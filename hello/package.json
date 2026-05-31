@@ -1,0 +1,22 @@
+{
+  "name": "@caffeine/hello",
+  "version": "0.0.0",
+  "description": "Hello world package",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "test": "node --import tsx/esm --test-reporter spec --test '**/*.test.ts'"
+  }
+}
