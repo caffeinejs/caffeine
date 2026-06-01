@@ -1,4 +1,4 @@
 {
   "files": [],
-  "references": [{ "path": "./hello" }]
+  "references": [{ "path": "./http" }, { "path": "./http-fastify-adapter" }]
 }

@@ -12,11 +12,10 @@ install: ## install dependencies
 
 .PHONY: build
 build: ## build all packages
-	@npm run build
-
-.PHONY: build-force
-build-force: ## force rebuild all packages
 	@npm run build:force
+
+build\:%: ## build a single package and its local deps (e.g. build:http)
+	@npm run build:force -w $*
 
 .PHONY: clean
 clean: ## remove build artifacts
@@ -25,6 +24,9 @@ clean: ## remove build artifacts
 .PHONY: test
 test: ## run all tests
 	@npm test
+
+test\:%: ## run the test suite of a single package (e.g. test:http)
+	@npm test -w $*
 
 .PHONY: ci
 ci: ## run all ci checks
@@ -44,17 +46,29 @@ ci-fix: ## run all ci checks but with fixes enabled
 fmt: ## format code
 	@npm run fmt
 
+fmt\:%: ## format a single package (e.g. fmt:http)
+	@npx prettier $* --write
+
 .PHONY: fmt-check
 fmt-check: ## check code formatting
 	@npm run fmt:check
+
+fmt-check\:%: ## check formatting of a single package (e.g. fmt-check:http)
+	@npx prettier $* --check
 
 .PHONY: lint
 lint: ## check lint and fix errors
 	@npm run lint:fix
 
+lint\:%: ## lint a single package and fix errors (e.g. lint:http)
+	@npx eslint $* --fix
+
 .PHONY: lint-check
 lint-check: ## check lint without fixing
 	@npm run lint
+
+lint-check\:%: ## lint a single package without fixing (e.g. lint-check:http)
+	@npx eslint $*
 
 # Misc
 # --
@@ -62,3 +76,9 @@ lint-check: ## check lint without fixing
 .PHONY: help
 help: ## show help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@printf "\033[36m%-20s\033[0m %s\n" "build:<package>" "build a single package and its local deps (e.g. build:http)"
+	@printf "\033[36m%-20s\033[0m %s\n" "test:<package>" "run the test suite of a single package (e.g. test:http)"
+	@printf "\033[36m%-20s\033[0m %s\n" "lint:<package>" "lint a single package and fix errors (e.g. lint:http)"
+	@printf "\033[36m%-20s\033[0m %s\n" "lint-check:<package>" "lint a single package without fixing (e.g. lint-check:http)"
+	@printf "\033[36m%-20s\033[0m %s\n" "fmt:<package>" "format a single package (e.g. fmt:http)"
+	@printf "\033[36m%-20s\033[0m %s\n" "fmt-check:<package>" "check formatting of a single package (e.g. fmt-check:http)"

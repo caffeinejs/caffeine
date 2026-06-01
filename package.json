@@ -7,7 +7,8 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "hello"
+    "http",
+    "http-fastify-adapter"
   ],
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.9.0",
     "eslint": "^10.3.0",
     "eslint-import-resolver-typescript": "^4.4.4",
@@ -28,7 +30,9 @@
     "eslint-plugin-n": "^18.0.1",
     "eslint-plugin-promise": "^7.3.0",
     "eslint-plugin-tsdoc": "^0.5.2",
+    "expect": "^29.7.0",
     "globals": "^17.6.0",
+    "jest-mock": "^29.7.0",
     "prettier": "^3.8.3",
     "tsx": "^4.19.2",
     "typescript": "^6.0.3",

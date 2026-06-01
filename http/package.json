@@ -1,7 +1,7 @@
 {
-  "name": "@caffeine/hello",
+  "name": "@caffeine/http",
   "version": "0.0.0",
-  "description": "Hello world package",
+  "description": "Caffeine http package",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -18,5 +18,8 @@
   "scripts": {
     "build": "tsc --build --force tsconfig.build.json",
     "test": "node --import tsx/esm --test-reporter spec --test '**/*.test.ts'"
+  },
+  "dependencies": {
+    "@caffeine-projects/di": "file:../../di"
   }
 }

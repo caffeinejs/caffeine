@@ -28,6 +28,8 @@ export default defineConfig(
       globals: globals.node,
     },
     rules: {
+      curly: ['error', 'all'],
+
       'tsdoc/syntax': 'error',
 
       'n/no-missing-import': 'off',

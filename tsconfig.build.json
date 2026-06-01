@@ -1,4 +1,4 @@
 {
   "files": [],
-  "references": [{ "path": "./hello/tsconfig.build.json" }]
+  "references": [{ "path": "./http/tsconfig.build.json" }, { "path": "./http-fastify-adapter/tsconfig.build.json" }]
 }
