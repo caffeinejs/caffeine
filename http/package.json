@@ -17,7 +17,7 @@
   ],
   "scripts": {
     "build": "tsc --build --force tsconfig.build.json",
-    "test": "node --import tsx/esm --test-reporter spec --test '**/*.test.ts'"
+    "test": "vitest run"
   },
   "dependencies": {
     "@caffeine-projects/di": "file:../../di"

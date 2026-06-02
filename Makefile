@@ -15,7 +15,7 @@ build: ## build all packages
 	@npm run build:force
 
 build\:%: ## build a single package and its local deps (e.g. build:http)
-	@npm run build:force -w $*
+	@npm run build -w $*
 
 .PHONY: clean
 clean: ## remove build artifacts

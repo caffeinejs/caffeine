@@ -145,3 +145,5 @@ vite.config.ts.timestamp-*
 # Project
 
 .vscode/
+
+docs/.ai/
