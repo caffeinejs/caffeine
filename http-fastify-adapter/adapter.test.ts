@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import supertest from 'supertest'
 import fastify from 'fastify'
 import { fastifyAdapter, fastifyAdapterFactory } from './adapter.js'
-import { Controller, Get, header, newHTTP, param, Params, query } from '@caffeine/http'
-import { DiCaf } from '@caffeine/core'
+import { Controller, Get, header, newHTTP, param, Params, query } from '@caffeinejs/http'
+import { DiCaf } from '@caffeinejs/core'
 
 describe('Fastify Adapter', () => {
   it('exposes the underlying server as a supertest-compatible listener', async () => {

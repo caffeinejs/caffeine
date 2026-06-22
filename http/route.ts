@@ -1,4 +1,4 @@
-import { Binding, Key, Provider } from '@caffeine/core'
+import { Binding, Key, Provider } from '@caffeinejs/core'
 import { ParameterPickOptions } from './route.picker.js'
 
 export interface Route<R> {

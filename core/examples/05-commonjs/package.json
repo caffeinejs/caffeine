@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "@caffeine/core": "file:../.."
+    "@caffeinejs/core": "file:../.."
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

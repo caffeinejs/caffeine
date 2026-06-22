@@ -1,5 +1,5 @@
-import { Container } from '@caffeine/core'
-import { Adaptee, Adapter, AdapterFactory, AdapterIn, ParameterPickOptions } from '@caffeine/http'
+import { Container } from '@caffeinejs/core'
+import { Adaptee, Adapter, AdapterFactory, AdapterIn, ParameterPickOptions } from '@caffeinejs/http'
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 

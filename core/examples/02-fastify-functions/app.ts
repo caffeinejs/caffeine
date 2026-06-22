@@ -1,5 +1,5 @@
 import fastify, { FastifyInstance, FastifyPluginAsync, FastifyServerOptions } from 'fastify'
-import type { Container } from '@caffeine/core'
+import type { Container } from '@caffeinejs/core'
 
 export type ContainerPluginOptions = { container: Container }
 

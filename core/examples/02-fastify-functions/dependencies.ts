@@ -1,4 +1,4 @@
-import { DiCaf, type Container } from '@caffeine/core'
+import { DiCaf, type Container } from '@caffeinejs/core'
 import { CatsInMemoryRepository } from './cats/cats.repository.js'
 
 export const CATS_REPOSITORY = Symbol.for('cats.repository')

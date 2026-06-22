@@ -9,9 +9,9 @@
     "allowJs": true,
     "types": ["node"],
     "paths": {
-      "@caffeine/core": ["../index.ts"],
-      "@caffeine/core/decorators": ["../decorators/index.ts"],
-      "@caffeine/core/internals": ["../decorators/registrar/index.ts"]
+      "@caffeinejs/core": ["../index.ts"],
+      "@caffeinejs/core/decorators": ["../decorators/index.ts"],
+      "@caffeinejs/core/internals": ["../decorators/registrar/index.ts"]
     }
   },
   "include": ["./**/*.ts"],

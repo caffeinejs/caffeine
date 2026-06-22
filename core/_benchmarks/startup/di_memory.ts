@@ -1,5 +1,5 @@
-import { DiCaf } from '@caffeine/core'
-import { Injectable } from '@caffeine/core/decorators'
+import { DiCaf } from '@caffeinejs/core'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable()
 class UserRepository {}

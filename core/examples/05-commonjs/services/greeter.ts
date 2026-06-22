@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@caffeine/core/decorators'
+import { Inject, Injectable } from '@caffeinejs/core/decorators'
 import type { Logger } from './logger.js'
 
 @Injectable('greeter')

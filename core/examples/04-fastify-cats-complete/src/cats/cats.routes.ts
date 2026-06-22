@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
-import type { Container } from '@caffeine/core'
+import type { Container } from '@caffeinejs/core'
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsService } from './cats.service.js'
 

@@ -1,5 +1,5 @@
 {
-  "name": "@caffeine/benchmarks",
+  "name": "@caffeinejs/benchmarks",
   "version": "0.0.0",
   "description": "Caffeine benchmarks",
   "license": "MIT",
@@ -9,8 +9,8 @@
     "bench": "node --import=tsx"
   },
   "dependencies": {
-    "@caffeine/core": "*",
-    "@caffeine/http": "*"
+    "@caffeinejs/core": "*",
+    "@caffeinejs/http": "*"
   },
   "devDependencies": {
     "mitata": "^1.0.34",

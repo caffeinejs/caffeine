@@ -1,4 +1,4 @@
-import { DiCaf } from '@caffeine/core'
+import { DiCaf } from '@caffeinejs/core'
 
 // --- Services ---
 

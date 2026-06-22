@@ -1,5 +1,5 @@
-import { Injection } from '@caffeine/core'
-import { composeDecorators, Injectable, Label, Tag } from '@caffeine/core/decorators'
+import { Injection } from '@caffeinejs/core'
+import { composeDecorators, Injectable, Label, Tag } from '@caffeinejs/core/decorators'
 
 export function Controller(path: string, dependencies?: Injection[]) {
   return composeDecorators(

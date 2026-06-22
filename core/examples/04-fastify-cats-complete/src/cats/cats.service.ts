@@ -1,5 +1,5 @@
-import { provide, type Provider } from '@caffeine/core'
-import { Injectable } from '@caffeine/core/decorators'
+import { provide, type Provider } from '@caffeinejs/core'
+import { Injectable } from '@caffeinejs/core/decorators'
 import { DataConfig } from '../util/gcs/data.config.js'
 import { RequestContext } from '../util/request/request.context.js'
 import type { Cat, CreateCatDTO, UpdateCatDTO } from './cat.js'

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { DiCaf, scan } from '@caffeine/core'
+import { DiCaf, scan } from '@caffeinejs/core'
 import type { Greeter } from './services/greeter.js'
 
 async function main(): Promise<string> {

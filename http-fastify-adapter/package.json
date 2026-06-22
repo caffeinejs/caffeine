@@ -1,5 +1,5 @@
 {
-  "name": "@caffeine/http-fastify-adapter",
+  "name": "@caffeinejs/http-fastify-adapter",
   "version": "0.0.0",
   "description": "Caffeine http fastify adapter package",
   "license": "MIT",
@@ -20,8 +20,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeine/core": "*",
-    "@caffeine/http": "*"
+    "@caffeinejs/core": "*",
+    "@caffeinejs/http": "*"
   },
   "peerDependencies": {
     "fastify": "^5.0.0",

@@ -1,4 +1,4 @@
-import { Injectable } from '@caffeine/core/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
 import { Pet } from './pets.js'
 
 export interface PetsRepository {

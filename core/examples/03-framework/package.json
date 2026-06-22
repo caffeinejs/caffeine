@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@caffeine/core": "file:../..",
+    "@caffeinejs/core": "file:../..",
     "fastify": "^5.8.5"
   },
   "devDependencies": {

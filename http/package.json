@@ -1,5 +1,5 @@
 {
-  "name": "@caffeine/http",
+  "name": "@caffeinejs/http",
   "version": "0.0.0",
   "description": "Caffeine http package",
   "license": "MIT",
@@ -20,6 +20,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeine/core": "*"
+    "@caffeinejs/core": "*"
   }
 }

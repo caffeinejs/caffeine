@@ -1,5 +1,5 @@
-import { Ctor, Injection } from '@caffeine/core'
-import { Injectable, Label } from '@caffeine/core/decorators'
+import { Ctor, Injection } from '@caffeinejs/core'
+import { Injectable, Label } from '@caffeinejs/core/decorators'
 import { Keys } from '../symbols.js'
 import { configureRouterAndRegisterRoutes } from './_registrar.js'
 

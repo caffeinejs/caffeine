@@ -1,4 +1,4 @@
-import { Container, DiCaf, Module, Options } from '@caffeine/core'
+import { Container, DiCaf, Module, Options } from '@caffeinejs/core'
 import { Keys } from './symbols.js'
 import { Router } from './route.js'
 import { Adaptee, AdapterFactory } from './adapter.js'

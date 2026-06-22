@@ -1,4 +1,4 @@
-import { Container } from '@caffeine/core'
+import { Container } from '@caffeinejs/core'
 import { Router } from './route.js'
 
 export type Adapter<R, A> = (input: AdapterIn<R>) => Adaptee<A> | Promise<Adaptee<A>>

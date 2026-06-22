@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { DiCaf, scan } from '@caffeine/core'
+import { DiCaf, scan } from '@caffeinejs/core'
 import { healthModule } from './health/health.mod.js'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))

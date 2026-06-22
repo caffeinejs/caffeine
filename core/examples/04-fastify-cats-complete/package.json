@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@caffeine/core": "file:../..",
+    "@caffeinejs/core": "file:../..",
     "@google-cloud/storage": "^7.16.0",
     "fastify": "^5.8.5",
     "ioredis": "^5.11.1",

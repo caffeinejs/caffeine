@@ -1,4 +1,4 @@
-import { Injectable } from '@caffeine/core/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable()
 class UserRepository {}

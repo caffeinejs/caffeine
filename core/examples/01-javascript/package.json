@@ -7,7 +7,7 @@
     "start": "node --import tsx/esm index.js"
   },
   "dependencies": {
-    "@caffeine/core": "file:../.."
+    "@caffeinejs/core": "file:../.."
   },
   "devDependencies": {
     "tsx": "^4.22.4"

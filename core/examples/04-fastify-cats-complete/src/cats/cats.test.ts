@@ -1,6 +1,6 @@
 import { Redis } from 'ioredis'
 import { describe, it, expect, vi, beforeAll, afterEach, afterAll } from 'vitest'
-import { newTestContainer } from '@caffeine/core/testing'
+import { newTestContainer } from '@caffeinejs/core/testing'
 import { buildServer } from '../app.js'
 import { createContainer } from '../app.container.js'
 import { DataConfig } from '../util/gcs/data.config.js'
