@@ -2,7 +2,7 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "dist",
+    "outDir": "dist/esm",
     "lib": ["esnext", "DOM", "Decorators", "esnext.decorators"],
     "types": ["node"]
   },

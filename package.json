@@ -13,9 +13,9 @@
     "benchmarks"
   ],
   "scripts": {
-    "build": "tsc --build tsconfig.build.json",
-    "build:force": "tsc --build --force tsconfig.build.json",
-    "clean": "tsc --build --clean tsconfig.build.json",
+    "build": "tsc --build tsconfig.build.json && npm run build:cjs -ws --if-present",
+    "build:force": "tsc --build --force tsconfig.build.json && npm run build:cjs -ws --if-present",
+    "clean": "npm run clean:dist -ws --if-present && tsc --build --clean tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint",

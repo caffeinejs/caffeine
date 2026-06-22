@@ -4,28 +4,68 @@
   "description": "Caffeine core package",
   "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/commonjs/index.js",
+  "types": "dist/esm/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "node": {
+        "import": {
+          "types": "./dist/esm/index.nodejs.d.ts",
+          "default": "./dist/esm/index.nodejs.js"
+        },
+        "require": {
+          "types": "./dist/commonjs/index.nodejs.d.ts",
+          "default": "./dist/commonjs/index.nodejs.js"
+        }
+      },
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/index.d.ts",
+        "default": "./dist/commonjs/index.js"
+      }
     },
     "./decorators": {
-      "types": "./dist/decorators/index.d.ts",
-      "default": "./dist/decorators/index.js"
+      "import": {
+        "types": "./dist/esm/decorators/index.d.ts",
+        "default": "./dist/esm/decorators/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/decorators/index.d.ts",
+        "default": "./dist/commonjs/decorators/index.js"
+      }
     },
     "./decorators/legacy": {
-      "types": "./dist/decorators/legacy/index.d.ts",
-      "default": "./dist/decorators/legacy/index.js"
+      "import": {
+        "types": "./dist/esm/decorators/legacy/index.d.ts",
+        "default": "./dist/esm/decorators/legacy/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/decorators/legacy/index.d.ts",
+        "default": "./dist/commonjs/decorators/legacy/index.js"
+      }
     },
     "./internals": {
-      "types": "./dist/decorators/registrar/index.d.ts",
-      "default": "./dist/decorators/registrar/index.js"
+      "import": {
+        "types": "./dist/esm/decorators/registrar/index.d.ts",
+        "default": "./dist/esm/decorators/registrar/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/decorators/registrar/index.d.ts",
+        "default": "./dist/commonjs/decorators/registrar/index.js"
+      }
     },
     "./testing": {
-      "types": "./dist/index.testing.d.ts",
-      "default": "./dist/index.testing.js"
+      "import": {
+        "types": "./dist/esm/index.testing.d.ts",
+        "default": "./dist/esm/index.testing.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/index.testing.d.ts",
+        "default": "./dist/commonjs/index.testing.js"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -34,7 +74,9 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc --build --force tsconfig.build.json",
+    "build": "tsc --build --force tsconfig.build.json && npm run build:cjs",
+    "build:cjs": "node ../tools/build-cjs.mjs",
+    "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
   "peerDependencies": {
