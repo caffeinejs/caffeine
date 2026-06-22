@@ -1,4 +1,4 @@
-import { Container } from '@caffeine-projects/dicaf'
+import { Container } from '@caffeine/core'
 import { Adaptee, Adapter, AdapterFactory, AdapterIn, ParameterPickOptions } from '@caffeine/http'
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'

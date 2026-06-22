@@ -39,6 +39,11 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.2",
     "unplugin-swc": "^1.5.9",
+    "@fast-check/vitest": "^0.4.1",
+    "fast-check": "^4.8.0",
+    "globby": "^16.0.0",
+    "uuid": "^11.0.0",
+    "reflect-metadata": "^0.2.2",
     "vitest": "^4.1.8"
   }
 }

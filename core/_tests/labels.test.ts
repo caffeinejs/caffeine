@@ -1,0 +1,175 @@
+import { describe, it, expect } from 'vitest'
+import { Provides } from '../decorators/provides.js'
+import { Configuration } from '../decorators/configuration.js'
+import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Label } from '../decorators/label.js'
+import { Profile } from '../decorators/profile.js'
+import { DiCaf } from '../container.js'
+
+describe('Label', function () {
+  it('should tag a class and return its binding via getBy', function () {
+    const sym = Symbol('svc')
+
+    @Label(sym)
+    @Injectable()
+    class Svc {}
+
+    const di = new DiCaf()
+
+    const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
+    expect(result)
+      .toHaveLength(1)
+    expect(result[0].key)
+      .toBe(Svc)
+  })
+
+  it('should support multiple labels on a single class', function () {
+    const sym1 = Symbol('a')
+    const sym2 = Symbol('b')
+
+    @Label(sym1, sym2)
+    @Injectable()
+    class Multi {}
+
+    const di = new DiCaf()
+
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1)))
+      .toHaveLength(1)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2)))
+      .toHaveLength(1)
+  })
+
+  it('should accumulate labels when @Label is stacked', function () {
+    const sym1 = Symbol('x')
+    const sym2 = Symbol('y')
+
+    @Label(sym2)
+    @Label(sym1)
+    @Injectable()
+    class Stacked {}
+
+    const di = new DiCaf()
+
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1)))
+      .toHaveLength(1)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2)))
+      .toHaveLength(1)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))[0].key)
+      .toBe(Stacked)
+  })
+
+  it('should return a BindingDescriptor with the correct key and labels', function () {
+    const sym = Symbol('resolve')
+
+    @Label(sym)
+    @Injectable()
+    class Resolved {}
+
+    const di = new DiCaf()
+    const descriptors = di.getBindingsByLabel(sym)
+
+    expect(descriptors)
+      .toHaveLength(1)
+    expect(descriptors[0].key)
+      .toBe(Resolved)
+    expect(descriptors[0].binding.labels)
+      .toContain(sym)
+  })
+
+  it('should return BindingDescriptor[] from getBindingsBy, not resolved instances', function () {
+    const sym = Symbol('bindings-only')
+
+    @Label(sym)
+    @Injectable()
+    class Target {}
+
+    const di = new DiCaf()
+    const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
+
+    expect(result[0]).not.toBeInstanceOf(Target)
+    expect(typeof result[0].key)
+      .toBe('function')
+  })
+
+  it('should not return the binding of a class that fails its conditional', function () {
+    const sym = Symbol('cond')
+
+    @Label(sym)
+    @ConditionalOn(() => false)
+    @Injectable()
+    class Excluded {}
+
+    const di = new DiCaf()
+
+    expect(di.has(Excluded))
+      .toBe(false)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
+      .toHaveLength(0)
+  })
+
+  it('should respect profile when querying labels via child container', function () {
+    const sym = Symbol('ns-label')
+
+    @Label(sym)
+    @Profile('myns')
+    @Injectable()
+    class NsService {}
+
+    const root = new DiCaf()
+    const child = new DiCaf({ profiles: ['myns'] })
+
+    expect(root.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
+      .toHaveLength(0)
+    expect(child.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
+      .toHaveLength(1)
+  })
+
+  describe('on @Provides methods inside @Configuration', function () {
+    it('should tag a bean method and return its binding via getBindingsByLabel', function () {
+      const sym = Symbol('bean-label')
+      const kSvc = Symbol('svc-key')
+
+      @Configuration()
+      class Conf {
+        @Provides(kSvc)
+        @Label(sym)
+        svc() {
+          return 'value'
+        }
+      }
+
+      const di = new DiCaf()
+
+      const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
+      expect(result)
+        .toHaveLength(1)
+      expect(result[0].binding.labels)
+        .toContain(sym)
+    })
+
+    it('should return a BindingDescriptor with the correct key and labels when label is on @Provides method', function () {
+      const sym = Symbol('bean-label-resolve')
+      const kItem = Symbol('item-key')
+
+      @Configuration()
+      class ItemConf {
+        @Provides(kItem)
+        @Label(sym)
+        item() {
+          return { name: 'item' }
+        }
+      }
+
+      const di = new DiCaf()
+      const descriptors = di.getBindingsByLabel(sym)
+
+      expect(descriptors)
+        .toHaveLength(1)
+      expect(descriptors[0].key)
+        .toBe(kItem)
+      expect(descriptors[0].binding.labels)
+        .toContain(sym)
+    })
+  })
+})

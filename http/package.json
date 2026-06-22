@@ -20,6 +20,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeine-projects/dicaf": "^0.0.1"
+    "@caffeine/core": "*"
   }
 }

@@ -3,12 +3,30 @@
   "version": "0.0.0",
   "description": "Caffeine core package",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./decorators": {
+      "types": "./dist/decorators/index.d.ts",
+      "default": "./dist/decorators/index.js"
+    },
+    "./decorators/legacy": {
+      "types": "./dist/decorators/legacy/index.d.ts",
+      "default": "./dist/decorators/legacy/index.js"
+    },
+    "./internals": {
+      "types": "./dist/decorators/registrar/index.d.ts",
+      "default": "./dist/decorators/registrar/index.js"
+    },
+    "./testing": {
+      "types": "./dist/index.testing.d.ts",
+      "default": "./dist/index.testing.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -18,5 +36,13 @@
   "scripts": {
     "build": "tsc --build --force tsconfig.build.json",
     "test": "vitest run"
+  },
+  "peerDependencies": {
+    "reflect-metadata": ">=0.1.13"
+  },
+  "peerDependenciesMeta": {
+    "reflect-metadata": {
+      "optional": true
+    }
   }
 }

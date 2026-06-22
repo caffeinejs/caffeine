@@ -1,0 +1,18 @@
+import { Injectable } from '../../../decorators/injectable.js'
+import { Extends } from '../../../decorators/extends.js'
+import { allOf, defer } from '../../../injection.js'
+
+export abstract class DispatchHandler {}
+
+@Extends(DispatchHandler)
+@Injectable()
+export class DispatchHandlerA extends DispatchHandler {}
+
+@Extends(DispatchHandler)
+@Injectable()
+export class DispatchHandlerB extends DispatchHandler {}
+
+@Injectable([allOf(defer(() => DispatchHandler))])
+export class Dispatcher {
+  constructor(readonly handlers: DispatchHandler[]) {}
+}

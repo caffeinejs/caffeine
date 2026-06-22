@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "..",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "types": ["node"],
+    "paths": {
+      "@caffeine/core": ["../index.ts"],
+      "@caffeine/core/decorators": ["../decorators/index.ts"],
+      "@caffeine/core/internals": ["../decorators/registrar/index.ts"]
+    }
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["**/dist/**", "**/node_modules/**", "./_testdata/startup_legacy/**", "./_testdata/third_party_legacy/**"]
+}

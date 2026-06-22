@@ -1,0 +1,68 @@
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: examples/05-fastify-cats-complete/Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://cats:cats@postgres:5432/cats
+      REDIS_URL: redis://redis:6379
+      GCS_ENDPOINT: http://gcs:4443
+      GCS_BUCKET: cats
+      GCS_PROJECT_ID: cats-local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      gcs:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: cats
+      POSTGRES_PASSWORD: cats
+      POSTGRES_DB: cats
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cats']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  gcs:
+    image: fsouza/fake-gcs-server:1.52
+    ports:
+      - '4443:4443'
+    command:
+      - -scheme=http
+      - -public-host=localhost:4443
+    volumes:
+      - ./_tests/_testdata/gcs/data:/data
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '-q',
+          '-O',
+          '/dev/null',
+          'http://localhost:4443/storage/v1/b/cats/o',
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 10s

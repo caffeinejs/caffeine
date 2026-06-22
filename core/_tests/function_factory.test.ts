@@ -1,0 +1,157 @@
+import { describe, it, expect } from 'vitest'
+import { Injectable } from '../decorators/injectable.js'
+import { DiCaf } from '../container.js'
+import { optional } from '../injection.js'
+
+describe('Functions', function () {
+  describe('given a function that returns another function', function () {
+    const kVal = Symbol('test')
+
+    class Opt {}
+
+    @Injectable()
+    class Dep {
+      value = 'test'
+    }
+
+    @Injectable(kVal)
+    class Nm {
+      id = 'dev'
+    }
+
+    it('should resolve functions injecting required dependencies', async function () {
+      const di = new DiCaf()
+      const kFn = Symbol('fn')
+      const fn = (dep: Dep, nm: Nm, opt?: Opt) => (message: string) =>
+        `received: ${message} - ${dep.value} - ${nm.id} - ${opt === undefined}`
+
+      di.bind(kFn)
+        .toFunction(fn, [Dep, kVal, optional(Opt)])
+      await di.init()
+
+      const theFunction = di.get<(message: string) => string>(kFn)
+      const res = theFunction('hello')
+
+      expect(res)
+        .toEqual('received: hello - test - dev - true')
+    })
+  })
+
+  describe('given a function that returns an object with functions', function () {
+    it('should resolve function that returns an object with functions', async function () {
+      @Injectable()
+      class Msg {
+        msg() {
+          return 'hello'
+        }
+      }
+
+      const kFn = Symbol('fn')
+      const fn = (msg: Msg) => ({
+        greet: () => msg.msg() + ' world',
+      })
+
+      const di = new DiCaf()
+      di.bind(kFn)
+        .toFunction(fn, [Msg])
+      await di.init()
+
+      const obj = di.get<{ greet: () => string }>(kFn)
+      const res = obj.greet()
+
+      expect(res)
+        .toEqual('hello world')
+    })
+  })
+
+  describe('given a function with 0 dependencies', function () {
+    it('should resolve without arguments', async function () {
+      const kFn = Symbol('fn-no-deps')
+      const fn = () => 'no deps'
+
+      const di = new DiCaf()
+      di.bind(kFn)
+        .toFunction(fn)
+      await di.init()
+
+      const result = di.get<string>(kFn)
+
+      expect(result)
+        .toEqual('no deps')
+    })
+  })
+
+  describe('given a function with 2 dependencies', function () {
+    it('should resolve with 2 arguments', async function () {
+      const kFn = Symbol('fn-2-deps')
+      const fn = (a: string, b: string) => `${a}-${b}`
+
+      const di = new DiCaf()
+      di.bind('fn2-dep-a')
+        .toValue('alpha')
+      di.bind('fn2-dep-b')
+        .toValue('beta')
+      di.bind(kFn)
+        .toFunction(fn, ['fn2-dep-a', 'fn2-dep-b'])
+      await di.init()
+
+      const result = di.get<string>(kFn)
+
+      expect(result)
+        .toEqual('alpha-beta')
+    })
+  })
+
+  describe('given a function with 4 dependencies', function () {
+    it('should resolve with 4 arguments', async function () {
+      const kFn = Symbol('fn-4-deps')
+      const fn = (a: string, b: string, c: string, d: string) => `${a}-${b}-${c}-${d}`
+
+      const di = new DiCaf()
+      di.bind('fn4-dep-a')
+        .toValue('a')
+      di.bind('fn4-dep-b')
+        .toValue('b')
+      di.bind('fn4-dep-c')
+        .toValue('c')
+      di.bind('fn4-dep-d')
+        .toValue('d')
+      di.bind(kFn)
+        .toFunction(fn, ['fn4-dep-a', 'fn4-dep-b', 'fn4-dep-c', 'fn4-dep-d'])
+      await di.init()
+
+      const result = di.get<string>(kFn)
+
+      expect(result)
+        .toEqual('a-b-c-d')
+    })
+  })
+
+  describe('given a function with 5 or more dependencies', function () {
+    it('should resolve via fallback array path', async function () {
+      const kFn = Symbol('fn-5-deps')
+      const fn = (a: string, b: string, c: string, d: string, e: string) =>
+        `${a}-${b}-${c}-${d}-${e}`
+
+      const di = new DiCaf()
+      di.bind('fn5-dep-a')
+        .toValue('a')
+      di.bind('fn5-dep-b')
+        .toValue('b')
+      di.bind('fn5-dep-c')
+        .toValue('c')
+      di.bind('fn5-dep-d')
+        .toValue('d')
+      di.bind('fn5-dep-e')
+        .toValue('e')
+      di.bind(kFn)
+        .toFunction(fn, ['fn5-dep-a', 'fn5-dep-b', 'fn5-dep-c', 'fn5-dep-d', 'fn5-dep-e'])
+      await di.init()
+
+      const result = di.get<string>(kFn)
+
+      expect(result)
+        .toEqual('a-b-c-d-e')
+    })
+  })
+})

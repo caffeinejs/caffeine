@@ -1,4 +1,18 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
+  "compilerOptions": {
+    "types": ["node", "reflect-metadata"]
+  },
+  "exclude": [
+    "dist",
+    "node_modules",
+    "**/_tests/",
+    "**/_testdata/",
+    "**/_benchmarks/",
+    "**/examples/",
+    "**/tools/",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "*.config.ts"
+  ]
 }

@@ -1,0 +1,7 @@
+**/node_modules
+out
+coverage
+.git
+*.tgz
+*.log
+.DS_Store

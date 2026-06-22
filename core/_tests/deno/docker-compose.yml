@@ -1,0 +1,7 @@
+services:
+  deno:
+    build:
+      context: ../..
+      dockerfile: _tests/deno/Dockerfile
+    image: caffeine-projects-di-deno-compat
+    command: ['deno', 'test', '-A', '--no-check', '--ignore=./vendor']

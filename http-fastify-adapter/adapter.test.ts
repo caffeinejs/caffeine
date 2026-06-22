@@ -3,7 +3,7 @@ import supertest from 'supertest'
 import fastify from 'fastify'
 import { fastifyAdapter, fastifyAdapterFactory } from './adapter.js'
 import { Controller, Get, header, newHTTP, param, Params, query } from '@caffeine/http'
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { DiCaf } from '@caffeine/core'
 
 describe('Fastify Adapter', () => {
   it('exposes the underlying server as a supertest-compatible listener', async () => {
