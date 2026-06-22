@@ -1,7 +1,7 @@
 {
-  "name": "caffeine",
+  "name": "@caffeinejs/monorepo",
   "version": "0.0.0",
-  "description": "Caffeine monorepo",
+  "description": "CaffeineJS monorepo",
   "license": "MIT",
   "author": "Vitor Hugo Salgado (https://github.com/vitorsalgado)",
   "private": true,
