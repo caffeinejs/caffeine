@@ -6,6 +6,9 @@ import pluginN from 'eslint-plugin-n'
 import pluginPromise from 'eslint-plugin-promise'
 import tsdocPlugin from 'eslint-plugin-tsdoc'
 import globals from 'globals'
+import unusedImports from 'eslint-plugin-unused-imports'
+import simpleImportSort from 'eslint-plugin-simple-import-sort'
+import stylistic from '@stylistic/eslint-plugin'
 
 export default defineConfig(
   { ignores: ['**/dist/**', '.vscode/**', '.local/**'] },
@@ -13,14 +16,38 @@ export default defineConfig(
   tseslintConfigs.recommended,
   importX.flatConfigs.recommended,
   importX.flatConfigs.typescript,
+  stylistic.configs.customize({
+    semi: false,
+    quotes: 'single',
+    arrowParens: false,
+    trailingComma: 'all',
+    braceStyle: '1tbs',
+    indent: 2,
+    quoteProps: 'as-needed',
+    blockSpacing: true,
+  }),
   {
     settings: {
-      'import-x/resolver': { typescript: true },
+      'import-x/resolver': {
+        typescript: {
+          alwaysTryTypes: true,
+          noWarnOnMultipleProjects: true,
+          project: [
+            './tsconfig.json',
+            './core/tsconfig.json',
+            './http/tsconfig.json',
+            './http-fastify-adapter/tsconfig.json',
+            './benchmarks/tsconfig.json',
+          ],
+        },
+      },
     },
     plugins: {
       n: pluginN,
       promise: pluginPromise,
       tsdoc: tsdocPlugin,
+      'unused-imports': unusedImports,
+      'simple-import-sort': simpleImportSort,
     },
     languageOptions: {
       ecmaVersion: 'latest',
@@ -32,9 +59,23 @@ export default defineConfig(
 
       'tsdoc/syntax': 'error',
 
+      '@stylistic/max-len': ['warn', {
+        code: 120,
+        tabWidth: 2,
+        ignoreComments: true,
+        ignoreTrailingComments: true,
+        ignoreStrings: true,
+        ignoreTemplateLiterals: true,
+        ignoreUrls: true,
+        ignoreRegExpLiterals: true,
+      }],
+      '@stylistic/arrow-parens': ['error', 'as-needed'],
+      '@stylistic/newline-per-chained-call': ['error'],
+
       'n/no-missing-import': 'off',
       'n/no-unpublished-import': 'off',
 
+      'unused-imports/no-unused-imports': 'error',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-empty-function': ['error', { allow: ['decoratedFunctions'] }],
       '@typescript-eslint/no-useless-constructor': 'error',
@@ -53,12 +94,14 @@ export default defineConfig(
         { groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index', 'object'] },
       ],
       'import-x/no-named-as-default': 'off',
-      'import-x/no-duplicates': 'off',
+      'import-x/no-duplicates': 'error',
       'import-x/no-mutable-exports': 'error',
       'import-x/no-useless-path-segments': ['error', { noUselessIndex: false }],
       'import-x/no-self-import': 'error',
       'import-x/export': 'error',
       'import-x/no-deprecated': 'error',
+
+      'simple-import-sort/exports': 'error',
 
       'no-restricted-imports': [
         'error',
@@ -74,16 +117,29 @@ export default defineConfig(
     },
   },
   {
+    files: ['**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/consistent-type-exports': ['error', { fixMixedExportsWithInlineTypeSpecifier: true }],
+    },
+  },
+  {
     files: ['**/*.test.ts', '**/*.spec.ts'],
     rules: {
       'import-x/extensions': 'off',
+      'tsdoc/syntax': 'off',
       '@typescript-eslint/no-useless-constructor': 'off',
       '@typescript-eslint/no-empty-function': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
     },
   },
   {
-    files: ['**/*.js'],
+    files: ['**/*.js', '**/*.cjs'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },

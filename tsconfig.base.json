@@ -2,7 +2,11 @@
   "compilerOptions": {
     "module": "nodenext",
     "target": "es2023",
-    "lib": ["esnext", "Decorators", "esnext.decorators"],
+    "lib": [
+      "esnext",
+      "Decorators",
+      "esnext.decorators"
+    ],
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,

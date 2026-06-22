@@ -1,4 +1,17 @@
 {
   "files": [],
-  "references": [{ "path": "./http" }, { "path": "./http-fastify-adapter" }]
+  "references": [
+    {
+      "path": "./core"
+    },
+    {
+      "path": "./http"
+    },
+    {
+      "path": "./http-fastify-adapter"
+    },
+    {
+      "path": "./benchmarks"
+    }
+  ]
 }

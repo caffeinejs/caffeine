@@ -1,0 +1,19 @@
+{
+  "name": "@caffeine/benchmarks",
+  "version": "0.0.0",
+  "description": "Caffeine benchmarks",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "node --import=tsx"
+  },
+  "dependencies": {
+    "@caffeine/core": "*",
+    "@caffeine/http": "*"
+  },
+  "devDependencies": {
+    "mitata": "^1.0.34",
+    "tsx": "^4.22.4"
+  }
+}

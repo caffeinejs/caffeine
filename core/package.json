@@ -1,7 +1,7 @@
 {
-  "name": "@caffeine/http",
+  "name": "@caffeine/core",
   "version": "0.0.0",
-  "description": "Caffeine http package",
+  "description": "Caffeine core package",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -18,8 +18,5 @@
   "scripts": {
     "build": "tsc --build --force tsconfig.build.json",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "@caffeine-projects/dicaf": "^0.0.1"
   }
 }

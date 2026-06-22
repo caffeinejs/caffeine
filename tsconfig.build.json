@@ -1,4 +1,14 @@
 {
   "files": [],
-  "references": [{ "path": "./http/tsconfig.build.json" }, { "path": "./http-fastify-adapter/tsconfig.build.json" }]
+  "references": [
+    {
+      "path": "./core/tsconfig.build.json"
+    },
+    {
+      "path": "./http-fastify-adapter/tsconfig.build.json"
+    },
+    {
+      "path": "./http/tsconfig.build.json"
+    }
+  ]
 }
