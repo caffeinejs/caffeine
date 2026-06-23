@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prestart": "npm run build --prefix ../..",
+    "prestart": "npm run build --prefix ../../..",
     "start": "node --import tsx/esm index.js"
   },
   "dependencies": {

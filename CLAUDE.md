@@ -63,7 +63,7 @@ import { Binding } from './Binding'
 
 ## Monorepo structure
 
-Packages: `core` (`@caffeinejs/core`), `http` (`@caffeinejs/http`), `http-fastify-adapter` (`@caffeinejs/http-fastify-adapter`). Examples live under `examples/`. Shared build tooling lives in `tools/`.
+Packages: `core` (`@caffeinejs/core`), `http` (`@caffeinejs/http`), `http-fastify-adapter` (`@caffeinejs/http-fastify-adapter`). Examples live under `core/examples/`. Shared build tooling lives in `tools/`.
 
 Cross-package imports use the package name, not relative paths across workspace boundaries.
 

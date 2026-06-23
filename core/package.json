@@ -101,11 +101,11 @@
     "bench:memory:compile": "esbuild _benchmarks/startup/di_memory.ts _benchmarks/startup/nest_memory.ts _benchmarks/startup/vanilla_memory.ts --outdir=_benchmarks/startup/dist --format=esm --platform=node --target=node24",
     "bench:memory": "node --expose-gc --import=tsx _benchmarks/memory.bench.ts",
     "bench:readme": "node tools/bench-report.mjs",
-    "example:graph": "npm run start -w @caffeine-projects/example-graph",
-    "example:javascript": "npm run start -w @caffeine-projects/example-javascript",
-    "example:framework": "npm run start -w @caffeine-projects/example-framework",
-    "example:fastify-functions": "npm run start -w @caffeine-projects/example-fastify-functions",
-    "example:cats-complete": "npm run start -w @caffeine-projects/example-fastify-cats-complete"
+    "example:javascript": "npm run start -w @caffeinejs/example-javascript",
+    "example:framework": "npm run start -w @caffeinejs/example-framework",
+    "example:fastify-functions": "npm run start -w @caffeinejs/example-fastify-functions",
+    "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete",
+    "example:commonjs": "npm run start -w @caffeinejs/example-commonjs"
   },
   "peerDependencies": {
     "reflect-metadata": ">=0.1.13"

@@ -1,9 +1,9 @@
 {
-  "name": "@caffeinejs/example-framework",
+  "name": "@caffeinejs/example-fastify-functions",
   "private": true,
   "type": "module",
   "scripts": {
-    "prestart": "npm run build --prefix ../..",
+    "prestart": "npm run build --prefix ../../..",
     "start": "node --import tsx/esm index.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"

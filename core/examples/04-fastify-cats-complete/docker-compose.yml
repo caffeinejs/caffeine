@@ -1,8 +1,8 @@
 services:
   app:
     build:
-      context: ../..
-      dockerfile: examples/05-fastify-cats-complete/Dockerfile
+      context: ../../..
+      dockerfile: core/examples/04-fastify-cats-complete/Dockerfile
     ports:
       - '3000:3000'
     environment:

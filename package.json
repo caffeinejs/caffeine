@@ -11,7 +11,7 @@
     "http",
     "http-fastify-adapter",
     "benchmarks",
-    "examples/*"
+    "core/examples/*"
   ],
   "scripts": {
     "build": "tsc --build tsconfig.build.json && npm run build:cjs --workspaces --if-present",
