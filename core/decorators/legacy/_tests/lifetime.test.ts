@@ -2,8 +2,8 @@ import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
 import { DiCaf } from '../../../container.js'
 import { Scopes } from '../../../scope.js'
-import { Injectable } from '../injectable.js'
-import { Lifetime } from '../lifetime.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Lifetime } from '../lifetime.legacy.js'
 
 describe('Legacy lifetime decorators', function () {
   describe('@Singleton', function () {

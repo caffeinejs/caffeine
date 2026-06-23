@@ -1,5 +1,5 @@
 {
-  "name": "@caffeine-projects/example-framework",
+  "name": "@caffeinejs/example-framework",
   "private": true,
   "type": "module",
   "scripts": {

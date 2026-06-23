@@ -1,11 +1,11 @@
 import 'reflect-metadata'
 import { describe, expect, it } from 'vitest'
-import { Injectable } from '../injectable.js'
-import { Named } from '../named.js'
-import { Extends } from '../extends.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Named } from '../named.legacy.js'
+import { Extends } from '../extends.legacy.js'
 import { DiCaf } from '../../../container.js'
-import { Primary } from '../primary.js'
-import { Inject } from '../inject.js'
+import { Primary } from '../primary.legacy.js'
+import { Inject } from '../inject.legacy.js'
 import { allOf } from '../../../injection.js'
 
 describe('Complex setup', function () {

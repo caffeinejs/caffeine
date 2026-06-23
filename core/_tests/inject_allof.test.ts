@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Extends } from '../decorators/extends.js'
-import { Injectable } from '../decorators/legacy/injectable.js'
+import { Injectable } from '../decorators/legacy/injectable.legacy.js'
 import { Named } from '../decorators/named.js'
 import { DiCaf } from '../container.js'
 import { allOf } from '../injection.js'

@@ -1,10 +1,10 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
 import { DiCaf } from '../../../container.js'
-import { Injectable } from '../injectable.js'
-import { Configuration } from '../configuration.js'
-import { Provides } from '../provides.js'
-import { Lazy } from '../lazy.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Configuration } from '../configuration.legacy.js'
+import { Provides } from '../provides.legacy.js'
+import { Lazy } from '../lazy.legacy.js'
 
 describe('Legacy @Lazy', function () {
   describe('class-level lazy', function () {

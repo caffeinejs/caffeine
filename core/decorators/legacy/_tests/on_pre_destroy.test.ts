@@ -1,10 +1,10 @@
 import 'reflect-metadata'
 import { describe, it, expect, vi } from 'vitest'
 import { v4 } from 'uuid'
-import { OnPreDestroy } from '../on_pre_destroy.js'
-import { Configuration } from '../configuration.js'
-import { Provides } from '../provides.js'
-import { Lazy } from '../lazy.js'
+import { OnPreDestroy } from '../on_pre_destroy.legacy.js'
+import { Configuration } from '../configuration.legacy.js'
+import { Provides } from '../provides.legacy.js'
+import { Lazy } from '../lazy.legacy.js'
 import { DiCaf } from '../../../container.js'
 
 describe('Legacy @OnPreDestroy', function () {

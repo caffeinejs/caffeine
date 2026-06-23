@@ -3,10 +3,10 @@ import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest'
 import { DiCaf } from '../../../container.js'
 import { PostProcessor } from '../../../post_processor.js'
 import { ResolutionContext } from '../../../resolution_context.js'
-import { Injectable } from '../injectable.js'
-import { Configuration } from '../configuration.js'
-import { Provides } from '../provides.js'
-import { ByPassPostProcessors } from '../bypass_post_processors.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Configuration } from '../configuration.legacy.js'
+import { Provides } from '../provides.legacy.js'
+import { ByPassPostProcessors } from '../bypass_post_processors.legacy.js'
 
 describe('Legacy @ByPassPostProcessors', function () {
   const spy = vi.fn()

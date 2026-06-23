@@ -3,7 +3,7 @@ import { isNamedKey, Identifier, Key } from '../../key.js'
 import { Injection } from '../../injection.js'
 import { normalizeInjections } from '../util/index.js'
 import { buildLegacyConstructorDeps, defineInjectable } from '../registrar/index.js'
-import { Extends } from './extends.js'
+import { Extends } from './extends.legacy.js'
 
 /**
  * Marks a class as an injectable component, registering it in the container.

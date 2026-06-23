@@ -5,7 +5,7 @@ import { ErrInvalidDecorator } from '../../errors.js'
 import { extendMemberInjectableAttributes } from '../registrar/index.js'
 import { normalizeInjections } from '../util/index.js'
 import { idfy } from '../registrar/types.js'
-import { Configuration } from './configuration.js'
+import { Configuration } from './configuration.legacy.js'
 
 /**
  * Marks a method inside a `@Configuration` class as a factory that provides a binding.

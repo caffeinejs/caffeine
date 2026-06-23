@@ -19,6 +19,8 @@
     "clean": "npm run clean:dist -ws --if-present && tsc --build --clean tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:typecheck": "tsc -p tsconfig.test.json",
+    "test:typecheck:legacy": "tsc -p tsconfig.legacy.json",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "fmt": "eslint --fix",

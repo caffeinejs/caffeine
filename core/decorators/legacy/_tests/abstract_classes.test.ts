@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { describe, expect, it, vi } from 'vitest'
-import { Injectable } from '../injectable.js'
-import { Extends } from '../extends.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Extends } from '../extends.legacy.js'
 import { DiCaf } from '../../../container.js'
 
 describe('Legacy Abstract Classes', function () {

@@ -11,7 +11,7 @@ import {
 } from '../registrar/index.js'
 import { DecoratedBindingConfig } from '../registrar/spec.js'
 import { normalizeInjections } from '../util/index.js'
-import { Provides } from './provides.js'
+import { Provides } from './provides.legacy.js'
 
 /**
  * Marks a class as a configuration source. Methods decorated with `@Provides` define factory bindings.

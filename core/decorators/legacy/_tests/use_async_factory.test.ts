@@ -1,8 +1,8 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
 import { DiCaf } from '../../../container.js'
-import { Injectable } from '../injectable.js'
-import { UseAsyncFactory } from '../use_async_factory.js'
+import { Injectable } from '../injectable.legacy.js'
+import { UseAsyncFactory } from '../use_async_factory.legacy.js'
 
 describe('Legacy @UseAsyncFactory', function () {
   describe('basic async factory', function () {

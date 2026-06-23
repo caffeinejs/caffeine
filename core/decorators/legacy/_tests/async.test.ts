@@ -1,9 +1,9 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
 import { DiCaf } from '../../../container.js'
-import { Configuration } from '../configuration.js'
-import { Provides } from '../provides.js'
-import { Async } from '../async.js'
+import { Configuration } from '../configuration.legacy.js'
+import { Provides } from '../provides.legacy.js'
+import { Async } from '../async.legacy.js'
 
 describe('Legacy @Async', function () {
   describe('async @Provides factory', function () {

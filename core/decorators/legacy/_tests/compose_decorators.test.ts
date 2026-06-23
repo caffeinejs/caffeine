@@ -1,10 +1,10 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
 import { DiCaf } from '../../../container.js'
-import { Injectable } from '../injectable.js'
-import { Named } from '../named.js'
-import { Lifetime } from '../lifetime.js'
-import { composeDecorators } from '../compose_decorators.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Named } from '../named.legacy.js'
+import { Lifetime } from '../lifetime.legacy.js'
+import { composeDecorators } from '../compose_decorators.legacy.js'
 import { Scopes } from '../../../scope.js'
 
 type AnyDecorator = (target: object | Function, propertyKey?: string | symbol, descriptor?: PropertyDescriptor) => void

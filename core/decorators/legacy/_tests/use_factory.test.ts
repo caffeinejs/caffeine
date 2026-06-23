@@ -1,10 +1,10 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
 import { DiCaf } from '../../../container.js'
-import { Injectable } from '../injectable.js'
-import { Lifetime } from '../lifetime.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Lifetime } from '../lifetime.legacy.js'
 import { Scopes } from '../../../scope.js'
-import { UseFactory } from '../use_factory.js'
+import { UseFactory } from '../use_factory.legacy.js'
 
 describe('Legacy @UseFactory', function () {
   describe('basic factory', function () {

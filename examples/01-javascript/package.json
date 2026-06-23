@@ -1,17 +1,15 @@
 {
-  "name": "@caffeine-projects/example-commonjs",
+  "name": "@caffeinejs/example-javascript",
   "private": true,
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "prestart": "npm run build --prefix ../..",
-    "start": "tsx index.ts"
+    "start": "node --import tsx/esm index.js"
   },
   "dependencies": {
     "@caffeinejs/core": "file:../.."
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "tsx": "^4.22.4"
   }
 }

@@ -1,9 +1,9 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
 import { DiCaf } from '../../../container.js'
-import { Injectable } from '../injectable.js'
-import { Inject } from '../inject.js'
-import { Lifetime } from '../lifetime.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Inject } from '../inject.legacy.js'
+import { Lifetime } from '../lifetime.legacy.js'
 import { Scopes } from '../../../scope.js'
 
 describe('Legacy @Injectable', function () {

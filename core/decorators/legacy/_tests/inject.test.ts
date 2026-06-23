@@ -1,8 +1,8 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
 import { DiCaf } from '../../../container.js'
-import { Injectable } from '../injectable.js'
-import { Inject } from '../inject.js'
+import { Injectable } from '../injectable.legacy.js'
+import { Inject } from '../inject.legacy.js'
 
 describe('Legacy @Inject', function () {
   describe('property injection', function () {

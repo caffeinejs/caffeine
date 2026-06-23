@@ -1,7 +1,7 @@
 import { ErrInvalidDecorator } from '../../errors.js'
 import { extendMemberInjectableAttributes } from '../registrar/index.js'
 import { idfy } from '../registrar/types.js'
-import { Configuration } from './configuration.js'
+import { Configuration } from './configuration.legacy.js'
 
 /**
  * Configures a pre-destroy callback for a bean produced by a `@Provides` method.
