@@ -50,6 +50,15 @@ lint: ## check lint and fix errors
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 	@npm run lint:fix -w $*
 
+.PHONY: bench
+bench: ## list available benchmarks
+	@echo "Available benchmarks: helloworld"
+	@echo "Usage: make bench:<type> (e.g. make bench:helloworld)"
+
+bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
+	@npm run build -w @caffeinejs/benchmarks
+	@npm run bench:$* -w @caffeinejs/benchmarks
+
 # Misc
 # --
 
@@ -62,3 +71,4 @@ help: ## show help
 	@printf "\033[36m%-20s\033[0m %s\n" "lint-check:<package>" "lint a single package without fixing (e.g. lint-check:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "fmt:<package>" "format a single package (e.g. fmt:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "fmt-check:<package>" "check formatting of a single package (e.g. fmt-check:http)"
+	@printf "\033[36m%-20s\033[0m %s\n" "bench:<type>" "build and run a benchmark (e.g. bench:helloworld)"

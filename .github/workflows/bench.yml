@@ -1,0 +1,52 @@
+name: Bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      benchmark:
+        description: 'Benchmark to run'
+        required: true
+        default: 'helloworld'
+        type: choice
+        options:
+          - helloworld
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: 'Bench :: ${{ inputs.benchmark }}'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.3
+
+      - name: Node
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Build
+        run: npm run build -w @caffeinejs/benchmarks
+
+      - name: Run Benchmark
+        run: npm run bench:${{ inputs.benchmark }} -w @caffeinejs/benchmarks | tee /tmp/bench-output.txt
+
+      - name: Write Summary
+        if: always()
+        run: |
+          echo "## Benchmark: \`${{ inputs.benchmark }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/bench-output.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

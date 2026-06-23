@@ -6,13 +6,34 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "bench": "node --import=tsx"
+    "bench": "node --import=tsx",
+    "build": "tsc -p tsconfig.nestjs.json",
+    "bench:helloworld": "node helloworld/bench.js"
   },
   "dependencies": {
+    "@adonisjs/application": "^9.0.1",
+    "@adonisjs/encryption": "^6.0.2",
+    "@adonisjs/events": "^10.2.0",
+    "@adonisjs/http-server": "^9.1.0",
+    "@adonisjs/logger": "^7.1.1",
     "@caffeinejs/core": "*",
-    "@caffeinejs/http": "*"
+    "@caffeinejs/http": "*",
+    "@elysiajs/node": "^1.4.5",
+    "@hono/node-server": "^1.0.0",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/platform-fastify": "^11.1.27",
+    "@trpc/server": "^11.0.0",
+    "elysia": "^1.4.29",
+    "express": "^5.0.0",
+    "fastify": "^5.0.0",
+    "hono": "^4.0.0",
+    "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
+    "autocannon": "^8.0.0",
     "mitata": "^1.0.34",
     "tsx": "^4.22.4"
   }
