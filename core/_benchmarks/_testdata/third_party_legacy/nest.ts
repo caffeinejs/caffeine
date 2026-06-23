@@ -1,5 +1,4 @@
-import { Injectable, Scope } from '@nestjs/common'
-import { Module } from '@nestjs/common'
+import { Injectable, Scope, Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 
 @Injectable()

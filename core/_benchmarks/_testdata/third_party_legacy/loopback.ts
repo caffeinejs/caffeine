@@ -23,6 +23,7 @@ const ctx = new Context()
 ctx.bind(LoopRep.name).toClass(LoopRep)
 ctx.bind(LoopSvc.name).toClass(LoopSvc)
 ctx.bind(LoopRoot.name).toClass(LoopRoot)
-ctx.bind(LoopSingletonRoot.name).toClass(LoopSingletonRoot).inScope(BindingScope.SINGLETON)
+ctx.bind(LoopSingletonRoot.name).toClass(LoopSingletonRoot)
+  .inScope(BindingScope.SINGLETON)
 
 export { ctx as loopCtx }

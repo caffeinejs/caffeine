@@ -1,9 +1,6 @@
 // @ts-nocheck
 
-import { createContainer } from 'awilix'
-import { asClass } from 'awilix'
-import { InjectionMode } from 'awilix'
-import { Lifetime } from 'awilix'
+import { createContainer, asClass, InjectionMode, Lifetime } from 'awilix'
 
 class AwilixRep1 {}
 

@@ -17,9 +17,11 @@ import { BindTo } from './Binder.js'
 
 After making any code changes, always run the following checks in order and fix any failures before considering the task complete:
 
-1. `npm run build` — must compile without errors (type checks included)
-2. `npm test` — all tests must pass
-3. `npm run lint:fix` — zero errors (warnings are pre-existing and acceptable)
+1. `npm run build` — must compile without errors
+2. `npm run test:typecheck` — type-check all test files
+3. `npm run test:typecheck:legacy` — type-check legacy decorator files
+4. `npm test` — all tests must pass
+5. `npm run lint:fix` — zero errors (warnings are pre-existing and acceptable)
 
 ## Private modules
 

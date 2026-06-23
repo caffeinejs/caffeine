@@ -1,5 +1,4 @@
-import { injectable, singleton } from 'tsyringe'
-import { container as tsy } from 'tsyringe'
+import { injectable, singleton, container as tsy } from 'tsyringe'
 
 @injectable()
 class TsyRep1 {}

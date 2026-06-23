@@ -1,6 +1,4 @@
-import { injectable } from '@loopback/context'
-import { inject } from '@loopback/context'
-import { Context } from '@loopback/context'
+import { injectable, inject, Context } from '@loopback/context'
 
 @injectable()
 class UserRepository {}

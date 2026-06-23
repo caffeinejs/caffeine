@@ -1,6 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { DiCaf } from '@caffeinejs/core'
-import { scan } from '@caffeinejs/core'
+import { DiCaf, scan } from '@caffeinejs/core'
 
 const distDir = fileURLToPath(new URL('.', import.meta.url))
 

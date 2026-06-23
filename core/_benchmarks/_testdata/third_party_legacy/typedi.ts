@@ -1,7 +1,6 @@
 // @ts-nocheck
 
-import { Service } from 'typedi'
-import { Container } from 'typedi'
+import { Service, Container } from 'typedi'
 
 @Service({ transient: true })
 class TypeRep1 {}

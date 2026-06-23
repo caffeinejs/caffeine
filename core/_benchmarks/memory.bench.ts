@@ -78,25 +78,25 @@ function row(label: string, m: Record<keyof MemUsage, number>, overhead: number)
   const ratio = overhead / smallerOverhead
   const vs = ratio === 1 ? ' (baseline)' : `  ${ratio.toFixed(1)}x more`
   return (
-    label.padEnd(10) +
-    kb(m.heapUsed).padStart(COL) +
-    kb(m.heapTotal).padStart(COL) +
-    kb(m.rss).padStart(COL) +
-    kb(m.external).padStart(COL) +
-    kb(overhead).padStart(COL) +
-    vs
+    label.padEnd(10)
+    + kb(m.heapUsed).padStart(COL)
+    + kb(m.heapTotal).padStart(COL)
+    + kb(m.rss).padStart(COL)
+    + kb(m.external).padStart(COL)
+    + kb(overhead).padStart(COL)
+    + vs
   )
 }
 
 console.log(`\n--- Memory Usage (median of ${N} subprocess runs, same 7-class graph) ---\n`)
 console.log(`Node.js baseline heapUsed: ${kb(baseline.heapUsed)}\n`)
 console.log(
-  ''.padEnd(10) +
-    'heapUsed'.padStart(COL) +
-    'heapTotal'.padStart(COL) +
-    'rss'.padStart(COL) +
-    'external'.padStart(COL) +
-    'overhead'.padStart(COL),
+  ''.padEnd(10)
+  + 'heapUsed'.padStart(COL)
+  + 'heapTotal'.padStart(COL)
+  + 'rss'.padStart(COL)
+  + 'external'.padStart(COL)
+  + 'overhead'.padStart(COL),
 )
 const rows = [
   { name: 'vanilla', m: vanilla, overhead: vanillaOverhead },

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import supertest from 'supertest'
 import fastify from 'fastify'
-import { fastifyAdapter, fastifyAdapterFactory } from './adapter.js'
 import { Controller, Get, header, newHTTP, param, Params, query } from '@caffeinejs/http'
 import { DiCaf } from '@caffeinejs/core'
+import { fastifyAdapter, fastifyAdapterFactory } from './adapter.js'
 
 describe('Fastify Adapter', () => {
   it('exposes the underlying server as a supertest-compatible listener', async () => {
@@ -16,7 +16,8 @@ describe('Fastify Adapter', () => {
     const adaptee = await Promise.resolve(adapter({ routers: [] }))
 
     expect(adaptee.instance()).toBe(app)
-    await supertest(adaptee.instance().server).get('/').expect(200, { ok: true })
+    await supertest(adaptee.instance().server).get('/')
+      .expect(200, { ok: true })
   })
 
   it('exposes the underlying fastify instance and can be tested with .inject()', async () => {

@@ -1,5 +1,4 @@
-import { Injectable } from 'injection-js'
-import { ReflectiveInjector } from 'injection-js'
+import { Injectable, ReflectiveInjector } from 'injection-js'
 import type { ResolvedReflectiveProvider } from 'injection-js'
 
 @Injectable()

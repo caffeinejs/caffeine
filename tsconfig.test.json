@@ -1,9 +1,7 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "jsx": "preserve",
     "noEmit": true,
     "composite": false,
@@ -15,8 +13,8 @@
     "**/*.spec.ts"
   ],
   "exclude": [
-    "dist",
-    "node_modules",
-    "**/*.legacy.ts"
+    "**/dist",
+    "**/node_modules",
+    "core/decorators/legacy/**"
   ]
 }

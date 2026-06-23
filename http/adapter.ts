@@ -15,8 +15,8 @@ export interface AdapterFactoryIn {
   container: Container
 }
 
-export type AdapterFactory<R, A> =
-  (input: AdapterFactoryIn) => Adapter<R, A> | Promise<Adapter<R, A>>
+export type AdapterFactory<R, A>
+  = (input: AdapterFactoryIn) => Adapter<R, A> | Promise<Adapter<R, A>>
 
 export interface Kit<R> {
   routers: Router<R>[]

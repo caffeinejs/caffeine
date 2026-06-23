@@ -1,6 +1,5 @@
 import 'reflect-metadata'
-import { Injectable } from '@nestjs/common'
-import { Module } from '@nestjs/common'
+import { Injectable, Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 
 @Injectable()

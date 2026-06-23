@@ -18,20 +18,20 @@ const WARMUP = 5
 const ITERATIONS = 50
 
 async function measureAsync(fn: () => Promise<number>, warmup: number, n: number): Promise<number[]> {
-  for (let i = 0; i < warmup; i++) await fn()
+  for (let i = 0; i < warmup; i++) { await fn() }
   const samples: number[] = []
-  for (let i = 0; i < n; i++) samples.push(await fn())
+  for (let i = 0; i < n; i++) { samples.push(await fn()) }
   return samples
 }
 
 function measureSync(fn: () => number, warmup: number, n: number): number[] {
-  for (let i = 0; i < warmup; i++) fn()
+  for (let i = 0; i < warmup; i++) { fn() }
   const samples: number[] = []
-  for (let i = 0; i < n; i++) samples.push(fn())
+  for (let i = 0; i < n; i++) { samples.push(fn()) }
   return samples
 }
 
-function stats(samples: number[]): { mean: number; min: number; max: number; p50: number; p95: number } {
+function stats(samples: number[]): { mean: number, min: number, max: number, p50: number, p95: number } {
   const sorted = [...samples].sort((a, b) => a - b)
   const mean = samples.reduce((s, x) => s + x, 0) / samples.length
   const p50 = sorted[Math.floor(sorted.length * 0.5)]!
@@ -44,12 +44,12 @@ const fmtMs = (ms: number): string => ms.toFixed(2) + ' ms'
 const COL = 10
 
 const row = (label: string, s: ReturnType<typeof stats>): string =>
-  label.padEnd(12) +
-  fmtMs(s.mean).padStart(COL) +
-  fmtMs(s.min).padStart(COL) +
-  fmtMs(s.max).padStart(COL) +
-  fmtMs(s.p50).padStart(COL) +
-  fmtMs(s.p95).padStart(COL)
+  label.padEnd(12)
+  + fmtMs(s.mean).padStart(COL)
+  + fmtMs(s.min).padStart(COL)
+  + fmtMs(s.max).padStart(COL)
+  + fmtMs(s.p50).padStart(COL)
+  + fmtMs(s.p95).padStart(COL)
 
 console.log(`Warming up (${WARMUP} iterations each)...`)
 const diSamples = await measureAsync(runDI, WARMUP, ITERATIONS)
@@ -70,13 +70,13 @@ const baseline = results[0]!.s.mean
 
 console.log(`\n--- Startup Time (${ITERATIONS} iterations, same 7-class graph) ---\n`)
 console.log(
-  ''.padEnd(12) +
-    'mean'.padStart(COL) +
-    'min'.padStart(COL) +
-    'max'.padStart(COL) +
-    'p50'.padStart(COL) +
-    'p95'.padStart(COL) +
-    '  vs fastest',
+  ''.padEnd(12)
+  + 'mean'.padStart(COL)
+  + 'min'.padStart(COL)
+  + 'max'.padStart(COL)
+  + 'p50'.padStart(COL)
+  + 'p95'.padStart(COL)
+  + '  vs fastest',
 )
 for (const { name, s } of results) {
   const ratio = s.mean / baseline

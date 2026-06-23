@@ -28,18 +28,14 @@ test: ## run all tests
 test\:%: ## run the test suite of a single package (e.g. test:http)
 	@npm test -w $*
 
-.PHONY: ci
-ci: ## run all ci checks
-	@npm run fmt:check
-	@npm run lint
-	@npm run build
-	@npm test
-
-.PHONY: ci-fix
-ci-fix: ## run all ci checks but with fixes enabled
+.PHONY: check
+check: ## run all checks
 	@npm run fmt
 	@npm run lint:fix
+	@npm run lint:markdown
 	@npm run build
+	@npm run test:typecheck
+	@npm run test:typecheck:legacy
 	@npm test
 
 .PHONY: fmt
@@ -47,28 +43,14 @@ fmt: ## format code
 	@npm run fmt
 
 fmt\:%: ## format a single package (e.g. fmt:http)
-	@npx prettier $* --write
-
-.PHONY: fmt-check
-fmt-check: ## check code formatting
-	@npm run fmt:check
-
-fmt-check\:%: ## check formatting of a single package (e.g. fmt-check:http)
-	@npx prettier $* --check
+	@npm run fmt -w $*
 
 .PHONY: lint
 lint: ## check lint and fix errors
 	@npm run lint:fix
 
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
-	@npx eslint $* --fix
-
-.PHONY: lint-check
-lint-check: ## check lint without fixing
-	@npm run lint
-
-lint-check\:%: ## lint a single package without fixing (e.g. lint-check:http)
-	@npx eslint $*
+	@npm run lint:fix -w $*
 
 # Misc
 # --

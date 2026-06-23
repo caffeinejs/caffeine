@@ -1,5 +1,4 @@
-import { injectable } from 'inversify'
-import { Container } from 'inversify'
+import { injectable, Container } from 'inversify'
 
 @injectable()
 class UserRepository {}

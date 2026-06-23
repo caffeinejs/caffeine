@@ -1,4 +1,4 @@
-import { configureRoute } from './_registrar.js';
+import { configureRoute } from './_registrar.js'
 
 export function Get(path: string) {
   return function (_target: Function, context: ClassMethodDecoratorContext): void {
@@ -59,5 +59,6 @@ function configureMethod(
   path: string,
   method: string | string[],
 ) {
-  configureRoute(context, spec => spec.method(method).handler(context.name).path(path))
+  configureRoute(context, spec => spec.method(method).handler(context.name)
+    .path(path))
 }

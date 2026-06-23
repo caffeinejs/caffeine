@@ -1,7 +1,6 @@
 // @ts-nocheck
 
-import { injectable } from 'inversify'
-import { Container } from 'inversify'
+import { injectable, Container } from 'inversify'
 
 @injectable()
 class InvRep1 {}
@@ -72,6 +71,7 @@ inv.bind(InvSvc4).toSelf()
 inv.bind(InvSvc5).toSelf()
 inv.bind(InvSvc6).toSelf()
 inv.bind(InvRoot).toSelf()
-inv.bind(InvRootSingleton).toSelf().inSingletonScope()
+inv.bind(InvRootSingleton).toSelf()
+  .inSingletonScope()
 
 export { inv }

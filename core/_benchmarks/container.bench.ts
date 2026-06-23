@@ -5,9 +5,7 @@ import { Provides } from '../decorators/provides.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
-import { object } from '../injection.js'
-import { allOf } from '../injection.js'
-import { optional } from '../injection.js'
+import { object, allOf, optional } from '../injection.js'
 import { DiCaf } from '../container.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Scopes } from '../scope.js'
@@ -257,7 +255,7 @@ class Dep2 {}
 ])
 @Lifetime(Scopes.TRANSIENT)
 class DestructuringRoot {
-  constructor(readonly args: { dep1: Dep1; dep2?: Dep2; nested: { inner: Dep1 } }) {}
+  constructor(readonly args: { dep1: Dep1, dep2?: Dep2, nested: { inner: Dep1 } }) {}
 }
 
 @Injectable([Act, allOf(kLog), optional(Maybe)])
@@ -310,8 +308,8 @@ group('bindings', () => {
 const { benchmarks } = await run()
 
 const fmtNs = (ns: number): string => {
-  if (ns < 1_000) return `${ns.toFixed(2)} ns`
-  if (ns < 1_000_000) return `${(ns / 1_000).toFixed(2)} µs`
+  if (ns < 1_000) { return `${ns.toFixed(2)} ns` }
+  if (ns < 1_000_000) { return `${(ns / 1_000).toFixed(2)} µs` }
   return `${(ns / 1_000_000).toFixed(2)} ms`
 }
 
