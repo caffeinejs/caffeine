@@ -1,17 +1,32 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { access } from 'node:fs/promises'
-import os from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import autocannon from 'autocannon'
+import { printMachineInfo } from '../machine-info.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 const BASE_URL = `http://127.0.0.1:${PORT}/`
 
+interface ServerConfig {
+  name: string
+  cmd: string
+  args: string[]
+  requiresBuild?: boolean
+  url?: string
+}
+
+interface BenchResult {
+  name: string
+  reqPerSec: number
+  latencyMs: number
+  throughputMBs: number
+}
+
 const nestjsBuilt = resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs.js')
 
-const servers = [
+const servers: ServerConfig[] = [
   {
     name: 'fastify',
     cmd: 'node',
@@ -56,7 +71,7 @@ const servers = [
   },
 ]
 
-async function waitForReady(url, timeoutMs = 10_000) {
+async function waitForReady(url: string, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -72,7 +87,7 @@ async function waitForReady(url, timeoutMs = 10_000) {
   throw new Error(`Server on port ${PORT} did not become ready within ${timeoutMs}ms`)
 }
 
-async function killProcess(child) {
+async function killProcess(child: ChildProcess): Promise<void> {
   return new Promise(resolve => {
     child.kill('SIGTERM')
     const forceKill = setTimeout(() => child.kill('SIGKILL'), 2000)
@@ -83,7 +98,7 @@ async function killProcess(child) {
   })
 }
 
-async function runServer(server) {
+async function runServer(server: ServerConfig): Promise<BenchResult> {
   if (server.requiresBuild) {
     try {
       await access(nestjsBuilt)
@@ -121,19 +136,7 @@ async function runServer(server) {
   }
 }
 
-function printMachineInfo() {
-  const cpus = os.cpus()
-  const cpu = cpus[0]
-  const totalRam = (os.totalmem() / 1024 ** 3).toFixed(1)
-
-  console.log('\nMachine:')
-  console.log(`  OS:   ${os.type()} ${os.release()} ${os.arch()}`)
-  console.log(`  CPU:  ${cpu.model.trim()} x${cpus.length} @ ${(cpu.speed / 1000).toFixed(2)} GHz`)
-  console.log(`  RAM:  ${totalRam} GB`)
-  console.log(`  Node: ${process.version}`)
-}
-
-function printTable(results) {
+function printTable(results: BenchResult[]): void {
   const c1 = 14, c2 = 14, c3 = 19, c4 = 23
   const line = `${'-'.repeat(c1)}+-${'-'.repeat(c2)}+-${'-'.repeat(c3)}+-${'-'.repeat(c4 - 2)}`
   const header
@@ -162,7 +165,7 @@ function printTable(results) {
   console.log()
 }
 
-const results = []
+const results: BenchResult[] = []
 
 for (const server of servers) {
   if (process.env.CI !== 'true') {

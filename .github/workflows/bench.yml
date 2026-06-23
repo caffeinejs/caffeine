@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - helloworld
+          - startup
 
 concurrency:
   group: benchmark-${{ github.ref }}

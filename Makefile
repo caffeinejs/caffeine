@@ -52,7 +52,7 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 
 .PHONY: bench
 bench: ## list available benchmarks
-	@echo "Available benchmarks: helloworld"
+	@echo "Available benchmarks: helloworld startup"
 	@echo "Usage: make bench:<type> (e.g. make bench:helloworld)"
 
 bench\:%: ## build and run a benchmark (e.g. bench:helloworld)

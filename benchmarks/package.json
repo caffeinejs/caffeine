@@ -7,8 +7,10 @@
   "type": "module",
   "scripts": {
     "bench": "node --import=tsx",
-    "build": "tsc -p tsconfig.nestjs.json",
-    "bench:helloworld": "node helloworld/bench.js"
+    "build": "tsc -p tsconfig.nestjs.json && npm run bench:startup:compile",
+    "bench:startup:compile": "esbuild startup/nestjs/app.ts startup/fastify/app.ts startup/hono/app.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outdir=startup/dist --tsconfig=tsconfig.startup.json",
+    "bench:helloworld": "node --import=tsx helloworld/bench.ts",
+    "bench:startup": "node --import=tsx startup/bench.ts"
   },
   "dependencies": {
     "@adonisjs/application": "^9.0.1",
@@ -32,8 +34,10 @@
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
+    "@types/autocannon": "^7.12.7",
     "@types/express": "^5.0.0",
     "autocannon": "^8.0.0",
+    "esbuild": "^0.25.0",
     "mitata": "^1.0.34",
     "tsx": "^4.22.4"
   }
