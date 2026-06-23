@@ -1,7 +1,7 @@
 import Http, { IncomingMessage, ServerResponse } from 'http'
+import { randomUUID } from 'node:crypto'
 import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 import Supertest from 'supertest'
-import { randomUUID } from 'node:crypto'
 import { DiCaf, Scopes } from '../../../index.nodejs.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'

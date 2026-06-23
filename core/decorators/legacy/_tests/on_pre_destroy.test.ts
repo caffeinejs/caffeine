@@ -1,6 +1,6 @@
 import 'reflect-metadata'
-import { describe, it, expect, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { describe, it, expect, vi } from 'vitest'
 import { OnPreDestroy } from '../on_pre_destroy.legacy.js'
 import { Configuration } from '../configuration.legacy.js'
 import { Provides } from '../provides.legacy.js'

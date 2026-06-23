@@ -1,5 +1,5 @@
-import { describe, it, beforeAll, expect, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { describe, it, beforeAll, expect, vi } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'

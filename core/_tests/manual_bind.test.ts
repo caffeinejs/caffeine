@@ -1,6 +1,6 @@
 import '../index.nodejs.js'
-import { describe, it, expect, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { describe, it, expect, vi } from 'vitest'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'

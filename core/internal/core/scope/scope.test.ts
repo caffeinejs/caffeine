@@ -1,5 +1,5 @@
-import { describe, it, afterAll, expect, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { describe, it, afterAll, expect, vi } from 'vitest'
 import { Binding } from '../../../binding.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'

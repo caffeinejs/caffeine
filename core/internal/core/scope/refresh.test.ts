@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { describe, it, expect, vi } from 'vitest'
 import { Scopes } from '../../../scope.js'
 import { DiCaf } from '../../../container.js'
 import { Lifetime } from '../../../decorators/lifetime.js'

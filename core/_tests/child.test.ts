@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { describe, it, expect } from 'vitest'
 import { DiCaf } from '../container.js'
 
 describe('Named bindings visible in child containers', function () {

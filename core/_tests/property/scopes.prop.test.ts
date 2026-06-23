@@ -1,6 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { randomUUID } from 'node:crypto'
 import { DiCaf } from '../../container.js'
 import { Scopes } from '../../scope.js'
 

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
 import { randomUUID } from 'node:crypto'
+import { describe, it, expect } from 'vitest'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
