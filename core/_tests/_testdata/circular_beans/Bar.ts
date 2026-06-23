@@ -1,8 +1,8 @@
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Foo } from './Foo.js'
 
 export class Bar {
-  uuid: string = v4()
+  uuid: string = randomUUID()
 
   constructor(readonly foo: Foo) {}
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -19,7 +19,7 @@ describe('Abstract Classes', function () {
     @Injectable()
     @Extends(Base)
     class Impl extends Base {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       test(): string {
         return 'ok'
@@ -63,7 +63,7 @@ describe('Abstract Classes', function () {
 
   describe('when extending an abstract class with a transient scope', function () {
     abstract class Base {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
     }
 
     @Injectable()
@@ -394,7 +394,7 @@ describe('Abstract Classes', function () {
 
     describe('transient scope', function () {
       abstract class IdBase {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       class IdImpl extends IdBase {}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
@@ -19,12 +19,12 @@ describe('Method Injections', function () {
   @Injectable()
   @Lifetime(Scopes.TRANSIENT)
   class TransientDep {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
   }
 
   @Injectable()
   class SingletonDep {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
   }
 
   abstract class Base {
@@ -50,7 +50,7 @@ describe('Method Injections', function () {
   describe('when setting a transient dependency in a singleton component - using provide()', function () {
     @Injectable()
     class SingleInject {
-      id: string = v4()
+      id: string = randomUUID()
       transient!: Provider<TransientDep>
 
       @Inject([provide(TransientDep)])
@@ -85,7 +85,7 @@ describe('Method Injections', function () {
     @Injectable()
     @Lifetime(Scopes.TRANSIENT)
     class Tr {
-      id: string = v4()
+      id: string = randomUUID()
       dep!: Provider<SingletonDep>
 
       @Inject([provide(SingletonDep)])
@@ -159,7 +159,7 @@ describe('Method Injections', function () {
     @Injectable()
     @Profile('method-injections-test')
     class Test {
-      id: string = v4()
+      id: string = randomUUID()
       transient!: Provider<TransientDep>
       val!: string
       bases!: Base[]

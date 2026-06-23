@@ -42,8 +42,12 @@ group('normal', () => {
 const { benchmarks } = await run()
 
 const fmtNs = (ns: number): string => {
-  if (ns < 1_000) { return `${ns.toFixed(2)} ns` }
-  if (ns < 1_000_000) { return `${(ns / 1_000).toFixed(2)} µs` }
+  if (ns < 1_000) {
+    return `${ns.toFixed(2)} ns`
+  }
+  if (ns < 1_000_000) {
+    return `${(ns / 1_000).toFixed(2)} µs`
+  }
   return `${(ns / 1_000_000).toFixed(2)} ms`
 }
 

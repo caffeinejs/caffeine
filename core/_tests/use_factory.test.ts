@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { UseFactory } from '../decorators/use_factory.js'
@@ -69,7 +69,7 @@ describe(`@${UseFactory.name}()`, function () {
   })
 
   class Repo<T = any> {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     constructor(readonly model: T) {}
 

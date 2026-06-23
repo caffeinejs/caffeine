@@ -1,6 +1,6 @@
 import '../index.nodejs.js'
 import { describe, it, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -24,7 +24,7 @@ describe('Manual Binding', function () {
     }
 
     class Late {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       test() {
         return 'hi'
@@ -366,15 +366,15 @@ describe('Manual Binding', function () {
 
     describe('scoping', function () {
       class TransientDep {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       class CtxDep {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       class ContainerDep {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       class ReqDep {}

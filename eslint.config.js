@@ -11,7 +11,15 @@ import simpleImportSort from 'eslint-plugin-simple-import-sort'
 import stylistic from '@stylistic/eslint-plugin'
 
 export default defineConfig(
-  { ignores: ['**/dist/**', '.vscode/**', '.local/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '.vscode/**',
+      '.local/**',
+      'core/_benchmarks/**',
+      'core/_tests/deno/**',
+    ],
+  },
   eslint.configs.recommended,
   tseslintConfigs.recommended,
   importX.flatConfigs.recommended,
@@ -120,12 +128,33 @@ export default defineConfig(
     files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['*.config.ts', 'core/*.config.ts'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
       '@typescript-eslint/consistent-type-exports': ['error', { fixMixedExportsWithInlineTypeSpecifier: true }],
+    },
+  },
+  {
+    files: [
+      '**/_tests/**/*.ts',
+      '**/_testdata/**/*.ts',
+      '**/_benchmarks/**/*.ts',
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/*.bench.ts',
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: false,
+        projectService: false,
+      },
+    },
+    rules: {
+      '@typescript-eslint/consistent-type-exports': 'off',
     },
   },
   {

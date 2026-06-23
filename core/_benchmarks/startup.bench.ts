@@ -18,16 +18,24 @@ const WARMUP = 5
 const ITERATIONS = 50
 
 async function measureAsync(fn: () => Promise<number>, warmup: number, n: number): Promise<number[]> {
-  for (let i = 0; i < warmup; i++) { await fn() }
+  for (let i = 0; i < warmup; i++) {
+    await fn()
+  }
   const samples: number[] = []
-  for (let i = 0; i < n; i++) { samples.push(await fn()) }
+  for (let i = 0; i < n; i++) {
+    samples.push(await fn())
+  }
   return samples
 }
 
 function measureSync(fn: () => number, warmup: number, n: number): number[] {
-  for (let i = 0; i < warmup; i++) { fn() }
+  for (let i = 0; i < warmup; i++) {
+    fn()
+  }
   const samples: number[] = []
-  for (let i = 0; i < n; i++) { samples.push(fn()) }
+  for (let i = 0; i < n; i++) {
+    samples.push(fn())
+  }
   return samples
 }
 

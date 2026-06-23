@@ -1,5 +1,5 @@
 import { describe, it, beforeAll, expect } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -15,7 +15,7 @@ describe('Named Dependencies', function () {
   @Injectable()
   @Named(kBye)
   class ByeService {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     bye(): string {
       return 'bye-bye'
@@ -25,7 +25,7 @@ describe('Named Dependencies', function () {
   @Injectable([ByeService])
   @Named(kAck)
   class AckService {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     constructor(private readonly byeService: ByeService) {}
 
@@ -40,7 +40,7 @@ describe('Named Dependencies', function () {
 
   @Injectable([kBye, kAck])
   class Root {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     constructor(
       readonly byeService: ByeService,

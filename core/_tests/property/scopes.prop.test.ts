@@ -1,15 +1,15 @@
 import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { DiCaf } from '../../container.js'
 import { Scopes } from '../../scope.js'
 
 class SingletonSvc {
-  readonly id: string = v4()
+  readonly id: string = randomUUID()
 }
 
 class TransientSvc {
-  readonly id: string = v4()
+  readonly id: string = randomUUID()
 }
 
 describe('scope semantics (property)', function () {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -84,7 +84,7 @@ describe('Configuration', function () {
     const kTest = Symbol('test')
 
     class Service {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       constructor(private readonly msg: string) {}
 
@@ -218,7 +218,7 @@ describe('Configuration', function () {
 
   describe('when beans have dependencies inside same configuration context', function () {
     class Dep {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
     }
 
     class Root {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { DiCaf } from '@caffeine-projects/dicaf'
-import { Configuration, Injectable, Provides } from '@caffeine-projects/dicaf/decorators'
+import { DiCaf } from '@caffeinejs/core'
+import { Configuration, Injectable, Provides } from '@caffeinejs/core/decorators'
 
 Deno.test('public API exposes the core symbols', () => {
   assert.equal(typeof DiCaf, 'function')

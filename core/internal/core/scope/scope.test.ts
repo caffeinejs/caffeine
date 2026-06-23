@@ -1,5 +1,5 @@
 import { describe, it, afterAll, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Binding } from '../../../binding.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
@@ -15,7 +15,7 @@ describe('Scoping', function () {
   const spy = vi.fn()
 
   class CustomScope implements Scope {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {
       spy()
@@ -51,7 +51,7 @@ describe('Scoping', function () {
   @Lazy()
   @Lifetime(kCustomScopeId)
   class Dep {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
   }
 
   afterAll(() => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Injectable } from '../decorators/injectable.js'
 import { DiCaf } from '../container.js'
 
@@ -20,7 +20,7 @@ describe('interfaces', function () {
 
     @Injectable(kRepo)
     class MySQLRepository implements Repository {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       save(): string {
         return 'mysql'

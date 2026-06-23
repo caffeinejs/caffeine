@@ -1,4 +1,4 @@
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Injectable } from '../../../decorators/injectable.js'
 import { defer } from '../../../injection.js'
 import { Scopes } from '../../../scope.js'
@@ -7,7 +7,7 @@ import { Bar, BarTransient } from './Bar.js'
 
 @Injectable([defer(() => Bar)])
 export class Foo {
-  uuid: string = v4()
+  uuid: string = randomUUID()
 
   constructor(readonly bar: Bar) {}
 
@@ -21,7 +21,7 @@ export class Foo {
 @Injectable([defer(() => BarTransient)])
 @Lifetime(Scopes.TRANSIENT)
 export class FooTransient {
-  uuid: string = v4()
+  uuid: string = randomUUID()
 
   constructor(readonly bar: BarTransient) {}
 

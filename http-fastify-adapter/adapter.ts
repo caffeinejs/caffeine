@@ -69,11 +69,23 @@ function compile<
       case 'body':
         return (server, req, res) => req.body
       case 'query':
-        if (field) { return (server, req, res) => (req.query as Record<string, unknown>)[field] } else { return (server, req, res) => req.query }
+        if (field) {
+          return (server, req, res) => (req.query as Record<string, unknown>)[field]
+        } else {
+          return (server, req, res) => req.query
+        }
       case 'params':
-        if (field) { return (server, req, res) => (req.params as Record<string, unknown>)[field] } else { return (server, req, res) => req.params }
+        if (field) {
+          return (server, req, res) => (req.params as Record<string, unknown>)[field]
+        } else {
+          return (server, req, res) => req.params
+        }
       case 'header':
-        if (field) { return (server, req, res) => (req.headers as Record<string, unknown>)[field] } else { return (server, req, res) => req.headers }
+        if (field) {
+          return (server, req, res) => (req.headers as Record<string, unknown>)[field]
+        } else {
+          return (server, req, res) => req.headers
+        }
       default:
         throw new Error(`Invalid parameter type: ${type}`)
     }

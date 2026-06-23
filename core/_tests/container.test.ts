@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { DiCaf } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { PreDestroy } from '../decorators/pre_destroy.js'
@@ -74,20 +74,20 @@ describe('Container Operations', function () {
       const kValue = Symbol('test_reset_value')
 
       class Dep1 {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
 
         constructor(readonly value: string) {}
       }
 
       @Injectable()
       class Dep2 {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       const kDep3 = Symbol('dep_3')
 
       class Dep3 {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       @Configuration()
@@ -102,7 +102,7 @@ describe('Container Operations', function () {
 
       @Injectable(kDep4)
       class Dep4 {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       it('should reset all instances, keeping value providers', async function () {
@@ -193,7 +193,7 @@ describe('Container Operations', function () {
       @Injectable([kValue])
       @Profile('container-ops-async-reset')
       class Dep1 {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
 
         constructor(readonly value: string) {}
 
@@ -205,12 +205,12 @@ describe('Container Operations', function () {
 
       @Injectable()
       class Dep2 {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       @Injectable()
       class Dep3 {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       it('should reset only the requested instance and call destroy hook if any', async function () {

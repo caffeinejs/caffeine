@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
-import { DiCaf, ErrCannotLoadTypeScriptModule, scan } from '@caffeine-projects/dicaf'
-import { DenoAutoloadConfig } from './_testdata/config.ts'
+import { DiCaf, ErrCannotLoadTypeScriptModule, scan } from '@caffeinejs/core'
+import { DenoAutoloadConfig, kDenoMessage } from './_testdata/config.ts'
 import { DenoAutoloadService } from './_testdata/service.ts'
-import { kDenoMessage } from './_testdata/config.ts'
 
 const testdataDir = new URL('./_testdata', import.meta.url).pathname
 

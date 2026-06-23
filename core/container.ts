@@ -308,7 +308,7 @@ export class DiCaf implements Container {
   }
 
   /**
-   * Wraps the given key in a {@link Provider} that returns an instance on every {@link Provider.get()} call.
+   * Wraps the given key in a {@link Provider} that returns an instance on every {@link Provider.get} call.
    *
    * @param key - The key to wrap in a {@link Provider}.
    *
@@ -329,7 +329,7 @@ export class DiCaf implements Container {
 
   /**
    * Wraps the given key in a {@link Provider} that returns an array of
-   * instances on every {@link Provider.get()} call.
+   * instances on every {@link Provider.get} call.
    *
    * @param key - The key to wrap in a {@link Provider}.
    *

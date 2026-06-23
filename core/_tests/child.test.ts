@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { DiCaf } from '../container.js'
 
 describe('Named bindings visible in child containers', function () {
@@ -60,7 +60,7 @@ describe('Named bindings visible in child containers', function () {
 
 describe('Per-container scope instances', function () {
   class PerContainerSingleton {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
   }
 
   it('should give independent singleton instances across separate containers', async function () {
@@ -85,7 +85,7 @@ describe('Child', function () {
   describe('when child contains root', function () {
     describe('and parent contains injection dependency', function () {
       class Dep {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       class Svc {

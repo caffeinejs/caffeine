@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Async } from '../decorators/async.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -97,7 +97,7 @@ describe('Hooks', function () {
     @Injectable([Dep])
     @Profile('hooks-post-construct')
     class Component {
-      id: string = v4()
+      id: string = randomUUID()
 
       @Inject(Prop)
       prop!: Prop

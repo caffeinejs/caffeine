@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { OnPreDestroy } from '../on_pre_destroy.legacy.js'
 import { Configuration } from '../configuration.legacy.js'
 import { Provides } from '../provides.legacy.js'
@@ -12,7 +12,7 @@ describe('Legacy @OnPreDestroy', function () {
     const spy = vi.fn()
 
     class ConnLegOPD {
-      readonly id = v4()
+      readonly id = randomUUID()
     }
 
     @Configuration()
@@ -40,7 +40,7 @@ describe('Legacy @OnPreDestroy', function () {
     const order: string[] = []
 
     class CacheLegOPD {
-      readonly id = v4()
+      readonly id = randomUUID()
     }
 
     @Configuration()

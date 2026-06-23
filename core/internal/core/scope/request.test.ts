@@ -1,7 +1,7 @@
 import Http, { IncomingMessage, ServerResponse } from 'http'
 import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 import Supertest from 'supertest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { DiCaf, Scopes } from '../../../index.nodejs.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
@@ -19,7 +19,7 @@ describe('Request Scope', function () {
     @Injectable()
     @Lifetime(Scopes.REQUEST)
     class Ctrl {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       constructor() {
         ctorSpy()

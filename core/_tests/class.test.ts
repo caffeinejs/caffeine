@@ -1,5 +1,5 @@
 import { describe, it, beforeAll, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
@@ -13,7 +13,7 @@ describe('Class', function () {
 
     @Injectable()
     class SeeYaService {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       constructor() {
         spy()
@@ -26,7 +26,7 @@ describe('Class', function () {
 
     @Injectable([SeeYaService])
     class OkService {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       constructor(private readonly seeYaService: SeeYaService) {
         spy()
@@ -39,7 +39,7 @@ describe('Class', function () {
 
     @Injectable([SeeYaService, OkService])
     class Root {
-      readonly id: string = v4()
+      readonly id: string = randomUUID()
 
       constructor(
         readonly seeYaService: SeeYaService,
@@ -216,19 +216,19 @@ describe('Class', function () {
     describe('and using singleton scope for all', function () {
       @Injectable()
       class Dep {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
       }
 
       @Injectable([Dep])
       class Repo {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
 
         constructor(readonly dep: Dep) {}
       }
 
       @Injectable([Repo, Dep])
       class Service {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
 
         constructor(
           readonly repo: Repo,
@@ -238,7 +238,7 @@ describe('Class', function () {
 
       @Injectable([Dep, Service, Repo])
       class Controller {
-        readonly id: string = v4()
+        readonly id: string = randomUUID()
 
         constructor(
           readonly dep: Dep,

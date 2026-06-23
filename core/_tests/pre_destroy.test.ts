@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { PreDestroy } from '../decorators/pre_destroy.js'
 import { OnPreDestroy } from '../decorators/on_pre_destroy.js'
 import { DiCaf } from '../container.js'
@@ -47,7 +47,7 @@ describe('PreDestroy', function () {
       const spy = vi.fn()
 
       class ConnOPD {
-        readonly id = v4()
+        readonly id = randomUUID()
       }
 
       @Configuration()
@@ -75,7 +75,7 @@ describe('PreDestroy', function () {
       const order: string[] = []
 
       class CacheOPD {
-        readonly id = v4()
+        readonly id = randomUUID()
       }
 
       @Configuration()
@@ -141,7 +141,7 @@ describe('PreDestroy', function () {
 
       @Injectable()
       class Svc {
-        readonly id = v4()
+        readonly id = randomUUID()
 
         @PreDestroy()
         destroy() {
@@ -173,7 +173,7 @@ describe('PreDestroy', function () {
 
       @Injectable()
       class Svc {
-        readonly id = v4()
+        readonly id = randomUUID()
 
         @PreDestroy()
         destroy() {

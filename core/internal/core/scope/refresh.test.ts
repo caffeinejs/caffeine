@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { v4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import { Scopes } from '../../../scope.js'
 import { DiCaf } from '../../../container.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
@@ -10,7 +10,7 @@ describe('Refresh Scope', function () {
   @Injectable()
   @Lifetime(Scopes.REFRESH)
   class Dep {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     fn(): string {
       return 'test'
@@ -20,7 +20,7 @@ describe('Refresh Scope', function () {
   @Injectable([Dep])
   @Lifetime(Scopes.REFRESH)
   class Root {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     constructor(readonly dep: Dep) {}
 
@@ -31,7 +31,7 @@ describe('Refresh Scope', function () {
 
   @Injectable()
   class Out {
-    readonly id: string = v4()
+    readonly id: string = randomUUID()
 
     hi(): string {
       return 'tchau'
