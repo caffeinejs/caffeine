@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.nestjs.json && npm run bench:startup:compile",
     "bench:startup:compile": "esbuild startup/nestjs/app.ts startup/fastify/app.ts startup/hono/app.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outdir=startup/dist --tsconfig=tsconfig.startup.json",
     "bench:helloworld": "node --import=tsx helloworld/bench.ts",
-    "bench:startup": "node --import=tsx startup/bench.ts"
+    "bench:startup": "node --import=tsx startup/bench.ts",
+    "bench:request": "node --import=tsx request/bench.ts"
   },
   "dependencies": {
     "@adonisjs/application": "^9.0.1",
@@ -31,6 +32,8 @@
     "express": "^5.0.0",
     "fastify": "^5.0.0",
     "hono": "^4.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
