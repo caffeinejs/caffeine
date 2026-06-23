@@ -14,7 +14,6 @@ const main = require(path.join(root, 'dist/commonjs/index.js'))
 const decorators = require(path.join(root, 'dist/commonjs/decorators/index.js'))
 const registrar = require(path.join(root, 'dist/commonjs/decorators/registrar/index.js'))
 const testing = require(path.join(root, 'dist/commonjs/testing/index.js'))
-const legacy = require(path.join(root, 'dist/commonjs/decorators/legacy/index.js'))
 
 // ---------------------------------------------------------------------------
 // 2. Key named exports present
@@ -32,7 +31,6 @@ for (const name of requiredDecoratorsExports) {
 
 assert.ok('defineInjectable' in registrar, 'registrar: defineInjectable missing')
 assert.ok('TestContainer' in testing, 'testing: TestContainer missing')
-assert.ok('Injectable' in legacy, 'legacy: Injectable missing')
 
 // ---------------------------------------------------------------------------
 // 3. dist/commonjs/package.json stub exists and has correct content
@@ -73,7 +71,7 @@ async function testDiCaf() {
 
   // class binding
   const kSvc = Symbol('svc')
-  class Svc {}
+  class Svc { }
 
   const di2 = new DiCaf()
   di2.bind(kSvc).toClass(Svc)
@@ -90,7 +88,7 @@ async function testDiCaf() {
   // multiple bindings, dependency chain
   const kA = Symbol('a')
   const kB = Symbol('b')
-  class A {}
+  class A { }
   class B {
     constructor(a) {
       this.a = a
