@@ -1,8 +1,8 @@
 if (typeof Reflect === 'undefined' || !Reflect.getMetadata) {
   throw new Error(
-    'DiCaf requires reflect-metadata when using Legacy Decorators. '
+    '@caffeinejs/core requires reflect-metadata when using Legacy Decorators. '
     + `Please install it and add 'import "reflect-metadata"' to the top of your entry point. `
-    + `If you are using ECMAScript Decorators, import from '@caffeine-projects/dicaf/decorators' instead`,
+    + `If you are using ECMAScript Decorators, import from '@caffeinejs/core/decorators' instead`,
   )
 }
 
