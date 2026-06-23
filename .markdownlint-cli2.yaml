@@ -1,0 +1,16 @@
+# See https://github.com/DavidAnson/markdownlint-cli2
+config:
+  # Disable all rules by default.
+  default: false
+
+globs:
+  - '**/*.md'
+
+ignores:
+  - '**/node_modules/**'
+  - '.agents/**'
+  - '.claude/**'
+  - '.local/**'
+  - 'test/**/*.md'
+
+noProgress: true
