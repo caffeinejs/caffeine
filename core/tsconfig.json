@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist/esm",
@@ -15,7 +15,6 @@
     "**/examples/",
     "**/tools/",
     "**/*.spec.ts",
-    "**/*.test.ts",
-    "*.config.ts"
+    "**/*.test.ts"
   ]
 }

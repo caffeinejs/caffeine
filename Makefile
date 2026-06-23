@@ -6,10 +6,6 @@
 
 export
 
-.PHONY: install
-install: ## install dependencies
-	@npm install
-
 .PHONY: build
 build: ## build all packages
 	@npm run build:force
@@ -36,6 +32,8 @@ check: ## run all checks
 	@npm run build
 	@npm run test:typecheck
 	@npm run test:typecheck:legacy
+	@npm run test:cjs
+	@npm run test:memory
 	@npm test
 
 .PHONY: fmt

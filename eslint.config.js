@@ -46,6 +46,8 @@ export default defineConfig(
             './http/tsconfig.json',
             './http-fastify-adapter/tsconfig.json',
             './benchmarks/tsconfig.json',
+            './examples/*/tsconfig.json',
+            './core/examples/*/tsconfig.json',
           ],
         },
       },
@@ -128,9 +130,7 @@ export default defineConfig(
     files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
-        projectService: {
-          allowDefaultProject: ['*.config.ts', 'core/*.config.ts'],
-        },
+        projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
     },
