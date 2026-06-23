@@ -142,8 +142,22 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
+# AI
+CLAUDE.local.md
+skills-lock.json
+
+.codex/
+.agents/
+.claude/skills/*
+
 # Project
 
 .vscode/
 
+dist/
+out/
 docs/.ai/
+
+Makefile.overrides
+
+.env

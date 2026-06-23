@@ -1,7 +1,7 @@
 {
   "name": "@caffeinejs/core",
   "version": "0.0.0",
-  "description": "Caffeine core package",
+  "description": "CaffeineJS IoC Container",
   "license": "MIT",
   "type": "module",
   "main": "dist/commonjs/index.js",
