@@ -76,7 +76,7 @@
   "scripts": {
     "build": "rm -rf dist && npm run build:esm && npm run build:cjs && tsc -p tsconfig.legacy.json",
     "build:esm": "tsc --build --force tsconfig.build.json",
-    "build:cjs": "node tools/build-cjs.mjs",
+    "build:cjs": "node ../tools/build-cjs.mjs",
     "test:typecheck": "tsc -p tsconfig.test.json",
     "test:typecheck:legacy": "tsc -p tsconfig.legacy.json",
     "test": "vitest run",
