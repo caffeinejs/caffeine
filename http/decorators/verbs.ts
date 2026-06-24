@@ -59,6 +59,8 @@ function configureMethod(
   path: string,
   method: string | string[],
 ) {
-  configureRoute(context, spec => spec.method(method).handler(context.name)
+  configureRoute(context, spec => spec
+    .method(method)
+    .handler(context.name)
     .path(path))
 }

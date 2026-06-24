@@ -1,0 +1,12 @@
+import { AdapterFactory } from '@caffeinejs/http'
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import { FastifyAdapter } from './adapter.js'
+
+export function fastifyAdapterFactory<
+  SERVER extends FastifyInstance = FastifyInstance,
+  REQ extends FastifyRequest = FastifyRequest,
+  RES extends FastifyReply = FastifyReply,
+>(fastify: SERVER): AdapterFactory<SERVER, REQ, FastifyAdapter<SERVER, REQ, RES>> {
+  return (kit, input): FastifyAdapter<SERVER, REQ, RES> =>
+    new FastifyAdapter<SERVER, REQ, RES>(kit.container, fastify, input.routers)
+}

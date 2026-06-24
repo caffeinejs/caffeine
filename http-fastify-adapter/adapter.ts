@@ -1,16 +1,9 @@
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
-import { Adapter, AdapterFactory, ParameterPickOptions, Router } from '@caffeinejs/http'
+import { Adapter, Router } from '@caffeinejs/http'
 import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
 import fp from 'fastify-plugin'
-import { FastifyContext } from './context.js'
-
-type Accessor<
-  SERVER extends FastifyInstance = FastifyInstance,
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->
-  = (server: SERVER, req: REQ, res: RES) => unknown
+import { compileParameters } from './adapter_handler_parameters.js'
 
 type HandlerFn = (handler: string | symbol) => (...args: unknown[]) => unknown
 
@@ -29,6 +22,17 @@ export class FastifyAdapter<
   async ready(): Promise<void> {
     await this.container.init()
 
+    const needsRequestScope = this.routers.some(
+      router => this.container.hasScopeInGraph(router.key, Scopes.REQUEST),
+    )
+
+    if (needsRequestScope) {
+      const man = this.container.requestScopeManager
+      this.#fastify.addHook('onRequest', (_req, _res, done) => {
+        man.run(() => done())
+      })
+    }
+
     for (let i = 0; i < this.routers.length; i++) {
       const router = this.routers[i]
 
@@ -37,13 +41,14 @@ export class FastifyAdapter<
       const fpo = { name: `${String(router.key)}`, fastify: '5.x' }
 
       this.#fastify.register(fp(async server => {
+        const controller = router.controller
+        const isSingleton = router.binding.scopeId === Scopes.SINGLETON
+
         for (const route of routes) {
-          const fn = compile(route.parameters) as (server: SERVER, req: REQ, res: RES) => unknown[]
-          const controller = router.controller
-          const singleton = router.binding.scopeId === Scopes.SINGLETON
+          const fn = compileParameters(route.parameters) as (server: SERVER, req: REQ, res: RES) => unknown[]
           let handlerFn: HandlerFn
 
-          if (singleton) {
+          if (isSingleton) {
             const ref = controller.get()
             const refFn = ref[route.handler]
             handlerFn = () => (...args: unknown[]) => refFn(...args)
@@ -52,7 +57,7 @@ export class FastifyAdapter<
           }
 
           server.route({
-            method: route.method,
+            method: [...new Set(route.method.map(m => m.toUpperCase()))],
             url: `${prefix}${route.path}`,
             schema: route.schema as FastifySchema,
             handler: async function (req, res) {
@@ -88,61 +93,5 @@ export class FastifyAdapter<
 
   async listen(opts?: FastifyListenOptions): Promise<string> {
     return this.#fastify.listen(opts)
-  }
-}
-
-export function fastifyAdapterFactory<
-  SERVER extends FastifyInstance = FastifyInstance,
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->(fastify: SERVER): AdapterFactory<SERVER, REQ, FastifyAdapter<SERVER, REQ, RES>> {
-  return (kit, input): FastifyAdapter<SERVER, REQ, RES> =>
-    new FastifyAdapter<SERVER, REQ, RES>(kit.container, fastify, input.routers)
-}
-
-function compile<
-  SERVER extends FastifyInstance = FastifyInstance,
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->(params: ParameterPickOptions<REQ>[]): (server: SERVER, req: REQ, res: RES) => unknown[] {
-  const accessors: Accessor[] = params.map(p => {
-    const type = p.type
-    const field = p.name
-
-    switch (type) {
-      case 'body':
-        return (_server, req, _res) => req.body
-      case 'query':
-        if (field) {
-          return (_server, req, _res) => (req.query as Record<string, unknown>)[field]
-        } else {
-          return (_server, req, _res) => req.query
-        }
-      case 'params':
-        if (field) {
-          return (_server, req, _res) => (req.params as Record<string, unknown>)[field]
-        } else {
-          return (_server, req, _res) => req.params
-        }
-      case 'header':
-        if (field) {
-          return (_server, req, _res) => (req.headers as Record<string, unknown>)[field]
-        } else {
-          return (_server, req, _res) => req.headers
-        }
-      case 'context':
-        return (_server, req, res) => new FastifyContext(req, res)
-      default:
-        throw new Error(`Invalid parameter type: ${type}`)
-    }
-  })
-
-  return (server, req, res) => {
-    const out = new Array(accessors.length)
-    for (let i = 0; i < accessors.length; i++) {
-      out[i] = accessors[i](server, req, res)
-    }
-
-    return out
   }
 }

@@ -31,3 +31,27 @@ export function header<R = unknown>(name?: string): ParameterPickOptions<R> {
 export function context<R = unknown>(): ParameterPickOptions<R> {
   return { type: 'context' }
 }
+
+export function method<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'method' }
+}
+
+export function url<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'url' }
+}
+
+export function path<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'path' }
+}
+
+export function signal<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'signal' }
+}
+
+export function port<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'port' }
+}
+
+export function address<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'address' }
+}
