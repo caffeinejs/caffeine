@@ -27,7 +27,8 @@ export interface Route<R> {
 }
 
 export interface Router<R> {
-  prefix: string
+  path: string
+  prefix?: string
   routes: Route<R>[]
   accept: string[]
   contentTypes: string[]

@@ -2,7 +2,6 @@ import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, Router } from '@caffeinejs/http'
 import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
-import fp from 'fastify-plugin'
 import { compileParameters } from './adapter_handler_parameters.js'
 
 type HandlerFn = (handler: string | symbol) => (...args: unknown[]) => unknown
@@ -36,11 +35,10 @@ export class FastifyAdapter<
     for (let i = 0; i < this.routers.length; i++) {
       const router = this.routers[i]
 
-      const prefix = router.prefix
+      const basePath = router.path
       const routes = router.routes
-      const fpo = { name: `${String(router.key)}`, fastify: '5.x' }
 
-      this.#fastify.register(fp(async server => {
+      this.#fastify.register(async server => {
         const controller = router.controller
         const isSingleton = router.binding.scopeId === Scopes.SINGLETON
 
@@ -58,7 +56,7 @@ export class FastifyAdapter<
 
           server.route({
             method: [...new Set(route.method.map(m => m.toUpperCase()))],
-            url: `${prefix}${route.path}`,
+            url: `${basePath}${route.path}`,
             schema: route.schema as FastifySchema,
             bodyLimit: route.bodyLimit ?? router.bodyLimit,
             handlerTimeout: route.timeout ?? router.timeout,
@@ -87,7 +85,7 @@ export class FastifyAdapter<
             },
           })
         }
-      }, fpo))
+      }, { prefix: router.prefix })
     }
 
     await this.#fastify.ready()

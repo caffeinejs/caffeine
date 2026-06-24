@@ -1,4 +1,4 @@
-import { RouteBuilder, RouterBuilder } from './routing_decorator_spec.js'
+import { RouteBuilder, RouterBuilder } from './routing.js'
 
 const RouterRegistry = new WeakMap<Function, RouterBuilder>()
 const RouteRegistry = new WeakMap<object, Map<string | symbol, RouteBuilder>>()

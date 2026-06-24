@@ -26,7 +26,7 @@ describe('path normalization', () => {
     }
     void C1
     const r = getRouter(C1)!.toRouter('key', {} as never, {} as never)
-    expect(r.prefix).toBe('')
+    expect(r.path).toBe('')
     expect(r.routes[0].path).toBe('/action')
   })
 
@@ -38,7 +38,7 @@ describe('path normalization', () => {
     }
     void C2
     const r = getRouter(C2)!.toRouter('key', {} as never, {} as never)
-    expect(r.prefix).toBe('/api')
+    expect(r.path).toBe('/api')
     expect(r.routes[0].path).toBe('/users')
   })
 
@@ -72,7 +72,7 @@ describe('path normalization', () => {
     }
     void C5
     const r = getRouter(C5)!.toRouter('key', {} as never, {} as never)
-    expect(r.prefix).toBe('')
+    expect(r.path).toBe('')
     expect(r.routes[0].path).toBe('/')
   })
 
@@ -84,6 +84,6 @@ describe('path normalization', () => {
     }
     void C6
     const r = getRouter(C6)!.toRouter('key', {} as never, {} as never)
-    expect(`${r.prefix}${r.routes[0].path}`).toBe('/action')
+    expect(`${r.path}${r.routes[0].path}`).toBe('/action')
   })
 })

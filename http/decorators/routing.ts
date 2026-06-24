@@ -13,6 +13,7 @@ function normalizePath(path: string): string {
 }
 
 export class RouterBuilder {
+  _path?: string
   #_prefix?: string
   #_header?: Record<string, string | string[]>
   #_consumes?: string[]
@@ -21,8 +22,8 @@ export class RouterBuilder {
   #_bodyLimit?: number
   #_timeout?: number
 
-  prefix(prefix: string) {
-    this.#_prefix = prefix
+  path(path: string) {
+    this._path = path
   }
 
   header(name: string, value: string | string[]) {
@@ -45,6 +46,10 @@ export class RouterBuilder {
     this.#_routes.push(...(Array.isArray(routes) ? routes : [routes]))
   }
 
+  prefix(prefix: string) {
+    this.#_prefix = prefix
+  }
+
   bodyLimit(bytes: number) {
     this.#_bodyLimit = bytes
   }
@@ -59,7 +64,8 @@ export class RouterBuilder {
     controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>,
   ): Router<R> {
     return {
-      prefix: normalizePrefix(this.#_prefix ?? ''),
+      path: normalizePrefix(this._path ?? ''),
+      prefix: this.#_prefix,
       routes: (this.#_routes ?? []).map(route => route.toRoute<R>()),
       header: Object.assign({}, this.#_header ?? {}),
       accept: [...(this.#_consumes ?? [])],
