@@ -2,6 +2,16 @@ import { Binding, Key, Provider } from '@caffeinejs/core'
 import { Route, Router, RouteValidationSchema } from '../route.js'
 import { ParameterPickOptions } from '../route.picker.js'
 
+function normalizePrefix(prefix: string): string {
+  return prefix.replace(/\/+$/, '')
+}
+
+function normalizePath(path: string): string {
+  const withLeading = path.startsWith('/') ? path : `/${path}`
+  const collapsed = withLeading.replace(/\/+/g, '/')
+  return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
+}
+
 export class RouterBuilder {
   #_prefix?: string
   #_header?: Record<string, string | string[]>
@@ -33,14 +43,14 @@ export class RouterBuilder {
     this.#_routes.push(...(Array.isArray(routes) ? routes : [routes]))
   }
 
-  toRouter<R, S extends RouteValidationSchema>(
+  toRouter<R>(
     key: Key,
     binding: Binding<unknown>,
     controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>,
-  ): Router<R, S> {
+  ): Router<R> {
     return {
-      prefix: this.#_prefix ?? '',
-      routes: (this.#_routes ?? []).map(route => route.toRoute<R, S>()),
+      prefix: normalizePrefix(this.#_prefix ?? ''),
+      routes: (this.#_routes ?? []).map(route => route.toRoute<R>()),
       header: Object.assign({}, this.#_header ?? {}),
       accept: [...(this.#_consumes ?? [])],
       contentTypes: [...(this.#_produces ?? [])],
@@ -106,9 +116,9 @@ export class RouteBuilder {
     return this
   }
 
-  toRoute<R, S extends RouteValidationSchema>(): Route<R, S> {
+  toRoute<R>(): Route<R> {
     return {
-      path: this.#_path ?? '',
+      path: normalizePath(this.#_path ?? ''),
       method: [...(this.#_method ?? [])],
       accept: [...(this.#_consumes ?? [])],
       contentTypes: [...(this.#_produces ?? [])],
@@ -116,7 +126,7 @@ export class RouteBuilder {
       header: Object.assign({}, this.#_header ?? {}),
       handler: this.#_handler ?? '',
       response: { status: 200, header: {} },
-      schema: this.#_schema as S,
+      schema: this.#_schema,
     }
   }
 }

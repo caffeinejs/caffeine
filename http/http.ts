@@ -1,6 +1,6 @@
 import { Container, DiCaf, Module, Options } from '@caffeinejs/core'
 import { Keys } from './symbols.js'
-import { Router, RouteValidationSchema } from './route.js'
+import { Router } from './route.js'
 import { Adapter, AdapterFactory } from './adapter.js'
 import { getRouter } from './decorators/_registrar.js'
 import { CaffeineError } from './error.js'
@@ -31,7 +31,7 @@ export class CaffeineHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> {
 
   async create(): Promise<A> {
     const controllers = this.#container.getBindingsByLabel(Keys.CONTROLLER)
-    const routers = new Array<Router<REQ, RouteValidationSchema>>(controllers.length)
+    const routers = new Array<Router<REQ>>(controllers.length)
 
     for (let i = 0; i < controllers.length; i++) {
       const { key, binding } = controllers[i]
@@ -39,7 +39,7 @@ export class CaffeineHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> {
       if (!rd) {
         throw new CaffeineError(`Cannot build router: no route definition found for controller "${String(key)}"`, 'HTTP_MISSING_ROUTER')
       }
-      routers[i] = rd.toRouter<REQ, RouteValidationSchema>(key, binding, this.#container.wrap(key))
+      routers[i] = rd.toRouter<REQ>(key, binding, this.#container.wrap(key))
     }
 
     return this.#adapterFactory({ container: this.#container }, { routers })

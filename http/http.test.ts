@@ -1,6 +1,7 @@
-import { describe, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { Get } from './decorators/verbs.js'
 import { Controller } from './decorators/controller.js'
+import { getRouter } from './decorators/_registrar.js'
 
 describe('HttpAdapter', () => {
   it('should be defined', () => {
@@ -13,5 +14,76 @@ describe('HttpAdapter', () => {
     }
 
     void new TestController()
+  })
+})
+
+describe('path normalization', () => {
+  it('strips trailing slash from prefix', () => {
+    @Controller('/')
+    class C1 {
+      @Get('/action')
+      get() { return {} }
+    }
+    void C1
+    const r = getRouter(C1)!.toRouter('key', {} as never, {} as never)
+    expect(r.prefix).toBe('')
+    expect(r.routes[0].path).toBe('/action')
+  })
+
+  it('strips trailing slash from multi-segment prefix', () => {
+    @Controller('/api/')
+    class C2 {
+      @Get('/users')
+      get() { return {} }
+    }
+    void C2
+    const r = getRouter(C2)!.toRouter('key', {} as never, {} as never)
+    expect(r.prefix).toBe('/api')
+    expect(r.routes[0].path).toBe('/users')
+  })
+
+  it('adds leading slash to path when missing', () => {
+    @Controller('/api')
+    class C3 {
+      @Get('action')
+      get() { return {} }
+    }
+    void C3
+    const r = getRouter(C3)!.toRouter('key', {} as never, {} as never)
+    expect(r.routes[0].path).toBe('/action')
+  })
+
+  it('collapses double slashes in path', () => {
+    @Controller('/api')
+    class C4 {
+      @Get('//double')
+      get() { return {} }
+    }
+    void C4
+    const r = getRouter(C4)!.toRouter('key', {} as never, {} as never)
+    expect(r.routes[0].path).toBe('/double')
+  })
+
+  it('preserves root path', () => {
+    @Controller('')
+    class C5 {
+      @Get('/')
+      get() { return {} }
+    }
+    void C5
+    const r = getRouter(C5)!.toRouter('key', {} as never, {} as never)
+    expect(r.prefix).toBe('')
+    expect(r.routes[0].path).toBe('/')
+  })
+
+  it('safe concat: prefix "/" + path "/action" yields "/action"', () => {
+    @Controller('/')
+    class C6 {
+      @Get('/action')
+      go() { return {} }
+    }
+    void C6
+    const r = getRouter(C6)!.toRouter('key', {} as never, {} as never)
+    expect(`${r.prefix}${r.routes[0].path}`).toBe('/action')
   })
 })

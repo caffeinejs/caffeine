@@ -9,7 +9,7 @@ export interface RouteValidationSchema {
   response?: unknown
 }
 
-export interface Route<R, SCHEMA extends RouteValidationSchema = RouteValidationSchema> {
+export interface Route<R> {
   path: string
   method: string[]
   accept: string[]
@@ -17,16 +17,16 @@ export interface Route<R, SCHEMA extends RouteValidationSchema = RouteValidation
   parameters: ParameterPickOptions<R>[]
   header: Record<string, string | string[]>
   handler: string | symbol
-  schema?: SCHEMA
+  schema?: RouteValidationSchema
   response: {
     status: number
     header: Record<string, string>
   }
 }
 
-export interface Router<R, SCHEMA extends RouteValidationSchema = RouteValidationSchema> {
+export interface Router<R> {
   prefix: string
-  routes: Route<R, SCHEMA>[]
+  routes: Route<R>[]
   accept: string[]
   contentTypes: string[]
   header: Record<string, string | string[]>
