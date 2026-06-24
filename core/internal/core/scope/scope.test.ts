@@ -4,7 +4,7 @@ import { Binding } from '../../../binding.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { ErrScopeAlreadyRegistered, ErrScopeNotRegistered } from '../../../errors.js'
 import { Factory } from '../../../factory.js'
 import { bindScope, hasScope, Scopes, Scope, unbindScope } from '../../../scope.js'
@@ -65,7 +65,7 @@ describe('Scoping', function () {
     class NonexistentScope {}
 
     try {
-      new DiCaf()
+      new CaffeineIoC()
     } catch (e) {
       expect(e)
         .toBeInstanceOf(ErrScopeNotRegistered)
@@ -108,7 +108,7 @@ describe('Scoping', function () {
 
     bindScope(kCustomScopeId, () => scope)
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const scoped1 = di.get(Dep)
     const scoped2 = di.get(Dep)

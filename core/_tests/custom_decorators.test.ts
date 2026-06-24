@@ -12,7 +12,7 @@ import {
   defineInjectable,
 } from '../decorators/registrar/index.js'
 import { Ctor } from '../types.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Scopes } from '../scope.js'
 
 describe('Custom decorator primitives', function () {
@@ -26,7 +26,7 @@ describe('Custom decorator primitives', function () {
     class StaticLazy { }
 
     it('should apply a static partial to the class binding', function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const binding = di.getBindings(StaticLazy)[0]
       expect(binding.lazy)
         .toBe(true)
@@ -57,7 +57,7 @@ describe('Custom decorator primitives', function () {
     }
 
     it('should expose injectableProperties from metadata in the factory', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(kDep).toClass(FieldDep)
       di.bind(FieldConsumer).toSelf()
 
@@ -86,7 +86,7 @@ describe('Custom decorator primitives', function () {
     void ConfLazyBean
 
     it('should apply a partial to a @Provides method making it lazy', function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const binding = di.getBindings(kService)[0]
       expect(binding.lazy)
         .toBe(true)
@@ -100,7 +100,7 @@ describe('Custom decorator primitives', function () {
     class TransientSvc { }
 
     it('should compose Injectable + Scoped into a single decorator', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(TransientSvc)
         .toSelf()
       await di.init()
@@ -118,7 +118,7 @@ describe('Custom decorator primitives', function () {
     class ComposedCtrl { }
 
     it('should compose Injectable + Label and accumulate all contributions', function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       expect(di.has(ComposedCtrl))
         .toBe(true)
       const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
@@ -149,7 +149,7 @@ describe('Custom decorator primitives', function () {
     }
 
     it('should build a custom field injection decorator that resolves correctly', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(kCustomDep)
         .toClass(TargetService)
       di.bind(TargetConsumer)

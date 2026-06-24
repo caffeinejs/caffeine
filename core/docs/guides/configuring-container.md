@@ -1,12 +1,12 @@
 # Configuring the Container
 
-`DiCaf` accepts an optional options object as its first constructor argument.
+`CaffeineIoC` accepts an optional options object as its first constructor argument.
 All fields are optional — omitting them gives you the defaults shown below.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf({
+const di = new CaffeineIoC({
   // options described in this guide
 })
 ```
@@ -22,7 +22,7 @@ The scope applied to any binding that does not declare one explicitly.
 ```ts
 import { Scopes } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf({ defaultScopeId: Scopes.TRANSIENT })
+const di = new CaffeineIoC({ defaultScopeId: Scopes.TRANSIENT })
 ```
 
 Every binding in this container is transient unless it explicitly sets
@@ -40,7 +40,7 @@ Makes all bindings lazy by default — construction is deferred to the first
 `get()` call instead of happening during `init()`.
 
 ```ts
-const di = new DiCaf({ lazy: true })
+const di = new CaffeineIoC({ lazy: true })
 await di.init()
 // nothing constructed yet
 
@@ -67,7 +67,7 @@ Activates the named profiles. Bindings annotated with `@Profile('name')` are
 only registered when the matching profile is active.
 
 ```ts
-const di = new DiCaf({ profiles: ['production'] })
+const di = new CaffeineIoC({ profiles: ['production'] })
 ```
 
 ```ts
@@ -99,7 +99,7 @@ Controls scope validation at init time. Three modes:
 | `'off'` | Validation disabled. |
 
 ```ts
-const di = new DiCaf({
+const di = new CaffeineIoC({
   checks: { scopes: 'off' },
 })
 ```
@@ -114,7 +114,7 @@ When `true`, the container detects circular dependencies at init time and throws
 before any instance is created.
 
 ```ts
-const di = new DiCaf({
+const di = new CaffeineIoC({
   checks: { circularReferences: false },
 })
 ```
@@ -132,7 +132,7 @@ Attaches a parent container. When a key is not found in the child, resolution
 falls through to the parent.
 
 ```ts
-const root = new DiCaf()
+const root = new CaffeineIoC()
 await root.init()
 
 const child = root.newChild()
@@ -158,7 +158,7 @@ all `@Injectable`-decorated classes it finds in the global decorator registry.
 Set to `false` for fully manual containers where no decorators are used:
 
 ```ts
-const di = new DiCaf({ decorators: false })
+const di = new CaffeineIoC({ decorators: false })
 
 di.bind(Logger).toSelf()
 di.bind(UserService).toClass(UserService, [Logger])
@@ -178,7 +178,7 @@ inject metadata from an external source (config files, environment variables,
 feature flags) without decorators.
 
 ```ts
-const di = new DiCaf({
+const di = new CaffeineIoC({
   metadataReader: key => {
     if (key === DbConnection) {
       return { lazy: true }

@@ -4,7 +4,7 @@ sidebar_label: Functions
 
 # Functions
 
-`toFunction(fn, injections)` binds a plain function to a key. DiCaf resolves the
+`toFunction(fn, injections)` binds a plain function to a key. CaffeineIoC resolves the
 declared injections, calls `fn` with those values, and registers whatever `fn` returns
 as the binding's value.
 
@@ -12,7 +12,7 @@ This is useful when you want to produce a value — a closure, a plain object, o
 object with methods — without declaring a class.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 ```
 
 ---
@@ -35,7 +35,7 @@ function createWelcomeSender(email: EmailService) {
   }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(EmailService).toSelf()
 di.bind(SEND_WELCOME).toFunction(createWelcomeSender, [EmailService])
@@ -69,7 +69,7 @@ function buildHttpOptions(config: AppConfig) {
   }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(AppConfig).toSelf()
 di.bind(HTTP_OPTIONS).toFunction(buildHttpOptions, [AppConfig])
@@ -112,7 +112,7 @@ function createUserService(repo: UserRepository, logger: Logger) {
   }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(UserRepository).toSelf()
 di.bind(Logger).toSelf()
@@ -144,7 +144,7 @@ di.bind(PIPELINE).toFunction(
 )
 ```
 
-The injection count must equal the function's parameter count. DiCaf throws at bind
+The injection count must equal the function's parameter count. CaffeineIoC throws at bind
 time if they differ.
 
 ---

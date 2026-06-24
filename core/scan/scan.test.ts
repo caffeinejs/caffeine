@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { globby } from 'globby'
 import { describe, expect, it } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { AppRepository } from './_testdata/app/nested/repo.js'
 import { AppService } from './_testdata/app/service.js'
 import { JsxTsxService } from './_testdata/jsx-tsx/service.js'
@@ -12,7 +12,7 @@ import { scan } from './index.js'
 const dir = fileURLToPath(new URL('.', import.meta.url))
 
 describe('scan()', function () {
-  it('loads decorated modules so new DiCaf() can resolve them', async function () {
+  it('loads decorated modules so new CaffeineIoC() can resolve them', async function () {
     const loaded = await scan({
       dir: join(dir, '_testdata/app'),
     })
@@ -30,7 +30,7 @@ describe('scan()', function () {
     expect(loaded.some(m => m.endsWith('ignored.spec.ts')))
       .toBe(false)
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     const service = di.get(AppService)
@@ -117,7 +117,7 @@ describe('scan()', function () {
     expect(loaded[0]!.endsWith('root.ts'))
       .toBe(true)
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     expect(di.get(ShallowRootService))
@@ -134,7 +134,7 @@ describe('scan()', function () {
     expect(loaded.some(m => m.endsWith('service.tsx')))
       .toBe(true)
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     expect(di.get(JsxTsxService))

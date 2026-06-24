@@ -11,7 +11,7 @@ function runWorker<T>(url: URL): Promise<T> {
 
 const workerUrl = new URL('./_worker_di.mjs', import.meta.url)
 
-describe('DiCaf in worker thread', function () {
+describe('CaffeineIoC in worker thread', function () {
   it('resolves a singleton to the same instance', async function () {
     const result = await runWorker<{ singletonIsSameInstance: boolean }>(workerUrl)
     expect(result.singletonIsSameInstance)

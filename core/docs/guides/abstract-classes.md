@@ -1,6 +1,6 @@
 # Abstract Classes
 
-Abstract classes are a first-class pattern in DiCaf.
+Abstract classes are a first-class pattern in CaffeineIoC.
 Use `@Extends` to bind a concrete class to its abstract parent so the container
 can resolve it by the abstract type. This is the key decorator for this pattern.
 
@@ -41,7 +41,7 @@ class ConsoleLogger extends Logger {
 ```
 
 ```ts
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 const logger = di.get(Logger) // resolves ConsoleLogger
@@ -239,7 +239,7 @@ Use the fluent binder API and call `.extends()` to register a concrete class und
 an abstract key without any decorators.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 abstract class Cache {
   abstract get(key: string): string | undefined
@@ -257,7 +257,7 @@ class RedisCache extends Cache {
   set(key: string, value: string) { /* ... */ }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(MemCache).toSelf().extends()
 di.bind(RedisCache).toSelf().extends().primary()

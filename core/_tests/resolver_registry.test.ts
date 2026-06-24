@@ -1,5 +1,5 @@
 import { describe, it, afterEach, expect } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey, ErrResolverAlreadyRegistered, ErrUnknownResolver } from '../errors.js'
 import {
   BuiltInResolvers,
@@ -79,7 +79,7 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
       constructor(readonly dep: unknown) {}
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Consumer)
       .toSelf([provide(kMissing)])
 
@@ -93,7 +93,7 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
       constructor(readonly dep: unknown) {}
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(OptConsumer)
       .toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER }])
     await di.init()
@@ -108,7 +108,7 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
 
 describe('defaultResolverFactory', function () {
   it('should return undefined for optional missing dependencies', function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     const kMissing = Symbol('resolver-missing-optional')
 
     const resolver = standardFactory({
@@ -126,7 +126,7 @@ describe('defaultResolverFactory', function () {
 
   it('should resolve all bindings for multiple injection', async function () {
     const kShared = Symbol('resolver-shared-multi')
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
 
     di.bind('a')
       .toValue('one')
@@ -154,7 +154,7 @@ describe('custom resolver end-to-end', function () {
   it('resolves using a registered factory', async function () {
     bindResolver(kTestResolver, () => () => sentinel)
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(CustomConsumer)
       .toSelf([{ resolver: kTestResolver }])
     await di.init()
@@ -164,7 +164,7 @@ describe('custom resolver end-to-end', function () {
   })
 
   it('throws ErrUnknownResolver when resolver name is not registered', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(UnknownResolverConsumer)
       .toSelf([{ resolver: Symbol('no-such-resolver') }])
 

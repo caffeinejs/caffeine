@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrInvalidContainerState, ErrMissingInjectionKey, ErrNoResolutionForKey } from '../errors.js'
 import { allOf, optional, provide } from '../injection.js'
 import { Provider } from '../provider.js'
@@ -14,7 +14,7 @@ describe('build()', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       const svc = di.build(Service)
@@ -28,7 +28,7 @@ describe('build()', function () {
     it('should build an instance when an empty injections array is passed', async function () {
       class Service {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       expect(di.build(Service, []))
@@ -51,7 +51,7 @@ describe('build()', function () {
         ) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Repo)
         .toSelf()
@@ -77,7 +77,7 @@ describe('build()', function () {
     it('should call the function with no deps when no injections are passed', async function () {
       const fn = () => 42
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       expect(di.build(fn))
@@ -91,7 +91,7 @@ describe('build()', function () {
 
       const fn = (config: Config, port: number) => `${config.host}:${port}`
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Config)
         .toSelf()
@@ -113,7 +113,7 @@ describe('build()', function () {
         constructor(readonly logger: Logger | undefined) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Logger)
         .toSelf()
@@ -132,7 +132,7 @@ describe('build()', function () {
         constructor(readonly logger: Logger | undefined) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       const svc = di.build(Service, [optional(Logger)])
@@ -152,7 +152,7 @@ describe('build()', function () {
         constructor(readonly handlers: Handler[]) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(HandlerA)
         .toSelf()
@@ -180,7 +180,7 @@ describe('build()', function () {
         constructor(readonly plugins: Plugin[]) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       const runner = di.build(Runner, [allOf(Plugin)])
@@ -198,7 +198,7 @@ describe('build()', function () {
         constructor(readonly connProvider: Provider<Connection>) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Connection)
         .toSelf()
@@ -217,7 +217,7 @@ describe('build()', function () {
         constructor(readonly requestProvider: Provider<Request>) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Request)
         .toSelf()
@@ -245,7 +245,7 @@ describe('build()', function () {
         constructor(readonly validatorsProvider: Provider<Validator[]>) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(ValidatorA)
         .toSelf()
@@ -269,7 +269,7 @@ describe('when target type is registered in the container', function () {
   it('should build a fresh instance, not return the registered singleton', async function () {
     class Service {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
 
     di.bind(Service)
       .toSelf()
@@ -294,7 +294,7 @@ describe('when target type is registered in the container', function () {
       }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
 
     di.bind(HandlerA)
       .toSelf()
@@ -329,7 +329,7 @@ describe('builder()', function () {
         constructor(readonly name: string) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind('name')
         .toValue('worker')
@@ -354,7 +354,7 @@ describe('builder()', function () {
         constructor(readonly config: Config) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Config)
         .toSelf()
@@ -377,7 +377,7 @@ describe('builder()', function () {
         constructor(readonly tracker: Tracker) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Tracker)
         .toSelf()
@@ -400,7 +400,7 @@ describe('builder()', function () {
         constructor(readonly sessionProvider: Provider<Session>) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Session)
         .toSelf()
@@ -433,7 +433,7 @@ describe('builder()', function () {
         ) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind('a')
         .toValue('hello')
@@ -456,7 +456,7 @@ describe('builder()', function () {
         ) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind('a')
         .toValue('hello')
@@ -479,7 +479,7 @@ describe('builder()', function () {
         ) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind('a')
         .toValue('hello')
@@ -502,7 +502,7 @@ describe('builder()', function () {
         ) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind('second')
         .toValue('world')
@@ -522,7 +522,7 @@ describe('builder()', function () {
     it('should not validate injection count for non-constructable functions', async function () {
       const fn = (a: string, b: string) => `${a}-${b}`
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind('a')
         .toValue('x')
@@ -538,7 +538,7 @@ describe('builder()', function () {
         constructor(readonly dep: Missing) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       expect(() => di.build(Consumer, [Missing]))
@@ -550,7 +550,7 @@ describe('builder()', function () {
         constructor(readonly dep: unknown) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       // { optional: true } is a valid InjectionDescriptor but has no key —
@@ -563,14 +563,14 @@ describe('builder()', function () {
 
 describe('builder() before init()', function () {
   it('should throw ErrInvalidContainerState when called before init()', function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind('svc').toValue('hello')
 
     expect(() => di.builder(class Svc {}, [])).toThrow(ErrInvalidContainerState)
   })
 
   it('build() should throw ErrInvalidContainerState when called before init()', function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
 
     expect(() => di.build(class Svc {})).toThrow(ErrInvalidContainerState)
   })

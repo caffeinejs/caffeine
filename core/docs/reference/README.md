@@ -1,13 +1,13 @@
 # Reference
 
-Complete API documentation for DiCaf. For task-oriented guides, see the
+Complete API documentation for CaffeineIoC. For task-oriented guides, see the
 [Guides](../guides/README.md) section.
 
 ## Core documents
 
 The following documents cover the APIs you will use most often:
 
-- [Container](./container.md) — the `DiCaf` class: constructor options, all
+- [Container](./container.md) — the `CaffeineIoC` class: constructor options, all
   resolution, binding, lifecycle, and inspection methods.
 
 - [Binder](./binder.md) — the `Binder` and `BinderOptions` fluent APIs
@@ -28,10 +28,10 @@ The following documents cover the APIs you will use most often:
 
 - [Binder](./binder.md) — `Binder<T>` and `BinderOptions<T>` fluent APIs.
 
-- [Container](./container.md) — `DiCaf` constructor, resolution methods,
+- [Container](./container.md) — `CaffeineIoC` constructor, resolution methods,
   binding methods, lifecycle, and properties.
 
-- [Options](./options.md) — all `DiCaf` constructor options with types, defaults,
+- [Options](./options.md) — all `CaffeineIoC` constructor options with types, defaults,
   and `ScopeCheckMode` values.
 
 - [Decorators](./decorators.md) — all class, method, member, and configuration

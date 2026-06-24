@@ -4,7 +4,7 @@ import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Scopes } from '../scope.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Interceptor } from '../decorators/interceptor.js'
@@ -64,7 +64,7 @@ describe('Configuration', function () {
     }
 
     it('should return instance from method based on class ref', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const service = di.get(Service)
 
@@ -105,7 +105,7 @@ describe('Configuration', function () {
     }
 
     it('should resolved named beans', async function () {
-      const di = new DiCaf({ profiles: ['provides-named'] })
+      const di = new CaffeineIoC({ profiles: ['provides-named'] })
       const msg = 'hello world'
 
       di.bind('msg')
@@ -141,7 +141,7 @@ describe('Configuration', function () {
     }
 
     it('should inject value provided by bean method', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const txt = di.get('txt')
       const usingTxt = di.get(UsingTxt)
@@ -204,7 +204,7 @@ describe('Configuration', function () {
     }
 
     it('should use primary beans from configurations class', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const abs = di.get(Abs)
       const i = di.get<Interface>(kInterface)
@@ -239,7 +239,7 @@ describe('Configuration', function () {
     }
 
     it('should resolve components referencing another dependencies inside same configuration context', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const root = di.get(Root)
       const dep = di.get(Dep)
@@ -265,7 +265,7 @@ describe('Configuration', function () {
         }
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const foo = di.get(Foo)

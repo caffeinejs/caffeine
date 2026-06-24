@@ -1,7 +1,7 @@
 # Factory Classes
 
 A factory class is a `@Configuration`-decorated class whose methods produce bindings
-for the container. Each method annotated with `@Provides` acts as a factory: DiCaf
+for the container. Each method annotated with `@Provides` acts as a factory: CaffeineIoC
 calls it during initialization and registers the returned value under the declared key.
 
 Factory classes are useful when you need to construct instances that cannot be created
@@ -13,7 +13,7 @@ import { Configuration, Provides } from '@caffeine-projects/dicaf/decorators'
 ```
 
 :::warning
-The `@Configuration` class itself is managed internally by DiCaf and is never meant
+The `@Configuration` class itself is managed internally by CaffeineIoC and is never meant
 to be injected. Do not declare it as a dependency in other classes. Only the bindings
 produced by its `@Provides` methods are available in the container.
 :::
@@ -51,7 +51,7 @@ class InfrastructureConfig {
 `HttpClient` and `'db.url'` are now resolvable from the container:
 
 ```ts
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 di.get(HttpClient)     // HttpClient instance
@@ -91,7 +91,7 @@ class DatabaseConfig {
 
 ## Method-level dependency injection
 
-`@Provides` accepts an optional dependency list as its second argument. DiCaf resolves
+`@Provides` accepts an optional dependency list as its second argument. CaffeineIoC resolves
 those dependencies and passes them as method parameters.
 
 ```ts
@@ -261,7 +261,7 @@ class TestConfig {
 ```
 
 ```ts
-const di = new DiCaf({ profiles: ['test'] })
+const di = new CaffeineIoC({ profiles: ['test'] })
 await di.init()
 ```
 

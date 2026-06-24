@@ -2,7 +2,7 @@ import Http, { IncomingMessage, ServerResponse } from 'http'
 import { randomUUID } from 'node:crypto'
 import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 import Supertest from 'supertest'
-import { DiCaf, Scopes } from '../../../index.nodejs.js'
+import { CaffeineIoC, Scopes } from '../../../index.nodejs.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
@@ -48,7 +48,7 @@ describe('Request Scope', function () {
       }
     }
 
-    const di = new DiCaf({ checks: { scopes: 'off' } })
+    const di = new CaffeineIoC({ checks: { scopes: 'off' } })
 
     beforeAll(async () => {
       await di.init()

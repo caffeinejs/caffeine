@@ -22,7 +22,7 @@ import { Provider } from './provider.js'
 export type ScopeCheckMode = 'compatible-scopes-only' | 'no-mix' | 'off'
 
 /**
- * Options to build a {@link DiCaf} container instance.
+ * Options to build a {@link CaffeineIoC} container instance.
  */
 export interface Options {
   /**
@@ -99,7 +99,7 @@ export interface BindingDescriptor {
 
 /**
  * Container describes the IoC container API.
- * @see {@link DiCaf} for the implementation of the container and more information.
+ * @see {@link CaffeineIoC} for the implementation of the container and more information.
  */
 export interface Container {
   readonly profiles: ReadonlySet<Identifier>

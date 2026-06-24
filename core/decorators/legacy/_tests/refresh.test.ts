@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Lifetime } from '../lifetime.legacy.js'
 import { Scopes } from '../../../scope.js'
@@ -12,10 +12,10 @@ describe('Legacy @Refresh', function () {
     readonly id = Math.random()
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
 
   beforeAll(async () => {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 

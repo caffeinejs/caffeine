@@ -8,7 +8,7 @@ import { notNil } from './internal/util/assert/index.js'
 import { Identifier } from './key.js'
 import { ResolutionContext } from './resolution_context.js'
 
-export const kScopeName = Symbol('dicaf.scope.name')
+export const kScopeName = Symbol('@caffeinejs/core:scope.name')
 
 /**
  * Scopes is a collection of built-in scope identifiers.
@@ -25,10 +25,10 @@ export const kScopeName = Symbol('dicaf.scope.name')
  * ```
  */
 export const Scopes = {
-  SINGLETON: Symbol('dicaf.scope.singleton'),
-  TRANSIENT: Symbol('dicaf.scope.transient'),
-  REQUEST: Symbol('dicaf.scope.request'),
-  REFRESH: Symbol('dicaf.scope.refresh'),
+  SINGLETON: Symbol('@caffeinejs/core:scope.singleton'),
+  TRANSIENT: Symbol('@caffeinejs/core:scope.transient'),
+  REQUEST: Symbol('@caffeinejs/core:scope.request'),
+  REFRESH: Symbol('@caffeinejs/core:scope.refresh'),
 } as const
 
 /**

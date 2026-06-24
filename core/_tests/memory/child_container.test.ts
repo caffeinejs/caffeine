@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
 
@@ -7,7 +7,7 @@ describe('Child container memory', function () {
   it('releases child-only singleton instance after child dispose()', async function () {
     class ChildOnlySvc {}
 
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     await parent.init()
 
     let isCollected!: () => boolean
@@ -30,7 +30,7 @@ describe('Child container memory', function () {
   })
 
   it('child container itself is GC-able after dispose()', async function () {
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     await parent.init()
 
     let isCollected!: () => boolean
@@ -53,7 +53,7 @@ describe('Child container memory', function () {
   it('parent singleton instance outlives child dispose()', async function () {
     class SharedSvc {}
 
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     parent.bind(SharedSvc)
       .toSelf()
     await parent.init()
@@ -77,7 +77,7 @@ describe('Child container memory', function () {
   it('multiple child containers do not leak instances across dispose cycles', async function () {
     class Svc {}
 
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     await parent.init()
 
     const refs: Array<() => boolean> = []

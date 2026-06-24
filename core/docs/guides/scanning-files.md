@@ -6,7 +6,7 @@ sidebar_label: Auto Load Decorated Classes
 
 When using decorators, every file containing an `@Injectable` or
 `@Configuration` class must be imported before the container is created.
-DiCaf's `scan()` function automates this: it recursively imports all source
+CaffeineIoC's `scan()` function automates this: it recursively imports all source
 files in a directory so their decorators register themselves, without you
 having to maintain a manual import list.
 
@@ -20,18 +20,18 @@ import { scan } from '@caffeine-projects/dicaf'
 
 ```ts
 import { fileURLToPath } from 'node:url'
-import { DiCaf, scan } from '@caffeine-projects/dicaf'
+import { CaffeineIoC, scan } from '@caffeine-projects/dicaf'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
 
 await scan({ dir: rootDir, exclude: import.meta.url })
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 ```
 
 `scan()` returns a `Promise<string[]>` with the list of files it imported.
-It must be awaited before `new DiCaf()`.
+It must be awaited before `new CaffeineIoC()`.
 
 Always exclude the file that calls `scan()`. If `scan()` lives in a dedicated
 module (e.g. `app.container.ts`) rather than the process entry point, exclude

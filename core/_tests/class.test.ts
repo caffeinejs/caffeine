@@ -3,7 +3,7 @@ import { describe, it, beforeAll, expect, vi } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrInvalidDecorator, ErrNoUniqueInjectionForKey, ErrNoResolutionForKey } from '../errors.js'
 import { allOf, useValue } from '../injection.js'
 
@@ -49,7 +49,7 @@ describe('Class', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -60,7 +60,7 @@ describe('Class', function () {
 
       expect(root)
         .toBeDefined()
-      expect(new DiCaf()
+      expect(new CaffeineIoC()
         .has(Root))
         .toBeTruthy()
       expect(root.seeYaService.bye())
@@ -92,7 +92,7 @@ describe('Class', function () {
     }
 
     it('should throw error', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Service)
         .toSelf([Repo])
 
@@ -129,7 +129,7 @@ describe('Class', function () {
     }
 
     it('should resolve class dependency array with all named with the same value', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const lang = di.get(Lang)
 
@@ -164,7 +164,7 @@ describe('Class', function () {
       }
 
       it('should resolve the one defined as primary when only one resolution is requested', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
         const dep = di.get<Svc2>(kName)
 
@@ -185,7 +185,7 @@ describe('Class', function () {
       class Svc2 {}
 
       it('should throw error when requesting a single instance', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         expect(() => di.get(name))
@@ -193,7 +193,7 @@ describe('Class', function () {
       })
 
       it('should return an array of instances when requesting many instances - regardless of the primary definition', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         expect(di.getMany(name))
@@ -203,7 +203,7 @@ describe('Class', function () {
 
     describe('when resolving multiple of non existent', function () {
       it('should throw when no bindings registered', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         expect(() => di.getMany('nonexistent'))
@@ -248,7 +248,7 @@ describe('Class', function () {
       }
 
       it('should resolve with same instance from previous resolutions', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         const controller = di.get(Controller)
@@ -288,7 +288,7 @@ describe('Class', function () {
     }
 
     it('should injection values on non exposed constructor arguments', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const root = di.get(Root)
 
@@ -329,7 +329,7 @@ describe('Class', function () {
     }
 
     it('should inject a constant string via @Injectable', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.get(SingleValueDep).label)
@@ -337,7 +337,7 @@ describe('Class', function () {
     })
 
     it('should inject multiple constants via @Injectable', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.get(MultiValueDep).host)
@@ -347,7 +347,7 @@ describe('Class', function () {
     })
 
     it('should mix container-resolved and constant injections', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const mixed = di.get(MixedDep)
@@ -380,7 +380,7 @@ describe('Class', function () {
     }
 
     it('should resolve the class with the custom key and the class ctor', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.get(kKey))

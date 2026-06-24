@@ -6,17 +6,17 @@
 npm install @caffeine-projects/dicaf
 ```
 
-DiCaf requires Node.js 20 or later and ships as an ES module with full CommonJS
+CaffeineIoC requires Node.js 20 or later and ships as an ES module with full CommonJS
 support.
 
 ## Your first container
 
-The core concept in DiCaf is a **container**: an object that knows how to create
+The core concept in CaffeineIoC is a **container**: an object that knows how to create
 and wire up your application's dependencies. You tell the container what classes
 exist and how to build them; the container handles construction and injection.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 import { Extends, Injectable } from '@caffeine-projects/dicaf/decorators'
 
 abstract class Logger {
@@ -40,7 +40,7 @@ class UserService {
   }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 const svc = di.get(UserService)
@@ -83,10 +83,10 @@ export class ProductController {
 ```
 ```ts
 // file: app.container.ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 export function createContainer() {
-  const container = new DiCaf()
+  const container = new CaffeineIoC()
   return container
 }
 //
@@ -97,18 +97,18 @@ We could solve this with:
 
 ```ts
 import './product.controller.ts'
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 export function createContainer() {
-  const container = new DiCaf()
+  const container = new CaffeineIoC()
   return container
 }
 ```
 
-To avoid having to import all files with decorated classes, DiCaf provides a `scan` feature that does the job automatically:
+To avoid having to import all files with decorated classes, CaffeineIoC provides a `scan` feature that does the job automatically:
 
 ```ts
-import { DiCaf, scan } from '@caffeine-projects/dicaf'
+import { CaffeineIoC, scan } from '@caffeine-projects/dicaf'
 
 // must be called before creating the container
 await scan({
@@ -117,7 +117,7 @@ await scan({
 })
 
 export function createContainer() {
-  const container = new DiCaf()
+  const container = new CaffeineIoC()
   return container
 }
 ```
@@ -131,7 +131,7 @@ symbols too. This is useful when binding a TypeScript interface — since
 interfaces do not exist at runtime, a symbol acts as the token.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 import { Injectable } from '@caffeine-projects/dicaf/decorators'
 
 interface Logger {
@@ -152,7 +152,7 @@ class UserService {
   constructor(private readonly logger: Logger) {}
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 const svc = di.get(UserService)
@@ -161,7 +161,7 @@ const svc = di.get(UserService)
 The same binding done manually with `bind()`:
 
 ```ts
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(kLogger).toClass(ConsoleLogger)
 di.bind(UserService).toClass(UserService, [kLogger])
@@ -173,7 +173,7 @@ const svc = di.get(UserService)
 
 ## Customizing injections
 
-Injection keys alone are often not enough. DiCaf ships a set of helper functions
+Injection keys alone are often not enough. CaffeineIoC ships a set of helper functions
 that wrap a key into an `InjectionDescriptor`, letting you make a dependency
 optional, inject all implementations at once, or defer resolution for circular
 dependencies.
@@ -298,7 +298,7 @@ If you prefer not to use decorators, you can register bindings explicitly with
 when you need full control over how a binding is configured.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 class Logger {
   log(msg: string) {
@@ -314,7 +314,7 @@ class UserService {
   }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(Logger).toSelf()
 di.bind(UserService).toClass(UserService, [Logger])

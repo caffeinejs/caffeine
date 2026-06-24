@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Scopes } from '../../../scope.js'
 import { Configuration } from '../configuration.legacy.js'
 import { Provides } from '../provides.legacy.js'
@@ -77,7 +77,7 @@ class ProvidesDecoratorsConf {
   }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 beforeAll(async () => {
   await di.init()

@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('@Injectable overloads', function () {
   it('should register with no arguments', async function () {
     @Injectable()
     class NoArgs {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.get(NoArgs))
       .toBeInstanceOf(NoArgs)
@@ -19,7 +19,7 @@ describe('@Injectable overloads', function () {
     @Injectable(kSvc)
     class KeyOnly {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.get(kSvc))
       .toBeInstanceOf(KeyOnly)
@@ -29,7 +29,7 @@ describe('@Injectable overloads', function () {
     @Injectable('myService')
     class StringKey {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.get('myService'))
       .toBeInstanceOf(StringKey)
@@ -46,7 +46,7 @@ describe('@Injectable overloads', function () {
       constructor(readonly dep: Dep) {}
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const instance = di.get(WithDeps) as WithDeps
     expect(instance.dep)
@@ -68,7 +68,7 @@ describe('@Injectable overloads', function () {
       constructor(readonly dep: Dependency) {}
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const instance = di.get(kNamed) as KeyAndDeps
     expect(instance)

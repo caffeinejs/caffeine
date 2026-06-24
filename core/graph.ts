@@ -26,11 +26,11 @@ interface BindingGraph {
 }
 
 /**
- * Renders the {@link DiCaf} container dependencies graph as a `Markdown` table.
+ * Renders the {@link CaffeineIoC} container dependencies graph as a `Markdown` table.
  *
  * @param input - The {@link Container} container to render the graph for.
  *
- * @returns A string representing the {@link DiCaf} container dependencies graph as a `Markdown` table.
+ * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a `Markdown` table.
  */
 export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)
@@ -119,11 +119,11 @@ function escapeMermaid(text: string): string {
 }
 
 /**
- * Renders the {@link DiCaf} container dependencies graph as a `Mermaid` diagram.
+ * Renders the {@link CaffeineIoC} container dependencies graph as a `Mermaid` diagram.
  *
  * @param input - The {@link Container} container to render the graph for.
  *
- * @returns A string representing the {@link DiCaf} container dependencies graph as a `Mermaid` diagram.
+ * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a `Mermaid` diagram.
  */
 export function graphToMermaid(input: Iterable<[Key, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)
@@ -163,11 +163,11 @@ function escapeDot(text: string): string {
 }
 
 /**
- * Renders the {@link DiCaf} container dependencies graph as a Graphviz DOT digraph.
+ * Renders the {@link CaffeineIoC} container dependencies graph as a Graphviz DOT digraph.
  *
  * @param input - The {@link Container} container to render the graph for.
  *
- * @returns A string representing the {@link DiCaf} container dependencies graph as a Graphviz DOT digraph.
+ * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a Graphviz DOT digraph.
  */
 export function graphToDot(input: Iterable<[Key, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)
@@ -214,22 +214,22 @@ export function graphToDot(input: Iterable<[Key, Binding]> | BindingGraph): stri
 }
 
 /**
- * Serializes the {@link DiCaf} container dependencies graph as a JSON string.
+ * Serializes the {@link CaffeineIoC} container dependencies graph as a JSON string.
  *
  * @param input - The {@link Container} container to serialize the graph for.
  *
- * @returns A string representing the {@link DiCaf} container dependencies graph as a JSON string.
+ * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a JSON string.
  */
 export function graphToJson(input: Iterable<[Key, Binding]> | BindingGraph): string {
   return JSON.stringify(resolveGraph(input), null, 2)
 }
 
 /**
- * Renders the {@link DiCaf} container dependencies graph as a plain-text tree.
+ * Renders the {@link CaffeineIoC} container dependencies graph as a plain-text tree.
  *
  * @param input - The {@link Container} container to render the graph for.
  *
- * @returns A string representing the {@link DiCaf} container dependencies graph as a plain-text tree.
+ * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a plain-text tree.
  */
 export function graphToText(input: Iterable<[Key, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)

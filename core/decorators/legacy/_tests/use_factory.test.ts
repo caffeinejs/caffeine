@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Lifetime } from '../lifetime.legacy.js'
 import { Scopes } from '../../../scope.js'
@@ -18,7 +18,7 @@ describe('Legacy @UseFactory', function () {
       builtBy = 'constructor'
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -50,7 +50,7 @@ describe('Legacy @UseFactory', function () {
       readonly id = Math.random()
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -75,7 +75,7 @@ describe('Legacy @UseFactory', function () {
     @Injectable()
     class ContextBean {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Configuration } from '../decorators/configuration.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('@Configuration bean factory', function () {
   describe('with 2 injected dependencies', function () {
@@ -34,7 +34,7 @@ describe('@Configuration bean factory', function () {
     void Conf2
 
     it('resolves bean with 2 dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const svc = di.get(Svc2)
       expect(svc.a).toEqual('a')
@@ -77,7 +77,7 @@ describe('@Configuration bean factory', function () {
     void Conf3
 
     it('resolves bean with 3 dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const svc = di.get(Svc3)
       expect(svc.a).toEqual('a')
@@ -127,7 +127,7 @@ describe('@Configuration bean factory', function () {
     void Conf4
 
     it('resolves bean with 4 dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const svc = di.get(Svc4)
       expect(svc.a).toEqual('a')
@@ -184,7 +184,7 @@ describe('@Configuration bean factory', function () {
     void Conf5
 
     it('resolves bean via fallback array path with 5 dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const svc = di.get(Svc5)
       expect(svc.a).toEqual('a')

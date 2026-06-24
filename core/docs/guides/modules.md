@@ -6,7 +6,7 @@ bindings into cohesive groups, import them by feature, and pass them to the
 container at construction time.
 
 ```ts
-import { DiCaf, mod, type ContainerBindingOps } from '@caffeine-projects/dicaf'
+import { CaffeineIoC, mod, type ContainerBindingOps } from '@caffeine-projects/dicaf'
 
 function databaseModule(di: ContainerBindingOps) {
   di.bind(Database).toClass(PostgresDatabase)
@@ -17,11 +17,11 @@ function emailModule(di: ContainerBindingOps) {
   di.bind(Mailer).toClass(SmtpMailer)
 }
 
-const di = new DiCaf(databaseModule, emailModule)
+const di = new CaffeineIoC(databaseModule, emailModule)
 await di.init()
 ```
 
-Modules passed to the `DiCaf` constructor are applied immediately, before
+Modules passed to the `CaffeineIoC` constructor are applied immediately, before
 `init()` is called.
 
 ## Naming a module
@@ -48,7 +48,7 @@ const configModule = mod('config', async (di) => {
   di.bind(AppConfig).toValue(config)
 })
 
-const di = new DiCaf(configModule)
+const di = new CaffeineIoC(configModule)
 await di.init()
 ```
 
@@ -104,7 +104,7 @@ extend them without affecting the parent. This is useful for request-scoped
 setups or multi-tenant isolation.
 
 ```ts
-const parent = new DiCaf(commonModule)
+const parent = new CaffeineIoC(commonModule)
 await parent.init()
 
 const child = parent.newChild()

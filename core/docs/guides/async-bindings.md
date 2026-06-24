@@ -4,7 +4,7 @@ Use async bindings when creating an instance requires I/O — connecting to a
 database, fetching remote configuration, opening a file handle, and similar
 operations that return a `Promise`.
 
-DiCaf awaits all async bindings during `init()`, so by the time your code calls
+CaffeineIoC awaits all async bindings during `init()`, so by the time your code calls
 `container.get()`, every async dependency is already resolved and ready.
 
 ## Constraints
@@ -25,9 +25,9 @@ Async bindings have three hard constraints enforced at `init()`:
 Use `toAsyncFactory()` on the binder when wiring dependencies in a module:
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf(mod => {
+const di = new CaffeineIoC(mod => {
   mod.bind(DatabasePool).toAsyncFactory(async ctx => {
     const config = ctx.container.get(AppConfig)
     return createPool(config.databaseUrl)
@@ -94,7 +94,7 @@ the key.
 
 ## Ordering between async bindings
 
-If one async binding depends on another, DiCaf topologically sorts them before
+If one async binding depends on another, CaffeineIoC topologically sorts them before
 calling `init()` — you do not need to declare or enforce the order manually.
 
 ```ts
@@ -109,7 +109,7 @@ class InfraConfig {
   @Async()
   @Provides(UserRepository, [DatabasePool])
   async userRepository(pool: DatabasePool): Promise<UserRepository> {
-    // pool is already resolved — DiCaf awaited databasePool() first
+    // pool is already resolved — CaffeineIoC awaited databasePool() first
     return new UserRepository(pool)
   }
 }

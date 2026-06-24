@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Configuration } from '../configuration.legacy.js'
 import { Provides } from '../provides.legacy.js'
@@ -18,7 +18,7 @@ describe('Legacy @Lazy', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -65,7 +65,7 @@ describe('Legacy @Lazy', function () {
 
     void LazyConf
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -91,7 +91,7 @@ describe('Legacy @Lazy', function () {
     @Injectable()
     class NonLazyClass {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()

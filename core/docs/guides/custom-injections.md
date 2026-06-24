@@ -1,6 +1,6 @@
 # Custom Injections
 
-DiCaf's injection helpers wrap a key into an `InjectionDescriptor`, letting you
+CaffeineIoC's injection helpers wrap a key into an `InjectionDescriptor`, letting you
 modify how a single dependency is resolved — marking it optional, deferring its
 key, wrapping it in a provider, or injecting a constant value.
 

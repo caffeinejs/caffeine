@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { bindScope, Scopes, unbindScope } from '../../../scope.js'
 import { RequestScope } from './index.js'
 
@@ -16,7 +16,7 @@ describe('REQUEST scope — manual bindScope', function () {
   it('resolves request-scoped beans inside run()', async function () {
     class Svc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Svc)
       .toSelf()
       .lifetime(Scopes.REQUEST)
@@ -36,7 +36,7 @@ describe('REQUEST scope — manual bindScope', function () {
   it('throws when resolving outside run()', async function () {
     class Svc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Svc)
       .toSelf()
       .lifetime(Scopes.REQUEST)

@@ -1,6 +1,6 @@
 # Graph
 
-DiCaf can render a container's bindings as a dependency graph in several
+CaffeineIoC can render a container's bindings as a dependency graph in several
 formats. All graph functions are exported from the main package.
 
 ```ts

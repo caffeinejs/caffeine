@@ -225,7 +225,7 @@ All bindings are registered before any `@ConditionalOn` predicate runs, so
 ## Manual bindings (without decorators)
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 interface Cache {
   get(key: string): string | undefined
@@ -245,7 +245,7 @@ class RedisCache implements Cache {
   set(key: string, value: string) { /* ... */ }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(kCache).toClass(RedisCache)
 

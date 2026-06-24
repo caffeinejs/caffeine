@@ -64,7 +64,7 @@ class MetricsPostProcessor implements PostProcessor {
   }
 }
 
-const di = new DiCaf(appModule)
+const di = new CaffeineIoC(appModule)
 di.postProcessors.add(new MetricsPostProcessor())
 await di.init()
 ```

@@ -84,13 +84,13 @@ export type InjectionResolverFactory<T = unknown> = (ctx: InjectionResolverFacto
  * Built-in injection resolver factories.
  */
 export const BuiltInResolvers = {
-  DEFAULT: Symbol('dicaf.resolver.default'),
-  MAP: Symbol('dicaf.resolver.map'),
-  DEFER: Symbol('dicaf.resolver.defer'),
-  OBJECT: Symbol('dicaf.resolver.object'),
-  ORDERED: Symbol('dicaf.resolver.ordered'),
-  PROVIDER: Symbol('dicaf.resolver.provider'),
-  VALUE: Symbol('dicaf.resolver.value'),
+  DEFAULT: Symbol('@caffeinejs/core:resolver.default'),
+  MAP: Symbol('@caffeinejs/core:resolver.map'),
+  DEFER: Symbol('@caffeinejs/core:resolver.defer'),
+  OBJECT: Symbol('@caffeinejs/core:resolver.object'),
+  ORDERED: Symbol('@caffeinejs/core:resolver.ordered'),
+  PROVIDER: Symbol('@caffeinejs/core:resolver.provider'),
+  VALUE: Symbol('@caffeinejs/core:resolver.value'),
 } as const
 
 const registry = new Map<symbol, InjectionResolverFactory>()

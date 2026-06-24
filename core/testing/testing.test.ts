@@ -6,7 +6,7 @@ import { Inject } from '../decorators/inject.js'
 import { Async } from '../decorators/async.js'
 import { Profile } from '../decorators/profile.js'
 import { optional } from '../injection.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrUnresolvableDependencies } from '../errors.js'
 import { InstanceTracker } from './tracker.js'
 import { TestContainer } from './testing.js'
@@ -73,7 +73,7 @@ describe('TestContainer', function () {
 
   describe('base()', function () {
     it('resolves the root type', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       await di.init()
 
@@ -82,7 +82,7 @@ describe('TestContainer', function () {
     })
 
     it('resolves root with all its dependencies', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       await di.init()
       const ctrl = di.get(Controller)
@@ -93,7 +93,7 @@ describe('TestContainer', function () {
     })
 
     it('includes all bindings — not focused to one root', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       await di.init()
 
@@ -103,7 +103,7 @@ describe('TestContainer', function () {
     })
 
     it('resolves property injection', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       await di.init()
 
@@ -112,7 +112,7 @@ describe('TestContainer', function () {
     })
 
     it('resolves root with optional dep present', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       await di.init()
 
@@ -124,7 +124,7 @@ describe('TestContainer', function () {
   describe('override()', function () {
     it('replaces a dep with the given value', async function () {
       const mockRepo = { isMock: true } as unknown as Repository
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .override(Repository, b => b.toValue(mockRepo))
         .build()
@@ -136,7 +136,7 @@ describe('TestContainer', function () {
     })
 
     it('allows overriding a named key', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .override(kMsg, b => b.toValue('overridden'))
         .build()
@@ -151,7 +151,7 @@ describe('TestContainer', function () {
   describe('isolate()', function () {
     it('isolated key resolves to the provided value', async function () {
       const mockRepo = {} as RepositoryWithExclusive
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .isolate(RepositoryWithExclusive, false, b => b.toValue(mockRepo))
         .build()
@@ -163,7 +163,7 @@ describe('TestContainer', function () {
 
     it('exclusive sub-deps of isolated key are pruned', async function () {
       const mockRepo = {} as RepositoryWithExclusive
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .isolate(RepositoryWithExclusive, false, b => b.toValue(mockRepo))
         .build()
@@ -174,7 +174,7 @@ describe('TestContainer', function () {
 
     it('shared dep of isolated key is NOT pruned', async function () {
       const mockRepo = {} as RepositoryWithShared
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .isolate(RepositoryWithShared, false, b => b.toValue(mockRepo))
         .build()
@@ -186,7 +186,7 @@ describe('TestContainer', function () {
 
     it('pruneShared: true removes shared dep regardless', async function () {
       const mockRepo = {} as RepositoryWithShared
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .isolate(RepositoryWithShared, true, b => b.toValue(mockRepo))
         .build()
@@ -213,7 +213,7 @@ describe('TestContainer', function () {
     }
 
     it('skipAsyncBindings() with no args strips all async bindings', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).skipAsyncBindings()
         .build()
 
@@ -222,7 +222,7 @@ describe('TestContainer', function () {
     })
 
     it('skipAsyncBindings(key) preserves the listed async binding', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).skipAsyncBindings(kConn)
         .build()
 
@@ -230,7 +230,7 @@ describe('TestContainer', function () {
     })
 
     it('skip(key) strips an async binding', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).skip(kConn)
         .build()
 
@@ -239,7 +239,7 @@ describe('TestContainer', function () {
     })
 
     it('skip(key) strips a non-async binding', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).skip(Repository)
         .build()
 
@@ -248,7 +248,7 @@ describe('TestContainer', function () {
     })
 
     it('override key is exempt from skipAsyncBindings filter and resolves', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(ServiceWithAsyncDep)
         .skipAsyncBindings()
@@ -261,7 +261,7 @@ describe('TestContainer', function () {
     })
 
     it('isolate key is exempt from skipAsyncBindings filter', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .skipAsyncBindings()
         .isolate(kConn, false, b => b.toValue('mock-connection'))
@@ -271,7 +271,7 @@ describe('TestContainer', function () {
     })
 
     it('chained calls accumulate exceptions', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .skipAsyncBindings()
         .skipAsyncBindings(kConn)
@@ -283,7 +283,7 @@ describe('TestContainer', function () {
 
   describe('focus()', function () {
     it('keeps root and its transitive deps', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Controller)
         .build()
 
@@ -292,7 +292,7 @@ describe('TestContainer', function () {
     })
 
     it('drops bindings not in the dep tree', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Controller)
         .build()
 
@@ -300,7 +300,7 @@ describe('TestContainer', function () {
     })
 
     it('multi-root keeps union of both trees', function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Controller, UnrelatedService)
         .build()
 
@@ -310,7 +310,7 @@ describe('TestContainer', function () {
 
     it('composes with isolate — dep analysis reflects focused scope', async function () {
       const mockRepo = {} as Repository
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(Controller)
         .isolate(Repository, false, b => b.toValue(mockRepo))
@@ -322,8 +322,8 @@ describe('TestContainer', function () {
   })
 
   describe('build()', function () {
-    it('returns an uninitialized DiCaf', function () {
-      const source = new DiCaf()
+    it('returns an uninitialized CaffeineIoC', function () {
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
 
       expect(di.ready)
@@ -331,7 +331,7 @@ describe('TestContainer', function () {
     })
 
     it('can be initialized manually', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       await di.init()
 
@@ -343,7 +343,7 @@ describe('TestContainer', function () {
   describe('TestPostProcessor', function () {
     it('records instances created during init()', async function () {
       const tracker = new InstanceTracker()
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       di.postProcessors.add(tracker)
       await di.init()
@@ -354,7 +354,7 @@ describe('TestContainer', function () {
 
     it('instancesOf() returns the singleton instance', async function () {
       const tracker = new InstanceTracker()
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       di.postProcessors.add(tracker)
       await di.init()
@@ -367,7 +367,7 @@ describe('TestContainer', function () {
 
     it('wasInstantiated() returns false for classes outside the focused graph', async function () {
       const tracker = new InstanceTracker()
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Repository)
         .build()
       di.postProcessors.add(tracker)
@@ -379,7 +379,7 @@ describe('TestContainer', function () {
 
     it('confirms focus() trimmed bindings were not instantiated', async function () {
       const tracker = new InstanceTracker()
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Repository)
         .build()
       di.postProcessors.add(tracker)
@@ -392,7 +392,7 @@ describe('TestContainer', function () {
 
     it('reset() clears all recorded events', async function () {
       const tracker = new InstanceTracker()
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
       di.postProcessors.add(tracker)
       await di.init()
@@ -405,7 +405,7 @@ describe('TestContainer', function () {
 
     it('events() preserves dep-before-dependent order', async function () {
       const tracker = new InstanceTracker()
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Controller)
         .build()
       di.postProcessors.add(tracker)
@@ -492,7 +492,7 @@ describe('TestContainer', function () {
     }
 
     it('resolves the full 3-level async chain end-to-end', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(CgOrderService)
         .build()
       await di.init()
@@ -509,7 +509,7 @@ describe('TestContainer', function () {
     })
 
     it('kCgDbConn is a singleton — CgOrderService and CgUserRepo share the same instance', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(CgOrderService)
         .build()
       await di.init()
@@ -522,7 +522,7 @@ describe('TestContainer', function () {
       const fakeConn = new CgDbConn(new CgDbPool('fake'))
       const fakeCache = new CgCacheClient('fake-redis')
 
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(CgOrderService)
         .skipAsyncBindings()
@@ -538,7 +538,7 @@ describe('TestContainer', function () {
     })
 
     it('two TestContainers from the same snapshot are independent', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const snap = source.snapshot()
 
       const fake1 = new CgDbConn(new CgDbPool('snap1'))
@@ -568,7 +568,7 @@ describe('TestContainer', function () {
 
     it('isolate(kCgDbConn, true) prunes the db chain, leaving the cache chain intact', function () {
       const fakeConn = new CgDbConn(new CgDbPool('fake'))
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(CgOrderService)
         .isolate(kCgDbConn, true, b => b.toValue(fakeConn))
@@ -582,7 +582,7 @@ describe('TestContainer', function () {
 
     it('isolate(kCgDbConn, false) prunes exclusive db deps, preserves CgInfraConfig shared by cache', function () {
       const fakeConn = new CgDbConn(new CgDbPool('fake'))
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(CgOrderService)
         .isolate(kCgDbConn, false, b => b.toValue(fakeConn))
@@ -598,7 +598,7 @@ describe('TestContainer', function () {
       const kTestClock = Symbol('kTestClock')
       const fakeClock = { now: () => 0 }
 
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(CgOrderService)
         .skipAsyncBindings()
@@ -614,7 +614,7 @@ describe('TestContainer', function () {
     })
 
     it('profiles() makes active profiles accessible during init', async function () {
-      const source = new DiCaf()
+      const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(CgOrderService)
         .skipAsyncBindings()
@@ -628,7 +628,7 @@ describe('TestContainer', function () {
     })
 
     it('snapshot from profile-aware source captures @Profile-gated classes', async function () {
-      const source = new DiCaf({ profiles: ['ci'] })
+      const source = new CaffeineIoC({ profiles: ['ci'] })
       const di = new TestContainer(source).focus(CgCiOnlyService)
         .build()
       await di.init()
@@ -638,7 +638,7 @@ describe('TestContainer', function () {
 
     describe('assertResolvable()', function () {
       it('does not throw when all deps are wired', function () {
-        const source = new DiCaf()
+        const source = new CaffeineIoC()
         const di = new TestContainer(source).focus(CgOrderService)
           .build()
 
@@ -646,7 +646,7 @@ describe('TestContainer', function () {
       })
 
       it('throws ErrUnresolvableDependencies when a binding is missing after skip', function () {
-        const source = new DiCaf()
+        const source = new CaffeineIoC()
         const di = new TestContainer(source)
           .focus(CgOrderService)
           .skip(kCgDbConn)
@@ -656,7 +656,7 @@ describe('TestContainer', function () {
       })
 
       it('collects all broken edges before throwing — not just the first', function () {
-        const source = new DiCaf()
+        const source = new CaffeineIoC()
         const di = new TestContainer(source)
           .focus(CgOrderService)
           .skip(kCgDbConn)
@@ -678,7 +678,7 @@ describe('TestContainer', function () {
     describe('overrideWithValue() / isolateWithValue()', function () {
       it('overrideWithValue is shorthand for override(key, b => b.toValue(value))', async function () {
         const fakeConn = new CgDbConn(new CgDbPool('fake'))
-        const source = new DiCaf()
+        const source = new CaffeineIoC()
         const di = new TestContainer(source)
           .focus(CgOrderService)
           .skipAsyncBindings()
@@ -692,7 +692,7 @@ describe('TestContainer', function () {
 
       it('isolateWithValue is shorthand for isolate(key, pruneShared, b => b.toValue(value))', async function () {
         const fakeConn = new CgDbConn(new CgDbPool('fake'))
-        const source = new DiCaf()
+        const source = new CaffeineIoC()
         const di = new TestContainer(source)
           .focus(CgOrderService)
           .isolateWithValue(kCgDbConn, false, fakeConn)

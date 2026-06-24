@@ -55,7 +55,7 @@ A DI container automates this. You register what exists and how to build it;
 the container resolves the construction order and manages instances:
 
 ```ts
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(SmtpMailer).toValue(new SmtpMailer('smtp.example.com', 587))
 di.bind(UserService).toSelf([SmtpMailer])
@@ -77,13 +77,13 @@ class UserService {
 The container reads this at startup and wires the graph without any manual
 construction code.
 
-## What DiCaf adds
+## What CaffeineIoC adds
 
-DiCaf is an IoC container for JavaScript and TypeScript. "IoC" stands for
+CaffeineIoC is an IoC container for JavaScript and TypeScript. "IoC" stands for
 Inversion of Control — instead of your code calling `new`, the container
 controls construction.
 
-Beyond basic injection, DiCaf provides:
+Beyond basic injection, CaffeineIoC provides:
 
 - **Scopes** — control how many instances exist (singleton, per-request,
   per-child-container).
@@ -96,6 +96,6 @@ Beyond basic injection, DiCaf provides:
 - **Testing utilities** — snapshot and restore the binding registry for
   isolated tests.
 
-See [Container lifecycle](./container-lifecycle.md) for how DiCaf's startup and
+See [Container lifecycle](./container-lifecycle.md) for how CaffeineIoC's startup and
 shutdown sequence works, or start with the
 [tutorial](../tutorial/request-scope-fastify) to see it in practice.

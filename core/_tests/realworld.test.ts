@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Named } from '../decorators/named.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { allOf } from '../injection.js'
 import { UseFactory } from '../decorators/use_factory.js'
@@ -231,7 +231,7 @@ describe('Real World', function () {
   }
 
   it('should ensure everything resolves and works properly', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const controller = di.get(Controller)
 

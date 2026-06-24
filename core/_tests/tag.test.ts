@@ -3,7 +3,7 @@ import { Provides } from '../decorators/provides.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Tag } from '../decorators/tag.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('Tag', function () {
   it('should attach and retrieve a tag from a class binding', function () {
@@ -13,7 +13,7 @@ describe('Tag', function () {
     @Injectable()
     class UserCtrl {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     const binding = di.getBindings(UserCtrl)[0]
 
     expect(binding.tags.get(kRoute))
@@ -26,7 +26,7 @@ describe('Tag', function () {
     @Injectable()
     class Plain {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     const binding = di.getBindings(Plain)[0]
 
     expect(binding.tags.get(kRoute))
@@ -42,7 +42,7 @@ describe('Tag', function () {
     @Injectable()
     class Both {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     const binding = di.getBindings(Both)[0]
 
     expect(binding.tags.get(kA))
@@ -59,7 +59,7 @@ describe('Tag', function () {
     @Injectable()
     class Overwritten {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     const binding = di.getBindings(Overwritten)[0]
 
     expect(binding.tags.get(kSlot))
@@ -75,7 +75,7 @@ describe('Tag', function () {
       @Injectable()
       class Accumulated {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const binding = di.getBindings(Accumulated)[0]
 
       expect(binding.tags.get(k))
@@ -97,7 +97,7 @@ describe('Tag', function () {
       }
       void Conf
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const binding = di.getBindings(kBean)[0]
 
       expect(binding.tags.get(k))
@@ -112,7 +112,7 @@ describe('Tag', function () {
       @Injectable()
       class Mismatch {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const binding = di.getBindings(Mismatch)[0]
 
       expect(binding.tags.get(k))
@@ -129,7 +129,7 @@ describe('Tag', function () {
       @Injectable()
       class MergedSet {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const result = di.getBindings(MergedSet)[0].tags.get(k) as Set<number>
 
       expect(result)
@@ -146,7 +146,7 @@ describe('Tag', function () {
       @Injectable()
       class MergedMap {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const result = di.getBindings(MergedMap)[0].tags.get(k) as Map<string, number>
 
       expect(result.get('a'))
@@ -163,7 +163,7 @@ describe('Tag', function () {
       @Injectable()
       class MapConflict {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const result = di.getBindings(MapConflict)[0].tags.get(k) as Map<string, string>
 
       expect(result.get('x'))
@@ -180,7 +180,7 @@ describe('Tag', function () {
       @Injectable()
       class MergedObj {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const result = di.getBindings(MergedObj)[0].tags.get(k) as Record<string, number>
 
       expect(result.a)
@@ -197,7 +197,7 @@ describe('Tag', function () {
       @Injectable()
       class ObjConflict {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const result = di.getBindings(ObjConflict)[0].tags.get(k) as Record<string, string>
 
       expect(result.x)
@@ -220,7 +220,7 @@ describe('Tag', function () {
       }
       void ApiConf
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const descriptors = di.getBindings(kEndpoint)
 
       expect(descriptors)
@@ -244,7 +244,7 @@ describe('Tag', function () {
       }
       void Conf
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const descriptors = di.getBindings(kBean)
 
       expect(descriptors[0].tags.get(kSlot))

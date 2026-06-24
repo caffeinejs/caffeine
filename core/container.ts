@@ -51,13 +51,13 @@ const DEFAULT_OPTIONS: Partial<Options> = {
 }
 
 /**
- * DiCaf IoC container implementation of the {@link Container} interface.
+ * CaffeineIoC IoC container implementation of the {@link Container} interface.
  * A container must always be initialized before it can be used.
  * Upon initialization, it is no longer possible to register new bindings.
  *
  * @sealed
  */
-export class DiCaf implements Container {
+export class CaffeineIoC implements Container {
   private readonly modules: Module[]
   private readonly registry = new Map<Key, Binding>()
   private readonly bindings = new Map<Key, Binding[]>()
@@ -158,7 +158,7 @@ export class DiCaf implements Container {
   }
 
   get [Symbol.toStringTag]() {
-    return DiCaf.name
+    return CaffeineIoC.name
   }
 
   /**
@@ -648,8 +648,8 @@ export class DiCaf implements Container {
   /**
    * Creates a new child container from this one, sharing the same configuration.
    */
-  newChild(): DiCaf {
-    const child = new DiCaf({
+  newChild(): CaffeineIoC {
+    const child = new CaffeineIoC({
       lazy: this.lazy,
       defaultScopeId: this.scopeId,
       profiles: [...this.profiles],
@@ -1549,14 +1549,14 @@ export class DiCaf implements Container {
   }
 }
 
-export function newContainer(...modules: Module[]): DiCaf
-export function newContainer(options: Partial<Options>, ...modules: Module[]): DiCaf
+export function newContainer(...modules: Module[]): CaffeineIoC
+export function newContainer(options: Partial<Options>, ...modules: Module[]): CaffeineIoC
 export function newContainer(
   optionsOrModuleFn: Partial<Options> | Module = {},
   ...modules: Module[]
-): DiCaf {
+): CaffeineIoC {
   const isModuleFn = typeof optionsOrModuleFn === 'function'
   const allModuleFns = isModuleFn ? [optionsOrModuleFn, ...modules] : modules
 
-  return new DiCaf(isModuleFn ? {} : optionsOrModuleFn, ...allModuleFns)
+  return new CaffeineIoC(isModuleFn ? {} : optionsOrModuleFn, ...allModuleFns)
 }

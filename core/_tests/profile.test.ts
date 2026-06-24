@@ -2,7 +2,7 @@ import { describe, it, beforeAll, expect } from 'vitest'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey } from '../errors.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Lazy } from '../decorators/lazy.js'
@@ -62,7 +62,7 @@ describe('Profile', function () {
   }
 
   describe('when profile is set', function () {
-    const di = new DiCaf({ profiles: ['prof2'] })
+    const di = new CaffeineIoC({ profiles: ['prof2'] })
 
     beforeAll(async () => {
       await di.init()
@@ -89,7 +89,7 @@ describe('Profile', function () {
   })
 
   describe('when no profiles are active', function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -108,7 +108,7 @@ describe('Profile', function () {
   })
 
   describe('when multiple profiles are active', function () {
-    const di = new DiCaf({ profiles: ['prof1', 'prof2', 'prof-cross'] })
+    const di = new CaffeineIoC({ profiles: ['prof1', 'prof2', 'prof-cross'] })
 
     beforeAll(async () => {
       await di.init()
@@ -135,13 +135,13 @@ describe('Profile', function () {
   })
 
   it('should throw at init when a component depends on a component from a different profile', async function () {
-    const di = new DiCaf({ profiles: ['prof-cross'] })
+    const di = new CaffeineIoC({ profiles: ['prof-cross'] })
     await expect(di.init()).rejects.toThrow(ErrNoResolutionForKey)
   })
 
   describe('using profiles in configuration providers', function () {
     describe('when profile is set', function () {
-      const di = new DiCaf({ profiles: ['prof2'] })
+      const di = new CaffeineIoC({ profiles: ['prof2'] })
 
       beforeAll(async () => {
         await di.init()

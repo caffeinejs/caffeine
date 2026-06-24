@@ -5,7 +5,7 @@ import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrInvalidBinding, ErrNoResolutionForKey } from '../errors.js'
 import { useValue } from '../injection.js'
 import { Provider } from '../provider.js'
@@ -42,7 +42,7 @@ describe('Manual Binding', function () {
     }
 
     it('should bind to class', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const before = di.has(Late)
 
       di.bind(Late)
@@ -62,7 +62,7 @@ describe('Manual Binding', function () {
     })
 
     it('should bind to class by name', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('test')
         .toClass(Late)
@@ -77,7 +77,7 @@ describe('Manual Binding', function () {
     })
 
     it('should bind abstract class to concrete implementation', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind(Abs)
         .toClass(Impl)
@@ -91,7 +91,7 @@ describe('Manual Binding', function () {
     })
 
     it('should bind value', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('val')
         .toValue('test')
@@ -109,7 +109,7 @@ describe('Manual Binding', function () {
     })
 
     it('should bind factory', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('val')
         .toValue('test')
@@ -149,7 +149,7 @@ describe('Manual Binding', function () {
       }
 
       it('should resolve when multiple injections are provided', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(DepA)
           .toSelf()
@@ -168,7 +168,7 @@ describe('Manual Binding', function () {
       })
 
       it('should resolve when a single injection is provided without wrapping array', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(DepA)
           .toSelf()
@@ -183,7 +183,7 @@ describe('Manual Binding', function () {
       })
 
       it('should accept an InjectionDescriptor', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(DepA)
           .toSelf()
@@ -219,7 +219,7 @@ describe('Manual Binding', function () {
       }
 
       it('should resolve when multiple injections are provided', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(DepC)
           .toSelf()
@@ -238,7 +238,7 @@ describe('Manual Binding', function () {
       })
 
       it('should resolve when a single injection is provided without wrapping array', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(DepC)
           .toSelf()
@@ -255,7 +255,7 @@ describe('Manual Binding', function () {
 
     describe('with options', function () {
       it('should bind dependency as transient when using .transient()', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(Late)
           .toSelf()
@@ -271,7 +271,7 @@ describe('Manual Binding', function () {
 
     describe('rebinding', function () {
       it('should apply the new factory after rebind', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(Late)
           .toSelf()
@@ -292,7 +292,7 @@ describe('Manual Binding', function () {
 
         class Replacement {}
 
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         di.rebind(Original).toClass(Replacement)
         await di.init()
 
@@ -312,7 +312,7 @@ describe('Manual Binding', function () {
       const qry4 = () => 'four'
 
       it('should resolve all functions', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(kQry1)
           .toValue(qry1)
@@ -345,7 +345,7 @@ describe('Manual Binding', function () {
       }
 
       it('should use the custom factory to build the instance', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(Dep)
           .toFactory(() => {
@@ -382,7 +382,7 @@ describe('Manual Binding', function () {
       class RefreshDep {}
 
       it('should bind component as transient scoped', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(TransientDep)
           .toSelf()
@@ -396,7 +396,7 @@ describe('Manual Binding', function () {
       })
 
       it('should bind component as request scoped', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         di.bind(ReqDep)
           .toSelf()
           .lifetime(Scopes.REQUEST)
@@ -408,7 +408,7 @@ describe('Manual Binding', function () {
       })
 
       it('should bind component as refresh scoped', function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         di.bind(RefreshDep)
           .toSelf()
@@ -422,14 +422,14 @@ describe('Manual Binding', function () {
 
   describe('invalid bindings scenarios', function () {
     it('should only accept self binding with class types', function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       expect(() => di.bind('test')
         .toSelf())
         .toThrow(ErrInvalidBinding)
     })
 
     it('should only accept previously registered scopes', function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       expect(() => di.bind('test')
         .toValue('value')
         .lifetime('nonexistent-scope'))
@@ -447,14 +447,14 @@ describe('Manual Binding', function () {
       }
 
       it('should throw when fewer injections than constructor parameters are provided', function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         expect(() => di.bind(TwoParam)
           .toClass(TwoParam, [Dep]))
           .toThrow(ErrInvalidBinding)
       })
 
       it('should throw when more injections than constructor parameters are provided', function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         expect(() => di.bind(TwoParam)
           .toClass(TwoParam, [Dep, Dep, Dep]))
           .toThrow(ErrInvalidBinding)
@@ -472,7 +472,7 @@ describe('Manual Binding', function () {
       }
 
       it('should throw when the injection count does not match the constructor parameter count', function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         expect(() => di.bind(TwoParam)
           .toSelf([Dep]))
           .toThrow(ErrInvalidBinding)
@@ -483,7 +483,7 @@ describe('Manual Binding', function () {
   describe('labels()', function () {
     it('should add a single label to the binding', function () {
       const kSvc = Symbol('svc')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -496,7 +496,7 @@ describe('Manual Binding', function () {
     it('should accumulate labels across multiple labels() calls', function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -511,7 +511,7 @@ describe('Manual Binding', function () {
 
     it('should not add duplicate entries when called twice with the same symbol', function () {
       const kSvc = Symbol('svc')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -527,7 +527,7 @@ describe('Manual Binding', function () {
     it('should add multiple labels from an array', function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -542,7 +542,7 @@ describe('Manual Binding', function () {
     it('should merge labels from single and array calls', function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -557,7 +557,7 @@ describe('Manual Binding', function () {
 
     it('should deduplicate symbols present in both existing labels and the new array', function () {
       const kSvc = Symbol('svc')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -573,7 +573,7 @@ describe('Manual Binding', function () {
 
   describe('names()', function () {
     it('should deduplicate names when the same name is added twice', function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind('svc')
         .toValue('ok')
@@ -586,7 +586,7 @@ describe('Manual Binding', function () {
 
   describe('primary()', function () {
     it('should set the primary flag on the binding', function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       class Svc {}
 
@@ -602,7 +602,7 @@ describe('Manual Binding', function () {
   describe('tags()', function () {
     it('should set a single tag on the binding', function () {
       const kRoute = Symbol('route')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -617,7 +617,7 @@ describe('Manual Binding', function () {
     it('should accumulate tags across multiple tags() calls', function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -634,7 +634,7 @@ describe('Manual Binding', function () {
 
     it('should overwrite an existing tag when called with the same key', function () {
       const kSlot = Symbol('slot')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -650,7 +650,7 @@ describe('Manual Binding', function () {
     it('should set multiple tags from a map', function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -672,7 +672,7 @@ describe('Manual Binding', function () {
     it('should merge single tag with map tags', function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -689,7 +689,7 @@ describe('Manual Binding', function () {
 
     it('should overwrite keys already present when maps overlap', function () {
       const kSlot = Symbol('slot')
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind('svc')
         .toValue({})
@@ -713,7 +713,7 @@ describe('Manual Binding', function () {
         }
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind(SvcWithInit)
         .toSelf()
         .postConstruct(v => v.init())
@@ -733,7 +733,7 @@ describe('Manual Binding', function () {
         }
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind(SvcWithInit)
         .toSelf()
         .postConstruct(v => v.init())
@@ -763,7 +763,7 @@ describe('Manual Binding', function () {
     }
 
     it('should not init component on bootstrap when it is configured as lazy', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       di.bind(Laziest)
         .toSelf()
@@ -792,7 +792,7 @@ describe('Manual Binding', function () {
 
       void AsyncWithInjectableProp
 
-      expect(() => new DiCaf())
+      expect(() => new CaffeineIoC())
         .toThrow(ErrInvalidBinding)
     })
 
@@ -812,7 +812,7 @@ describe('Manual Binding', function () {
 
       void AsyncWithInjectableMethod
 
-      expect(() => new DiCaf())
+      expect(() => new CaffeineIoC())
         .toThrow(ErrInvalidBinding)
     })
   })
@@ -823,7 +823,7 @@ describe('Manual Binding', function () {
         constructor(readonly val: string) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(StringParam)
         .toSelf([useValue('hello')])
       await di.init()
@@ -837,7 +837,7 @@ describe('Manual Binding', function () {
         constructor(readonly val: number) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(NumParam)
         .toSelf([useValue(42)])
       await di.init()
@@ -854,7 +854,7 @@ describe('Manual Binding', function () {
         constructor(readonly config: Config) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(ConfigConsumer)
         .toSelf([useValue(config)])
       await di.init()
@@ -868,7 +868,7 @@ describe('Manual Binding', function () {
         constructor(readonly val: unknown) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(NullParam)
         .toSelf([useValue(null)])
       await di.init()
@@ -882,7 +882,7 @@ describe('Manual Binding', function () {
         constructor(readonly val: unknown) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(UndefinedParam)
         .toSelf([useValue(undefined)])
       await di.init()
@@ -899,7 +899,7 @@ describe('Manual Binding', function () {
         ) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(MultiParam)
         .toSelf([useValue('localhost'), useValue(3000)])
       await di.init()
@@ -913,7 +913,7 @@ describe('Manual Binding', function () {
 
   describe('aliasOf()', function () {
     it('should resolve alias to value target', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       const key1 = Symbol('key1')
       const key2 = Symbol('key2')
 
@@ -929,7 +929,7 @@ describe('Manual Binding', function () {
       class Svc {}
 
       const key = Symbol('alias')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Svc).toSelf()
       di.bind(key).aliasOf(Svc)
@@ -944,7 +944,7 @@ describe('Manual Binding', function () {
       }
 
       const alias = Symbol('alias')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(Svc).toSelf()
         .lifetime(Scopes.SINGLETON)
@@ -958,7 +958,7 @@ describe('Manual Binding', function () {
       class Svc {}
 
       const alias = Symbol('alias')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(alias).aliasOf(Svc)
       di.bind(Svc).toSelf()
@@ -970,7 +970,7 @@ describe('Manual Binding', function () {
 
     it('should support additional names on the alias', async function () {
       const key2 = Symbol('key2')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(key2).toValue(42)
       di.bind(Symbol('key1')).aliasOf(key2)
@@ -984,7 +984,7 @@ describe('Manual Binding', function () {
       class Unregistered {}
 
       const alias = Symbol('alias')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.bind(alias).aliasOf(Unregistered)
 
@@ -1008,7 +1008,7 @@ describe('Manual Binding', function () {
 
       void OneInjectionTwoMethodParams
 
-      expect(() => new DiCaf())
+      expect(() => new CaffeineIoC())
         .toThrow()
     })
   })
@@ -1016,7 +1016,7 @@ describe('Manual Binding', function () {
 
 describe('wrap()', function () {
   it('should return a Provider that resolves the binding on each get()', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind('svc').toValue({ name: 'service' })
     await di.init()
 
@@ -1027,7 +1027,7 @@ describe('wrap()', function () {
   })
 
   it('should throw ErrNoResolutionForKey when key is not registered', function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
 
     expect(() => di.wrap('nonexistent')).toThrow(ErrNoResolutionForKey)
   })
@@ -1037,7 +1037,7 @@ describe('wrapMany()', function () {
   it('should return a Provider<T[]> resolving all bindings for a shared name key', async function () {
     const kSvc = Symbol('wrap-many-svc')
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind('alpha').toValue('alpha')
       .names(kSvc)
     di.bind('bravo').toValue('bravo')
@@ -1053,7 +1053,7 @@ describe('wrapMany()', function () {
   })
 
   it('should throw ErrNoResolutionForKey when no bindings exist for the key', function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     const kMissing = Symbol('wrap-many-missing')
 
     expect(() => di.wrapMany(kMissing)).toThrow(ErrNoResolutionForKey)

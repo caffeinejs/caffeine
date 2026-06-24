@@ -1,12 +1,12 @@
 # Options
 
-Constructor options for the `DiCaf` container.
+Constructor options for the `CaffeineIoC` container.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 import type { Options } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf(options: Partial<Options>)
+const di = new CaffeineIoC(options: Partial<Options>)
 ```
 
 All fields are optional. Omitting them produces the defaults shown below.
@@ -28,7 +28,7 @@ registered only when `'name'` appears in this array. Bindings with no
 `@Profile` annotation are always registered.
 
 ```ts
-const di = new DiCaf({ profiles: ['production'] })
+const di = new CaffeineIoC({ profiles: ['production'] })
 ```
 
 See the [Profiles guide](../guides/profiles.md).
@@ -48,7 +48,7 @@ Scope applied to bindings that do not explicitly declare one via `@Lifetime()` o
 ```ts
 import { Scopes } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf({ defaultScopeId: Scopes.TRANSIENT })
+const di = new CaffeineIoC({ defaultScopeId: Scopes.TRANSIENT })
 ```
 
 Built-in identifiers: `Scopes.SINGLETON`, `Scopes.TRANSIENT`, `Scopes.REFRESH`, `Scopes.REQUEST`. See the [Scopes reference](./scopes.md).
@@ -75,7 +75,7 @@ Priority (highest first):
 3. Scope default
 
 ```ts
-const di = new DiCaf({ lazy: true })
+const di = new CaffeineIoC({ lazy: true })
 await di.init()
 // nothing constructed yet
 
@@ -101,7 +101,7 @@ Prefer `container.newChild()` over passing `parent` directly — `newChild()`
 copies container-scoped bindings and post-processors automatically.
 
 ```ts
-const root = new DiCaf()
+const root = new CaffeineIoC()
 await root.init()
 
 const child = root.newChild()
@@ -143,7 +143,7 @@ holding a transient reference — without blocking valid mixed-scope designs tha
 use `provide()`.
 
 ```ts
-const di = new DiCaf({ checks: { scopes: 'no-mix' } })
+const di = new CaffeineIoC({ checks: { scopes: 'no-mix' } })
 ```
 
 #### `checks.circularReferences`
@@ -159,7 +159,7 @@ When `true`, the container performs a graph traversal during `init()` and throws
 intentionally breaking cycles with `@Lazy()`.
 
 ```ts
-const di = new DiCaf({ checks: { circularReferences: false } })
+const di = new CaffeineIoC({ checks: { circularReferences: false } })
 ```
 
 ---
@@ -179,7 +179,7 @@ construction time.
 Set to `false` for fully manual containers with no decorators:
 
 ```ts
-const di = new DiCaf({ decorators: false })
+const di = new CaffeineIoC({ decorators: false })
 
 di.bind(Logger).toSelf()
 di.bind(UserService).toClass(UserService, [Logger])
@@ -206,7 +206,7 @@ merged into the binding, allowing external metadata sources (config files,
 environment variables) to override defaults without decorators.
 
 ```ts
-const di = new DiCaf({
+const di = new CaffeineIoC({
   metadataReader: key => {
     if (key === DbConnection) {
       return { lazy: true }

@@ -24,7 +24,7 @@ import {
 } from '@caffeine-projects/dicaf/decorators/legacy'
 ```
 
-DiCaf ships two decorator flavours. This document focus on **stage 3 decorators**
+CaffeineIoC ships two decorator flavours. This document focus on **stage 3 decorators**
 (TypeScript 5.0+, no `experimentalDecorators`). A legacy variant is also available
 at `@caffeine-projects/dicaf/decorators/legacy` for projects that use
 `experimentalDecorators: true` and `reflect-metadata`. The decorator API is
@@ -181,7 +181,7 @@ container's active profiles are set via the `profiles` constructor option.
 @Profile('production')
 class ProductionMailer implements Mailer { ... }
 
-new DiCaf({ profiles: ['production'] })
+new CaffeineIoC({ profiles: ['production'] })
 ```
 
 ### @ConditionalOn

@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Named } from '../named.legacy.js'
 import { Primary } from '../primary.legacy.js'
@@ -21,7 +21,7 @@ describe('Legacy decorators', function () {
     @Injectable()
     class NamedSvc {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -53,7 +53,7 @@ describe('Legacy decorators', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -84,7 +84,7 @@ describe('Legacy decorators', function () {
     }
 
     it('only registers matching profile', async function () {
-      const di = new DiCaf({ profiles: ['prod'], decorators: false })
+      const di = new CaffeineIoC({ profiles: ['prod'], decorators: false })
       di.autoWire()
       await di.init()
 
@@ -102,7 +102,7 @@ describe('Legacy decorators', function () {
     @Injectable()
     class TaggedSvc {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -122,7 +122,7 @@ describe('Legacy decorators', function () {
     @Injectable()
     class LabeledSvc {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -153,7 +153,7 @@ describe('Legacy decorators', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -179,7 +179,7 @@ describe('Legacy decorators', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -206,7 +206,7 @@ describe('Legacy decorators', function () {
         }
       }
 
-      const autoDi = new DiCaf()
+      const autoDi = new CaffeineIoC()
       await autoDi.init()
       expect(autoDi.get(AutoBase)).toBeInstanceOf(AutoImpl)
     })
@@ -256,7 +256,7 @@ describe('Legacy decorators', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -282,7 +282,7 @@ describe('Legacy decorators', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -310,14 +310,14 @@ describe('Legacy decorators', function () {
     class ExcludedSvc {}
 
     it('conditional evaluation runs at init', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       expect(di.has(ConditionalSvc))
         .toBeDefined()
     })
 
     it('excludes bean when predicate returns false', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       expect(di.has(ExcludedSvc)).toBe(false)
     })

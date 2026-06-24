@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
 
@@ -8,7 +8,7 @@ describe('HookListener memory', function () {
     let isCollected!: () => boolean
 
     const run = async () => {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       isCollected = trackForCollection(di)
       await di.init()
       await di.dispose()
@@ -25,7 +25,7 @@ describe('HookListener memory', function () {
     let isCollected!: () => boolean
 
     const run = async () => {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       const listener = () => {}
       di.hooks.on('onDisposed', listener)
       isCollected = trackForCollection(di)
@@ -41,7 +41,7 @@ describe('HookListener memory', function () {
   })
 
   it('once() listener is removed after firing', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     let fired = 0
     const listener = () => fired++
 
@@ -60,7 +60,7 @@ describe('HookListener memory', function () {
     let isCollected!: () => boolean
 
     const run = async () => {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.hooks.on('onDisposed', () => {
         void di.size
       })

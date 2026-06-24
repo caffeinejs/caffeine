@@ -6,7 +6,7 @@ import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { allOf } from '../injection.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrInvalidBinding, ErrInvalidDecorator, ErrNoUniqueInjectionForKey } from '../errors.js'
 import { Scopes } from '../scope.js'
 
@@ -27,7 +27,7 @@ describe('Abstract Classes', function () {
     }
 
     it('should resolve instance via the abstract class key', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const impl1 = di.get(Base) as Impl
       const impl2 = di.get(Base) as Impl
@@ -48,7 +48,7 @@ describe('Abstract Classes', function () {
         constructor(readonly dep: Base) {}
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const service = di.get(Service)
 
@@ -73,7 +73,7 @@ describe('Abstract Classes', function () {
     void Impl
 
     it('should respect the scope of the concrete class', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const a = di.get(Base)
       const b = di.get(Base)
@@ -118,7 +118,7 @@ describe('Abstract Classes', function () {
         constructor(readonly repo: Repo) {}
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const service = di.get<DbService>(DbService)
@@ -135,7 +135,7 @@ describe('Abstract Classes', function () {
         constructor(readonly repo: Repo) {}
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const service = di.get<DbService>(DbService)
@@ -152,7 +152,7 @@ describe('Abstract Classes', function () {
         constructor(readonly repos: Repo[]) {}
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const service = di.get<DbService>(DbService)
@@ -178,7 +178,7 @@ describe('Abstract Classes', function () {
         constructor(readonly repos: Repo[]) {}
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const service = di.get(AllRepoService)
@@ -202,7 +202,7 @@ describe('Abstract Classes', function () {
           ) {}
         }
 
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         const service = di.get(DbService)
@@ -240,7 +240,7 @@ describe('Abstract Classes', function () {
       }
       void InMemoryRepo
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const repo = di.get(Repo)
 
@@ -298,7 +298,7 @@ describe('Abstract Classes', function () {
     void Service
 
     it('should resolve the concrete class via the abstract key', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const repo = di.get(Repo)
 
@@ -309,7 +309,7 @@ describe('Abstract Classes', function () {
     })
 
     it('should resolve the primary implementation when requesting a single dependency by the abstract key', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const repo = di.get(Repo)
 
@@ -320,7 +320,7 @@ describe('Abstract Classes', function () {
     })
 
     it('should inject all implementations by the abstract key', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const repos = di.getMany(Repo)
 
@@ -332,7 +332,7 @@ describe('Abstract Classes', function () {
     })
 
     it('should resolve the dependencies following the injection specification', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const service = di.get(Service)
 
@@ -363,7 +363,7 @@ describe('Abstract Classes', function () {
       }
 
       it('should resolve the concrete class via the abstract key', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         di.bind(MemStore)
           .toSelf()
           .extends(Store)
@@ -378,7 +378,7 @@ describe('Abstract Classes', function () {
       })
 
       it('should return the same singleton instance via both the concrete and abstract key', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         di.bind(MemStore)
           .toSelf()
           .extends(Store)
@@ -400,7 +400,7 @@ describe('Abstract Classes', function () {
       class IdImpl extends IdBase {}
 
       it('should produce a new instance on each resolution via the abstract key', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         di.bind(IdImpl)
           .toSelf()
           .lifetime(Scopes.TRANSIENT)
@@ -432,7 +432,7 @@ describe('Abstract Classes', function () {
       }
 
       it('should resolve the primary implementation when requesting by abstract key', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         di.bind(MemCache)
           .toSelf()
           .extends(Cache)
@@ -449,7 +449,7 @@ describe('Abstract Classes', function () {
       })
 
       it('should resolve all implementations via getMany', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         di.bind(MemCache)
           .toSelf()
           .extends(Cache)
@@ -474,7 +474,7 @@ describe('Abstract Classes', function () {
       class Unrelated {}
 
       it('should throw when the concrete class does not extend the given base', function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         expect(() => di.bind(Unrelated)
           .toSelf()
@@ -485,7 +485,7 @@ describe('Abstract Classes', function () {
       it('should throw when base is not a class reference', function () {
         class Impl extends Base {}
 
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
 
         expect(() =>
           di
@@ -530,7 +530,7 @@ describe('Abstract Classes', function () {
         }
 
         it('should resolve the component extending the other injectable class', async function () {
-          const di = new DiCaf()
+          const di = new CaffeineIoC()
           await di.init()
 
           const otherService = di.get(OtherService)
@@ -539,7 +539,7 @@ describe('Abstract Classes', function () {
         })
 
         it('should fail to resolve the base injectable', async function () {
-          const di = new DiCaf()
+          const di = new CaffeineIoC()
           await di.init()
 
           expect(() => di.get(Service))

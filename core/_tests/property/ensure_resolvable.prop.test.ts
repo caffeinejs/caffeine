@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { ErrUnresolvableDependencies } from '../../errors.js'
 import { buildAcyclicEdges, buildDiFromEdges } from './helpers/cycle_di_builder.js'
 
@@ -30,7 +30,7 @@ describe('ensureResolvable (property)', function () {
   it.prop([fc.string({ minLength: 1, maxLength: 12 })], { numRuns: 50 })(
     'missing required dependency produces an issue mentioning the key',
     missingKey => {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind('svc')
         .toFunction((_: unknown) => ({}), [missingKey])
 
@@ -51,7 +51,7 @@ describe('ensureResolvable (property)', function () {
   )
 
   it('optional missing dependency does not throw', function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind('svc')
       .toFunction((_: unknown) => ({}), [{ key: 'missing', optional: true }])
 

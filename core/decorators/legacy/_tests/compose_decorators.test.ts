@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Named } from '../named.legacy.js'
 import { Lifetime } from '../lifetime.legacy.js'
@@ -16,7 +16,7 @@ describe('Legacy composeDecorators', function () {
     @SingletonBean
     class ComposedSingletonSvc {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -37,7 +37,7 @@ describe('Legacy composeDecorators', function () {
     @NamedBean
     class ComposedNamedSvc {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -54,7 +54,7 @@ describe('Legacy composeDecorators', function () {
     @TransientBean
     class ComposedTransientSvc {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()

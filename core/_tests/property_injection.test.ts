@@ -3,7 +3,7 @@ import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Named } from '../decorators/named.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('Property Injection', function () {
   const kValue = Symbol('value')
@@ -52,7 +52,7 @@ describe('Property Injection', function () {
     }
 
     it('should construct class and resolve property dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind(kValue)
         .toValue('test')
       await di.init()
@@ -93,7 +93,7 @@ describe('Property Injection', function () {
     }
 
     it('should instantiate class injecting constructor dependencies and then inject property dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind(kValue)
         .toValue('test')
       await di.init()
@@ -153,7 +153,7 @@ describe('Property Injection', function () {
     }
 
     it('should inject values any type of private property', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind(kValue)
         .toValue('test')
       await di.init()

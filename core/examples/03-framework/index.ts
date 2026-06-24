@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import fastify, { FastifyRequest } from 'fastify'
-import { DiCaf, scan } from '@caffeinejs/core'
+import { CaffeineIoC, scan } from '@caffeinejs/core'
 import { RouteParam } from './util/decorators/params.js'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
@@ -11,7 +11,7 @@ console.log('scanning done')
 
 const server = fastify({ logger: true })
 
-const container = new DiCaf()
+const container = new CaffeineIoC()
 container.assertResolvable()
 
 await container.init()

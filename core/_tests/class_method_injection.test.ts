@@ -5,7 +5,7 @@ import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Named } from '../decorators/named.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Scopes } from '../scope.js'
 import { allOf, optional, provide } from '../injection.js'
 import { ErrInvalidBinding } from '../errors.js'
@@ -60,7 +60,7 @@ describe('Method Injections', function () {
     }
 
     it('should inject a Provider<T> into a method resolving the dependency on demand on every .get()', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const r1 = di.get(SingleInject)
@@ -95,7 +95,7 @@ describe('Method Injections', function () {
     }
 
     it('should init class on every resolution and inject the same singleton dependency', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const res1 = di.get(Tr)
       const res2 = di.get(Tr)
@@ -127,7 +127,7 @@ describe('Method Injections', function () {
     }
 
     it('should resolve and inject all parameters', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(TransientDep)
         .toSelf()
       di.bind(B1)
@@ -183,7 +183,7 @@ describe('Method Injections', function () {
     }
 
     it('should inject dependencies in all setter methods', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(TransientDep)
         .toSelf()
       di.bind(B1)
@@ -243,7 +243,7 @@ describe('Method Injections', function () {
     }
 
     it('should inject dependencies on setter methods after property injections', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(kValue)
         .toValue('test')
       di.bind(kMethodValue)
@@ -272,7 +272,7 @@ describe('Method Injections', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(kVal)
         .toValue('hello')
       di.bind(Svc)
@@ -297,7 +297,7 @@ describe('Method Injections', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(kA)
         .toValue('foo')
       di.bind(kB)
@@ -330,7 +330,7 @@ describe('Method Injections', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(kA)
         .toValue('foo')
       di.bind(kB)
@@ -360,7 +360,7 @@ describe('Method Injections', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(DepA)
         .toSelf()
       di.bind(DepB)
@@ -387,7 +387,7 @@ describe('Method Injections', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Svc)
         .toSelf()
         .injectMethod('setOpt', optional(kOpt))
@@ -401,7 +401,7 @@ describe('Method Injections', function () {
   describe('BinderOptions.injectMethod() — validation', function () {
     it('should throw ErrInvalidBinding for a symbol key', function () {
       const k = Symbol('x')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       expect(() => di.bind(k)
         .toValue('v')
         .injectMethod('setVal', k))
@@ -409,7 +409,7 @@ describe('Method Injections', function () {
     })
 
     it('should throw ErrInvalidBinding for a string key', function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       expect(() => di.bind('key')
         .toValue('v')
         .injectMethod('setVal', 'key'))

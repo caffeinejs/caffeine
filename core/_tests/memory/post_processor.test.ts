@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { PostProcessor } from '../../post_processor.js'
 import { ResolutionContext } from '../../resolution_context.js'
 import { forceGC } from './_gc.js'
@@ -18,7 +18,7 @@ describe('PostProcessor memory', function () {
       },
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(postProcessor)
     di.bind(Svc)
       .toSelf()
@@ -48,7 +48,7 @@ describe('PostProcessor memory', function () {
       },
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(postProcessor)
     di.bind(Svc)
       .toSelf()

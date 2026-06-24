@@ -1,4 +1,4 @@
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Container } from '../container_interface.js'
 import { Identifier, Key, TypedKey } from '../key.js'
 import { Module } from '../module.js'
@@ -297,7 +297,7 @@ export class TestContainer {
       snap = snap.filter(k => !this.#skips.has(k))
     }
 
-    const di = new DiCaf(
+    const di = new CaffeineIoC(
       {
         decorators: false,
         lazy: this.#lazy,

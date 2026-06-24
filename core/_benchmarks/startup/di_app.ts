@@ -1,4 +1,4 @@
-import { DiCaf } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/core'
 import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable()
@@ -34,7 +34,7 @@ class AppService {
 
 export async function run(): Promise<number> {
   const start = performance.now()
-  const di = new DiCaf()
+  const di = new CaffeineIoC()
   await di.init()
   return performance.now() - start
 }

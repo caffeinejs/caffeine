@@ -5,7 +5,7 @@ import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { Provides } from '../decorators/provides.js'
 import { Configuration } from '../decorators/configuration.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrMultiplePrimary } from '../errors.js'
 import { Profile } from '../decorators/profile.js'
 
@@ -34,7 +34,7 @@ describe('@Primary', function () {
     }
 
     it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new DiCaf({ profiles: ['double-primary'] }))
+      expect(() => new CaffeineIoC({ profiles: ['double-primary'] }))
         .toThrow(ErrMultiplePrimary)
     })
   })
@@ -63,7 +63,7 @@ describe('@Primary', function () {
     }
 
     it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new DiCaf({ profiles: ['double-primary'] }))
+      expect(() => new CaffeineIoC({ profiles: ['double-primary'] }))
         .toThrow(ErrMultiplePrimary)
     })
   })
@@ -93,7 +93,7 @@ describe('@Primary', function () {
     }
 
     it('should resolve to the surviving primary without error', async function () {
-      const di = new DiCaf({ profiles: ['conditional-primary'] })
+      const di = new CaffeineIoC({ profiles: ['conditional-primary'] })
       await di.init()
       const result = di.get<Active>(kActive)
 

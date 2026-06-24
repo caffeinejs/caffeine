@@ -1,6 +1,6 @@
 import '../../index.nodejs.js'
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { Scopes } from '../../scope.js'
 import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
@@ -9,7 +9,7 @@ describe('Request scope memory', function () {
   it('releases request-scoped instance after run() resolves', async function () {
     class ReqSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(ReqSvc)
       .toSelf()
       .lifetime(Scopes.REQUEST)
@@ -33,7 +33,7 @@ describe('Request scope memory', function () {
   it('multiple request runs do not accumulate instances', async function () {
     class ReqSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(ReqSvc)
       .toSelf()
       .lifetime(Scopes.REQUEST)
@@ -58,7 +58,7 @@ describe('Request scope memory', function () {
   it('RequestScopeContext destroys instances on run() completion', async function () {
     class ReqSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(ReqSvc)
       .toSelf()
       .lifetime(Scopes.REQUEST)

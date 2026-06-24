@@ -1,6 +1,6 @@
 # Decorator modes
 
-DiCaf supports three ways to declare dependencies. Choose based on your
+CaffeineIoC supports three ways to declare dependencies. Choose based on your
 TypeScript version, build tooling, and how much you want metadata to be
 implicit vs explicit.
 
@@ -42,7 +42,7 @@ dependency lists. It is the long-term standard.
 ## Legacy TypeScript decorators with reflect-metadata
 
 Uses TypeScript's `experimentalDecorators` flag and the `reflect-metadata`
-polyfill. The compiler emits type metadata for constructor parameters, so DiCaf
+polyfill. The compiler emits type metadata for constructor parameters, so CaffeineIoC
 can infer dependencies without an explicit list.
 
 ```json
@@ -86,7 +86,7 @@ Register bindings directly on the container using the fluent `bind()` API and
 module functions. No decorators, no `reflect-metadata`, no TypeScript flags.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 import type { Module } from '@caffeine-projects/dicaf'
 
 const appModule: Module = di => {
@@ -97,7 +97,7 @@ const appModule: Module = di => {
   di.bind(UserService).toClass(UserService, [Logger, Database])
 }
 
-const di = new DiCaf({ decorators: false }, appModule)
+const di = new CaffeineIoC({ decorators: false }, appModule)
 await di.init()
 ```
 
@@ -107,7 +107,7 @@ declarations with the class. More verbose for large graphs. No global registry
 decorated classes.
 
 **Choose this when:** decorators are not available in your environment, you
-prefer centralized explicit configuration, or you are integrating DiCaf into
+prefer centralized explicit configuration, or you are integrating CaffeineIoC into
 a library that cannot impose decorator annotations on user code.
 
 ---
@@ -132,7 +132,7 @@ class InfraConfig {
 ```
 
 `PostgresDatabase` does not need `@Injectable`. The `@Configuration` class
-acts as a factory, keeping third-party constructors free of DiCaf annotations.
+acts as a factory, keeping third-party constructors free of CaffeineIoC annotations.
 
 ---
 

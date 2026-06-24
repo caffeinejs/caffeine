@@ -1,4 +1,4 @@
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { defer, optional } from '../../../injection.js'
 import type { Injection } from '../../../injection.js'
 
@@ -43,8 +43,8 @@ function toInjection(edge: CycleEdge): Injection {
   return edge.to
 }
 
-export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true): DiCaf {
-  const di = new DiCaf({ checks: { circularReferences }, decorators: false })
+export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true): CaffeineIoC {
+  const di = new CaffeineIoC({ checks: { circularReferences }, decorators: false })
   const keys = new Set<string>()
 
   for (const edge of edges) {

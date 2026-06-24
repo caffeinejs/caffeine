@@ -1,4 +1,4 @@
 export const Keys = {
-  kRefresher: Symbol.for('dicaf.refresher'),
-  kRequestScopeManager: Symbol.for('dicaf.request-scope-manager'),
+  kRefresher: Symbol.for('@caffeinejs/core:refresher'),
+  kRequestScopeManager: Symbol.for('@caffeinejs/core:request-scope-manager'),
 }

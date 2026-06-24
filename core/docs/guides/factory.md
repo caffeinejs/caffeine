@@ -20,14 +20,14 @@ at resolution time rather than at bind time.
 ## Basic example
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 class DatabaseService { /* ... */ }
 class CacheService { /* ... */ }
 
 const REPOSITORY = Symbol('app:repository')
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(DatabaseService).toSelf()
 di.bind(CacheService).toSelf()

@@ -1,5 +1,5 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey } from '../errors.js'
 import { allOf, mapped, provide } from '../injection.js'
 import type { Provider } from '../provider.js'
@@ -28,7 +28,7 @@ describe('getting-started: manual bindings', function () {
       greet(name: string) { return this.logger.log(`Hello, ${name}!`) }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(GsLogger).toSelf()
     di.bind(GsUserService).toClass(GsUserService, [GsLogger])
     await di.init()
@@ -43,7 +43,7 @@ describe('getting-started: manual bindings', function () {
       log(msg: string) { return msg }
     }
     const kGsLogger = Symbol.for('gs.logger')
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(kGsLogger).toClass(GsLoggerSym)
     await di.init()
 
@@ -67,9 +67,9 @@ describe('getting-started: @Injectable decorators', function () {
     greet(name: string) { return this.logger.log(`Hello, ${name}!`) }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -99,9 +99,9 @@ describe('abstract-classes: @Extends basic', function () {
     log(message: string) { return message }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -143,9 +143,9 @@ describe('abstract-classes: allOf with @Extends', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -180,9 +180,9 @@ describe('abstract-classes: @Primary', function () {
     findById(id: string) { return `primary:${id}` }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -229,9 +229,9 @@ describe('abstract-classes: @Named + mapped()', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -281,9 +281,9 @@ describe('abstract-classes: @ConditionalOn with fallback — no redis', function
     set(key: string, value: string) { /* no-op */ }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -322,9 +322,9 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
     set(key: string, value: string) { /* no-op */ }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     di.bind(AcRedisClientB).toValue(new AcRedisClientB())
     await di.init()
   })
@@ -365,9 +365,9 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
     set(key: string, value: string) { /* no-op */ }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     di.bind(AcRedisClientB).toValue(new AcRedisClientB())
     await di.init()
   })
@@ -397,7 +397,7 @@ describe('abstract-classes: manual .extends() API', function () {
   }
 
   it('resolves via fluent extends chain', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(AcManualMemCache).toSelf()
       .extends()
     await di.init()
@@ -405,7 +405,7 @@ describe('abstract-classes: manual .extends() API', function () {
   })
 
   it('primary() wins over non-primary', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(AcManualMemCache).toSelf()
       .extends()
     di.bind(AcManualRedisCache).toSelf()
@@ -416,7 +416,7 @@ describe('abstract-classes: manual .extends() API', function () {
   })
 
   it('getMany returns all implementations', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(AcManualMemCache).toSelf()
       .extends()
     di.bind(AcManualRedisCache).toSelf()
@@ -446,9 +446,9 @@ describe('interfaces: symbol token pattern', function () {
     constructor(readonly repo: IfRepository) {}
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -492,9 +492,9 @@ describe('interfaces: allOf with symbol token', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -532,9 +532,9 @@ describe('interfaces: @Primary for interfaces', function () {
     findById(id: string) { return `primary:${id}` }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -576,9 +576,9 @@ describe('interfaces: @Named dispatch for interfaces', function () {
     constructor(readonly senders: Map<string, IfNotificationSender>) {}
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -611,7 +611,7 @@ describe('interfaces: manual bind with interface symbol', function () {
   }
 
   it('binds class to symbol key and resolves it', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(kIfCache).toClass(IfMemCache)
     await di.init()
 
@@ -645,9 +645,9 @@ describe('factory-classes: basic @Configuration + @Provides', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -684,9 +684,9 @@ describe('factory-classes: constructor injection into factory', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -723,9 +723,9 @@ describe('factory-classes: method-level @Provides dependencies', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -773,9 +773,9 @@ describe('factory-classes: abstract and symbol keys in @Provides', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -815,9 +815,9 @@ describe('factory-classes: @Fallback on @Provides — fallback used', function (
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -859,9 +859,9 @@ describe('factory-classes: @Primary on @Provides wins over @Fallback', function 
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -886,9 +886,9 @@ describe('factory-classes: @Named on @Provides injectable by name', function () 
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -923,9 +923,9 @@ describe('factory-classes: scope control on @Provides', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -959,7 +959,7 @@ describe('factory-classes: @Profile-gated @Configuration — inactive', function
   }
 
   it('config methods not active when profile inactive', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(FcGatedGatewayA)).toBe(false)
   })
@@ -986,7 +986,7 @@ describe('factory-classes: @Profile-gated @Configuration — active', function (
   }
 
   it('config methods active when profile active', async function () {
-    const di = new DiCaf({ profiles: ['fcTestB'] })
+    const di = new CaffeineIoC({ profiles: ['fcTestB'] })
     await di.init()
     expect(di.get(FcGatedGatewayB)).toBeInstanceOf(FcStubGatewayB)
   })
@@ -1013,7 +1013,7 @@ describe('profiles: @Profile basic — active', function () {
   }
 
   it('resolves @Profile bean when profile active', async function () {
-    const di = new DiCaf({ profiles: ['prtestA'] })
+    const di = new CaffeineIoC({ profiles: ['prtestA'] })
     await di.init()
     expect(di.has(PrStubGatewayA)).toBe(true)
   })
@@ -1040,7 +1040,7 @@ describe('profiles: @Profile basic — inactive', function () {
   }
 
   it('throws when @Profile bean resolved without active profile', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(PrStubGatewayB)).toBe(false)
     expect(() => di.get(PrStubGatewayB)).toThrow(ErrNoResolutionForKey)
@@ -1057,19 +1057,19 @@ describe('profiles: multiple profiles OR semantics', function () {
   }
 
   it('registers when first listed profile is active', async function () {
-    const di = new DiCaf({ profiles: ['prDev'] })
+    const di = new CaffeineIoC({ profiles: ['prDev'] })
     await di.init()
     expect(di.has(PrVerboseLogger)).toBe(true)
   })
 
   it('registers when second listed profile is active', async function () {
-    const di = new DiCaf({ profiles: ['prStaging'] })
+    const di = new CaffeineIoC({ profiles: ['prStaging'] })
     await di.init()
     expect(di.has(PrVerboseLogger)).toBe(true)
   })
 
   it('not registered when none of the listed profiles match', async function () {
-    const di = new DiCaf({ profiles: ['prProd'] })
+    const di = new CaffeineIoC({ profiles: ['prProd'] })
     await di.init()
     expect(di.has(PrVerboseLogger)).toBe(false)
   })
@@ -1091,7 +1091,7 @@ describe('profiles: multiple active profiles simultaneously', function () {
   }
 
   it('activates all listed profiles at once', async function () {
-    const di = new DiCaf({ profiles: ['prEuMulti', 'prTestMulti'] })
+    const di = new CaffeineIoC({ profiles: ['prEuMulti', 'prTestMulti'] })
     await di.init()
     expect(di.has(PrEuService)).toBe(true)
     expect(di.has(PrTestService)).toBe(true)
@@ -1119,7 +1119,7 @@ describe('profiles: @Profile on @Configuration — inactive', function () {
   }
 
   it('@Configuration not active when profile not active', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(PrEmailServiceA)).toBe(false)
   })
@@ -1146,7 +1146,7 @@ describe('profiles: @Profile on @Configuration — active', function () {
   }
 
   it('@Configuration active when profile active', async function () {
-    const di = new DiCaf({ profiles: ['prTestConfigB'] })
+    const di = new CaffeineIoC({ profiles: ['prTestConfigB'] })
     await di.init()
     expect(di.get(PrEmailServiceB)).toBeInstanceOf(PrNoopEmailServiceB)
   })
@@ -1177,7 +1177,7 @@ describe('profiles: @Profile + @ConditionalOn — condition fails', function () 
   }
 
   it('skips bean when profile active but condition false', async function () {
-    const di = new DiCaf({ profiles: ['prCondEuA'] })
+    const di = new CaffeineIoC({ profiles: ['prCondEuA'] })
     await di.init()
     expect(di.has(PrCondRedisEuCacheA)).toBe(false)
     expect(di.get(PrCondCacheA)).toBeInstanceOf(PrCondMemCacheA)
@@ -1210,7 +1210,7 @@ describe('profiles: @Profile + @ConditionalOn — both pass', function () {
   }
 
   it('registers bean when both profile active and condition true', async function () {
-    const di = new DiCaf({ profiles: ['prCondEuB'] })
+    const di = new CaffeineIoC({ profiles: ['prCondEuB'] })
     di.bind(PrCondRedisClientB).toValue(new PrCondRedisClientB())
     await di.init()
     expect(di.has(PrCondRedisEuCacheB)).toBe(true)
@@ -1253,14 +1253,14 @@ describe('conditional-bindings: @ConditionalOn env-based — eu', function () {
 
   it('registers eu gateway when env condition passes', async function () {
     process.env.CB_REGION_EU = 'eu'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.get(CbGatewayEu)).toBeInstanceOf(CbStripeEuGateway)
   })
 
   it('uses fallback when env condition fails', async function () {
     process.env.CB_REGION_EU = 'other'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.get(CbGatewayEu)).toBeInstanceOf(CbMockGatewayEu)
   })
@@ -1293,7 +1293,7 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — all pass', func
 
   it('registers only when all conditions pass', async function () {
     process.env.CB_AND_A = 'eu'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     di.bind(CbAndRedisClientA).toValue(new CbAndRedisClientA())
     await di.init()
     expect(di.has(CbRedisEuCacheA)).toBe(true)
@@ -1327,7 +1327,7 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — partial fail', 
 
   it('skips when region condition fails but container condition passes', async function () {
     process.env.CB_AND_B = 'us'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     di.bind(CbAndRedisClientB).toValue(new CbAndRedisClientB())
     await di.init()
     expect(di.has(CbRedisEuCacheB)).toBe(false)
@@ -1335,7 +1335,7 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — partial fail', 
 
   it('skips when container condition fails but region condition passes', async function () {
     process.env.CB_AND_B = 'eu'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(CbRedisEuCacheB)).toBe(false)
   })
@@ -1368,7 +1368,7 @@ describe('conditional-bindings: async conditionals', function () {
 
   it('skips bean when async condition returns false', async function () {
     cbAsyncFlagEnabled = false
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(CbNewPaymentGateway)).toBe(false)
     expect(di.get(CbAsyncGateway)).toBeInstanceOf(CbDefaultAsyncGateway)
@@ -1376,7 +1376,7 @@ describe('conditional-bindings: async conditionals', function () {
 
   it('registers bean when async condition returns true', async function () {
     cbAsyncFlagEnabled = true
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(CbNewPaymentGateway)).toBe(true)
     expect(di.get(CbAsyncGateway)).toBeInstanceOf(CbNewPaymentGateway)
@@ -1418,14 +1418,14 @@ describe('conditional-bindings: conditional @Configuration — class gate', func
 
   it('class-level condition gates all provided beans when false', async function () {
     process.env.CB_CFG_A = 'us'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(CbCfgGatewayA)).toBe(false)
   })
 
   it('class-level condition activates all beans when true', async function () {
     process.env.CB_CFG_A = 'eu'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.get(CbCfgGatewayA)).toBeInstanceOf(CbCfgStripeGatewayA)
   })
@@ -1481,7 +1481,7 @@ describe('conditional-bindings: conditional @Configuration — method gate', fun
 
   it('method-level condition gates individual @Provides when false', async function () {
     process.env.CB_CFG_B = 'eu'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(CbCfgGatewayB)).toBe(true)
     expect(di.has(CbCfgTaxCalc)).toBe(false)
@@ -1489,7 +1489,7 @@ describe('conditional-bindings: conditional @Configuration — method gate', fun
 
   it('method-level condition activates @Provides when dep bound', async function () {
     process.env.CB_CFG_B = 'eu'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     di.bind(CbCfgRedisDepB).toValue(new CbCfgRedisDepB())
     await di.init()
     expect(di.get(CbCfgTaxCalc)).toBeInstanceOf(CbCfgTaxCalcImpl)
@@ -1526,7 +1526,7 @@ describe('conditional-bindings: fluent .conditional() API', function () {
 
   it('conditional() registers matching bean and skips others', async function () {
     process.env.CB_FLUENT_REGION = 'eu'
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(CbFluentEuGateway).toSelf()
       .extends(CbFluentGateway)
       .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
@@ -1539,7 +1539,7 @@ describe('conditional-bindings: fluent .conditional() API', function () {
 
   it('falls back when condition fails', async function () {
     process.env.CB_FLUENT_REGION = 'other'
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(CbFluentEuGateway).toSelf()
       .extends(CbFluentGateway)
       .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
@@ -1565,9 +1565,9 @@ describe('fallback-bindings: @Fallback used alone', function () {
     log(_msg: string) { return 'noop' }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -1597,9 +1597,9 @@ describe('fallback-bindings: @Fallback skipped with override', function () {
     log(msg: string) { return `real:${msg}` }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -1633,9 +1633,9 @@ describe('fallback-bindings: library override pattern', function () {
     set(key: string, value: unknown) { /* no-op */ }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -1665,9 +1665,9 @@ describe('fallback-bindings: @Fallback on @Provides — used', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -1708,9 +1708,9 @@ describe('fallback-bindings: @Fallback on @Provides — overridden', function ()
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -1748,7 +1748,7 @@ describe('fallback-bindings: @Fallback + @ConditionalOn — active', function ()
 
   it('fallback active when condition passes', async function () {
     process.env.FB_COND_A = 'production'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(FbDefaultGatewayA)).toBe(true)
     expect(di.get(FbCondGatewayA)).toBeInstanceOf(FbDefaultGatewayA)
@@ -1784,7 +1784,7 @@ describe('fallback-bindings: @Fallback + @ConditionalOn — inactive', function 
 
   it('fallback inactive when condition fails', async function () {
     process.env.FB_COND_B = 'test'
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     expect(di.has(FbDefaultGatewayB)).toBe(false)
   })
@@ -1810,7 +1810,7 @@ describe('fallback-bindings: fluent .fallback() API', function () {
   }
 
   it('.fallback() used when no non-fallback binding exists', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(FbFluentCache).toClass(FbFluentInMemoryCache)
       .fallback()
     await di.init()
@@ -1818,7 +1818,7 @@ describe('fallback-bindings: fluent .fallback() API', function () {
   })
 
   it('.fallback() skipped when non-fallback binding exists', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(FbFluentCache).toClass(FbFluentInMemoryCache)
       .fallback()
     di.bind(FbFluentCache).toClass(FbFluentRedisCache)
@@ -1842,10 +1842,10 @@ describe('lazy-bindings: @Lazy() basic', function () {
     compute() { return 42 }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
     lbLazyConstructed = false
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -1874,10 +1874,10 @@ describe('lazy-bindings: container-wide lazy: true', function () {
     value() { return 'wide-lazy' }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
     lbWideLazyConstructed = false
-    di = new DiCaf({ lazy: true })
+    di = new CaffeineIoC({ lazy: true })
     await di.init()
   })
 
@@ -1907,10 +1907,10 @@ describe('lazy-bindings: @Lazy(false) eager override', function () {
     status() { return 'ok' }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
     lbEagerConstructed = false
-    di = new DiCaf({ lazy: true })
+    di = new CaffeineIoC({ lazy: true })
     await di.init()
   })
 
@@ -1936,7 +1936,7 @@ describe('lazy-bindings: manual .lazy() API', function () {
     class LbDeferredService {
       constructor() { constructed = true }
     }
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(LbDeferredService).toSelf()
       .lazy()
     await di.init()
@@ -1950,7 +1950,7 @@ describe('lazy-bindings: manual .lazy() API', function () {
     class LbEagerService {
       constructor() { eagerConstructed = true }
     }
-    const di = new DiCaf({ decorators: false, lazy: true })
+    const di = new CaffeineIoC({ decorators: false, lazy: true })
     di.bind(LbEagerService).toSelf()
       .lazy(false)
     await di.init()
@@ -1977,9 +1977,9 @@ describe('mixing-scopes: Provider<T> with provide()', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 
@@ -2021,9 +2021,9 @@ describe('mixing-scopes: singleton holds Provider for short-lived dep', function
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
   beforeAll(async function () {
-    di = new DiCaf()
+    di = new CaffeineIoC()
     await di.init()
   })
 

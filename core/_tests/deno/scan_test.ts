@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { DiCaf, ErrCannotLoadTypeScriptModule, scan } from '@caffeinejs/core'
+import { CaffeineIoC, ErrCannotLoadTypeScriptModule, scan } from '@caffeinejs/core'
 import { DenoAutoloadConfig, kDenoMessage } from './_testdata/config.ts'
 import { DenoAutoloadService } from './_testdata/service.ts'
 
@@ -10,10 +10,10 @@ Deno.test('scan public API is exported', () => {
   assert.equal(typeof ErrCannotLoadTypeScriptModule, 'function')
 })
 
-Deno.test('scan() scans a directory and decorators register for DiCaf resolution', async () => {
+Deno.test('scan() scans a directory and decorators register for CaffeineIoC resolution', async () => {
   await scan({ dir: testdataDir })
 
-  const di = new DiCaf()
+  const di = new CaffeineIoC()
   await di.init()
 
   const svc = di.get(DenoAutoloadService)

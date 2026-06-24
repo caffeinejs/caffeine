@@ -142,9 +142,9 @@ to return `undefined`.
 The fluent binder exposes `.fallback()` for decorator-free containers.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf({ decorators: false })
+const di = new CaffeineIoC({ decorators: false })
 
 // Library registers its default
 di.bind(Cache)

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('Named bindings visible in child containers', function () {
   it('should resolve a named string key registered only in the child', async function () {
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
 
     child.bind('child-key')
@@ -16,7 +16,7 @@ describe('Named bindings visible in child containers', function () {
   })
 
   it('should resolve a named symbol key registered only in the child', async function () {
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
     const k = Symbol('sym-child')
 
@@ -29,7 +29,7 @@ describe('Named bindings visible in child containers', function () {
   })
 
   it('should fall through to parent for a named key not in the child', async function () {
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     parent.bind('parent-key')
       .toValue('from-parent')
 
@@ -41,7 +41,7 @@ describe('Named bindings visible in child containers', function () {
   })
 
   it('should prefer child over parent when both have the same named key', async function () {
-    const parent = new DiCaf({ decorators: false })
+    const parent = new CaffeineIoC({ decorators: false })
     parent.bind('shared')
       .toValue('parent-value')
 
@@ -64,11 +64,11 @@ describe('Per-container scope instances', function () {
   }
 
   it('should give independent singleton instances across separate containers', async function () {
-    const di1 = new DiCaf({ decorators: false })
+    const di1 = new CaffeineIoC({ decorators: false })
     di1.bind(PerContainerSingleton)
       .toSelf()
 
-    const di2 = new DiCaf({ decorators: false })
+    const di2 = new CaffeineIoC({ decorators: false })
     di2.bind(PerContainerSingleton)
       .toSelf()
     await di1.init()
@@ -93,7 +93,7 @@ describe('Child', function () {
       }
 
       it('should resolve requested type', async function () {
-        const parent = new DiCaf()
+        const parent = new CaffeineIoC()
         const child = parent.newChild()
 
         parent.bind(Dep)

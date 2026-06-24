@@ -1,6 +1,6 @@
 # Container lifecycle
 
-A DiCaf container moves through four phases: **construction**, **init**,
+A CaffeineIoC container moves through four phases: **construction**, **init**,
 **resolution**, and **disposal**. Understanding this sequence helps you know
 where to register things, why `init()` must be called before `get()`, and what
 `dispose()` guarantees.
@@ -10,7 +10,7 @@ where to register things, why `init()` must be called before `get()`, and what
 ## Phase 1 — Construction
 
 ```ts
-const di = new DiCaf(moduleA, moduleB)
+const di = new CaffeineIoC(moduleA, moduleB)
 ```
 
 During construction:
@@ -23,7 +23,7 @@ During construction:
 - No instances are created.
 - The container is not usable for resolution yet.
 
-If you import decorated classes **after** calling `new DiCaf()`, call
+If you import decorated classes **after** calling `new CaffeineIoC()`, call
 `di.autoWire()` manually to pick them up.
 
 ---
@@ -101,7 +101,7 @@ Child containers share the parent's binding registry but maintain their own
 instance cache. They follow the same four phases:
 
 ```ts
-const parent = new DiCaf(sharedModule)
+const parent = new CaffeineIoC(sharedModule)
 await parent.init()
 
 const child = parent.newChild()
@@ -134,7 +134,7 @@ Pre-destroy hooks are **not** called on the old instances during refresh.
 
 | Phase | How to enter | What happens |
 |---|---|---|
-| Construction | `new DiCaf(...)` | Bindings registered, no instances |
+| Construction | `new CaffeineIoC(...)` | Bindings registered, no instances |
 | Init | `await di.init()` | Graph validated, singletons created |
 | Resolution | `di.get(...)` | Instances returned per scope rules |
 | Disposal | `await di.dispose()` | PreDestroy hooks, instances released |

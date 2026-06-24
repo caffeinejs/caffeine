@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Module, mod } from '../module.js'
 import { ContainerBindingOps } from '../container_interface.js'
 import { ErrInvalidContainerState } from '../errors.js'
@@ -13,14 +13,14 @@ class OtherSvc {
 }
 
 describe('Module', function () {
-  describe('new DiCaf(...modules)', function () {
+  describe('new CaffeineIoC(...modules)', function () {
     it('should accept modules as the first parameter without options', async function () {
       const mod: Module = (container: ContainerBindingOps) => {
         container.bind(Svc)
           .toSelf()
       }
 
-      const di = new DiCaf({ decorators: false }, mod)
+      const di = new CaffeineIoC({ decorators: false }, mod)
       await di.init()
 
       expect(di.get(Svc))
@@ -37,7 +37,7 @@ describe('Module', function () {
           .toSelf()
       }
 
-      const di = new DiCaf({ decorators: false }, modA, modB)
+      const di = new CaffeineIoC({ decorators: false }, modA, modB)
       await di.init()
 
       expect(di.get(Svc))
@@ -47,14 +47,14 @@ describe('Module', function () {
     })
   })
 
-  describe('new DiCaf(options, ...modules)', function () {
+  describe('new CaffeineIoC(options, ...modules)', function () {
     it('should execute a single module and register its bindings', async function () {
       const mod: Module = (container: ContainerBindingOps) => {
         container.bind(Svc)
           .toSelf()
       }
 
-      const di = new DiCaf({ decorators: false }, mod)
+      const di = new CaffeineIoC({ decorators: false }, mod)
       await di.init()
 
       expect(di.get(Svc))
@@ -74,7 +74,7 @@ describe('Module', function () {
         order.push(3)
       }
 
-      const di = new DiCaf({ decorators: false }, mod1, mod2, mod3)
+      const di = new CaffeineIoC({ decorators: false }, mod1, mod2, mod3)
       await di.init()
 
       expect(order)
@@ -87,7 +87,7 @@ describe('Module', function () {
           .toValue('value')
       }
 
-      const di = new DiCaf({ decorators: false }, mod)
+      const di = new CaffeineIoC({ decorators: false }, mod)
       await di.init()
 
       expect(di.get('key'))
@@ -101,7 +101,7 @@ describe('Module', function () {
         moduleCalled = true
       }
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       await di.init()
 
       expect(moduleCalled)
@@ -118,7 +118,7 @@ describe('Module', function () {
           .toSelf()
       }
 
-      const di = new DiCaf({ decorators: false }, modA, modB)
+      const di = new CaffeineIoC({ decorators: false }, modA, modB)
       await di.init()
 
       expect(di.get(Svc))
@@ -128,19 +128,19 @@ describe('Module', function () {
     })
 
     it('should work with no modules', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await expect(di.init()).resolves.toBeUndefined()
     })
   })
 
-  describe('new DiCaf(...modules)', function () {
+  describe('new CaffeineIoC(...modules)', function () {
     it('should accept modules as the first parameter without options', async function () {
       const mod: Module = (container: ContainerBindingOps) => {
         container.bind('key')
           .toValue('value')
       }
 
-      const di = new DiCaf(mod)
+      const di = new CaffeineIoC(mod)
       await di.init()
 
       expect(di.get('key'))
@@ -157,7 +157,7 @@ describe('Module', function () {
           .toSelf()
       }
 
-      const di = new DiCaf(modA, modB)
+      const di = new CaffeineIoC(modA, modB)
       await di.init()
 
       expect(di.get(Svc))
@@ -167,14 +167,14 @@ describe('Module', function () {
     })
   })
 
-  describe('new DiCaf(options, ...modules)', function () {
+  describe('new CaffeineIoC(options, ...modules)', function () {
     it('should execute modules after autoWire', async function () {
       const mod: Module = (container: ContainerBindingOps) => {
         container.bind('manual-key')
           .toValue('manual-value')
       }
 
-      const di = new DiCaf({}, mod)
+      const di = new CaffeineIoC({}, mod)
       await di.init()
 
       expect(di.get('manual-key'))
@@ -191,7 +191,7 @@ describe('Module', function () {
         order.push(2)
       }
 
-      const di = new DiCaf({}, mod1, mod2)
+      const di = new CaffeineIoC({}, mod1, mod2)
       await di.init()
 
       expect(order)
@@ -199,7 +199,7 @@ describe('Module', function () {
     })
 
     it('should work with no modules', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await expect(di.init()).resolves.toBeUndefined()
     })
 
@@ -210,7 +210,7 @@ describe('Module', function () {
           .toValue(42)
       }
 
-      const di = new DiCaf({}, module)
+      const di = new CaffeineIoC({}, module)
       await di.init()
 
       expect(di.get(kToken))
@@ -224,7 +224,7 @@ describe('Module', function () {
         container.bind(Svc).toSelf()
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.addModules(module)
       await di.init()
 
@@ -239,7 +239,7 @@ describe('Module', function () {
         container.bind(OtherSvc).toSelf()
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.addModules(modA, modB)
       await di.init()
 
@@ -257,7 +257,7 @@ describe('Module', function () {
         order.push(2)
       }
 
-      const di = new DiCaf({ decorators: false }, ctorMod)
+      const di = new CaffeineIoC({ decorators: false }, ctorMod)
       di.addModules(addedMod)
       await di.init()
 
@@ -267,7 +267,7 @@ describe('Module', function () {
     it('should support multiple addModules calls accumulating in order', async function () {
       const order: number[] = []
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.addModules(() => {
         order.push(1)
       })
@@ -282,7 +282,7 @@ describe('Module', function () {
     })
 
     it('should throw ErrInvalidContainerState when called after init', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       expect(() => di.addModules(() => {})).toThrow(ErrInvalidContainerState)
@@ -292,7 +292,7 @@ describe('Module', function () {
       const events: { name: string, index: number }[] = []
       const namedMod = mod('AddedModule', () => {})
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.addModules(namedMod)
       di.hooks.on('onModuleRegistered', e => events.push(e))
       await di.init()
@@ -312,7 +312,7 @@ describe('Module', function () {
           }, 0)
         })
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.addModules(module)
       await di.init()
 
@@ -332,7 +332,7 @@ describe('Module', function () {
           }, 0)
         })
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       await di.init()
 
       expect(resolved)
@@ -346,7 +346,7 @@ describe('Module', function () {
 
       const module: Module = () => {}
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       di.hooks.on('onModuleRegistered', e => events.push(e))
       await di.init()
 
@@ -361,7 +361,7 @@ describe('Module', function () {
 
       const module = mod('PaymentModule', () => {})
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       di.hooks.on('onModuleRegistered', e => events.push(e))
       await di.init()
 
@@ -376,7 +376,7 @@ describe('Module', function () {
       const mod2 = mod('Mod2', () => {})
       const mod3 = mod('Mod3', () => {})
 
-      const di = new DiCaf({ decorators: false }, mod1, mod2, mod3)
+      const di = new CaffeineIoC({ decorators: false }, mod1, mod2, mod3)
       di.hooks.on('onModuleRegistered', e => events.push(e))
       await di.init()
 
@@ -394,7 +394,7 @@ describe('Module', function () {
 
       const module: Module = () => Promise.reject(error)
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       di.hooks.on('onModuleRegistrationFailed', e => failures.push(e))
 
       await expect(di.init()).rejects.toThrow(error)
@@ -411,7 +411,7 @@ describe('Module', function () {
 
       const module = mod('FailingModule', () => Promise.reject(error))
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       di.hooks.on('onModuleRegistrationFailed', e => failures.push(e))
 
       await expect(di.init()).rejects.toThrow(error)
@@ -425,7 +425,7 @@ describe('Module', function () {
 
       const module: Module = () => Promise.reject(new Error('boom'))
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       di.hooks.on('onModuleRegistered', e => registered.push(e))
 
       await expect(di.init()).rejects.toThrow()
@@ -442,7 +442,7 @@ describe('Module', function () {
         throw error
       }
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       di.hooks.on('onModuleRegistrationFailed', e => failures.push(e))
 
       await expect(di.init()).rejects.toThrow(error)
@@ -460,7 +460,7 @@ describe('Module', function () {
         throw new Error('sync boom')
       }
 
-      const di = new DiCaf({ decorators: false }, module)
+      const di = new CaffeineIoC({ decorators: false }, module)
       di.hooks.on('onModuleRegistered', e => registered.push(e))
 
       await expect(di.init()).rejects.toThrow()

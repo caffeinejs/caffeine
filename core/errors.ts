@@ -12,9 +12,9 @@ import { solutions } from './internal/util/errutil/index.js'
 import { allOf } from './injection.js'
 
 /**
- * DiCafError is the base error class for all errors thrown by the DiCaf library.
+ * CaffeineIoCError is the base error class for all errors thrown by the CaffeineIoC library.
  */
-export class DiCafError extends Error {
+export class CaffeineIoCError extends Error {
   readonly code: string
 
   constructor(message: string, code: string) {
@@ -27,7 +27,7 @@ export class DiCafError extends Error {
  * ErrNoUniqueInjectionForKey is an error that is thrown when requesting a single instance of a key
  * that has more than one injectable bound to it, without a disambiguation strategy.
  */
-export class ErrNoUniqueInjectionForKey extends DiCafError {
+export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
   constructor(key: Key, message?: string) {
     super(
       (message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`)
@@ -46,7 +46,7 @@ export class ErrNoUniqueInjectionForKey extends DiCafError {
 /**
  * ErrNoResolutionForKey is an error that is thrown when no resolution is found for a key.
  */
-export class ErrNoResolutionForKey extends DiCafError {
+export class ErrNoResolutionForKey extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_NO_RESOLUTION_FOR_KEY')
     this.name = 'ErrNoResolutionForKey'
@@ -56,7 +56,7 @@ export class ErrNoResolutionForKey extends DiCafError {
 /**
  * ErrScopeNotRegistered is an error that is thrown when binding to a scope that is not registered.
  */
-export class ErrScopeNotRegistered extends DiCafError {
+export class ErrScopeNotRegistered extends CaffeineIoCError {
   constructor(scopeId: Identifier) {
     super(`Scope "${scopeId.toString()}" is not registered: use bindScope() to register it`, 'ERR_SCOPE_NOT_REGISTERED')
     this.name = 'ErrScopeNotRegistered'
@@ -66,7 +66,7 @@ export class ErrScopeNotRegistered extends DiCafError {
 /**
  * ErrScopeAlreadyRegistered is an error that is thrown when binding to a scope that is already registered.
  */
-export class ErrScopeAlreadyRegistered extends DiCafError {
+export class ErrScopeAlreadyRegistered extends CaffeineIoCError {
   constructor(scopeId: Identifier) {
     super(`Scope "${scopeId.toString()}" is already registered`, 'ERR_SCOPE_ALREADY_REGISTERED')
     this.name = 'ErrScopeAlreadyRegistered'
@@ -76,7 +76,7 @@ export class ErrScopeAlreadyRegistered extends DiCafError {
 /**
  * ErrRepeatedInjectableConfiguration is an error that is thrown when a key is configured with multiple injectables.
  */
-export class ErrRepeatedInjectableConfiguration extends DiCafError {
+export class ErrRepeatedInjectableConfiguration extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_REPEATED_INJECTABLE')
     this.name = 'ErrRepeatedInjectableConfiguration'
@@ -86,7 +86,7 @@ export class ErrRepeatedInjectableConfiguration extends DiCafError {
 /**
  * ErrInvalidBinding is an error that is thrown when a binding configuration is invalid.
  */
-export class ErrInvalidBinding extends DiCafError {
+export class ErrInvalidBinding extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_INVALID_BINDING')
     this.name = 'ErrInvalidBinding'
@@ -96,7 +96,7 @@ export class ErrInvalidBinding extends DiCafError {
 /**
  * ErrInvalidDecorator is an error that is thrown when a binding decorator is invalid.
  */
-export class ErrInvalidDecorator extends DiCafError {
+export class ErrInvalidDecorator extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_INVALID_DECORATOR')
     this.name = 'ErrInvalidDecorator'
@@ -106,7 +106,7 @@ export class ErrInvalidDecorator extends DiCafError {
 /**
  * ErrOrphanedBindingConfig is an error that is thrown when a binding configuration is found for a key that is not decorated with an {@link Injectable} decorator.
  */
-export class ErrOrphanedBindingConfig extends DiCafError {
+export class ErrOrphanedBindingConfig extends CaffeineIoCError {
   constructor(key: Key) {
     super(
       `Found binding configuration for "${keyStr(key)}" but the type is not decorated with one of: @${Injectable.name}, @${Extends.name}`,
@@ -119,7 +119,7 @@ export class ErrOrphanedBindingConfig extends DiCafError {
 /**
  * ErrMultiplePrimary is an error that is thrown when a key has multiple primary bindings.
  */
-export class ErrMultiplePrimary extends DiCafError {
+export class ErrMultiplePrimary extends CaffeineIoCError {
   constructor(key: Key) {
     super(
       `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditionals reduce the candidates to exactly one`
@@ -136,7 +136,7 @@ export class ErrMultiplePrimary extends DiCafError {
 /**
  * ErrIllegalScopeState is an error that is thrown when a scope state is illegal/invalid.
  */
-export class ErrIllegalScopeState extends DiCafError {
+export class ErrIllegalScopeState extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_ILLEGAL_SCOPE_STATE')
     this.name = 'ErrIllegalScopeState'
@@ -147,7 +147,7 @@ export class ErrIllegalScopeState extends DiCafError {
  * ErrOutOfScope is an error that is thrown when a scope is out of scope.
  * Normally this error is thrown when a {@link RequestScope} is used outside of a run() call.
  */
-export class ErrOutOfScope extends DiCafError {
+export class ErrOutOfScope extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_OUT_OF_SCOPE')
     this.name = 'ErrOutOfScope'
@@ -158,7 +158,7 @@ export class ErrOutOfScope extends DiCafError {
  * ErrScopeMismatchInConfiguration is an error that is thrown when a {@link Provides} injectable is declared
  * with a different scope than the {@link Configuration} class.
  */
-export class ErrScopeMismatchInConfiguration extends DiCafError {
+export class ErrScopeMismatchInConfiguration extends CaffeineIoCError {
   constructor(className: string, methodName: string, configScopeId: Identifier, methodScopeId: Identifier) {
     super(
       `Cannot configure provider "${methodName}" in "${className}": the @${Configuration.name} class declares scope "${String(configScopeId)}" but the method declares scope "${String(methodScopeId)}"`
@@ -175,7 +175,7 @@ export class ErrScopeMismatchInConfiguration extends DiCafError {
 /**
  * ErrUnknownResolver is an error that is thrown when a resolver for a component dependency is not registered.
  */
-export class ErrUnknownResolver extends DiCafError {
+export class ErrUnknownResolver extends CaffeineIoCError {
   constructor(name: symbol) {
     super(
       `Cannot resolve injection: resolver "${name.description ?? String(name)}" is not registered: use bindResolver() to register it`,
@@ -188,7 +188,7 @@ export class ErrUnknownResolver extends DiCafError {
 /**
  * ErrResolverAlreadyRegistered is an error that is thrown when a resolver is already registered.
  */
-export class ErrResolverAlreadyRegistered extends DiCafError {
+export class ErrResolverAlreadyRegistered extends CaffeineIoCError {
   constructor(name: symbol) {
     super(`Resolver "${name.description ?? String(name)}" is already registered`, 'ERR_RESOLVER_ALREADY_REGISTERED')
     this.name = 'ErrResolverAlreadyRegistered'
@@ -198,7 +198,7 @@ export class ErrResolverAlreadyRegistered extends DiCafError {
 /**
  * ErrMissingInjectionKey is an error that is thrown when a component dependency is missing a key.
  */
-export class ErrMissingInjectionKey extends DiCafError {
+export class ErrMissingInjectionKey extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_MISSING_INJECTION_KEY')
     this.name = 'ErrMissingInjectionKey'
@@ -209,7 +209,7 @@ export class ErrMissingInjectionKey extends DiCafError {
  * ErrInvalidContainerState is an error that is thrown when an operation is not permitted
  * given the container's current initialization state.
  */
-export class ErrInvalidContainerState extends DiCafError {
+export class ErrInvalidContainerState extends CaffeineIoCError {
   constructor(message: string) {
     super(message, 'ERR_INVALID_CONTAINER_STATE')
     this.name = 'ErrInvalidContainerState'
@@ -219,7 +219,7 @@ export class ErrInvalidContainerState extends DiCafError {
 /**
  * ErrUnresolvableDependencies is an error that is thrown when a component dependency is unresolvable.
  */
-export class ErrUnresolvableDependencies extends DiCafError {
+export class ErrUnresolvableDependencies extends CaffeineIoCError {
   constructor(readonly issues: string[]) {
     super(
       `Found ${issues.length} unresolvable ${issues.length === 1 ? 'dependency' : 'dependencies'}:\n${issues.join('\n')}`,
@@ -234,7 +234,7 @@ export class ErrUnresolvableDependencies extends DiCafError {
  * ErrConfigurationBindingNotFound is an error that is thrown when a configuration binding is not found.
  * Normally this error is thrown when using {@link Provides} decorators without decorating the holding class with {@link Configuration}.
  */
-export class ErrConfigurationBindingNotFound extends DiCafError {
+export class ErrConfigurationBindingNotFound extends CaffeineIoCError {
   constructor(target: Ctor) {
     super(`Configuration binding not found for "${target.name}"`, 'ERR_CONFIGURATION_BINDING_NOT_FOUND')
     this.name = 'ErrConfigurationBindingNotFound'
@@ -244,7 +244,7 @@ export class ErrConfigurationBindingNotFound extends DiCafError {
 /**
  * ErrCircularDependency is an error that is thrown when a circular dependency is detected.
  */
-export class ErrCircularDependency extends DiCafError {
+export class ErrCircularDependency extends CaffeineIoCError {
   constructor(cycle: string) {
     super(`Cannot initialize: circular dependency detected: ${cycle}`, 'ERR_CIRCULAR_DEPENDENCY')
     this.name = 'ErrCircularDependency'
@@ -254,7 +254,7 @@ export class ErrCircularDependency extends DiCafError {
 /**
  * ErrScopeMismatch is an error that is thrown when a component dependency graph is mixing different scopes.
  */
-export class ErrScopeMismatch extends DiCafError {
+export class ErrScopeMismatch extends CaffeineIoCError {
   constructor(readonly violations: string[]) {
     super(
       `Scope check detected ${violations.length} violation(s)\n\n`
@@ -276,7 +276,7 @@ export class ErrScopeMismatch extends DiCafError {
  * ErrNoRequestStorageSet is an error that is thrown when attempting to use the request scope feature
  * without setting its request scope storage.
  */
-export class ErrNoRequestStorageSet extends DiCafError {
+export class ErrNoRequestStorageSet extends CaffeineIoCError {
   constructor() {
     super(
       'No request scope storage has been set.\n'
@@ -292,7 +292,7 @@ export class ErrNoRequestStorageSet extends DiCafError {
  * ErrCannotLoadTypeScriptModule is an error that is thrown when attempting to load a TypeScript module
  * in a runtime that does not support TypeScript natively.
  */
-export class ErrCannotLoadTypeScriptModule extends DiCafError {
+export class ErrCannotLoadTypeScriptModule extends CaffeineIoCError {
   constructor(file: string) {
     super(
       `Cannot load module at "${file}": TypeScript is not supported in this runtime — compile to JavaScript or run with a TypeScript-capable runtime`,

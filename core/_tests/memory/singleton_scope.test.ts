@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
 
@@ -7,7 +7,7 @@ describe('Singleton scope memory', function () {
   it('releases singleton instance after dispose()', async function () {
     class Svc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Svc)
       .toSelf()
     await di.init()
@@ -25,7 +25,7 @@ describe('Singleton scope memory', function () {
     class Mid {}
     class Root {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Dep)
       .toSelf()
     di.bind(Mid)
@@ -52,7 +52,7 @@ describe('Singleton scope memory', function () {
   it('releases instance after resetInstances()', async function () {
     class Svc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Svc)
       .toSelf()
     await di.init()
@@ -72,7 +72,7 @@ describe('Singleton scope memory', function () {
     class CycleC {}
 
     const run = async () => {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(CycleA)
         .toSelf()
       di.bind(CycleB)

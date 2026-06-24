@@ -1,4 +1,4 @@
-import { DiCaf } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/core'
 import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable()
@@ -32,7 +32,7 @@ class AppService {
   ) {}
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 global.gc!()

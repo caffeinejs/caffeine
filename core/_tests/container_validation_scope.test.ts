@@ -1,5 +1,5 @@
 import { describe, it, expect, afterAll } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrScopeMismatch } from '../errors.js'
 import { provide, allOf } from '../injection.js'
 import { Scopes, bindScope, unbindScope } from '../scope.js'
@@ -10,7 +10,7 @@ describe('checks:scopes', function () {
     it('allows same scope (singleton → singleton)', async function () {
       const kDep = Symbol('sm-dep-ss')
       const kOwner = Symbol('sm-owner-ss')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -23,7 +23,7 @@ describe('checks:scopes', function () {
     it('allows same scope (transient → transient)', async function () {
       const kDep = Symbol('sm-dep-tt')
       const kOwner = Symbol('sm-owner-tt')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -38,7 +38,7 @@ describe('checks:scopes', function () {
     it('throws when singleton depends on transient', async function () {
       const kDep = Symbol('sm-dep-st')
       const kOwner = Symbol('sm-owner-st')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -53,7 +53,7 @@ describe('checks:scopes', function () {
     it('throws when transient depends on singleton', async function () {
       const kDep = Symbol('sm-dep-ts')
       const kOwner = Symbol('sm-owner-ts')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -68,7 +68,7 @@ describe('checks:scopes', function () {
     it('throws when singleton depends on refresh', async function () {
       const kDep = Symbol('sm-dep-srf')
       const kOwner = Symbol('sm-owner-srf')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -83,7 +83,7 @@ describe('checks:scopes', function () {
     it('allows singleton → provide(transient)', async function () {
       const kDep = Symbol('sm-dep-spt')
       const kOwner = Symbol('sm-owner-spt')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -98,7 +98,7 @@ describe('checks:scopes', function () {
     it('allows transient → provide(singleton)', async function () {
       const kDep = Symbol('sm-dep-tps')
       const kOwner = Symbol('sm-owner-tps')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -113,7 +113,7 @@ describe('checks:scopes', function () {
     it('throws when allOf injects different-scoped bindings', async function () {
       const kDep = Symbol('sm-dep-allof')
       const kOwner = Symbol('sm-owner-allof')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -131,7 +131,7 @@ describe('checks:scopes', function () {
       class SmPropDep {}
       class SmPropOwner {}
 
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(SmPropDep)
         .toClass(SmPropDep)
@@ -148,7 +148,7 @@ describe('checks:scopes', function () {
       class SmPropDepOk {}
       class SmPropOwnerOk {}
 
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(SmPropDepOk)
         .toClass(SmPropDepOk)
@@ -169,7 +169,7 @@ describe('checks:scopes', function () {
         init(_dep: SmMethodDep) {}
       }
 
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(SmMethodDep)
         .toClass(SmMethodDep)
@@ -188,7 +188,7 @@ describe('checks:scopes', function () {
       const kDepA = Symbol('sm-mv-dep-a')
       const kDepB = Symbol('sm-mv-dep-b')
       const kOwner = Symbol('sm-mv-owner')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDepA)
         .toValue('a')
@@ -215,7 +215,7 @@ describe('checks:scopes', function () {
     it('skips scope validation when scopes check is off', async function () {
       const kDep = Symbol('sm-off-dep')
       const kOwner = Symbol('sm-off-owner')
-      const di = new DiCaf({ checks: { scopes: 'off' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -254,7 +254,7 @@ describe('checks:scopes', function () {
         get durable() { return true },
       }))
 
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -274,7 +274,7 @@ describe('checks:scopes', function () {
     it('mentions both keys and their scopes in violation message', async function () {
       const kDep = Symbol('sm-msg-dep')
       const kOwner = Symbol('sm-msg-owner')
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
       di.bind(kDep)
         .toValue('dep')
@@ -320,7 +320,7 @@ describe('checks:scopes', function () {
     it('allows durable → durable (singleton → singleton)', async function () {
       const kDep = Symbol('cso-dep-ss')
       const kOwner = Symbol('cso-owner-ss')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
       di.bind(kOwner).toFunction((_: unknown) => ({}), [kDep])
@@ -331,7 +331,7 @@ describe('checks:scopes', function () {
     it('allows durable → durable (singleton → refresh)', async function () {
       const kDep = Symbol('cso-dep-srf')
       const kOwner = Symbol('cso-owner-srf')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
         .lifetime(Scopes.REFRESH)
@@ -343,7 +343,7 @@ describe('checks:scopes', function () {
     it('throws when durable depends on non-durable (singleton → transient)', async function () {
       const kDep = Symbol('cso-dep-st')
       const kOwner = Symbol('cso-owner-st')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
         .lifetime(Scopes.TRANSIENT)
@@ -355,7 +355,7 @@ describe('checks:scopes', function () {
     it('throws when durable depends on non-durable (singleton → custom non-durable)', async function () {
       const kDep = Symbol('cso-dep-snd')
       const kOwner = Symbol('cso-owner-snd')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
         .lifetime(kNonDurableScope)
@@ -367,7 +367,7 @@ describe('checks:scopes', function () {
     it('allows non-durable → durable (transient → singleton)', async function () {
       const kDep = Symbol('cso-dep-ts')
       const kOwner = Symbol('cso-owner-ts')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
       di.bind(kOwner).toFunction((_: unknown) => ({}), [kDep])
@@ -379,7 +379,7 @@ describe('checks:scopes', function () {
     it('allows non-durable → durable (custom non-durable → singleton)', async function () {
       const kDep = Symbol('cso-dep-nds')
       const kOwner = Symbol('cso-owner-nds')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
       di.bind(kOwner).toFunction((_: unknown) => ({}), [kDep])
@@ -391,7 +391,7 @@ describe('checks:scopes', function () {
     it('allows non-durable → non-durable (transient → transient)', async function () {
       const kDep = Symbol('cso-dep-tt')
       const kOwner = Symbol('cso-owner-tt')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
         .lifetime(Scopes.TRANSIENT)
@@ -404,7 +404,7 @@ describe('checks:scopes', function () {
     it('skips provide() injections regardless of scope mismatch', async function () {
       const kDep = Symbol('cso-dep-prov')
       const kOwner = Symbol('cso-owner-prov')
-      const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
         .lifetime(Scopes.TRANSIENT)

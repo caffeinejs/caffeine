@@ -6,7 +6,7 @@ import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { object, allOf, optional } from '../injection.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Scopes } from '../scope.js'
 import { Inject } from '../decorators/inject.js'
@@ -275,11 +275,11 @@ class RootWith2Props {
 
 class Undecorated {}
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 const kBindSym = Symbol('bind_sym')
-const diForBindings = new DiCaf()
+const diForBindings = new CaffeineIoC()
 let bindSeq = 0
 
 group('resolutions', () => {

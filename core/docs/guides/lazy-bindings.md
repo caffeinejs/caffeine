@@ -1,6 +1,6 @@
 # Lazy
 
-By default, DiCaf constructs singleton, container-scoped, and refresh-scoped bindings
+By default, CaffeineIoC constructs singleton, container-scoped, and refresh-scoped bindings
 eagerly — during `init()`. A lazy binding defers that construction until the binding
 is first resolved via `get()`.
 
@@ -94,7 +94,7 @@ for a specific binding.
 
 ```ts
 // All bindings in this container are lazy by default
-const di = new DiCaf({ lazy: true })
+const di = new CaffeineIoC({ lazy: true })
 
 @Lazy(false)
 @Injectable()
@@ -115,7 +115,7 @@ Set `lazy: true` in the container options to make all bindings lazy unless expli
 opted out with `@Lazy(false)`.
 
 ```ts
-const di = new DiCaf({ lazy: true })
+const di = new CaffeineIoC({ lazy: true })
 await di.init()
 // nothing is constructed yet
 
@@ -135,9 +135,9 @@ The priority chain:
 The fluent binder exposes `.lazy()` for decorator-free containers.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf({ decorators: false })
+const di = new CaffeineIoC({ decorators: false })
 
 di.bind(HeavyService)
   .toSelf()

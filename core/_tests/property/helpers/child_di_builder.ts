@@ -1,4 +1,4 @@
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 
 export type ChildScenario = {
   parentOnly: string[]
@@ -6,8 +6,8 @@ export type ChildScenario = {
   shared: { key: string, parentValue: string, childValue: string }[]
 }
 
-export function buildChildScenario(scenario: ChildScenario): { parent: DiCaf, child: DiCaf } {
-  const parent = new DiCaf({ decorators: false })
+export function buildChildScenario(scenario: ChildScenario): { parent: CaffeineIoC, child: CaffeineIoC } {
+  const parent = new CaffeineIoC({ decorators: false })
 
   for (const key of scenario.parentOnly) {
     parent.bind(key)

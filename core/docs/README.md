@@ -1,4 +1,4 @@
-# DiCaf Documentation
+# CaffeineIoC Documentation
 
 IoC container for JavaScript and TypeScript.
 
@@ -8,9 +8,9 @@ IoC container for JavaScript and TypeScript.
 
 ## Guides
 
-Task-oriented documentation for common DiCaf workflows.
+Task-oriented documentation for common CaffeineIoC workflows.
 
-- [Getting Started](./guides/getting-started.md) — install DiCaf, create your first container, and resolve your first dependency.
+- [Getting Started](./guides/getting-started.md) — install CaffeineIoC, create your first container, and resolve your first dependency.
 - [Modules](./guides/modules.md) — organize bindings into reusable module functions.
 - [Decorators](./guides/decorators.md) — annotate classes with `@Injectable`, `@Configuration`, `@Provides`, and related decorators.
 - [Async Bindings](./guides/async-bindings.md) — bind keys to async factories; constraints and ordering rules.
@@ -20,9 +20,9 @@ Task-oriented documentation for common DiCaf workflows.
 
 ## Reference
 
-Complete API documentation for DiCaf.
+Complete API documentation for CaffeineIoC.
 
-- [Container](./reference/container.md) — the `DiCaf` class: constructor options, resolution, binding, lifecycle, and inspection.
+- [Container](./reference/container.md) — the `CaffeineIoC` class: constructor options, resolution, binding, lifecycle, and inspection.
 - [Binder](./reference/binder.md) — the `Binder` and `BinderOptions` fluent APIs.
 - [Decorators](./reference/decorators.md) — all decorators exported from `@caffeine-projects/dicaf/decorators`.
 - [Injection](./reference/injection.md) — injection helpers: `allOf`, `optional`, `provide`, `mapped`, `object`, `defer`, `useValue`, `compose`.
@@ -35,7 +35,7 @@ Complete API documentation for DiCaf.
 
 ## Explanation
 
-Conceptual background on how and why DiCaf works the way it does.
+Conceptual background on how and why CaffeineIoC works the way it does.
 
 - [What is dependency injection?](./explanation/what-is-di.md) — the problem DI solves and why a container helps.
 - [Container lifecycle](./explanation/container-lifecycle.md) — construction, init, resolution, and disposal phases.

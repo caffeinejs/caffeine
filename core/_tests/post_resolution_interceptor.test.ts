@@ -3,7 +3,7 @@ import { Injectable } from '../decorators/injectable.js'
 import { Interceptor } from '../decorators/interceptor.js'
 import { Profile } from '../decorators/profile.js'
 import { PostResolutionInterceptor } from '../post_resolution_interceptor.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Provides } from '../decorators/provides.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Async } from '../decorators/async.js'
@@ -50,7 +50,7 @@ describe('Post Resolution Interceptor', function () {
 
   describe('using post interceptor on class level', function () {
     it('should register multiple post resolution interceptors', async function () {
-      const di = new DiCaf({ profiles: ['pri-class'] })
+      const di = new CaffeineIoC({ profiles: ['pri-class'] })
       await di.init()
       const dep = di.get(Dep)
 
@@ -65,7 +65,7 @@ describe('Post Resolution Interceptor', function () {
 
   describe('using post interceptor on configuration class', function () {
     it('should register multiple post resolution interceptors', async function () {
-      const di = new DiCaf({ profiles: ['post-conf'] })
+      const di = new CaffeineIoC({ profiles: ['post-conf'] })
       await di.init()
       const dep = di.get(Comp)
 
@@ -103,7 +103,7 @@ describe('Post Resolution Interceptor', function () {
 
       void AsyncConf
 
-      const di = new DiCaf({ profiles: ['pri-async-provides'] })
+      const di = new CaffeineIoC({ profiles: ['pri-async-provides'] })
       await di.init()
 
       const first = di.get(AsyncToken)
@@ -145,7 +145,7 @@ describe('Post Resolution Interceptor', function () {
       @UseAsyncFactory(async () => new AsyncService('uaf-value'))
       class AsyncServiceImpl extends AsyncService {}
 
-      const di = new DiCaf({ profiles: ['pri-async-uaf'] })
+      const di = new CaffeineIoC({ profiles: ['pri-async-uaf'] })
       await di.init()
 
       const first = di.get(AsyncServiceImpl)

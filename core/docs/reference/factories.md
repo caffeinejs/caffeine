@@ -38,7 +38,7 @@ type AsyncFactory<T> = (ctx: ResolutionContext) => Promise<T>
 An async factory function. Used with `toAsyncFactory()`, `@UseAsyncFactory`, and
 `@Async` + `@Provides` inside `@Configuration` classes.
 
-DiCaf awaits the promise during `init()` — by the time `container.get()` is
+CaffeineIoC awaits the promise during `init()` — by the time `container.get()` is
 called, the instance is already resolved.
 
 **Constraints:**

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Profile } from '../decorators/profile.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey, ErrNoUniqueInjectionForKey } from '../errors.js'
 import { optional } from '../injection.js'
 
@@ -32,7 +32,7 @@ describe('Optional Injections', function () {
     }
 
     it('should inject undefined values when dependency cannot be resolved and is marked as optional', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const svc = di.get(OptSvc)
       const ctrl = di.get(Ctrl)
@@ -46,7 +46,7 @@ describe('Optional Injections', function () {
     })
 
     it('should throw at init when a non-optional injection has no binding', async function () {
-      const di = new DiCaf({ profiles: ['opt-non-optional'] })
+      const di = new CaffeineIoC({ profiles: ['opt-non-optional'] })
       await expect(di.init()).rejects.toThrow(ErrNoResolutionForKey)
     })
   })
@@ -75,7 +75,7 @@ describe('Optional Injections', function () {
     }
 
     it('should keep the optional value', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const optStr = di.get(OptStr)
       const test = di.get(Test)
@@ -94,7 +94,7 @@ describe('Optional Injections', function () {
 
 describe('container.getOptional()', function () {
   it('should return the instance when the key is registered', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind('svc').toValue('hello')
     await di.init()
 
@@ -102,7 +102,7 @@ describe('container.getOptional()', function () {
   })
 
   it('should return undefined when the key is not registered', async function () {
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     await di.init()
 
     expect(di.getOptional('nonexistent')).toBeUndefined()
@@ -111,7 +111,7 @@ describe('container.getOptional()', function () {
   it('should return the primary instance when multiple bindings share a key', async function () {
     const kSvc = Symbol('opt-primary')
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind('primary-val').toValue('primary')
       .names(kSvc)
       .primary()
@@ -125,7 +125,7 @@ describe('container.getOptional()', function () {
   it('should throw ErrNoUniqueInjectionForKey when multiple bindings exist without a primary', async function () {
     const kSvc = Symbol('opt-ambig')
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind('val-a').toValue('alpha')
       .names(kSvc)
     di.bind('val-b').toValue('bravo')

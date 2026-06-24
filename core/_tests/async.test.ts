@@ -4,7 +4,7 @@ import { Async } from '../decorators/async.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrInvalidBinding } from '../errors.js'
 import { Scopes } from '../scope.js'
 import { PostProcessor } from '../post_processor.js'
@@ -25,7 +25,7 @@ describe('Async bindings via decorators', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     const db = di.get(DatabaseConnection)
@@ -75,7 +75,7 @@ describe('Async bindings via decorators', function () {
     void AsyncDepConfig
     void Repo
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     const db = di.get(DbConnection)
@@ -128,7 +128,7 @@ describe('Async bindings via decorators', function () {
 
     void ReversedConfig
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     const db = di.get(Db)
@@ -147,7 +147,7 @@ describe('Async bindings via manual binding', function () {
       constructor(readonly host: string) {}
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
     di.bind(Connection)
       .toAsyncFactory(async () => {
@@ -173,7 +173,7 @@ describe('Async bindings via manual binding', function () {
       constructor(readonly dep: SyncDep) {}
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(SyncDep)
       .toSelf()
       .lifetime(Scopes.SINGLETON)
@@ -195,7 +195,7 @@ describe('Async bindings via manual binding', function () {
   it('should throw when an explicit non-singleton scope is applied to an async binding', function () {
     class MyService {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
 
     expect(() => {
@@ -209,7 +209,7 @@ describe('Async bindings via manual binding', function () {
   it('should throw when lazy() is called on an async binding', function () {
     class MyService {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
 
     expect(() => {
@@ -231,7 +231,7 @@ describe('Async bindings with RefreshScope', function () {
   it('should not throw when refresh scope is applied to an async binding', function () {
     class MyService {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
 
     expect(() => {
@@ -246,7 +246,7 @@ describe('Async bindings with RefreshScope', function () {
       constructor(readonly value: string) {}
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
     di.bind(ApiToken)
       .toAsyncFactory(async () => new ApiToken('token-v1'))
@@ -268,7 +268,7 @@ describe('Async bindings with RefreshScope', function () {
     }
 
     let counter = 0
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
     di.bind(ApiToken)
       .toAsyncFactory(async () => new ApiToken(`token-v${++counter}`))
@@ -301,7 +301,7 @@ describe('Async bindings with RefreshScope', function () {
     let singletonCount = 0
     let refreshCount = 0
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
     di.bind(DbConn)
       .toAsyncFactory(async () => new DbConn(++singletonCount))
@@ -332,7 +332,7 @@ describe('resetInstance() with async bindings', function () {
     }
 
     let counter = 0
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
     di.bind(Token)
       .toAsyncFactory(async () => new Token(++counter))
@@ -361,7 +361,7 @@ describe('resetInstance() with async bindings', function () {
     }
 
     let counter = 0
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
     di.bind(RefreshToken)
       .toAsyncFactory(async () => new RefreshToken(++counter))
@@ -393,7 +393,7 @@ describe('resetInstance() with async bindings', function () {
     }
 
     let counter = 0
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
     di.bind(Conn)
       .toAsyncFactory(async () => {
@@ -443,7 +443,7 @@ describe('resetInstance() with async bindings', function () {
 
     void AsyncDepConfig
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     const a1 = di.get(DepA) as DepA
@@ -484,7 +484,7 @@ describe('@UseAsyncFactory()', function () {
     @UseAsyncFactory(_ctx => Promise.resolve(new Config('redis://localhost')))
     class Config2 extends Config {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     const cfg = di.get(Config2)
@@ -516,7 +516,7 @@ describe('async bindings with post-processors', function () {
       },
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
     di.bind(Token)
       .toAsyncFactory(async () => new Token('hello'))
@@ -556,7 +556,7 @@ describe('async bindings with post-processors', function () {
       },
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
     di.bind(Svc)
       .toAsyncFactory(async () => new Svc(99))
@@ -579,7 +579,7 @@ describe('async bindings with post-processors', function () {
       }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(AsyncBean)
       .toAsyncFactory(async () => new AsyncBean())
       .postConstruct(v => v.onInit())
@@ -612,7 +612,7 @@ describe('async bindings with post-processors', function () {
       },
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
     di.bind(Ordered)
       .toAsyncFactory(async () => new Ordered())
@@ -638,7 +638,7 @@ describe('resolveAsyncBindings() — cached skip on repeated init()', function (
       constructor() { this.id = ++callCount }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(DbConn).toAsyncFactory(async () => new DbConn())
 
     await di.init()
@@ -658,7 +658,7 @@ describe('resetBinding() — async path', function () {
       constructor() { this.version = ++callCount }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Cache).toAsyncFactory(async () => new Cache())
     await di.init()
 
@@ -691,7 +691,7 @@ describe('resetInstance() — mixed async + sync bindings under the same key', f
       constructor() { this.id = ++syncCallCount }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(AsyncSvc).toAsyncFactory(async () => new AsyncSvc())
       .names(kShared)
     di.bind(SyncSvc).toSelf()

@@ -4,7 +4,7 @@ sidebar_label: Request Scope with Fastify
 
 # Tutorial: Request scope with Fastify
 
-This tutorial shows how to wire DiCaf's request scope into a Fastify application.
+This tutorial shows how to wire CaffeineIoC's request scope into a Fastify application.
 By the end you will have a container that creates a fresh `RequestContext` per HTTP
 request and makes it available to any service that needs it.
 
@@ -22,7 +22,7 @@ npm install @caffeine-projects/dicaf fastify
 
 ## 2. TypeScript config
 
-DiCaf uses TC39 stage 3 decorators — no `reflect-metadata` needed.
+CaffeineIoC uses TC39 stage 3 decorators — no `reflect-metadata` needed.
 
 ```json
 {
@@ -40,7 +40,7 @@ DiCaf uses TC39 stage 3 decorators — no `reflect-metadata` needed.
 
 ## 3. Create a request-scoped service
 
-`Scopes.REQUEST` tells DiCaf to create a new instance for each request and discard it
+`Scopes.REQUEST` tells CaffeineIoC to create a new instance for each request and discard it
 when the request ends.
 
 ```ts
@@ -65,7 +65,7 @@ export class RequestContext {
 ## 4. Wire the container into Fastify
 
 The `onRequest` hook calls `requestScopeManager.run()`. Everything inside that
-callback runs within a single request's async context — DiCaf uses it to isolate
+callback runs within a single request's async context — CaffeineIoC uses it to isolate
 request-scoped instances between concurrent requests.
 
 ```ts
@@ -126,11 +126,11 @@ returns the instance that belongs to the current request.
 
 ```ts
 // src/index.ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 import { buildServer } from './app.js'
 import { CatsService } from './cats.service.js'
 
-const container = new DiCaf()
+const container = new CaffeineIoC()
 await container.init()
 
 const server = await buildServer(container)

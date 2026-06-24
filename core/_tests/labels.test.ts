@@ -5,7 +5,7 @@ import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Label } from '../decorators/label.js'
 import { Profile } from '../decorators/profile.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('Label', function () {
   it('should tag a class and return its binding via getBy', function () {
@@ -15,7 +15,7 @@ describe('Label', function () {
     @Injectable()
     class Svc {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
     expect(result)
@@ -32,7 +32,7 @@ describe('Label', function () {
     @Injectable()
     class Multi {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1)))
       .toHaveLength(1)
@@ -49,7 +49,7 @@ describe('Label', function () {
     @Injectable()
     class Stacked {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1)))
       .toHaveLength(1)
@@ -66,7 +66,7 @@ describe('Label', function () {
     @Injectable()
     class Resolved {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     const descriptors = di.getBindingsByLabel(sym)
 
     expect(descriptors)
@@ -84,7 +84,7 @@ describe('Label', function () {
     @Injectable()
     class Target {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
 
     expect(result[0]).not.toBeInstanceOf(Target)
@@ -100,7 +100,7 @@ describe('Label', function () {
     @Injectable()
     class Excluded {}
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     expect(di.has(Excluded))
       .toBe(false)
@@ -116,8 +116,8 @@ describe('Label', function () {
     @Injectable()
     class NsService {}
 
-    const root = new DiCaf()
-    const child = new DiCaf({ profiles: ['myns'] })
+    const root = new CaffeineIoC()
+    const child = new CaffeineIoC({ profiles: ['myns'] })
 
     expect(root.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
       .toHaveLength(0)
@@ -139,7 +139,7 @@ describe('Label', function () {
         }
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
       expect(result)
@@ -161,7 +161,7 @@ describe('Label', function () {
         }
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const descriptors = di.getBindingsByLabel(sym)
 
       expect(descriptors)

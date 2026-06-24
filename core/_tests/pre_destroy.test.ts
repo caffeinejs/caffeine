@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 import { PreDestroy } from '../decorators/pre_destroy.js'
 import { OnPreDestroy } from '../decorators/on_pre_destroy.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Provides } from '../decorators/provides.js'
@@ -31,7 +31,7 @@ describe('PreDestroy', function () {
       }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(Managed)
       .toSelf()
     await di.init()
@@ -61,7 +61,7 @@ describe('PreDestroy', function () {
 
       void AppConfigOPD
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const instance = di.get(ConnOPD)
@@ -92,7 +92,7 @@ describe('PreDestroy', function () {
 
       void CacheConfigOPD
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       di.get(CacheOPD)
@@ -118,7 +118,7 @@ describe('PreDestroy', function () {
 
       void SvcConfigOPD
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       // Never call di.get(SvcOPD) → lazy bean never instantiated → not cached
@@ -150,7 +150,7 @@ describe('PreDestroy', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Svc)
         .toSelf()
         .lifetime(Scopes.SINGLETON)
@@ -181,7 +181,7 @@ describe('PreDestroy', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Svc)
         .toSelf()
         .lifetime(Scopes.SINGLETON)

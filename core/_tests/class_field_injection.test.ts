@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Inject } from '../decorators/inject.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { optional } from '../injection.js'
 import { ErrInvalidBinding } from '../errors.js'
 
@@ -78,7 +78,7 @@ describe('class field injection', function () {
     }
 
     it('should inject all member kinds after construction', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const mixed = di.get(Mixed)
@@ -130,7 +130,7 @@ describe('class field injection', function () {
     }
 
     it('should resolve required members and leave optional absent dep undefined', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const instance = di.get(PartiallyOptional)
@@ -150,7 +150,7 @@ describe('class field injection', function () {
         dep!: DepA
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(DepA)
         .toSelf()
       di.bind(ManualSvc)
@@ -180,7 +180,7 @@ describe('class field injection', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(DepA)
         .toSelf()
       di.bind(DepB)
@@ -205,7 +205,7 @@ describe('class field injection', function () {
         constructor(readonly ctorDep: DepA) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(DepA)
         .toSelf()
       di.bind(DepB)
@@ -228,7 +228,7 @@ describe('class field injection', function () {
         absent!: DepC | undefined
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(DepA)
         .toSelf()
       // DepC is intentionally NOT bound
@@ -249,7 +249,7 @@ describe('class field injection', function () {
   describe('BinderOptions.injectProperty() — validation', function () {
     it('should throw ErrInvalidBinding when key is a symbol', function () {
       const kSym = Symbol('sym')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
         di.bind(kSym)
@@ -260,7 +260,7 @@ describe('class field injection', function () {
     })
 
     it('should throw ErrInvalidBinding when key is a string', function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
         di.bind('stringKey')

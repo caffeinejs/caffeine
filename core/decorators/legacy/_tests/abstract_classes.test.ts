@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { describe, expect, it, vi } from 'vitest'
 import { Injectable } from '../injectable.legacy.js'
 import { Extends } from '../extends.legacy.js'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 
 describe('Legacy Abstract Classes', function () {
   describe('when a class has a constructor parameter of an abstract class', function () {
@@ -30,7 +30,7 @@ describe('Legacy Abstract Classes', function () {
         }
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const orderService = di.get(OrderService)

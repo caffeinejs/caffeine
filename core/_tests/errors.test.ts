@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { DiCafError } from '../errors.js'
+import { CaffeineIoCError } from '../errors.js'
 
 describe('Errors', function () {
   it('should init error with provided code', function () {
-    const err = new DiCafError('msg', 'ERR_TEST')
+    const err = new CaffeineIoCError('msg', 'ERR_TEST')
 
     expect(err.message)
       .toEqual('msg')

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { mapped, optional } from '../injection.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Lazy } from '../decorators/lazy.js'
@@ -50,7 +50,7 @@ describe('Inject Into Map', function () {
         constructor(readonly greeters: Map<string, Greeter> | undefined) {}
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const consumer = di.build(OptConsumer, [optional(mapped(kMap))])
@@ -66,7 +66,7 @@ describe('Inject Into Map', function () {
         constructor(readonly data: Map<string, unknown> | undefined) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
       const consumer = di.build(OptConsumer, [optional(mapped(kAbsent))])
@@ -76,7 +76,7 @@ describe('Inject Into Map', function () {
 
   describe('when injecting into a map', function () {
     it('should inject the correct greeter', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const welcome = di.get(Welcome)

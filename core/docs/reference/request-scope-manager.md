@@ -51,7 +51,7 @@ Accessing a `REQUEST`-scoped binding outside of a `run()` block throws
 setStorage(storage: RequestScopeStorage): void
 ```
 
-Replaces the underlying storage strategy. DiCaf uses `AsyncLocalStorage`
+Replaces the underlying storage strategy. CaffeineIoC uses `AsyncLocalStorage`
 internally by default. Call `setStorage()` only when you need to substitute a
 custom implementation — for example, in environments where `AsyncLocalStorage`
 is not available or when using a test double.

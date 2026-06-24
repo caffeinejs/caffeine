@@ -1,6 +1,6 @@
 # Testing
 
-DiCaf's `testing` sub-package provides `TestContainer`, a fluent builder designed
+CaffeineIoC's `testing` sub-package provides `TestContainer`, a fluent builder designed
 for **integration tests** — tests that exercise real components wired through the
 real container. If you picture the test pyramid, `TestContainer` lives at the
 integration layer and above: you boot an actual container, keep most bindings real,
@@ -22,7 +22,7 @@ The production container is **never initialized directly** in tests. Instead:
 
 ```ts
 // app.container.ts — builds but never inits
-export const appContainer = new DiCaf(databaseModule, emailModule)
+export const appContainer = new CaffeineIoC(databaseModule, emailModule)
 
 // test
 const di = new TestContainer(appContainer)
@@ -36,7 +36,7 @@ await app.ready()
 const svc = di.get(OrderService)
 ```
 
-The container that comes out of `.build()` is a real DiCaf container with all
+The container that comes out of `.build()` is a real CaffeineIoC container with all
 production wiring intact, minus the pieces you replaced.
 
 ## Source: container or snapshot
@@ -292,7 +292,7 @@ we recommend following the structure below, organizing the basic application com
 ```
 src/
   index.ts          ← entry point: wires everything and starts the server. Minimum logic here.
-  app.container.ts  ← builds the DiCaf container (no init())
+  app.container.ts  ← builds the CaffeineIoC container (no init())
   app.ts            ← builds the server, receives a container
 ```
 
@@ -305,10 +305,10 @@ The filenames and structure are incidental. What matters is that the container i
 
 ```ts
 // app.container.ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 export function createContainer() {
-  const container = new DiCaf()
+  const container = new CaffeineIoC()
   // registrations ...
   return container
 }

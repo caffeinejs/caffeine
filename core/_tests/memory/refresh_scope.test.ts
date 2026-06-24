@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { Scopes } from '../../scope.js'
 import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
@@ -8,7 +8,7 @@ describe('Refresh scope memory', function () {
   it('releases refresh-scoped instance after resetInstances()', async function () {
     class RefSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(RefSvc)
       .toSelf()
       .lifetime(Scopes.REFRESH)
@@ -26,7 +26,7 @@ describe('Refresh scope memory', function () {
   it('releases refresh-scoped instance after dispose()', async function () {
     class RefSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(RefSvc)
       .toSelf()
       .lifetime(Scopes.REFRESH)
@@ -43,7 +43,7 @@ describe('Refresh scope memory', function () {
   it('releases old instance and retains new one after resetInstance()', async function () {
     class RefSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(RefSvc)
       .toSelf()
       .lifetime(Scopes.REFRESH)

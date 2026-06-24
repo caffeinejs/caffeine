@@ -1,6 +1,6 @@
 # Class
 
-DiCaf supports three injection points on classes: **constructor**, **properties**, and **methods**.
+CaffeineIoC supports three injection points on classes: **constructor**, **properties**, and **methods**.
 They are applied in that order — property injections happen after construction,
 method injections after properties.
 

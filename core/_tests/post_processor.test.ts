@@ -2,7 +2,7 @@ import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest'
 import { Binding } from '../binding.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Factory } from '../factory.js'
 import { PostProcessor } from '../post_processor.js'
 import { bindScope, Scope, unbindScope } from '../scope.js'
@@ -112,12 +112,12 @@ describe('Post Processors', function () {
     }
   }
 
-  let di: DiCaf
+  let di: CaffeineIoC
 
   beforeAll(() => {
     bindScope(kScope, () => new CustomTransient())
 
-    di = new DiCaf({ decorators: false })
+    di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(new PpOne())
     di.postProcessors.add(new PpTwo())
   })

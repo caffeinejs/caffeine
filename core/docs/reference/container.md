@@ -44,8 +44,8 @@
 ## Constructor
 
 ```ts
-new DiCaf(...modules: Module[])
-new DiCaf(options: Options, ...modules: Module[])
+new CaffeineIoC(...modules: Module[])
+new CaffeineIoC(options: Options, ...modules: Module[])
 ```
 
 Creates a new container and immediately applies every module passed to it.
@@ -282,7 +282,7 @@ resolvers, and eagerly instantiates non-lazy singletons.
 return `undefined` or throw.
 
 ```ts
-const di = new DiCaf(appModule)
+const di = new CaffeineIoC(appModule)
 await di.init()
 ```
 
@@ -379,7 +379,7 @@ parent.
 Child containers must also be initialized with `await child.init()`.
 
 ```ts
-const parent = new DiCaf(sharedModule)
+const parent = new CaffeineIoC(sharedModule)
 await parent.init()
 
 const child = parent.newChild()

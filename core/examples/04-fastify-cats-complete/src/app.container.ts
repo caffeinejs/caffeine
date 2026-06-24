@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { DiCaf, scan } from '@caffeinejs/core'
+import { CaffeineIoC, scan } from '@caffeinejs/core'
 import { healthModule } from './health/health.mod.js'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
@@ -13,9 +13,9 @@ await scan({
   exclude: [import.meta.url, new URL('./index.ts', import.meta.url)],
 })
 
-export async function createContainer(): Promise<DiCaf> {
+export async function createContainer(): Promise<CaffeineIoC> {
   // The health components are configured "manually" using a Module function.
   // All the other decorated components are automatically registered once the `scan` loads them once.
   // Both concepts can be mixed.
-  return new DiCaf(healthModule)
+  return new CaffeineIoC(healthModule)
 }

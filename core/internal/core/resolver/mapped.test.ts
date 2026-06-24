@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { ErrMissingInjectionKey, ErrNoResolutionForKey } from '../../../errors.js'
 import { BuiltInResolvers } from '../../../injection_resolver.js'
 import { mapped, optional } from '../../../injection.js'
 import { mappedFactory } from './index.js'
 
-function ctx(container: DiCaf, descriptor: ReturnType<typeof mapped | typeof optional>, key: any = 'Consumer') {
+function ctx(container: CaffeineIoC, descriptor: ReturnType<typeof mapped | typeof optional>, key: any = 'Consumer') {
   return { container, descriptor, key, kind: 'constructor' as const, member: '', index: 0 }
 }
 
@@ -13,14 +13,14 @@ describe('mappedFactory', function () {
   describe('validation', function () {
     it('should throw ErrMissingInjectionKey when ctx.key is absent', function () {
       const kKey = Symbol('map-no-ctx-key')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       expect(() => mappedFactory(ctx(di, mapped(kKey), null)))
         .toThrow(ErrMissingInjectionKey)
     })
 
     it('should throw ErrMissingInjectionKey when descriptor has no key', function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       expect(() => mappedFactory({
         container: di,
@@ -34,7 +34,7 @@ describe('mappedFactory', function () {
 
     it('should throw ErrNoResolutionForKey when no bindings exist and injection is required', function () {
       const kAbsent = Symbol('map-absent-required')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       expect(() => mappedFactory(ctx(di, mapped(kAbsent))))
         .toThrow(ErrNoResolutionForKey)
@@ -42,7 +42,7 @@ describe('mappedFactory', function () {
 
     it('should return undefined when no bindings exist and injection is optional', function () {
       const kAbsent = Symbol('map-absent-optional')
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       const resolver = mappedFactory(ctx(di, optional(mapped(kAbsent))))
       expect(resolver()).toBeUndefined()
@@ -55,7 +55,7 @@ describe('mappedFactory', function () {
       class ButtonWidget extends Widget {}
       class InputWidget extends Widget {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(ButtonWidget).toSelf()
         .extends(Widget)
         .names('button')
@@ -78,7 +78,7 @@ describe('mappedFactory', function () {
       class StoreA extends Store {}
       class StoreB extends Store {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(StoreA).toSelf()
         .extends(Store)
       di.bind(StoreB).toSelf()
@@ -97,7 +97,7 @@ describe('mappedFactory', function () {
       class PluginA extends Plugin {}
       class PluginB extends Plugin {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(PluginA).toSelf()
         .extends(Plugin)
         .names('alpha')

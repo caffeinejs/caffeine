@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Named } from '../decorators/named.js'
 import { Provides } from '../decorators/provides.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrInvalidDecorator, ErrOrphanedBindingConfig } from '../errors.js'
 import { Scopes } from '../scope.js'
 
@@ -12,7 +12,7 @@ describe('Orphaned binding config validation', function () {
     class Svc {}
     void Svc
 
-    expect(() => new DiCaf())
+    expect(() => new CaffeineIoC())
       .toThrow(ErrOrphanedBindingConfig)
   })
 
@@ -21,7 +21,7 @@ describe('Orphaned binding config validation', function () {
     class Svc {}
     void Svc
 
-    expect(() => new DiCaf())
+    expect(() => new CaffeineIoC())
       .toThrow(ErrOrphanedBindingConfig)
   })
 

@@ -17,13 +17,13 @@ happens.
 
 ### [Request Scope with Fastify](./request-scope-fastify.md)
 
-Wire DiCaf's request scope into a Fastify application. You will build a container
+Wire CaffeineIoC's request scope into a Fastify application. You will build a container
 that creates a fresh `RequestContext` per HTTP request and makes it available to
 any service that depends on it.
 
 **What you will learn:**
 
-- Setting up DiCaf with stage 3 decorators
+- Setting up CaffeineIoC with stage 3 decorators
 - Binding services across singleton and request scopes
 - Integrating the request scope lifecycle with Fastify hooks
 - Writing isolated tests for request-scoped components

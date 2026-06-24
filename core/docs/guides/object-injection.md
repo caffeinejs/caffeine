@@ -96,7 +96,7 @@ class AppFacade {
 `object()` works identically without decorators.
 
 ```ts
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(UserRepository).toSelf()
 di.bind(EmailService).toSelf()

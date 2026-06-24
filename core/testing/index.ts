@@ -1,5 +1,5 @@
 /**
- * Test utilities for {@link DiCaf} containers.
+ * Test utilities for {@link CaffeineIoC} containers.
  *
  * {@link TestContainer} is a fluent builder that takes a live container or a
  * {@link Snapshot} and produces a trimmed, override-ready container suitable for
@@ -16,15 +16,15 @@
  *
  * ```ts
  * import { beforeAll, describe, expect, it } from 'vitest'
- * import { DiCaf } from '@caffeine-projects/di'
+ * import { CaffeineIoC } from '@caffeine-projects/di'
  * import { TestContainer } from '@caffeine-projects/di/testing'
  * import { mockRepo } from './mocks.js'
  *
  * describe('OrderService', () => {
- *   let di: DiCaf
+ *   let di: CaffeineIoC
  *
  *   beforeAll(async () => {
- *     const source = new DiCaf()
+ *     const source = new CaffeineIoC()
  *     di = new TestContainer(source)
  *       .override(Repository, b => b.toValue(mockRepo))
  *       .build()

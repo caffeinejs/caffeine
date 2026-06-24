@@ -1,5 +1,5 @@
 /**
- * DiCaf - Fast and Powerful Dependency Injection Container for JS/TS.
+ * CaffeineIoC - Fast and Powerful Dependency Injection Container for JS/TS.
  *
  * @packageDocumentation
  */
@@ -8,7 +8,7 @@ export type { Binder } from './binder.js'
 export type { BinderOptions } from './binder_options.js'
 export type { Binding } from './binding.js'
 export type { Conditional, ConditionContext } from './conditional.js'
-export { DiCaf } from './container.js'
+export { CaffeineIoC } from './container.js'
 export type * from './container_interface.js'
 export * from './errors.js'
 export type { AsyncFactory, Factory } from './factory.js'

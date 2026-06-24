@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { allOf, defer, object, optional } from '../injection.js'
@@ -15,7 +15,7 @@ import { DispatchHandlerA, DispatchHandlerB, Dispatcher } from './_testdata/circ
 describe('Circular References', function () {
   describe('dependencies with deferred constructor', function () {
     it('should resolve dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const foo = di.get(Foo)
@@ -41,7 +41,7 @@ describe('Circular References', function () {
     })
 
     it('should resolve dependencies with mixed scopes', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const foo = di.get(FooTransient)
@@ -66,7 +66,7 @@ describe('Circular References', function () {
 
   describe('when a circular dependency does not use the defer injection', function () {
     it('should build inconsistent dependency graph', async () => {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const bar = di.get(BarFail)
@@ -96,7 +96,7 @@ describe('Circular References', function () {
 
   describe('deferred key in property injection', function () {
     it('should resolve the property via the deferred binding', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const consumer = di.get(PropConsumer)
 
@@ -126,7 +126,7 @@ describe('Circular References', function () {
 
   describe('deferred key in method injection', function () {
     it('should inject via the method using the deferred binding', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const consumer = di.get(MethodConsumer)
 
@@ -147,7 +147,7 @@ describe('Circular References', function () {
         constructor(readonly a: CycleA) {}
       }
 
-      const di = new DiCaf({ checks: { circularReferences: true }, decorators: false })
+      const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
       di.bind(CycleA)
         .toSelf([CycleB])
       di.bind(CycleB)
@@ -165,7 +165,7 @@ describe('Circular References', function () {
         constructor(readonly a: CycleA) {}
       }
 
-      const di = new DiCaf({ checks: { circularReferences: true }, decorators: false })
+      const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
       di.bind(CycleA)
         .toSelf([CycleB])
       di.bind(CycleB)
@@ -199,7 +199,7 @@ describe('Circular References', function () {
         constructor(readonly a: NodeA) {}
       }
 
-      const di = new DiCaf({ checks: { circularReferences: true }, decorators: false })
+      const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
       di.bind(NodeA)
         .toSelf([NodeB])
       di.bind(NodeB)
@@ -219,7 +219,7 @@ describe('Circular References', function () {
         constructor(readonly a: OptA) {}
       }
 
-      const di = new DiCaf({ checks: { circularReferences: true }, decorators: false })
+      const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
       di.bind(OptA)
         .toSelf([optional(OptB)])
         .lazy()
@@ -239,7 +239,7 @@ describe('Circular References', function () {
         constructor(readonly a: DeferA) {}
       }
 
-      const di = new DiCaf({ checks: { circularReferences: true }, decorators: false })
+      const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
       di.bind(DeferA)
         .toSelf([defer(() => DeferB)])
       di.bind(DeferB)
@@ -254,7 +254,7 @@ describe('Circular References', function () {
 
   describe('multiple instances of a deferred key — decorated', function () {
     it('should exclude self when consumer is also bound to the abstract key', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const a = di.get(HandlerA)
@@ -265,7 +265,7 @@ describe('Circular References', function () {
     })
 
     it('should return empty array when consumer is the only implementation', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const a = di.get(SoleHandlerA)
@@ -273,7 +273,7 @@ describe('Circular References', function () {
     })
 
     it('should collect all implementations when consumer is not bound to the abstract key', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const dispatcher = di.get(Dispatcher)
@@ -293,7 +293,7 @@ describe('Circular References', function () {
       class HandlerB extends Handler {}
       class HandlerC extends Handler {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(HandlerA).toSelf([allOf(defer(() => Handler))])
         .extends(Handler)
       di.bind(HandlerB).toSelf()
@@ -316,7 +316,7 @@ describe('Circular References', function () {
         constructor(readonly peers: Handler[]) { super() }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(HandlerA).toSelf([allOf(defer(() => Handler))])
         .extends(Handler)
       await di.init()
@@ -335,7 +335,7 @@ describe('Circular References', function () {
         constructor(readonly handlers: Handler[]) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(HandlerA).toSelf()
         .extends(Handler)
       di.bind(HandlerB).toSelf()
@@ -358,7 +358,7 @@ describe('Circular References', function () {
         constructor(readonly deps: { a: DepA, b: DepB }) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(DepA).toSelf()
       di.bind(DepB).toSelf()
       di.bind(Consumer).toSelf([object({ a: defer(() => DepA), b: DepB })])
@@ -380,7 +380,7 @@ describe('Circular References', function () {
         tag() { return 'b' }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(ServiceA).toSelf([object({ b: defer(() => ServiceB) })])
       di.bind(ServiceB).toSelf([ServiceA])
       await di.init()
@@ -397,7 +397,7 @@ describe('Circular References', function () {
         constructor(readonly deps: { dep?: Dep }) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Dep).toSelf()
       di.bind(Consumer).toSelf([object({ dep: optional(defer(() => Dep)) })])
       await di.init()
@@ -413,7 +413,7 @@ describe('Circular References', function () {
         constructor(readonly deps: { dep?: Dep }) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Consumer).toSelf([object({ dep: optional(defer(() => Dep)) })])
       await di.init()
 
@@ -431,7 +431,7 @@ describe('Circular References', function () {
         constructor(readonly deps: { handlers: Handler[] }) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(HandlerA).toSelf()
         .extends(Handler)
       di.bind(HandlerB).toSelf()

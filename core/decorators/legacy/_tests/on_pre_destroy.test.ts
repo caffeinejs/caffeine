@@ -5,7 +5,7 @@ import { OnPreDestroy } from '../on_pre_destroy.legacy.js'
 import { Configuration } from '../configuration.legacy.js'
 import { Provides } from '../provides.legacy.js'
 import { Lazy } from '../lazy.legacy.js'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 
 describe('Legacy @OnPreDestroy', function () {
   it('should call the fn with the produced instance on dispose', async function () {
@@ -26,7 +26,7 @@ describe('Legacy @OnPreDestroy', function () {
 
     void AppConfigLegOPD
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     const instance = di.get(ConnLegOPD)
@@ -57,7 +57,7 @@ describe('Legacy @OnPreDestroy', function () {
 
     void CacheConfigLegOPD
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     di.get(CacheLegOPD)
@@ -89,7 +89,7 @@ describe('Legacy @OnPreDestroy', function () {
 
     void SvcConfigLegOPD
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     // Never call di.get(SvcLegOPD) → lazy bean never instantiated → not cached

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Binding } from '../binding.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { InjectionDescriptor } from '../injection.js'
 import { Key } from '../key.js'
 import { MetadataReader } from '../metadata_reader.js'
@@ -62,7 +62,7 @@ describe('Custom Binding Metadata', function () {
     }
 
     it('should resolve dependencies based on the return of the Symbols.injections function', async function () {
-      const di = new DiCaf({ metadataReader: builtInMetadataReader })
+      const di = new CaffeineIoC({ metadataReader: builtInMetadataReader })
 
       di.bind(Dep)
         .toSelf()
@@ -96,7 +96,7 @@ describe('Custom Binding Metadata', function () {
       }
 
       class Svc {}
-      const di = new DiCaf({ metadataReader: custom, decorators: false })
+      const di = new CaffeineIoC({ metadataReader: custom, decorators: false })
       di.bind(Svc)
         .toSelf()
 

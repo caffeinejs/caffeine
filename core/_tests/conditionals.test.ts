@@ -2,7 +2,7 @@ import { describe, it, beforeEach, expect, vi } from 'vitest'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { optional } from '../injection.js'
 import { Configuration } from '../decorators/configuration.js'
 import { ContainerBindingOps } from '../container_interface.js'
@@ -45,7 +45,7 @@ describe('Conditionals', function () {
     }
 
     it('should only register components that pass all provided conditionals', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
 
       expect(di.has(Pass))
         .toBeFalsy()
@@ -65,7 +65,7 @@ describe('Conditionals', function () {
     })
 
     it('should resolve components that pass conditionals and handle optional absent deps', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Managed)
         .toSelf()
       di.bind(Pass)
@@ -98,7 +98,7 @@ describe('Conditionals', function () {
       @ConditionalOn(ctx => ctx.container.has(ModuleSvc))
       class DependsOnModuleSvc {}
 
-      const di = new DiCaf((container: ContainerBindingOps) => {
+      const di = new CaffeineIoC((container: ContainerBindingOps) => {
         container.bind(ModuleSvc)
           .toSelf()
       })
@@ -116,7 +116,7 @@ describe('Conditionals', function () {
       @ConditionalOn(ctx => ctx.container.has(NeverBound))
       class DependsOnNeverBound {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.has(DependsOnNeverBound))
@@ -130,7 +130,7 @@ describe('Conditionals', function () {
       @ConditionalOn(async () => true)
       class AsyncTrueBean {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.has(AsyncTrueBean))
@@ -142,7 +142,7 @@ describe('Conditionals', function () {
       @ConditionalOn(async () => false)
       class AsyncFalseBean {}
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.has(AsyncFalseBean))
@@ -155,7 +155,7 @@ describe('Conditionals', function () {
       class PresenceSvc {}
       class ConditionalSvc {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(PresenceSvc)
         .toSelf()
       di.bind(ConditionalSvc)
@@ -173,7 +173,7 @@ describe('Conditionals', function () {
       class AbsentSvc {}
       class ConditionalSvcFailing {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(ConditionalSvcFailing)
         .toSelf()
         .conditional(ctx => ctx.container.has(AbsentSvc))
@@ -186,7 +186,7 @@ describe('Conditionals', function () {
     it('should support async conditional functions', async function () {
       class AsyncConditionalSvc {}
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(AsyncConditionalSvc)
         .toSelf()
         .conditional(async () => true)
@@ -213,7 +213,7 @@ describe('Conditionals', function () {
       }
       void FailingConf
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.has(FailingConf))
@@ -235,7 +235,7 @@ describe('Conditionals', function () {
       }
       void PassingConf
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       expect(di.has(PassingConf))
@@ -317,7 +317,7 @@ describe('Conditionals', function () {
       })
 
       it('should merge the conditionals from class and method level', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         expect(di.has(NoConf))

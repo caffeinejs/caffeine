@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('interfaces', function () {
   describe('given an interface with multiple implementations and one of them using a named key', function () {
@@ -36,7 +36,7 @@ describe('interfaces', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Service)
         .toSelf()
       await di.init()
@@ -57,7 +57,7 @@ describe('interfaces', function () {
         }
       }
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       for (let i = 0; i < 3; i++) {

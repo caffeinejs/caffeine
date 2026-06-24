@@ -1,14 +1,14 @@
 # Guides
 
-Task-oriented documentation for common DiCaf workflows. Start with
+Task-oriented documentation for common CaffeineIoC workflows. Start with
 [Getting Started](./getting-started.md) if you are new to the library.
 
 ## Table of contents
 
-- [Getting Started](./getting-started.md) — install DiCaf, create your first
+- [Getting Started](./getting-started.md) — install CaffeineIoC, create your first
   container, and resolve your first dependency.
 
-- [Configuring the Container](./configuring-container.md) — all `DiCaf` constructor
+- [Configuring the Container](./configuring-container.md) — all `CaffeineIoC` constructor
   options: default scope, lazy mode, profiles, scope validation, circular reference
   detection, parent containers, and metadata readers.
 

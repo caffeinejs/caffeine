@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Configuration } from '../configuration.legacy.js'
 import { Provides } from '../provides.legacy.js'
 import { Async } from '../async.legacy.js'
@@ -22,7 +22,7 @@ describe('Legacy @Async', function () {
 
     void AsyncConnConfig
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()

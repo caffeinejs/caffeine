@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { UseAsyncFactory } from '../use_async_factory.legacy.js'
 
@@ -16,7 +16,7 @@ describe('Legacy @UseAsyncFactory', function () {
       builtBy = 'constructor'
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -51,7 +51,7 @@ describe('Legacy @UseAsyncFactory', function () {
       value = ''
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()

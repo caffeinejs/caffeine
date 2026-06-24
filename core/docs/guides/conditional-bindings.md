@@ -261,9 +261,9 @@ including the method-level predicates.
 The fluent binder exposes `.conditional()` for the same behaviour without decorators.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
-const di = new DiCaf({ decorators: false })
+const di = new CaffeineIoC({ decorators: false })
 
 di.bind(StripeEUGateway)
   .toSelf()

@@ -4,7 +4,7 @@ sidebar_label: Collections
 
 # Collections
 
-DiCaf can inject multiple bindings registered under the same key into a single
+CaffeineIoC can inject multiple bindings registered under the same key into a single
 dependency — either as an **array** with `allOf()`, or as a **`Map`** with `mapped()`.
 Both functions are imported from the core package.
 
@@ -128,7 +128,7 @@ Both `allOf` and `mapped` work identically without decorators. Pass the injectio
 descriptor in the `deps` array when calling `bind().toSelf()` or `bind().toClass()`.
 
 ```ts
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(RequiredValidator).toSelf().extends(Validator)
 di.bind(LengthValidator).toSelf().extends(Validator)

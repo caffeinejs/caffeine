@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import supertest from 'supertest'
 import fastify from 'fastify'
 import { address, Controller, Get, header, Method, method, newHTTP, Params, param, path, port, query, signal, url } from '@caffeinejs/http'
-import { DiCaf, Scopes } from '@caffeinejs/core'
+import { CaffeineIoC, Scopes } from '@caffeinejs/core'
 import { Injectable, Lifetime } from '@caffeinejs/core/decorators'
 import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
@@ -12,7 +12,7 @@ describe('Fastify Adapter', () => {
     const app = fastify()
     app.get('/', () => ({ ok: true }))
 
-    const adapter = new FastifyAdapter(new DiCaf(), app, [])
+    const adapter = new FastifyAdapter(new CaffeineIoC(), app, [])
     await adapter.ready()
 
     expect(adapter.instance()).toBe(app)
@@ -24,7 +24,7 @@ describe('Fastify Adapter', () => {
     const app = fastify()
     app.get('/', () => ({ ok: true }))
 
-    const adapter = new FastifyAdapter(new DiCaf(), app, [])
+    const adapter = new FastifyAdapter(new CaffeineIoC(), app, [])
     await adapter.ready()
     const result = await adapter.instance().inject('/')
 

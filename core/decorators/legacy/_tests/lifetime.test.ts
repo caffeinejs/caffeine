@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Scopes } from '../../../scope.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Lifetime } from '../lifetime.legacy.js'
@@ -13,7 +13,7 @@ describe('Legacy lifetime decorators', function () {
       readonly id = Math.random()
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -32,7 +32,7 @@ describe('Legacy lifetime decorators', function () {
       readonly id = Math.random()
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -53,7 +53,7 @@ describe('Legacy lifetime decorators', function () {
       readonly id = Math.random()
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()

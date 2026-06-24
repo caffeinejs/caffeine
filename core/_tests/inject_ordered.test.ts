@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/legacy/injectable.legacy.js'
 import { Order } from '../decorators/order.js'
 import { ordered } from '../injection.js'
@@ -37,7 +37,7 @@ describe('ordered() injection', function () {
     }
 
     it('injects handlers sorted by order value ascending', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const pipeline = di.get(Pipeline)
@@ -70,7 +70,7 @@ describe('ordered() injection', function () {
     }
 
     it('preserves original registration order among ties (stable sort)', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const consumer = di.get(TiedConsumer)
@@ -109,7 +109,7 @@ describe('ordered() injection', function () {
     }
 
     it('places ordered bindings before unordered ones', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const chain = di.get(Chain)
@@ -129,7 +129,7 @@ describe('ordered() injection', function () {
     }
 
     it('injects an empty array', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const consumer = di.get(Consumer)
@@ -168,7 +168,7 @@ describe('ordered() with .order() binder option', function () {
         .order(3)
     })
 
-    const di = new DiCaf(m)
+    const di = new CaffeineIoC(m)
     await di.init()
 
     const plugins = di.build(
@@ -207,7 +207,7 @@ describe('ordered() with .order() binder option', function () {
         .order(2)
     })
 
-    const di = new DiCaf(m)
+    const di = new CaffeineIoC(m)
     await di.init()
 
     const svcs = di.build(

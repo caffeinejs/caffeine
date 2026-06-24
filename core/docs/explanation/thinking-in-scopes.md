@@ -49,7 +49,7 @@ class NotificationService { ... }
 `NotificationService` is a singleton. It receives `EmailSender` during `init()`,
 and holds it forever. But `EmailSender` was transient — it was supposed to be
 created fresh on every use. The singleton accidentally froze one transient
-instance for its entire lifetime. DiCaf throws during `init()` to prevent this.
+instance for its entire lifetime. CaffeineIoC throws during `init()` to prevent this.
 
 The technical term for this bug is a **scope leak**.
 
@@ -78,7 +78,7 @@ class NotificationService {
 **Option 3 — Disable validation.** If you know what you are doing:
 
 ```ts
-new DiCaf({ checks: { scopes: 'off' } })
+new CaffeineIoC({ checks: { scopes: 'off' } })
 ```
 
 ---

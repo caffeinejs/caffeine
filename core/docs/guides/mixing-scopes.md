@@ -1,6 +1,6 @@
 # Mixing Scopes
 
-By default, DiCaf prevents scope violations at initialization time: a longer-lived
+By default, CaffeineIoC prevents scope violations at initialization time: a longer-lived
 component cannot hold a direct reference to a shorter-lived one, because the
 shorter-lived instance would be captured and reused for the lifetime of the
 longer-lived owner — the classic **scope leak**.
@@ -27,8 +27,8 @@ Even without the check enabled, the bug exists silently: `session` is resolved o
 and the same stale instance is reused for every request.
 
 :::warning
-DiCaf does not perform scope bubbling. Frameworks like NestJS silently promote a
-shorter-lived dependency to the lifetime of its consumer. DiCaf refuses to do this —
+CaffeineIoC does not perform scope bubbling. Frameworks like NestJS silently promote a
+shorter-lived dependency to the lifetime of its consumer. CaffeineIoC refuses to do this —
 the scope each binding declares is the scope it keeps. Use `provide()` to cross scope
 boundaries explicitly.
 :::
@@ -152,7 +152,7 @@ Enable scope validation at container level to catch violations early.
 By default, the container uses: `compatible-scopes-only`.
 
 ```ts
-const di = new DiCaf({ checks: { scopes: 'compatible-scopes-only' } })
+const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' } })
 ```
 
 Use `'compatible-scopes-only'` for a relaxed variant that allows durable scopes

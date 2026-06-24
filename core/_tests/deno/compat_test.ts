@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { DiCaf } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/core'
 import { Configuration, Injectable, Provides } from '@caffeinejs/core/decorators'
 
 Deno.test('public API exposes the core symbols', () => {
-  assert.equal(typeof DiCaf, 'function')
+  assert.equal(typeof CaffeineIoC, 'function')
   assert.equal(typeof Injectable, 'function')
   assert.equal(typeof Configuration, 'function')
   assert.equal(typeof Provides, 'function')
@@ -34,7 +34,7 @@ Deno.test('resolves a constructor-injected dependency graph', async () => {
     ) {}
   }
 
-  const di = new DiCaf()
+  const di = new CaffeineIoC()
   await di.init()
   const root = di.get(Root)
 
@@ -58,7 +58,7 @@ Deno.test('resolves a @Configuration @Provides factory bean', async () => {
     }
   }
 
-  const di = new DiCaf()
+  const di = new CaffeineIoC()
   await di.init()
   const connection = di.get(Connection)
 

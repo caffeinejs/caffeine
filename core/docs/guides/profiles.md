@@ -44,7 +44,7 @@ class StubPaymentGateway extends PaymentGateway {
 Activate profiles when constructing the container:
 
 ```ts
-const di = new DiCaf({ profiles: ['test'] })
+const di = new CaffeineIoC({ profiles: ['test'] })
 await di.init()
 
 di.get(StubPaymentGateway) // resolves — 'test' is active
@@ -54,7 +54,7 @@ di.get(StripeEUGateway)    // resolves — no profile, always active
 When no profiles are active, only no-profile bindings are registered:
 
 ```ts
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 di.get(StripeEUGateway)    // resolves
@@ -83,7 +83,7 @@ class VerboseLogger extends Logger {
 Pass multiple profile names to the container. All listed profiles are active at once:
 
 ```ts
-const di = new DiCaf({ profiles: ['eu', 'test'] })
+const di = new CaffeineIoC({ profiles: ['eu', 'test'] })
 await di.init()
 // bindings tagged @Profile('eu'), @Profile('test'), or @Profile('eu', 'test') are all active
 ```
@@ -118,7 +118,7 @@ Activate the profile in test runs to wire in the full stub infrastructure in one
 
 ```ts
 // vitest setup file
-const di = new DiCaf({ profiles: ['test'] })
+const di = new CaffeineIoC({ profiles: ['test'] })
 await di.init()
 ```
 

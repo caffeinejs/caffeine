@@ -1,6 +1,6 @@
 import { Container, ContainerBindingOps } from './container_interface.js'
 
-const kName = Symbol('dicaf.module.name')
+const kName = Symbol('@caffeinejs/core:module.name')
 
 /**
  * Module can be used to register bindings within a {@link Container} instance in a modular way.
@@ -22,7 +22,7 @@ const kName = Symbol('dicaf.module.name')
  * import { orderModule } from './order.mod.js'
  * import { usersModule } from './users.mod.js'
  *
- * const container = new DiCaf([orderModule, usersModule])
+ * const container = new CaffeineIoC([orderModule, usersModule])
  * await container.init()
  * ```
  */

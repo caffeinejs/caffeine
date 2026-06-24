@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/legacy/injectable.legacy.js'
 import { Named } from '../decorators/named.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { allOf } from '../injection.js'
 
 describe('given multiple named injectables sharing the same name', function () {
@@ -41,7 +41,7 @@ describe('given multiple named injectables sharing the same name', function () {
     }
 
     it('should inject all named implementations except the one that asked for them', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const root = di.get(Root)
@@ -88,7 +88,7 @@ describe('given multiple injectables extending the same abstract class', functio
     }
 
     it('should inject all implementations abstract class implementations, expect the one that asked for them', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
 
       const root = di.get(Root)

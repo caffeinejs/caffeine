@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Configuration } from '../configuration.legacy.js'
 import { Provides } from '../provides.legacy.js'
@@ -57,7 +57,7 @@ describe('Legacy @Interceptor', function () {
   @Injectable()
   class MultiInterceptedClass {}
 
-  const di = new DiCaf()
+  const di = new CaffeineIoC()
 
   beforeAll(async () => {
     await di.init()

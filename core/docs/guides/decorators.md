@@ -4,7 +4,7 @@ sidebar_label: Decorators
 
 # Decorators
 
-DiCaf ships two decorator flavours. Choosing the wrong one — or mixing both — causes
+CaffeineIoC ships two decorator flavours. Choosing the wrong one — or mixing both — causes
 runtime errors that are hard to trace. This guide explains the difference, how to set
 each one up, and how to enforce consistency with ESLint.
 
@@ -71,7 +71,7 @@ import { Injectable, Lifetime, Scopes } from '@caffeine-projects/dicaf/decorator
 ### Setup
 
 Install `reflect-metadata` and import it once at your application entry point before
-any DiCaf code runs:
+any CaffeineIoC code runs:
 
 ```sh
 npm install reflect-metadata
@@ -85,7 +85,7 @@ import 'reflect-metadata'
 ### Declaring dependencies
 
 With `emitDecoratorMetadata: true`, the compiler emits constructor parameter types as
-metadata. DiCaf reads this at startup so you do not need an explicit dependency list:
+metadata. CaffeineIoC reads this at startup so you do not need an explicit dependency list:
 
 ```ts
 @Injectable()

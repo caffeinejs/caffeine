@@ -1,6 +1,6 @@
 # Errors
 
-DiCaf errors extend `DiCafError`, which in turn extends `Error`. All errors
+CaffeineIoC errors extend `CaffeineIoCError`, which in turn extends `Error`. All errors
 carry a `code` string that identifies the error type programmatically.
 
 ```ts

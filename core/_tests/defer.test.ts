@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { allOf, defer, optional } from '../injection.js'
 import { ErrScopeMismatch } from '../errors.js'
 import { Scopes } from '../scope.js'
@@ -17,7 +17,7 @@ describe('defer() composition', function () {
         constructor(readonly dep: Dep | undefined) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Dep)
         .toSelf()
       di.bind(Owner)
@@ -39,7 +39,7 @@ describe('defer() composition', function () {
           constructor(readonly dep: MissingDep | undefined) {}
         }
 
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         di.bind(Owner)
           .toSelf([optional(defer(() => MissingDep))])
         await di.init()
@@ -71,7 +71,7 @@ describe('defer() composition', function () {
         constructor(readonly plugins: { name(): string }[]) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(PluginA)
         .toSelf()
         .names(kPlugin)
@@ -97,7 +97,7 @@ describe('defer() composition', function () {
         constructor(readonly items: unknown[]) {}
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Host)
         .toSelf([allOf(defer(() => kAbsent))])
       await di.init()
@@ -114,7 +114,7 @@ describe('defer() composition', function () {
         constructor(readonly deps: TransientDep[]) {}
       }
 
-      const di = new DiCaf({ checks: { scopes: 'no-mix' }, decorators: false })
+      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
       di.bind(TransientDep)
         .toSelf()
         .lifetime(Scopes.TRANSIENT)

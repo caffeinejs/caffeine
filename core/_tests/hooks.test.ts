@@ -7,7 +7,7 @@ import { Profile } from '../decorators/profile.js'
 import { PostConstruct } from '../decorators/post_construct.js'
 import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Provides } from '../decorators/provides.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { HookListener } from '../hooks.js'
@@ -52,7 +52,7 @@ describe('Hooks', function () {
     }
 
     it('should call method marked as on destroy when instance is a singleton', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(Dep)
         .toSelf()
       await di.init()
@@ -65,7 +65,7 @@ describe('Hooks', function () {
     })
 
     it('should accept async destroy method', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(AsyncDep)
         .toSelf()
       await di.init()
@@ -134,7 +134,7 @@ describe('Hooks', function () {
     }
 
     it('should execute after property, method and any other post providers', async function () {
-      const di = new DiCaf({ profiles: ['hooks-post-construct'] })
+      const di = new CaffeineIoC({ profiles: ['hooks-post-construct'] })
       await di.init()
 
       di.get(Component)
@@ -159,7 +159,7 @@ describe('Hooks', function () {
 
       it('fires with async: false when sync factory throws', async function () {
         const failListener = vi.fn()
-        const di = new DiCaf({ profiles: ['hook-init-fail-sync'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-fail-sync'], decorators: false })
         di.hooks.on('onBindingInitializationFailed', failListener)
         di.autoWire()
 
@@ -191,7 +191,7 @@ describe('Hooks', function () {
 
       it('fires with async: true when async factory rejects', async function () {
         const failListener = vi.fn()
-        const di = new DiCaf({ profiles: ['hook-init-fail-async'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-fail-async'], decorators: false })
         di.hooks.on('onBindingInitializationFailed', failListener)
         di.autoWire()
 
@@ -217,7 +217,7 @@ describe('Hooks', function () {
 
       it('fires with async: false and matching instance', async function () {
         const listener = vi.fn()
-        const di = new DiCaf({ profiles: ['hook-init-sync'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-sync'], decorators: false })
         di.hooks.on('onBindingInitialized', listener)
         di.autoWire()
         await di.init()
@@ -249,7 +249,7 @@ describe('Hooks', function () {
 
       it('fires with async: true and matching instance', async function () {
         const listener = vi.fn()
-        const di = new DiCaf({ profiles: ['hook-init-async'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-async'], decorators: false })
         di.hooks.on('onBindingInitialized', listener)
         di.autoWire()
         await di.init()
@@ -272,7 +272,7 @@ describe('Hooks', function () {
 
       it('does not fire for lazy binding during init()', async function () {
         const listener = vi.fn()
-        const di = new DiCaf({ profiles: ['hook-init-lazy'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-lazy'], decorators: false })
         di.hooks.on('onBindingInitialized', listener)
         di.autoWire()
         await di.init()
@@ -331,7 +331,7 @@ describe('Hooks', function () {
     }
 
     it('should call inspector methods on container specific registration steps', async function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       di.hooks.on('onSetup', a => spy())
       di.hooks.on('onBindingRegistered', a => spy())

@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { ErrScopeMismatchInConfiguration } from '../../../errors.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Configuration } from '../configuration.legacy.js'
@@ -26,7 +26,7 @@ describe('Legacy @Configuration + @Provides', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -59,7 +59,7 @@ describe('Legacy @Configuration + @Provides', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -87,7 +87,7 @@ describe('Legacy @Configuration + @Provides', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -111,7 +111,7 @@ describe('Legacy @Configuration + @Provides', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -139,7 +139,7 @@ describe('Legacy @Configuration + @Provides', function () {
 
     void AsyncClientConfig
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -184,7 +184,7 @@ describe('Legacy @Configuration + @Provides', function () {
 
     void MultiConfig
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()

@@ -4,7 +4,7 @@ import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { ErrInvalidContainerState, ErrNoResolutionForKey, ErrRepeatedInjectableConfiguration } from '../errors.js'
 import { Configuration } from '../decorators/configuration.js'
 
@@ -49,7 +49,7 @@ describe('Named Dependencies', function () {
   }
 
   it('should resolve based on dependency qualifier', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const root = di.get(Root)
 
@@ -60,7 +60,7 @@ describe('Named Dependencies', function () {
   })
 
   it('should resolve same instance when using named and type', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const bye = di.get(ByeService)
     const byeNamed = di.get(kBye)
@@ -87,7 +87,7 @@ describe('Named Dependencies', function () {
           }
         }
 
-        new DiCaf()
+        new CaffeineIoC()
       })
         .toThrow()
     })
@@ -109,7 +109,7 @@ describe('Named Dependencies', function () {
           }
         }
 
-        new DiCaf()
+        new CaffeineIoC()
       })
         .toThrow()
     })
@@ -139,7 +139,7 @@ describe('Named Dependencies', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -182,7 +182,7 @@ describe('Named Dependencies', function () {
 
     describe('when no binding exists for the key', function () {
       it('should return empty array for unregistered class key', async function () {
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
         expect(di.getManyOptional(LocalSvc)).toEqual([])
@@ -190,14 +190,14 @@ describe('Named Dependencies', function () {
 
       it('should return empty array for unregistered symbol key', async function () {
         const kMissing = Symbol('missing')
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
         expect(di.getManyOptional(kMissing)).toEqual([])
       })
 
       it('should return empty array for unregistered string key', async function () {
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
         expect(di.getManyOptional('no-such-key')).toEqual([])
@@ -206,7 +206,7 @@ describe('Named Dependencies', function () {
 
     describe('when a single binding exists', function () {
       it('should return array with one instance for class key', async function () {
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
           c.bind(LocalSvc).toSelf()
         })
@@ -219,7 +219,7 @@ describe('Named Dependencies', function () {
 
       it('should return array with one instance for symbol key', async function () {
         const kSymbol = Symbol('getManyOptional-single')
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
           c.bind(kSymbol).toValue(42)
         })
@@ -231,7 +231,7 @@ describe('Named Dependencies', function () {
       })
 
       it('should return array with one instance for string key', async function () {
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
           c.bind('str-key').toValue('hello')
         })
@@ -246,7 +246,7 @@ describe('Named Dependencies', function () {
     describe('contrast with getMany', function () {
       it('should return empty array where getMany would throw', async function () {
         const kUnknown = Symbol('unknown')
-        const di = new DiCaf({ decorators: false })
+        const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
         expect(() => di.getMany(kUnknown)).toThrow(ErrNoResolutionForKey)
@@ -255,7 +255,7 @@ describe('Named Dependencies', function () {
     })
 
     it('should throw ErrInvalidContainerState before init', function () {
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
 
       expect(() => di.getManyOptional(LocalSvc)).toThrow(ErrInvalidContainerState)
     })

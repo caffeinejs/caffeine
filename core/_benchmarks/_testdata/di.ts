@@ -1,4 +1,4 @@
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { Injectable } from '../../decorators/injectable.js'
 import { Lifetime } from '../../decorators/lifetime.js'
 import { Scopes } from '../../scope.js'
@@ -105,7 +105,7 @@ export class RootSingleton {
   ) {}
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 export { di }

@@ -135,7 +135,7 @@ await container.refresher.refresh()
 
 ## Scope compatibility
 
-By default, DiCaf enforces compatible-scope rules: a singleton may not depend
+By default, CaffeineIoC enforces compatible-scope rules: a singleton may not depend
 on a transient directly, because the transient would be created once and
 effectively become a singleton. The container throws during `init()` if this
 rule is violated.
@@ -143,9 +143,9 @@ rule is violated.
 Behaviour is controlled by the `checks.scopes` option:
 
 ```ts
-new DiCaf({ checks: { scopes: 'no-mix' } })                    // strict: exact scope match
-new DiCaf({ checks: { scopes: 'compatible-scopes-only' } })    // default
-new DiCaf({ checks: { scopes: 'off' } })                       // no validation
+new CaffeineIoC({ checks: { scopes: 'no-mix' } })                    // strict: exact scope match
+new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' } })    // default
+new CaffeineIoC({ checks: { scopes: 'off' } })                       // no validation
 ```
 
 To inject a shorter-lived dependency into a longer-lived one, use
@@ -222,7 +222,7 @@ class UserSession { ... }
 ```
 
 Scope factories are global — call `bindScope()` once at application startup,
-before any `new DiCaf()` call.
+before any `new CaffeineIoC()` call.
 
 ---
 

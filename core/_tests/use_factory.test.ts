@@ -5,7 +5,7 @@ import { Lazy } from '../decorators/lazy.js'
 import { UseFactory } from '../decorators/use_factory.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Scopes } from '../scope.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { classFactory } from '../internal/core/factory/class.js'
 import { Factory } from '../factory.js'
 import { ResolutionContext } from '../resolution_context.js'
@@ -45,7 +45,7 @@ describe(`@${UseFactory.name}()`, function () {
   }
 
   it('should use custom factory provided in the decorator', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const loggable = di.get(Loggable)
 
@@ -58,7 +58,7 @@ describe(`@${UseFactory.name}()`, function () {
   })
 
   it('should use a factory factory using the function provided in the decorator', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const dep = di.get(Dep)
 
@@ -97,7 +97,7 @@ describe(`@${UseFactory.name}()`, function () {
   }
 
   it('should provide another bean instance different from the decorated type', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const repo = di.get(User) as Repo<User>
     const repo2 = di.get(User) as Repo
@@ -111,7 +111,7 @@ describe(`@${UseFactory.name}()`, function () {
   })
 
   it('should provide another bean respecting configurations set on key class', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const repo = di.get(TrUser) as Repo<User>
     const repo2 = di.get(TrUser) as Repo
@@ -124,7 +124,7 @@ describe(`@${UseFactory.name}()`, function () {
   })
 
   it('should inject provided component', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const svc = di.get(Svc)
 

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { optional } from '../injection.js'
 
-describe('DiCaf', function () {
+describe('CaffeineIoC', function () {
   const kTestName = Symbol('test-name')
 
   @Injectable()
@@ -25,7 +25,7 @@ describe('DiCaf', function () {
   }
 
   it('should print the type name when calling toString()', function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     di.bind('tk100')
       .toValue('test')
     di.bind('tk200')
@@ -45,11 +45,11 @@ describe('DiCaf', function () {
     expect(str)
       .toContain('tk200')
     expect(protoStr)
-      .toEqual('[object DiCaf]')
+      .toEqual('[object CaffeineIoC]')
   })
 
   it('should support iteration via entries() and direct Symbol.iterator', function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     for (const [key, binding] of di.entries()) {
       expect(key)
@@ -84,7 +84,7 @@ describe('DiCaf', function () {
   // This test considers ALL injectable defined in this test file
   // --
   it('should return the number of registered components when calling size()', function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     const userDefined = 3 // all injectables in this file
     const internal = 1 // the internal components (request scope manager is not enabled in this test)
     const expected = userDefined + internal

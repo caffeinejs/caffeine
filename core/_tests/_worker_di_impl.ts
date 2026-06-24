@@ -1,5 +1,5 @@
 import { parentPort } from 'node:worker_threads'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Scopes } from '../scope.js'
@@ -37,7 +37,7 @@ class Service {
   }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 const c1 = di.get(Counter)

@@ -20,10 +20,10 @@ A function called once per binding registration, after decorator metadata is
 collected. Its return value is merged over the decorator-derived binding config —
 fields returned by the reader take precedence over decorator values.
 
-Passed as the `metadataReader` option in the `DiCaf` constructor:
+Passed as the `metadataReader` option in the `CaffeineIoC` constructor:
 
 ```ts
-const di = new DiCaf({ metadataReader: myReader })
+const di = new CaffeineIoC({ metadataReader: myReader })
 ```
 
 See [container options](./container.md#options) for the full options table.
@@ -31,7 +31,7 @@ See [container options](./container.md#options) for the full options table.
 ### When to use
 
 `MetadataReader` is an integration point for bridging external metadata sources
-into DiCaf. Common use cases:
+into CaffeineIoC. Common use cases:
 
 - Reading scope or profile overrides from a configuration file or environment
 - Importing binding metadata from another framework's annotation system
@@ -68,7 +68,7 @@ const reader: MetadataReader = key => {
   return scopeId ? { scopeId } : {}
 }
 
-const di = new DiCaf({ metadataReader: reader })
+const di = new CaffeineIoC({ metadataReader: reader })
 ```
 
 ### Useful Binding fields to override

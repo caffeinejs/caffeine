@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { Scopes } from '../../scope.js'
 import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
@@ -8,7 +8,7 @@ describe('Transient scope memory', function () {
   it('does not retain transient instances after resolution', async function () {
     class TrSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(TrSvc)
       .toSelf()
       .lifetime(Scopes.TRANSIENT)
@@ -26,7 +26,7 @@ describe('Transient scope memory', function () {
   it('each resolution produces an independent unreferenced instance', async function () {
     class TrSvc {}
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
     di.bind(TrSvc)
       .toSelf()
       .lifetime(Scopes.TRANSIENT)

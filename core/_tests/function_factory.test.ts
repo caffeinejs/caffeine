@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { optional } from '../injection.js'
 
 describe('Functions', function () {
@@ -20,7 +20,7 @@ describe('Functions', function () {
     }
 
     it('should resolve functions injecting required dependencies', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       const kFn = Symbol('fn')
       const fn = (dep: Dep, nm: Nm, opt?: Opt) => (message: string) =>
         `received: ${message} - ${dep.value} - ${nm.id} - ${opt === undefined}`
@@ -51,7 +51,7 @@ describe('Functions', function () {
         greet: () => msg.msg() + ' world',
       })
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind(kFn)
         .toFunction(fn, [Msg])
       await di.init()
@@ -69,7 +69,7 @@ describe('Functions', function () {
       const kFn = Symbol('fn-no-deps')
       const fn = () => 'no deps'
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind(kFn)
         .toFunction(fn)
       await di.init()
@@ -86,7 +86,7 @@ describe('Functions', function () {
       const kFn = Symbol('fn-2-deps')
       const fn = (a: string, b: string) => `${a}-${b}`
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind('fn2-dep-a')
         .toValue('alpha')
       di.bind('fn2-dep-b')
@@ -107,7 +107,7 @@ describe('Functions', function () {
       const kFn = Symbol('fn-4-deps')
       const fn = (a: string, b: string, c: string, d: string) => `${a}-${b}-${c}-${d}`
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind('fn4-dep-a')
         .toValue('a')
       di.bind('fn4-dep-b')
@@ -133,7 +133,7 @@ describe('Functions', function () {
       const fn = (a: string, b: string, c: string, d: string, e: string) =>
         `${a}-${b}-${c}-${d}-${e}`
 
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       di.bind('fn5-dep-a')
         .toValue('a')
       di.bind('fn5-dep-b')

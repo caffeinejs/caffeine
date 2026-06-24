@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 import { Scopes } from '../../../scope.js'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { PreDestroy } from '../../../decorators/pre_destroy.js'
@@ -51,7 +51,7 @@ describe('Refresh Scope', function () {
         }
       }
 
-      const di = new DiCaf({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false })
       di.bind(WithCustomDestroy)
         .toSelf()
       await di.init()
@@ -68,7 +68,7 @@ describe('Refresh Scope', function () {
 
   describe('when request a scope refresh', function () {
     it('should reset refresh scoped components', async function () {
-      const di = new DiCaf()
+      const di = new CaffeineIoC()
       await di.init()
       const scope = di.refresher
 

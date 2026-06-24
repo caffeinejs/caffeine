@@ -1,6 +1,6 @@
 # Dependency Graph
 
-DiCaf can render the bindings of a container as a dependency graph in several
+CaffeineIoC can render the bindings of a container as a dependency graph in several
 formats. This is useful for auditing dependency relationships, spotting
 unexpected couplings, and generating architecture diagrams.
 
@@ -15,7 +15,7 @@ A plain-text tree suitable for logging or terminal output.
 ```ts
 import { graphToText } from '@caffeine-projects/dicaf'
 
-const container = new DiCaf()
+const container = new CaffeineIoC()
 await container.init()
 
 console.log(graphToText(container))
@@ -82,7 +82,7 @@ startup check:
 import { writeFileSync } from 'node:fs'
 import { graphToMermaid } from '@caffeine-projects/dicaf'
 
-const container = new DiCaf()
+const container = new CaffeineIoC()
 await container.init()
 container.assertResolvable()
 

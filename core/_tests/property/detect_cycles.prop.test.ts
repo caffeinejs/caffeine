@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { DiCaf } from '../../container.js'
+import { CaffeineIoC } from '../../container.js'
 import { ErrCircularDependency } from '../../errors.js'
 import { defer, optional } from '../../injection.js'
 import { addBackEdge, buildAcyclicEdges, buildDiFromEdges } from './helpers/cycle_di_builder.js'
@@ -53,7 +53,7 @@ describe('detectCycles via init (property)', function () {
   })
 
   it('optional closing edge does not trigger ErrCircularDependency at init', async function () {
-    const di = new DiCaf({ checks: { circularReferences: true }, decorators: false })
+    const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
     di.bind('a')
       .toFunction((_b: unknown) => ({}), [optional('b')])
       .lazy()
@@ -65,7 +65,7 @@ describe('detectCycles via init (property)', function () {
   })
 
   it('defer closing edge does not trigger ErrCircularDependency at init', async function () {
-    const di = new DiCaf({ checks: { circularReferences: true }, decorators: false })
+    const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
     di.bind('a')
       .toFunction(
         (_b: unknown) => ({}),

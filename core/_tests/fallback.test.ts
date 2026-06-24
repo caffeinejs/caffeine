@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Fallback } from '../decorators/fallback.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
@@ -19,7 +19,7 @@ describe('@Fallback() on a class', function () {
   }
 
   it('should register when no other binding exists for the key', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     expect(di.has(DefaultService))
@@ -30,7 +30,7 @@ describe('@Fallback() on a class', function () {
   })
 
   it('should be skipped when a non-fallback binding is manually registered for the same key', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     class OverrideService {
       value() {
@@ -92,7 +92,7 @@ describe('@Fallback() on a @Provides method', function () {
   }
 
   it('should register a fallback @Provides bean when no other binding exists for the key', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     expect(di.get(kFallbackOnly))
@@ -100,7 +100,7 @@ describe('@Fallback() on a @Provides method', function () {
   })
 
   it('should skip a fallback @Provides bean when a non-fallback binding exists for the same key', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     expect(di.get(kShared))
@@ -108,7 +108,7 @@ describe('@Fallback() on a @Provides method', function () {
   })
 
   it('should always register non-fallback @Provides beans from the same @Configuration class', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     expect(di.get(kConcrete))
@@ -128,7 +128,7 @@ describe('.fallback() on BinderOptions', function () {
       }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
 
     di.bind(kFlu)
       .toClass(FluLib)
@@ -156,7 +156,7 @@ describe('.fallback() on BinderOptions', function () {
       }
     }
 
-    const di = new DiCaf({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false })
 
     di.bind(kFlu2)
       .toClass(FluLib)
@@ -199,7 +199,7 @@ describe('@Fallback() ordering guarantee via @Provides', function () {
   }
 
   it('should always process non-fallback @Provides beans before fallback @Provides beans', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
 
     expect(di.get(kFirst))
@@ -231,7 +231,7 @@ describe('@Fallback() + @ConditionalOn() — conditional evaluation', function (
   class FbCondSkip {}
 
   it('should register a @Fallback + @ConditionalOn bean when condition passes and no competing binding exists', async function () {
-    const di = new DiCaf({ profiles: ['fb-cond-pass'] })
+    const di = new CaffeineIoC({ profiles: ['fb-cond-pass'] })
     await di.init()
 
     expect(di.has(FbCondPass)).toBe(true)
@@ -239,14 +239,14 @@ describe('@Fallback() + @ConditionalOn() — conditional evaluation', function (
   })
 
   it('should not register a @Fallback + @ConditionalOn bean when condition fails', async function () {
-    const di = new DiCaf({ profiles: ['fb-cond-fail'] })
+    const di = new CaffeineIoC({ profiles: ['fb-cond-fail'] })
     await di.init()
 
     expect(di.has(FbCondFail)).toBe(false)
   })
 
   it('should skip a @Fallback + @ConditionalOn bean when a competing binding already exists', async function () {
-    const di = new DiCaf({ profiles: ['fb-cond-skip'] })
+    const di = new CaffeineIoC({ profiles: ['fb-cond-skip'] })
     di.bind(FbCondSkip).toValue('override' as unknown as FbCondSkip)
     await di.init()
 

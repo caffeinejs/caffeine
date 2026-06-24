@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { object, allOf, optional } from '../injection.js'
-import { DiCaf } from '../container.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('Destructuring', function () {
   const kDep = Symbol('test')
@@ -81,7 +81,7 @@ describe('Destructuring', function () {
   }
 
   it('should resolve argument bag in same well it would resolve normal args', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const root = di.get(Root)
 
@@ -100,7 +100,7 @@ describe('Destructuring', function () {
   })
 
   it('should resolve constructor mixing different argument types', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const diff = di.get(DiffTypes)
 
@@ -123,7 +123,7 @@ describe('Destructuring', function () {
   })
 
   it('should resolve deep nested destructuring bags', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const nested = di.get(Nested)
 
@@ -138,7 +138,7 @@ describe('Destructuring', function () {
   })
 
   it('should resolve symbol-keyed fields in destructuring bag', async function () {
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
     await di.init()
     const sym = di.get(SymbolKeyed)
 

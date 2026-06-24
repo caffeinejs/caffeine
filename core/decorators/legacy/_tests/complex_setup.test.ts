@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { Injectable } from '../injectable.legacy.js'
 import { Named } from '../named.legacy.js'
 import { Extends } from '../extends.legacy.js'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Primary } from '../primary.legacy.js'
 import { Inject } from '../inject.legacy.js'
 import { allOf } from '../../../injection.js'
@@ -40,7 +40,7 @@ describe('Complex setup', function () {
       }
 
       it('should inject the correct primary injectable', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         const service = di.get(Service)
@@ -62,7 +62,7 @@ describe('Complex setup', function () {
       }
 
       it('should inject the correct repositories', async function () {
-        const di = new DiCaf()
+        const di = new CaffeineIoC()
         await di.init()
 
         const service = di.get(Service)

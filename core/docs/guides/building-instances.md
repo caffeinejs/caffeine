@@ -24,7 +24,7 @@ before using `build()` or `builder()`.
 array maps each constructor argument position to a key or injection descriptor.
 
 ```ts
-import { DiCaf } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeine-projects/dicaf'
 
 @Injectable()
 class DatabaseService { /* ... */ }
@@ -38,7 +38,7 @@ class ReportGenerator {
   generate() { /* ... */ }
 }
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 await di.init()
 
 // ReportGenerator is not registered — build() creates it on demand

@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, it, beforeAll, expect } from 'vitest'
-import { DiCaf } from '../../../container.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../injectable.legacy.js'
 import { Inject } from '../inject.legacy.js'
 import { Lifetime } from '../lifetime.legacy.js'
@@ -20,7 +20,7 @@ describe('Legacy @Injectable', function () {
       constructor(readonly dep: Dep) {}
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -50,7 +50,7 @@ describe('Legacy @Injectable', function () {
       constructor(readonly dep: AutoDep) {}
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -80,7 +80,7 @@ describe('Legacy @Injectable', function () {
       constructor(@Inject(ParamDep) readonly dep: ParamDep) {}
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -107,7 +107,7 @@ describe('Legacy @Injectable', function () {
       }
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -132,7 +132,7 @@ describe('Legacy @Injectable', function () {
       readonly id = Math.random()
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
@@ -155,7 +155,7 @@ describe('Legacy @Injectable', function () {
       readonly id = Math.random()
     }
 
-    const di = new DiCaf()
+    const di = new CaffeineIoC()
 
     beforeAll(async () => {
       await di.init()
