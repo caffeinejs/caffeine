@@ -45,7 +45,7 @@ export class FastifyAdapter<
         const isSingleton = router.binding.scopeId === Scopes.SINGLETON
 
         for (const route of routes) {
-          const fn = compileParameters(route.parameters) as (server: SERVER, req: REQ, res: RES) => unknown[]
+          const fn = compileParameters(route.parameters) as (req: REQ, res: RES) => unknown[]
           let handlerFn: HandlerFn
 
           if (isSingleton) {
@@ -60,8 +60,10 @@ export class FastifyAdapter<
             method: [...new Set(route.method.map(m => m.toUpperCase()))],
             url: `${prefix}${route.path}`,
             schema: route.schema as FastifySchema,
+            bodyLimit: route.bodyLimit ?? router.bodyLimit,
+            handlerTimeout: route.timeout ?? router.timeout,
             handler: async function (req, res) {
-              const result = await handlerFn(route.handler)(...fn(this as SERVER, req as REQ, res as RES))
+              const result = await handlerFn(route.handler)(...fn(req as REQ, res as RES))
 
               // Fetch API Response Support.
               // The response is mapped using Fastify's reply object.

@@ -18,6 +18,8 @@ export interface Route<R> {
   header: Record<string, string | string[]>
   handler: string | symbol
   schema?: RouteValidationSchema
+  bodyLimit?: number
+  timeout?: number
   response: {
     status: number
     header: Record<string, string>
@@ -30,6 +32,8 @@ export interface Router<R> {
   accept: string[]
   contentTypes: string[]
   header: Record<string, string | string[]>
+  bodyLimit?: number
+  timeout?: number
   key: Key
   binding: Binding
   controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>

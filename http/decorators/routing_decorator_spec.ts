@@ -18,6 +18,8 @@ export class RouterBuilder {
   #_consumes?: string[]
   #_produces?: string[]
   #_routes?: RouteBuilder[]
+  #_bodyLimit?: number
+  #_timeout?: number
 
   prefix(prefix: string) {
     this.#_prefix = prefix
@@ -43,6 +45,14 @@ export class RouterBuilder {
     this.#_routes.push(...(Array.isArray(routes) ? routes : [routes]))
   }
 
+  bodyLimit(bytes: number) {
+    this.#_bodyLimit = bytes
+  }
+
+  timeout(ms: number) {
+    this.#_timeout = ms
+  }
+
   toRouter<R>(
     key: Key,
     binding: Binding<unknown>,
@@ -54,6 +64,8 @@ export class RouterBuilder {
       header: Object.assign({}, this.#_header ?? {}),
       accept: [...(this.#_consumes ?? [])],
       contentTypes: [...(this.#_produces ?? [])],
+      bodyLimit: this.#_bodyLimit,
+      timeout: this.#_timeout,
       key,
       binding,
       controller,
@@ -70,6 +82,8 @@ export class RouteBuilder {
   #_consumes?: string[]
   #_produces?: string[]
   #_schema?: RouteValidationSchema
+  #_bodyLimit?: number
+  #_timeout?: number
 
   header(name: string, value: string | string[]) {
     this.#_header ??= {}
@@ -116,6 +130,16 @@ export class RouteBuilder {
     return this
   }
 
+  bodyLimit(bytes: number): this {
+    this.#_bodyLimit = bytes
+    return this
+  }
+
+  timeout(ms: number): this {
+    this.#_timeout = ms
+    return this
+  }
+
   toRoute<R>(): Route<R> {
     return {
       path: normalizePath(this.#_path ?? ''),
@@ -127,6 +151,8 @@ export class RouteBuilder {
       handler: this.#_handler ?? '',
       response: { status: 200, header: {} },
       schema: this.#_schema,
+      bodyLimit: this.#_bodyLimit,
+      timeout: this.#_timeout,
     }
   }
 }
