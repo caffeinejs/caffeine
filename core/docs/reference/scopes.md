@@ -21,7 +21,7 @@ Every binding has exactly one scope.
 ## Built-in scopes
 
 ```ts
-import { Scopes } from '@caffeine-projects/dicaf'
+import { Scopes } from '@caffeinejs/core'
 ```
 
 | Identifier | Decorator | Description |
@@ -171,7 +171,7 @@ Implement the `Scope` interface and register it with `bindScope()`. The scope
 factory receives the container so the scope can resolve dependencies if needed.
 
 ```ts
-import { bindScope, type Binding, type Factory, type ResolutionContext, type Scope } from '@caffeine-projects/dicaf'
+import { bindScope, type Binding, type Factory, type ResolutionContext, type Scope } from '@caffeinejs/core'
 
 const CUSTOM_SCOPE = Symbol.for('my-app.scope.session')
 
@@ -269,7 +269,7 @@ Registers a scope under `id`. Throws `ErrScopeAlreadyRegistered` if `id` is
 already bound.
 
 ```ts
-import { bindScope } from '@caffeine-projects/dicaf'
+import { bindScope } from '@caffeinejs/core'
 
 bindScope(MY_SCOPE, (container) => new MyCustomScope())
 ```

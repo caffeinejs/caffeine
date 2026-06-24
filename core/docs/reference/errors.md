@@ -4,7 +4,7 @@ CaffeineIoC errors extend `CaffeineIoCError`, which in turn extends `Error`. All
 carry a `code` string that identifies the error type programmatically.
 
 ```ts
-import { ErrNoResolutionForKey } from '@caffeine-projects/dicaf'
+import { ErrNoResolutionForKey } from '@caffeinejs/core'
 
 try {
   di.get(SomeService)
@@ -54,7 +54,7 @@ Thrown during `init()` when a binding uses a scope identifier that is not
 registered.
 
 **Fix:** Call `bindScope(id, factory)` before creating the container. For the
-built-in `REQUEST` scope, ensure you are importing from `@caffeine-projects/dicaf`
+built-in `REQUEST` scope, ensure you are importing from `@caffeinejs/core`
 in a Node.js environment (which auto-registers it).
 
 ---

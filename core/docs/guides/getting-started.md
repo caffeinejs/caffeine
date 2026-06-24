@@ -3,7 +3,7 @@
 ## Installation
 
 ```sh
-npm install @caffeine-projects/dicaf
+npm install @caffeinejs/core
 ```
 
 CaffeineIoC requires Node.js 20 or later and ships as an ES module with full CommonJS
@@ -16,8 +16,8 @@ and wire up your application's dependencies. You tell the container what classes
 exist and how to build them; the container handles construction and injection.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
-import { Extends, Injectable } from '@caffeine-projects/dicaf/decorators'
+import { CaffeineIoC } from '@caffeinejs/core'
+import { Extends, Injectable } from '@caffeinejs/core/decorators'
 
 abstract class Logger {
   abstract log(msg: string): void
@@ -67,14 +67,14 @@ So this example would not work:
 
 ```ts
 // file: product.repository.ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable()
 export class ProductRepository {}
 ```
 ```ts
 // file: product.controller.ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable([ProductRepository])
 export class ProductController {
@@ -83,7 +83,7 @@ export class ProductController {
 ```
 ```ts
 // file: app.container.ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 export function createContainer() {
   const container = new CaffeineIoC()
@@ -97,7 +97,7 @@ We could solve this with:
 
 ```ts
 import './product.controller.ts'
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 export function createContainer() {
   const container = new CaffeineIoC()
@@ -108,7 +108,7 @@ export function createContainer() {
 To avoid having to import all files with decorated classes, CaffeineIoC provides a `scan` feature that does the job automatically:
 
 ```ts
-import { CaffeineIoC, scan } from '@caffeine-projects/dicaf'
+import { CaffeineIoC, scan } from '@caffeinejs/core'
 
 // must be called before creating the container
 await scan({
@@ -131,8 +131,8 @@ symbols too. This is useful when binding a TypeScript interface — since
 interfaces do not exist at runtime, a symbol acts as the token.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
+import { CaffeineIoC } from '@caffeinejs/core'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 interface Logger {
   log(msg: string): void
@@ -179,7 +179,7 @@ optional, inject all implementations at once, or defer resolution for circular
 dependencies.
 
 ```ts
-import { optional, allOf, provide, defer, useValue } from '@caffeine-projects/dicaf'
+import { optional, allOf, provide, defer, useValue } from '@caffeinejs/core'
 ```
 
 ### optional
@@ -298,7 +298,7 @@ If you prefer not to use decorators, you can register bindings explicitly with
 when you need full control over how a binding is configured.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 class Logger {
   log(msg: string) {

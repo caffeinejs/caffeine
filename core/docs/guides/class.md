@@ -17,7 +17,7 @@ Constructor injection is the recommended way. Prefer to use it only.
 :::
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable([Database, Logger])
 class UserService {
@@ -31,11 +31,11 @@ class UserService {
 The dep array passed to `@Injectable` must match the constructor parameter
 positions exactly.
 
-**Legacy decorators:** With `@caffeine-projects/dicaf/decorators/legacy`, 
+**Legacy decorators:** With `@caffeinejs/core/decorators/legacy`, 
 constructor dependencies whose key is the class constructor itself are inferred automatically from TypeScript's type metadata — the `deps` array can be omitted:
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators/legacy'
+import { Injectable } from '@caffeinejs/core/decorators/legacy'
 
 @Injectable()
 class UserService {
@@ -63,8 +63,8 @@ When a key is a string, symbol, or you need to use an injection modifier (like `
 constructor keys:
 
 ```ts
-import { Injectable, Inject } from '@caffeine-projects/dicaf/decorators/legacy'
-import { allOf } from '@caffeine-projects/dicaf'
+import { Injectable, Inject } from '@caffeinejs/core/decorators/legacy'
+import { allOf } from '@caffeinejs/core'
 
 @Injectable()
 class RepositoryService {
@@ -83,7 +83,7 @@ construction. Use the non-null assertion (`!`) because TypeScript cannot see
 that the container will always fill the field.
 
 ```ts
-import { Injectable, Inject } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Inject } from '@caffeinejs/core/decorators'
 
 @Injectable()
 class ReportService {
@@ -101,7 +101,7 @@ class ReportService {
 method after all property injections have been applied. 
 
 ```ts
-import { Injectable, Inject } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Inject } from '@caffeinejs/core/decorators'
 
 @Injectable()
 class ConnectionPool {
@@ -132,7 +132,7 @@ The container does not wait for them during initialization.
 :::
 
 ```ts
-import { Injectable, PostConstruct } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, PostConstruct } from '@caffeinejs/core/decorators'
 
 @Injectable([Config])
 class CacheService {
@@ -158,7 +158,7 @@ Pre-destroy hooks can be async.
 :::
 
 ```ts
-import { Injectable, PreDestroy } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, PreDestroy } from '@caffeinejs/core/decorators'
 
 @Injectable([Config])
 class CacheService {

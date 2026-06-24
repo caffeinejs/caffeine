@@ -10,7 +10,7 @@ when a constructor receives a single configuration-style parameter instead of mu
 positional arguments.
 
 ```ts
-import { object } from '@caffeine-projects/dicaf'
+import { object } from '@caffeinejs/core'
 ```
 
 ---
@@ -18,8 +18,8 @@ import { object } from '@caffeine-projects/dicaf'
 ## Basic example
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
-import { object } from '@caffeine-projects/dicaf'
+import { Injectable } from '@caffeinejs/core/decorators'
+import { object } from '@caffeinejs/core'
 
 class UserRepository { /* ... */ }
 class EmailService { /* ... */ }
@@ -46,7 +46,7 @@ Each property value in the spec can be a plain key, or any injection descriptor
 returned by `optional()`, `allOf()`, `provide()`, and so on.
 
 ```ts
-import { object, optional, allOf } from '@caffeine-projects/dicaf'
+import { object, optional, allOf } from '@caffeinejs/core'
 
 @Injectable([
   object({

@@ -24,7 +24,7 @@ Complete API documentation for CaffeineIoC.
 
 - [Container](./reference/container.md) — the `CaffeineIoC` class: constructor options, resolution, binding, lifecycle, and inspection.
 - [Binder](./reference/binder.md) — the `Binder` and `BinderOptions` fluent APIs.
-- [Decorators](./reference/decorators.md) — all decorators exported from `@caffeine-projects/dicaf/decorators`.
+- [Decorators](./reference/decorators.md) — all decorators exported from `@caffeinejs/core/decorators`.
 - [Injection](./reference/injection.md) — injection helpers: `allOf`, `optional`, `provide`, `mapped`, `object`, `defer`, `useValue`, `compose`.
 - [Scopes](./reference/scopes.md) — built-in scope identifiers, the `Scope` interface, and custom scope registry.
 - [Hooks](./reference/hooks.md) — `HookListener` events emitted during container setup and runtime.

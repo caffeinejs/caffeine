@@ -13,7 +13,7 @@ or any runtime condition you can express as a boolean.
 ## How `@ConditionalOn` works
 
 ```ts
-import { ConditionalOn } from '@caffeine-projects/dicaf/decorators'
+import { ConditionalOn } from '@caffeinejs/core/decorators'
 ```
 
 The decorator takes a `Conditional` — a function receiving a `ConditionContext`
@@ -54,7 +54,7 @@ A realistic pattern: different infrastructure implementations are loaded based o
 region-specific class registers only when its region matches.
 
 ```ts
-import { Injectable, Extends, Fallback, ConditionalOn } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Extends, Fallback, ConditionalOn } from '@caffeinejs/core/decorators'
 ```
 
 ### Define the contract
@@ -175,7 +175,7 @@ The predicate can return a `Promise<boolean>`, which is awaited during `init()`.
 Useful for feature flags fetched from a remote service.
 
 ```ts
-import type { Conditional } from '@caffeine-projects/dicaf'
+import type { Conditional } from '@caffeinejs/core'
 
 // featureFlags() is a standalone async function — ctx.container has no .get()
 const isNewPaymentFlowEnabled: Conditional = async () => {
@@ -217,7 +217,7 @@ condition fails, **all** `@Provides` methods inside that class are skipped — t
 are treated as if they were never declared.
 
 ```ts
-import { Configuration, Provides, ConditionalOn } from '@caffeine-projects/dicaf/decorators'
+import { Configuration, Provides, ConditionalOn } from '@caffeinejs/core/decorators'
 
 @Configuration()
 @ConditionalOn(() => process.env.REGION === 'eu')
@@ -261,7 +261,7 @@ including the method-level predicates.
 The fluent binder exposes `.conditional()` for the same behaviour without decorators.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 const di = new CaffeineIoC({ decorators: false })
 

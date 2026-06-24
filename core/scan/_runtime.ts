@@ -74,7 +74,7 @@ export const Runtime = {
 
   get supportTypeScript(): boolean {
     cache.supportTypeScript
-      ??= checkEnvVariable('DICAF_AUTOLOAD_TYPESCRIPT')
+      ??= checkEnvVariable('CAFFEINEJS_AUTOLOAD_TYPESCRIPT')
         || Runtime.bun
         || Runtime.deno
         || Runtime.tsNode

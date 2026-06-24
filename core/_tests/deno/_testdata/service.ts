@@ -1,4 +1,4 @@
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable()
 export class DenoAutoloadService {

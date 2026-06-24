@@ -13,7 +13,7 @@ Five renderers are available. All accept the container instance or `.entries()` 
 A plain-text tree suitable for logging or terminal output.
 
 ```ts
-import { graphToText } from '@caffeine-projects/dicaf'
+import { graphToText } from '@caffeinejs/core'
 
 const container = new CaffeineIoC()
 await container.init()
@@ -26,7 +26,7 @@ console.log(graphToText(container))
 A Markdown table for embedding in documentation or GitHub issues.
 
 ```ts
-import { graphToMarkdown } from '@caffeine-projects/dicaf'
+import { graphToMarkdown } from '@caffeinejs/core'
 
 console.log(graphToMarkdown(container))
 ```
@@ -37,7 +37,7 @@ A [Mermaid](https://mermaid.js.org/) diagram for rendering in Markdown
 previews, Notion, or GitHub README files.
 
 ```ts
-import { graphToMermaid } from '@caffeine-projects/dicaf'
+import { graphToMermaid } from '@caffeinejs/core'
 
 console.log(graphToMermaid(container))
 ```
@@ -48,7 +48,7 @@ A [DOT](https://graphviz.org/doc/info/lang.html) language file for rendering
 with GraphViz tools (`dot`, `neato`, etc.).
 
 ```ts
-import { graphToDot } from '@caffeine-projects/dicaf'
+import { graphToDot } from '@caffeinejs/core'
 
 console.log(graphToDot(container))
 ```
@@ -58,7 +58,7 @@ console.log(graphToDot(container))
 A machine-readable JSON representation of the graph for custom tooling.
 
 ```ts
-import { graphToJson } from '@caffeine-projects/dicaf'
+import { graphToJson } from '@caffeinejs/core'
 
 const json = graphToJson(container)
 ```
@@ -80,7 +80,7 @@ startup check:
 
 ```ts
 import { writeFileSync } from 'node:fs'
-import { graphToMermaid } from '@caffeine-projects/dicaf'
+import { graphToMermaid } from '@caffeinejs/core'
 
 const container = new CaffeineIoC()
 await container.init()

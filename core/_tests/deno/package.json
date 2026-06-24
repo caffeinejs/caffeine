@@ -1,8 +1,8 @@
 {
-  "name": "@caffeine-projects/dicaf-deno-compat",
+  "name": "@caffeinejs/core-deno-compat",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@caffeine-projects/dicaf": "file:./vendor"
+    "@caffeinejs/core": "file:./vendor"
   }
 }

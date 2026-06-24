@@ -53,11 +53,11 @@ All imports must include the `.js` extension, including TypeScript source files.
 
 ```ts
 // correct
-import { DiCaf } from './container.js'
+import { CaffeineIoC } from './container.js'
 import { Binding } from './binding.js'
 
 // wrong
-import { DiCaf } from './container'
+import { CaffeineIoC } from './container'
 import { Binding } from './Binding'
 ```
 
@@ -69,10 +69,10 @@ Cross-package imports use the package name, not relative paths across workspace 
 
 ```ts
 // correct — from http package
-import { DiCaf } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 // wrong — leaks internal paths
-import { DiCaf } from '../core/container.js'
+import { CaffeineIoC } from '../core/container.js'
 ```
 
 ## Git discipline

@@ -7,7 +7,7 @@ key, wrapping it in a provider, or injecting a constant value.
 All helpers are exported from the core package:
 
 ```ts
-import { optional, provide, defer, useValue, compose } from '@caffeine-projects/dicaf'
+import { optional, provide, defer, useValue, compose } from '@caffeinejs/core'
 ```
 
 :::info
@@ -18,7 +18,7 @@ manually. They are more concise, composable, and less error-prone.
 They are also available under the `inject` namespace:
 
 ```ts
-import { inject } from '@caffeine-projects/dicaf'
+import { inject } from '@caffeinejs/core'
 
 inject.optional(Logger)
 inject.provide(EmailSender)
@@ -45,8 +45,8 @@ Marks a dependency as optional. If no binding is registered for the key the
 container injects `undefined` instead of throwing.
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
-import { optional } from '@caffeine-projects/dicaf'
+import { Injectable } from '@caffeinejs/core/decorators'
+import { optional } from '@caffeinejs/core'
 
 @Injectable([optional(FeatureFlags)])
 class UserService {
@@ -67,9 +67,9 @@ Use this to inject a shorter-lived dependency into a longer-lived component
 without triggering a scope violation.
 
 ```ts
-import { Injectable, Lifetime } from '@caffeine-projects/dicaf/decorators'
-import { provide } from '@caffeine-projects/dicaf'
-import { Scopes, Provider } from '@caffeine-projects/dicaf'
+import { Injectable, Lifetime } from '@caffeinejs/core/decorators'
+import { provide } from '@caffeinejs/core'
+import { Scopes, Provider } from '@caffeinejs/core'
 
 @Injectable([provide(EmailSender)])
 @Lifetime(Scopes.SINGLETON)
@@ -94,8 +94,8 @@ a circular module import would cause the class reference to be `undefined` at
 declaration time.
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
-import { defer } from '@caffeine-projects/dicaf'
+import { Injectable } from '@caffeinejs/core/decorators'
+import { defer } from '@caffeinejs/core'
 
 @Injectable([defer(() => B)])
 class A {
@@ -119,8 +119,8 @@ Injects a constant value directly. No container binding is required — the valu
 is passed to the constructor as-is.
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
-import { useValue } from '@caffeine-projects/dicaf'
+import { Injectable } from '@caffeinejs/core/decorators'
+import { useValue } from '@caffeinejs/core'
 
 @Injectable([useValue('localhost'), useValue(5432)])
 class DatabaseClient {
@@ -140,7 +140,7 @@ function receives the key and its result is merged into the descriptor from
 left to right.
 
 ```ts
-import { compose, optional, allOf } from '@caffeine-projects/dicaf'
+import { compose, optional, allOf } from '@caffeinejs/core'
 
 const optionalMany = (key: Key) => compose(key, optional, allOf)
 

@@ -4,7 +4,7 @@ Abstract classes are a first-class pattern in CaffeineIoC.
 Use `@Extends` to bind a concrete class to its abstract parent so the container
 can resolve it by the abstract type. This is the key decorator for this pattern.
 
-All decorators are imported from `@caffeine-projects/dicaf/decorators`.
+All decorators are imported from `@caffeinejs/core/decorators`.
 
 ```ts
 import { 
@@ -13,7 +13,7 @@ import {
   Named, 
   Primary, 
   ConditionalOn, 
-} from '@caffeine-projects/dicaf/decorators'
+} from '@caffeinejs/core/decorators'
 ```
 
 ---
@@ -25,7 +25,7 @@ Pass the base explicitly (`@Extends(Base)`) when you want to be unambiguous or w
 extending through an intermediate class.
 
 ```ts
-import { Injectable, Extends } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Extends } from '@caffeinejs/core/decorators'
 
 abstract class Logger {
   abstract log(message: string): void
@@ -55,8 +55,8 @@ Every concrete class decorated with `@Extends` registers itself under the abstra
 key. `allOf` collects all of them into an array.
 
 ```ts
-import { Injectable, Extends } from '@caffeine-projects/dicaf/decorators'
-import { allOf } from '@caffeine-projects/dicaf'
+import { Injectable, Extends } from '@caffeinejs/core/decorators'
+import { allOf } from '@caffeinejs/core'
 
 abstract class Processor {
   abstract process(input: string): string
@@ -108,7 +108,7 @@ When multiple implementations are registered, injecting the abstract key directl
 (without `allOf`) throws unless exactly one binding is marked `@Primary`.
 
 ```ts
-import { Injectable, Extends, Primary } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Extends, Primary } from '@caffeinejs/core/decorators'
 
 abstract class UserRepository {
   abstract findById(id: string): Promise<User | undefined>
@@ -145,8 +145,8 @@ class UserService {
 Use `@Named` to assign a stable name to an implementation and inject it by that name.
 
 ```ts
-import { Injectable, Extends, Named } from '@caffeine-projects/dicaf/decorators'
-import { mapped } from '@caffeine-projects/dicaf'
+import { Injectable, Extends, Named } from '@caffeinejs/core/decorators'
+import { mapped } from '@caffeinejs/core'
 
 abstract class NotificationSender {
   abstract send(message: string, to: string): Promise<void>
@@ -197,7 +197,7 @@ class NotificationRouter {
 container initialization. Useful for environment-driven or feature-flag-driven wiring.
 
 ```ts
-import { Injectable, Extends, Primary, ConditionalOn, Fallback } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Extends, Primary, ConditionalOn, Fallback } from '@caffeinejs/core/decorators'
 
 abstract class CacheStore {
   abstract get(key: string): Promise<string | undefined>
@@ -239,7 +239,7 @@ Use the fluent binder API and call `.extends()` to register a concrete class und
 an abstract key without any decorators.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 abstract class Cache {
   abstract get(key: string): string | undefined

@@ -4,7 +4,7 @@
 
 Do not mutate the module-level state in `decorators/registrar/registrar.ts` (`Bindings`, `ByNamespace`, `ProvidedBindings`, `MetadataWeakMap`, `Injectables`) from tests. These are global singletons shared across all tests in the same process; direct mutation causes test pollution and order-dependent failures.
 
-Tests must interact with the DiCaf container only through the public API (decorators, `DiCaf`, `Scope`, etc.). If a test needs an isolated registry, use a child scope or a fresh container instance — never reach into the registrar's internal maps.
+Tests must interact with the CaffeineIoC container only through the public API (decorators, `CaffeineIoC`, `Scope`, etc.). If a test needs an isolated registry, use a child scope or a fresh container instance — never reach into the registrar's internal maps.
 
 ## Testing: always call init() before resolving
 
@@ -12,12 +12,12 @@ Any test that calls `container.get()`, `container.getRequired()`, or `container.
 
 ```ts
 // correct
-const di = new DiCaf(mod)
+const di = new CaffeineIoC(mod)
 await di.init()
 expect(di.get(Svc)).toBeInstanceOf(Svc)
 
 // wrong — init() not called
-const di = new DiCaf(mod)
+const di = new CaffeineIoC(mod)
 expect(di.get(Svc)).toBeInstanceOf(Svc)
 ```
 

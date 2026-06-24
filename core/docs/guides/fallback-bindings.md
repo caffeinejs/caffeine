@@ -9,7 +9,7 @@ where a component can ship with a built-in implementation that application code
 (or other library users) can silently replace without any configuration change.
 
 ```ts
-import { Fallback } from '@caffeine-projects/dicaf/decorators'
+import { Fallback } from '@caffeinejs/core/decorators'
 ```
 
 ---
@@ -142,7 +142,7 @@ to return `undefined`.
 The fluent binder exposes `.fallback()` for decorator-free containers.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 const di = new CaffeineIoC({ decorators: false })
 

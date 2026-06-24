@@ -24,7 +24,7 @@ before using `build()` or `builder()`.
 array maps each constructor argument position to a key or injection descriptor.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 @Injectable()
 class DatabaseService { /* ... */ }
@@ -98,7 +98,7 @@ The injections array accepts any injection descriptor, just like constructor
 injection in a registered binding.
 
 ```ts
-import { optional, allOf, useValue } from '@caffeine-projects/dicaf'
+import { optional, allOf, useValue } from '@caffeinejs/core'
 
 di.build(NotificationDispatcher, [
   allOf(Notifier),          // array of all Notifier bindings

@@ -5,7 +5,7 @@ sidebar_label: Refresher
 # Refresher
 
 ```ts
-import type { Refresher } from '@caffeine-projects/dicaf'
+import type { Refresher } from '@caffeinejs/core'
 ```
 
 ---

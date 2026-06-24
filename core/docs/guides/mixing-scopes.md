@@ -38,8 +38,8 @@ boundaries explicitly.
 ## The solution: `provide()` and `Provider<T>`
 
 ```ts
-import { provide } from '@caffeine-projects/dicaf'
-import type { Provider } from '@caffeine-projects/dicaf'
+import { provide } from '@caffeinejs/core'
+import type { Provider } from '@caffeinejs/core'
 ```
 
 `provide(key)` wraps the dependency in a `Provider<T>`. The provider's `get()` method
@@ -66,10 +66,10 @@ adds a small overhead compared to a direct injection. This is expected behavior 
 ## Basic example
 
 ```ts
-import { Injectable, Lifetime } from '@caffeine-projects/dicaf/decorators'
-import { provide } from '@caffeine-projects/dicaf'
-import type { Provider } from '@caffeine-projects/dicaf'
-import { Scopes } from '@caffeine-projects/dicaf'
+import { Injectable, Lifetime } from '@caffeinejs/core/decorators'
+import { provide } from '@caffeinejs/core'
+import type { Provider } from '@caffeinejs/core'
+import { Scopes } from '@caffeinejs/core'
 
 @Injectable()
 @Lifetime(Scopes.TRANSIENT)
@@ -102,10 +102,10 @@ Injecting the request context directly would be a scope leak. Use `provide()` so
 the controller fetches the live context on each request.
 
 ```ts
-import { Injectable, Lifetime } from '@caffeine-projects/dicaf/decorators'
-import { provide } from '@caffeine-projects/dicaf'
-import type { Provider } from '@caffeine-projects/dicaf'
-import { Scopes } from '@caffeine-projects/dicaf'
+import { Injectable, Lifetime } from '@caffeinejs/core/decorators'
+import { provide } from '@caffeinejs/core'
+import type { Provider } from '@caffeinejs/core'
+import { Scopes } from '@caffeinejs/core'
 
 @Injectable()
 @Lifetime(Scopes.REQUEST)

@@ -18,7 +18,7 @@ Standard TC39 decorators, available in TypeScript 5.0+. No `reflect-metadata` po
 required. Import from the main subpath:
 
 ```ts
-import { Injectable, Lifetime, Scopes } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Lifetime, Scopes } from '@caffeinejs/core/decorators'
 ```
 
 ### TypeScript config
@@ -54,7 +54,7 @@ Uses TypeScript's `experimentalDecorators` flag and the `reflect-metadata` polyf
 Import from the legacy subpath:
 
 ```ts
-import { Injectable, Lifetime, Scopes } from '@caffeine-projects/dicaf/decorators/legacy'
+import { Injectable, Lifetime, Scopes } from '@caffeinejs/core/decorators/legacy'
 ```
 
 ### TypeScript config
@@ -105,8 +105,8 @@ reader, decorators will silently no-op, or the container will fail to resolve bi
 
 ```ts
 // wrong — never mix these two imports
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
-import { Lifetime } from '@caffeine-projects/dicaf/decorators/legacy'
+import { Injectable } from '@caffeinejs/core/decorators'
+import { Lifetime } from '@caffeinejs/core/decorators/legacy'
 ```
 
 Pick one flavour per project and use it consistently across every file.
@@ -122,14 +122,14 @@ rule pointing at the subpath you are not using:
 // eslint.config.js — stage 3 project: ban the legacy subpath
 rules: {
   'no-restricted-imports': ['error', {
-    patterns: ['@caffeine-projects/dicaf/decorators/legacy*'],
+    patterns: ['@caffeinejs/core/decorators/legacy*'],
   }],
 }
 
 // eslint.config.js — legacy project: ban the stage 3 subpath
 rules: {
   'no-restricted-imports': ['error', {
-    patterns: ['@caffeine-projects/dicaf/decorators', '!@caffeine-projects/dicaf/decorators/legacy'],
+    patterns: ['@caffeinejs/core/decorators', '!@caffeinejs/core/decorators/legacy'],
   }],
 }
 ```

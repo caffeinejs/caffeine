@@ -9,7 +9,7 @@ dependency — either as an **array** with `allOf()`, or as a **`Map`** with `ma
 Both functions are imported from the core package.
 
 ```ts
-import { allOf, mapped } from '@caffeine-projects/dicaf'
+import { allOf, mapped } from '@caffeinejs/core'
 ```
 
 This is useful when you register several implementations of the same abstract class or
@@ -25,8 +25,8 @@ The order of elements matches the registration order of the bindings.
 ### Example: validation pipeline
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
-import { allOf } from '@caffeine-projects/dicaf'
+import { Injectable } from '@caffeinejs/core/decorators'
+import { allOf } from '@caffeinejs/core'
 
 abstract class Validator {
   abstract validate(value: unknown): string[]
@@ -80,8 +80,8 @@ is the resolved instance.
 ### Example: named strategy map
 
 ```ts
-import { Injectable, Named } from '@caffeine-projects/dicaf/decorators'
-import { mapped } from '@caffeine-projects/dicaf'
+import { Injectable, Named } from '@caffeinejs/core/decorators'
+import { mapped } from '@caffeinejs/core'
 
 interface PaymentGateway {
   charge(amount: number): void

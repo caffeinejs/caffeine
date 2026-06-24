@@ -62,7 +62,7 @@ stateless, make it a singleton too.
 singleton calls `provider.get()` each time it needs a fresh instance:
 
 ```ts
-import { provide } from '@caffeine-projects/dicaf'
+import { provide } from '@caffeinejs/core'
 
 @Injectable([provide(EmailSender)])
 @Lifetime(Scopes.SINGLETON)

@@ -9,7 +9,7 @@ factory receives a `ResolutionContext` — giving it direct access to the contai
 instead of having dependencies injected positionally.
 
 ```ts
-import type { ResolutionContext } from '@caffeine-projects/dicaf'
+import type { ResolutionContext } from '@caffeinejs/core'
 ```
 
 Use `toFactory()` when the set of dependencies is dynamic, conditional, or determined
@@ -20,7 +20,7 @@ at resolution time rather than at bind time.
 ## Basic example
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 class DatabaseService { /* ... */ }
 class CacheService { /* ... */ }
@@ -109,8 +109,8 @@ injection alone cannot express — fixed options, external configuration, or wra
 the class before returning.
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
-import { UseFactory } from '@caffeine-projects/dicaf/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
+import { UseFactory } from '@caffeinejs/core/decorators'
 
 class AppConfig {
   readonly timeout = Number(process.env.TIMEOUT ?? 5000)
@@ -160,7 +160,7 @@ class UserRepository {}
 generic factory functions reused across multiple classes.
 
 ```ts
-import type { ResolutionContext } from '@caffeine-projects/dicaf'
+import type { ResolutionContext } from '@caffeinejs/core'
 
 function tracingFactory<T>(inner: (ctx: ResolutionContext) => T) {
   return (ctx: ResolutionContext): T => {

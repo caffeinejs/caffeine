@@ -1,4 +1,4 @@
-import { Configuration, Provides } from '@caffeine-projects/dicaf/decorators'
+import { Configuration, Provides } from '@caffeinejs/core/decorators'
 
 export const kDenoMessage = Symbol('kDenoMessage')
 

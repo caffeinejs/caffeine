@@ -8,7 +8,7 @@ Bindings without any `@Profile` are always registered, regardless of which profi
 are active — the same semantics Docker Compose uses for its profiles.
 
 ```ts
-import { Profile } from '@caffeine-projects/dicaf/decorators'
+import { Profile } from '@caffeinejs/core/decorators'
 ```
 
 :::tip
@@ -97,7 +97,7 @@ skipped unless the profile is active — the same cascade behaviour as `@Conditi
 on a configuration class.
 
 ```ts
-import { Configuration, Provides, Profile } from '@caffeine-projects/dicaf/decorators'
+import { Configuration, Provides, Profile } from '@caffeinejs/core/decorators'
 
 @Configuration()
 @Profile('test')

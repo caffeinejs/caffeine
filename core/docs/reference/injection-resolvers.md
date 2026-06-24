@@ -24,7 +24,7 @@ import {
   type InjectionResolver,
   type InjectionResolverFactory,
   type InjectionResolverFactoryContext,
-} from '@caffeine-projects/dicaf'
+} from '@caffeinejs/core'
 ```
 
 An **injection resolver** is a low-level extension point. When the container
@@ -91,12 +91,12 @@ site.
 
 ```ts
 const BuiltInResolvers = {
-  DEFAULT:  Symbol('dicaf.resolver.default'),
-  MAP:      Symbol('dicaf.resolver.map'),
-  DEFER:    Symbol('dicaf.resolver.defer'),
-  OBJECT:   Symbol('dicaf.resolver.object'),
-  PROVIDER: Symbol('dicaf.resolver.provider'),
-  VALUE:    Symbol('dicaf.resolver.value'),
+  DEFAULT:  Symbol('@caffeinejs/core:resolver.default'),
+  MAP:      Symbol('@caffeinejs/core:resolver.map'),
+  DEFER:    Symbol('@caffeinejs/core:resolver.defer'),
+  OBJECT:   Symbol('@caffeinejs/core:resolver.object'),
+  PROVIDER: Symbol('@caffeinejs/core:resolver.provider'),
+  VALUE:    Symbol('@caffeinejs/core:resolver.value'),
 } as const
 ```
 

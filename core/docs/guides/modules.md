@@ -6,7 +6,7 @@ bindings into cohesive groups, import them by feature, and pass them to the
 container at construction time.
 
 ```ts
-import { CaffeineIoC, mod, type ContainerBindingOps } from '@caffeine-projects/dicaf'
+import { CaffeineIoC, mod, type ContainerBindingOps } from '@caffeinejs/core'
 
 function databaseModule(di: ContainerBindingOps) {
   di.bind(Database).toClass(PostgresDatabase)
@@ -31,7 +31,7 @@ messages and hook events, making it easier to trace which module registered a
 failing binding.
 
 ```ts
-import { mod } from '@caffeine-projects/dicaf'
+import { mod } from '@caffeinejs/core'
 
 const databaseModule = mod('database', (di) => {
   di.bind(Database).toClass(PostgresDatabase)
@@ -60,7 +60,7 @@ container's `has()` method, the binding key, and the binding config. It is
 evaluated once during `init()`, so the container is partially available:
 
 ```ts
-import { type ContainerBindingOps } from '@caffeine-projects/dicaf'
+import { type ContainerBindingOps } from '@caffeinejs/core'
 
 function storageModule(di: ContainerBindingOps) {
   di.bind(BlobStorage)

@@ -20,10 +20,10 @@ required. No `experimentalDecorators` flag needed.
 }
 ```
 
-Import from `@caffeine-projects/dicaf/decorators`:
+Import from `@caffeinejs/core/decorators`:
 
 ```ts
-import { Injectable, Lifetime, Scopes } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Lifetime, Scopes } from '@caffeinejs/core/decorators'
 
 @Injectable([Logger, Database])
 class UserService {
@@ -62,7 +62,7 @@ npm install reflect-metadata
 
 ```ts
 import 'reflect-metadata'
-import { Injectable } from '@caffeine-projects/dicaf/decorators/legacy'
+import { Injectable } from '@caffeinejs/core/decorators/legacy'
 
 @Injectable()
 class UserService {
@@ -86,8 +86,8 @@ Register bindings directly on the container using the fluent `bind()` API and
 module functions. No decorators, no `reflect-metadata`, no TypeScript flags.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
-import type { Module } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
+import type { Module } from '@caffeinejs/core'
 
 const appModule: Module = di => {
   di.bind(Logger).toSelf()
@@ -140,6 +140,6 @@ acts as a factory, keeping third-party constructors free of CaffeineIoC annotati
 
 | Mode | TypeScript flag | Explicit deps | Package |
 |---|---|---|---|
-| Stage 3 decorators | none | yes | `@caffeine-projects/dicaf/decorators` |
-| Legacy decorators | `experimentalDecorators` + `emitDecoratorMetadata` | no | `@caffeine-projects/dicaf/decorators/legacy` |
-| Programmatic | none | yes | `@caffeine-projects/dicaf` |
+| Stage 3 decorators | none | yes | `@caffeinejs/core/decorators` |
+| Legacy decorators | `experimentalDecorators` + `emitDecoratorMetadata` | no | `@caffeinejs/core/decorators/legacy` |
+| Programmatic | none | yes | `@caffeinejs/core` |

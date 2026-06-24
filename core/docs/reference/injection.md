@@ -19,10 +19,10 @@ All helpers are exported individually or through the `inject` namespace:
 
 ```ts
 // named imports
-import { allOf, optional, provide, mapped, object, defer, useValue } from '@caffeine-projects/dicaf'
+import { allOf, optional, provide, mapped, object, defer, useValue } from '@caffeinejs/core'
 
 // namespace import — all helpers available as inject.*
-import { inject } from '@caffeine-projects/dicaf'
+import { inject } from '@caffeinejs/core'
 
 inject.allOf(Plugin)
 inject.optional(Logger)
@@ -199,7 +199,7 @@ when a circular module import would cause the key to be `undefined` at class
 declaration time.
 
 ```ts
-import { defer } from '@caffeine-projects/dicaf'
+import { defer } from '@caffeinejs/core'
 
 @Injectable([defer(() => B)])
 class A {

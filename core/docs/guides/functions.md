@@ -12,7 +12,7 @@ This is useful when you want to produce a value — a closure, a plain object, o
 object with methods — without declaring a class.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 ```
 
 ---
@@ -132,7 +132,7 @@ The `injections` array accepts any injection descriptor — the same as construc
 injection.
 
 ```ts
-import { optional, allOf, useValue } from '@caffeine-projects/dicaf'
+import { optional, allOf, useValue } from '@caffeinejs/core'
 
 di.bind(PIPELINE).toFunction(
   (validators, cache, maxItems) => createPipeline(validators, cache, maxItems),

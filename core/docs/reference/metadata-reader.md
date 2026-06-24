@@ -5,7 +5,7 @@ sidebar_label: Metadata Reader
 # Metadata Reader
 
 ```ts
-import type { MetadataReader } from '@caffeine-projects/dicaf'
+import type { MetadataReader } from '@caffeinejs/core'
 ```
 
 ---
@@ -56,7 +56,7 @@ const reader: MetadataReader = key => {
 ### Example — scope overrides from config
 
 ```ts
-import { Scopes, type MetadataReader } from '@caffeine-projects/dicaf'
+import { Scopes, type MetadataReader } from '@caffeinejs/core'
 
 const overrides = new Map<unknown, symbol>([
   [UserService, Scopes.TRANSIENT],

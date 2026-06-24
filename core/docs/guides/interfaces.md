@@ -22,7 +22,7 @@ export const kRepository = Symbol('Repository')
 Register an implementation under that token:
 
 ```ts
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
+import { Injectable } from '@caffeinejs/core/decorators'
 
 @Injectable(kRepository)
 class InMemoryRepository implements Repository {
@@ -48,8 +48,8 @@ Register multiple implementations under the same symbol token, then collect all 
 them with `allOf`.
 
 ```ts
-import { Injectable, Named } from '@caffeine-projects/dicaf/decorators'
-import { allOf } from '@caffeine-projects/dicaf'
+import { Injectable, Named } from '@caffeinejs/core/decorators'
+import { allOf } from '@caffeinejs/core'
 
 interface Processor {
   process(input: string): string
@@ -100,7 +100,7 @@ name or token.
 ## Selecting a single implementation with `@Primary`
 
 ```ts
-import { Injectable, Named, Primary } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Named, Primary } from '@caffeinejs/core/decorators'
 
 interface UserRepository {
   findById(id: string): Promise<User | undefined>
@@ -139,8 +139,8 @@ class UserService {
 Assign each implementation a distinct name for targeted injection or runtime dispatch.
 
 ```ts
-import { Injectable, Named } from '@caffeine-projects/dicaf/decorators'
-import { mapped } from '@caffeine-projects/dicaf'
+import { Injectable, Named } from '@caffeinejs/core/decorators'
+import { mapped } from '@caffeinejs/core'
 
 interface NotificationSender {
   send(message: string, to: string): Promise<void>
@@ -187,7 +187,7 @@ class NotificationRouter {
 ## Conditional implementations with `@ConditionalOn`
 
 ```ts
-import { Injectable, Named, Primary, ConditionalOn } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, Named, Primary, ConditionalOn } from '@caffeinejs/core/decorators'
 
 interface CacheStore {
   get(key: string): Promise<string | undefined>
@@ -225,7 +225,7 @@ All bindings are registered before any `@ConditionalOn` predicate runs, so
 ## Manual bindings (without decorators)
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 interface Cache {
   get(key: string): string | undefined

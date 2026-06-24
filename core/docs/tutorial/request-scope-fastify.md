@@ -15,7 +15,7 @@ request and makes it available to any service that needs it.
 ## 1. Install
 
 ```sh
-npm install @caffeine-projects/dicaf fastify
+npm install @caffeinejs/core fastify
 ```
 
 ---
@@ -45,8 +45,8 @@ when the request ends.
 
 ```ts
 // src/request.context.ts
-import { Injectable, Lifetime, PostConstruct } from '@caffeine-projects/dicaf/decorators'
-import { Scopes } from '@caffeine-projects/dicaf'
+import { Injectable, Lifetime, PostConstruct } from '@caffeinejs/core/decorators'
+import { Scopes } from '@caffeinejs/core'
 
 @Injectable()
 @Lifetime(Scopes.REQUEST)
@@ -71,7 +71,7 @@ request-scoped instances between concurrent requests.
 ```ts
 // src/app.ts
 import fastify from 'fastify'
-import type { Container } from '@caffeine-projects/dicaf'
+import type { Container } from '@caffeinejs/core'
 
 export async function buildServer(container: Container) {
   const server = fastify({ logger: true })
@@ -102,8 +102,8 @@ on each call.
 
 ```ts
 // src/cats.service.ts
-import { provide, type Provider } from '@caffeine-projects/dicaf'
-import { Injectable } from '@caffeine-projects/dicaf/decorators'
+import { provide, type Provider } from '@caffeinejs/core'
+import { Injectable } from '@caffeinejs/core/decorators'
 import { RequestContext } from './request.context.js'
 
 @Injectable([provide(RequestContext)])
@@ -126,7 +126,7 @@ returns the instance that belongs to the current request.
 
 ```ts
 // src/index.ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 import { buildServer } from './app.js'
 import { CatsService } from './cats.service.js'
 
@@ -169,4 +169,4 @@ Each concurrent request gets its own `RequestContext`. They never share state.
 - Add more request-scoped services the same way — annotate with `@Lifetime(Scopes.REQUEST)` and inject via `provide()`.
 - Use `scan()` to auto-import decorated files instead of listing them manually. See the [Scanning Files guide](../guides/scanning-files.md).
 - See the [Mixing Scopes guide](../guides/mixing-scopes.md) for the full explanation of why `provide()` is required.
-- A complete working example with PostgreSQL, Redis, and health checks is available in the [`core/examples/04-fastify-cats-complete`](https://github.com/caffeine-projects/dicaf/tree/main/core/examples/04-fastify-cats-complete) directory.
+- A complete working example with PostgreSQL, Redis, and health checks is available in the [`core/examples/04-fastify-cats-complete`](https://github.com/caffeinejs/core/tree/main/core/examples/04-fastify-cats-complete) directory.

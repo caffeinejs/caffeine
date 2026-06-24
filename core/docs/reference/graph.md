@@ -10,7 +10,7 @@ import {
   graphToMermaid,
   graphToDot,
   graphToJson,
-} from '@caffeine-projects/dicaf'
+} from '@caffeinejs/core'
 ```
 
 - [graphToText](#graphtotext)

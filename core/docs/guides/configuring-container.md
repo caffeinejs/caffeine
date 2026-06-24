@@ -4,7 +4,7 @@
 All fields are optional — omitting them gives you the defaults shown below.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 const di = new CaffeineIoC({
   // options described in this guide
@@ -20,7 +20,7 @@ const di = new CaffeineIoC({
 The scope applied to any binding that does not declare one explicitly.
 
 ```ts
-import { Scopes } from '@caffeine-projects/dicaf'
+import { Scopes } from '@caffeinejs/core'
 
 const di = new CaffeineIoC({ defaultScopeId: Scopes.TRANSIENT })
 ```

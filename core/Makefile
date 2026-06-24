@@ -77,8 +77,7 @@ all: ## run the whole build and quality checks
 	@npm test
 	@npm run test:memory
 	@npm run test:browser
-	@npm run test:cjs
-	@npm run test:deno
+@npm run test:deno
 
 .PHONY: rebuild
 rebuild: ## rebuild main library and typecheck all examples

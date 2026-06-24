@@ -5,7 +5,7 @@ eagerly — during `init()`. A lazy binding defers that construction until the b
 is first resolved via `get()`.
 
 ```ts
-import { Lazy } from '@caffeine-projects/dicaf/decorators'
+import { Lazy } from '@caffeinejs/core/decorators'
 ```
 
 ---
@@ -135,7 +135,7 @@ The priority chain:
 The fluent binder exposes `.lazy()` for decorator-free containers.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 const di = new CaffeineIoC({ decorators: false })
 

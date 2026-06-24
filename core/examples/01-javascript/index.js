@@ -1,4 +1,4 @@
-import { DiCaf } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 // --- Services ---
 
@@ -79,7 +79,7 @@ const kLogger = 'logger'
 const kStorage = 'storage'
 const kTodoService = 'todo-service'
 
-const di = new DiCaf()
+const di = new CaffeineIoC()
 
 di.bind(kLogger)
   .toClass(Logger)

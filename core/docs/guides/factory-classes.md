@@ -9,7 +9,7 @@ by `@Injectable` alone — third-party classes with no decorators, values assemb
 configuration, or instances that depend on runtime parameters.
 
 ```ts
-import { Configuration, Provides } from '@caffeine-projects/dicaf/decorators'
+import { Configuration, Provides } from '@caffeinejs/core/decorators'
 ```
 
 :::warning

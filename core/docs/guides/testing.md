@@ -8,7 +8,7 @@ and only replace components at the infrastructure boundary (databases, HTTP clie
 message queues, and other I/O).
 
 ```ts
-import { TestContainer, newTestContainer } from '@caffeine-projects/dicaf/testing'
+import { TestContainer, newTestContainer } from '@caffeinejs/core/testing'
 ```
 
 ## Mental model
@@ -215,7 +215,7 @@ init and dispose.
 ```ts
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
-import { TestContainer } from '@caffeine-projects/dicaf/testing'
+import { TestContainer } from '@caffeinejs/core/testing'
 import { appContainer } from '../app.container.js'
 import { buildApp } from '../app.js'
 
@@ -305,7 +305,7 @@ The filenames and structure are incidental. What matters is that the container i
 
 ```ts
 // app.container.ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 export function createContainer() {
   const container = new CaffeineIoC()
@@ -322,7 +322,7 @@ See the example below with [Fastify](https://fastify.dev/):
 ```ts
 // app.ts
 import Fastify from 'fastify'
-import type { Container } from '@caffeine-projects/dicaf'
+import type { Container } from '@caffeinejs/core'
 
 export function buildApp(container: Container) {
   const app = Fastify()

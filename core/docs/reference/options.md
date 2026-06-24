@@ -3,8 +3,8 @@
 Constructor options for the `CaffeineIoC` container.
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
-import type { Options } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
+import type { Options } from '@caffeinejs/core'
 
 const di = new CaffeineIoC(options: Partial<Options>)
 ```
@@ -46,7 +46,7 @@ defaultScopeId?: Identifier
 Scope applied to bindings that do not explicitly declare one via `@Lifetime()` or `.scope()`.
 
 ```ts
-import { Scopes } from '@caffeine-projects/dicaf'
+import { Scopes } from '@caffeinejs/core'
 
 const di = new CaffeineIoC({ defaultScopeId: Scopes.TRANSIENT })
 ```

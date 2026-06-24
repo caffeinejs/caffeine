@@ -25,7 +25,7 @@ Async bindings have three hard constraints enforced at `init()`:
 Use `toAsyncFactory()` on the binder when wiring dependencies in a module:
 
 ```ts
-import { CaffeineIoC } from '@caffeine-projects/dicaf'
+import { CaffeineIoC } from '@caffeinejs/core'
 
 const di = new CaffeineIoC(mod => {
   mod.bind(DatabasePool).toAsyncFactory(async ctx => {
@@ -47,7 +47,7 @@ Use `@UseAsyncFactory` when you want to keep the async wiring co-located with
 the class declaration:
 
 ```ts
-import { Injectable, UseAsyncFactory } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, UseAsyncFactory } from '@caffeinejs/core/decorators'
 
 @UseAsyncFactory(async ctx => {
   const config = ctx.container.get(AppConfig)
@@ -67,7 +67,7 @@ Use `@Async` on a `@Provides` method when grouping related factory methods in
 a configuration class:
 
 ```ts
-import { Configuration, Provides, Async } from '@caffeine-projects/dicaf/decorators'
+import { Configuration, Provides, Async } from '@caffeinejs/core/decorators'
 
 @Configuration([AppConfig])
 class InfraConfig {
@@ -121,7 +121,7 @@ Async bindings default to singleton scope. To use refresh scope instead, add
 `@Lifetime(Scopes.REFRESH)`:
 
 ```ts
-import { Injectable, UseAsyncFactory, Lifetime, Scopes } from '@caffeine-projects/dicaf/decorators'
+import { Injectable, UseAsyncFactory, Lifetime, Scopes } from '@caffeinejs/core/decorators'
 
 @Lifetime(Scopes.REFRESH)
 @UseAsyncFactory(async ctx => {

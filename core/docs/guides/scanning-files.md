@@ -13,14 +13,14 @@ having to maintain a manual import list.
 `scan()` is available from the main package import in Node.js environments:
 
 ```ts
-import { scan } from '@caffeine-projects/dicaf'
+import { scan } from '@caffeinejs/core'
 ```
 
 ## Basic usage
 
 ```ts
 import { fileURLToPath } from 'node:url'
-import { CaffeineIoC, scan } from '@caffeine-projects/dicaf'
+import { CaffeineIoC, scan } from '@caffeinejs/core'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
 
@@ -106,7 +106,7 @@ you have a CommonJS project and import failures occur.
 Pass a list of file paths directly to import only those files:
 
 ```ts
-import { scan } from '@caffeine-projects/dicaf'
+import { scan } from '@caffeinejs/core'
 
 const files = ['./services/user.js', './services/order.js']
 await scan(files)
@@ -124,7 +124,7 @@ library to produce the list. For example, with
 [globby](https://github.com/sindresorhus/globby):
 
 ```ts
-import { scan } from '@caffeine-projects/dicaf'
+import { scan } from '@caffeinejs/core'
 import { globby } from 'globby'
 
 await scan(globby('src/services/**/*.js'))

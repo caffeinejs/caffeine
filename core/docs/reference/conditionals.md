@@ -10,7 +10,7 @@ sidebar_label: Conditionals
 Both types are exported from the main package:
 
 ```ts
-import type { Conditional, ConditionContext } from '@caffeine-projects/dicaf'
+import type { Conditional, ConditionContext } from '@caffeinejs/core'
 ```
 
 ---
