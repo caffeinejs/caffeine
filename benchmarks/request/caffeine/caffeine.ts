@@ -23,6 +23,30 @@ const schema = {
   },
 }
 
+const responseSchema = {
+  200: {
+    type: 'object',
+    properties: {
+      params: schema,
+      query: schema,
+      body: schema,
+      header: schema,
+      big: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'number' },
+            message: { type: 'string' },
+            active: { type: 'boolean' },
+            cities: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    },
+  },
+}
+
 @Controller('')
 class AppController {
   @Get('/health')
@@ -38,35 +62,7 @@ class AppController {
     header(),
     context(),
   ])
-  @Schema({
-    params: schema,
-    querystring: schema,
-    body: schema,
-    headers: schema,
-    response: {
-      200: {
-        type: 'object',
-        properties: {
-          params: schema,
-          query: schema,
-          body: schema,
-          header: schema,
-          big: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'number' },
-                message: { type: 'string' },
-                active: { type: 'boolean' },
-                cities: { type: 'array', items: { type: 'string' } },
-              },
-            },
-          },
-        },
-      },
-    },
-  })
+  @Schema({ params: schema, querystring: schema, body: schema, headers: schema, response: responseSchema })
   helloWorld(
     params: DataSchema,
     query: DataSchema,

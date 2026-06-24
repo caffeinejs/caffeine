@@ -1,5 +1,5 @@
 import { Binding, Key, Provider } from '@caffeinejs/core'
-import { Route, Router } from '../route.js'
+import { Route, Router, RouteValidationSchema } from '../route.js'
 import { ParameterPickOptions } from '../route.picker.js'
 
 export class RouterBuilder {
@@ -33,14 +33,14 @@ export class RouterBuilder {
     this.#_routes.push(...(Array.isArray(routes) ? routes : [routes]))
   }
 
-  toRouter<R>(
+  toRouter<R, S extends RouteValidationSchema>(
     key: Key,
     binding: Binding<unknown>,
     controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>,
-  ): Router<R> {
+  ): Router<R, S> {
     return {
       prefix: this.#_prefix ?? '',
-      routes: (this.#_routes ?? []).map(route => route.toRoute<R>()),
+      routes: (this.#_routes ?? []).map(route => route.toRoute<R, S>()),
       header: Object.assign({}, this.#_header ?? {}),
       accept: [...(this.#_consumes ?? [])],
       contentTypes: [...(this.#_produces ?? [])],
@@ -59,7 +59,7 @@ export class RouteBuilder {
   #_parameters?: ParameterPickOptions<unknown>[]
   #_consumes?: string[]
   #_produces?: string[]
-  #_schema?: unknown
+  #_schema?: RouteValidationSchema
 
   header(name: string, value: string | string[]) {
     this.#_header ??= {}
@@ -101,12 +101,12 @@ export class RouteBuilder {
     return this
   }
 
-  schema(schema: unknown) {
+  schema<S extends RouteValidationSchema>(schema: S): this {
     this.#_schema = schema
     return this
   }
 
-  toRoute<R>(): Route<R> {
+  toRoute<R, S extends RouteValidationSchema>(): Route<R, S> {
     return {
       path: this.#_path ?? '',
       method: [...(this.#_method ?? [])],
@@ -116,7 +116,7 @@ export class RouteBuilder {
       header: Object.assign({}, this.#_header ?? {}),
       handler: this.#_handler ?? '',
       response: { status: 200, header: {} },
-      schema: this.#_schema,
+      schema: this.#_schema as S,
     }
   }
 }

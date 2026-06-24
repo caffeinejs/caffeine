@@ -1,7 +1,15 @@
 import { Binding, Key, Provider } from '@caffeinejs/core'
 import { ParameterPickOptions } from './route.picker.js'
 
-export interface Route<R, SCHEMA = unknown> {
+export interface RouteValidationSchema {
+  params?: unknown
+  querystring?: unknown
+  headers?: unknown
+  body?: unknown
+  response?: unknown
+}
+
+export interface Route<R, SCHEMA extends RouteValidationSchema = RouteValidationSchema> {
   path: string
   method: string[]
   accept: string[]
@@ -16,7 +24,7 @@ export interface Route<R, SCHEMA = unknown> {
   }
 }
 
-export interface Router<R, SCHEMA = unknown> {
+export interface Router<R, SCHEMA extends RouteValidationSchema = RouteValidationSchema> {
   prefix: string
   routes: Route<R, SCHEMA>[]
   accept: string[]

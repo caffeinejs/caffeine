@@ -1,8 +1,19 @@
 import { IncomingMessage } from 'http'
-import { Context, Req } from '@caffeinejs/http'
+import { Context, Req, RouteValidationSchema } from '@caffeinejs/http'
 import { FastifyRequest, FastifyReply, RawReplyDefaultExpression, RawServerDefault, RawRequestDefaultExpression } from 'fastify'
 
-export class FastifyContext implements Context<
+export interface FastifyRouteSchema<
+  _TParams = Record<string, string>,
+  _TQuery = Record<string, string>,
+  _THeaders = Record<string, string>,
+  _TBody = unknown,
+> extends RouteValidationSchema {}
+
+type InferParams<S> = S extends FastifyRouteSchema<infer P, any, any, any> ? P : Record<string, string>
+type InferQuery<S> = S extends FastifyRouteSchema<any, infer Q, any, any> ? Q : Record<string, string>
+type InferHeaders<S> = S extends FastifyRouteSchema<any, any, infer H, any> ? H : Record<string, string>
+
+export class FastifyContext<SCHEMA extends FastifyRouteSchema = FastifyRouteSchema> implements Context<
   RawRequestDefaultExpression<RawServerDefault>,
   RawReplyDefaultExpression<RawServerDefault>
 > {
@@ -11,8 +22,8 @@ export class FastifyContext implements Context<
     private readonly reply: FastifyReply,
   ) { }
 
-  get req(): FastifyContextRequest {
-    return new FastifyContextRequest(this.request)
+  get req(): FastifyContextRequest<SCHEMA> {
+    return new FastifyContextRequest<SCHEMA>(this.request)
   }
 
   get res(): RawReplyDefaultExpression<RawServerDefault> {
@@ -36,7 +47,12 @@ export class FastifyContext implements Context<
   }
 }
 
-export class FastifyContextRequest implements Req<RawRequestDefaultExpression<RawServerDefault>> {
+export class FastifyContextRequest<SCHEMA extends FastifyRouteSchema = FastifyRouteSchema> implements Req<
+  RawRequestDefaultExpression<RawServerDefault>,
+  InferParams<SCHEMA>,
+  InferQuery<SCHEMA>,
+  InferHeaders<SCHEMA>
+> {
   constructor(private readonly request: FastifyRequest) {}
 
   get raw(): IncomingMessage {
@@ -51,29 +67,29 @@ export class FastifyContextRequest implements Req<RawRequestDefaultExpression<Ra
     return this.request.method
   }
 
-  header(): Record<string, string>
+  header(): InferHeaders<SCHEMA>
   header(key: string): string | undefined
-  header(key?: string): string | Record<string, string> | undefined {
+  header(key?: string): InferHeaders<SCHEMA> | string | undefined {
     if (key === undefined) {
-      return this.request.headers as Record<string, string>
+      return this.request.headers as InferHeaders<SCHEMA>
     }
     return this.request.headers[key] as string | undefined
   }
 
-  param(): Record<string, string>
+  param(): InferParams<SCHEMA>
   param(key: string): string | undefined
-  param(key?: string): string | Record<string, string> | undefined {
+  param(key?: string): InferParams<SCHEMA> | string | undefined {
     if (key === undefined) {
-      return this.request.params as Record<string, string>
+      return this.request.params as InferParams<SCHEMA>
     }
     return (this.request.params as Record<string, string>)[key]
   }
 
-  query(): Record<string, string>
+  query(): InferQuery<SCHEMA>
   query(key: string): string | undefined
-  query(key?: string): string | Record<string, string> | undefined {
+  query(key?: string): InferQuery<SCHEMA> | string | undefined {
     if (key === undefined) {
-      return this.request.query as Record<string, string>
+      return this.request.query as InferQuery<SCHEMA>
     }
     return (this.request.query as Record<string, string>)[key]
   }
