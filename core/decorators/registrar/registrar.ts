@@ -262,15 +262,6 @@ export function decoratorConfigToBinding<T>(config: DecoratedBindingConfig): Bin
   return config.binding()
 }
 
-function profileKeys(profile: Identifier): Set<Key> {
-  let keys = ByProfile.get(profile)
-  if (!keys) {
-    keys = new Set()
-    ByProfile.set(profile, keys)
-  }
-  return keys
-}
-
 function injectablesPerProfile(profile: Identifier): Array<[Key, DecoratedBindingConfig]> {
   let arr = ProvidedBindings.get(profile)
   if (!arr) {

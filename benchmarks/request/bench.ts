@@ -12,7 +12,7 @@ interface ServerConfig {
   cmd: string
   args: string[]
   port: number
-  requiresBuild?: boolean
+  builtPath?: string
 }
 
 interface BenchResult {
@@ -21,8 +21,6 @@ interface BenchResult {
   latencyMs: number
   throughputMBs: number
 }
-
-const nestjsBuilt = resolve(__dirname, '..', 'dist', 'request', 'nestjs.js')
 
 const servers: ServerConfig[] = [
   {
@@ -40,9 +38,9 @@ const servers: ServerConfig[] = [
   {
     name: 'nestjs',
     cmd: 'node',
-    args: [nestjsBuilt],
+    args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs.js')],
     port: 3022,
-    requiresBuild: true,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'nestjs.js'),
   },
 ]
 
@@ -83,12 +81,12 @@ async function killProcess(child: ChildProcess): Promise<void> {
 }
 
 async function runServer(server: ServerConfig): Promise<BenchResult> {
-  if (server.requiresBuild) {
+  if (server.builtPath) {
     try {
-      await access(nestjsBuilt)
+      await access(server.builtPath)
     } catch {
       throw new Error(
-        `NestJS compiled output not found at: ${nestjsBuilt}\n`
+        `Compiled output not found at: ${server.builtPath}\n`
         + `Run: npm run build -w @caffeinejs/benchmarks`,
       )
     }
