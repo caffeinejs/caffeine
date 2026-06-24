@@ -21,7 +21,7 @@ export interface Route<R> {
   bodyLimit?: number
   timeout?: number
   response: {
-    status: number
+    status?: number
     header: Record<string, string>
   }
 }

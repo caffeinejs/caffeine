@@ -79,6 +79,10 @@ export class FastifyAdapter<
                 return res.send(body)
               }
 
+              if (route.response.status !== undefined) {
+                res.code(route.response.status)
+              }
+
               return result
             },
           })

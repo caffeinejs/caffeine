@@ -84,6 +84,7 @@ export class RouteBuilder {
   #_schema?: RouteValidationSchema
   #_bodyLimit?: number
   #_timeout?: number
+  #_statusCode?: number
 
   header(name: string, value: string | string[]) {
     this.#_header ??= {}
@@ -140,6 +141,11 @@ export class RouteBuilder {
     return this
   }
 
+  statusCode(code: number): this {
+    this.#_statusCode = code
+    return this
+  }
+
   toRoute<R>(): Route<R> {
     return {
       path: normalizePath(this.#_path ?? ''),
@@ -149,7 +155,7 @@ export class RouteBuilder {
       parameters: [...(this.#_parameters ?? [])],
       header: Object.assign({}, this.#_header ?? {}),
       handler: this.#_handler ?? '',
-      response: { status: 200, header: {} },
+      response: { status: this.#_statusCode, header: {} },
       schema: this.#_schema,
       bodyLimit: this.#_bodyLimit,
       timeout: this.#_timeout,
