@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { makeBigArray } from './shared.js'
+import { makeBigArray } from '../shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3020', 10)
 

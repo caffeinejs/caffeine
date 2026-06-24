@@ -10,7 +10,7 @@ import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
 import { Observable } from 'rxjs'
 import { FastifyReply } from 'fastify'
-import { makeBigArray } from './shared.js'
+import { makeBigArray } from '../shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3022', 10)
 

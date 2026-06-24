@@ -15,6 +15,7 @@ interface ServerConfig {
   args: string[]
   builtPath?: string
   url?: string
+  env?: NodeJS.ProcessEnv
 }
 
 interface BenchResult {
@@ -28,44 +29,50 @@ const servers: ServerConfig[] = [
   {
     name: 'fastify',
     cmd: 'node',
-    args: [resolve(__dirname, 'fastify.js')],
+    args: [resolve(__dirname, 'fastify', 'fastify.js')],
   },
   {
     name: 'express',
     cmd: 'node',
-    args: [resolve(__dirname, 'express.js')],
+    args: [resolve(__dirname, 'express', 'express.js')],
   },
   {
     name: 'nestjs',
     cmd: 'node',
-    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs.js')],
-    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs.js'),
+    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs', 'nestjs.js')],
+    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs', 'nestjs.js'),
   },
   {
     name: 'elysia',
     cmd: 'node',
-    args: [resolve(__dirname, 'elysia.js')],
+    args: [resolve(__dirname, 'elysia', 'elysia.js')],
   },
   {
     name: 'hono',
     cmd: 'node',
-    args: [resolve(__dirname, 'hono.js')],
+    args: [resolve(__dirname, 'hono', 'hono.js')],
   },
   {
     name: 'node:http',
     cmd: 'node',
-    args: [resolve(__dirname, 'node-http.js')],
+    args: [resolve(__dirname, 'node-http', 'node-http.js')],
   },
   {
     name: 'adonisjs',
     cmd: 'node',
-    args: [resolve(__dirname, 'adonisjs.js')],
+    args: [resolve(__dirname, 'adonisjs', 'adonisjs.js')],
   },
   {
     name: 'trpc',
     cmd: 'node',
-    args: [resolve(__dirname, 'trpc.js')],
+    args: [resolve(__dirname, 'trpc', 'trpc.js')],
     url: `http://127.0.0.1:${PORT}/hello`,
+  },
+  {
+    name: 'caffeine',
+    cmd: 'node',
+    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
+    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
   },
 ]
 
@@ -111,7 +118,7 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
   const serverUrl = server.url ?? BASE_URL
 
   const child = spawn(server.cmd, server.args, {
-    env: { ...process.env, PORT: String(PORT) },
+    env: { ...process.env, PORT: String(PORT), ...server.env },
     stdio: ['ignore', 'ignore', 'ignore'],
   })
 

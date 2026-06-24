@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const distNestjs = resolve(__dirname, '..', 'dist', 'request', 'nestjs.js')
+const distNestjs = resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js')
 
 interface ServerConfig {
   name: string
@@ -20,13 +20,13 @@ const servers: ServerConfig[] = [
   {
     name: 'fastify',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'fastify.ts')],
+    args: ['--import=tsx', resolve(__dirname, 'fastify', 'fastify.ts')],
     port: 3020,
   },
   {
     name: 'hono',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'hono.ts')],
+    args: ['--import=tsx', resolve(__dirname, 'hono', 'hono.ts')],
     port: 3021,
   },
   {

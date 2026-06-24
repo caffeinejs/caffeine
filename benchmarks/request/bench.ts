@@ -26,21 +26,21 @@ const servers: ServerConfig[] = [
   {
     name: 'fastify',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'fastify.ts')],
+    args: ['--import=tsx', resolve(__dirname, 'fastify', 'fastify.ts')],
     port: 3020,
   },
   {
     name: 'hono',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'hono.ts')],
+    args: ['--import=tsx', resolve(__dirname, 'hono', 'hono.ts')],
     port: 3021,
   },
   {
     name: 'nestjs',
     cmd: 'node',
-    args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs.js')],
+    args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js')],
     port: 3022,
-    builtPath: resolve(__dirname, '..', 'dist', 'request', 'nestjs.js'),
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js'),
   },
 ]
 

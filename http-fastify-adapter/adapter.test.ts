@@ -3,32 +3,28 @@ import supertest from 'supertest'
 import fastify from 'fastify'
 import { Controller, Get, header, newHTTP, param, Params, query } from '@caffeinejs/http'
 import { DiCaf } from '@caffeinejs/core'
-import { fastifyAdapter, fastifyAdapterFactory } from './adapter.js'
+import { FastifyAdapter, fastifyAdapterFactory } from './adapter.js'
 
 describe('Fastify Adapter', () => {
   it('exposes the underlying server as a supertest-compatible listener', async () => {
-    const container = new DiCaf()
     const app = fastify()
     app.get('/', () => ({ ok: true }))
-    await app.ready()
 
-    const adapter = fastifyAdapter(app, container)
-    const adaptee = await Promise.resolve(adapter({ routers: [] }))
+    const adapter = new FastifyAdapter(new DiCaf(), app, [])
+    await adapter.ready()
 
-    expect(adaptee.instance()).toBe(app)
-    await supertest(adaptee.instance().server).get('/')
+    expect(adapter.instance()).toBe(app)
+    await supertest(adapter.instance().server).get('/')
       .expect(200, { ok: true })
   })
 
   it('exposes the underlying fastify instance and can be tested with .inject()', async () => {
-    const container = new DiCaf()
     const app = fastify()
     app.get('/', () => ({ ok: true }))
-    await app.ready()
 
-    const adapter = fastifyAdapter(app, container)
-    const adaptee = await Promise.resolve(adapter({ routers: [] }))
-    const result = await adaptee.instance().inject('/')
+    const adapter = new FastifyAdapter(new DiCaf(), app, [])
+    await adapter.ready()
+    const result = await adapter.instance().inject('/')
 
     expect(result.json()).toEqual({ ok: true })
   })
@@ -44,9 +40,12 @@ describe('Fastify Adapter', () => {
         }
       }
 
-      const srv = await newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const adapter = await app.create()
 
-      await supertest(srv.instance().server)
+      await adapter.ready()
+
+      await supertest(adapter.instance().server)
         .get('/users/1?filter=test')
         .set('x-test', 'test')
         .expect(200, { ok: true, id: '1', filter: 'test', test: 'test' })

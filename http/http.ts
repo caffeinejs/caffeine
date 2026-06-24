@@ -1,60 +1,54 @@
 import { Container, DiCaf, Module, Options } from '@caffeinejs/core'
 import { Keys } from './symbols.js'
 import { Router } from './route.js'
-import { Adaptee, AdapterFactory } from './adapter.js'
+import { Adapter, AdapterFactory } from './adapter.js'
 import { getRouter } from './decorators/_registrar.js'
+import { CaffeineError } from './error.js'
 
-export type HTTPApplicationOptions = {
+export type CaffeineHTTPOptions = {
   container?: Container | Options
 }
 
-export class CaffeineHTTP<REQ, A> {
+export class CaffeineHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> {
   #container: Container
-  #modules!: Module[]
+  #modules: Module[] = []
+  #adapterFactory: AdapterFactory<I, REQ, A>
 
   constructor(
-    private readonly adapterFactory: AdapterFactory<REQ, A>,
-    options: HTTPApplicationOptions = {},
+    adapterFactory: AdapterFactory<I, REQ, A>,
+    options: CaffeineHTTPOptions = {},
   ) {
+    this.#adapterFactory = adapterFactory
     this.#container = typeof options.container === 'function'
       ? options.container
       : new DiCaf(typeof options.container === 'object' ? options.container as Partial<Options> : {})
   }
 
-  use(module: Module): this {
-    this.#modules ??= []
-    this.#modules.push(module)
+  modules(...modules: Module[]): this {
+    this.#modules.push(...modules)
     return this
   }
 
-  async ready(): Promise<Adaptee<A>> {
-    const adapter = await Promise.resolve(this.adapterFactory({ container: this.#container }))
+  async create(): Promise<A> {
+    const controllers = this.#container.getBindingsByLabel(Keys.CONTROLLER)
+    const routers = new Array<Router<REQ>>(controllers.length)
 
-    return adapter({ routers: [] })
+    for (let i = 0; i < controllers.length; i++) {
+      const { key, binding } = controllers[i]
+      const rd = getRouter(key as Function)
+      if (!rd) {
+        throw new CaffeineError(`Cannot build router: no route definition found for controller "${String(key)}"`, 'HTTP_MISSING_ROUTER')
+      }
+      routers[i] = rd.toRouter<REQ>(key, binding, this.#container.wrap(key))
+    }
+
+    return this.#adapterFactory({ container: this.#container }, { routers })
   }
 }
 
-export async function newHTTP<REQ, A>(adapterFactory: AdapterFactory<REQ, A>, options: HTTPApplicationOptions = {}): Promise<Adaptee<A>> {
-  const container = typeof options.container === 'function'
-    ? options.container
-    : new DiCaf(typeof options.container === 'object' ? options.container as Partial<Options> : {})
-
-  await container.init()
-
-  const controllers = container.getBindingsByLabel(Keys.CONTROLLER)
-  const routers = new Array<Router<REQ>>(controllers.length)
-
-  for (let i = 0; i < controllers.length; i++) {
-    const { key, binding } = controllers[i]
-    const rd = getRouter(key as Function)
-    if (!rd) {
-      throw new Error(`Router definition not found for controller ${String(key)}`)
-    }
-
-    routers[i] = rd.toRouter<REQ>(key, binding, container.wrap(key))
-  }
-
-  return Promise
-    .resolve(adapterFactory({ container }))
-    .then(adapter => adapter({ routers }))
+export function newHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>(
+  adapterFactory: AdapterFactory<I, REQ, A>,
+  options: CaffeineHTTPOptions = {},
+): CaffeineHTTP<I, REQ, A> {
+  return new CaffeineHTTP(adapterFactory, options)
 }

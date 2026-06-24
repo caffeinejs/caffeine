@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server'
 import { zValidator } from '@hono/zod-validator'
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { makeBigArray } from './shared.js'
+import { makeBigArray } from '../shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3021', 10)
 const big = makeBigArray()

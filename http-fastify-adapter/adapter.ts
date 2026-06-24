@@ -1,6 +1,6 @@
-import { Container } from '@caffeinejs/core'
-import { Adaptee, Adapter, AdapterFactory, AdapterIn, ParameterPickOptions } from '@caffeinejs/http'
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { Container, Scopes } from '@caffeinejs/core'
+import { Adapter, AdapterFactory, ParameterPickOptions, Router } from '@caffeinejs/http'
+import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 type Accessor<
@@ -10,50 +10,75 @@ type Accessor<
 >
   = (server: SERVER, req: REQ, res: RES) => unknown
 
-export function fastifyAdapterFactory<
-  SERVER extends FastifyInstance = FastifyInstance,
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->(fastify: SERVER): AdapterFactory<REQ, SERVER> {
-  return ctx => fastifyAdapter<SERVER, REQ, RES>(fastify, ctx.container)
-}
+type HandlerFn = (handler: string | symbol) => (...args: unknown[]) => unknown
 
-export function fastifyAdapter<
+export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
->(fastify: SERVER, container: Container): Adapter<REQ, SERVER> {
-  return async function ({ routers }: AdapterIn<REQ>): Promise<Adaptee<SERVER>> {
-    for (let i = 0; i < routers.length; i++) {
-      const router = routers[i]
+> extends Adapter<SERVER, REQ> {
+  #fastify: SERVER
+
+  constructor(container: Container, fastify: SERVER, routers: Router<REQ>[]) {
+    super(container, routers)
+    this.#fastify = fastify
+  }
+
+  async ready(): Promise<void> {
+    await this.container.init()
+
+    for (let i = 0; i < this.routers.length; i++) {
+      const router = this.routers[i]
 
       const prefix = router.prefix
       const routes = router.routes
       const fpo = { name: `${String(router.key)}`, fastify: '5.x' }
 
-      fastify.register(fp(async (server, options) => {
+      this.#fastify.register(fp(async server => {
         for (const route of routes) {
           const fn = compile(route.parameters) as (server: SERVER, req: REQ, res: RES) => unknown[]
           const controller = router.controller
+          const singleton = router.binding.scopeId === Scopes.SINGLETON
+          let handlerFn: HandlerFn
+
+          if (singleton) {
+            const ref = controller.get()
+            const refFn = ref[route.handler]
+            handlerFn = () => (...args: unknown[]) => refFn(...args)
+          } else {
+            handlerFn = (handler: string | symbol) => (...args: unknown[]) => controller.get()[handler](...args)
+          }
 
           server.route({
             method: route.method,
             url: `${prefix}${route.path}`,
-            config: {},
             handler: function (req, res) {
-              return controller.get()[route.handler](...fn(this as SERVER, req as REQ, res as RES))
+              return handlerFn(route.handler)(...fn(this as SERVER, req as REQ, res as RES))
             },
           })
         }
       }, fpo))
     }
 
-    await fastify.ready()
-
-    return {
-      instance: () => fastify,
-    }
+    await this.#fastify.ready()
   }
+
+  instance(): SERVER {
+    return this.#fastify
+  }
+
+  async listen(opts?: FastifyListenOptions): Promise<string> {
+    return this.#fastify.listen(opts)
+  }
+}
+
+export function fastifyAdapterFactory<
+  SERVER extends FastifyInstance = FastifyInstance,
+  REQ extends FastifyRequest = FastifyRequest,
+  RES extends FastifyReply = FastifyReply,
+>(fastify: SERVER): AdapterFactory<SERVER, REQ, FastifyAdapter<SERVER, REQ, RES>> {
+  return (kit, input): FastifyAdapter<SERVER, REQ, RES> =>
+    new FastifyAdapter<SERVER, REQ, RES>(kit.container, fastify, input.routers)
 }
 
 function compile<
@@ -67,24 +92,24 @@ function compile<
 
     switch (type) {
       case 'body':
-        return (server, req, res) => req.body
+        return (_server, req, _res) => req.body
       case 'query':
         if (field) {
-          return (server, req, res) => (req.query as Record<string, unknown>)[field]
+          return (_server, req, _res) => (req.query as Record<string, unknown>)[field]
         } else {
-          return (server, req, res) => req.query
+          return (_server, req, _res) => req.query
         }
       case 'params':
         if (field) {
-          return (server, req, res) => (req.params as Record<string, unknown>)[field]
+          return (_server, req, _res) => (req.params as Record<string, unknown>)[field]
         } else {
-          return (server, req, res) => req.params
+          return (_server, req, _res) => req.params
         }
       case 'header':
         if (field) {
-          return (server, req, res) => (req.headers as Record<string, unknown>)[field]
+          return (_server, req, _res) => (req.headers as Record<string, unknown>)[field]
         } else {
-          return (server, req, res) => req.headers
+          return (_server, req, _res) => req.headers
         }
       default:
         throw new Error(`Invalid parameter type: ${type}`)
