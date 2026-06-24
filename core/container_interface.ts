@@ -157,6 +157,8 @@ export interface Container {
 
   newChild(): Container
 
+  compile(): Promise<void>
+
   init(): Promise<void>
 
   dispose(): Promise<void>

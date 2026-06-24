@@ -908,9 +908,7 @@ export class CaffeineIoC implements Container {
       return
     }
 
-    if (!this._compiled) {
-      await this.compile()
-    }
+    await this.compile()
 
     this._sortedAsyncEntries = this.sortAsyncBindings()
     this._initializing = true
@@ -1321,7 +1319,18 @@ export class CaffeineIoC implements Container {
     }
   }
 
-  private async compile(): Promise<void> {
+  /**
+   * Compiles all registered bindings — runs module evaluation, conditional resolution,
+   * circular-reference checks, scope validation, and factory compilation.
+   *
+   * May be called before {@link init} to pre-warm the container (e.g. for benchmarking).
+   * Calling {@link init} after `compile()` will skip recompilation automatically.
+   * Subsequent calls are no-ops.
+   */
+  async compile(): Promise<void> {
+    if (this._compiled) {
+      return
+    }
     await Promise.all(this.modules.map((module, index) => runModule(module, this, index)))
     await this.evaluatePendingConditionals()
 
