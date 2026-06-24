@@ -103,6 +103,19 @@ async function killProcess(child: ChildProcess): Promise<void> {
   })
 }
 
+async function clearPort(port: number): Promise<void> {
+  const { execSync } = await import('node:child_process')
+  try {
+    const pids = execSync(`lsof -ti:${port}`, { encoding: 'utf8' }).trim()
+    if (pids) {
+      execSync(`kill -9 ${pids.split('\n').join(' ')}`, { stdio: 'ignore' })
+      await new Promise(r => setTimeout(r, 200))
+    }
+  } catch {
+    // port is free or lsof not available
+  }
+}
+
 async function runServer(server: ServerConfig): Promise<BenchResult> {
   if (server.builtPath) {
     try {
@@ -114,6 +127,8 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
       )
     }
   }
+
+  await clearPort(PORT)
 
   const serverUrl = server.url ?? BASE_URL
 

@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, AdapterFactory, ParameterPickOptions, Router } from '@caffeinejs/http'
 import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
@@ -54,8 +55,24 @@ export class FastifyAdapter<
             method: route.method,
             url: `${prefix}${route.path}`,
             schema: route.schema as FastifySchema,
-            handler: function (req, res) {
-              return handlerFn(route.handler)(...fn(this as SERVER, req as REQ, res as RES))
+            handler: async function (req, res) {
+              const result = await handlerFn(route.handler)(...fn(this as SERVER, req as REQ, res as RES))
+
+              // Fetch API Response Support.
+              // The response is mapped using Fastify's reply object.
+              if (result instanceof Response) {
+                res.code(result.status)
+                for (const [key, value] of result.headers) {
+                  res.header(key, value)
+                }
+
+                const stream = result.body
+                const body = stream ? Readable.fromWeb(stream as Parameters<typeof Readable.fromWeb>[0]) : null
+
+                return res.send(body)
+              }
+
+              return result
             },
           })
         }
