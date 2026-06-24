@@ -176,6 +176,12 @@ export interface Binding<T = any> {
   fallback?: boolean
 
   /**
+   * The order of this binding when injected as part of an ordered collection via {@link ordered}.
+   * Lower values come first. Bindings without an order value are placed last.
+   */
+  order?: number
+
+  /**
    * Whether this binding is asynchronous.
    */
   async?: boolean
@@ -221,6 +227,7 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     internal: initial.internal ?? false,
     source: initial.source,
     fallback: initial.fallback,
+    order: initial.order,
     async: initial.async,
     ctx: initial.ctx,
   }

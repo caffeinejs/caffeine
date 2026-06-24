@@ -34,6 +34,7 @@ export class DecoratedBindingConfig {
   #configuredBy?: string
   #source?: { ctor: Ctor, method: string | symbol }
   #fallback?: boolean
+  #order?: number
   #async?: boolean
   #metadataMerged?: boolean
 
@@ -240,6 +241,11 @@ export class DecoratedBindingConfig {
     return this
   }
 
+  order(order: number): this {
+    this.#order = order
+    return this
+  }
+
   asyncBean(value = true): this {
     this.#async = value
     return this
@@ -297,6 +303,7 @@ export class DecoratedBindingConfig {
       internal: false,
       source: this.#source,
       fallback: this.#fallback,
+      order: this.#order,
       async: this.#async,
       ctx: undefined,
     })

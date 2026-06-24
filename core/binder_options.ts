@@ -141,6 +141,26 @@ export class BinderOptions<TValue> {
   }
 
   /**
+   * Sets the sort position of this binding when resolved via {@link ordered}.
+   * Bindings with lower values are placed first. Bindings without an order are placed last,
+   * preserving their original registration order among themselves.
+   *
+   * @param order - Non-negative integer that determines the position in the sorted result.
+   *
+   * @example
+   * ```ts
+   * container.bind(PluginA).toClass(PluginA).extends(Plugin).order(1)
+   * container.bind(PluginB).toClass(PluginB).extends(Plugin).order(2)
+   * ```
+   */
+  order(order: number): BinderOptions<TValue> {
+    this.binding.order = order
+    this.sync()
+
+    return this
+  }
+
+  /**
    * Configures property injection for the bound class without relying on decorators.
    *
    * @example

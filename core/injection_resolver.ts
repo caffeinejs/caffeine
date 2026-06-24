@@ -5,6 +5,7 @@ import {
   standardFactory,
   objectFactory,
   mappedFactory,
+  orderedFactory,
   providerFactory,
   valueFactory,
 } from './internal/core/resolver/index.js'
@@ -87,6 +88,7 @@ export const BuiltInResolvers = {
   MAP: Symbol('dicaf.resolver.map'),
   DEFER: Symbol('dicaf.resolver.defer'),
   OBJECT: Symbol('dicaf.resolver.object'),
+  ORDERED: Symbol('dicaf.resolver.ordered'),
   PROVIDER: Symbol('dicaf.resolver.provider'),
   VALUE: Symbol('dicaf.resolver.value'),
 } as const
@@ -96,6 +98,7 @@ const registry = new Map<symbol, InjectionResolverFactory>()
   .set(BuiltInResolvers.MAP, mappedFactory)
   .set(BuiltInResolvers.DEFER, deferredFactory)
   .set(BuiltInResolvers.OBJECT, objectFactory)
+  .set(BuiltInResolvers.ORDERED, orderedFactory)
   .set(BuiltInResolvers.PROVIDER, providerFactory)
   .set(BuiltInResolvers.VALUE, valueFactory)
 /**

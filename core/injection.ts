@@ -131,6 +131,57 @@ export function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDesc
 }
 
 /**
+ * ordered creates an injection descriptor that injects all bindings associated with the given key,
+ * sorted by their configured {@link Order} value (ascending). Bindings without an order are placed last,
+ * preserving their original registration order among themselves.
+ *
+ * @param keyOrDescriptor - The key or descriptor to inject all ordered bindings for.
+ *
+ * @example
+ * ```ts
+ * abstract class Handler {
+ *   abstract handle(): void
+ * }
+ *
+ * @Order(1)
+ * @Injectable()
+ * class AuthHandler extends Handler { ... }
+ *
+ * @Order(2)
+ * @Injectable()
+ * class LogHandler extends Handler { ... }
+ *
+ * @Injectable([ordered(Handler)])
+ * class Pipeline {
+ *   constructor(readonly handlers: Handler[]) {} // [AuthHandler, LogHandler]
+ * }
+ * ```
+ */
+export function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+  if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
+    const descriptor = keyOrDescriptor as InjectionDescriptor
+
+    if (!isValidKey(descriptor.key)) {
+      throw new ErrMissingInjectionKey(
+        `Cannot call ${ordered.name}: descriptor does not have a valid key`
+        + solutions(
+          `- Pass a key directly or use an injection function that resolves to a key, e.g. ${ordered.name}(${optional.name}(key))`,
+          `- A circular module import may have caused the key to be undefined at declaration time — use ${ordered.name}(${defer.name}(() => ClassName)) to defer resolution`,
+        ),
+      )
+    }
+
+    return { ...descriptor, resolver: BuiltInResolvers.ORDERED }
+  }
+
+  if (keyOrDescriptor == null) {
+    throw new ErrMissingInjectionKey(`Cannot call ${ordered.name}: key is null or undefined`)
+  }
+
+  return { key: keyOrDescriptor as Key, resolver: BuiltInResolvers.ORDERED }
+}
+
+/**
  * mapped creates an injection descriptor that injects multiple bindings associated with given key
  * into a map, where the map key is the binding name and the value is the instance.
  *
