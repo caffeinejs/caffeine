@@ -11,7 +11,9 @@
     "bench:startup:compile": "esbuild startup/nestjs/app.ts startup/fastify/app.ts startup/hono/app.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outdir=startup/dist --tsconfig=tsconfig.startup.json",
     "bench:helloworld": "node --import=tsx helloworld/bench.ts",
     "bench:startup": "node --import=tsx startup/bench.ts",
-    "bench:request": "node --import=tsx request/bench.ts"
+    "bench:request": "node --import=tsx request/bench.ts",
+    "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit",
+    "test:request": "node --import=tsx request/test.ts"
   },
   "dependencies": {
     "@adonisjs/application": "^9.0.1",
@@ -23,18 +25,20 @@
     "@caffeinejs/http": "*",
     "@elysiajs/node": "^1.4.5",
     "@hono/node-server": "^1.0.0",
+    "@hono/zod-validator": "^0.8.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/platform-fastify": "^11.1.27",
     "@trpc/server": "^11.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
     "elysia": "^1.4.29",
     "express": "^5.0.0",
     "fastify": "^5.0.0",
     "hono": "^4.0.0",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.14.1",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/autocannon": "^7.12.7",

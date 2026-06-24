@@ -75,6 +75,10 @@ import { DiCaf } from '@caffeinejs/core'
 import { DiCaf } from '../core/container.js'
 ```
 
+## Git discipline
+
+Never use `git stash` under any circumstances. Not to save work, not to switch context, not to resolve conflicts. No exceptions. If uncommitted changes exist and you need to switch state, stop and ask for guidance.
+
 ## Build system
 
 - `npm run build` at the root compiles all packages via `tsc --build` (project references) then runs `build:cjs` per workspace to emit CommonJS output via esbuild.

@@ -50,9 +50,9 @@ const REQUEST_BODY = JSON.stringify({ strBody: 'test', numBody: 99, boolBody: tr
 const REQUEST_HEADERS = {
   'content-type': 'application/json',
   'x-api-key': 'benchmark',
-  'x-str-header': 'hello',
-  'x-num-header': '42',
-  'x-bool-header': 'true',
+  text: 'hello',
+  num: '42',
+  bool: 'true',
 }
 
 async function waitForReady(url: string, timeoutMs = 10_000): Promise<void> {
@@ -95,7 +95,7 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
   }
 
   const healthUrl = `http://127.0.0.1:${server.port}/health`
-  const benchUrl = `http://127.0.0.1:${server.port}/api/test/hello/42/true?strQuery=world&numQuery=7&boolQuery=false`
+  const benchUrl = `http://127.0.0.1:${server.port}/api/test/hello/42/true?text=world&num=7&bool=false`
 
   const child = spawn(server.cmd, server.args, {
     env: { ...process.env, PORT: String(server.port) },

@@ -1,27 +1,31 @@
 import 'reflect-metadata'
 import {
   Body, CallHandler, CanActivate, Controller, ExecutionContext, Get,
-  Headers, Injectable, Module, NestInterceptor, Param, ParseBoolPipe,
-  ParseIntPipe, Post, Query, Res, UnauthorizedException, UseGuards,
-  UseInterceptors, ValidationPipe,
+  Headers, HttpCode, Injectable, Module, NestInterceptor, Param, Post,
+  Query, Res, UnauthorizedException, UseGuards, UseInterceptors, ValidationPipe,
 } from '@nestjs/common'
-import { IsBoolean, IsNumber, IsString } from 'class-validator'
+import { Transform, Type } from 'class-transformer'
+import { IsBoolean, IsInt, IsNotEmpty, IsString } from 'class-validator'
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
 import { Observable } from 'rxjs'
+import { FastifyReply } from 'fastify'
 import { makeBigArray } from './shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3022', 10)
 
-class TestBodyDto {
+class Schema {
   @IsString()
-  strBody!: string
+  @IsNotEmpty()
+  text!: string
 
-  @IsNumber()
-  numBody!: number
+  @IsInt()
+  @Type(() => Number)
+  num!: number
 
   @IsBoolean()
-  boolBody!: boolean
+  @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
+  bool!: boolean
 }
 
 @Injectable()
@@ -54,35 +58,27 @@ class TestController {
     return { ok: true }
   }
 
-  @Post('/api/test/:strParam/:numParam/:boolParam')
+  @Post('/api/test/:text/:num/:bool')
   @UseGuards(new ApiKeyGuard())
+  @HttpCode(200)
   test(
-    @Param('strParam') strParam: string,
-    @Param('numParam', ParseIntPipe) numParam: number,
-    @Param('boolParam', ParseBoolPipe) boolParam: boolean,
-    @Query('strQuery') strQuery: string,
-    @Query('numQuery', ParseIntPipe) numQuery: number,
-    @Query('boolQuery', ParseBoolPipe) boolQuery: boolean,
-    @Body() body: TestBodyDto,
-    @Headers('x-str-header') xStr: string,
-    @Headers('x-num-header') xNum: string,
-    @Headers('x-bool-header') xBool: string,
-
-    @Res({ passthrough: true }) res: any,
+    @Param() params: Schema,
+    @Query() query: Schema,
+    @Body() body: Schema,
+    @Headers('text') hText: string,
+    @Headers('num') hNum: string,
+    @Headers('bool') hBool: string,
+    @Res({ passthrough: true }) res: FastifyReply,
   ) {
-    res.header('x-str-header', xStr)
-    res.header('x-num-header', xNum)
-    res.header('x-bool-header', xBool)
+    res.header('text', hText)
+    res.header('num', hNum)
+    res.header('bool', hBool)
 
     return {
-      params: { str: strParam, num: numParam, bool: boolParam },
-      query: { str: strQuery, num: numQuery, bool: boolQuery },
-      body: { str: body.strBody, num: body.numBody, bool: body.boolBody },
-      header: {
-        str: xStr,
-        num: parseInt(xNum, 10),
-        bool: xBool === 'true',
-      },
+      params: { text: params.text, num: params.num, bool: params.bool },
+      query: { text: query.text, num: query.num, bool: query.bool },
+      body: { text: body.text, num: body.num, bool: body.bool },
+      header: { text: hText, num: parseInt(hNum, 10), bool: hBool === 'true' },
       big: this.big,
     }
   }
@@ -92,8 +88,9 @@ class TestController {
   controllers: [TestController],
   providers: [RequestIdInterceptor],
 })
-class AppModule {}
+class AppModule { }
 
 const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
 app.useGlobalPipes(new ValidationPipe({ transform: true }))
+
 await app.listen(PORT, '0.0.0.0')

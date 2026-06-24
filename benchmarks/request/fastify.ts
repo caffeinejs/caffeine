@@ -2,23 +2,36 @@ import Fastify from 'fastify'
 import { makeBigArray } from './shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3020', 10)
-const big = makeBigArray()
 
+const big = makeBigArray()
 const app = Fastify({ logger: false })
 
+const schema = {
+  type: 'object',
+  required: ['text', 'num', 'bool'],
+  properties: {
+    text: { type: 'string' },
+    num: { type: 'number' },
+    bool: { type: 'boolean' },
+  },
+}
+
 app.addHook('onRequest', (_req, reply, done) => {
-  reply.header('x-request-id', Math.random().toString(36)
-    .slice(2))
+  reply.header('x-request-id',
+    Math
+      .random()
+      .toString(36)
+      .slice(2))
   done()
 })
 
 app.get('/health', () => ({ ok: true }))
 
 app.post<{
-  Params: { strParam: string, numParam: number, boolParam: boolean }
-  Querystring: { strQuery: string, numQuery: number, boolQuery: boolean }
-  Body: { strBody: string, numBody: number, boolBody: boolean }
-}>('/api/test/:strParam/:numParam/:boolParam', {
+  Params: { text: string, num: number, bool: boolean }
+  Querystring: { text: string, num: number, bool: boolean }
+  Body: { text: string, num: number, bool: boolean }
+}>('/api/test/:text/:num/:bool', {
   preHandler: (req, reply, done) => {
     if (req.headers['x-api-key'] !== 'benchmark') {
       reply.code(401).send({ error: 'Unauthorized' })
@@ -27,69 +40,17 @@ app.post<{
     done()
   },
   schema: {
-    params: {
-      type: 'object',
-      required: ['strParam', 'numParam', 'boolParam'],
-      properties: {
-        strParam: { type: 'string' },
-        numParam: { type: 'number' },
-        boolParam: { type: 'boolean' },
-      },
-    },
-    querystring: {
-      type: 'object',
-      required: ['strQuery', 'numQuery', 'boolQuery'],
-      properties: {
-        strQuery: { type: 'string' },
-        numQuery: { type: 'number' },
-        boolQuery: { type: 'boolean' },
-      },
-    },
-    body: {
-      type: 'object',
-      required: ['strBody', 'numBody', 'boolBody'],
-      properties: {
-        strBody: { type: 'string' },
-        numBody: { type: 'number' },
-        boolBody: { type: 'boolean' },
-      },
-    },
+    params: schema,
+    querystring: schema,
+    body: schema,
     response: {
       200: {
         type: 'object',
         properties: {
-          params: {
-            type: 'object',
-            properties: {
-              str: { type: 'string' },
-              num: { type: 'number' },
-              bool: { type: 'boolean' },
-            },
-          },
-          query: {
-            type: 'object',
-            properties: {
-              str: { type: 'string' },
-              num: { type: 'number' },
-              bool: { type: 'boolean' },
-            },
-          },
-          body: {
-            type: 'object',
-            properties: {
-              str: { type: 'string' },
-              num: { type: 'number' },
-              bool: { type: 'boolean' },
-            },
-          },
-          header: {
-            type: 'object',
-            properties: {
-              str: { type: 'string' },
-              num: { type: 'number' },
-              bool: { type: 'boolean' },
-            },
-          },
+          params: schema,
+          query: schema,
+          body: schema,
+          header: schema,
           big: {
             type: 'array',
             items: {
@@ -111,21 +72,22 @@ app.post<{
   const q = req.query
   const b = req.body
 
-  reply.header('x-str-header', req.headers['x-str-header'])
-  reply.header('x-num-header', req.headers['x-num-header'])
-  reply.header('x-bool-header', req.headers['x-bool-header'])
+  reply.header('text', req.headers['text'])
+  reply.header('num', req.headers['num'])
+  reply.header('bool', req.headers['bool'])
 
-  return {
-    params: { str: p.strParam, num: p.numParam, bool: p.boolParam },
-    query: { str: q.strQuery, num: q.numQuery, bool: q.boolQuery },
-    body: { str: b.strBody, num: b.numBody, bool: b.boolBody },
+  reply.send({
+    params: { text: p.text, num: p.num, bool: p.bool },
+    query: { text: q.text, num: q.num, bool: q.bool },
+    body: { text: b.text, num: b.num, bool: b.bool },
     header: {
-      str: req.headers['x-str-header'] as string,
-      num: parseInt(req.headers['x-num-header'] as string, 10),
-      bool: req.headers['x-bool-header'] === 'true',
+      text: req.headers['text'] as string,
+      num: parseInt(req.headers['num'] as string, 10),
+      bool: req.headers['bool'] === 'true',
     },
     big,
-  }
+  })
 })
 
+await app.ready()
 await app.listen({ port: PORT, host: '0.0.0.0' })

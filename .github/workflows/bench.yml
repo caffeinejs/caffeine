@@ -11,9 +11,10 @@ on:
         options:
           - helloworld
           - startup
+          - request
 
 concurrency:
-  group: benchmark-${{ github.ref }}
+  group: bench-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,10 +41,10 @@ jobs:
       - name: Build
         run: npm run build -w @caffeinejs/benchmarks
 
-      - name: Run Benchmark
+      - name: Benchmark
         run: npm run bench:${{ inputs.benchmark }} -w @caffeinejs/benchmarks | tee /tmp/bench-output.txt
 
-      - name: Write Summary
+      - name: Summary
         if: always()
         run: |
           echo "## Benchmark: \`${{ inputs.benchmark }}\`" >> $GITHUB_STEP_SUMMARY
