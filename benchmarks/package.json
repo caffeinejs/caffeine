@@ -12,6 +12,7 @@
     "bench:helloworld": "node --import=tsx helloworld/bench.ts",
     "bench:startup": "node --import=tsx startup/bench.ts",
     "bench:request": "node --import=tsx request/bench.ts",
+    "bench:mixedscopes": "node --import=tsx mixedscopes/bench.ts",
     "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit",
     "test:request": "node --import=tsx request/test.ts"
   },

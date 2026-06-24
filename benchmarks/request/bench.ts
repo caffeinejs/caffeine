@@ -88,6 +88,32 @@ async function killProcess(child: ChildProcess): Promise<void> {
   })
 }
 
+async function clearPort(port: number): Promise<void> {
+  const { execSync } = await import('node:child_process')
+  try {
+    const pids = execSync(`lsof -ti:${port}`, { encoding: 'utf8' }).trim()
+    if (pids) {
+      execSync(`kill -9 ${pids.split('\n').join(' ')}`, { stdio: 'ignore' })
+      await new Promise(r => setTimeout(r, 200))
+    }
+  } catch {
+    // port is free or lsof not available
+  }
+}
+
+let activeChild: ChildProcess | null = null
+
+function shutdown(): void {
+  if (activeChild) {
+    activeChild.kill('SIGTERM')
+    setTimeout(() => activeChild?.kill('SIGKILL'), 2000).unref()
+  }
+  process.exit(1)
+}
+
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)
+
 async function runServer(server: ServerConfig): Promise<BenchResult> {
   if (server.builtPath) {
     try {
@@ -103,11 +129,14 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
   const healthUrl = `http://127.0.0.1:${server.port}/health`
   const benchUrl = `http://127.0.0.1:${server.port}/api/test/hello/42/true?text=world&num=7&bool=false`
 
+  await clearPort(server.port)
+
   const child = spawn(server.cmd, server.args, {
     env: { ...process.env, ...server.env, PORT: String(server.port) },
     stdio: ['ignore', 'ignore', 'ignore'],
   })
 
+  activeChild = child
   child.on('error', err => {
     throw err
   })
@@ -123,6 +152,7 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
     duration: 10,
   })
 
+  activeChild = null
   await killProcess(child)
   await new Promise(r => setTimeout(r, 500))
 

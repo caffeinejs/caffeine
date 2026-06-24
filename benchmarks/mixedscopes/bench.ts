@@ -6,16 +6,14 @@ import autocannon from 'autocannon'
 import { printMachineInfo } from '../machine-info.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PORT = parseInt(process.env.PORT ?? '3000', 10)
-const BASE_URL = `http://127.0.0.1:${PORT}/`
 
 interface ServerConfig {
   name: string
   cmd: string
   args: string[]
+  port: number
   builtPath?: string
-  url?: string
-  env?: NodeJS.ProcessEnv
+  env?: Record<string, string>
 }
 
 interface BenchResult {
@@ -27,54 +25,29 @@ interface BenchResult {
 
 const servers: ServerConfig[] = [
   {
-    name: 'fastify',
+    name: 'caffeine',
     cmd: 'node',
-    args: [resolve(__dirname, 'fastify', 'fastify.js')],
-  },
-  {
-    name: 'express',
-    cmd: 'node',
-    args: [resolve(__dirname, 'express', 'express.js')],
+    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
+    port: 3030,
+    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
   },
   {
     name: 'nestjs',
     cmd: 'node',
-    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs', 'nestjs.js')],
-    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs', 'nestjs.js'),
-  },
-  {
-    name: 'elysia',
-    cmd: 'node',
-    args: [resolve(__dirname, 'elysia', 'elysia.js')],
-  },
-  {
-    name: 'hono',
-    cmd: 'node',
-    args: [resolve(__dirname, 'hono', 'hono.js')],
-  },
-  {
-    name: 'node:http',
-    cmd: 'node',
-    args: [resolve(__dirname, 'node-http', 'node-http.js')],
-  },
-  {
-    name: 'adonisjs',
-    cmd: 'node',
-    args: [resolve(__dirname, 'adonisjs', 'adonisjs.js')],
-  },
-  {
-    name: 'trpc',
-    cmd: 'node',
-    args: [resolve(__dirname, 'trpc', 'trpc.js')],
-    url: `http://127.0.0.1:${PORT}/hello`,
-  },
-  {
-    name: 'caffeine',
-    cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
-    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
+    args: [resolve(__dirname, '..', 'dist', 'mixedscopes', 'nestjs', 'nestjs.js')],
+    port: 3031,
+    builtPath: resolve(__dirname, '..', 'dist', 'mixedscopes', 'nestjs', 'nestjs.js'),
   },
 ]
+
+const REQUEST_BODY = JSON.stringify({ text: 'test', num: 99, bool: true })
+const REQUEST_HEADERS = {
+  'content-type': 'application/json',
+  'x-api-key': 'benchmark',
+  text: 'hello',
+  num: '42',
+  bool: 'true',
+}
 
 async function waitForReady(url: string, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
@@ -89,7 +62,7 @@ async function waitForReady(url: string, timeoutMs = 10_000): Promise<void> {
     }
     await new Promise(r => setTimeout(r, 100))
   }
-  throw new Error(`Server on port ${PORT} did not become ready within ${timeoutMs}ms`)
+  throw new Error(`Server did not become ready within ${timeoutMs}ms`)
 }
 
 async function killProcess(child: ChildProcess): Promise<void> {
@@ -116,7 +89,7 @@ async function clearPort(port: number): Promise<void> {
   }
 }
 
-let activeChild: import('node:child_process').ChildProcess | null = null
+let activeChild: ChildProcess | null = null
 
 function shutdown(): void {
   if (activeChild) {
@@ -141,12 +114,13 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
     }
   }
 
-  await clearPort(PORT)
+  const healthUrl = `http://127.0.0.1:${server.port}/health`
+  const benchUrl = `http://127.0.0.1:${server.port}/api/test/hello/42/true?text=world&num=7&bool=false`
 
-  const serverUrl = server.url ?? BASE_URL
+  await clearPort(server.port)
 
   const child = spawn(server.cmd, server.args, {
-    env: { ...process.env, PORT: String(PORT), ...server.env },
+    env: { ...process.env, ...server.env, PORT: String(server.port) },
     stdio: ['ignore', 'ignore', 'ignore'],
   })
 
@@ -155,9 +129,16 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
     throw err
   })
 
-  await waitForReady(serverUrl)
+  await waitForReady(healthUrl)
 
-  const result = await autocannon({ url: serverUrl, connections: 100, duration: 10 })
+  const result = await autocannon({
+    url: benchUrl,
+    method: 'POST',
+    body: REQUEST_BODY,
+    headers: REQUEST_HEADERS,
+    connections: 100,
+    duration: 10,
+  })
 
   activeChild = null
   await killProcess(child)
@@ -206,7 +187,6 @@ for (const server of servers) {
   if (process.env.CI !== 'true') {
     console.log(`Benchmarking ${server.name}...`)
   }
-
   results.push(await runServer(server))
 }
 

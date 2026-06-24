@@ -9,11 +9,8 @@
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
-    "sourceMap": true,
-    "outDir": "dist",
-    "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["helloworld/nestjs/nestjs.ts", "request/nestjs/nestjs.ts", "request/shared.ts", "mixedscopes/nestjs/nestjs.ts"],
-  "exclude": ["dist", "node_modules"]
+  "include": ["nestjs.ts"],
+  "exclude": ["node_modules"]
 }

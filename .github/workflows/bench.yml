@@ -12,6 +12,7 @@ on:
           - helloworld
           - startup
           - request
+          - mixedscopes
 
 concurrency:
   group: bench-${{ github.ref }}
