@@ -14,6 +14,8 @@ import { makeBigArray } from '../shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3022', 10)
 
+const big = makeBigArray()
+
 class Schema {
   @IsString()
   @IsNotEmpty()
@@ -30,8 +32,8 @@ class Schema {
 
 @Injectable()
 class RequestIdInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const res = _context.switchToHttp().getResponse<{ header: (name: string, value: string) => void }>()
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const res = context.switchToHttp().getResponse<{ header: (name: string, value: string) => void }>()
     res.header('x-request-id', Math.random().toString(36)
       .slice(2))
     return next.handle()
@@ -51,8 +53,6 @@ class ApiKeyGuard implements CanActivate {
 @Controller()
 @UseInterceptors(RequestIdInterceptor)
 class TestController {
-  private readonly big = makeBigArray()
-
   @Get('/health')
   health() {
     return { ok: true }
@@ -79,7 +79,7 @@ class TestController {
       query: { text: query.text, num: query.num, bool: query.bool },
       body: { text: body.text, num: body.num, bool: body.bool },
       header: { text: hText, num: parseInt(hNum, 10), bool: hBool === 'true' },
-      big: this.big,
+      big,
     }
   }
 }

@@ -12,6 +12,8 @@ class AppController {
   }
 }
 
+void [AppController]
+
 const app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })))
 const adapter = await app.create()
 

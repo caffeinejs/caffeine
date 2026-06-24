@@ -14,6 +14,7 @@ interface ServerConfig {
   args: string[]
   port: number
   requiresBuild?: boolean
+  env?: Record<string, string>
 }
 
 const servers: ServerConfig[] = [
@@ -35,6 +36,13 @@ const servers: ServerConfig[] = [
     args: [distNestjs],
     port: 3022,
     requiresBuild: true,
+  },
+  {
+    name: 'caffeine',
+    cmd: 'node',
+    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
+    port: 3023,
+    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
   },
 ]
 
@@ -92,7 +100,7 @@ for (const server of servers) {
     }
 
     const child = spawn(server.cmd, server.args, {
-      env: { ...process.env, PORT: String(server.port) },
+      env: { ...process.env, ...server.env, PORT: String(server.port) },
       stdio: 'ignore',
     })
 

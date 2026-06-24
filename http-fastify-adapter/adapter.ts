@@ -1,7 +1,8 @@
 import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, AdapterFactory, ParameterPickOptions, Router } from '@caffeinejs/http'
-import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest } from 'fastify'
+import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
 import fp from 'fastify-plugin'
+import { FastifyContext } from './context.js'
 
 type Accessor<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -52,6 +53,7 @@ export class FastifyAdapter<
           server.route({
             method: route.method,
             url: `${prefix}${route.path}`,
+            schema: route.schema as FastifySchema,
             handler: function (req, res) {
               return handlerFn(route.handler)(...fn(this as SERVER, req as REQ, res as RES))
             },
@@ -111,6 +113,8 @@ function compile<
         } else {
           return (_server, req, _res) => req.headers
         }
+      case 'context':
+        return (_server, req, res) => new FastifyContext(req, res)
       default:
         throw new Error(`Invalid parameter type: ${type}`)
     }

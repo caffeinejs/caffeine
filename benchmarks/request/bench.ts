@@ -13,6 +13,7 @@ interface ServerConfig {
   args: string[]
   port: number
   builtPath?: string
+  env?: Record<string, string>
 }
 
 interface BenchResult {
@@ -41,6 +42,13 @@ const servers: ServerConfig[] = [
     args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js')],
     port: 3022,
     builtPath: resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js'),
+  },
+  {
+    name: 'caffeine',
+    cmd: 'node',
+    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
+    port: 3023,
+    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
   },
 ]
 
@@ -96,7 +104,7 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
   const benchUrl = `http://127.0.0.1:${server.port}/api/test/hello/42/true?text=world&num=7&bool=false`
 
   const child = spawn(server.cmd, server.args, {
-    env: { ...process.env, PORT: String(server.port) },
+    env: { ...process.env, ...server.env, PORT: String(server.port) },
     stdio: ['ignore', 'ignore', 'ignore'],
   })
 

@@ -59,6 +59,7 @@ export class RouteBuilder {
   #_parameters?: ParameterPickOptions<unknown>[]
   #_consumes?: string[]
   #_produces?: string[]
+  #_schema?: unknown
 
   header(name: string, value: string | string[]) {
     this.#_header ??= {}
@@ -100,6 +101,11 @@ export class RouteBuilder {
     return this
   }
 
+  schema(schema: unknown) {
+    this.#_schema = schema
+    return this
+  }
+
   toRoute<R>(): Route<R> {
     return {
       path: this.#_path ?? '',
@@ -110,6 +116,7 @@ export class RouteBuilder {
       header: Object.assign({}, this.#_header ?? {}),
       handler: this.#_handler ?? '',
       response: { status: 200, header: {} },
+      schema: this.#_schema,
     }
   }
 }

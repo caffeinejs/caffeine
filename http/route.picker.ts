@@ -27,3 +27,7 @@ export function body<R = unknown>(): ParameterPickOptions<R> {
 export function header<R = unknown>(name?: string): ParameterPickOptions<R> {
   return { name, type: 'header' }
 }
+
+export function context<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'context' }
+}

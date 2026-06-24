@@ -1,4 +1,5 @@
 export { Adapter, type AdapterFactory, type AdapterFactoryIn, type AdapterIn } from './adapter.js'
+export type * from './context.js'
 export * from './decorators/index.js'
 export * from './error.js'
 export * from './http.js'
