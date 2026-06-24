@@ -1,4 +1,4 @@
-import { Container, DiCaf, Module, Options } from '@caffeinejs/core'
+import { Container, CaffeineIoC, Module, Options } from '@caffeinejs/core'
 import { Keys } from './symbols.js'
 import { Router } from './route.js'
 import { Adapter, AdapterFactory } from './adapter.js'
@@ -21,7 +21,7 @@ export class CaffeineHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> {
     this.#adapterFactory = adapterFactory
     this.#container = typeof options.container === 'function'
       ? options.container
-      : new DiCaf(typeof options.container === 'object' ? options.container as Partial<Options> : {})
+      : new CaffeineIoC(typeof options.container === 'object' ? options.container as Partial<Options> : {})
   }
 
   modules(...modules: Module[]): this {

@@ -15,7 +15,7 @@ function normalizePath(path: string): string {
 export class RouterBuilder {
   _path?: string
   #_prefix?: string
-  #_header?: Record<string, string | string[]>
+  #_header?: Map<string, string | string[]>
   #_consumes?: string[]
   #_produces?: string[]
   #_routes?: RouteBuilder[]
@@ -27,8 +27,8 @@ export class RouterBuilder {
   }
 
   header(name: string, value: string | string[]) {
-    this.#_header ??= {}
-    this.#_header[name] = value
+    this.#_header ??= new Map()
+    this.#_header.set(name, value)
   }
 
   consumes(consumes: string | string[]) {
@@ -67,7 +67,7 @@ export class RouterBuilder {
       path: normalizePrefix(this._path ?? ''),
       prefix: this.#_prefix,
       routes: (this.#_routes ?? []).map(route => route.toRoute<R>()),
-      header: Object.assign({}, this.#_header ?? {}),
+      header: new Map(this.#_header),
       accept: [...(this.#_consumes ?? [])],
       contentTypes: [...(this.#_produces ?? [])],
       bodyLimit: this.#_bodyLimit,
@@ -80,7 +80,7 @@ export class RouterBuilder {
 }
 
 export class RouteBuilder {
-  #_header?: Record<string, string | string[]>
+  #_header?: Map<string, string | string[]>
   #_path?: string
   #_method?: string[]
   #_handler?: string | symbol
@@ -93,8 +93,8 @@ export class RouteBuilder {
   #_statusCode?: number
 
   header(name: string, value: string | string[]) {
-    this.#_header ??= {}
-    this.#_header[name] = value
+    this.#_header ??= new Map()
+    this.#_header.set(name, value)
     return this
   }
 
@@ -159,9 +159,8 @@ export class RouteBuilder {
       accept: [...(this.#_consumes ?? [])],
       contentTypes: [...(this.#_produces ?? [])],
       parameters: [...(this.#_parameters ?? [])],
-      header: Object.assign({}, this.#_header ?? {}),
       handler: this.#_handler ?? '',
-      response: { status: this.#_statusCode, header: {} },
+      response: { status: this.#_statusCode, header: new Map(this.#_header) },
       schema: this.#_schema,
       bodyLimit: this.#_bodyLimit,
       timeout: this.#_timeout,

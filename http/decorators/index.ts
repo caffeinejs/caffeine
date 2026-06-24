@@ -1,6 +1,7 @@
 export * from './body_limit.js'
 export * from './consumes.js'
 export * from './controller.js'
+export * from './header.js'
 export * from './params.js'
 export * from './prefix.js'
 export * from './produces.js'

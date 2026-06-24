@@ -81,6 +81,14 @@ export class FastifyAdapter<
                 res.code(route.response.status)
               }
 
+              for (const [k, v] of router.header) {
+                res.header(k, v)
+              }
+
+              for (const [k, v] of route.response.header) {
+                res.header(k, v)
+              }
+
               return result
             },
           })
