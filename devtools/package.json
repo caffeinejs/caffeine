@@ -1,0 +1,33 @@
+{
+  "name": "@caffeinejs/devtools",
+  "version": "0.0.0",
+  "description": "CaffeineJS devtools",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/commonjs/index.js",
+  "types": "dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/index.d.ts",
+        "default": "./dist/commonjs/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json && npm run build:cjs",
+    "build:cjs": "node ../tools/build-cjs.mjs",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  }
+}

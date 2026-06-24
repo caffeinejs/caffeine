@@ -9,6 +9,9 @@
     },
     {
       "path": "./http/tsconfig.build.json"
+    },
+    {
+      "path": "./devtools/tsconfig.build.json"
     }
   ]
 }

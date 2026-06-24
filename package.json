@@ -10,6 +10,7 @@
     "core",
     "http",
     "http-fastify-adapter",
+    "devtools",
     "benchmarks",
     "core/examples/*",
     "examples/*"
