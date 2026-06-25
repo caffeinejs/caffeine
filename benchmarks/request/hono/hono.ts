@@ -34,17 +34,19 @@ app.post(
   '/api/test/:text/:num/:bool',
   zValidator('param', schema),
   zValidator('query', schema),
-  zValidator('header', schema),
   zValidator('json', schema),
   c => {
     const params = c.req.valid('param')
     const query = c.req.valid('query')
-    const header = c.req.valid('header')
     const body = c.req.valid('json')
 
-    c.header('text', header.text)
-    c.header('num', header.num.toString())
-    c.header('bool', header.bool.toString())
+    const hText = c.req.header('text') ?? ''
+    const hNum = c.req.header('num') ?? ''
+    const hBool = c.req.header('bool') ?? ''
+
+    c.header('text', hText)
+    c.header('num', hNum)
+    c.header('bool', hBool)
 
     return c.json({
       params: {
@@ -63,9 +65,9 @@ app.post(
         bool: body.bool,
       },
       header: {
-        text: header.text,
-        num: header.num,
-        bool: header.bool,
+        text: hText,
+        num: parseInt(hNum, 10),
+        bool: hBool === 'true',
       },
       big,
     })

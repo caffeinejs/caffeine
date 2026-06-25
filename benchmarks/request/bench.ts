@@ -58,7 +58,7 @@ const servers: ServerConfig[] = [
   },
 ]
 
-const REQUEST_BODY = JSON.stringify({ strBody: 'test', numBody: 99, boolBody: true })
+const REQUEST_BODY = JSON.stringify({ text: 'test', num: 99, bool: true })
 const REQUEST_HEADERS = {
   'content-type': 'application/json',
   'x-api-key': 'benchmark',

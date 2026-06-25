@@ -62,7 +62,7 @@ class AppController {
     header(),
     context(),
   ])
-  @Schema({ params: schema, querystring: schema, body: schema, headers: schema, response: responseSchema })
+  @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
   helloWorld(
     params: DataSchema,
     query: DataSchema,
