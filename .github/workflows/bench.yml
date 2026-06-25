@@ -40,7 +40,9 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build
-        run: npm run build -w @caffeinejs/benchmarks
+        run: |
+          npm run build
+          npm run build -w @caffeinejs/benchmarks
 
       - name: Benchmark
         run: npm run bench:${{ inputs.benchmark }} -w @caffeinejs/benchmarks | tee /tmp/bench-output.txt
