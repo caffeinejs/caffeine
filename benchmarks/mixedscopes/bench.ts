@@ -49,7 +49,9 @@ const REQUEST_HEADERS = {
   bool: 'true',
 }
 
-async function waitForReady(url: string, timeoutMs = 10_000): Promise<void> {
+const READY_TIMEOUT = process.env.CI === 'true' ? 60_000 : 10_000
+
+async function waitForReady(url: string, timeoutMs = READY_TIMEOUT): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -121,7 +123,7 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
 
   const child = spawn(server.cmd, server.args, {
     env: { ...process.env, ...server.env, PORT: String(server.port) },
-    stdio: ['ignore', 'ignore', 'ignore'],
+    stdio: ['ignore', 'ignore', 'inherit'],
   })
 
   activeChild = child
