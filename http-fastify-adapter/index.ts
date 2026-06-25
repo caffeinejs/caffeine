@@ -1,3 +1,5 @@
 export * from './adapter.js'
 export * from './adapter_factory.js'
+export * from './compose_framework_errors.js'
 export * from './context.js'
+export * from './multipart.js'

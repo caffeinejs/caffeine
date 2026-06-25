@@ -55,3 +55,15 @@ export function port<R = unknown>(): ParameterPickOptions<R> {
 export function address<R = unknown>(): ParameterPickOptions<R> {
   return { type: 'address' }
 }
+
+export function parts<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:parts' }
+}
+
+export function files<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:files' }
+}
+
+export function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
+  return { name: fieldname, type: 'multipart:file' }
+}
