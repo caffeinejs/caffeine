@@ -1,11 +1,8 @@
 import { body, context, Controller, Get, header, newHTTP, param, Params, Post, query, Schema } from '@caffeinejs/http'
 import { fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http-fastify-adapter'
 import fastify from 'fastify'
-import { makeBigArray } from '../shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
-
-const big = makeBigArray()
 
 interface DataSchema {
   text: string
@@ -31,18 +28,7 @@ const responseSchema = {
       query: schema,
       body: schema,
       header: schema,
-      big: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'number' },
-            message: { type: 'string' },
-            active: { type: 'boolean' },
-            cities: { type: 'array', items: { type: 'string' } },
-          },
-        },
-      },
+
     },
   },
 }
@@ -79,7 +65,6 @@ class AppController {
       query: { text: query.text, num: query.num, bool: query.bool },
       body: { text: body.text, num: body.num, bool: body.bool },
       header: { text: header.text, num: header.num, bool: header.bool },
-      big,
     }
   }
 }

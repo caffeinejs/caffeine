@@ -1,9 +1,6 @@
 import Fastify from 'fastify'
-import { makeBigArray } from '../shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3020', 10)
-
-const big = makeBigArray()
 const app = Fastify({ logger: false })
 
 const schema = {
@@ -43,29 +40,29 @@ app.post<{
     params: schema,
     querystring: schema,
     body: schema,
-    response: {
-      200: {
-        type: 'object',
-        properties: {
-          params: schema,
-          query: schema,
-          body: schema,
-          header: schema,
-          big: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'number' },
-                message: { type: 'string' },
-                active: { type: 'boolean' },
-                cities: { type: 'array', items: { type: 'string' } },
-              },
-            },
-          },
-        },
-      },
-    },
+    // response: {
+    //   200: {
+    //     type: 'object',
+    //     properties: {
+    //       params: schema,
+    //       query: schema,
+    //       body: schema,
+    //       header: schema,
+    //       big: {
+    //         type: 'array',
+    //         items: {
+    //           type: 'object',
+    //           properties: {
+    //             id: { type: 'number' },
+    //             message: { type: 'string' },
+    //             active: { type: 'boolean' },
+    //             cities: { type: 'array', items: { type: 'string' } },
+    //           },
+    //         },
+    //       },
+    //     },
+    //   },
+    // },
   },
 }, (req, reply) => {
   const p = req.params
@@ -85,7 +82,6 @@ app.post<{
       num: parseInt(req.headers['num'] as string, 10),
       bool: req.headers['bool'] === 'true',
     },
-    big,
   })
 })
 

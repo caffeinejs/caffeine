@@ -7,8 +7,10 @@ export interface AdapterIn<R> {
 
 export abstract class Adapter<I, R> {
   #container: Container
+  #readyHooks: Array<() => Promise<void>> = []
+  #closeHooks: Array<() => Promise<void>> = []
 
-  constructor(container: Container, protected readonly routers: Router<R>[]) {
+  constructor(container: Container, readonly routers: Router<R>[]) {
     this.#container = container
   }
 
@@ -16,9 +18,37 @@ export abstract class Adapter<I, R> {
     return this.#container
   }
 
-  abstract ready(): Promise<void>
+  async ready(): Promise<void> {
+    await this.#container.init()
+    await this.setup()
+    for (const hook of this.#readyHooks) {
+      await hook()
+    }
+  }
+
+  async close(): Promise<void> {
+    for (const hook of this.#closeHooks) {
+      await hook()
+    }
+    await this.teardown()
+    await this.#container.dispose()
+  }
+
+  protected abstract setup(): Promise<void>
+
+  protected abstract teardown(): Promise<void>
 
   abstract instance(): I
+
+  onReady(hook: () => Promise<void>): this {
+    this.#readyHooks.push(hook)
+    return this
+  }
+
+  onClose(hook: () => Promise<void>): this {
+    this.#closeHooks.push(hook)
+    return this
+  }
 }
 
 export interface AdapterFactoryIn {

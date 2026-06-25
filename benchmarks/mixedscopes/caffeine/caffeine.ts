@@ -3,11 +3,8 @@ import { Injectable, Lifetime } from '@caffeinejs/core/decorators'
 import { body, context, Controller, Get, header, newHTTP, param, Params, Post, query, Schema } from '@caffeinejs/http'
 import { fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http-fastify-adapter'
 import fastify from 'fastify'
-import { makeBigArray } from '../../request/shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3030', 10)
-
-const big = makeBigArray()
 
 interface DataSchema {
   text: string
@@ -33,18 +30,7 @@ const responseSchema = {
       query: schema,
       body: schema,
       header: schema,
-      big: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'number' },
-            message: { type: 'string' },
-            active: { type: 'boolean' },
-            cities: { type: 'array', items: { type: 'string' } },
-          },
-        },
-      },
+
     },
   },
 }
@@ -100,7 +86,6 @@ class AppController {
       query: { text: q.text, num: q.num, bool: q.bool },
       body: { text: b.text, num: b.num, bool: b.bool },
       header: { text: h.text, num: h.num, bool: h.bool },
-      big,
     }
   }
 }

@@ -71,8 +71,8 @@ const servers: ServerConfig[] = [
   {
     name: 'caffeine',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
-    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
+    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine', 'caffeine.js')],
+    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine', 'caffeine.js'),
   },
 ]
 
@@ -159,7 +159,9 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
 
   await waitForReady(serverUrl)
 
-  const result = await autocannon({ url: serverUrl, connections: 100, duration: 10 })
+  await autocannon({ url: serverUrl, connections: 100, duration: 10, pipelining: 10 })
+
+  const result = await autocannon({ url: serverUrl, connections: 100, duration: 40, pipelining: 10 })
 
   activeChild = null
   await killProcess(child)

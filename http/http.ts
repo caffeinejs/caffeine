@@ -19,9 +19,10 @@ export class CaffeineHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> {
     options: CaffeineHTTPOptions = {},
   ) {
     this.#adapterFactory = adapterFactory
-    this.#container = typeof options.container === 'function'
-      ? options.container
-      : new CaffeineIoC(typeof options.container === 'object' ? options.container as Partial<Options> : {})
+    const c = options.container
+    this.#container = c != null && typeof (c as Container).get === 'function'
+      ? c as Container
+      : new CaffeineIoC(c != null ? c as Partial<Options> : {})
   }
 
   modules(...modules: Module[]): this {

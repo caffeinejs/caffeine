@@ -10,11 +10,8 @@ import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
 import { Observable } from 'rxjs'
 import { FastifyReply } from 'fastify'
-import { makeBigArray } from '../../request/shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3031', 10)
-
-const big = makeBigArray()
 
 class Schema {
   @IsString()
@@ -104,7 +101,6 @@ class TestController {
       query: { text: query.text, num: query.num, bool: query.bool },
       body: { text: body.text, num: body.num, bool: body.bool },
       header: { text: hText, num: parseInt(hNum, 10), bool: hBool === 'true' },
-      big,
     }
   }
 }

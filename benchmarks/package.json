@@ -1,20 +1,23 @@
 {
   "name": "@caffeinejs/benchmarks",
   "version": "0.0.0",
-  "description": "Caffeine benchmarks",
+  "description": "CaffeineJS benchmarks",
   "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
     "bench": "node --import=tsx",
-    "build": "tsc -p tsconfig.nestjs.json && npm run bench:startup:compile",
+    "build": "tsc -p tsconfig.nestjs.json && npm run bench:startup:compile && npm run bench:fixtures:compile && npm run bench:caffeine:compile",
     "bench:startup:compile": "esbuild startup/nestjs/app.ts startup/fastify/app.ts startup/hono/app.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outdir=startup/dist --tsconfig=tsconfig.startup.json",
+    "bench:fixtures:compile": "esbuild request/fastify/fastify.ts request/hono/hono.ts request/elysia/elysia.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outbase=. --outdir=dist --tsconfig=tsconfig.nestjs.json",
+    "bench:caffeine:compile": "esbuild helloworld/caffeine/caffeine.ts request/caffeine/caffeine.ts mixedscopes/caffeine/caffeine.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outbase=. --outdir=dist --tsconfig=request/caffeine/tsconfig.json",
     "bench:helloworld": "node --import=tsx helloworld/bench.ts",
     "bench:startup": "node --import=tsx startup/bench.ts",
     "bench:request": "node --import=tsx request/bench.ts",
     "bench:mixedscopes": "node --import=tsx mixedscopes/bench.ts",
     "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit",
-    "test:request": "node --import=tsx request/test.ts"
+    "test:request": "node --import=tsx request/test.ts",
+    "bench:profile": "node --import=tsx profiling/run.ts"
   },
   "dependencies": {
     "@adonisjs/application": "^9.0.1",

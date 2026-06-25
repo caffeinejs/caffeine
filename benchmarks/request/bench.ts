@@ -27,14 +27,16 @@ const servers: ServerConfig[] = [
   {
     name: 'fastify',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'fastify', 'fastify.ts')],
+    args: [resolve(__dirname, '..', 'dist', 'request', 'fastify', 'fastify.js')],
     port: 3020,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'fastify', 'fastify.js'),
   },
   {
     name: 'hono',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'hono', 'hono.ts')],
+    args: [resolve(__dirname, '..', 'dist', 'request', 'hono', 'hono.js')],
     port: 3021,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'hono', 'hono.js'),
   },
   {
     name: 'nestjs',
@@ -46,15 +48,16 @@ const servers: ServerConfig[] = [
   {
     name: 'caffeine',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
+    args: [resolve(__dirname, '..', 'dist', 'request', 'caffeine', 'caffeine.js')],
     port: 3023,
-    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'caffeine', 'caffeine.js'),
   },
   {
     name: 'elysia',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'elysia', 'elysia.ts')],
+    args: [resolve(__dirname, '..', 'dist', 'request', 'elysia', 'elysia.js')],
     port: 3024,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'elysia', 'elysia.js'),
   },
 ]
 
@@ -151,14 +154,18 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
 
   await waitForReady(healthUrl)
 
-  const result = await autocannon({
+  const cannonOpts = {
     url: benchUrl,
-    method: 'POST',
+    method: 'POST' as const,
     body: REQUEST_BODY,
     headers: REQUEST_HEADERS,
     connections: 100,
-    duration: 10,
-  })
+    pipelining: 10,
+  }
+
+  await autocannon({ ...cannonOpts, duration: 10 })
+
+  const result = await autocannon({ ...cannonOpts, duration: 40 })
 
   activeChild = null
   await killProcess(child)

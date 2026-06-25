@@ -57,8 +57,19 @@ bench: ## list available benchmarks
 	@echo "Usage: make bench:<type> (e.g. make bench:helloworld)"
 
 bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
+	@npm run build
 	@npm run build -w @caffeinejs/benchmarks
 	@npm run bench:$* -w @caffeinejs/benchmarks
+
+.PHONY: devtools
+devtools:
+	@npm run build
+	@npm run dev -w @caffeinejs/devtools-ui
+
+.PHONY: example\:devtools
+example\:devtools:
+	@npm run build
+	@npx tsx examples/02-devtools-basic/index.ts
 
 # Misc
 # --

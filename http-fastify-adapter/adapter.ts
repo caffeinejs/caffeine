@@ -2,9 +2,7 @@ import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, Router } from '@caffeinejs/http'
 import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
-import { compileParameters } from './adapter_handler_parameters.js'
-
-type HandlerFn = (handler: string | symbol) => (...args: unknown[]) => unknown
+import { compileHandler } from './adapter_handler_parameters.js'
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -18,9 +16,7 @@ export class FastifyAdapter<
     this.#fastify = fastify
   }
 
-  async ready(): Promise<void> {
-    await this.container.init()
-
+  protected async setup(): Promise<void> {
     const needsRequestScope = this.routers.some(
       router => this.container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
@@ -43,15 +39,50 @@ export class FastifyAdapter<
         const isSingleton = router.binding.scopeId === Scopes.SINGLETON
 
         for (const route of routes) {
-          const fn = compileParameters(route.parameters) as (req: REQ, res: RES) => unknown[]
-          let handlerFn: HandlerFn
+          let dispatch: (req: REQ, res: RES) => unknown
 
           if (isSingleton) {
             const ref = controller.get()
-            const refFn = ref[route.handler]
-            handlerFn = () => (...args: unknown[]) => refFn(...args)
+            const refFn = (ref[route.handler] as (...args: unknown[]) => unknown).bind(ref)
+            dispatch = compileHandler(route.parameters, refFn)
           } else {
-            handlerFn = (handler: string | symbol) => (...args: unknown[]) => controller.get()[handler](...args)
+            const handlerKey = route.handler
+            dispatch = compileHandler(route.parameters, (...args) => {
+              const inst = controller.get()
+              return (inst[handlerKey] as (...args: unknown[]) => unknown).apply(inst, args)
+            })
+          }
+
+          const respond = (result: unknown, res: RES): unknown => {
+            for (const [k, v] of router.header) {
+              res.header(k, v)
+            }
+
+            for (const [k, v] of route.response.header) {
+              res.header(k, v)
+            }
+
+            // Fetch API Response Support.
+            // The response is mapped using Fastify's reply object.
+            if (result instanceof Response) {
+              res.code(result.status)
+              for (const [key, value] of result.headers) {
+                res.header(key, value)
+              }
+
+              const stream = result.body
+              const body = stream ? Readable.fromWeb(stream as Parameters<typeof Readable.fromWeb>[0]) : null
+
+              return res.send(body)
+            }
+
+            // Non-Fetch API response specifics.
+
+            if (route.response.status !== undefined) {
+              res.code(route.response.status)
+            }
+
+            return result
           }
 
           server.route({
@@ -60,38 +91,13 @@ export class FastifyAdapter<
             schema: route.schema as FastifySchema,
             bodyLimit: route.bodyLimit ?? router.bodyLimit,
             handlerTimeout: route.timeout ?? router.timeout,
-            handler: async function (req, res) {
-              const result = await handlerFn(route.handler)(...fn(req as REQ, res as RES))
-
-              for (const [k, v] of router.header) {
-                res.header(k, v)
+            handler: function (req, res) {
+              const result = dispatch(req as REQ, res as RES)
+              if (result instanceof Promise) {
+                return result.then(r => respond(r, res as RES))
               }
 
-              for (const [k, v] of route.response.header) {
-                res.header(k, v)
-              }
-
-              // Fetch API Response Support.
-              // The response is mapped using Fastify's reply object.
-              if (result instanceof Response) {
-                res.code(result.status)
-                for (const [key, value] of result.headers) {
-                  res.header(key, value)
-                }
-
-                const stream = result.body
-                const body = stream ? Readable.fromWeb(stream as Parameters<typeof Readable.fromWeb>[0]) : null
-
-                return res.send(body)
-              }
-
-              // Non-Fetch API response specifics.
-
-              if (route.response.status !== undefined) {
-                res.code(route.response.status)
-              }
-
-              return result
+              return respond(result, res as RES)
             },
           })
         }
@@ -99,6 +105,10 @@ export class FastifyAdapter<
     }
 
     await this.#fastify.ready()
+  }
+
+  protected async teardown(): Promise<void> {
+    await this.#fastify.close()
   }
 
   instance(): SERVER {

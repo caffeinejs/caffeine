@@ -27,9 +27,9 @@ const servers: ServerConfig[] = [
   {
     name: 'caffeine',
     cmd: 'node',
-    args: ['--import=tsx', resolve(__dirname, 'caffeine', 'caffeine.ts')],
+    args: [resolve(__dirname, '..', 'dist', 'mixedscopes', 'caffeine', 'caffeine.js')],
     port: 3030,
-    env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
+    builtPath: resolve(__dirname, '..', 'dist', 'mixedscopes', 'caffeine', 'caffeine.js'),
   },
   {
     name: 'nestjs',
@@ -133,14 +133,18 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
 
   await waitForReady(healthUrl)
 
-  const result = await autocannon({
+  const cannonOpts = {
     url: benchUrl,
-    method: 'POST',
+    method: 'POST' as const,
     body: REQUEST_BODY,
     headers: REQUEST_HEADERS,
     connections: 100,
-    duration: 10,
-  })
+    pipelining: 10,
+  }
+
+  await autocannon({ ...cannonOpts, duration: 10 })
+
+  const result = await autocannon({ ...cannonOpts, duration: 40 })
 
   activeChild = null
   await killProcess(child)

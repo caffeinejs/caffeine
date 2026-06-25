@@ -8,65 +8,94 @@ type Accessor<
 >
   = (req: REQ, res: RES) => unknown
 
-export function compileParameters<
+function buildAccessor<
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
->(params: ParameterPickOptions<REQ>[]): (req: REQ, res: RES) => unknown[] {
-  const accessors: Accessor<REQ, RES>[] = params.map(p => {
-    const type = p.type
-    const field = p.name
+>(p: ParameterPickOptions<REQ>): Accessor<REQ, RES> {
+  const type = p.type
+  const field = p.name
 
-    switch (type) {
-      case 'body':
-        return req => req.body
-      case 'query':
-        if (field) {
-          return req => (req.query as Record<string, unknown>)[field]
-        } else {
-          return req => req.query
-        }
-      case 'params':
-        if (field) {
-          return req => (req.params as Record<string, unknown>)[field]
-        } else {
-          return req => req.params
-        }
-      case 'header':
-        if (field) {
-          return req => (req.headers as Record<string, unknown>)[field]
-        } else {
-          return req => req.headers
-        }
-      case 'context':
-        return (req, res) => new FastifyContext(req, res)
-      case 'method':
-        return req => req.method
-      case 'url':
-        return req => req.url
-      case 'path':
-        return req => req.url.split('?')[0]
-      case 'signal':
-        return req => req.signal
-      case 'port':
-        return req => req.port
-      case 'address':
-        return req => req.socket.remoteAddress
-      default:
-        throw new Error(`Invalid parameter type: ${type}`)
-    }
-  })
+  switch (type) {
+    case 'body':
+      return req => req.body
+    case 'query':
+      if (field) {
+        return req => (req.query as Record<string, unknown>)[field]
+      } else {
+        return req => req.query
+      }
+    case 'params':
+      if (field) {
+        return req => (req.params as Record<string, unknown>)[field]
+      } else {
+        return req => req.params
+      }
+    case 'header':
+      if (field) {
+        return req => (req.headers as Record<string, unknown>)[field]
+      } else {
+        return req => req.headers
+      }
+    case 'context':
+      return (req, res) => new FastifyContext(req, res)
+    case 'method':
+      return req => req.method
+    case 'url':
+      return req => req.url
+    case 'path':
+      return req => req.url.split('?')[0]
+    case 'signal':
+      return req => req.signal
+    case 'port':
+      return req => req.port
+    case 'address':
+      return req => req.socket.remoteAddress
+    default:
+      throw new Error(`Invalid parameter type: ${type}`)
+  }
+}
 
-  // Fast-path for a parameter-less route.
-  if (accessors.length === 0) {
-    return () => []
+export function compileHandler<
+  REQ extends FastifyRequest = FastifyRequest,
+  RES extends FastifyReply = FastifyReply,
+>(
+  params: ParameterPickOptions<REQ>[],
+  fn: (...args: unknown[]) => unknown,
+): (req: REQ, res: RES) => unknown {
+  if (params.length === 0) {
+    return () => fn()
   }
 
-  return (req, res) => {
-    const out = new Array(accessors.length)
-    for (let i = 0; i < accessors.length; i++) {
-      out[i] = accessors[i](req, res)
-    }
+  const a = params.map(p => buildAccessor<REQ, RES>(p))
 
-    return out
+  switch (a.length) {
+    case 1:
+      return (req, res) =>
+        fn(a[0](req, res))
+    case 2:
+      return (req, res) =>
+        fn(a[0](req, res), a[1](req, res))
+    case 3:
+      return (req, res) =>
+        fn(a[0](req, res), a[1](req, res), a[2](req, res))
+    case 4:
+      return (req, res) =>
+        fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res))
+    case 5:
+      return (req, res) =>
+        fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res))
+    case 6:
+      return (req, res) =>
+        fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res), a[5](req, res))
+    default: {
+      const len = a.length
+      return (req, res) => {
+        const out = new Array(len)
+        for (let i = 0; i < len; i++) {
+          out[i] = a[i](req, res)
+        }
+        return fn(...out)
+      }
+    }
   }
 }
