@@ -63,6 +63,14 @@ export class FastifyAdapter<
             handler: async function (req, res) {
               const result = await handlerFn(route.handler)(...fn(req as REQ, res as RES))
 
+              for (const [k, v] of router.header) {
+                res.header(k, v)
+              }
+
+              for (const [k, v] of route.response.header) {
+                res.header(k, v)
+              }
+
               // Fetch API Response Support.
               // The response is mapped using Fastify's reply object.
               if (result instanceof Response) {
@@ -77,16 +85,10 @@ export class FastifyAdapter<
                 return res.send(body)
               }
 
+              // Non-Fetch API response specifics.
+
               if (route.response.status !== undefined) {
                 res.code(route.response.status)
-              }
-
-              for (const [k, v] of router.header) {
-                res.header(k, v)
-              }
-
-              for (const [k, v] of route.response.header) {
-                res.header(k, v)
               }
 
               return result
