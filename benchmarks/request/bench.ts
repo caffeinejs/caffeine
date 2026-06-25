@@ -50,6 +50,12 @@ const servers: ServerConfig[] = [
     port: 3023,
     env: { TSX_TSCONFIG_PATH: resolve(__dirname, 'caffeine', 'tsconfig.json') },
   },
+  {
+    name: 'elysia',
+    cmd: 'node',
+    args: ['--import=tsx', resolve(__dirname, 'elysia', 'elysia.ts')],
+    port: 3024,
+  },
 ]
 
 const REQUEST_BODY = JSON.stringify({ strBody: 'test', numBody: 99, boolBody: true })
