@@ -5,6 +5,9 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "bin": {
     "caffeine": "./dist/caffeine"
   },
