@@ -1,3 +1,4 @@
 export { testClient } from './client.js'
-export { ErrNoRoutesForController } from './error.js'
-export type { RouterCtor as ControllerCtor, Fetchable, RouteMethods as RouteMethodKeys, TestClient } from './types.js'
+export { typedClient } from './client_typed.js'
+export { ErrFetchFailed, ErrNoRouter as ErrNoRoutesForController } from './error.js'
+export type { Fetchable, RouteMethods, RouterCtor, TestClient, TypedTestClient } from './types.js'

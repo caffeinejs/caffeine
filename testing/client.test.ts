@@ -1,6 +1,6 @@
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { CaffeineIoC, Injectable } from '@caffeinejs/core'
+import { Injectable } from '@caffeinejs/core'
 import { Application, Controller, Delete, Get, Post, Params, body, newHTTP, param } from '@caffeinejs/http'
 import { fastifyAdapterFactory } from '@caffeinejs/http-fastify-adapter'
 import { ErrNoRoutesForController, testClient } from './index.js'
@@ -56,13 +56,12 @@ void [TaskStore, TaskController]
 
 class NoRouteController {}
 
-describe('@caffeinejs/testing', () => {
+describe('testClient()', () => {
   let app: Application<any, any, any>
   let baseUrl: string
 
   beforeAll(async () => {
-    const container = new CaffeineIoC()
-    app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })), { container })
+    app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })))
     await app.ready()
     baseUrl = await app.server().listen({ port: 0, host: '127.0.0.1' })
   })
@@ -71,58 +70,66 @@ describe('@caffeinejs/testing', () => {
     await app.close()
   })
 
-  describe('testClient', () => {
-    it('calls registered handlers via fetch Request', async () => {
-      const client = testClient(TaskController, baseUrl)
+  it('calls registered handlers via fetch Request', async () => {
+    const client = testClient(TaskController, baseUrl)
 
-      expect(client.list).toBeTypeOf('function')
-      expect(client.create).toBeTypeOf('function')
-      expect(client.remove).toBeTypeOf('function')
+    expect(client.list).toBeTypeOf('function')
+    expect(client.create).toBeTypeOf('function')
+    expect(client.remove).toBeTypeOf('function')
 
-      const listRes = await client.list()
-      expect(listRes.status).toBe(200)
-      expect(await listRes.json()).toEqual([])
+    const listRes = await client.list()
+    expect(listRes.status).toBe(200)
+    expect(await listRes.json()).toEqual([])
 
-      const createRes = await client.create({
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: 'test' }),
-      })
-      expect(createRes.status).toBe(200)
-      expect(await createRes.json()).toMatchObject({ id: 1, name: 'test' })
+    const createRes = await client.create({
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'test' }),
     })
+    expect(createRes.status).toBe(200)
+    expect(await createRes.json()).toMatchObject({ id: 1, name: 'test' })
+  })
 
-    it('calls handler via in-process adapter', async () => {
-      const client = testClient(TaskController, app)
+  it('calls handler via in-process adapter', async () => {
+    const client = testClient(TaskController, app)
 
-      const listRes = await client.list()
-      expect(listRes.status).toBe(200)
-      expect(await listRes.json()).toBeInstanceOf(Array)
+    const listRes = await client.list()
+    expect(listRes.status).toBe(200)
+    expect(await listRes.json()).toBeInstanceOf(Array)
 
-      const createRes = await client.create({
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: 'in-process' }),
-      })
-      expect(createRes.status).toBe(200)
-      expect(await createRes.json()).toMatchObject({ name: 'in-process' })
+    const createRes = await client.create({
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'in-process' }),
     })
+    expect(createRes.status).toBe(200)
+    expect(await createRes.json()).toMatchObject({ name: 'in-process' })
+  })
 
-    it('calls registered handlers via URL instance', async () => {
-      const client = testClient(TaskController, new URL(baseUrl))
+  it('calls registered handlers via URL instance', async () => {
+    const client = testClient(TaskController, new URL(baseUrl))
 
-      const listRes = await client.list(new Request(`${baseUrl}/tasks`))
-      expect(listRes.status).toBe(200)
-      expect(await listRes.json()).toBeInstanceOf(Array)
+    const listRes = await client.list(new Request(`${baseUrl}/tasks`))
+    expect(listRes.status).toBe(200)
+    expect(await listRes.json()).toBeInstanceOf(Array)
 
-      const createRes = await client.create({
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: 'url-instance' }),
-      })
-      expect(createRes.status).toBe(200)
-      expect(await createRes.json()).toMatchObject({ name: 'url-instance' })
+    const createRes = await client.create({
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'url-instance' }),
     })
+    expect(createRes.status).toBe(200)
+    expect(await createRes.json()).toMatchObject({ name: 'url-instance' })
+  })
 
-    it('throws when controller has no routes', () => {
-      expect(() => testClient(NoRouteController, baseUrl)).toThrow(ErrNoRoutesForController)
-    })
+  it('throws when controller has no routes', () => {
+    expect(() => testClient(NoRouteController, baseUrl)).toThrow(ErrNoRoutesForController)
+  })
+
+  it('returns independent clients for same controller with different targets', async () => {
+    const remote = testClient(TaskController, baseUrl)
+    const inProcess = testClient(TaskController, app)
+
+    const [remoteRes, inProcessRes] = await Promise.all([remote.list(), inProcess.list()])
+
+    expect(remoteRes.status).toBe(200)
+    expect(inProcessRes.status).toBe(200)
   })
 })

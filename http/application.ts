@@ -17,20 +17,19 @@ export interface AdapterFactoryIn {
 }
 
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
-  = (kit: AdapterFactoryIn) => A | Promise<A>
+  = (kit: AdapterFactoryIn) => A
 
 export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   #container: Container
   #routers: Router<R>[]
-  #adapterFactory: AdapterFactory<I, R, A>
-  #adapter: A | null = null
+  #adapter: A
   #readyHooks: Array<() => Promise<void>> = []
   #closeHooks: Array<() => Promise<void>> = []
 
-  constructor(container: Container, routers: Router<R>[], adapterFactory: AdapterFactory<I, R, A>) {
+  constructor(container: Container, routers: Router<R>[], adapter: A) {
     this.#container = container
     this.#routers = routers
-    this.#adapterFactory = adapterFactory
+    this.#adapter = adapter
   }
 
   get container(): Container {
@@ -42,16 +41,10 @@ export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   }
 
   server(): I {
-    if (!this.#adapter) {
-      throw new Error('Application not ready: call app.ready() first')
-    }
     return this.#adapter.server()
   }
 
   fetch(request: Request): Promise<Response> {
-    if (!this.#adapter) {
-      throw new Error('Application not ready: call app.ready() first')
-    }
     return this.#adapter.fetch(request)
   }
 
@@ -62,7 +55,6 @@ export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
 
   async ready(): Promise<void> {
     await this.#container.init()
-    this.#adapter = await this.#adapterFactory({ container: this.#container })
     await this.#adapter.setup({ routers: this.#routers })
 
     for (const hook of this.#readyHooks) {
@@ -75,7 +67,7 @@ export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
       await hook()
     }
 
-    await this.#adapter?.teardown()
+    await this.#adapter.teardown()
     await this.#container.dispose()
   }
 

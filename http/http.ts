@@ -18,6 +18,7 @@ export function newHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>(
     ? c as Container
     : new CaffeineIoC(c != null ? c as Partial<Options> : {})
 
+  const adapter = adapterFactory({ container })
   const controllers = container.getBindingsByLabel(Keys.CONTROLLER)
   const routers = new Array<Router<REQ>>(controllers.length)
 
@@ -25,11 +26,11 @@ export function newHTTP<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>(
     const { key, binding } = controllers[i]
     const rd = getRouter(key as Function)
     if (!rd) {
-      throw new CaffeineError(`Cannot build router: no route definition found for controller "${String(key)}"`, 'HTTP_MISSING_ROUTER')
+      throw new CaffeineError(`Cannot build router: no route definition found for router "${String(key)}"`, 'HTTP_MISSING_ROUTER')
     }
 
     routers[i] = rd.toRouter<REQ>(key, binding, container.wrap(key))
   }
 
-  return new Application(container, routers, adapterFactory)
+  return new Application(container, routers, adapter)
 }
