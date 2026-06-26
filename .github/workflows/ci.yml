@@ -39,7 +39,9 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Build
-        run: npm run build
+        run: |
+          npm run build
+          npm run build --workspaces --if-present
 
       - name: Link
         run: |
