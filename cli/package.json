@@ -6,14 +6,12 @@
   "private": true,
   "type": "module",
   "bin": {
-    "caffeine": "./dist/esm/bin.js"
+    "caffeine": "./dist/bin.js"
   },
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },

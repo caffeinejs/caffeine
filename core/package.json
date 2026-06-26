@@ -4,27 +4,27 @@
   "description": "CaffeineJS IoC Container",
   "license": "MIT",
   "type": "module",
-  "types": "dist/esm/index.d.ts",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "node": {
-        "types": "./dist/esm/index.nodejs.d.ts",
-        "default": "./dist/esm/index.nodejs.js"
+        "types": "./dist/index.nodejs.d.ts",
+        "default": "./dist/index.nodejs.js"
       },
-      "types": "./dist/esm/index.d.ts",
-      "default": "./dist/esm/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./decorators": {
-      "types": "./dist/esm/decorators/index.d.ts",
-      "default": "./dist/esm/decorators/index.js"
+      "types": "./dist/decorators/index.d.ts",
+      "default": "./dist/decorators/index.js"
     },
     "./internals": {
-      "types": "./dist/esm/decorators/registrar/index.d.ts",
-      "default": "./dist/esm/decorators/registrar/index.js"
+      "types": "./dist/decorators/registrar/index.d.ts",
+      "default": "./dist/decorators/registrar/index.js"
     },
     "./testing": {
-      "types": "./dist/esm/index.testing.d.ts",
-      "default": "./dist/esm/index.testing.js"
+      "types": "./dist/index.testing.d.ts",
+      "default": "./dist/index.testing.js"
     },
     "./package.json": "./package.json"
   },
@@ -42,7 +42,7 @@
     "test:memory": "vitest run --config vitest.leak.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:coverage:html": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text",
-    "test:browser": "esbuild dist/esm/index.js --bundle --platform=browser --format=esm --outfile=/dev/null",
+    "test:browser": "esbuild dist/index.js --bundle --platform=browser --format=esm --outfile=/dev/null",
     "test:deno": "npm run build && docker compose -f _tests/deno/docker-compose.yml up --build --abort-on-container-exit --exit-code-from deno",
     "lint": "eslint",
     "lint:fix": "eslint --fix",

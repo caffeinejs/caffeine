@@ -5,19 +5,19 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "types": "dist/esm/index.d.ts",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/esm/index.d.ts",
-      "default": "./dist/esm/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./decorators": {
-      "types": "./dist/esm/decorators.d.ts",
-      "default": "./dist/esm/decorators.js"
+      "types": "./dist/decorators.d.ts",
+      "default": "./dist/decorators.js"
     },
     "./decorators/registrar": {
-      "types": "./dist/esm/decorators/registrar/index.d.ts",
-      "default": "./dist/esm/decorators/registrar/index.js"
+      "types": "./dist/decorators/registrar/index.d.ts",
+      "default": "./dist/decorators/registrar/index.js"
     },
     "./package.json": "./package.json"
   },
