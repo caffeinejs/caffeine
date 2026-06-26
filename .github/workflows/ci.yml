@@ -45,6 +45,7 @@ jobs:
 
       - name: Link
         run: |
+          chmod +x cli/dist/bin.js
           npm link -w cli
 
       - name: Lint
