@@ -5,18 +5,11 @@
   "license": "MIT",
   "private": true,
   "type": "module",
-  "main": "dist/commonjs/index.js",
   "types": "dist/esm/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
-      },
-      "require": {
-        "types": "./dist/commonjs/index.d.ts",
-        "default": "./dist/commonjs/index.js"
-      }
+      "types": "./dist/esm/index.d.ts",
+      "default": "./dist/esm/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -25,8 +18,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "npm run build -w @caffeinejs/devtools-ui && tsc --build --force tsconfig.build.json && npm run build:cjs",
-    "build:cjs": "node ../tools/build-cjs.mjs",
+    "build": "npm run build -w @caffeinejs/devtools-ui && tsc --build --force tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },

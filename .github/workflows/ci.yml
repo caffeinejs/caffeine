@@ -95,8 +95,5 @@ jobs:
       - name: Install
         run: npm ci --ignore-scripts
 
-      - name: Test CJS
-        run: npm run test:cjs
-
       - name: Test
         run: npm run test:coverage

@@ -4,68 +4,31 @@
   "description": "CaffeineJS IoC Container",
   "license": "MIT",
   "type": "module",
-  "main": "dist/commonjs/index.js",
   "types": "dist/esm/index.d.ts",
   "exports": {
     ".": {
       "node": {
-        "import": {
-          "types": "./dist/esm/index.nodejs.d.ts",
-          "default": "./dist/esm/index.nodejs.js"
-        },
-        "require": {
-          "types": "./dist/commonjs/index.nodejs.d.ts",
-          "default": "./dist/commonjs/index.nodejs.js"
-        }
+        "types": "./dist/esm/index.nodejs.d.ts",
+        "default": "./dist/esm/index.nodejs.js"
       },
-      "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
-      },
-      "require": {
-        "types": "./dist/commonjs/index.d.ts",
-        "default": "./dist/commonjs/index.js"
-      }
+      "types": "./dist/esm/index.d.ts",
+      "default": "./dist/esm/index.js"
     },
     "./decorators": {
-      "import": {
-        "types": "./dist/esm/decorators/index.d.ts",
-        "default": "./dist/esm/decorators/index.js"
-      },
-      "require": {
-        "types": "./dist/commonjs/decorators/index.d.ts",
-        "default": "./dist/commonjs/decorators/index.js"
-      }
+      "types": "./dist/esm/decorators/index.d.ts",
+      "default": "./dist/esm/decorators/index.js"
     },
     "./decorators/legacy": {
-      "import": {
-        "types": "./dist/esm/decorators/legacy/index.d.ts",
-        "default": "./dist/esm/decorators/legacy/index.js"
-      },
-      "require": {
-        "types": "./dist/commonjs/decorators/legacy/index.d.ts",
-        "default": "./dist/commonjs/decorators/legacy/index.js"
-      }
+      "types": "./dist/esm/decorators/legacy/index.d.ts",
+      "default": "./dist/esm/decorators/legacy/index.js"
     },
     "./internals": {
-      "import": {
-        "types": "./dist/esm/decorators/registrar/index.d.ts",
-        "default": "./dist/esm/decorators/registrar/index.js"
-      },
-      "require": {
-        "types": "./dist/commonjs/decorators/registrar/index.d.ts",
-        "default": "./dist/commonjs/decorators/registrar/index.js"
-      }
+      "types": "./dist/esm/decorators/registrar/index.d.ts",
+      "default": "./dist/esm/decorators/registrar/index.js"
     },
     "./testing": {
-      "import": {
-        "types": "./dist/esm/index.testing.d.ts",
-        "default": "./dist/esm/index.testing.js"
-      },
-      "require": {
-        "types": "./dist/commonjs/index.testing.d.ts",
-        "default": "./dist/commonjs/index.testing.js"
-      }
+      "types": "./dist/esm/index.testing.d.ts",
+      "default": "./dist/esm/index.testing.js"
     },
     "./package.json": "./package.json"
   },
@@ -74,9 +37,8 @@
     "package.json"
   ],
   "scripts": {
-    "build": "rm -rf dist && npm run build:esm && npm run build:cjs && tsc -p tsconfig.legacy.json",
+    "build": "rm -rf dist && npm run build:esm && tsc -p tsconfig.legacy.json",
     "build:esm": "tsc --build --force tsconfig.build.json",
-    "build:cjs": "node ../tools/build-cjs.mjs",
     "test:typecheck": "tsc -p tsconfig.test.json",
     "test:typecheck:legacy": "tsc -p tsconfig.legacy.json",
     "test": "vitest run",
@@ -103,8 +65,7 @@
     "example:javascript": "npm run start -w @caffeinejs/example-javascript",
     "example:framework": "npm run start -w @caffeinejs/example-framework",
     "example:fastify-functions": "npm run start -w @caffeinejs/example-fastify-functions",
-    "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete",
-    "example:commonjs": "npm run start -w @caffeinejs/example-commonjs"
+    "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete"
   },
   "peerDependencies": {
     "reflect-metadata": ">=0.1.13"

@@ -81,6 +81,6 @@ Never use `git stash` under any circumstances. Not to save work, not to switch c
 
 ## Build system
 
-- `npm run build` at the root compiles all packages via `tsc --build` (project references) then runs `build:cjs` per workspace to emit CommonJS output via esbuild.
-- ESM output lands in `dist/esm/`, CJS in `dist/commonjs/`.
+- `npm run build` at the root compiles all packages via `tsc --build` (project references).
+- ESM output lands in `dist/esm/`.
 - Do not edit `dist/` by hand.
