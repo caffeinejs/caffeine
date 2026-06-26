@@ -41,8 +41,9 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Generate
-        run: npm run build --workspaces --if-present
+      - name: Link
+        run: |
+          npm link -w cli
 
       - name: Lint
         run: npm run lint
