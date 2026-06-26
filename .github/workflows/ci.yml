@@ -40,12 +40,11 @@ jobs:
 
       - name: Build
         run: |
+          npm run build -w cli
           npm run build
-          npm run build --workspaces --if-present
 
       - name: Link
         run: |
-          chmod +x cli/dist/bin.js
           npm link -w cli
 
       - name: Lint
