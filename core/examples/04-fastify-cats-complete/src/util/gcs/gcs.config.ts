@@ -1,6 +1,5 @@
 import { Storage } from '@google-cloud/storage'
-import { Async, Configuration, Lifetime, Provides } from '@caffeinejs/core/decorators'
-import { Scopes } from '@caffeinejs/core'
+import { Async, Configuration, Lifetime, Provides, Scopes } from '@caffeinejs/core'
 import { AppConfig } from '../../app.config.js'
 import { DataConfig } from './data.config.js'
 

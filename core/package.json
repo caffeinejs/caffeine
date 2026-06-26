@@ -14,10 +14,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./decorators": {
-      "types": "./dist/decorators/index.d.ts",
-      "default": "./dist/decorators/index.js"
-    },
     "./internals": {
       "types": "./dist/decorators/registrar/index.d.ts",
       "default": "./dist/decorators/registrar/index.js"

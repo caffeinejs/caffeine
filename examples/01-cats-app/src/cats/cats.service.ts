@@ -1,4 +1,4 @@
-import { Injectable } from '@caffeinejs/core/decorators'
+import { Injectable } from '@caffeinejs/core'
 import type { Cat, CreateCatDTO, UpdateCatDTO } from './cat.js'
 
 @Injectable()

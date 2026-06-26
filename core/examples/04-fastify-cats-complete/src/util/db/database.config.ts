@@ -1,5 +1,5 @@
 import { Pool } from 'pg'
-import { Configuration, OnPreDestroy, Provides } from '@caffeinejs/core/decorators'
+import { Configuration, OnPreDestroy, Provides } from '@caffeinejs/core'
 import { AppConfig } from '../../app.config.js'
 import { kPgPool } from '../../keys.js'
 

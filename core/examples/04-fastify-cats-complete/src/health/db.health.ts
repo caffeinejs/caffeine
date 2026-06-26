@@ -1,5 +1,5 @@
 import { Pool } from 'pg'
-import { Extends, Injectable } from '@caffeinejs/core/decorators'
+import { Extends, Injectable } from '@caffeinejs/core'
 import { kPgPool } from '../keys.js'
 import { HealthCheck, type HealthResult } from './health.js'
 

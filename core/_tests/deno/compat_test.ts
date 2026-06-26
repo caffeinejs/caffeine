@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { CaffeineIoC } from '@caffeinejs/core'
-import { Configuration, Injectable, Provides } from '@caffeinejs/core/decorators'
+import { Configuration, Injectable, Provides } from '@caffeinejs/core'
 
 Deno.test('public API exposes the core symbols', () => {
   assert.equal(typeof CaffeineIoC, 'function')

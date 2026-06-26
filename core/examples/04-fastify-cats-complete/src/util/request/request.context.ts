@@ -1,5 +1,4 @@
-import { Scopes } from '@caffeinejs/core'
-import { Injectable, Lifetime, PostConstruct } from '@caffeinejs/core/decorators'
+import { Scopes, Injectable, Lifetime, PostConstruct } from '@caffeinejs/core'
 
 @Injectable()
 @Lifetime(Scopes.REQUEST)

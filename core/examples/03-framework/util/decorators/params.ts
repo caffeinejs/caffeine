@@ -1,4 +1,4 @@
-import { Tag } from '@caffeinejs/core/decorators'
+import { Tag } from '@caffeinejs/core'
 
 export interface RouteParam {
   name: string

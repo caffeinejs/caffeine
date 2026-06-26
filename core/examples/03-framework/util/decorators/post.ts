@@ -1,4 +1,4 @@
-import { Tag } from '@caffeinejs/core/decorators'
+import { Tag } from '@caffeinejs/core'
 
 export function Post(path: string) {
   return function (target: Function, context: ClassMethodDecoratorContext): void {

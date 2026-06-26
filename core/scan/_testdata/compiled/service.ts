@@ -1,4 +1,4 @@
-import { Injectable } from '@caffeinejs/core/decorators'
+import { Injectable } from '@caffeinejs/core'
 
 @Injectable('compiled-svc')
 export class CompiledService {

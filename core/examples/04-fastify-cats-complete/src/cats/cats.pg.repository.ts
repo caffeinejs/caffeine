@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { provide, type Provider } from '@caffeinejs/core'
-import { Extends, Injectable } from '@caffeinejs/core/decorators'
+import { Extends, Injectable } from '@caffeinejs/core'
 import { kPgPool } from '../keys.js'
 import { RequestContext } from '../util/request/request.context.js'
 import type { Cat, CreateCatDTO, UpdateCatDTO } from './cat.js'
