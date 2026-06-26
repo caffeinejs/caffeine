@@ -2,8 +2,8 @@ import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/core'
 import { Injectable } from '@caffeinejs/core/decorators'
-import { Controller, Delete, Get, Post, Params, body, newHTTP, param } from '@caffeinejs/http'
-import { fastifyAdapterFactory, type FastifyAdapter } from '@caffeinejs/http-fastify-adapter'
+import { Application, Controller, Delete, Get, Post, Params, body, newHTTP, param } from '@caffeinejs/http'
+import { fastifyAdapterFactory } from '@caffeinejs/http-fastify-adapter'
 import { ErrNoRoutesForController, testClient } from './index.js'
 
 @Injectable()
@@ -58,19 +58,18 @@ void [TaskStore, TaskController]
 class NoRouteController {}
 
 describe('@caffeinejs/testing', () => {
+  let app: Application<any, any, any>
   let baseUrl: string
-  let adapter: FastifyAdapter
 
   beforeAll(async () => {
     const container = new CaffeineIoC()
-    const app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })), { container })
-    adapter = await app.create()
-    await adapter.ready()
-    baseUrl = await adapter.listen({ port: 0, host: '127.0.0.1' })
+    app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })), { container })
+    await app.ready()
+    baseUrl = await app.server().listen({ port: 0, host: '127.0.0.1' })
   })
 
   afterAll(async () => {
-    await adapter.close()
+    await app.close()
   })
 
   describe('testClient', () => {
@@ -94,7 +93,7 @@ describe('@caffeinejs/testing', () => {
     })
 
     it('calls handler via in-process adapter', async () => {
-      const client = testClient(TaskController, adapter)
+      const client = testClient(TaskController, app)
 
       const listRes = await client.list()
       expect(listRes.status).toBe(200)

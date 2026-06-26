@@ -19,15 +19,14 @@ describe('Adapter Lifecycle', () => {
     void [LifecycleController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
 
-    adapter.onReady(async () => {
+    app.onReady(async () => {
       order.push('ready-hook')
     })
 
-    await adapter.ready()
+    await app.ready()
 
-    const res = await adapter.instance().inject({ method: 'GET', url: '/lc/ping' })
+    const res = await app.server().inject({ method: 'GET', url: '/lc/ping' })
 
     expect(res.statusCode).toBe(200)
     expect(order).toEqual(['ready-hook', 'request'])
@@ -43,15 +42,14 @@ describe('Adapter Lifecycle', () => {
     void [Lc2Controller]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
 
     const order: number[] = []
-    adapter
+    app
       .onReady(async () => { order.push(1) })
       .onReady(async () => { order.push(2) })
       .onReady(async () => { order.push(3) })
 
-    await adapter.ready()
+    await app.ready()
 
     expect(order).toEqual([1, 2, 3])
   })
@@ -66,15 +64,14 @@ describe('Adapter Lifecycle', () => {
     void [Lc3Controller]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
 
     const closeFired = vi.fn()
-    adapter.onClose(async () => {
+    app.onClose(async () => {
       closeFired()
     })
 
-    await adapter.ready()
-    await adapter.close()
+    await app.ready()
+    await app.close()
 
     expect(closeFired).toHaveBeenCalledOnce()
   })
@@ -89,17 +86,15 @@ describe('Adapter Lifecycle', () => {
     void [Lc4Controller]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
+    await app.ready()
 
-    await adapter.ready()
-
-    const beforeClose = await adapter.instance().inject({ method: 'GET', url: '/lc4/ping' })
+    const beforeClose = await app.server().inject({ method: 'GET', url: '/lc4/ping' })
     expect(beforeClose.statusCode).toBe(200)
 
-    await adapter.close()
+    await app.close()
 
     await expect(
-      adapter.instance().inject({ method: 'GET', url: '/lc4/ping' }),
+      app.server().inject({ method: 'GET', url: '/lc4/ping' }),
     ).rejects.toThrow()
   })
 })

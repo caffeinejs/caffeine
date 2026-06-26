@@ -17,10 +17,9 @@ describe('BodyLimit', () => {
     void [LimitedController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const over = await adapter.instance().inject({
+    const over = await app.server().inject({
       method: 'POST',
       url: '/limited/data',
       payload: 'x'.repeat(20),
@@ -49,20 +48,19 @@ describe('BodyLimit', () => {
     void [MixedLimitController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
     const body = 'x'.repeat(50)
     const headers = { 'content-type': 'text/plain' }
 
-    const classRes = await adapter.instance().inject({
+    const classRes = await app.server().inject({
       method: 'POST',
       url: '/mixed-limit/class-limit',
       payload: body,
       headers,
     })
 
-    const routeRes = await adapter.instance().inject({
+    const routeRes = await app.server().inject({
       method: 'POST',
       url: '/mixed-limit/route-limit',
       payload: body,

@@ -79,10 +79,10 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const adapter = await newHTTP(fastifyAdapterFactory(server)).create()
-    await adapter.ready()
+    const app = newHTTP(fastifyAdapterFactory(server))
+    await app.ready()
 
-    await adapter.instance().inject({
+    await app.server().inject({
       method: 'POST',
       url: '/up1/upload',
       headers: multipartHeaders(),
@@ -115,10 +115,10 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const adapter = await newHTTP(fastifyAdapterFactory(server)).create()
-    await adapter.ready()
+    const app = newHTTP(fastifyAdapterFactory(server))
+    await app.ready()
 
-    await adapter.instance().inject({
+    await app.server().inject({
       method: 'POST',
       url: '/up2/upload',
       headers: multipartHeaders(),
@@ -147,10 +147,10 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const adapter = await newHTTP(fastifyAdapterFactory(server)).create()
-    await adapter.ready()
+    const app = newHTTP(fastifyAdapterFactory(server))
+    await app.ready()
 
-    await adapter.instance().inject({
+    await app.server().inject({
       method: 'POST',
       url: '/up3/upload',
       headers: multipartHeaders(),
@@ -179,10 +179,10 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const adapter = await newHTTP(fastifyAdapterFactory(server)).create()
-    await adapter.ready()
+    const app = newHTTP(fastifyAdapterFactory(server))
+    await app.ready()
 
-    await adapter.instance().inject({
+    await app.server().inject({
       method: 'POST',
       url: '/up4/upload',
       headers: multipartHeaders(),
@@ -212,10 +212,10 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const adapter = await newHTTP(fastifyAdapterFactory(server)).create()
-    await adapter.ready()
+    const app = newHTTP(fastifyAdapterFactory(server))
+    await app.ready()
 
-    await adapter.instance().inject({
+    await app.server().inject({
       method: 'POST',
       url: '/up5/upload?userId=user-42',
       headers: multipartHeaders(),
@@ -243,10 +243,10 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const adapter = await newHTTP(fastifyAdapterFactory(server)).create()
-    await adapter.ready()
+    const app = newHTTP(fastifyAdapterFactory(server))
+    await app.ready()
 
-    await adapter.instance().inject({
+    await app.server().inject({
       method: 'POST',
       url: '/up6/upload',
       headers: multipartHeaders(),
@@ -278,10 +278,10 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const adapter = await newHTTP(fastifyAdapterFactory(server)).create()
-    await adapter.ready()
+    const app = newHTTP(fastifyAdapterFactory(server))
+    await app.ready()
 
-    await adapter.instance().inject({
+    await app.server().inject({
       method: 'POST',
       url: '/up7/upload',
       headers: multipartHeaders(),

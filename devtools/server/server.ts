@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http'
-import type { Adapter } from '@caffeinejs/http'
+import type { Application } from '@caffeinejs/http'
 import { HttpCollector } from '../collectors/http.collector.js'
 import { DevtoolsStore } from '../store.js'
 import type { DevtoolsEvent } from '../types.js'
@@ -26,8 +26,8 @@ export class DevtoolsServer {
     this.ws.broadcast({ type: 'event', event })
   }
 
-  attach(adapter: Adapter<any, any>): this {
-    this.httpCollector.attach(adapter)
+  attach(app: Application<any, any, any>): this {
+    this.httpCollector.attach(app)
     return this
   }
 

@@ -18,11 +18,10 @@ describe('Header', () => {
     void [VersionedController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const resA = await adapter.instance().inject({ method: 'GET', url: '/versioned/a' })
-    const resB = await adapter.instance().inject({ method: 'GET', url: '/versioned/b' })
+    const resA = await app.server().inject({ method: 'GET', url: '/versioned/a' })
+    const resB = await app.server().inject({ method: 'GET', url: '/versioned/b' })
 
     expect(resA.headers['x-api-version']).toBe('1')
     expect(resB.headers['x-api-version']).toBe('1')
@@ -42,11 +41,10 @@ describe('Header', () => {
     void [TargetedController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const hit = await adapter.instance().inject({ method: 'GET', url: '/targeted/with-header' })
-    const miss = await adapter.instance().inject({ method: 'GET', url: '/targeted/without-header' })
+    const hit = await app.server().inject({ method: 'GET', url: '/targeted/with-header' })
+    const miss = await app.server().inject({ method: 'GET', url: '/targeted/without-header' })
 
     expect(hit.headers['x-custom']).toBe('yes')
     expect(miss.headers['x-custom']).toBeUndefined()
@@ -63,10 +61,9 @@ describe('Header', () => {
     void [MultiClassController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const res = await adapter.instance().inject({ method: 'GET', url: '/multi-class/route' })
+    const res = await app.server().inject({ method: 'GET', url: '/multi-class/route' })
 
     expect(res.headers['x-roles']).toEqual(['admin', 'user'])
   })
@@ -82,10 +79,9 @@ describe('Header', () => {
     void [MultiMethodController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const res = await adapter.instance().inject({ method: 'GET', url: '/multi-method/route' })
+    const res = await app.server().inject({ method: 'GET', url: '/multi-method/route' })
 
     expect(res.headers['x-flags']).toEqual(['read', 'write'])
   })
@@ -102,10 +98,9 @@ describe('Header', () => {
     void [OverrideController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const res = await adapter.instance().inject({ method: 'GET', url: '/override/route' })
+    const res = await app.server().inject({ method: 'GET', url: '/override/route' })
 
     expect(res.headers['x-tier']).toBe('method')
     expect(res.headers['x-tier']).not.toBe(['class', 'method'])

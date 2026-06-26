@@ -10,6 +10,7 @@ import { PostProcessor } from './post_processor.js'
 import { Injection } from './injection.js'
 import { Ctor } from './types.js'
 import { Provider } from './provider.js'
+import { Module } from './module.js'
 
 /**
  * Scope validation checks to apply during container initialization.
@@ -148,6 +149,8 @@ export interface Container {
 
   rebind<T>(key: TypedKey<T>): Binder<T>
   rebind<T = unknown>(key: NamedKey): Binder<T>
+
+  addModules(module: Module, ...rest: Module[]): void
 
   resetInstances(): Promise<void>
 

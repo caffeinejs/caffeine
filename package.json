@@ -19,8 +19,8 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "tsc --build tsconfig.build.json && npm run build:cjs --workspaces --if-present && npm run build --workspaces --if-present",
-    "build:force": "tsc --build --force tsconfig.build.json && npm run build:cjs --workspaces --if-present && npm run build --workspaces --if-present",
+    "build": "tsc --build tsconfig.build.json && npm run build:cjs --workspaces --if-present",
+    "build:force": "tsc --build --force tsconfig.build.json && npm run build:cjs --workspaces --if-present",
     "clean": "npm run clean:dist --workspaces --if-present && tsc --build --clean tsconfig.build.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

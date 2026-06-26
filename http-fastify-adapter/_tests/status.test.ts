@@ -17,10 +17,9 @@ describe('Status', () => {
     void [StatusController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const res = await adapter.instance().inject({ method: 'POST', url: '/status/created' })
+    const res = await app.server().inject({ method: 'POST', url: '/status/created' })
 
     expect(res.statusCode).toBe(201)
   })
@@ -37,10 +36,9 @@ describe('Status', () => {
     void [StatusDefaultController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const res = await adapter.instance().inject({ method: 'GET', url: '/status-default/ok' })
+    const res = await app.server().inject({ method: 'GET', url: '/status-default/ok' })
 
     expect(res.statusCode).toBe(200)
   })

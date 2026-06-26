@@ -82,12 +82,11 @@ void [TaskStore, TaskLogger, TaskController]
 
 const container = new CaffeineIoC(DevtoolsModule({ port: 9229 }))
 const app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })), { container })
-const adapter = await app.create()
-await adapter.ready()
+await app.ready()
 
 const devtools = container.get(DevtoolsServer)
-devtools.attach(adapter).start()
+devtools.attach(app).start()
 
-await adapter.listen({ port: 3000, host: '127.0.0.1' })
+await app.server().listen({ port: 3000, host: '127.0.0.1' })
 console.log('[app] HTTP server at http://localhost:3000')
 console.log('[app] Devtools at http://localhost:9229')

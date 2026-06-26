@@ -1,35 +1,38 @@
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
-import { Adapter, Router, joinPaths } from '@caffeinejs/http'
-import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
+import { Adapter, AdapterIn, Router } from '@caffeinejs/http'
+import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
-> extends Adapter<SERVER, REQ> {
+> implements Adapter<SERVER, REQ> {
   #fastify: SERVER
+  #container: Container
 
-  constructor(container: Container, fastify: SERVER, routers: Router<REQ>[]) {
-    super(container, routers)
+  constructor(container: Container, fastify: SERVER) {
     this.#fastify = fastify
+    this.#container = container
   }
 
-  protected async setup(): Promise<void> {
-    const needsRequestScope = this.routers.some(
-      router => this.container.hasScopeInGraph(router.key, Scopes.REQUEST),
+  async setup(input: AdapterIn<REQ>): Promise<void> {
+    const routers = input.routers as Router<REQ>[]
+
+    const needsRequestScope = routers.some(
+      router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
 
     if (needsRequestScope) {
-      const man = this.container.requestScopeManager
+      const man = this.#container.requestScopeManager
       this.#fastify.addHook('onRequest', (_req, _res, done) => {
         man.run(() => done())
       })
     }
 
-    for (let i = 0; i < this.routers.length; i++) {
-      const router = this.routers[i]
+    for (let i = 0; i < routers.length; i++) {
+      const router = routers[i]
 
       const basePath = router.path
       const routes = router.routes
@@ -107,8 +110,12 @@ export class FastifyAdapter<
     await this.#fastify.ready()
   }
 
-  protected async teardown(): Promise<void> {
+  async teardown(): Promise<void> {
     await this.#fastify.close()
+  }
+
+  server(): SERVER {
+    return this.#fastify
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -158,12 +165,9 @@ export class FastifyAdapter<
       )
     })
   }
+}
 
-  instance(): SERVER {
-    return this.#fastify
-  }
-
-  async listen(opts?: FastifyListenOptions): Promise<string> {
-    return this.#fastify.listen(opts)
-  }
+function joinPaths(base: string, path: string): string {
+  const joined = `${base}${path}`
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
 }

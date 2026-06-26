@@ -12,11 +12,11 @@ describe('Fastify Adapter', () => {
     const app = fastify()
     app.get('/', () => ({ ok: true }))
 
-    const adapter = new FastifyAdapter(new CaffeineIoC(), app, [])
-    await adapter.ready()
+    const adapter = new FastifyAdapter(new CaffeineIoC(), app)
+    await adapter.setup({ routers: [] })
 
-    expect(adapter.instance()).toBe(app)
-    await supertest(adapter.instance().server).get('/')
+    expect(adapter.server()).toBe(app)
+    await supertest(adapter.server().server).get('/')
       .expect(200, { ok: true })
   })
 
@@ -24,9 +24,9 @@ describe('Fastify Adapter', () => {
     const app = fastify()
     app.get('/', () => ({ ok: true }))
 
-    const adapter = new FastifyAdapter(new CaffeineIoC(), app, [])
-    await adapter.ready()
-    const result = await adapter.instance().inject('/')
+    const adapter = new FastifyAdapter(new CaffeineIoC(), app)
+    await adapter.setup({ routers: [] })
+    const result = await adapter.server().inject('/')
 
     expect(result.json()).toEqual({ ok: true })
   })
@@ -45,11 +45,9 @@ describe('Fastify Adapter', () => {
       void [TestController]
 
       const app = newHTTP(fastifyAdapterFactory(fastify()))
-      const adapter = await app.create()
+      await app.ready()
 
-      await adapter.ready()
-
-      await supertest(adapter.instance().server)
+      await supertest(app.server().server)
         .get('/users/1?filter=test')
         .set('x-test', 'test')
         .expect(200, { ok: true, id: '1', filter: 'test', test: 'test' })
@@ -82,10 +80,9 @@ describe('Fastify Adapter', () => {
       void [PickersController]
 
       const app = newHTTP(fastifyAdapterFactory(fastify()))
-      const adapter = await app.create()
-      await adapter.ready()
+      await app.ready()
 
-      const res = await adapter.instance().inject({ method: 'GET', url: '/test/pickers?foo=bar' })
+      const res = await app.server().inject({ method: 'GET', url: '/test/pickers?foo=bar' })
 
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({
@@ -113,12 +110,11 @@ describe('Fastify Adapter', () => {
       void [MethodController]
 
       const app = newHTTP(fastifyAdapterFactory(fastify()))
-      const adapter = await app.create()
-      await adapter.ready()
+      await app.ready()
 
-      for (const method of methods) {
-        const res = await adapter.instance().inject({ method, url: '/method-test/action' })
-        expect(res.json()).toEqual({ method })
+      for (const m of methods) {
+        const res = await app.server().inject({ method: m, url: '/method-test/action' })
+        expect(res.json()).toEqual({ method: m })
       }
     })
   })
@@ -141,11 +137,10 @@ describe('Fastify Adapter', () => {
       void [RequestScopedController]
 
       const app = newHTTP(fastifyAdapterFactory(fastify()))
-      const adapter = await app.create()
-      await adapter.ready()
+      await app.ready()
 
-      const r1 = await adapter.instance().inject({ method: 'GET', url: '/req-ctrl/id' })
-      const r2 = await adapter.instance().inject({ method: 'GET', url: '/req-ctrl/id' })
+      const r1 = await app.server().inject({ method: 'GET', url: '/req-ctrl/id' })
+      const r2 = await app.server().inject({ method: 'GET', url: '/req-ctrl/id' })
 
       expect(r1.statusCode).toBe(200)
       expect(r2.statusCode).toBe(200)
@@ -176,11 +171,10 @@ describe('Fastify Adapter', () => {
       void [TransientController]
 
       const app = newHTTP(fastifyAdapterFactory(fastify()))
-      const adapter = await app.create()
-      await adapter.ready()
+      await app.ready()
 
-      const r1 = await adapter.instance().inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
-      const r2 = await adapter.instance().inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
+      const r1 = await app.server().inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
+      const r2 = await app.server().inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
 
       expect(r1.statusCode).toBe(200)
       expect(r2.statusCode).toBe(200)

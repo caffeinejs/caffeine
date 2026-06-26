@@ -15,7 +15,6 @@ class AppController {
 void [AppController]
 
 const app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })))
-const adapter = await app.create()
 
-await adapter.ready()
-await adapter.listen({ port: PORT, host: '0.0.0.0' })
+await app.ready()
+await app.server().listen({ port: PORT, host: '0.0.0.0' })

@@ -7,6 +7,6 @@ export function fastifyAdapterFactory<
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
 >(fastify: SERVER): AdapterFactory<SERVER, REQ, FastifyAdapter<SERVER, REQ, RES>> {
-  return (kit, input): FastifyAdapter<SERVER, REQ, RES> =>
-    new FastifyAdapter<SERVER, REQ, RES>(kit.container, fastify, input.routers)
+  return (kit): FastifyAdapter<SERVER, REQ, RES> =>
+    new FastifyAdapter<SERVER, REQ, RES>(kit.container, fastify)
 }

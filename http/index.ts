@@ -1,4 +1,4 @@
-export { Adapter, type AdapterFactory, type AdapterFactoryIn, type AdapterIn } from './adapter.js'
+export { type Adapter, type AdapterFactory, type AdapterFactoryIn, type AdapterIn, Application } from './application.js'
 export type * from './context.js'
 export * from './decorators/index.js'
 export { joinPaths, type RouteBuilder, type RouterBuilder } from './decorators/registrar/index.js'

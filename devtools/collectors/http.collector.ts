@@ -1,14 +1,14 @@
-import type { Adapter } from '@caffeinejs/http'
+import type { Application } from '@caffeinejs/http'
 import type { DevtoolsStore } from '../store.js'
 import type { RouteSnapshot } from '../types.js'
 
 export class HttpCollector {
   constructor(private readonly store: DevtoolsStore) {}
 
-  attach(adapter: Adapter<any, any>): void {
+  attach(app: Application<any, any, any>): void {
     const snapshots: RouteSnapshot[] = []
 
-    for (const router of adapter.routers) {
+    for (const router of app.routers) {
       const controllerScope = String(router.binding.scopeId)
       const controllerKey
         = typeof router.key === 'function'

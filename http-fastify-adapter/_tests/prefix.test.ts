@@ -17,11 +17,10 @@ describe('Prefix', () => {
     void [UsersController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const hit = await adapter.instance().inject({ method: 'GET', url: '/v1/users/list' })
-    const miss = await adapter.instance().inject({ method: 'GET', url: '/users/list' })
+    const hit = await app.server().inject({ method: 'GET', url: '/v1/users/list' })
+    const miss = await app.server().inject({ method: 'GET', url: '/users/list' })
 
     expect(hit.statusCode).toBe(200)
     expect(miss.statusCode).toBe(404)
@@ -49,11 +48,10 @@ describe('Prefix', () => {
     void [ItemsController, ItemsV2Controller]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
-    const adapter = await app.create()
-    await adapter.ready()
+    await app.ready()
 
-    const v1 = await adapter.instance().inject({ method: 'GET', url: '/v1/items/all' })
-    const v2 = await adapter.instance().inject({ method: 'GET', url: '/v2/items/all' })
+    const v1 = await app.server().inject({ method: 'GET', url: '/v1/items/all' })
+    const v2 = await app.server().inject({ method: 'GET', url: '/v2/items/all' })
 
     expect(v1.statusCode).toBe(200)
     expect(v2.statusCode).toBe(200)
