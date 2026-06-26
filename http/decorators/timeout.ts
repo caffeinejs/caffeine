@@ -1,5 +1,5 @@
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
-import { configureRoute, configureRouter } from './_registrar.js'
+import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export function Timeout(ms: number) {
   return defineClassOrMemberDecorator(

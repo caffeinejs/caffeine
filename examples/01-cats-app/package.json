@@ -3,6 +3,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node index.ts"
+    "prestart": "npm run build --prefix ../.. && caffeine generate",
+    "start": "node --import tsx/esm index.ts"
+  },
+  "dependencies": {
+    "@caffeinejs/core": "file:../../core",
+    "@caffeinejs/http": "file:../../http",
+    "@caffeinejs/http-fastify-adapter": "file:../../http-fastify-adapter",
+    "fastify": "^5.8.5"
+  },
+  "devDependencies": {
+    "@caffeinejs/cli": "file:../../cli",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   }
 }

@@ -25,9 +25,24 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc --build --force tsconfig.build.json && npm run build:cjs",
+    "build": "npm run build -w @caffeinejs/devtools-ui && tsc --build --force tsconfig.build.json && npm run build:cjs",
     "build:cjs": "node ../tools/build-cjs.mjs",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/core": "*",
+    "ws": "^8.18.3"
+  },
+  "peerDependencies": {
+    "@caffeinejs/http": "*"
+  },
+  "peerDependenciesMeta": {
+    "@caffeinejs/http": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

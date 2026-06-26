@@ -1,5 +1,5 @@
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
-import { configureRoute, configureRouter } from './_registrar.js'
+import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export function Header(name: string, value: string | string[]) {
   return defineClassOrMemberDecorator(

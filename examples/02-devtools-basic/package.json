@@ -1,0 +1,15 @@
+{
+  "name": "@caffeinejs/example-devtools-basic",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "@caffeinejs/core": "*",
+    "@caffeinejs/devtools": "*",
+    "@caffeinejs/http": "*",
+    "@caffeinejs/http-fastify-adapter": "*",
+    "fastify": "^5.0.0"
+  }
+}

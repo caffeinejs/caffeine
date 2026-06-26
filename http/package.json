@@ -18,6 +18,26 @@
         "default": "./dist/commonjs/index.js"
       }
     },
+    "./decorators": {
+      "import": {
+        "types": "./dist/esm/decorators.d.ts",
+        "default": "./dist/esm/decorators.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/decorators.d.ts",
+        "default": "./dist/commonjs/decorators.js"
+      }
+    },
+    "./decorators/registrar": {
+      "import": {
+        "types": "./dist/esm/decorators/registrar/index.d.ts",
+        "default": "./dist/esm/decorators/registrar/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/decorators/registrar/index.d.ts",
+        "default": "./dist/commonjs/decorators/registrar/index.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [

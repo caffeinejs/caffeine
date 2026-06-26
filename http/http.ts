@@ -2,7 +2,7 @@ import { Container, CaffeineIoC, Module, Options } from '@caffeinejs/core'
 import { Keys } from './symbols.js'
 import { Router } from './route.js'
 import { Adapter, AdapterFactory } from './adapter.js'
-import { getRouter } from './decorators/_registrar.js'
+import { getRouter } from './decorators/registrar/registrar.js'
 import { CaffeineError } from './error.js'
 
 export type CaffeineHTTPOptions = {

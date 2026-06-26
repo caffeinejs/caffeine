@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
-import { Adapter, Router } from '@caffeinejs/http'
+import { Adapter, Router, joinPaths } from '@caffeinejs/http'
 import { FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
 
@@ -87,7 +87,7 @@ export class FastifyAdapter<
 
           server.route({
             method: [...new Set(route.method.map(m => m.toUpperCase()))],
-            url: `${basePath}${route.path}`,
+            url: joinPaths(basePath, route.path),
             schema: route.schema as FastifySchema,
             bodyLimit: route.bodyLimit ?? router.bodyLimit,
             handlerTimeout: route.timeout ?? router.timeout,
@@ -109,6 +109,54 @@ export class FastifyAdapter<
 
   protected async teardown(): Promise<void> {
     await this.#fastify.close()
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    const buffer = await request.arrayBuffer()
+
+    const headers = Object.fromEntries(request.headers)
+    // light-my-request computes content-length from the payload itself;
+    // passing the original value causes a mismatch
+    delete headers['content-length']
+
+    return new Promise<Response>((resolve, reject) => {
+      void this.#fastify.inject(
+        {
+          // @ts-expect-error — request.method is string; light-my-request expects its own HTTPMethods union but all valid HTTP methods are accepted at runtime
+          method: request.method,
+          url: url.pathname + url.search,
+          headers,
+          payload: buffer.byteLength > 0 ? Buffer.from(buffer) : undefined,
+        },
+        (err, result) => {
+          if (err || !result) {
+            reject(err ?? new Error('inject produced no result'))
+            return
+          }
+
+          const responseHeaders = new Headers()
+          for (const [key, value] of Object.entries(result.headers)) {
+            if (value === undefined) {
+              continue
+            }
+
+            if (Array.isArray(value)) {
+              for (const v of value) {
+                responseHeaders.append(key, String(v))
+              }
+            } else {
+              responseHeaders.set(key, String(value))
+            }
+          }
+
+          resolve(new Response(result.rawPayload, {
+            status: result.statusCode,
+            headers: responseHeaders,
+          }))
+        },
+      )
+    })
   }
 
   instance(): SERVER {

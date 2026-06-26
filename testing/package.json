@@ -1,0 +1,51 @@
+{
+  "name": "@caffeinejs/testing",
+  "version": "0.0.0",
+  "description": "CaffeineJS HTTP testing utilities",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/commonjs/index.js",
+  "types": "dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/index.d.ts",
+        "default": "./dist/commonjs/index.js"
+      }
+    },
+    "./experimental": {
+      "import": {
+        "types": "./dist/esm/experimental/index.d.ts",
+        "default": "./dist/esm/experimental/index.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/experimental/index.d.ts",
+        "default": "./dist/commonjs/experimental/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json && npm run build:cjs",
+    "build:cjs": "node ../tools/build-cjs.mjs",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/http": "*"
+  },
+  "devDependencies": {
+    "@caffeinejs/core": "*",
+    "@caffeinejs/http-fastify-adapter": "*",
+    "fastify": "^5.8.5"
+  }
+}

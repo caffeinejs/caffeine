@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Get } from './decorators/verbs.js'
 import { Controller } from './decorators/controller.js'
-import { getRouter } from './decorators/_registrar.js'
+import { getRouter } from './decorators/registrar/registrar.js'
+import { getRouter as getRouterFromMain } from './index.js'
 
 describe('HttpAdapter', () => {
   it('should be defined', () => {
@@ -14,6 +15,21 @@ describe('HttpAdapter', () => {
     }
 
     void new TestController()
+  })
+
+  it('registrar subpath export shares the same registry as decorators', () => {
+    @Controller('/registrar-export')
+    class RegistrarExportController {
+      @Get('/ping')
+      ping() {
+        return { ok: true }
+      }
+    }
+
+    void RegistrarExportController
+
+    expect(getRouter(RegistrarExportController)).toBeDefined()
+    expect(getRouterFromMain(RegistrarExportController)).toBe(getRouter(RegistrarExportController))
   })
 })
 

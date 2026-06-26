@@ -1,4 +1,4 @@
-import { configureRoute } from './_registrar.js'
+import { configureRoute } from './registrar/registrar.js'
 
 export function Status(code: number) {
   return (

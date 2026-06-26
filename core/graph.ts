@@ -1,7 +1,7 @@
 import { Binding } from './binding.js'
 import { Key, isNamedKey, keyStr } from './key.js'
 
-interface GraphNode {
+export interface GraphNode {
   id: number
   label: string
   scopeId: string
@@ -11,16 +11,16 @@ interface GraphNode {
   lazy: boolean
 }
 
-type EdgeKind = 'injection' | 'property-injection' | 'method-injection' | 'named-group' | 'label-group'
+export type EdgeKind = 'injection' | 'property-injection' | 'method-injection' | 'named-group' | 'label-group'
 
-interface GraphEdge {
+export interface GraphEdge {
   fromId: number
   toId: number
   kind: EdgeKind
   meta?: string
 }
 
-interface BindingGraph {
+export interface BindingGraph {
   nodes: GraphNode[]
   edges: GraphEdge[]
 }

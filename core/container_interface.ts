@@ -198,4 +198,5 @@ export type ContainerBindingOps = Pick<Container,
   | 'postProcessors'
   | 'bind'
   | 'rebind'
+  | 'entries'
 >

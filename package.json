@@ -10,7 +10,10 @@
     "core",
     "http",
     "http-fastify-adapter",
+    "cli",
     "devtools",
+    "devtools/ui",
+    "testing",
     "benchmarks",
     "core/examples/*",
     "examples/*"
@@ -52,6 +55,7 @@
     "markdownlint-cli2": "^0.22.1",
     "reflect-metadata": "^0.2.2",
     "typescript": "^6.0.3",
+    "tsx": "^4.22.4",
     "typescript-eslint": "^8.59.2",
     "unplugin-swc": "^1.5.9",
     "vitest": "^4.1.8"

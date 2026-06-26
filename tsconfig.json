@@ -42,6 +42,9 @@
       "path": "./http-fastify-adapter"
     },
     {
+      "path": "./cli"
+    },
+    {
       "path": "./devtools"
     },
     {

@@ -1,6 +1,6 @@
 import { Binding, Key, Provider } from '@caffeinejs/core'
-import { Route, Router, RouteValidationSchema } from '../route.js'
-import { ParameterPickOptions } from '../route.picker.js'
+import { Route, Router, RouteValidationSchema } from '../../route.js'
+import { ParameterPickOptions } from '../../route.picker.js'
 
 function normalizePrefix(prefix: string): string {
   return prefix.replace(/\/+$/, '')
@@ -10,6 +10,11 @@ function normalizePath(path: string): string {
   const withLeading = path.startsWith('/') ? path : `/${path}`
   const collapsed = withLeading.replace(/\/+/g, '/')
   return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
+}
+
+export function joinPaths(base: string, path: string): string {
+  const joined = `${base}${path}`
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
 }
 
 export class RouterBuilder {
@@ -56,6 +61,14 @@ export class RouterBuilder {
 
   timeout(ms: number) {
     this.#_timeout = ms
+  }
+
+  describe<R = unknown>(): Exclude<Router<R>, 'key' | 'binding' | 'controller'> {
+    return this.toRouter(
+      null as unknown as Key,
+      null as unknown as Binding<unknown>,
+      null as unknown as Provider<Record<string | symbol, (...args: unknown[]) => unknown>>,
+    )
   }
 
   toRouter<R>(

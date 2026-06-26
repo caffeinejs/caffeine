@@ -1,0 +1,36 @@
+{
+  "name": "@caffeinejs/cli",
+  "version": "0.0.0",
+  "description": "CaffeineJS build-time CLI",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "caffeine": "./dist/esm/bin.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist"
+  },
+  "dependencies": {
+    "picomatch": "^4.0.4"
+  },
+  "devDependencies": {
+    "@types/picomatch": "^4.0.3",
+    "esbuild": "*",
+    "vite": "*"
+  }
+}

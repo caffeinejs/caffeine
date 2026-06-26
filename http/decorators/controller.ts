@@ -1,7 +1,7 @@
 import { Ctor, Injection } from '@caffeinejs/core'
 import { Injectable, Label } from '@caffeinejs/core/decorators'
 import { Keys } from '../symbols.js'
-import { configureRouterAndRegisterRoutes } from './_registrar.js'
+import { configureRouterAndRegisterRoutes } from './registrar/registrar.js'
 
 export function Controller(path: string, dependencies?: Injection[]) {
   return function (target: Function, context: ClassDecoratorContext): void {
