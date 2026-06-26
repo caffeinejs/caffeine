@@ -1,4 +1,7 @@
 export { testClient } from './client.js'
 export { typedClient } from './client_typed.js'
+export { newTestContainer, TestContainer } from './container.js'
 export { ErrFetchFailed, ErrNoRouter as ErrNoRoutesForController } from './error.js'
+export type { InstantiationEvent } from './tracker.js'
+export { InstanceTracker } from './tracker.js'
 export type { Fetchable, RouteMethods, RouterCtor, TestClient, TypedTestClient } from './types.js'

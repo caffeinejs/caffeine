@@ -18,10 +18,6 @@
       "types": "./dist/decorators/registrar/index.d.ts",
       "default": "./dist/decorators/registrar/index.js"
     },
-    "./testing": {
-      "types": "./dist/index.testing.d.ts",
-      "default": "./dist/index.testing.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [

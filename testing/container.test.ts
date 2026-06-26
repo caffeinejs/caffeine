@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { Configuration } from '../decorators/configuration.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Provides } from '../decorators/provides.js'
-import { Inject } from '../decorators/inject.js'
-import { Async } from '../decorators/async.js'
-import { Profile } from '../decorators/profile.js'
-import { optional } from '../injection.js'
-import { CaffeineIoC } from '../container.js'
-import { ErrUnresolvableDependencies } from '../errors.js'
+import {
+  Async,
+  CaffeineIoC,
+  Configuration,
+  ErrUnresolvableDependencies,
+  Inject,
+  Injectable,
+  Profile,
+  Provides,
+  optional,
+} from '@caffeinejs/core'
 import { InstanceTracker } from './tracker.js'
-import { TestContainer } from './testing.js'
+import { TestContainer } from './container.js'
 
 describe('TestContainer', function () {
   const kMsg = Symbol('kMsg')
@@ -179,7 +181,6 @@ describe('TestContainer', function () {
         .isolate(RepositoryWithShared, false, b => b.toValue(mockRepo))
         .build()
 
-      // SharedDep is kept because ControllerWithShared also depends on it
       expect(di.has(ControllerWithShared)).toBe(true)
       expect(di.has(SharedDep)).toBe(true)
     })

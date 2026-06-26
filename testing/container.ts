@@ -1,10 +1,6 @@
-import { CaffeineIoC } from '../container.js'
-import { Container } from '../container_interface.js'
-import { Identifier, Key, TypedKey } from '../key.js'
-import { Module } from '../module.js'
-import { Snapshot } from '../snapshot.js'
-import { Binder } from '../binder.js'
-import { exclusiveDeps, allTransitiveDeps } from './_util.js'
+import { CaffeineIoC } from '@caffeinejs/core'
+import type { Binder, Container, Identifier, Key, Module, Snapshot } from '@caffeinejs/core'
+import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
 interface IsolationEntry {
   configure: (binder: Binder<any>) => void
@@ -17,8 +13,6 @@ interface IsolationEntry {
  * suitable for use in tests.
  *
  * By default, the resulting container will be lazy.
- *
- * @testing
  */
 export class TestContainer {
   readonly #snap: Snapshot
@@ -39,7 +33,7 @@ export class TestContainer {
       throw new Error('TestContainer requires either a Container instance or a container Snapshot')
     }
 
-    this.#snap = source instanceof Snapshot ? source : source.snapshot()
+    this.#snap = source instanceof CaffeineIoC ? source.snapshot() : source as Snapshot
   }
 
   /**
@@ -308,11 +302,11 @@ export class TestContainer {
     di.restore(snap)
 
     for (const [key, { configure }] of this.#isolations) {
-      configure(di.rebind(key as TypedKey<any>))
+      configure(di.rebind(key as any))
     }
 
     for (const [key, configure] of this.#overrides) {
-      configure(di.rebind(key as TypedKey<any>))
+      configure(di.rebind(key as any))
     }
 
     return di
@@ -325,8 +319,6 @@ export class TestContainer {
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param container - The base container to use as the foundation for the test container.
- *
- * @testing
  */
 export function newTestContainer(container: Container): TestContainer
 /**
@@ -335,8 +327,6 @@ export function newTestContainer(container: Container): TestContainer
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param snap - The snapshot to use as the foundation for the test container.
- *
- * @testing
  */
 export function newTestContainer(snap: Snapshot): TestContainer
 /**
@@ -345,8 +335,6 @@ export function newTestContainer(snap: Snapshot): TestContainer
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param source - The container or snapshot to use as the foundation for the test container.
- *
- * @testing
  */
 export function newTestContainer(source: Container | Snapshot): TestContainer {
   return new TestContainer(source as Container)

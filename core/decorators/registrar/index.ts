@@ -1,4 +1,5 @@
 export type { Binding as BindingDecoratorConfig } from '../../binding.js'
+export type { DecoratorRegistrySnapshot } from './registrar.js'
 export {
   addProvidedBindings,
   decoratorConfigToBinding,
@@ -12,4 +13,5 @@ export {
   hasInjectable,
   providedBindingConfigurations,
 } from './registrar.js'
+export { restoreDecoratorRegistry, snapshotDecoratorRegistry } from './registrar.js'
 export type { MemberMetadata as Metadata } from './spec.js'

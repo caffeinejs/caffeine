@@ -27,10 +27,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@caffeinejs/core": "*",
     "@caffeinejs/http": "*"
   },
   "devDependencies": {
-    "@caffeinejs/core": "*",
     "@caffeinejs/http-fastify-adapter": "*",
     "fastify": "^5.8.5"
   }

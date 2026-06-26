@@ -1,40 +1,8 @@
-import { Key } from '../key.js'
-import { DeferredCtor } from '../deferred_ctor.js'
-import { Snapshot } from '../snapshot.js'
+import { DeferredCtor } from '@caffeinejs/core'
+import type { Key, Snapshot } from '@caffeinejs/core'
 
 export function resolveKey(key: Key): Key {
   return key instanceof DeferredCtor ? key.unwrap() : key
-}
-
-function buildForwardMap(snap: Snapshot): Map<Key, Set<Key>> {
-  const forward = new Map<Key, Set<Key>>()
-
-  for (const [k, b] of snap.entries()) {
-    const deps = new Set<Key>()
-    for (const d of b.injections) {
-      if (d.key) {
-        deps.add(resolveKey(d.key))
-      }
-    }
-    for (const d of b.injectableProperties.values()) {
-      if (d.key) {
-        deps.add(resolveKey(d.key))
-      }
-    }
-    for (const ds of b.injectableMethods.values()) {
-      for (const d of ds) {
-        if (d.key) {
-          deps.add(resolveKey(d.key))
-        }
-      }
-    }
-    if (b.source?.ctor) {
-      deps.add(b.source.ctor)
-    }
-    forward.set(k, deps)
-  }
-
-  return forward
 }
 
 export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<Key>): Set<Key> {
@@ -92,4 +60,35 @@ export function allTransitiveDeps(snap: Snapshot, roots: Set<Key>): Set<Key> {
     }
   }
   return result
+}
+
+function buildForwardMap(snap: Snapshot): Map<Key, Set<Key>> {
+  const forward = new Map<Key, Set<Key>>()
+
+  for (const [k, b] of snap.entries()) {
+    const deps = new Set<Key>()
+    for (const d of b.injections) {
+      if (d.key) {
+        deps.add(resolveKey(d.key))
+      }
+    }
+    for (const d of b.injectableProperties.values()) {
+      if (d.key) {
+        deps.add(resolveKey(d.key))
+      }
+    }
+    for (const ds of b.injectableMethods.values()) {
+      for (const d of ds) {
+        if (d.key) {
+          deps.add(resolveKey(d.key))
+        }
+      }
+    }
+    if (b.source?.ctor) {
+      deps.add(b.source.ctor)
+    }
+    forward.set(k, deps)
+  }
+
+  return forward
 }

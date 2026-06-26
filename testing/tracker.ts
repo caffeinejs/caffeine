@@ -1,6 +1,4 @@
-import type { Key, Identifier } from '../key.js'
-import type { ResolutionContext } from '../resolution_context.js'
-import type { PostProcessor } from '../post_processor.js'
+import type { Identifier, Key, PostProcessor, ResolutionContext } from '@caffeinejs/core'
 
 export interface InstantiationEvent {
   key: Key
@@ -9,16 +7,6 @@ export interface InstantiationEvent {
   timestamp: number
 }
 
-/**
- * A {@link PostProcessor} that records every instantiation event during container resolution.
- * Add it to the {@link Container} `postProcessors` before calling `init()`.
- *
- * @param container - The container to record instantiation events for.
- *
- * @experimental
- * @internal
- * @testing
- */
 export class InstanceTracker implements PostProcessor {
   readonly #events: InstantiationEvent[] = []
 
