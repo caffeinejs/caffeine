@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { watch } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'

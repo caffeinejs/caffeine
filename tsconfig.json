@@ -49,6 +49,12 @@
     },
     {
       "path": "./benchmarks"
+    },
+    {
+      "path": "./plugins/esbuild"
+    },
+    {
+      "path": "./plugins/vite"
     }
   ]
 }

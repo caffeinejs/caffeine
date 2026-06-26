@@ -1,6 +1,4 @@
-import { readdir } from 'node:fs/promises'
-import { join, relative } from 'node:path'
-import picomatch from 'picomatch'
+import { join } from 'node:path'
 
 export interface ScanOptions {
   root: string
@@ -9,24 +7,17 @@ export interface ScanOptions {
 }
 
 export async function scan(opts: ScanOptions): Promise<string[]> {
-  const matchInclude = picomatch(opts.include)
-  const matchExclude = opts.exclude.length > 0 ? picomatch(opts.exclude) : () => false
+  const excludeGlobs = opts.exclude.map(p => new Bun.Glob(p))
+  const seen = new Set<string>()
 
-  const entries = await readdir(opts.root, { recursive: true, withFileTypes: true })
-  const results: string[] = []
-
-  for (const entry of entries) {
-    if (!entry.isFile()) {
-      continue
-    }
-
-    const abs = join(entry.parentPath, entry.name)
-    const rel = relative(opts.root, abs).replaceAll('\\', '/')
-
-    if (matchInclude(rel) && !matchExclude(rel)) {
-      results.push(abs)
+  for (const pattern of opts.include) {
+    const glob = new Bun.Glob(pattern)
+    for await (const rel of glob.scan({ cwd: opts.root, onlyFiles: true })) {
+      if (!excludeGlobs.some(g => g.match(rel))) {
+        seen.add(join(opts.root, rel))
+      }
     }
   }
 
-  return results.sort()
+  return [...seen].sort()
 }

@@ -1,7 +1,4 @@
-import { readFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { resolve } from 'node:path'
 
 export interface GenerateConfig {
   include: string[]
@@ -27,12 +24,12 @@ const CONFIG_CANDIDATES = [
 
 export async function loadConfig(cwd: string, configPath?: string): Promise<CaffeineConfig> {
   if (configPath) {
-    return loadFile(resolve(cwd, configPath), cwd)
+    return loadFile(resolve(cwd, configPath))
   }
   for (const candidate of CONFIG_CANDIDATES) {
     const path = resolve(cwd, candidate)
     try {
-      return await loadFile(path, cwd)
+      return await loadFile(path)
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         continue
@@ -43,46 +40,12 @@ export async function loadConfig(cwd: string, configPath?: string): Promise<Caff
   throw new Error('Cannot find caffeine config: no caffeine.config.{ts,js,mjs,json} found in ' + cwd)
 }
 
-async function loadFile(path: string, cwd: string): Promise<CaffeineConfig> {
+async function loadFile(path: string): Promise<CaffeineConfig> {
   if (path.endsWith('.json')) {
-    const raw = await readFile(path, 'utf8')
-    return JSON.parse(raw) as CaffeineConfig
+    return await Bun.file(path).json() as CaffeineConfig
   }
-  if (path.endsWith('.ts')) {
-    return loadTs(path, cwd)
-  }
-  const mod = await import(pathToFileURL(path).href) as { default?: CaffeineConfig } | CaffeineConfig
+  const mod = await import(path) as { default?: CaffeineConfig } | CaffeineConfig
   return unwrapDefault(mod)
-}
-
-async function loadTs(path: string, cwd: string): Promise<CaffeineConfig> {
-  const { spawnSync } = await import('node:child_process')
-
-  const req = createRequire(resolve(cwd, 'package.json'))
-  let tsxEsm: string
-  try {
-    tsxEsm = req.resolve('tsx/esm')
-  } catch {
-    throw new Error('Cannot load TypeScript config: tsx is required. Run: npm install -D tsx')
-  }
-
-  const href = pathToFileURL(path).href
-  const script = `import(${JSON.stringify(href)}).then(m=>process.stdout.write(JSON.stringify(m.default??m)))`
-
-  const result = spawnSync(process.execPath, ['--import', tsxEsm, '--eval', script], {
-    encoding: 'utf8',
-    cwd: dirname(path),
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
-
-  if (result.error) {
-    throw result.error
-  }
-  if (result.status !== 0) {
-    throw new Error('Cannot load TypeScript config at ' + path + ':\n' + result.stderr)
-  }
-
-  return JSON.parse(result.stdout) as CaffeineConfig
 }
 
 function unwrapDefault(mod: { default?: CaffeineConfig } | CaffeineConfig): CaffeineConfig {

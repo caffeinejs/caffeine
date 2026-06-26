@@ -18,6 +18,12 @@
     },
     {
       "path": "./testing/tsconfig.build.json"
+    },
+    {
+      "path": "./plugins/esbuild/tsconfig.build.json"
+    },
+    {
+      "path": "./plugins/vite/tsconfig.build.json"
     }
   ]
 }

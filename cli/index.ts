@@ -1,6 +1,2 @@
 export type { CaffeineConfig, GenerateConfig } from './config.js'
 export { defineConfig } from './config.js'
-export type { CaffeineEsbuildOptions } from './plugins/esbuild.js'
-export { caffeineEsbuild } from './plugins/esbuild.js'
-export type { CaffeineViteOptions } from './plugins/vite.js'
-export { caffeineVite } from './plugins/vite.js'

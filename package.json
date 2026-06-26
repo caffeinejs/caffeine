@@ -16,7 +16,8 @@
     "testing",
     "benchmarks",
     "core/examples/*",
-    "examples/*"
+    "examples/*",
+    "plugins/*"
   ],
   "scripts": {
     "build": "tsc --build tsconfig.build.json",

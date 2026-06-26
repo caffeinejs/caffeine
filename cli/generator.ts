@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto'
-import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve } from 'node:path'
 
 const HEADER = [
@@ -28,23 +26,21 @@ export async function generate(opts: GenerateOptions): Promise<boolean> {
 
   const content = `${HEADER}\n\n${imports}\n`
 
+  const outputFile = Bun.file(opts.output)
   let existing: string | undefined
-  try {
-    existing = await readFile(opts.output, 'utf8')
-  } catch {
-    // file doesn't exist yet
+  if (await outputFile.exists()) {
+    existing = await outputFile.text()
   }
 
-  const newHash = hash(content)
-  if (existing !== undefined && hash(existing) === newHash) {
+  if (existing !== undefined && hash(existing) === hash(content)) {
     return false
   }
 
-  await writeFile(opts.output, content, 'utf8')
+  await Bun.write(opts.output, content)
   return true
 }
 
 function hash(content: string): string {
-  return createHash('sha1').update(content)
+  return new Bun.CryptoHasher('sha1').update(content)
     .digest('hex')
 }
