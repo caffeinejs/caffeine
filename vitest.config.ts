@@ -4,7 +4,6 @@ export default defineConfig({
   test: {
     projects: [
       './core/vitest.config.ts',
-      './core/vitest.legacy.config.ts',
       './core/vitest.leak.config.ts',
       './http/vitest.config.ts',
       './http-fastify-adapter/vitest.config.ts',

@@ -48,9 +48,7 @@ jobs:
         run: npm run lint
 
       - name: Type Check
-        run: |
-          npm run test:typecheck
-          npm run test:typecheck:legacy
+        run: npm run test:typecheck
 
       - name: Memory Leak Test
         run: npm run test:memory

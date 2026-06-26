@@ -18,7 +18,6 @@ export default defineConfig({
     exclude: [
       'node_modules/**',
       'dist/**',
-      'decorators/legacy/_tests/**',
       '_tests/memory/**',
       '_tests/deno/**',
       'examples/**',

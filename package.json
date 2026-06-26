@@ -26,7 +26,6 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:typecheck": "tsc -p tsconfig.test.json",
-    "test:typecheck:legacy": "tsc -p tsconfig.legacy.json",
     "test:typecheck:benchmarks": "npm run test:typecheck -w @caffeinejs/benchmarks",
     "test:memory": "npm run test:memory --workspaces --if-present",
     "lint": "eslint",

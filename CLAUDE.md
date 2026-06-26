@@ -19,9 +19,8 @@ After making any code changes, always run the following checks in order and fix 
 
 1. `npm run build` — must compile without errors
 2. `npm run test:typecheck` — type-check all test files
-3. `npm run test:typecheck:legacy` — type-check legacy decorator files
-4. `npm test` — all tests must pass
-5. `npm run lint:fix` — zero errors (warnings are pre-existing and acceptable)
+3. `npm test` — all tests must pass
+4. `npm run lint:fix` — zero errors (warnings are pre-existing and acceptable)
 
 ## Private modules
 

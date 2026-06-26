@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CaffeineIoC } from '../container.js'
-import { Injectable } from '../decorators/legacy/injectable.legacy.js'
+import { Injectable } from '../decorators/injectable.js'
 import { Order } from '../decorators/order.js'
 import { ordered } from '../injection.js'
 import { mod } from '../module.js'

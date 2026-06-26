@@ -22,7 +22,6 @@ testcov: ## run all test with coverage
 .PHONY: testtypes
 testtypes: ## run all type checks
 	@npm run test:typecheck
-	@npm run test:typecheck:legacy
 
 .PHONY: testmem
 testmem: ## run memory leak tests
@@ -31,7 +30,6 @@ testmem: ## run memory leak tests
 .PHONY: ci
 ci: ## run all ci commands
 	@npm run test:typecheck
-	@npm run test:typecheck:legacy
 	@npm test
 	@npm run lint:fix
 
@@ -72,7 +70,6 @@ lintfix: ## fix lint errors
 all: ## run the whole build and quality checks
 	@npm run build
 	@npm run test:typecheck
-	@npm run test:typecheck:legacy
 	@npm run lint:fix
 	@npm test
 	@npm run test:memory

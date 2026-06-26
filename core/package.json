@@ -18,10 +18,6 @@
       "types": "./dist/esm/decorators/index.d.ts",
       "default": "./dist/esm/decorators/index.js"
     },
-    "./decorators/legacy": {
-      "types": "./dist/esm/decorators/legacy/index.d.ts",
-      "default": "./dist/esm/decorators/legacy/index.js"
-    },
     "./internals": {
       "types": "./dist/esm/decorators/registrar/index.d.ts",
       "default": "./dist/esm/decorators/registrar/index.js"
@@ -37,18 +33,16 @@
     "package.json"
   ],
   "scripts": {
-    "build": "rm -rf dist && npm run build:esm && tsc -p tsconfig.legacy.json",
+    "build": "rm -rf dist && npm run build:esm",
     "build:esm": "tsc --build --force tsconfig.build.json",
     "test:typecheck": "tsc -p tsconfig.test.json",
-    "test:typecheck:legacy": "tsc -p tsconfig.legacy.json",
     "test": "vitest run",
-    "test:legacy": "vitest run --config vitest.legacy.config.ts",
     "test:property": "vitest run _tests/property",
     "test:watch": "vitest",
     "test:memory": "vitest run --config vitest.leak.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:coverage:html": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text",
-"test:browser": "esbuild dist/esm/index.js --bundle --platform=browser --format=esm --outfile=/dev/null",
+    "test:browser": "esbuild dist/esm/index.js --bundle --platform=browser --format=esm --outfile=/dev/null",
     "test:deno": "npm run build && docker compose -f _tests/deno/docker-compose.yml up --build --abort-on-container-exit --exit-code-from deno",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
@@ -66,14 +60,6 @@
     "example:framework": "npm run start -w @caffeinejs/example-framework",
     "example:fastify-functions": "npm run start -w @caffeinejs/example-fastify-functions",
     "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete"
-  },
-  "peerDependencies": {
-    "reflect-metadata": ">=0.1.13"
-  },
-  "peerDependenciesMeta": {
-    "reflect-metadata": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@loopback/context": "^8.0.13",

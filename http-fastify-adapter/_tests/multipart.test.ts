@@ -7,7 +7,10 @@ import { MultipartFile, MultipartField } from '../multipart.js'
 
 const BOUNDARY = '----TestBoundary123'
 
-function multipartBody(entries: Array<{ name: string, value: string } | { name: string, filename: string, content: string, mime?: string }>): Buffer {
+type ME = { name: string, value: string } | { name: string, filename: string, content: string, mime?: string }
+
+function multipartBody(
+  entries: Array<ME>): Buffer {
   const parts: string[] = []
   for (const entry of entries) {
     if ('filename' in entry) {

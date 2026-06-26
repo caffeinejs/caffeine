@@ -12,5 +12,4 @@ export {
   hasInjectable,
   providedBindingConfigurations,
 } from './registrar.js'
-export * from './registrar_legacy.js'
 export type { MemberMetadata as Metadata } from './spec.js'
