@@ -80,13 +80,13 @@ export default defineConfig(
         ignoreUrls: true,
         ignoreRegExpLiterals: true,
       }],
+      '@stylistic/max-statements-per-line': ['error', { max: 2 }],
       '@stylistic/arrow-parens': ['error', 'as-needed'],
       '@stylistic/newline-per-chained-call': ['error'],
 
       'n/no-missing-import': 'off',
       'n/no-unpublished-import': 'off',
 
-      'unused-imports/no-unused-imports': 'error',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-empty-function': ['error', { allow: ['decoratedFunctions'] }],
       '@typescript-eslint/no-useless-constructor': 'error',
@@ -98,7 +98,6 @@ export default defineConfig(
       '@typescript-eslint/no-empty-object-type': 'off',
 
       'import-x/no-named-as-default-member': 'off',
-
       'import-x/extensions': ['error', 'ignorePackages', { js: 'always', jsx: 'never', ts: 'never', tsx: 'never' }],
       'import-x/order': [
         'error',
@@ -112,8 +111,8 @@ export default defineConfig(
       'import-x/export': 'error',
       'import-x/no-deprecated': 'error',
 
+      'unused-imports/no-unused-imports': 'error',
       'simple-import-sort/exports': 'error',
-
       'no-restricted-imports': [
         'error',
         {

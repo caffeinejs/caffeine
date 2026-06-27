@@ -21,7 +21,7 @@ export interface RouteSnapshot {
   controllerScope: string
   handler: string
   accept: string[]
-  contentTypes: string[]
+  contentType: string
   responseStatus?: number
 }
 

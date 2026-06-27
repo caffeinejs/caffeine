@@ -45,6 +45,10 @@ export class FastifyContext<SCHEMA extends FastifyRouteSchema = FastifyRouteSche
   notFound(): void {
     this.reply.code(404).send()
   }
+
+  redirect(url: string, status?: number): void {
+    this.reply.redirect(url, status)
+  }
 }
 
 export class FastifyContextRequest<SCHEMA extends FastifyRouteSchema = FastifyRouteSchema> implements Req<

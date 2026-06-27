@@ -20,7 +20,7 @@ export interface Req<
   param(key: string): string | undefined
 }
 
-export interface Context<REQ, RES> {
+export interface Context<REQ = unknown, RES = unknown> {
   get req(): Req<REQ>
 
   get res(): RES
@@ -33,4 +33,5 @@ export interface Context<REQ, RES> {
 
   notFound(): void
 
+  redirect(url: string, status?: number): void
 }

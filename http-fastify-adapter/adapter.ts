@@ -57,14 +57,6 @@ export class FastifyAdapter<
           }
 
           const respond = (result: unknown, res: RES): unknown => {
-            for (const [k, v] of router.header) {
-              res.header(k, v)
-            }
-
-            for (const [k, v] of route.response.header) {
-              res.header(k, v)
-            }
-
             // Fetch API Response Support.
             // The response is mapped using Fastify's reply object.
             if (result instanceof Response) {
@@ -81,10 +73,6 @@ export class FastifyAdapter<
 
             // Non-Fetch API response specifics.
 
-            if (route.response.status !== undefined) {
-              res.code(route.response.status)
-            }
-
             return result
           }
 
@@ -95,6 +83,26 @@ export class FastifyAdapter<
             bodyLimit: route.bodyLimit ?? router.bodyLimit,
             handlerTimeout: route.timeout ?? router.timeout,
             handler: function (req, res) {
+              if (router.header) {
+                for (const [k, v] of router.header) {
+                  res.header(k, v)
+                }
+              }
+
+              if (route.header) {
+                for (const [k, v] of route.header) {
+                  res.header(k, v)
+                }
+              }
+
+              if (route.contentType) {
+                res.type(route.contentType)
+              }
+
+              if (route.statusCode !== undefined) {
+                res.code(route.statusCode)
+              }
+
               const result = dispatch(req as REQ, res as RES)
               if (result instanceof Promise) {
                 return result.then(r => respond(r, res as RES))
@@ -118,23 +126,35 @@ export class FastifyAdapter<
     return this.#fastify
   }
 
-  async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url)
-    const buffer = await request.arrayBuffer()
+  async fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
+    let request: Request
 
-    const headers = Object.fromEntries(request.headers)
+    if (input instanceof Request) {
+      request = input
+    } else {
+      if (typeof input === 'string') {
+        if (input.startsWith('/')) {
+          input = 'http://localhost' + input
+        }
+      }
+
+      request = new Request(input, options)
+    }
+
+    const body = await request.arrayBuffer()
+    const payload = body.byteLength > 0 ? Buffer.from(body) : undefined
+
     // light-my-request computes content-length from the payload itself;
     // passing the original value causes a mismatch
-    delete headers['content-length']
+    request.headers.delete('content-length')
 
     return new Promise<Response>((resolve, reject) => {
       void this.#fastify.inject(
         {
-          // @ts-expect-error — request.method is string; light-my-request expects its own HTTPMethods union but all valid HTTP methods are accepted at runtime
-          method: request.method,
-          url: url.pathname + url.search,
-          headers,
-          payload: buffer.byteLength > 0 ? Buffer.from(buffer) : undefined,
+          method: request.method as any,
+          url: request.url,
+          headers: Object.fromEntries(request.headers),
+          payload,
         },
         (err, result) => {
           if (err || !result) {
@@ -159,6 +179,7 @@ export class FastifyAdapter<
 
           resolve(new Response(result.rawPayload, {
             status: result.statusCode,
+            statusText: result.statusMessage,
             headers: responseHeaders,
           }))
         },

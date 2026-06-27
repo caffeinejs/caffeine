@@ -2,65 +2,57 @@ import { Binding, Key, Provider } from '@caffeinejs/core'
 import { Route, Router, RouteValidationSchema } from '../../route.js'
 import { ParameterPickOptions } from '../../route.picker.js'
 
-function normalizePrefix(prefix: string): string {
-  return prefix.replace(/\/+$/, '')
-}
-
-function normalizePath(path: string): string {
-  const withLeading = path.startsWith('/') ? path : `/${path}`
-  const collapsed = withLeading.replace(/\/+/g, '/')
-  return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
-}
-
-export function joinPaths(base: string, path: string): string {
-  const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
-}
-
 export class RouterBuilder {
   _path?: string
   #_prefix?: string
   #_header?: Map<string, string | string[]>
   #_consumes?: string[]
-  #_produces?: string[]
+  #_produces: string = ''
   #_routes?: RouteBuilder[]
   #_bodyLimit?: number
   #_timeout?: number
 
   path(path: string) {
     this._path = path
+    return this
   }
 
   header(name: string, value: string | string[]) {
     this.#_header ??= new Map()
     this.#_header.set(name, value)
+    return this
   }
 
   consumes(consumes: string | string[]) {
     this.#_consumes ??= []
     this.#_consumes.push(...(Array.isArray(consumes) ? consumes : [consumes]))
+    return this
   }
 
-  produces(produces: string | string[]) {
-    this.#_produces ??= []
-    this.#_produces.push(...(Array.isArray(produces) ? produces : [produces]))
+  produces(produces: string) {
+    this.#_produces = produces
+    return this
   }
 
   routes(routes: RouteBuilder | RouteBuilder[]) {
     this.#_routes ??= []
     this.#_routes.push(...(Array.isArray(routes) ? routes : [routes]))
+    return this
   }
 
   prefix(prefix: string) {
     this.#_prefix = prefix
+    return this
   }
 
   bodyLimit(bytes: number) {
     this.#_bodyLimit = bytes
+    return this
   }
 
   timeout(ms: number) {
     this.#_timeout = ms
+    return this
   }
 
   describe<R = unknown>(): Exclude<Router<R>, 'key' | 'binding' | 'controller'> {
@@ -80,9 +72,9 @@ export class RouterBuilder {
       path: normalizePrefix(this._path ?? ''),
       prefix: this.#_prefix,
       routes: (this.#_routes ?? []).map(route => route.toRoute<R>()),
-      header: new Map(this.#_header),
+      header: this.#_header,
       accept: [...(this.#_consumes ?? [])],
-      contentTypes: [...(this.#_produces ?? [])],
+      contentType: this.#_produces,
       bodyLimit: this.#_bodyLimit,
       timeout: this.#_timeout,
       key,
@@ -99,7 +91,7 @@ export class RouteBuilder {
   #_handler?: string | symbol
   #_parameters?: ParameterPickOptions<unknown>[]
   #_consumes?: string[]
-  #_produces?: string[]
+  #_produces: string = ''
   #_schema?: RouteValidationSchema
   #_bodyLimit?: number
   #_timeout?: number
@@ -139,9 +131,8 @@ export class RouteBuilder {
     return this
   }
 
-  produces(produces: string | string[]) {
-    this.#_produces ??= []
-    this.#_produces.push(...(Array.isArray(produces) ? produces : [produces]))
+  produces(produces: string) {
+    this.#_produces = produces
     return this
   }
 
@@ -170,13 +161,29 @@ export class RouteBuilder {
       path: normalizePath(this.#_path ?? ''),
       method: [...(this.#_method ?? [])],
       accept: [...(this.#_consumes ?? [])],
-      contentTypes: [...(this.#_produces ?? [])],
+      contentType: this.#_produces ?? '',
       parameters: [...(this.#_parameters ?? [])],
       handler: this.#_handler ?? '',
-      response: { status: this.#_statusCode, header: new Map(this.#_header) },
       schema: this.#_schema,
       bodyLimit: this.#_bodyLimit,
       timeout: this.#_timeout,
+      header: this.#_header,
+      statusCode: this.#_statusCode,
     }
   }
+}
+
+function normalizePrefix(prefix: string): string {
+  return prefix.replace(/\/+$/, '')
+}
+
+function normalizePath(path: string): string {
+  const withLeading = path.startsWith('/') ? path : `/${path}`
+  const collapsed = withLeading.replace(/\/+/g, '/')
+  return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
+}
+
+export function joinPaths(base: string, path: string): string {
+  const joined = `${base}${path}`
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
 }

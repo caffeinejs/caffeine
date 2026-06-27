@@ -23,8 +23,8 @@ export class HttpCollector {
           controllerScope,
           handler: String(route.handler),
           accept: route.accept,
-          contentTypes: route.contentTypes,
-          responseStatus: route.response.status,
+          contentType: route.contentType,
+          responseStatus: route.statusCode,
         })
       }
     }

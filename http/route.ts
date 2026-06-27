@@ -13,16 +13,14 @@ export interface Route<R> {
   path: string
   method: string[]
   accept: string[]
-  contentTypes: string[]
+  contentType: string
   parameters: ParameterPickOptions<R>[]
   handler: string | symbol
   schema?: RouteValidationSchema
   bodyLimit?: number
   timeout?: number
-  response: {
-    status?: number
-    header: Map<string, string | string[]>
-  }
+  header?: Map<string, string | string[]>
+  statusCode?: number
 }
 
 export interface Router<R> {
@@ -30,8 +28,8 @@ export interface Router<R> {
   prefix?: string
   routes: Route<R>[]
   accept: string[]
-  contentTypes: string[]
-  header: Map<string, string | string[]>
+  contentType: string
+  header?: Map<string, string | string[]>
   bodyLimit?: number
   timeout?: number
   key: Key

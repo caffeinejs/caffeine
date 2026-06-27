@@ -9,7 +9,7 @@ export interface Adapter<I, R> {
   setup(input: AdapterIn<R>): Promise<void>
   teardown(): Promise<void>
   server(): I
-  fetch(request: Request): Promise<Response>
+  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 }
 
 export interface AdapterFactoryIn {
@@ -44,8 +44,8 @@ export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
     return this.#adapter.server()
   }
 
-  fetch(request: Request): Promise<Response> {
-    return this.#adapter.fetch(request)
+  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
+    return this.#adapter.fetch(request, options)
   }
 
   addModules(module: Module, ...modules: Module[]): this {
