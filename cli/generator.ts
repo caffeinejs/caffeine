@@ -37,6 +37,7 @@ export async function generate(opts: GenerateOptions): Promise<boolean> {
   }
 
   await Bun.write(opts.output, content)
+
   return true
 }
 

@@ -37,6 +37,7 @@ export async function loadConfig(cwd: string, configPath?: string): Promise<Caff
       throw err
     }
   }
+
   throw new Error('Cannot find caffeine config: no caffeine.config.{ts,js,mjs,json} found in ' + cwd)
 }
 

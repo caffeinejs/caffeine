@@ -16,6 +16,8 @@ export interface Req<
   header(): THeaders
   header(key: string): string | undefined
 
+  hasHeader(key: string): boolean
+
   param(): TParams
   param(key: string): string | undefined
 }

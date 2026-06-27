@@ -80,6 +80,10 @@ export class FastifyContextRequest<SCHEMA extends FastifyRouteSchema = FastifyRo
     return this.request.headers[key] as string | undefined
   }
 
+  hasHeader(key: string): boolean {
+    return this.request.headers[key] !== undefined
+  }
+
   param(): InferParams<SCHEMA>
   param(key: string): string | undefined
   param(key?: string): InferParams<SCHEMA> | string | undefined {

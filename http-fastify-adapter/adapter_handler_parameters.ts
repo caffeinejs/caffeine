@@ -126,7 +126,7 @@ function buildPicker<
                 fieldname: value.fieldname,
                 filename: value.filename,
                 mimetype: value.mimetype,
-                stream: Readable.toWeb(value.file) as ReadableStream<Uint8Array>,
+                stream: Readable.toWeb(value.file),
               })
             } else {
               controller.enqueue({
@@ -157,7 +157,7 @@ function buildPicker<
               fieldname: value.fieldname,
               filename: value.filename,
               mimetype: value.mimetype,
-              stream: Readable.toWeb(value.file) as ReadableStream<Uint8Array>,
+              stream: Readable.toWeb(value.file),
             })
           },
         })
@@ -177,13 +177,14 @@ function buildPicker<
                 controller.close()
                 return
               }
+
               if (!fieldname || value.fieldname === fieldname) {
                 controller.enqueue({
                   type: 'file',
                   fieldname: value.fieldname,
                   filename: value.filename,
                   mimetype: value.mimetype,
-                  stream: Readable.toWeb(value.file) as ReadableStream<Uint8Array>,
+                  stream: Readable.toWeb(value.file),
                 })
 
                 controller.close()

@@ -7,6 +7,7 @@ export default defineConfig({
       './core/vitest.leak.config.ts',
       './http/vitest.config.ts',
       './http-fastify-adapter/vitest.config.ts',
+      './http-hono/vitest.config.ts',
       './testing/vitest.config.ts',
     ],
   },

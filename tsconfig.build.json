@@ -8,6 +8,9 @@
       "path": "./http-fastify-adapter/tsconfig.build.json"
     },
     {
+      "path": "./http-hono/tsconfig.build.json"
+    },
+    {
       "path": "./http/tsconfig.build.json"
     },
     {
