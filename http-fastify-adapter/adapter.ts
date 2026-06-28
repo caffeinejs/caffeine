@@ -3,6 +3,7 @@ import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, AdapterIn, Router } from '@caffeinejs/http'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
+import { kConfig, kCORS } from './decorators/keys/keys.js'
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -19,7 +20,6 @@ export class FastifyAdapter<
 
   async setup(input: AdapterIn<REQ>): Promise<void> {
     const routers = input.routers as Router<REQ>[]
-
     const needsRequestScope = routers.some(
       router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
@@ -31,9 +31,7 @@ export class FastifyAdapter<
       })
     }
 
-    for (let i = 0; i < routers.length; i++) {
-      const router = routers[i]
-
+    for (const router of routers) {
       const basePath = router.path
       const routes = router.routes
 
@@ -71,9 +69,30 @@ export class FastifyAdapter<
               return res.send(body)
             }
 
-            // Non-Fetch API response specifics.
-
             return result
+          }
+
+          // Config
+          const config: Record<string | symbol, unknown> = {}
+
+          // CORS
+          const cors = router.binding.tags.get(kCORS) ?? {}
+          if (typeof cors !== 'undefined') {
+            config.cors = cors
+          }
+
+          // Additional Configuration Entries
+          const { config: extras, override } = router.binding.tags.get(kConfig) ?? {} as any
+          if (extras !== undefined) {
+            for (const [k, v] of Object.entries(extras)) {
+              if (Object.hasOwn(config, k)) {
+                if (override) {
+                  config[k] = v
+                }
+              } else {
+                config[k] = v
+              }
+            }
           }
 
           server.route({
@@ -82,6 +101,7 @@ export class FastifyAdapter<
             schema: route.schema as FastifySchema,
             bodyLimit: route.bodyLimit ?? router.bodyLimit,
             handlerTimeout: route.timeout ?? router.timeout,
+            config,
             handler: function (req, res) {
               if (router.header) {
                 for (const [k, v] of router.header) {

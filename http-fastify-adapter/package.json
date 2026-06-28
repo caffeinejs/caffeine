@@ -27,11 +27,15 @@
     "@caffeinejs/http": "*"
   },
   "peerDependencies": {
+    "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
     "fastify": "^5.0.0",
     "fastify-plugin": "^6.0.0"
   },
   "peerDependenciesMeta": {
+    "@fastify/cors": {
+      "optional": true
+    },
     "@fastify/multipart": {
       "optional": true
     },
@@ -43,6 +47,7 @@
     }
   },
   "devDependencies": {
+    "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
     "@types/supertest": "^7.2.0",
     "fastify": "^5.8.5",

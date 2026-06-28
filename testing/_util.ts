@@ -1,4 +1,3 @@
-import { joinPaths } from '@caffeinejs/http'
 import type { RouterDescriptor } from './types.js'
 
 export function resolveRouteUrl(
@@ -41,4 +40,9 @@ export function mergeRequest(request: Request, overrides: { method: string, url:
     referrer: request.referrer,
     referrerPolicy: request.referrerPolicy,
   } as RequestInit)
+}
+
+function joinPaths(base: string, path: string): string {
+  const joined = `${base}${path}`
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
 }

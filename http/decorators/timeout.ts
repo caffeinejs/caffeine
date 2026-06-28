@@ -3,7 +3,7 @@ import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export function Timeout(ms: number) {
   return defineClassOrMemberDecorator(
-    target => configureRouter(target, spec => spec.timeout(ms)),
+    (target, ctx) => configureRouter(ctx, target, spec => spec.timeout(ms)),
     context => configureRoute(context, spec => spec.timeout(ms)),
   )
 }

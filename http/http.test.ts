@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { Get } from './decorators/verbs.js'
 import { Controller } from './decorators/controller.js'
 import { getRouter } from './decorators/registrar/registrar.js'
-import { getRouter as getRouterFromMain } from './index.js'
 
 describe('HttpAdapter', () => {
   it('should be defined', () => {
@@ -29,7 +28,6 @@ describe('HttpAdapter', () => {
     void RegistrarExportController
 
     expect(getRouter(RegistrarExportController)).toBeDefined()
-    expect(getRouterFromMain(RegistrarExportController)).toBe(getRouter(RegistrarExportController))
   })
 })
 

@@ -182,8 +182,3 @@ function normalizePath(path: string): string {
   const collapsed = withLeading.replace(/\/+/g, '/')
   return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed
 }
-
-export function joinPaths(base: string, path: string): string {
-  const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
-}

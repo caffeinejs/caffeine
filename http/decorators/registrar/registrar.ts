@@ -19,7 +19,11 @@ export function configureRoute(ctx: ClassMemberDecoratorContext, mut: (spec: Rou
   mut(route)
 }
 
-export function configureRouter(key: Function, mut: (spec: RouterBuilder) => void) {
+export function configureRouter(
+  _ctx: ClassDecoratorContext,
+  key: Function,
+  mut: (spec: RouterBuilder) => void,
+): void {
   let cur = RouterRegistry.get(key)
   if (!cur) {
     cur = new RouterBuilder()

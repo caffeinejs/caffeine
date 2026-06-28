@@ -3,7 +3,7 @@ import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export function BodyLimit(bytes: number) {
   return defineClassOrMemberDecorator(
-    target => configureRouter(target, spec => spec.bodyLimit(bytes)),
+    (target, ctx) => configureRouter(ctx, target, spec => spec.bodyLimit(bytes)),
     context => configureRoute(context, spec => spec.bodyLimit(bytes)),
   )
 }
