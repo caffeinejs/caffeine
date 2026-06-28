@@ -3,7 +3,5 @@ import { Tag } from '@caffeinejs/core'
 import { kCORS } from './keys/keys.js'
 
 export function CORS(options: FastifyCorsOptions | boolean) {
-  return (fn: Function, context: ClassMemberDecoratorContext): void => {
-    Tag(kCORS, options)(fn, context)
-  }
+  return Tag(kCORS, options)
 }

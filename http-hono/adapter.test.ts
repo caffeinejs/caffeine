@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Hono } from 'hono'
-import { address, Controller, Get, header, Method, method, newHTTP, Params, param, path, port, query, signal, url } from '@caffeinejs/http'
+import { address, Controller, Get, header, Method, method, newHTTP, Params, param, path, pick, port, query, signal, url } from '@caffeinejs/http'
 import { CaffeineIoC, Scopes, Injectable, Lifetime } from '@caffeinejs/core'
 import { HonoAdapter } from './adapter.js'
 import { honoAdapterFactory } from './adapter_factory.js'
@@ -91,6 +91,49 @@ describe('Hono Adapter', () => {
         path: '/test/pickers',
         hasSignal: true,
       })
+    })
+
+    it('resolves an async custom picker before calling the handler', async () => {
+      @Controller('/async-pick')
+      class AsyncPickController {
+        @Get('/value')
+        @Params([pick(c => Promise.resolve((c as { req: { url: string } }).req.url.toUpperCase()), { async: true })])
+        get(uppercased: string) {
+          return { value: uppercased }
+        }
+      }
+
+      void [AsyncPickController]
+
+      const app = newHTTP(honoAdapterFactory(new Hono()))
+      await app.ready()
+
+      const res = await app.fetch('/async-pick/value')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ value: expect.stringContaining('/ASYNC-PICK/VALUE') })
+    })
+
+    it('resolves mixed sync and async pickers on the same route', async () => {
+      @Controller('/mixed-pick')
+      class MixedPickController {
+        @Get('/:id')
+        @Params([
+          param('id'),
+          pick(c => Promise.resolve(`async:${(c as { req: { url: string } }).req.url}`), { async: true }),
+        ])
+        get(id: string, asyncVal: string) {
+          return { id, asyncVal }
+        }
+      }
+
+      void [MixedPickController]
+
+      const app = newHTTP(honoAdapterFactory(new Hono()))
+      await app.ready()
+
+      const res = await app.fetch('/mixed-pick/42')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ id: '42', asyncVal: expect.stringContaining('async:') })
     })
 
     it('injects the HTTP method string into the handler', async () => {

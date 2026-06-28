@@ -3,9 +3,26 @@ import { Context } from 'hono'
 import { HonoContext, HonoContextHolder } from './context.js'
 
 const PARSED_BODY = Symbol('parsedBody')
+const PARSED_MULTIPART = Symbol('parsedMultipart')
 const CONTEXT_HOLDER = Symbol('contextHolder')
 
 type Picker<CTX extends Context = Context> = (c: CTX) => unknown
+
+export type MultipartData = Record<string, string | File | (string | File)[]>
+
+export interface MultipartFile {
+  type: 'file'
+  fieldname: string
+  filename: string
+  mimetype: string
+  stream: ReadableStream<Uint8Array>
+}
+
+export interface MultipartField {
+  type: 'field'
+  fieldname: string
+  value: string
+}
 
 export function setParsedBody(c: Context, body: unknown): void {
   ; (c as Context & { [PARSED_BODY]: unknown })[PARSED_BODY] = body
@@ -13,6 +30,14 @@ export function setParsedBody(c: Context, body: unknown): void {
 
 export function getParsedBody(c: Context): unknown {
   return (c as Context & { [PARSED_BODY]?: unknown })[PARSED_BODY]
+}
+
+export function setParsedMultipart(c: Context, data: MultipartData): void {
+  ; (c as Context & { [PARSED_MULTIPART]: MultipartData })[PARSED_MULTIPART] = data
+}
+
+function getParsedMultipart(c: Context): MultipartData {
+  return (c as Context & { [PARSED_MULTIPART]?: MultipartData })[PARSED_MULTIPART] ?? {}
 }
 
 export function getContextHolder(c: Context): HonoContextHolder | undefined {
@@ -149,9 +174,77 @@ function buildPicker<CTX extends Context = Context>(
     case 'address':
       return c => (c.req.raw as { socket?: { remoteAddress?: string } }).socket?.remoteAddress
     case 'multipart:parts':
+      return c => {
+        const data = getParsedMultipart(c)
+        return new ReadableStream<MultipartFile | MultipartField>({
+          start(controller) {
+            for (const [fieldname, value] of Object.entries(data)) {
+              for (const v of Array.isArray(value) ? value : [value]) {
+                if (v instanceof File) {
+                  controller.enqueue({
+                    type: 'file',
+                    fieldname,
+                    filename: v.name,
+                    mimetype: v.type,
+                    stream: v.stream(),
+                  })
+                } else {
+                  controller.enqueue({ type: 'field', fieldname, value: v })
+                }
+              }
+            }
+            controller.close()
+          },
+        })
+      }
     case 'multipart:files':
+      return c => {
+        const data = getParsedMultipart(c)
+        return new ReadableStream<MultipartFile>({
+          start(controller) {
+            for (const [fieldname, value] of Object.entries(data)) {
+              for (const v of Array.isArray(value) ? value : [value]) {
+                if (v instanceof File) {
+                  controller.enqueue({
+                    type: 'file',
+                    fieldname,
+                    filename: v.name,
+                    mimetype: v.type,
+                    stream: v.stream(),
+                  })
+                }
+              }
+            }
+            controller.close()
+          },
+        })
+      }
     case 'multipart:file':
-      throw new Error(`Multipart is not supported by the Hono adapter: ${type}`)
+      return c => {
+        const data = getParsedMultipart(c)
+        return new ReadableStream<MultipartFile>({
+          start(controller) {
+            for (const [fname, value] of Object.entries(data)) {
+              if (!field || fname === field) {
+                for (const v of Array.isArray(value) ? value : [value]) {
+                  if (v instanceof File) {
+                    controller.enqueue({
+                      type: 'file',
+                      fieldname: fname,
+                      filename: v.name,
+                      mimetype: v.type,
+                      stream: v.stream(),
+                    })
+                    controller.close()
+                    return
+                  }
+                }
+              }
+            }
+            controller.close()
+          },
+        })
+      }
     default:
       throw new Error(`Invalid parameter type: ${type}`)
   }
