@@ -14,9 +14,11 @@
     "bench:helloworld": "node --import=tsx helloworld/bench.ts",
     "bench:startup": "node --import=tsx startup/bench.ts",
     "bench:request": "node --import=tsx request/bench.ts",
+    "bench:request:bun": "node --import=tsx runtimes/bun/request/bench.ts",
     "bench:mixedscopes": "node --import=tsx mixedscopes/bench.ts",
-    "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit",
+    "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit && tsc -p runtimes/bun/tsconfig.json --noEmit",
     "test:request": "node --import=tsx request/test.ts",
+    "test:request:bun": "node --import=tsx runtimes/bun/request/test.ts",
     "bench:profile": "node --import=tsx profiling/run.ts"
   },
   "dependencies": {
@@ -47,6 +49,7 @@
   },
   "devDependencies": {
     "@types/autocannon": "^7.12.7",
+    "@types/bun": "^1.3.14",
     "@types/express": "^5.0.0",
     "autocannon": "^8.0.0",
     "esbuild": "^0.25.0",
