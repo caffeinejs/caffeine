@@ -30,26 +30,61 @@ export function compileHandler<
   }
 
   const a = params.map(p => buildPicker<CTX>(p))
+  const hasAsync = params.some(p => p.async === true)
+
+  if (!hasAsync) {
+    switch (a.length) {
+      case 1:
+        return c =>
+          fn(a[0](c))
+      case 2:
+        return c =>
+          fn(a[0](c), a[1](c))
+      case 3:
+        return c =>
+          fn(a[0](c), a[1](c), a[2](c))
+      case 4:
+        return c =>
+          fn(a[0](c), a[1](c), a[2](c), a[3](c))
+      case 5:
+        return c =>
+          fn(a[0](c), a[1](c), a[2](c), a[3](c), a[4](c))
+      case 6:
+        return c =>
+          fn(a[0](c), a[1](c), a[2](c), a[3](c), a[4](c), a[5](c))
+      default: {
+        const len = a.length
+        return c => {
+          const out = new Array(len)
+          for (let i = 0; i < len; i++) {
+            out[i] = a[i](c)
+          }
+          return fn(...out)
+        }
+      }
+    }
+  }
 
   switch (a.length) {
     case 1:
       return c =>
-        fn(a[0](c))
+        Promise.all([a[0](c)]).then(r => fn(r[0]))
     case 2:
       return c =>
-        fn(a[0](c), a[1](c))
+        Promise.all([a[0](c), a[1](c)]).then(r => fn(r[0], r[1]))
     case 3:
       return c =>
-        fn(a[0](c), a[1](c), a[2](c))
+        Promise.all([a[0](c), a[1](c), a[2](c)]).then(r => fn(r[0], r[1], r[2]))
     case 4:
       return c =>
-        fn(a[0](c), a[1](c), a[2](c), a[3](c))
+        Promise.all([a[0](c), a[1](c), a[2](c), a[3](c)]).then(r => fn(r[0], r[1], r[2], r[3]))
     case 5:
       return c =>
-        fn(a[0](c), a[1](c), a[2](c), a[3](c), a[4](c))
+        Promise.all([a[0](c), a[1](c), a[2](c), a[3](c), a[4](c)]).then(r => fn(r[0], r[1], r[2], r[3], r[4]))
     case 6:
       return c =>
-        fn(a[0](c), a[1](c), a[2](c), a[3](c), a[4](c), a[5](c))
+        Promise.all([a[0](c), a[1](c), a[2](c), a[3](c), a[4](c), a[5](c)])
+          .then(r => fn(r[0], r[1], r[2], r[3], r[4], r[5]))
     default: {
       const len = a.length
       return c => {
@@ -57,7 +92,7 @@ export function compileHandler<
         for (let i = 0; i < len; i++) {
           out[i] = a[i](c)
         }
-        return fn(...out)
+        return Promise.all(out).then(args => fn(...args))
       }
     }
   }

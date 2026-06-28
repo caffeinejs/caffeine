@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import supertest from 'supertest'
 import fastify from 'fastify'
-import { address, Controller, Get, header, Method, method, newHTTP, Params, param, path, port, query, signal, url } from '@caffeinejs/http'
+import { address, Controller, Get, header, Method, method, newHTTP, Params, param, path, pick, port, query, signal, url } from '@caffeinejs/http'
 import { CaffeineIoC, Scopes, Injectable, Lifetime } from '@caffeinejs/core'
 import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
@@ -91,6 +91,49 @@ describe('Fastify Adapter', () => {
         port: expect.any(Number),
         address: expect.any(String),
       })
+    })
+
+    it('resolves an async custom picker before calling the handler', async () => {
+      @Controller('/async-pick')
+      class AsyncPickController {
+        @Get('/value')
+        @Params([pick(req => Promise.resolve((req as { url: string }).url.toUpperCase()), { async: true })])
+        get(uppercased: string) {
+          return { value: uppercased }
+        }
+      }
+
+      void [AsyncPickController]
+
+      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      await app.ready()
+
+      const res = await app.server().inject({ method: 'GET', url: '/async-pick/value' })
+      expect(res.statusCode).toBe(200)
+      expect(res.json()).toEqual({ value: '/ASYNC-PICK/VALUE' })
+    })
+
+    it('resolves mixed sync and async pickers on the same route', async () => {
+      @Controller('/mixed-pick')
+      class MixedPickController {
+        @Get('/:id')
+        @Params([
+          param('id'),
+          pick(req => Promise.resolve(`async:${(req as { url: string }).url}`), { async: true }),
+        ])
+        get(id: string, asyncVal: string) {
+          return { id, asyncVal }
+        }
+      }
+
+      void [MixedPickController]
+
+      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      await app.ready()
+
+      const res = await app.server().inject({ method: 'GET', url: '/mixed-pick/42' })
+      expect(res.statusCode).toBe(200)
+      expect(res.json()).toMatchObject({ id: '42', asyncVal: 'async:/mixed-pick/42' })
     })
 
     it('injects the HTTP method string into the handler', async () => {

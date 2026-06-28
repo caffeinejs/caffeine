@@ -2,9 +2,10 @@ export interface ParameterPickOptions<R> {
   type: string
   name?: string
   picker?: ParameterPicker<R>
+  async?: boolean
 }
 
-export type ParameterPicker<R, O = unknown> = (req: R) => O
+export type ParameterPicker<R, O = unknown> = (req: R) => O | Promise<O>
 
 export type Picker<R> = (req: R, parameters: Array<ParameterPickOptions<R>>) => ParameterPicker<R, Array<unknown>>
 
@@ -66,4 +67,11 @@ export function files<R = unknown>(): ParameterPickOptions<R> {
 
 export function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
   return { name: fieldname, type: 'multipart:file' }
+}
+
+export function pick<R = unknown>(
+  fn: (req: R) => unknown | Promise<unknown>,
+  opts?: { async?: boolean },
+): ParameterPickOptions<R> {
+  return { type: 'custom', picker: fn as ParameterPicker<R>, async: opts?.async }
 }

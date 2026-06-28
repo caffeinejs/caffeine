@@ -24,29 +24,66 @@ export function compileHandler<
   }
 
   const a = params.map(p => buildPicker<REQ, RES>(p))
+  const hasAsync = params.some(p => p.async === true)
 
   // Arity-based compilation for up to 6 parameters.
   // 6 parameters should account for all practical use cases:
   // [signal, path params, query, header, body, context]
+  if (!hasAsync) {
+    switch (a.length) {
+      case 1:
+        return (req, res) =>
+          fn(a[0](req, res))
+      case 2:
+        return (req, res) =>
+          fn(a[0](req, res), a[1](req, res))
+      case 3:
+        return (req, res) =>
+          fn(a[0](req, res), a[1](req, res), a[2](req, res))
+      case 4:
+        return (req, res) =>
+          fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res))
+      case 5:
+        return (req, res) =>
+          fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res))
+      case 6:
+        return (req, res) =>
+          fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res), a[5](req, res))
+      default: {
+        const len = a.length
+        return (req, res) => {
+          const out = new Array(len)
+          for (let i = 0; i < len; i++) {
+            out[i] = a[i](req, res)
+          }
+          return fn(...out)
+        }
+      }
+    }
+  }
+
   switch (a.length) {
     case 1:
       return (req, res) =>
-        fn(a[0](req, res))
+        Promise.all([a[0](req, res)]).then(r => fn(r[0]))
     case 2:
       return (req, res) =>
-        fn(a[0](req, res), a[1](req, res))
+        Promise.all([a[0](req, res), a[1](req, res)]).then(r => fn(r[0], r[1]))
     case 3:
       return (req, res) =>
-        fn(a[0](req, res), a[1](req, res), a[2](req, res))
+        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res)]).then(r => fn(r[0], r[1], r[2]))
     case 4:
       return (req, res) =>
-        fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res))
+        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res)])
+          .then(r => fn(r[0], r[1], r[2], r[3]))
     case 5:
       return (req, res) =>
-        fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res))
+        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res)])
+          .then(r => fn(r[0], r[1], r[2], r[3], r[4]))
     case 6:
       return (req, res) =>
-        fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res), a[5](req, res))
+        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res), a[5](req, res)])
+          .then(r => fn(r[0], r[1], r[2], r[3], r[4], r[5]))
     default: {
       const len = a.length
       return (req, res) => {
@@ -54,7 +91,7 @@ export function compileHandler<
         for (let i = 0; i < len; i++) {
           out[i] = a[i](req, res)
         }
-        return fn(...out)
+        return Promise.all(out).then(args => fn(...args))
       }
     }
   }
