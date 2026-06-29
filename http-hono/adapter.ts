@@ -9,6 +9,7 @@ import {
   setParsedMultipart,
   type MultipartData,
 } from './adapter_handler_parameters.js'
+import { type HonoAdapterOptions } from './adapter_factory.js'
 
 export class HonoAdapter<
   SERVER extends Hono = Hono,
@@ -16,10 +17,12 @@ export class HonoAdapter<
 > implements Adapter<SERVER, CTX> {
   #hono: SERVER
   #container: Container
+  #options: HonoAdapterOptions | undefined
 
-  constructor(container: Container, hono: SERVER) {
+  constructor(container: Container, hono: SERVER, options?: HonoAdapterOptions) {
     this.#hono = hono
     this.#container = container
+    this.#options = options
   }
 
   async setup(input: AdapterIn<CTX>): Promise<void> {
@@ -44,19 +47,22 @@ export class HonoAdapter<
       const controller = router.controller
       const isSingleton = router.binding.scopeId === Scopes.SINGLETON
 
+      const cookieSecret = this.#options?.cookies?.secret
+      const adapterConfig = cookieSecret ? { cookieSecret } : undefined
+
       for (const route of routes) {
         let dispatch: (c: CTX) => unknown
 
         if (isSingleton) {
           const ref = controller.get()
           const refFn = (ref[route.handler] as (...args: unknown[]) => unknown).bind(ref)
-          dispatch = compileHandler(route.parameters, refFn)
+          dispatch = compileHandler(route.parameters, refFn, adapterConfig)
         } else {
           const handlerKey = route.handler
           dispatch = compileHandler(route.parameters, (...args) => {
             const inst = controller.get()
             return (inst[handlerKey] as (...args: unknown[]) => unknown).apply(inst, args)
-          })
+          }, adapterConfig)
         }
 
         const path = joinPaths(basePath, route.path)

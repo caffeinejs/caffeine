@@ -3,6 +3,7 @@ export interface Req<
   TParams = Record<string, string>,
   TQuery = Record<string, string>,
   THeaders = Record<string, string>,
+  TAsync extends boolean = false,
 > {
   get raw(): RAW
   get path(): string
@@ -20,20 +21,30 @@ export interface Req<
 
   param(): TParams
   param(key: string): string | undefined
+
+  cookie(): Record<string, string>
+  cookie(name: string): string | undefined
+
+  signedCookie(): TAsync extends true ? Promise<Record<string, UnsignedCookie>> : Record<string, UnsignedCookie>
+  signedCookie(name: string): TAsync extends true ? Promise<UnsignedCookie> : UnsignedCookie
 }
 
-export interface Context<REQ = unknown, RES = unknown> {
-  get req(): Req<REQ>
+export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = false> {
+  get req(): Req<REQ, Record<string, string>, Record<string, string>, Record<string, string>, TAsync>
 
-  get res(): RES
+  status(code: number): this
 
-  status(code: number): void
+  header(key: string, value: string): this
 
-  header(key: string, value: string): void
+  cookie(name: string, value: string, opts?: CO): this
 
-  body(body: unknown): void
+  deleteCookie(name: string, opts?: CO): this
 
-  notFound(): void
+  body(body: unknown): this
 
-  redirect(url: string, status?: number): void
+  notFound(): this
+
+  redirect(url: string, status?: number): this
 }
+
+export type UnsignedCookie = string | false | undefined

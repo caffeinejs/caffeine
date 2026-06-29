@@ -1,4 +1,5 @@
 /// <reference types="@fastify/multipart" />
+/// <reference types="@fastify/cookie" />
 import { Readable } from 'node:stream'
 import { ParameterPickOptions } from '@caffeinejs/http'
 import { FastifyRequest, FastifyReply } from 'fastify'
@@ -29,6 +30,7 @@ export function compileHandler<
   // Arity-based compilation for up to 6 parameters.
   // 6 parameters should account for all practical use cases:
   // [signal, path params, query, header, body, context]
+
   if (!hasAsync) {
     switch (a.length) {
       case 1:
@@ -234,6 +236,30 @@ function buildPicker<
             }
           },
         })
+      }
+    case 'cookie':
+      if (field) {
+        return req => ((req as unknown as FastifyRequest).cookies as Record<string, string | undefined>)[field]
+      }
+      return req => (req as unknown as FastifyRequest).cookies as Record<string, string | undefined>
+    case 'cookie:signed':
+      if (field) {
+        return req => {
+          const r = req as unknown as FastifyRequest
+          const raw = (r.cookies as Record<string, string | undefined>)[field]
+          if (!raw) { return undefined }
+          const result = r.unsignCookie(raw)
+          return result.valid && result.value !== null ? result.value : false
+        }
+      }
+      return req => {
+        const r = req as unknown as FastifyRequest
+        const out: Record<string, string | false | undefined> = {}
+        for (const [name, value] of Object.entries(r.cookies as Record<string, string>)) {
+          const result = r.unsignCookie(value)
+          out[name] = result.valid && result.value !== null ? result.value : false
+        }
+        return out
       }
     default:
       throw new Error(`Invalid parameter type: ${type}`)

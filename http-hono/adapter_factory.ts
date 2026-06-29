@@ -2,10 +2,14 @@ import { AdapterFactory } from '@caffeinejs/http'
 import { Context, Hono } from 'hono'
 import { HonoAdapter } from './adapter.js'
 
+export interface HonoAdapterOptions {
+  cookies?: { secret?: string | string[] }
+}
+
 export function honoAdapterFactory<
   SERVER extends Hono = Hono,
   CTX extends Context = Context,
->(hono: SERVER): AdapterFactory<SERVER, CTX, HonoAdapter<SERVER, CTX>> {
+>(hono: SERVER, options?: HonoAdapterOptions): AdapterFactory<SERVER, CTX, HonoAdapter<SERVER, CTX>> {
   return (kit): HonoAdapter<SERVER, CTX> =>
-    new HonoAdapter<SERVER, CTX>(kit.container, hono)
+    new HonoAdapter<SERVER, CTX>(kit.container, hono, options)
 }

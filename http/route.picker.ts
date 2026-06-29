@@ -69,6 +69,14 @@ export function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
   return { name: fieldname, type: 'multipart:file' }
 }
 
+export function cookie<R = unknown>(name?: string): ParameterPickOptions<R> {
+  return { name, type: 'cookie' }
+}
+
+export function signedCookie<R = unknown>(name?: string): ParameterPickOptions<R> {
+  return { name, type: 'cookie:signed', async: true }
+}
+
 export function pick<R = unknown>(
   fn: (req: R) => unknown | Promise<unknown>,
   opts?: { async?: boolean },

@@ -1,6 +1,11 @@
 import { ParameterPickOptions } from '@caffeinejs/http'
 import { Context } from 'hono'
+import { getCookie as honoCookie, getSignedCookie as honoGetSignedCookie } from 'hono/cookie'
 import { HonoContext, HonoContextHolder } from './context.js'
+
+export interface AdapterConfig {
+  cookieSecret?: string | string[]
+}
 
 const PARSED_BODY = Symbol('parsedBody')
 const PARSED_MULTIPART = Symbol('parsedMultipart')
@@ -49,12 +54,13 @@ export function compileHandler<
 >(
   params: ParameterPickOptions<CTX>[],
   fn: (...args: unknown[]) => unknown,
+  config?: AdapterConfig,
 ): (c: CTX) => unknown {
   if (params.length === 0) {
     return () => fn()
   }
 
-  const a = params.map(p => buildPicker<CTX>(p))
+  const a = params.map(p => buildPicker<CTX>(p, config))
   const hasAsync = params.some(p => p.async === true)
 
   if (!hasAsync) {
@@ -125,6 +131,7 @@ export function compileHandler<
 
 function buildPicker<CTX extends Context = Context>(
   p: ParameterPickOptions<CTX>,
+  config?: AdapterConfig,
 ): Picker<CTX> {
   if (p.picker) {
     return c => (p.picker as (c: CTX) => unknown)(c)
@@ -155,10 +162,11 @@ function buildPicker<CTX extends Context = Context>(
         return c => c.req.header()
       }
     case 'context': {
+      const secret = config?.cookieSecret
       return c => {
         const holder: HonoContextHolder = {}
           ; (c as unknown as Context & { [CONTEXT_HOLDER]?: HonoContextHolder })[CONTEXT_HOLDER] = holder
-        return new HonoContext(c, holder)
+        return new HonoContext(c, holder, secret)
       }
     }
     case 'method':
@@ -245,6 +253,22 @@ function buildPicker<CTX extends Context = Context>(
           },
         })
       }
+    case 'cookie':
+      if (field) { return c => honoCookie(c, field) }
+      return c => honoCookie(c)
+    case 'cookie:signed': {
+      const secret = config?.cookieSecret
+      if (field) {
+        return c => {
+          if (!secret) { throw new Error('Cannot use signedCookie() picker: cookieSecret not configured in adapter options') }
+          return honoGetSignedCookie(c, secret, field)
+        }
+      }
+      return c => {
+        if (!secret) { throw new Error('Cannot use signedCookie() picker: cookieSecret not configured in adapter options') }
+        return honoGetSignedCookie(c, secret)
+      }
+    }
     default:
       throw new Error(`Invalid parameter type: ${type}`)
   }

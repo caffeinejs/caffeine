@@ -1,7 +1,16 @@
 import { IncomingMessage } from 'node:http'
-import { Context, Req, RouteValidationSchema } from '@caffeinejs/http'
+import { Context, Req, RouteValidationSchema, UnsignedCookie } from '@caffeinejs/http'
 import { Context as HonoCtx } from 'hono'
+import {
+  getCookie,
+  setCookie,
+  deleteCookie,
+  getSignedCookie,
+  setSignedCookie,
+} from 'hono/cookie'
+import type { CookieOptions } from 'hono/utils/cookie'
 import type { RedirectStatusCode, StatusCode } from 'hono/utils/http-status'
+
 export interface HonoRouteSchema<
   _TParams = Record<string, string>,
   _TQuery = Record<string, string>,
@@ -19,42 +28,72 @@ export interface HonoContextHolder {
 
 export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> implements Context<
   IncomingMessage,
-  Response
+  CookieOptions,
+  true
 > {
   constructor(
     private readonly c: HonoCtx,
     private readonly holder: HonoContextHolder,
+    private readonly cookieSecret?: string | string[],
   ) { }
 
   get req(): HonoContextRequest<SCHEMA> {
-    return new HonoContextRequest<SCHEMA>(this.c)
+    return new HonoContextRequest<SCHEMA>(this.c, this.cookieSecret)
   }
 
   get res(): Response {
     return this.c.res
   }
 
-  status(code: number): void {
+  get native(): HonoCtx {
+    return this.c
+  }
+
+  status(code: number): this {
     this.c.status(code as StatusCode)
+    return this
   }
 
-  header(key: string, value: string): void {
+  header(key: string, value: string): this {
     this.c.header(key, value)
+    return this
   }
 
-  body(body: string | ArrayBuffer | ReadableStream | Uint8Array<ArrayBuffer>): void {
-    this.holder.response = this.c.body(body)
+  cookie(name: string, value: string, opts?: CookieOptions): this {
+    setCookie(this.c, name, value, opts)
+    return this
   }
 
-  notFound(): void {
+  deleteCookie(name: string, opts?: CookieOptions): this {
+    deleteCookie(this.c, name, opts)
+    return this
+  }
+
+  body(body: unknown): this {
+    this.holder.response = this.c.body(body as string | ArrayBuffer | ReadableStream | Uint8Array<ArrayBuffer>)
+    return this
+  }
+
+  notFound(): this {
     this.holder.response = new Response(null, { status: 404 })
+    return this
   }
 
-  redirect(url: string, status?: number): void {
+  redirect(url: string, status?: number): this {
     this.holder.response = new Response(null, {
       status: (status ?? 302) as RedirectStatusCode,
       headers: { Location: url },
     })
+    return this
+  }
+
+  async signedCookie(name: string, value: string, opts?: CookieOptions): Promise<void> {
+    const secret = this.cookieSecret
+    if (!secret) {
+      throw new Error('Cannot write signed cookies: cookieSecret not configured in adapter options')
+    }
+
+    await setSignedCookie(this.c, name, value, secret, opts)
   }
 }
 
@@ -62,9 +101,13 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
   IncomingMessage,
   InferParams<SCHEMA>,
   InferQuery<SCHEMA>,
-  InferHeaders<SCHEMA>
+  InferHeaders<SCHEMA>,
+  true
 > {
-  constructor(private readonly c: HonoCtx) {}
+  constructor(
+    private readonly c: HonoCtx,
+    private readonly cookieSecret?: string | string[],
+  ) {}
 
   get raw(): IncomingMessage {
     return this.c.req.raw as unknown as IncomingMessage
@@ -120,5 +163,27 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
       return undefined
     }
     return Array.isArray(val) ? val : [val]
+  }
+
+  cookie(): Record<string, string>
+  cookie(name: string): string | undefined
+  cookie(name?: string): Record<string, string> | string | undefined {
+    if (name === undefined) {
+      return getCookie(this.c)
+    }
+    return getCookie(this.c, name)
+  }
+
+  signedCookie(): Promise<Record<string, UnsignedCookie>>
+  signedCookie(name: string): Promise<UnsignedCookie>
+  async signedCookie(name?: string): Promise<Record<string, UnsignedCookie> | UnsignedCookie> {
+    const secret = this.cookieSecret
+    if (!secret) {
+      throw new Error('Cannot read signed cookies: cookieSecret not configured in adapter options')
+    }
+    if (name !== undefined) {
+      return getSignedCookie(this.c, secret, name)
+    }
+    return getSignedCookie(this.c, secret)
   }
 }

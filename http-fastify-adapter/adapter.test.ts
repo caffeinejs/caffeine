@@ -1,14 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import supertest from 'supertest'
-import fastify from 'fastify'
-import { address, Controller, Get, header, Method, method, newHTTP, Params, param, path, pick, port, query, signal, url } from '@caffeinejs/http'
+import Fastify from 'fastify'
+import FastifyCookie from '@fastify/cookie'
+import { address, Controller, context, cookie, Get, header, Method, method, newHTTP, Params, param, path, pick, port, query, signal, signedCookie, url } from '@caffeinejs/http'
 import { CaffeineIoC, Scopes, Injectable, Lifetime } from '@caffeinejs/core'
 import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
+import { FastifyContext } from './context.js'
 
 describe('Fastify Adapter', () => {
   it('exposes the underlying server as a Supertest-compatible listener', async () => {
-    const app = fastify()
+    const app = Fastify()
     app.get('/', () => ({ ok: true }))
 
     const adapter = new FastifyAdapter(new CaffeineIoC(), app)
@@ -20,7 +22,7 @@ describe('Fastify Adapter', () => {
   })
 
   it('exposes the underlying fastify instance and can be tested with .inject()', async () => {
-    const app = fastify()
+    const app = Fastify()
     app.get('/', () => ({ ok: true }))
 
     const adapter = new FastifyAdapter(new CaffeineIoC(), app)
@@ -43,7 +45,7 @@ describe('Fastify Adapter', () => {
 
       void [TestController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       await supertest(app.server().server)
@@ -78,7 +80,7 @@ describe('Fastify Adapter', () => {
 
       void [PickersController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const res = await app.server().inject({ method: 'GET', url: '/test/pickers?foo=bar' })
@@ -105,7 +107,7 @@ describe('Fastify Adapter', () => {
 
       void [AsyncPickController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const res = await app.server().inject({ method: 'GET', url: '/async-pick/value' })
@@ -128,7 +130,7 @@ describe('Fastify Adapter', () => {
 
       void [MixedPickController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const res = await app.server().inject({ method: 'GET', url: '/mixed-pick/42' })
@@ -151,7 +153,7 @@ describe('Fastify Adapter', () => {
 
       void [MethodController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       for (const m of methods) {
@@ -178,7 +180,7 @@ describe('Fastify Adapter', () => {
 
       void [RequestScopedController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const r1 = await app.server().inject({ method: 'GET', url: '/req-ctrl/id' })
@@ -202,7 +204,7 @@ describe('Fastify Adapter', () => {
       @Lifetime(Scopes.TRANSIENT)
       @Controller('/transient-ctrl', [RequestScopedService])
       class TransientController {
-        constructor(private readonly svc: RequestScopedService) {}
+        constructor(private readonly svc: RequestScopedService) { }
 
         @Get('/svc-id')
         get() {
@@ -212,7 +214,7 @@ describe('Fastify Adapter', () => {
 
       void [TransientController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const r1 = await app.server().inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
@@ -222,6 +224,198 @@ describe('Fastify Adapter', () => {
       expect(r2.statusCode).toBe(200)
       expect(r1.json().id).toBe(1)
       expect(r2.json().id).toBe(2)
+    })
+  })
+
+  describe('Cookies', () => {
+    it('injects a named cookie via cookie() picker', async () => {
+      @Controller('/ck')
+      class NamedCookieController {
+        @Get('/session')
+        @Params([cookie('session')])
+        get(session: string | undefined) {
+          return { session }
+        }
+      }
+      void [NamedCookieController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie)
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/session', { headers: { Cookie: 'session=abc123' } })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ session: 'abc123' })
+    })
+
+    it('injects all cookies via cookie() picker without a name', async () => {
+      @Controller('/ck')
+      class AllCookiesController {
+        @Get('/all')
+        @Params([cookie()])
+        get(cookies: Record<string, string | undefined>) {
+          return cookies
+        }
+      }
+      void [AllCookiesController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie)
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ a: '1', b: '2' })
+    })
+
+    it('injects a signed cookie via signedCookie() picker', async () => {
+      const SECRET = 'test-secret'
+      const { sign } = await import('@fastify/cookie')
+      const signed = sign('myvalue', SECRET)
+
+      @Controller('/ck')
+      class SignedController {
+        @Get('/signed')
+        @Params([signedCookie('tok')])
+        get(tok: string | false | undefined) {
+          return { tok }
+        }
+      }
+      void [SignedController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie, { secret: SECRET })
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${signed}` } })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ tok: 'myvalue' })
+    })
+
+    it('returns false for a tampered signed cookie via signedCookie() picker', async () => {
+      @Controller('/ck')
+      class TamperedController {
+        @Get('/tampered')
+        @Params([signedCookie('tok')])
+        get(tok: string | false | undefined) {
+          return { valid: tok !== false }
+        }
+      }
+      void [TamperedController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie, { secret: 'test-secret' })
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ valid: false })
+    })
+
+    it('setCookie helper sets a Set-Cookie header on the response', async () => {
+      @Controller('/ck')
+      class SetCookieController {
+        @Get('/set')
+        @Params([context()])
+        get(ctx: FastifyContext) {
+          ctx.cookie('session', 'hello', { httpOnly: true, path: '/' })
+          return { ok: true }
+        }
+      }
+      void [SetCookieController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie)
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/set')
+      expect(res.status).toBe(200)
+      const setCookieHeader = res.headers.get('set-cookie')
+      expect(setCookieHeader).toMatch(/session=hello/)
+      expect(setCookieHeader).toMatch(/HttpOnly/)
+    })
+
+    it('getCookie helper reads a cookie from the request via context', async () => {
+      @Controller('/ck')
+      class GetCookieController {
+        @Get('/get')
+        @Params([context()])
+        get(ctx: FastifyContext) {
+          return { value: ctx.req.cookie('token') }
+        }
+      }
+      void [GetCookieController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie)
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/get', { headers: { Cookie: 'token=secret' } })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ value: 'secret' })
+    })
+
+    it('ctx.req.signedCookie() reads a signed cookie from the request', async () => {
+      const SECRET = 'req-signed-secret'
+      const { sign } = await import('@fastify/cookie')
+      const signed = sign('reqvalue', SECRET)
+
+      @Controller('/ck')
+      class ReqSignedCookieController {
+        @Get('/read')
+        @Params([context()])
+        read(ctx: FastifyContext) {
+          return { value: ctx.req.signedCookie('tok') }
+        }
+      }
+      void [ReqSignedCookieController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie, { secret: SECRET })
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${signed}` } })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ value: 'reqvalue' })
+    })
+
+    it('deleteCookie helper clears a cookie', async () => {
+      @Controller('/ck')
+      class DeleteCookieController {
+        @Get('/delete')
+        @Params([context()])
+        get(ctx: FastifyContext) {
+          ctx.deleteCookie('session')
+          return { ok: true }
+        }
+      }
+      void [DeleteCookieController]
+
+      const fastify = Fastify()
+      fastify.register(FastifyCookie)
+
+      const app = newHTTP(fastifyAdapterFactory(fastify))
+      await app.ready()
+
+      const res = await app.fetch('/ck/delete')
+      expect(res.status).toBe(200)
+      const setCookieHeader = res.headers.get('set-cookie')
+      expect(setCookieHeader).toMatch(/session=/)
+      expect(setCookieHeader).toMatch(/Max-Age=0/)
     })
   })
 })

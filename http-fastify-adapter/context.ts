@@ -1,6 +1,7 @@
 import { IncomingMessage } from 'http'
-import { Context, Req, RouteValidationSchema } from '@caffeinejs/http'
-import { FastifyRequest, FastifyReply, RawReplyDefaultExpression, RawServerDefault, RawRequestDefaultExpression } from 'fastify'
+import { Context, Req, RouteValidationSchema, UnsignedCookie } from '@caffeinejs/http'
+import { FastifyRequest, RawServerDefault, RawRequestDefaultExpression, FastifyReply } from 'fastify'
+import { CookieSerializeOptions } from '@fastify/cookie'
 
 export interface FastifyRouteSchema<
   _TParams = Record<string, string>,
@@ -13,41 +14,61 @@ type InferParams<S> = S extends FastifyRouteSchema<infer P, any, any, any> ? P :
 type InferQuery<S> = S extends FastifyRouteSchema<any, infer Q, any, any> ? Q : Record<string, string>
 type InferHeaders<S> = S extends FastifyRouteSchema<any, any, infer H, any> ? H : Record<string, string>
 
-export class FastifyContext<SCHEMA extends FastifyRouteSchema = FastifyRouteSchema> implements Context<
+export class FastifyContext<
+  SCHEMA extends FastifyRouteSchema = FastifyRouteSchema,
+  REPLY extends FastifyReply = FastifyReply,
+> implements Context<
   RawRequestDefaultExpression<RawServerDefault>,
-  RawReplyDefaultExpression<RawServerDefault>
+  CookieSerializeOptions
 > {
+  #req: FastifyContextRequest<SCHEMA>
+  #reply: REPLY
+
   constructor(
-    private readonly request: FastifyRequest,
-    private readonly reply: FastifyReply,
-  ) { }
+    request: FastifyRequest,
+    reply: REPLY,
+  ) {
+    this.#req = new FastifyContextRequest<SCHEMA>(request)
+    this.#reply = reply
+  }
 
   get req(): FastifyContextRequest<SCHEMA> {
-    return new FastifyContextRequest<SCHEMA>(this.request)
+    return this.#req
   }
 
-  get res(): RawReplyDefaultExpression<RawServerDefault> {
-    return this.reply.raw
+  status(code: number): this {
+    this.#reply.code(code)
+    return this
   }
 
-  status(code: number): void {
-    this.reply.code(code)
+  header(key: string, value: string): this {
+    this.#reply.header(key, value)
+    return this
   }
 
-  header(key: string, value: string): void {
-    this.reply.header(key, value)
+  body(body: unknown): this {
+    this.#reply.send(body)
+    return this
   }
 
-  body(body: unknown): void {
-    this.reply.send(body)
+  notFound(): this {
+    this.#reply.code(404).send()
+    return this
   }
 
-  notFound(): void {
-    this.reply.code(404).send()
+  redirect(url: string, status?: number): this {
+    this.#reply.redirect(url, status)
+    return this
   }
 
-  redirect(url: string, status?: number): void {
-    this.reply.redirect(url, status)
+  cookie(name: string, value: string, opts?: CookieSerializeOptions): this {
+    this.#reply.setCookie(name, value, opts)
+    return this
+  }
+
+  deleteCookie(name: string, opts?: CookieSerializeOptions): this {
+    this.#reply.clearCookie(name, opts)
+    return this
   }
 }
 
@@ -107,6 +128,53 @@ export class FastifyContextRequest<SCHEMA extends FastifyRouteSchema = FastifyRo
     if (Array.isArray(val)) {
       return val
     }
+
     return val !== undefined ? [val] : undefined
+  }
+
+  cookie(): Record<string, string>
+  cookie(name: string): string | undefined
+  cookie(name?: string): Record<string, string> | string | undefined {
+    if (typeof this.request.cookies === 'undefined') {
+      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
+    }
+
+    if (name === undefined) {
+      return this.request.cookies as Record<string, string>
+    }
+
+    return this.request.cookies[name] as string | undefined
+  }
+
+  signedCookie(): Record<string, UnsignedCookie>
+  signedCookie(name: string): UnsignedCookie
+  signedCookie(name?: string): Record<string, UnsignedCookie> | UnsignedCookie {
+    if (typeof this.request.cookies === 'undefined') {
+      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
+    }
+
+    if (typeof name === 'string') {
+      const cookie = this.request.cookies[name]
+      if (cookie === undefined) {
+        return undefined
+      }
+
+      const result = this.request.unsignCookie(cookie)
+
+      return result.valid && result.value !== null ? result.value : false
+    }
+
+    const cookies = this.request.cookies as Record<string, string>
+    const ret: Record<string, UnsignedCookie> = {}
+    for (const [name, value] of Object.entries(cookies)) {
+      ret[name] = this.#unsignCookie(value)
+    }
+
+    return ret
+  }
+
+  #unsignCookie(cookie: string): string | false {
+    const result = this.request.unsignCookie(cookie)
+    return result.valid && result.value !== null ? result.value : false
   }
 }
