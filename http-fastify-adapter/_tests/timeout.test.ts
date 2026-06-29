@@ -27,8 +27,8 @@ describe('Timeout', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const slowRes = await app.server().inject({ method: 'GET', url: '/timed-class/slow' })
-    const fastRes = await app.server().inject({ method: 'GET', url: '/timed-class/fast-enough' })
+    const slowRes = await app.instance.inject({ method: 'GET', url: '/timed-class/slow' })
+    const fastRes = await app.instance.inject({ method: 'GET', url: '/timed-class/fast-enough' })
 
     expect(slowRes.statusCode).toBe(503)
     expect(fastRes.statusCode).toBe(200)
@@ -51,7 +51,7 @@ describe('Timeout', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const res = await app.server().inject({ method: 'GET', url: '/timed/slow' })
+    const res = await app.instance.inject({ method: 'GET', url: '/timed/slow' })
 
     expect(res.statusCode).toBe(503)
   })

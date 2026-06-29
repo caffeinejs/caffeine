@@ -7,4 +7,4 @@ const fastify = Fastify({ logger: true, routerOptions: { ignoreTrailingSlash: tr
 const app = newHTTP(fastifyAdapterFactory(fastify))
 
 await app.ready()
-await app.server().listen({ port: 3000, host: '0.0.0.0' })
+await app.instance.listen({ port: 3000, host: '0.0.0.0' })

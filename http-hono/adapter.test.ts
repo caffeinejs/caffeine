@@ -14,7 +14,7 @@ describe('Hono Adapter', () => {
     const adapter = new HonoAdapter(new CaffeineIoC(), app)
     await adapter.setup({ routers: [] })
 
-    expect(adapter.server()).toBe(app)
+    expect(adapter.instance).toBe(app)
     const res = await adapter.fetch('/')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })

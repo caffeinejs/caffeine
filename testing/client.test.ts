@@ -63,7 +63,7 @@ describe('testClient()', () => {
   beforeAll(async () => {
     app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })))
     await app.ready()
-    baseUrl = await app.server().listen({ port: 0, host: '127.0.0.1' })
+    baseUrl = await app.instance.listen({ port: 0, host: '127.0.0.1' })
   })
 
   afterAll(async () => {

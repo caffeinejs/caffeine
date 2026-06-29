@@ -157,7 +157,7 @@ export class HonoAdapter<
     // Hono has no lifecycle teardown
   }
 
-  server(): SERVER {
+  get instance(): SERVER {
     return this.#hono
   }
 

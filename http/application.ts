@@ -6,9 +6,10 @@ export interface AdapterIn<R> {
 }
 
 export interface Adapter<I, R> {
+  get instance(): I
+
   setup(input: AdapterIn<R>): Promise<void>
   teardown(): Promise<void>
-  server(): I
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 }
 
@@ -36,21 +37,21 @@ export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
     return this.#container
   }
 
+  get instance(): I {
+    return this.#adapter.instance
+  }
+
   get routers(): Router<R>[] {
     return this.#routers
-  }
-
-  server(): I {
-    return this.#adapter.server()
-  }
-
-  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
-    return this.#adapter.fetch(request, options)
   }
 
   addModules(module: Module, ...modules: Module[]): this {
     this.#container.addModules(module, ...modules)
     return this
+  }
+
+  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
+    return this.#adapter.fetch(request, options)
   }
 
   async ready(): Promise<void> {

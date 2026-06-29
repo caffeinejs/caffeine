@@ -85,7 +85,7 @@ describe('Multipart file upload', () => {
     const app = newHTTP(fastifyAdapterFactory(server))
     await app.ready()
 
-    await app.server().inject({
+    await app.instance.inject({
       method: 'POST',
       url: '/up1/upload',
       headers: multipartHeaders(),
@@ -121,7 +121,7 @@ describe('Multipart file upload', () => {
     const app = newHTTP(fastifyAdapterFactory(server))
     await app.ready()
 
-    await app.server().inject({
+    await app.instance.inject({
       method: 'POST',
       url: '/up2/upload',
       headers: multipartHeaders(),
@@ -153,7 +153,7 @@ describe('Multipart file upload', () => {
     const app = newHTTP(fastifyAdapterFactory(server))
     await app.ready()
 
-    await app.server().inject({
+    await app.instance.inject({
       method: 'POST',
       url: '/up3/upload',
       headers: multipartHeaders(),
@@ -185,7 +185,7 @@ describe('Multipart file upload', () => {
     const app = newHTTP(fastifyAdapterFactory(server))
     await app.ready()
 
-    await app.server().inject({
+    await app.instance.inject({
       method: 'POST',
       url: '/up4/upload',
       headers: multipartHeaders(),
@@ -218,7 +218,7 @@ describe('Multipart file upload', () => {
     const app = newHTTP(fastifyAdapterFactory(server))
     await app.ready()
 
-    await app.server().inject({
+    await app.instance.inject({
       method: 'POST',
       url: '/up5/upload?userId=user-42',
       headers: multipartHeaders(),
@@ -249,7 +249,7 @@ describe('Multipart file upload', () => {
     const app = newHTTP(fastifyAdapterFactory(server))
     await app.ready()
 
-    await app.server().inject({
+    await app.instance.inject({
       method: 'POST',
       url: '/up6/upload',
       headers: multipartHeaders(),
@@ -284,7 +284,7 @@ describe('Multipart file upload', () => {
     const app = newHTTP(fastifyAdapterFactory(server))
     await app.ready()
 
-    await app.server().inject({
+    await app.instance.inject({
       method: 'POST',
       url: '/up7/upload',
       headers: multipartHeaders(),

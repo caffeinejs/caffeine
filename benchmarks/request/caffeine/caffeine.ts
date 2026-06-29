@@ -93,4 +93,4 @@ server.addHook('preHandler', (req, reply, done) => {
 const app = newHTTP(fastifyAdapterFactory(server))
 
 await app.ready()
-await app.server().listen({ port: PORT, host: '0.0.0.0' })
+await app.instance.listen({ port: PORT, host: '0.0.0.0' })

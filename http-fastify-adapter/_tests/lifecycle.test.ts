@@ -26,7 +26,7 @@ describe('Adapter Lifecycle', () => {
 
     await app.ready()
 
-    const res = await app.server().inject({ method: 'GET', url: '/lc/ping' })
+    const res = await app.instance.inject({ method: 'GET', url: '/lc/ping' })
 
     expect(res.statusCode).toBe(200)
     expect(order).toEqual(['ready-hook', 'request'])
@@ -88,13 +88,13 @@ describe('Adapter Lifecycle', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const beforeClose = await app.server().inject({ method: 'GET', url: '/lc4/ping' })
+    const beforeClose = await app.instance.inject({ method: 'GET', url: '/lc4/ping' })
     expect(beforeClose.statusCode).toBe(200)
 
     await app.close()
 
     await expect(
-      app.server().inject({ method: 'GET', url: '/lc4/ping' }),
+      app.instance.inject({ method: 'GET', url: '/lc4/ping' }),
     ).rejects.toThrow()
   })
 })

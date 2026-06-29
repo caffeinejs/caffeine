@@ -19,8 +19,8 @@ describe('Prefix', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const hit = await app.server().inject({ method: 'GET', url: '/v1/users/list' })
-    const miss = await app.server().inject({ method: 'GET', url: '/users/list' })
+    const hit = await app.instance.inject({ method: 'GET', url: '/v1/users/list' })
+    const miss = await app.instance.inject({ method: 'GET', url: '/users/list' })
 
     expect(hit.statusCode).toBe(200)
     expect(miss.statusCode).toBe(404)
@@ -50,8 +50,8 @@ describe('Prefix', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const v1 = await app.server().inject({ method: 'GET', url: '/v1/items/all' })
-    const v2 = await app.server().inject({ method: 'GET', url: '/v2/items/all' })
+    const v1 = await app.instance.inject({ method: 'GET', url: '/v1/items/all' })
+    const v2 = await app.instance.inject({ method: 'GET', url: '/v2/items/all' })
 
     expect(v1.statusCode).toBe(200)
     expect(v2.statusCode).toBe(200)

@@ -21,7 +21,7 @@ describe('Fetch API Response Support', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const res = await app.server().inject({ method: 'GET', url: '/fetch/json' })
+    const res = await app.instance.inject({ method: 'GET', url: '/fetch/json' })
 
     expect(res.statusCode).toBe(201)
     expect(res.headers['x-custom']).toBe('yes')
@@ -42,7 +42,7 @@ describe('Fetch API Response Support', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const res = await app.server().inject({ method: 'GET', url: '/fetch/empty' })
+    const res = await app.instance.inject({ method: 'GET', url: '/fetch/empty' })
 
     expect(res.statusCode).toBe(204)
     expect(res.body).toBe('')
@@ -67,7 +67,7 @@ describe('Fetch API Response Support', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const res = await app.server().inject({ method: 'GET', url: '/fetch/buf' })
+    const res = await app.instance.inject({ method: 'GET', url: '/fetch/buf' })
 
     expect(res.statusCode).toBe(200)
     expect(res.headers['content-type']).toMatch('application/octet-stream')
@@ -93,7 +93,7 @@ describe('Fetch API Response Support', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const res = await app.server().inject({ method: 'GET', url: '/fetch/binary' })
+    const res = await app.instance.inject({ method: 'GET', url: '/fetch/binary' })
 
     expect(res.statusCode).toBe(200)
     expect(res.rawPayload.length).toBe(5)
@@ -116,7 +116,7 @@ describe('Fetch API Response Support', () => {
       const app = newHTTP(fastifyAdapterFactory(fastify()))
       await app.ready()
 
-      const res = await app.server().inject({ method: 'GET', url: '/mix-class/route' })
+      const res = await app.instance.inject({ method: 'GET', url: '/mix-class/route' })
 
       expect(res.headers['x-class']).toBe('from-decorator')
       expect(res.headers['x-response']).toBe('from-response')
@@ -137,7 +137,7 @@ describe('Fetch API Response Support', () => {
       const app = newHTTP(fastifyAdapterFactory(fastify()))
       await app.ready()
 
-      const res = await app.server().inject({ method: 'GET', url: '/mix-method/route' })
+      const res = await app.instance.inject({ method: 'GET', url: '/mix-method/route' })
 
       expect(res.headers['x-method']).toBe('from-decorator')
       expect(res.headers['x-response']).toBe('from-response')
@@ -158,7 +158,7 @@ describe('Fetch API Response Support', () => {
       const app = newHTTP(fastifyAdapterFactory(fastify()))
       await app.ready()
 
-      const res = await app.server().inject({ method: 'GET', url: '/override-class/route' })
+      const res = await app.instance.inject({ method: 'GET', url: '/override-class/route' })
 
       expect(res.headers['x-version']).toBe('response')
     })
@@ -178,7 +178,7 @@ describe('Fetch API Response Support', () => {
       const app = newHTTP(fastifyAdapterFactory(fastify()))
       await app.ready()
 
-      const res = await app.server().inject({ method: 'GET', url: '/override-method/route' })
+      const res = await app.instance.inject({ method: 'GET', url: '/override-method/route' })
 
       expect(res.headers['x-version']).toBe('response')
     })

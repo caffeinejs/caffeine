@@ -17,4 +17,4 @@ void [AppController]
 const app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })))
 
 await app.ready()
-await app.server().listen({ port: PORT, host: '0.0.0.0' })
+await app.instance.listen({ port: PORT, host: '0.0.0.0' })

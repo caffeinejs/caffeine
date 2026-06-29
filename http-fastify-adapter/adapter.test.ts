@@ -16,8 +16,8 @@ describe('Fastify Adapter', () => {
     const adapter = new FastifyAdapter(new CaffeineIoC(), app)
     await adapter.setup({ routers: [] })
 
-    expect(adapter.server()).toBe(app)
-    await supertest(adapter.server().server).get('/')
+    expect(adapter.instance).toBe(app)
+    await supertest(adapter.instance.server).get('/')
       .expect(200, { ok: true })
   })
 
@@ -27,7 +27,7 @@ describe('Fastify Adapter', () => {
 
     const adapter = new FastifyAdapter(new CaffeineIoC(), app)
     await adapter.setup({ routers: [] })
-    const result = await adapter.server().inject('/')
+    const result = await adapter.instance.inject('/')
 
     expect(result.json()).toEqual({ ok: true })
   })
@@ -48,7 +48,7 @@ describe('Fastify Adapter', () => {
       const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
-      await supertest(app.server().server)
+      await supertest(app.instance.server)
         .get('/users/1?filter=test')
         .set('x-test', 'test')
         .expect(200, { ok: true, id: '1', filter: 'test', test: 'test' })
@@ -83,7 +83,7 @@ describe('Fastify Adapter', () => {
       const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
-      const res = await app.server().inject({ method: 'GET', url: '/test/pickers?foo=bar' })
+      const res = await app.instance.inject({ method: 'GET', url: '/test/pickers?foo=bar' })
 
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({
@@ -110,7 +110,7 @@ describe('Fastify Adapter', () => {
       const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
-      const res = await app.server().inject({ method: 'GET', url: '/async-pick/value' })
+      const res = await app.instance.inject({ method: 'GET', url: '/async-pick/value' })
       expect(res.statusCode).toBe(200)
       expect(res.json()).toEqual({ value: '/ASYNC-PICK/VALUE' })
     })
@@ -133,7 +133,7 @@ describe('Fastify Adapter', () => {
       const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
-      const res = await app.server().inject({ method: 'GET', url: '/mixed-pick/42' })
+      const res = await app.instance.inject({ method: 'GET', url: '/mixed-pick/42' })
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({ id: '42', asyncVal: 'async:/mixed-pick/42' })
     })
@@ -157,7 +157,7 @@ describe('Fastify Adapter', () => {
       await app.ready()
 
       for (const m of methods) {
-        const res = await app.server().inject({ method: m, url: '/method-test/action' })
+        const res = await app.instance.inject({ method: m, url: '/method-test/action' })
         expect(res.json()).toEqual({ method: m })
       }
     })
@@ -183,8 +183,8 @@ describe('Fastify Adapter', () => {
       const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
-      const r1 = await app.server().inject({ method: 'GET', url: '/req-ctrl/id' })
-      const r2 = await app.server().inject({ method: 'GET', url: '/req-ctrl/id' })
+      const r1 = await app.instance.inject({ method: 'GET', url: '/req-ctrl/id' })
+      const r2 = await app.instance.inject({ method: 'GET', url: '/req-ctrl/id' })
 
       expect(r1.statusCode).toBe(200)
       expect(r2.statusCode).toBe(200)
@@ -217,8 +217,8 @@ describe('Fastify Adapter', () => {
       const app = newHTTP(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
-      const r1 = await app.server().inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
-      const r2 = await app.server().inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
+      const r1 = await app.instance.inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
+      const r2 = await app.instance.inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
 
       expect(r1.statusCode).toBe(200)
       expect(r2.statusCode).toBe(200)

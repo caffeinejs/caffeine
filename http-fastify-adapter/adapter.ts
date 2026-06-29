@@ -142,7 +142,7 @@ export class FastifyAdapter<
     await this.#fastify.close()
   }
 
-  server(): SERVER {
+  get instance(): SERVER {
     return this.#fastify
   }
 

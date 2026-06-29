@@ -19,7 +19,7 @@ describe('Status', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const res = await app.server().inject({ method: 'POST', url: '/status/created' })
+    const res = await app.instance.inject({ method: 'POST', url: '/status/created' })
 
     expect(res.statusCode).toBe(201)
   })
@@ -38,7 +38,7 @@ describe('Status', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const res = await app.server().inject({ method: 'GET', url: '/status-default/ok' })
+    const res = await app.instance.inject({ method: 'GET', url: '/status-default/ok' })
 
     expect(res.statusCode).toBe(200)
   })

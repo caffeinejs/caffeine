@@ -86,6 +86,6 @@ await app.ready()
 const devtools = container.get(DevtoolsServer)
 devtools.attach(app).start()
 
-await app.server().listen({ port: 3000, host: '127.0.0.1' })
+await app.instance.listen({ port: 3000, host: '127.0.0.1' })
 console.log('[app] HTTP server at http://localhost:3000')
 console.log('[app] Devtools at http://localhost:9229')
