@@ -1,7 +1,7 @@
 import { ParameterPickOptions } from '@caffeinejs/http'
 import { Context } from 'hono'
 import { getCookie as honoCookie, getSignedCookie as honoGetSignedCookie } from 'hono/cookie'
-import { HonoContext, HonoContextHolder } from './context.js'
+import { HonoContext } from './context.js'
 
 export interface AdapterConfig {
   cookieSecret?: string | string[]
@@ -9,7 +9,6 @@ export interface AdapterConfig {
 
 const PARSED_BODY = Symbol('parsedBody')
 const PARSED_MULTIPART = Symbol('parsedMultipart')
-const CONTEXT_HOLDER = Symbol('contextHolder')
 
 type Picker<CTX extends Context = Context> = (c: CTX) => unknown
 
@@ -43,10 +42,6 @@ export function setParsedMultipart(c: Context, data: MultipartData): void {
 
 function getParsedMultipart(c: Context): MultipartData {
   return (c as Context & { [PARSED_MULTIPART]?: MultipartData })[PARSED_MULTIPART] ?? {}
-}
-
-export function getContextHolder(c: Context): HonoContextHolder | undefined {
-  return (c as Context & { [CONTEXT_HOLDER]?: HonoContextHolder })[CONTEXT_HOLDER]
 }
 
 export function compileHandler<
@@ -163,11 +158,7 @@ function buildPicker<CTX extends Context = Context>(
       }
     case 'context': {
       const secret = config?.cookieSecret
-      return c => {
-        const holder: HonoContextHolder = {}
-          ; (c as unknown as Context & { [CONTEXT_HOLDER]?: HonoContextHolder })[CONTEXT_HOLDER] = holder
-        return new HonoContext(c, holder, secret)
-      }
+      return c => new HonoContext(c, secret)
     }
     case 'method':
       return c => c.req.method

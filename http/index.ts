@@ -2,7 +2,7 @@ export { type Adapter, type AdapterFactory, type AdapterFactoryIn, type AdapterI
 export type * from './context.js'
 export * from './decorators/index.js'
 export { type RouteBuilder, type RouterBuilder } from './decorators/registrar/index.js'
-export { getRouter } from './decorators/registrar/registrar.js'
+export { configureRoute, getRouter } from './decorators/registrar/registrar.js'
 export * from './error.js'
 export * from './http.js'
 export * from './media_types.js'

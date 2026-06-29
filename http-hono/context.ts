@@ -11,6 +11,8 @@ import {
 import type { CookieOptions } from 'hono/utils/cookie'
 import type { RedirectStatusCode, StatusCode } from 'hono/utils/http-status'
 
+export const PENDING_RESPONSE = Symbol('pendingResponse')
+
 export interface HonoRouteSchema<
   _TParams = Record<string, string>,
   _TQuery = Record<string, string>,
@@ -22,9 +24,7 @@ type InferParams<S> = S extends HonoRouteSchema<infer P, any, any, any> ? P : Re
 type InferQuery<S> = S extends HonoRouteSchema<any, infer Q, any, any> ? Q : Record<string, string>
 type InferHeaders<S> = S extends HonoRouteSchema<any, any, infer H, any> ? H : Record<string, string>
 
-export interface HonoContextHolder {
-  response?: Response
-}
+type HonoCtxWithPending = HonoCtx & { [PENDING_RESPONSE]?: Response }
 
 export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> implements Context<
   IncomingMessage,
@@ -33,20 +33,11 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
 > {
   constructor(
     private readonly c: HonoCtx,
-    private readonly holder: HonoContextHolder,
     private readonly cookieSecret?: string | string[],
-  ) { }
+  ) {}
 
   get req(): HonoContextRequest<SCHEMA> {
     return new HonoContextRequest<SCHEMA>(this.c, this.cookieSecret)
-  }
-
-  get res(): Response {
-    return this.c.res
-  }
-
-  get native(): HonoCtx {
-    return this.c
   }
 
   status(code: number): this {
@@ -70,17 +61,18 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
   }
 
   body(body: unknown): this {
-    this.holder.response = this.c.body(body as string | ArrayBuffer | ReadableStream | Uint8Array<ArrayBuffer>)
+    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE]
+      = this.c.body(body as string | ArrayBuffer | ReadableStream | Uint8Array<ArrayBuffer>)
     return this
   }
 
   notFound(): this {
-    this.holder.response = new Response(null, { status: 404 })
+    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = new Response(null, { status: 404 })
     return this
   }
 
   redirect(url: string, status?: number): this {
-    this.holder.response = new Response(null, {
+    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = new Response(null, {
       status: (status ?? 302) as RedirectStatusCode,
       headers: { Location: url },
     })
@@ -92,7 +84,6 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
     if (!secret) {
       throw new Error('Cannot write signed cookies: cookieSecret not configured in adapter options')
     }
-
     await setSignedCookie(this.c, name, value, secret, opts)
   }
 }

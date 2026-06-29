@@ -96,6 +96,7 @@ export class RouteBuilder {
   #_bodyLimit?: number
   #_timeout?: number
   #_statusCode?: number
+  #_rawBody?: boolean
 
   header(name: string, value: string | string[]) {
     this.#_header ??= new Map()
@@ -156,6 +157,11 @@ export class RouteBuilder {
     return this
   }
 
+  rawBody(enabled: boolean): this {
+    this.#_rawBody = enabled
+    return this
+  }
+
   toRoute<R>(): Route<R> {
     return {
       path: normalizePath(this.#_path ?? ''),
@@ -169,6 +175,7 @@ export class RouteBuilder {
       timeout: this.#_timeout,
       header: this.#_header,
       statusCode: this.#_statusCode,
+      rawBody: this.#_rawBody,
     }
   }
 }

@@ -95,42 +95,64 @@ export class FastifyAdapter<
             }
           }
 
-          server.route({
-            method: [...new Set(route.method.map(m => m.toUpperCase()))],
-            url: joinPaths(basePath, route.path),
-            schema: route.schema as FastifySchema,
-            bodyLimit: route.bodyLimit ?? router.bodyLimit,
-            handlerTimeout: route.timeout ?? router.timeout,
-            config,
-            handler: function (req, res) {
-              if (router.header) {
-                for (const [k, v] of router.header) {
-                  res.header(k, v)
+          const routeFn = (s: typeof server) =>
+            s.route({
+              method: [...new Set(route.method.map(m => m.toUpperCase()))],
+              url: joinPaths(basePath, route.path),
+              schema: route.schema as FastifySchema,
+              bodyLimit: route.bodyLimit ?? router.bodyLimit,
+              handlerTimeout: route.timeout ?? router.timeout,
+              config,
+              handler: function (req, res) {
+                if (router.header) {
+                  for (const [k, v] of router.header) {
+                    res.header(k, v)
+                  }
                 }
-              }
 
-              if (route.header) {
-                for (const [k, v] of route.header) {
-                  res.header(k, v)
+                if (route.header) {
+                  for (const [k, v] of route.header) {
+                    res.header(k, v)
+                  }
                 }
-              }
 
-              if (route.contentType) {
-                res.type(route.contentType)
-              }
+                if (route.contentType) {
+                  res.type(route.contentType)
+                }
 
-              if (route.statusCode !== undefined) {
-                res.code(route.statusCode)
-              }
+                if (route.statusCode !== undefined) {
+                  res.code(route.statusCode)
+                }
 
-              const result = dispatch(req as REQ, res as RES)
-              if (result instanceof Promise) {
-                return result.then(r => respond(r, res as RES))
-              }
+                const result = dispatch(req as REQ, res as RES)
+                if (result instanceof Promise) {
+                  return result.then(r => respond(r, res as RES))
+                }
 
-              return respond(result, res as RES)
-            },
-          })
+                return respond(result, res as RES)
+              },
+            })
+
+          // Raw Body
+          // When the route is decorated with @RawBody(), the body is read as a raw buffer.
+          // We need to register an inner plugin, so we can remove all content type parsers,
+          // and add a custom content type parser for the raw body.
+          if (route.rawBody) {
+            server.register(async innerServer => {
+              innerServer.removeAllContentTypeParsers()
+              innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit ?? router.bodyLimit }, function (_request, payload, done) {
+                const chunks: Buffer[] = []
+                payload.on('data', (chunk: Buffer) => chunks.push(chunk))
+                payload.on('end', () => done(null, Buffer.concat(chunks)))
+                payload.on('error', done)
+              })
+
+              routeFn(innerServer)
+            })
+            continue
+          }
+
+          routeFn(server)
         }
       }, { prefix: router.prefix })
     }

@@ -4,12 +4,12 @@ import { Context, Hono } from 'hono'
 import type { StatusCode } from 'hono/utils/http-status'
 import {
   compileHandler,
-  getContextHolder,
   setParsedBody,
   setParsedMultipart,
   type MultipartData,
 } from './adapter_handler_parameters.js'
 import { type HonoAdapterOptions } from './adapter_factory.js'
+import { PENDING_RESPONSE } from './context.js'
 
 export class HonoAdapter<
   SERVER extends Hono = Hono,
@@ -66,82 +66,48 @@ export class HonoAdapter<
         }
 
         const path = joinPaths(basePath, route.path)
-        const hasAsync = route.parameters.some(p => p.async === true)
         const needsBody = route.parameters.some(p => p.type === 'body')
-        const needsContext = route.parameters.some(p => p.type === 'context')
         const needsMultipart = route.parameters.some(p => p.type.startsWith('multipart:'))
-        const needsAsync = hasAsync || needsBody || needsMultipart
 
-        let handler: (c: Context) => Response | Promise<Response>
-
-        if (needsAsync) {
-          handler = async (c: Context) => {
-            if (router.header) {
-              for (const [k, v] of router.header) {
-                setResponseHeader(c, k, v)
-              }
+        const handler = async (c: Context): Promise<Response> => {
+          if (router.header) {
+            for (const [k, v] of router.header) {
+              setResponseHeader(c, k, v)
             }
-
-            if (route.header) {
-              for (const [k, v] of route.header) {
-                setResponseHeader(c, k, v)
-              }
-            }
-
-            if (route.contentType) {
-              c.header('content-type', route.contentType)
-            }
-
-            if (route.statusCode !== undefined) {
-              c.status(route.statusCode as StatusCode)
-            }
-
-            if (needsBody) {
-              const contentType = c.req.header('content-type') ?? ''
-              if (contentType.includes('application/json')) {
-                setParsedBody(c, await c.req.json())
-              } else if (contentType.includes('application/x-www-form-urlencoded')) {
-                setParsedBody(c, await c.req.parseBody())
-              } else {
-                setParsedBody(c, await c.req.text())
-              }
-            }
-
-            if (needsMultipart) {
-              setParsedMultipart(c, await c.req.parseBody({ all: true }) as MultipartData)
-            }
-
-            const result = await dispatch(c as CTX)
-            return respond(result, c, route.contentType, needsContext)
           }
-        } else {
-          handler = (c: Context) => {
-            if (router.header) {
-              for (const [k, v] of router.header) {
-                setResponseHeader(c, k, v)
-              }
-            }
 
-            if (route.header) {
-              for (const [k, v] of route.header) {
-                setResponseHeader(c, k, v)
-              }
+          if (route.header) {
+            for (const [k, v] of route.header) {
+              setResponseHeader(c, k, v)
             }
-
-            if (route.contentType) {
-              c.header('content-type', route.contentType)
-            }
-
-            if (route.statusCode !== undefined) {
-              c.status(route.statusCode as StatusCode)
-            }
-
-            const result = dispatch(c as CTX)
-            if (result instanceof Promise) {
-              return result.then(r => respond(r, c, route.contentType, needsContext))
-            }
-            return respond(result, c, route.contentType, needsContext)
           }
+
+          if (route.contentType) {
+            c.header('content-type', route.contentType)
+          }
+
+          if (route.statusCode !== undefined) {
+            c.status(route.statusCode as StatusCode)
+          }
+
+          if (needsBody) {
+            const contentType = c.req.header('content-type') ?? ''
+            if (contentType.includes('application/json')) {
+              setParsedBody(c, await c.req.json())
+            } else if (contentType.includes('application/x-www-form-urlencoded')) {
+              setParsedBody(c, await c.req.parseBody())
+            } else {
+              setParsedBody(c, await c.req.text())
+            }
+          }
+
+          if (needsMultipart) {
+            setParsedMultipart(c, await c.req.parseBody({ all: true }) as MultipartData)
+          }
+
+          const result = await dispatch(c as CTX)
+
+          return respond(result, c, route.contentType)
         }
 
         for (const method of [...new Set(route.method.map(m => m.toUpperCase()))]) {
@@ -178,18 +144,9 @@ export class HonoAdapter<
   }
 }
 
-function respond(
-  result: unknown,
-  c: Context,
-  contentType?: string,
-  needsContext = false,
-): Response {
-  if (needsContext) {
-    const holder = getContextHolder(c)
-    if (holder?.response) {
-      return holder.response
-    }
-  }
+function respond(result: unknown, c: Context, contentType?: string): Response {
+  const pending = (c as Context & { [PENDING_RESPONSE]?: Response })[PENDING_RESPONSE]
+  if (pending) { return pending }
 
   if (result instanceof Response) {
     return result

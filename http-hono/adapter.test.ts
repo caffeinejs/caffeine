@@ -457,4 +457,62 @@ describe('Hono Adapter', () => {
       expect(setCookieHeader).toMatch(/Max-Age=0/)
     })
   })
+
+  describe('Context Response Methods', () => {
+    it('ctx.body() sends a raw body response', async () => {
+      @Controller('/resp')
+      class BodyController {
+        @Get('/raw')
+        @Params([context()])
+        get(ctx: HonoContext) {
+          ctx.body('hello world')
+          return null
+        }
+      }
+      void [BodyController]
+
+      const app = newHTTP(honoAdapterFactory(new Hono()))
+      await app.ready()
+      const res = await app.fetch('/resp/raw')
+      expect(res.status).toBe(200)
+      expect(await res.text()).toBe('hello world')
+    })
+
+    it('ctx.notFound() sends a 404 response', async () => {
+      @Controller('/resp')
+      class NotFoundController {
+        @Get('/missing')
+        @Params([context()])
+        get(ctx: HonoContext) {
+          ctx.notFound()
+          return null
+        }
+      }
+      void [NotFoundController]
+
+      const app = newHTTP(honoAdapterFactory(new Hono()))
+      await app.ready()
+      const res = await app.fetch('/resp/missing')
+      expect(res.status).toBe(404)
+    })
+
+    it('ctx.redirect() sends a redirect response', async () => {
+      @Controller('/resp')
+      class RedirectController {
+        @Get('/old')
+        @Params([context()])
+        get(ctx: HonoContext) {
+          ctx.redirect('/resp/new', 301)
+          return null
+        }
+      }
+      void [RedirectController]
+
+      const app = newHTTP(honoAdapterFactory(new Hono()))
+      await app.ready()
+      const res = await app.fetch('/resp/old', { redirect: 'manual' })
+      expect(res.status).toBe(301)
+      expect(res.headers.get('location')).toBe('/resp/new')
+    })
+  })
 })
