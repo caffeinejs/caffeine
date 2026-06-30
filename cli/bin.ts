@@ -35,10 +35,15 @@ async function run(): Promise<void> {
     process.exit(1)
   }
 
+  const allOutputs = [
+    config.generate?.output,
+    config.modules?.output ?? 'app.mod.ts',
+  ].filter((o): o is string => o !== undefined)
+
   if (config.generate) {
     const { include, exclude = [], output, importExtension = '.js' } = config.generate
     const outputPath = resolve(cwd, output)
-    const files = await scan({ root: cwd, include, exclude: [...exclude, output] })
+    const files = await scan({ root: cwd, include, exclude: [...exclude, ...allOutputs] })
     const changed = await generate({ files, output: outputPath, importExtension })
 
     if (changed) {
@@ -51,7 +56,7 @@ async function run(): Promise<void> {
   if (config.modules) {
     const { include, exclude = [], output = 'app.mod.ts', importExtension = '.js' } = config.modules
     const outputPath = resolve(cwd, output)
-    const files = await scan({ root: cwd, include, exclude: [...exclude, output] })
+    const files = await scan({ root: cwd, include, exclude: [...exclude, ...allOutputs] })
     const changed = await generateModules({ files, output: outputPath, importExtension })
 
     if (changed) {
