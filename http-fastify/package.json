@@ -27,6 +27,7 @@
     "@caffeinejs/http": "*"
   },
   "peerDependencies": {
+    "@fastify/compress": "^9.0.0",
     "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
@@ -34,6 +35,9 @@
     "fastify-plugin": "^6.0.0"
   },
   "peerDependenciesMeta": {
+    "@fastify/compress": {
+      "optional": true
+    },
     "@fastify/cookie": {
       "optional": true
     },
@@ -51,6 +55,7 @@
     }
   },
   "devDependencies": {
+    "@fastify/compress": "^9.0.0",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",

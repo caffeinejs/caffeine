@@ -1,57 +1,103 @@
 import { Binding, Key, Provider } from '@caffeinejs/core'
 import { Route, Router, RouteValidationSchema } from '../../route.js'
 import { ParameterPickOptions } from '../../route.picker.js'
+import { mergeValue } from './_merge.js'
 
 export class RouterBuilder {
-  _path?: string
-  #_prefix?: string
-  #_header?: Map<string, string | string[]>
-  #_consumes?: string[]
-  #_produces: string = ''
-  #_routes?: RouteBuilder[]
-  #_bodyLimit?: number
-  #_timeout?: number
+  #path?: string
+  #prefix?: string
+  #header?: Map<string, string | string[]>
+  #consumes?: string[]
+  #produces: string = ''
+  #routes?: RouteBuilder[]
+  #bodyLimit?: number
+  #timeout?: number
+  #config?: Map<string, unknown>
+  #options?: Map<string, unknown>
+  #extras?: Map<symbol, unknown>
 
   path(path: string) {
-    this._path = path
+    this.#path = path
     return this
   }
 
   header(name: string, value: string | string[]) {
-    this.#_header ??= new Map()
-    this.#_header.set(name, value)
+    this.#header ??= new Map()
+    this.#header.set(name, value)
     return this
   }
 
   consumes(consumes: string | string[]) {
-    this.#_consumes ??= []
-    this.#_consumes.push(...(Array.isArray(consumes) ? consumes : [consumes]))
+    this.#consumes ??= []
+    this.#consumes.push(...(Array.isArray(consumes) ? consumes : [consumes]))
     return this
   }
 
   produces(produces: string) {
-    this.#_produces = produces
+    this.#produces = produces
     return this
   }
 
   routes(routes: RouteBuilder | RouteBuilder[]) {
-    this.#_routes ??= []
-    this.#_routes.push(...(Array.isArray(routes) ? routes : [routes]))
+    this.#routes ??= []
+    this.#routes.push(...(Array.isArray(routes) ? routes : [routes]))
     return this
   }
 
   prefix(prefix: string) {
-    this.#_prefix = prefix
+    this.#prefix = prefix
     return this
   }
 
   bodyLimit(bytes: number) {
-    this.#_bodyLimit = bytes
+    this.#bodyLimit = bytes
     return this
   }
 
   timeout(ms: number) {
-    this.#_timeout = ms
+    this.#timeout = ms
+    return this
+  }
+
+  config<K extends string>(key: K, value: unknown): this
+  config<K extends string>(config: Map<K, unknown>): this
+  config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
+    this.#config ??= new Map()
+    if (typeof keyOrConfig === 'string') {
+      this.#config.set(keyOrConfig, mergeValue(this.#config.get(keyOrConfig), value))
+    } else {
+      for (const [key, value] of keyOrConfig) {
+        this.#config.set(key, mergeValue(this.#config.get(key), value))
+      }
+    }
+    return this
+  }
+
+  options<K extends string>(key: K, value: unknown): this
+  options<K extends string>(options: Map<K, unknown>): this
+  options<K extends string>(keyOrOptions: K | Map<K, unknown>, value?: unknown): this {
+    this.#options ??= new Map()
+    if (typeof keyOrOptions === 'string') {
+      this.#options.set(keyOrOptions, mergeValue(this.#options.get(keyOrOptions), value))
+    } else {
+      for (const [key, value] of keyOrOptions) {
+        this.#options.set(key, mergeValue(this.#options.get(key), value))
+      }
+    }
+    return this
+  }
+
+  extras<K extends symbol>(key: K, value: unknown): this
+  extras<K extends symbol>(extras: Map<K, unknown>): this
+  extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
+    this.#extras ??= new Map()
+    if (typeof keyOrExtras === 'symbol') {
+      this.#extras.set(keyOrExtras, mergeValue(this.#extras.get(keyOrExtras), value))
+    } else {
+      for (const [key, value] of keyOrExtras) {
+        this.#extras.set(key, mergeValue(this.#extras.get(key), value))
+      }
+    }
     return this
   }
 
@@ -69,14 +115,17 @@ export class RouterBuilder {
     controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>,
   ): Router<R> {
     return {
-      path: normalizePrefix(this._path ?? ''),
-      prefix: this.#_prefix,
-      routes: (this.#_routes ?? []).map(route => route.toRoute<R>()),
-      header: this.#_header,
-      accept: [...(this.#_consumes ?? [])],
-      contentType: this.#_produces,
-      bodyLimit: this.#_bodyLimit,
-      timeout: this.#_timeout,
+      path: normalizePrefix(this.#path ?? ''),
+      prefix: this.#prefix,
+      routes: (this.#routes ?? []).map(route => route.toRoute<R>()),
+      header: this.#header,
+      accept: [...(this.#consumes ?? [])],
+      contentType: this.#produces,
+      bodyLimit: this.#bodyLimit,
+      timeout: this.#timeout,
+      config: this.#config,
+      options: this.#options,
+      extras: this.#extras,
       key,
       binding,
       controller,
@@ -96,6 +145,8 @@ export class RouteBuilder {
   #bodyLimit?: number
   #timeout?: number
   #statusCode?: number
+  #config?: Map<string, unknown>
+  #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
 
   header(name: string, value: string | string[]) {
@@ -157,17 +208,45 @@ export class RouteBuilder {
     return this
   }
 
-  extras(extras: Map<symbol, unknown>): this {
-    this.#extras ??= new Map()
-    for (const [key, value] of extras) {
-      this.#extras.set(key, value)
+  config<K extends string>(key: K, value: unknown): this
+  config<K extends string>(config: Map<K, unknown>): this
+  config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
+    this.#config ??= new Map()
+    if (typeof keyOrConfig === 'string') {
+      this.#config.set(keyOrConfig, mergeValue(this.#config.get(keyOrConfig), value))
+    } else {
+      for (const [key, value] of keyOrConfig) {
+        this.#config.set(key, mergeValue(this.#config.get(key), value))
+      }
     }
     return this
   }
 
-  extra<K extends symbol>(key: K, value: unknown): this {
+  options<K extends string>(key: K, value: unknown): this
+  options<K extends string>(options: Map<K, unknown>): this
+  options<K extends string>(keyOrOptions: K | Map<K, unknown>, value?: unknown): this {
+    this.#options ??= new Map()
+    if (typeof keyOrOptions === 'string') {
+      this.#options.set(keyOrOptions, mergeValue(this.#options.get(keyOrOptions), value))
+    } else {
+      for (const [key, value] of keyOrOptions) {
+        this.#options.set(key, mergeValue(this.#options.get(key), value))
+      }
+    }
+    return this
+  }
+
+  extras<K extends symbol>(key: K, value: unknown): this
+  extras<K extends symbol>(extras: Map<K, unknown>): this
+  extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
     this.#extras ??= new Map()
-    this.#extras.set(key, value)
+    if (typeof keyOrExtras === 'symbol') {
+      this.#extras.set(keyOrExtras, mergeValue(this.#extras.get(keyOrExtras), value))
+    } else {
+      for (const [key, value] of keyOrExtras) {
+        this.#extras.set(key, mergeValue(this.#extras.get(key), value))
+      }
+    }
     return this
   }
 
@@ -184,7 +263,9 @@ export class RouteBuilder {
       timeout: this.#timeout,
       header: this.#header,
       statusCode: this.#statusCode,
-      extras: this.#extras ?? new Map(),
+      config: this.#config,
+      options: this.#options,
+      extras: this.#extras,
     }
   }
 }

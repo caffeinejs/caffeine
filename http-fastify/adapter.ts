@@ -3,7 +3,7 @@ import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, AdapterIn, Router } from '@caffeinejs/http'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
-import { kBodyBuffer, kBodyStream, kConfig, kCORS } from './decorators/keys/keys.js'
+import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -54,26 +54,33 @@ export class FastifyAdapter<
             })
           }
 
-          // Config
+          // Route Config
+          // https://fastify.dev/docs/latest/Reference/Routes/#config
+          // This can be user-provided, or framework-level (Eg. @CORS).
           const config: Record<string | symbol, unknown> = {}
-
-          // CORS
-          const cors = router.binding.tags.get(kCORS) ?? {}
-          if (typeof cors !== 'undefined') {
-            config.cors = cors
+          if (router.config) {
+            for (const [k, v] of router.config) {
+              config[k] = v
+            }
+          }
+          if (route.config) {
+            for (const [k, v] of route.config) {
+              config[k] = v
+            }
           }
 
-          // Additional Configuration Entries
-          const { config: extras, override } = router.binding.tags.get(kConfig) ?? {} as any
-          if (extras !== undefined) {
-            for (const [k, v] of Object.entries(extras)) {
-              if (Object.hasOwn(config, k)) {
-                if (override) {
-                  config[k] = v
-                }
-              } else {
-                config[k] = v
-              }
+          // Route Options
+          // https://fastify.dev/docs/latest/Reference/Routes/#routes-options
+          // This can be user-provided, or framework-level (Eg. @Compress).
+          const options: Record<string | symbol, unknown> = {}
+          if (router.options) {
+            for (const [k, v] of router.options) {
+              options[k] = v
+            }
+          }
+          if (route.options) {
+            for (const [k, v] of route.options) {
+              options[k] = v
             }
           }
 
@@ -85,6 +92,7 @@ export class FastifyAdapter<
               bodyLimit: route.bodyLimit ?? router.bodyLimit,
               handlerTimeout: route.timeout ?? router.timeout,
               config,
+              ...options,
               handler: function (req, res) {
                 if (router.header) {
                   for (const [k, v] of router.header) {
@@ -114,7 +122,7 @@ export class FastifyAdapter<
           // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
           // We need to register an inner plugin, so we can remove all content type parsers,
           // and add a custom content type parser for the raw body.
-          if (route.extras.get(kBodyBuffer)) {
+          if (route.extras?.get(kBodyBuffer)) {
             server.register(async innerServer => {
               innerServer.removeAllContentTypeParsers()
               innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit ?? router.bodyLimit }, function (_request, payload, done) {
@@ -129,8 +137,8 @@ export class FastifyAdapter<
             continue
           }
 
-          // Body Stream
-          if (route.extras.get(kBodyStream)) {
+          // BodyAsStream
+          if (route.extras?.get(kBodyStream)) {
             server.register(async innerServer => {
               innerServer.removeAllContentTypeParsers()
               innerServer.addContentTypeParser('*', function (_request, payload, done) {

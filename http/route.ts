@@ -21,7 +21,9 @@ export interface Route<R> {
   timeout?: number
   header?: Map<string, string | string[]>
   statusCode?: number
-  extras: Map<symbol, unknown>
+  config?: Map<string, unknown>
+  options?: Map<string, unknown>
+  extras?: Map<symbol, unknown>
 }
 
 export interface Router<R> {
@@ -33,6 +35,9 @@ export interface Router<R> {
   header?: Map<string, string | string[]>
   bodyLimit?: number
   timeout?: number
+  config?: Map<string, unknown>
+  options?: Map<string, unknown>
+  extras?: Map<symbol, unknown>
   key: Key
   binding: Binding
   controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>
