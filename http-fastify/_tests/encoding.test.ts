@@ -10,7 +10,9 @@ async function gzip(data: string): Promise<Buffer> {
   const chunks: Buffer[] = []
   const gz = createGzip()
   gz.end(Buffer.from(data))
-  for await (const chunk of gz) { chunks.push(chunk as Buffer) }
+  for await (const chunk of gz) {
+    chunks.push(chunk as Buffer)
+  }
   return Buffer.concat(chunks)
 }
 
@@ -18,7 +20,9 @@ async function brotli(data: string): Promise<Buffer> {
   const chunks: Buffer[] = []
   const br = createBrotliCompress()
   br.end(Buffer.from(data))
-  for await (const chunk of Readable.from(br)) { chunks.push(chunk as Buffer) }
+  for await (const chunk of Readable.from(br)) {
+    chunks.push(chunk as Buffer)
+  }
   return Buffer.concat(chunks)
 }
 

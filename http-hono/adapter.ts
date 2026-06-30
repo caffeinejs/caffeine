@@ -146,7 +146,9 @@ export class HonoAdapter<
 
 function respond(result: unknown, c: Context, contentType?: string): Response {
   const pending = (c as Context & { [PENDING_RESPONSE]?: Response })[PENDING_RESPONSE]
-  if (pending) { return pending }
+  if (pending) {
+    return pending
+  }
 
   if (result instanceof Response) {
     return result

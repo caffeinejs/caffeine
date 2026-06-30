@@ -14,6 +14,12 @@ type InferParams<S> = S extends FastifyRouteSchema<infer P, any, any, any> ? P :
 type InferQuery<S> = S extends FastifyRouteSchema<any, infer Q, any, any> ? Q : Record<string, string>
 type InferHeaders<S> = S extends FastifyRouteSchema<any, any, infer H, any> ? H : Record<string, string>
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    caffeineContext: FastifyContext
+  }
+}
+
 export class FastifyContext<
   SCHEMA extends FastifyRouteSchema = FastifyRouteSchema,
   REPLY extends FastifyReply = FastifyReply,
@@ -23,6 +29,7 @@ export class FastifyContext<
 > {
   #req: FastifyContextRequest<SCHEMA>
   #reply: REPLY
+  #store: Map<unknown, unknown> | undefined
 
   constructor(
     request: FastifyRequest,
@@ -36,6 +43,20 @@ export class FastifyContext<
     return this.#req
   }
 
+  get<T>(key: unknown): T | undefined {
+    return this.#store?.get(key) as T | undefined
+  }
+
+  set(key: unknown, value: unknown): this {
+    if (!this.#store) {
+      this.#store = new Map()
+    }
+
+    this.#store.set(key, value)
+
+    return this
+  }
+
   status(code: number): this {
     this.#reply.code(code)
     return this
@@ -46,7 +67,7 @@ export class FastifyContext<
     return this
   }
 
-  body(body: unknown): this {
+  body(body?: unknown): this {
     this.#reply.send(body)
     return this
   }

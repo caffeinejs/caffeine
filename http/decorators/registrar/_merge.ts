@@ -1,9 +1,13 @@
 export function mergeValue(existing: unknown, incoming: unknown): unknown {
-  if (existing === undefined) { return incoming }
+  if (existing === undefined) {
+    return incoming
+  }
 
   if (incoming instanceof Map && existing instanceof Map) {
     const result = new Map(existing)
-    for (const [k, v] of incoming) { result.set(k, v) }
+    for (const [k, v] of incoming) {
+      result.set(k, v)
+    }
     return result
   }
 

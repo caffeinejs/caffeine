@@ -3,7 +3,6 @@
 import { Readable } from 'node:stream'
 import { ParameterPickOptions } from '@caffeinejs/http'
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { FastifyContext } from './context.js'
 import { assertMultipartRegistered, MultipartFile, MultipartField } from './multipart.js'
 
 type Picker<
@@ -132,7 +131,7 @@ function buildPicker<
         return req => req.headers
       }
     case 'context':
-      return (req, res) => new FastifyContext(req, res)
+      return req => req.caffeineContext
     case 'method':
       return req => req.method
     case 'url':
@@ -247,7 +246,9 @@ function buildPicker<
         return req => {
           const r = req as unknown as FastifyRequest
           const raw = (r.cookies as Record<string, string | undefined>)[field]
-          if (!raw) { return undefined }
+          if (!raw) {
+            return undefined
+          }
           const result = r.unsignCookie(raw)
           return result.valid && result.value !== null ? result.value : false
         }

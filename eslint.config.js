@@ -81,7 +81,7 @@ export default defineConfig(
         ignoreUrls: true,
         ignoreRegExpLiterals: true,
       }],
-      '@stylistic/max-statements-per-line': ['error', { max: 2 }],
+      '@stylistic/max-statements-per-line': ['error', { max: 1 }],
       '@stylistic/arrow-parens': ['error', 'as-needed'],
       '@stylistic/newline-per-chained-call': ['error'],
 

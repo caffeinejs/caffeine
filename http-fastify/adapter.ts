@@ -1,9 +1,23 @@
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, AdapterIn, Router } from '@caffeinejs/http'
-import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
+import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RouteOptions, type FastifyError } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
+import { FastifyContext } from './context.js'
+import { CacheStore, ETagGenerator } from './cache/types.js'
+import { RouteConfigurer } from './route_configurer.js'
+import { cacheConfigurer } from './cache/cache.js'
+import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
+import { MemoryCacheStore } from './cache/index.js'
+
+export interface FastifyAdapterOptions {
+  cache?: {
+    store?: CacheStore
+    etagGenerator?: ETagGenerator
+  }
+  configurers?: RouteConfigurer[]
+}
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -12,14 +26,38 @@ export class FastifyAdapter<
 > implements Adapter<SERVER, REQ> {
   #fastify: SERVER
   #container: Container
+  #options: FastifyAdapterOptions | undefined
 
-  constructor(container: Container, fastify: SERVER) {
+  constructor(container: Container, fastify: SERVER, options?: FastifyAdapterOptions) {
     this.#fastify = fastify
     this.#container = container
+    this.#options = options
   }
 
   async setup(input: AdapterIn<REQ>): Promise<void> {
     const routers = input.routers as Router<REQ>[]
+    const store = this.#options?.cache?.store ?? new MemoryCacheStore()
+
+    const configurers = [...(this.#options?.configurers ?? [])]
+    configurers.push(cacheConfigurer(store, this.#options?.cache?.etagGenerator))
+    configurers.push(cacheInvalidateConfigurer(store))
+
+    // Decorating the Fastify request with the Caffeine context
+    this.#fastify.decorateRequest('caffeineContext', null as unknown as FastifyContext)
+    this.#fastify.addHook('onRequest', (req, reply, done) => {
+      req.caffeineContext = new FastifyContext(req, reply)
+      done()
+    })
+
+    this.#fastify.setErrorHandler((error, request, reply) => {
+      const err = error as FastifyError
+      request.log.error({ err }, err.message)
+      void reply.status(err.statusCode ?? 500).send({
+        error: err.message,
+        statusCode: err.statusCode ?? 500,
+      })
+    })
+
     const needsRequestScope = routers.some(
       router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
@@ -84,39 +122,46 @@ export class FastifyAdapter<
             }
           }
 
-          const routeFn = (s: typeof server) =>
-            s.route({
-              method: [...new Set(route.method.map(m => m.toUpperCase()))],
-              url: joinPaths(basePath, route.path),
-              schema: route.schema as FastifySchema,
-              bodyLimit: route.bodyLimit ?? router.bodyLimit,
-              handlerTimeout: route.timeout ?? router.timeout,
-              config,
-              ...options,
-              handler: function (req, res) {
-                if (router.header) {
-                  for (const [k, v] of router.header) {
-                    res.header(k, v)
-                  }
+          const routeDef: RouteOptions = {
+            method: [...new Set(route.method.map(m => m.toUpperCase()))],
+            url: joinPaths(basePath, route.path),
+            schema: route.schema as FastifySchema,
+            bodyLimit: route.bodyLimit ?? router.bodyLimit,
+            handlerTimeout: route.timeout ?? router.timeout,
+            config,
+            ...options,
+            handler: function (req, res) {
+              if (router.header) {
+                for (const [k, v] of router.header) {
+                  res.header(k, v)
                 }
+              }
 
-                if (route.header) {
-                  for (const [k, v] of route.header) {
-                    res.header(k, v)
-                  }
+              if (route.header) {
+                for (const [k, v] of route.header) {
+                  res.header(k, v)
                 }
+              }
 
-                if (route.contentType) {
-                  res.type(route.contentType)
-                }
+              if (route.contentType) {
+                res.type(route.contentType)
+              }
 
-                if (route.statusCode !== undefined) {
-                  res.code(route.statusCode)
-                }
+              if (route.statusCode !== undefined) {
+                res.code(route.statusCode)
+              }
 
-                return dispatch(req as REQ, res as RES)
-              },
-            })
+              return dispatch(req as REQ, res as RES)
+            },
+          }
+
+          normalizeRouteDef(routeDef)
+
+          const routeFn = (s: typeof server, def: RouteOptions) => s.route(def)
+
+          for (const configurer of configurers) {
+            configurer({ server, router, route, routeDef })
+          }
 
           // BodyAsBuffer
           // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
@@ -132,7 +177,7 @@ export class FastifyAdapter<
                 payload.on('error', done)
               })
 
-              routeFn(innerServer)
+              routeFn(innerServer, routeDef)
             })
             continue
           }
@@ -145,12 +190,12 @@ export class FastifyAdapter<
                 done(null, Readable.toWeb(payload))
               })
 
-              routeFn(innerServer)
+              routeFn(innerServer, routeDef)
             })
             continue
           }
 
-          routeFn(server)
+          routeFn(server, routeDef)
         }
       }, { prefix: router.prefix })
     }
@@ -231,4 +276,25 @@ export class FastifyAdapter<
 function joinPaths(base: string, path: string): string {
   const joined = `${base}${path}`
   return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
+}
+
+// Normalizing all route hooks to arrays to more easily support multiple hooks.
+
+const ROUTE_HOOK_KEYS = [
+  'onRequest',
+  'preParsing',
+  'onSend',
+  'onError',
+  'onTimeout',
+  'onResponse',
+  'onRequestAbort',
+  'preHandler',
+  'preValidation',
+] as const satisfies readonly (keyof RouteOptions)[]
+
+function normalizeRouteDef(routeDef: RouteOptions) {
+  for (const key of ROUTE_HOOK_KEYS) {
+    const hook = routeDef[key]
+    routeDef[key] = (hook ? (Array.isArray(hook) ? hook : [hook]) : []) as any
+  }
 }

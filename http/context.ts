@@ -40,7 +40,7 @@ export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = f
 
   deleteCookie(name: string, opts?: CO): this
 
-  body(body: unknown): this
+  body(body?: unknown): this
 
   notFound(): this
 

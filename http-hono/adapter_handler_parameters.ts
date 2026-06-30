@@ -245,18 +245,24 @@ function buildPicker<CTX extends Context = Context>(
         })
       }
     case 'cookie':
-      if (field) { return c => honoCookie(c, field) }
+      if (field) {
+        return c => honoCookie(c, field)
+      }
       return c => honoCookie(c)
     case 'cookie:signed': {
       const secret = config?.cookieSecret
       if (field) {
         return c => {
-          if (!secret) { throw new Error('Cannot use signedCookie() picker: cookieSecret not configured in adapter options') }
+          if (!secret) {
+            throw new Error('Cannot use signedCookie() picker: cookieSecret not configured in adapter options')
+          }
           return honoGetSignedCookie(c, secret, field)
         }
       }
       return c => {
-        if (!secret) { throw new Error('Cannot use signedCookie() picker: cookieSecret not configured in adapter options') }
+        if (!secret) {
+          throw new Error('Cannot use signedCookie() picker: cookieSecret not configured in adapter options')
+        }
         return honoGetSignedCookie(c, secret)
       }
     }
