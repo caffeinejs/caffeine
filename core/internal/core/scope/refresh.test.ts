@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 import { Scopes } from '../../../scope.js'
 import { CaffeineIoC } from '../../../container.js'
+import { kSelfRefresh, SelfRefreshable } from '../../../refresher.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { PreDestroy } from '../../../decorators/pre_destroy.js'
@@ -63,6 +64,49 @@ describe('Refresh Scope', function () {
 
       expect(spy)
         .toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('when a refresh-scoped instance implements SelfRefreshable', function () {
+    const selfRefreshSpy = vi.fn()
+
+    class WithSelfRefresh implements SelfRefreshable {
+      readonly id: string
+
+      constructor() {
+        this.id = randomUUID()
+      }
+
+      [kSelfRefresh](): void {
+        selfRefreshSpy()
+      }
+    }
+
+    it('calls [kSelfRefresh] instead of recreating the instance', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(WithSelfRefresh).toSelf()
+        .lifetime(Scopes.REFRESH)
+      await di.init()
+
+      const before = di.get(WithSelfRefresh)
+      await di.refresher.refresh()
+      const after = di.get(WithSelfRefresh)
+
+      expect(selfRefreshSpy).toHaveBeenCalledTimes(1)
+      expect(before).toBe(after)
+      expect(before.id).toBe(after.id)
+    })
+
+    it('still resets instances that do not implement SelfRefreshable', async function () {
+      const di = new CaffeineIoC()
+      await di.init()
+
+      const root = di.get(Root)
+      await di.refresher.refresh()
+      const rootAfter = di.get(Root)
+
+      expect(root).not.toBe(rootAfter)
+      expect(root.id).not.toBe(rootAfter.id)
     })
   })
 

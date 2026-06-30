@@ -1,5 +1,6 @@
 import { Binding } from '../../../binding.js'
 import { Container } from '../../../container_interface.js'
+import { kSelfRefresh } from '../../../refresher.js'
 import { SingletonScope } from './singleton.js'
 
 export class RefreshScope extends SingletonScope {
@@ -14,7 +15,13 @@ export class RefreshScope extends SingletonScope {
   }
 
   async refresh(): Promise<void> {
-    await Promise.all(this.managedBindings.map(b => this.container.resetBinding(b)))
+    await Promise.all(this.managedBindings.map(b => {
+      const cached = this._cachedInstances.get(b.id)
+      if (cached != null && typeof (cached as Record<symbol, unknown>)[kSelfRefresh] === 'function') {
+        return (cached as Record<symbol, () => unknown>)[kSelfRefresh]()
+      }
+      return this.container.resetBinding(b)
+    }))
   }
 
   configure(binding: Binding) {
