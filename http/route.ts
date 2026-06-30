@@ -1,5 +1,5 @@
 import { Binding, Key, Provider } from '@caffeinejs/core'
-import { ParameterPickOptions } from './route.picker.js'
+import { ParameterPickOptions } from './route_picker.js'
 
 export interface RouteValidationSchema {
   params?: unknown

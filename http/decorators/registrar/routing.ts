@@ -1,6 +1,6 @@
 import { Binding, Key, Provider } from '@caffeinejs/core'
 import { Route, Router, RouteValidationSchema } from '../../route.js'
-import { ParameterPickOptions } from '../../route.picker.js'
+import { ParameterPickOptions } from '../../route_picker.js'
 import { mergeValue } from './_merge.js'
 
 export class RouterBuilder {

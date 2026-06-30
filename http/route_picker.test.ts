@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { compose, ParameterPicker, ParameterPickOptions } from './route.picker.js'
+import { compose, ParameterPicker, ParameterPickOptions } from './route_picker.js'
 
 describe('Request Parameter', () => {
   interface Request {

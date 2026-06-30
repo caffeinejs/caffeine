@@ -262,6 +262,10 @@ function buildPicker<
         }
         return out
       }
+    case 'fastify:request':
+      return req => req
+    case 'fastify:reply':
+      return (_req, res) => res
     default:
       throw new Error(`Invalid parameter type: ${type}`)
   }

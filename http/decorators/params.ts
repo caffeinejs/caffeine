@@ -1,4 +1,4 @@
-import { ParameterPickOptions } from '../route.picker.js'
+import { ParameterPickOptions } from '../route_picker.js'
 import { configureRoute } from './registrar/registrar.js'
 
 export function Params(params: ParameterPickOptions<unknown>[]) {

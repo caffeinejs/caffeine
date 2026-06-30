@@ -47,11 +47,11 @@ export class FastifyContext<
     return this.#reply.statusCode
   }
 
-  get<T = unknown>(key: string): T | undefined {
+  get<T>(key: unknown): T | undefined {
     return this.#store?.get(key) as T | undefined
   }
 
-  set<T = unknown>(key: string, value: T): this {
+  set(key: unknown, value: unknown): this {
     if (!this.#store) {
       this.#store = new Map()
     }
