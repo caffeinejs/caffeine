@@ -162,6 +162,7 @@ export default defineConfig(
     files: ['**/*.test.ts', '**/*.spec.ts'],
     rules: {
       'import-x/extensions': 'off',
+      'import-x/no-unresolved': ['error', { ignore: ['^bun:'] }],
       'tsdoc/syntax': 'off',
       '@typescript-eslint/no-useless-constructor': 'off',
       '@typescript-eslint/no-empty-function': 'off',

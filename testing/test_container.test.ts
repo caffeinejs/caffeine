@@ -11,7 +11,7 @@ import {
   optional,
 } from '@caffeinejs/core'
 import { InstanceTracker } from './tracker.js'
-import { TestContainer } from './container.js'
+import { TestContainer } from './test_container.js'
 
 describe('TestContainer', function () {
   const kMsg = Symbol('kMsg')
