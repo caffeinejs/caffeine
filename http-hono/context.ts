@@ -118,6 +118,7 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
     if (key === undefined) {
       return this.c.req.header() as InferHeaders<SCHEMA>
     }
+
     return this.c.req.header(key)
   }
 
@@ -131,6 +132,7 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
     if (key === undefined) {
       return this.c.req.param() as InferParams<SCHEMA>
     }
+
     return this.c.req.param(key)
   }
 
@@ -140,11 +142,14 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
     if (key === undefined) {
       const entries = this.c.req.queries()
       const out: Record<string, string> = {}
+
       for (const [k, v] of Object.entries(entries)) {
         out[k] = Array.isArray(v) ? v[0] ?? '' : v ?? ''
       }
+
       return out as InferQuery<SCHEMA>
     }
+
     return this.c.req.query(key)
   }
 
@@ -153,6 +158,7 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
     if (val === undefined) {
       return undefined
     }
+
     return Array.isArray(val) ? val : [val]
   }
 
@@ -162,19 +168,22 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
     if (name === undefined) {
       return getCookie(this.c)
     }
+
     return getCookie(this.c, name)
   }
 
   signedCookie(): Promise<Record<string, UnsignedCookie>>
   signedCookie(name: string): Promise<UnsignedCookie>
-  async signedCookie(name?: string): Promise<Record<string, UnsignedCookie> | UnsignedCookie> {
+  signedCookie(name?: string): Promise<Record<string, UnsignedCookie> | UnsignedCookie> {
     const secret = this.cookieSecret
     if (!secret) {
       throw new Error('Cannot read signed cookies: cookieSecret not configured in adapter options')
     }
+
     if (name !== undefined) {
       return getSignedCookie(this.c, secret, name)
     }
+
     return getSignedCookie(this.c, secret)
   }
 }

@@ -21,7 +21,7 @@ export interface Route<R> {
   timeout?: number
   header?: Map<string, string | string[]>
   statusCode?: number
-  rawBody?: boolean
+  extras: Map<symbol, unknown>
 }
 
 export interface Router<R> {

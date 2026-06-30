@@ -85,97 +85,106 @@ export class RouterBuilder {
 }
 
 export class RouteBuilder {
-  #_header?: Map<string, string | string[]>
-  #_path?: string
-  #_method?: string[]
-  #_handler?: string | symbol
-  #_parameters?: ParameterPickOptions<unknown>[]
-  #_consumes?: string[]
-  #_produces: string = ''
-  #_schema?: RouteValidationSchema
-  #_bodyLimit?: number
-  #_timeout?: number
-  #_statusCode?: number
-  #_rawBody?: boolean
+  #header?: Map<string, string | string[]>
+  #path?: string
+  #method?: string[]
+  #handler?: string | symbol
+  #parameters?: ParameterPickOptions<unknown>[]
+  #consumes?: string[]
+  #produces: string = ''
+  #schema?: RouteValidationSchema
+  #bodyLimit?: number
+  #timeout?: number
+  #statusCode?: number
+  #extras?: Map<symbol, unknown>
 
   header(name: string, value: string | string[]) {
-    this.#_header ??= new Map()
-    this.#_header.set(name, value)
+    this.#header ??= new Map()
+    this.#header.set(name, value)
     return this
   }
 
   path(path: string) {
-    this.#_path = path
+    this.#path = path
     return this
   }
 
   method(method: string | string[]): this {
-    this.#_method ??= []
-    this.#_method.push(...(Array.isArray(method) ? method : [method]))
+    this.#method ??= []
+    this.#method.push(...(Array.isArray(method) ? method : [method]))
     return this
   }
 
   handler(handler: string | symbol): this {
-    this.#_handler = handler
+    this.#handler = handler
     return this
   }
 
   parameters(parameters: ParameterPickOptions<unknown> | ParameterPickOptions<unknown>[]) {
-    this.#_parameters ??= []
-    this.#_parameters.push(...(Array.isArray(parameters) ? parameters : [parameters]))
+    this.#parameters ??= []
+    this.#parameters.push(...(Array.isArray(parameters) ? parameters : [parameters]))
     return this
   }
 
   consumes(consumes: string | string[]) {
-    this.#_consumes ??= []
-    this.#_consumes.push(...(Array.isArray(consumes) ? consumes : [consumes]))
+    this.#consumes ??= []
+    this.#consumes.push(...(Array.isArray(consumes) ? consumes : [consumes]))
     return this
   }
 
   produces(produces: string) {
-    this.#_produces = produces
+    this.#produces = produces
     return this
   }
 
   schema<S extends RouteValidationSchema>(schema: S): this {
-    this.#_schema = schema
+    this.#schema = schema
     return this
   }
 
   bodyLimit(bytes: number): this {
-    this.#_bodyLimit = bytes
+    this.#bodyLimit = bytes
     return this
   }
 
   timeout(ms: number): this {
-    this.#_timeout = ms
+    this.#timeout = ms
     return this
   }
 
   statusCode(code: number): this {
-    this.#_statusCode = code
+    this.#statusCode = code
     return this
   }
 
-  rawBody(enabled: boolean): this {
-    this.#_rawBody = enabled
+  extras(extras: Map<symbol, unknown>): this {
+    this.#extras ??= new Map()
+    for (const [key, value] of extras) {
+      this.#extras.set(key, value)
+    }
+    return this
+  }
+
+  extra<K extends symbol>(key: K, value: unknown): this {
+    this.#extras ??= new Map()
+    this.#extras.set(key, value)
     return this
   }
 
   toRoute<R>(): Route<R> {
     return {
-      path: normalizePath(this.#_path ?? ''),
-      method: [...(this.#_method ?? [])],
-      accept: [...(this.#_consumes ?? [])],
-      contentType: this.#_produces ?? '',
-      parameters: [...(this.#_parameters ?? [])],
-      handler: this.#_handler ?? '',
-      schema: this.#_schema,
-      bodyLimit: this.#_bodyLimit,
-      timeout: this.#_timeout,
-      header: this.#_header,
-      statusCode: this.#_statusCode,
-      rawBody: this.#_rawBody,
+      path: normalizePath(this.#path ?? ''),
+      method: [...(this.#method ?? [])],
+      accept: [...(this.#consumes ?? [])],
+      contentType: this.#produces ?? '',
+      parameters: [...(this.#parameters ?? [])],
+      handler: this.#handler ?? '',
+      schema: this.#schema,
+      bodyLimit: this.#bodyLimit,
+      timeout: this.#timeout,
+      header: this.#header,
+      statusCode: this.#statusCode,
+      extras: this.#extras ?? new Map(),
     }
   }
 }

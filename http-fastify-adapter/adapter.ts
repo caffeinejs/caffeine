@@ -3,7 +3,7 @@ import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, AdapterIn, Router } from '@caffeinejs/http'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
-import { kConfig, kCORS } from './decorators/keys/keys.js'
+import { kBodyBuffer, kBodyStream, kConfig, kCORS } from './decorators/keys/keys.js'
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -133,11 +133,11 @@ export class FastifyAdapter<
               },
             })
 
-          // Raw Body
-          // When the route is decorated with @RawBody(), the body is read as a raw buffer.
+          // BodyAsBuffer
+          // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
           // We need to register an inner plugin, so we can remove all content type parsers,
           // and add a custom content type parser for the raw body.
-          if (route.rawBody) {
+          if (route.extras.get(kBodyBuffer)) {
             server.register(async innerServer => {
               innerServer.removeAllContentTypeParsers()
               innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit ?? router.bodyLimit }, function (_request, payload, done) {
@@ -145,6 +145,19 @@ export class FastifyAdapter<
                 payload.on('data', (chunk: Buffer) => chunks.push(chunk))
                 payload.on('end', () => done(null, Buffer.concat(chunks)))
                 payload.on('error', done)
+              })
+
+              routeFn(innerServer)
+            })
+            continue
+          }
+
+          // Body Stream
+          if (route.extras.get(kBodyStream)) {
+            server.register(async innerServer => {
+              innerServer.removeAllContentTypeParsers()
+              innerServer.addContentTypeParser('*', function (_request, payload, done) {
+                done(null, Readable.toWeb(payload))
               })
 
               routeFn(innerServer)

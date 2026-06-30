@@ -1,50 +1,61 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import { Controller, Post, Params, body, newHTTP } from '@caffeinejs/http'
-import { fastifyAdapterFactory, RawBody } from '../index.js'
+import { fastifyAdapterFactory, BodyAsStream } from '../index.js'
 
-describe('RawBody', () => {
-  it('delivers the body as a Buffer regardless of content-type', async () => {
-    @Controller('/raw')
-    class RawController {
-      @RawBody()
+describe('BodyAsStream', () => {
+  it('delivers the body as a ReadableStream', async () => {
+    @Controller('/stream')
+    class StreamController {
+      @BodyAsStream()
       @Post('/upload')
       @Params([body()])
-      upload(b: Buffer) {
-        return { size: b.byteLength, isBuffer: Buffer.isBuffer(b) }
+      async upload(stream: ReadableStream) {
+        const isStream = stream instanceof ReadableStream
+        const chunks: Uint8Array[] = []
+        for await (const chunk of stream) {
+          chunks.push(chunk)
+        }
+        const total = chunks.reduce((n, c) => n + c.byteLength, 0)
+        return { isStream, size: total }
       }
     }
 
-    void [RawController]
+    void [StreamController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const payload = Buffer.from('hello raw world')
+    const payload = Buffer.from('hello stream world')
 
     const res = await app.instance.inject({
       method: 'POST',
-      url: '/raw/upload',
+      url: '/stream/upload',
       payload,
       headers: { 'content-type': 'text/plain' },
     })
 
     expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ size: payload.byteLength, isBuffer: true })
+    expect(res.json()).toEqual({ isStream: true, size: payload.byteLength })
   })
 
-  it('receives binary data correctly (application/octet-stream)', async () => {
-    @Controller('/raw-binary')
-    class RawBinaryController {
-      @RawBody()
+  it('yields correct bytes for binary data (application/octet-stream)', async () => {
+    @Controller('/stream-binary')
+    class StreamBinaryController {
+      @BodyAsStream()
       @Post('/data')
       @Params([body()])
-      data(b: Buffer) {
-        return { bytes: Array.from(b) }
+      async data(stram: ReadableStream) {
+        const chunks: Uint8Array[] = []
+        for await (const chunk of stram) {
+          chunks.push(chunk)
+        }
+        const buf = Buffer.concat(chunks)
+        return { bytes: Array.from(buf) }
       }
     }
 
-    void [RawBinaryController]
+    void [StreamBinaryController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
@@ -53,7 +64,7 @@ describe('RawBody', () => {
 
     const res = await app.instance.inject({
       method: 'POST',
-      url: '/raw-binary/data',
+      url: '/stream-binary/data',
       payload,
       headers: { 'content-type': 'application/octet-stream' },
     })
@@ -62,18 +73,22 @@ describe('RawBody', () => {
     expect(res.json()).toEqual({ bytes: [1, 2, 3, 255] })
   })
 
-  it('receives JSON payload as raw Buffer without parsing', async () => {
-    @Controller('/raw-json')
-    class RawJsonController {
-      @RawBody()
+  it('receives JSON payload as a stream without parsing', async () => {
+    @Controller('/stream-json')
+    class StreamJsonController {
+      @BodyAsStream()
       @Post('/data')
       @Params([body()])
-      data(b: Buffer) {
-        return { raw: b.toString('utf8') }
+      async data(stream: ReadableStream) {
+        const chunks: Uint8Array[] = []
+        for await (const chunk of stream) {
+          chunks.push(chunk)
+        }
+        return { raw: Buffer.concat(chunks).toString('utf8') }
       }
     }
 
-    void [RawJsonController]
+    void [StreamJsonController]
 
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
@@ -82,7 +97,7 @@ describe('RawBody', () => {
 
     const res = await app.instance.inject({
       method: 'POST',
-      url: '/raw-json/data',
+      url: '/stream-json/data',
       payload: jsonStr,
       headers: { 'content-type': 'application/json' },
     })
@@ -92,13 +107,13 @@ describe('RawBody', () => {
   })
 
   it('does not affect other routes on the same controller', async () => {
-    @Controller('/raw-mixed')
+    @Controller('/stream-mixed')
     class MixedController {
-      @RawBody()
+      @BodyAsStream()
       @Post('/raw')
       @Params([body()])
-      rawRoute(b: Buffer) {
-        return { isBuffer: Buffer.isBuffer(b) }
+      async rawRoute(stream: ReadableStream) {
+        return { isStream: stream instanceof ReadableStream }
       }
 
       @Post('/parsed')
@@ -113,22 +128,22 @@ describe('RawBody', () => {
     const app = newHTTP(fastifyAdapterFactory(fastify()))
     await app.ready()
 
-    const rawRes = await app.instance.inject({
+    const streamRes = await app.instance.inject({
       method: 'POST',
-      url: '/raw-mixed/raw',
+      url: '/stream-mixed/raw',
       payload: 'hello',
       headers: { 'content-type': 'text/plain' },
     })
 
     const parsedRes = await app.instance.inject({
       method: 'POST',
-      url: '/raw-mixed/parsed',
+      url: '/stream-mixed/parsed',
       payload: JSON.stringify({ x: 1 }),
       headers: { 'content-type': 'application/json' },
     })
 
-    expect(rawRes.statusCode).toBe(200)
-    expect(rawRes.json()).toEqual({ isBuffer: true })
+    expect(streamRes.statusCode).toBe(200)
+    expect(streamRes.json()).toEqual({ isStream: true })
 
     expect(parsedRes.statusCode).toBe(200)
     expect(parsedRes.json()).toEqual({ body: { x: 1 } })
