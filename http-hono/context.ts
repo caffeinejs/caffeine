@@ -11,8 +11,6 @@ import {
 import type { CookieOptions } from 'hono/utils/cookie'
 import type { RedirectStatusCode, StatusCode } from 'hono/utils/http-status'
 
-export const PENDING_RESPONSE = Symbol('pendingResponse')
-
 export interface HonoRouteSchema<
   _TParams = Record<string, string>,
   _TQuery = Record<string, string>,
@@ -24,13 +22,17 @@ type InferParams<S> = S extends HonoRouteSchema<infer P, any, any, any> ? P : Re
 type InferQuery<S> = S extends HonoRouteSchema<any, infer Q, any, any> ? Q : Record<string, string>
 type InferHeaders<S> = S extends HonoRouteSchema<any, any, infer H, any> ? H : Record<string, string>
 
-type HonoCtxWithPending = HonoCtx & { [PENDING_RESPONSE]?: Response }
-
 export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> implements Context<
   IncomingMessage,
   CookieOptions,
   true
 > {
+  #pendingResponse: Response | undefined
+
+  get pendingResponse(): Response | undefined {
+    return this.#pendingResponse
+  }
+
   constructor(
     private readonly c: HonoCtx,
     private readonly cookieSecret?: string | string[],
@@ -86,28 +88,27 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
   }
 
   body(body: unknown): this {
-    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE]
-      = this.c.body(body as string | ArrayBuffer | ReadableStream | Uint8Array<ArrayBuffer>)
+    this.#pendingResponse = this.c.body(body as string | ArrayBuffer | ReadableStream | Uint8Array<ArrayBuffer>)
     return this
   }
 
   notFound(body?: unknown): this {
-    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(404 as StatusCode, body)
+    this.#pendingResponse = this.#responseWithBody(404 as StatusCode, body)
     return this
   }
 
   badRequest(body?: unknown): this {
-    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(400 as StatusCode, body)
+    this.#pendingResponse = this.#responseWithBody(400 as StatusCode, body)
     return this
   }
 
   unprocessableEntity(body?: unknown): this {
-    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(422 as StatusCode, body)
+    this.#pendingResponse = this.#responseWithBody(422 as StatusCode, body)
     return this
   }
 
   internalServerError(body: unknown): this {
-    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(500 as StatusCode, body)
+    this.#pendingResponse = this.#responseWithBody(500 as StatusCode, body)
     return this
   }
 
@@ -120,7 +121,7 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
   }
 
   redirect(url: string, status?: number): this {
-    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = new Response(null, {
+    this.#pendingResponse = new Response(null, {
       status: (status ?? 302) as RedirectStatusCode,
       headers: { Location: url },
     })

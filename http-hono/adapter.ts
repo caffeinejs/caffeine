@@ -4,12 +4,12 @@ import { Context, Hono } from 'hono'
 import type { StatusCode } from 'hono/utils/http-status'
 import {
   compileHandler,
+  getHonoContext,
   setParsedBody,
   setParsedMultipart,
   type MultipartData,
 } from './adapter_handler_parameters.js'
 import { type HonoAdapterOptions } from './adapter_factory.js'
-import { PENDING_RESPONSE } from './context.js'
 
 export class HonoAdapter<
   SERVER extends Hono = Hono,
@@ -145,7 +145,7 @@ export class HonoAdapter<
 }
 
 function respond(result: unknown, c: Context, contentType?: string): Response {
-  const pending = (c as Context & { [PENDING_RESPONSE]?: Response })[PENDING_RESPONSE]
+  const pending = getHonoContext(c)?.pendingResponse
   if (pending) {
     return pending
   }

@@ -3,6 +3,13 @@ import { Context } from 'hono'
 import { getCookie as honoCookie, getSignedCookie as honoGetSignedCookie } from 'hono/cookie'
 import { HonoContext } from './context.js'
 
+const HONO_CTX = Symbol('honoCtx')
+type ContextWithHono = Context & { [HONO_CTX]?: HonoContext }
+
+export function getHonoContext(c: Context): HonoContext | undefined {
+  return (c as ContextWithHono)[HONO_CTX]
+}
+
 export interface AdapterConfig {
   cookieSecret?: string | string[]
 }
@@ -158,7 +165,15 @@ function buildPicker<CTX extends Context = Context>(
       }
     case 'context': {
       const secret = config?.cookieSecret
-      return c => new HonoContext(c, secret)
+      return c => {
+        const existing = (c as ContextWithHono)[HONO_CTX]
+        if (existing) {
+          return existing
+        }
+        const ctx = new HonoContext(c, secret)
+        ;(c as ContextWithHono)[HONO_CTX] = ctx
+        return ctx
+      }
     }
     case 'method':
       return c => c.req.method
