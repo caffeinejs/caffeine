@@ -40,13 +40,34 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
     return new HonoContextRequest<SCHEMA>(this.c, this.cookieSecret)
   }
 
+  get statusCode(): number {
+    return this.c.res.status
+  }
+
+  get<T = unknown>(key: string): T | undefined {
+    return this.c.get(key)
+  }
+
+  set<T = unknown>(key: string, value: T): this {
+    this.c.set(key, value)
+    return this
+  }
+
   status(code: number): this {
     this.c.status(code as StatusCode)
     return this
   }
 
-  header(key: string, value: string): this {
-    this.c.header(key, value)
+  header(key: string, value: string): this
+  header(headers: Record<string, string>): this
+  header(keyOrHeaders: string | Record<string, string>, value?: string): this {
+    if (typeof keyOrHeaders === 'string') {
+      this.c.header(keyOrHeaders, value!)
+    } else {
+      for (const [k, v] of Object.entries(keyOrHeaders)) {
+        this.c.header(k, v)
+      }
+    }
     return this
   }
 
@@ -104,7 +125,7 @@ export class HonoContextRequest<SCHEMA extends HonoRouteSchema = HonoRouteSchema
     return this.c.req.raw as unknown as IncomingMessage
   }
 
-  get path(): string {
+  get url(): string {
     return this.c.req.path
   }
 

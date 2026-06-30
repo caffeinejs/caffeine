@@ -744,7 +744,7 @@ describe('Cache key', () => {
 
     @Controller('/cache-key-custom-path')
     class KeyCustomPathController {
-      @Cache({ ttl: 60, key: req => req.path.split('?')[0] })
+      @Cache({ ttl: 60, key: req => req.url.split('?')[0] })
       @Get('/data')
       data() {
         callCount++
@@ -767,7 +767,7 @@ describe('Cache key', () => {
 
     @Controller('/cache-key-custom-query')
     class KeyCustomQueryController {
-      @Cache({ ttl: 60, key: req => `${req.path}?lang=${req.query('lang') ?? ''}` })
+      @Cache({ ttl: 60, key: req => `${req.url}?lang=${req.query('lang') ?? ''}` })
       @Get('/data')
       data() {
         callCount++

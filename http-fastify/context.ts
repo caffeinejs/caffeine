@@ -43,11 +43,15 @@ export class FastifyContext<
     return this.#req
   }
 
-  get<T>(key: unknown): T | undefined {
+  get statusCode(): number {
+    return this.#reply.statusCode
+  }
+
+  get<T = unknown>(key: string): T | undefined {
     return this.#store?.get(key) as T | undefined
   }
 
-  set(key: unknown, value: unknown): this {
+  set<T = unknown>(key: string, value: T): this {
     if (!this.#store) {
       this.#store = new Map()
     }
@@ -62,8 +66,14 @@ export class FastifyContext<
     return this
   }
 
-  header(key: string, value: string): this {
-    this.#reply.header(key, value)
+  header(key: string, value: string): this
+  header(headers: Record<string, string>): this
+  header(keyOrHeaders: string | Record<string, string>, value?: string): this {
+    if (typeof keyOrHeaders === 'string') {
+      this.#reply.header(keyOrHeaders, value!)
+    } else {
+      this.#reply.headers(keyOrHeaders)
+    }
     return this
   }
 
@@ -105,7 +115,7 @@ export class FastifyContextRequest<SCHEMA extends FastifyRouteSchema = FastifyRo
     return this.request.raw
   }
 
-  get path(): string {
+  get url(): string {
     return this.request.url
   }
 

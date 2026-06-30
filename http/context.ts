@@ -1,12 +1,12 @@
 export interface Req<
-  RAW,
+  RAW = unknown,
   TParams = Record<string, string>,
   TQuery = Record<string, string>,
   THeaders = Record<string, string>,
   TAsync extends boolean = false,
 > {
   get raw(): RAW
-  get path(): string
+  get url(): string
   get method(): string
 
   query(): TQuery
@@ -32,9 +32,16 @@ export interface Req<
 export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = false> {
   get req(): Req<REQ, Record<string, string>, Record<string, string>, Record<string, string>, TAsync>
 
+  get statusCode(): number
+
+  get<T = unknown>(key: string): T | undefined
+
+  set<T = unknown>(key: string, value: T): this
+
   status(code: number): this
 
   header(key: string, value: string): this
+  header(headers: Record<string, string>): this
 
   cookie(name: string, value: string, opts?: CO): this
 
