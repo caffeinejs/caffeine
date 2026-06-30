@@ -1,5 +1,5 @@
 import { ErrInvalidDecorator } from '../errors.js'
-import { Ctor } from '../types.js'
+import { AbstractCtor, Ctor } from '../types.js'
 import { isNamedKey, Identifier, Key } from '../key.js'
 import { Injection } from '../injection.js'
 import { defineInjectable } from './registrar/index.js'
@@ -42,10 +42,13 @@ export function Injectable<T>(keyOrDependencies?: Key | Injection[], dependencie
   }
 
   return (target: Ctor, context: ClassDecoratorContext) => {
-    defineInjectable<T>(context.metadata, target, config =>
-      config
-        .type(target)
-        .dependencies(deps)
-        .names(key))
+    const parent = Object.getPrototypeOf(target) as Ctor | AbstractCtor
+    defineInjectable<T>(context.metadata, target, config => {
+      config.type(target).dependencies(deps)
+        .names(key)
+      if (parent !== Function.prototype) {
+        config.extend(parent)
+      }
+    })
   }
 }

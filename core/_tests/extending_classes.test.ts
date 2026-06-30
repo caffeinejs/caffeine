@@ -7,7 +7,7 @@ import { Primary } from '../decorators/primary.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { allOf } from '../injection.js'
 import { CaffeineIoC } from '../container.js'
-import { ErrInvalidBinding, ErrInvalidDecorator, ErrNoUniqueInjectionForKey } from '../errors.js'
+import { ErrInvalidBinding, ErrInvalidDecorator } from '../errors.js'
 import { Scopes } from '../scope.js'
 
 describe('Abstract Classes', function () {
@@ -498,54 +498,62 @@ describe('Abstract Classes', function () {
     })
   })
 
-  describe('when extending a class that extends another class', function () {
-    describe('and the other class is an injectable with its own dependencies', function () {
-      describe('and the extending class has the same dependencies as the extended class', function () {
-        @Injectable()
-        class Repo {
-          hi(): string {
-            return 'tchau'
-          }
-        }
+  describe('auto-extend via @Injectable', function () {
+    abstract class AutoExtendBase {
+      abstract greet(): string
+    }
 
-        @Injectable([Repo])
-        class Service {
-          constructor(readonly repo: Repo) {}
+    @Injectable()
+    class AutoExtendChild extends AutoExtendBase {
+      greet(): string { return 'child' }
+    }
 
-          hi(): string {
-            return 'service: ' + this.repo.hi()
-          }
-        }
+    it('registers the class under its abstract base key automatically', async function () {
+      const di = new CaffeineIoC()
+      await di.init()
 
-        @Injectable([Repo])
-        @Extends()
-        class OtherService extends Service {
-          constructor(readonly repo: Repo) {
-            super(repo)
-          }
+      expect(di.get(AutoExtendChild)).toBeInstanceOf(AutoExtendChild)
+      expect(di.get(AutoExtendBase)).toBeInstanceOf(AutoExtendChild)
+    })
 
-          hi(): string {
-            return 'other service: ' + this.repo.hi()
-          }
-        }
+    class ConcreteBase {
+      greet(): string { return 'base' }
+    }
 
-        it('should resolve the component extending the other injectable class', async function () {
-          const di = new CaffeineIoC()
-          await di.init()
+    @Injectable()
+    class ConcreteChild extends ConcreteBase {
+      greet(): string { return 'child' }
+    }
 
-          const otherService = di.get(OtherService)
-          expect(otherService.hi())
-            .toEqual('other service: tchau')
-        })
+    it('registers the class under a non-injectable concrete base key', async function () {
+      const di = new CaffeineIoC()
+      await di.init()
 
-        it('should fail to resolve the base injectable', async function () {
-          const di = new CaffeineIoC()
-          await di.init()
+      expect(di.get(ConcreteChild)).toBeInstanceOf(ConcreteChild)
+      expect(di.get(ConcreteBase)).toBeInstanceOf(ConcreteChild)
+    })
 
-          expect(() => di.get(Service))
-            .toThrow(ErrNoUniqueInjectionForKey)
-        })
-      })
+    abstract class MultiBase {
+      abstract id(): string
+    }
+
+    @Injectable()
+    class MultiA extends MultiBase {
+      id(): string { return 'A' }
+    }
+
+    @Primary()
+    @Injectable()
+    class MultiB extends MultiBase {
+      id(): string { return 'B' }
+    }
+
+    it('resolves the @Primary child when multiple children share the same abstract base', async function () {
+      const di = new CaffeineIoC()
+      await di.init()
+
+      expect(di.get(MultiBase).id()).toBe('B')
+      expect(di.getMany(MultiBase)).toHaveLength(2)
     })
   })
 })

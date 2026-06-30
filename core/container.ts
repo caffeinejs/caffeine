@@ -17,6 +17,7 @@ import {
   ErrOrphanedBindingConfig,
   ErrMultiplePrimary,
   ErrInvalidContainerState,
+  ErrInjectableBase,
 } from './errors.js'
 import { Injection, InjectionDescriptor } from './injection.js'
 import { InjectionResolver } from './injection_resolver.js'
@@ -1290,6 +1291,13 @@ export class CaffeineIoC implements Container {
     const base = binding.extend
     if (base === undefined) {
       return
+    }
+
+    const baseReg = this.registry.get(base)
+    if (baseReg !== undefined && baseReg.type === base) {
+      const childName = (binding.type as Ctor | undefined)?.name ?? String(binding.type)
+      const baseName = (base as Ctor).name ?? String(base)
+      throw new ErrInjectableBase(childName, baseName)
     }
 
     const list = this.bindings.get(base)

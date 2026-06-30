@@ -104,6 +104,23 @@ export class ErrInvalidDecorator extends CaffeineIoCError {
 }
 
 /**
+ * ErrInjectableBase is thrown when a class decorated with `@Injectable` is used as an extension base by another `@Injectable` class.
+ */
+export class ErrInjectableBase extends CaffeineIoCError {
+  static readonly code = 'ERR_INJECTABLE_BASE'
+  readonly code = ErrInjectableBase.code
+
+  constructor(child: string, base: string) {
+    super(
+      `Cannot register "${child}" extending "${base}": "${base}" is marked as @Injectable and cannot be used as an extension base. `
+      + `Remove @Injectable from "${base}" or make it abstract.`,
+      ErrInjectableBase.code,
+    )
+    this.name = 'ErrInjectableBase'
+  }
+}
+
+/**
  * ErrOrphanedBindingConfig is an error that is thrown when a binding configuration is found for a key that is not decorated with an {@link Injectable} decorator.
  */
 export class ErrOrphanedBindingConfig extends CaffeineIoCError {

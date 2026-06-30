@@ -51,7 +51,6 @@ describe('Real World', function () {
     abstract send(): void
   }
 
-  @Injectable()
   class KafkaEventSender extends EventSender {
     type = 'kafka'
 
@@ -60,7 +59,6 @@ describe('Real World', function () {
     }
   }
 
-  @Injectable()
   class RabbitMqEventSender extends EventSender {
     type = 'rabbitmq'
 
@@ -157,7 +155,6 @@ describe('Real World', function () {
     }
   }
 
-  @Injectable()
   class ViewEngine {
     render() {
       return 'rendered'
