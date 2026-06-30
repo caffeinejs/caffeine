@@ -2,7 +2,7 @@ import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 import { Injectable } from '@caffeinejs/core'
 import { Application, Controller, Get, Post, Params, body, newHTTP } from '@caffeinejs/http'
-import { fastifyAdapterFactory } from '@caffeinejs/http-fastify-adapter'
+import { fastifyAdapterFactory } from '@caffeinejs/http-fastify'
 import { ErrFetchFailed, typedClient } from './index.js'
 import type { Fetchable } from './index.js'
 

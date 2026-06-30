@@ -9,7 +9,7 @@
   "dependencies": {
     "@caffeinejs/core": "*",
     "@caffeinejs/http": "*",
-    "@caffeinejs/http-fastify-adapter": "*",
+    "@caffeinejs/http-fastify": "*",
     "fastify": "^5.8.5"
   },
   "devDependencies": {

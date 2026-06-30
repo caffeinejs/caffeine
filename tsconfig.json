@@ -39,7 +39,7 @@
       "path": "./http"
     },
     {
-      "path": "./http-fastify-adapter"
+      "path": "./http-fastify"
     },
     {
       "path": "./http-hono"

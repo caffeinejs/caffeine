@@ -9,7 +9,7 @@
     "@caffeinejs/core": "*",
     "@caffeinejs/devtools": "*",
     "@caffeinejs/http": "*",
-    "@caffeinejs/http-fastify-adapter": "*",
+    "@caffeinejs/http-fastify": "*",
     "fastify": "^5.0.0"
   }
 }

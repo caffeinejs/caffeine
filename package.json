@@ -9,7 +9,7 @@
   "workspaces": [
     "core",
     "http",
-    "http-fastify-adapter",
+    "http-fastify",
     "http-hono",
     "cli",
     "devtools",

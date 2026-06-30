@@ -13,7 +13,7 @@ export default defineConfig({
   ],
   oxc: false,
   test: {
-    name: 'http-fastify-adapter',
+    name: 'http-fastify',
     include: ['**/*.test.ts'],
     environment: 'node',
   },

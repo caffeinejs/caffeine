@@ -1,5 +1,5 @@
 import { body, context, Controller, Get, header, newHTTP, param, Params, Post, query, Schema } from '@caffeinejs/http'
-import { fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http-fastify-adapter'
+import { fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http-fastify'
 import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
