@@ -29,6 +29,7 @@ export class FastifyContext<
 > {
   #req: FastifyContextRequest<SCHEMA>
   #reply: REPLY
+  #signal: AbortSignal
   #store: Map<unknown, unknown> | undefined
 
   constructor(
@@ -37,6 +38,7 @@ export class FastifyContext<
   ) {
     this.#req = new FastifyContextRequest<SCHEMA>(request)
     this.#reply = reply
+    this.#signal = request.signal
   }
 
   get req(): FastifyContextRequest<SCHEMA> {
@@ -45,6 +47,10 @@ export class FastifyContext<
 
   get statusCode(): number {
     return this.#reply.statusCode
+  }
+
+  get signal(): AbortSignal {
+    return this.#signal
   }
 
   get<T>(key: unknown): T | undefined {
@@ -82,8 +88,23 @@ export class FastifyContext<
     return this
   }
 
-  notFound(): this {
-    this.#reply.code(404).send()
+  notFound(body?: unknown): this {
+    this.#reply.code(404).send(body)
+    return this
+  }
+
+  badRequest(body?: unknown): this {
+    this.#reply.code(400).send(body)
+    return this
+  }
+
+  unprocessableEntity(body?: unknown): this {
+    this.#reply.code(422).send(body)
+    return this
+  }
+
+  internalServerError(body: unknown): this {
+    this.#reply.code(500).send(body)
     return this
   }
 

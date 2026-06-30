@@ -44,6 +44,10 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
     return this.c.res.status
   }
 
+  get signal(): AbortSignal {
+    return this.c.req.raw.signal
+  }
+
   get<T = unknown>(key: string): T | undefined {
     return this.c.get(key)
   }
@@ -87,9 +91,32 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
     return this
   }
 
-  notFound(): this {
-    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = new Response(null, { status: 404 })
+  notFound(body?: unknown): this {
+    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(404 as StatusCode, body)
     return this
+  }
+
+  badRequest(body?: unknown): this {
+    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(400 as StatusCode, body)
+    return this
+  }
+
+  unprocessableEntity(body?: unknown): this {
+    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(422 as StatusCode, body)
+    return this
+  }
+
+  internalServerError(body: unknown): this {
+    ;(this.c as HonoCtxWithPending)[PENDING_RESPONSE] = this.#responseWithBody(500 as StatusCode, body)
+    return this
+  }
+
+  #responseWithBody(status: StatusCode, body?: unknown): Response {
+    if (body === undefined) {
+      return new Response(null, { status })
+    }
+    this.c.status(status)
+    return this.c.body(body as string | ArrayBuffer | ReadableStream | Uint8Array<ArrayBuffer>)
   }
 
   redirect(url: string, status?: number): this {

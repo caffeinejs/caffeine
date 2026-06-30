@@ -34,6 +34,8 @@ export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = f
 
   get statusCode(): number
 
+  get signal(): AbortSignal
+
   get<T = unknown>(key: string): T | undefined
 
   set<T = unknown>(key: string, value: T): this
@@ -49,7 +51,13 @@ export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = f
 
   body(body?: unknown): this
 
-  notFound(): this
+  notFound(body?: unknown): this
+
+  badRequest(body?: unknown): this
+
+  unprocessableEntity(body?: unknown): this
+
+  internalServerError(body: unknown): this
 
   redirect(url: string, status?: number): this
 }
