@@ -54,24 +54,6 @@ export class FastifyAdapter<
             })
           }
 
-          const respond = (result: unknown, res: RES): unknown => {
-            // Fetch API Response Support.
-            // The response is mapped using Fastify's reply object.
-            if (result instanceof Response) {
-              res.code(result.status)
-              for (const [key, value] of result.headers) {
-                res.header(key, value)
-              }
-
-              const stream = result.body
-              const body = stream ? Readable.fromWeb(stream as Parameters<typeof Readable.fromWeb>[0]) : null
-
-              return res.send(body)
-            }
-
-            return result
-          }
-
           // Config
           const config: Record<string | symbol, unknown> = {}
 
@@ -124,12 +106,7 @@ export class FastifyAdapter<
                   res.code(route.statusCode)
                 }
 
-                const result = dispatch(req as REQ, res as RES)
-                if (result instanceof Promise) {
-                  return result.then(r => respond(r, res as RES))
-                }
-
-                return respond(result, res as RES)
+                return dispatch(req as REQ, res as RES)
               },
             })
 
