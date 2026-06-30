@@ -24,7 +24,9 @@
   ],
   "scripts": {
     "build": "bun build --compile bin.ts --outfile dist/caffeine && tsc --build --force tsconfig.build.json",
-    "clean:dist": "rm -rf dist"
+    "clean:dist": "rm -rf dist",
+    "test": "bun test *.test.ts",
+    "test:typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14"

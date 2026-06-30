@@ -5,6 +5,7 @@ import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { loadConfig } from './config.js'
 import { generate } from './generator.js'
+import { generateModules } from './modules_generator.js'
 import { scan } from './scanner.js'
 
 const { values, positionals } = parseArgs({
@@ -28,16 +29,36 @@ const cwd = values.cwd ? resolve(values.cwd) : process.cwd()
 
 async function run(): Promise<void> {
   const config = await loadConfig(cwd, values.config)
-  const { include, exclude = [], output, importExtension = '.js' } = config.generate
 
-  const outputPath = resolve(cwd, output)
-  const files = await scan({ root: cwd, include, exclude: [...exclude, output] })
-  const changed = await generate({ files, output: outputPath, importExtension })
+  if (!config.generate && !config.modules) {
+    console.error('[caffeine] config must define at least one of: generate, modules')
+    process.exit(1)
+  }
 
-  if (changed) {
-    console.log('[caffeine] generated', output, `(${files.length} files)`)
-  } else {
-    console.log('[caffeine] up to date', output)
+  if (config.generate) {
+    const { include, exclude = [], output, importExtension = '.js' } = config.generate
+    const outputPath = resolve(cwd, output)
+    const files = await scan({ root: cwd, include, exclude: [...exclude, output] })
+    const changed = await generate({ files, output: outputPath, importExtension })
+
+    if (changed) {
+      console.log('[caffeine] generated', output, `(${files.length} files)`)
+    } else {
+      console.log('[caffeine] up to date', output)
+    }
+  }
+
+  if (config.modules) {
+    const { include, exclude = [], output = 'app.mod.ts', importExtension = '.js' } = config.modules
+    const outputPath = resolve(cwd, output)
+    const files = await scan({ root: cwd, include, exclude: [...exclude, output] })
+    const changed = await generateModules({ files, output: outputPath, importExtension })
+
+    if (changed) {
+      console.log('[caffeine] generated modules', output, `(${files.length} files)`)
+    } else {
+      console.log('[caffeine] up to date modules', output)
+    }
   }
 }
 

@@ -30,7 +30,7 @@ export {
 } from './injection_resolver.js'
 export type { Identifier, Key } from './key.js'
 export type { MetadataReader } from './metadata_reader.js'
-export { mod, type Module } from './module.js'
+export { kModule, mod, type Module } from './module.js'
 export type { PostProcessor } from './post_processor.js'
 export type { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 export type { Provider } from './provider.js'

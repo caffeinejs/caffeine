@@ -1,6 +1,7 @@
 import { Container, ContainerBindingOps } from './container_interface.js'
 
 const kName = Symbol('@caffeinejs/core:module.name')
+export const kModule = Symbol('@caffeinejs/core:module')
 
 /**
  * Module can be used to register bindings within a {@link Container} instance in a modular way.
@@ -48,6 +49,7 @@ export type Module
  */
 export function mod(name: string, fn: Module): Module {
   ; (fn as any)[kName] = name
+  ; (fn as any)[kModule] = true
   return fn
 }
 

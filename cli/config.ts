@@ -7,8 +7,16 @@ export interface GenerateConfig {
   importExtension?: '.js' | '.ts' | ''
 }
 
+export interface ModulesConfig {
+  include: string[]
+  exclude?: string[]
+  output?: string
+  importExtension?: '.js' | '.ts' | ''
+}
+
 export interface CaffeineConfig {
-  generate: GenerateConfig
+  generate?: GenerateConfig
+  modules?: ModulesConfig
 }
 
 export function defineConfig(config: CaffeineConfig): CaffeineConfig {
