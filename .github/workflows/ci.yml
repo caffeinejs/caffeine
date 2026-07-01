@@ -67,7 +67,7 @@ jobs:
           path: |
             core/dist/
             http/dist/
-            http-fastify-adapter/dist/
+            http-fastify/dist/
             http-hono/dist/
           retention-days: 1
 

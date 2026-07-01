@@ -1,0 +1,19 @@
+{
+  "name": "my-app",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "@caffeinejs/core": "0.0.0",
+    "@caffeinejs/http": "0.0.0",
+    "@caffeinejs/http-fastify": "0.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/bun": "latest"
+  }
+}

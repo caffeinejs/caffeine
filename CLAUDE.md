@@ -74,6 +74,14 @@ import { CaffeineIoC } from '@caffeinejs/core'
 import { CaffeineIoC } from '../core/container.js'
 ```
 
+## Decorators
+
+This project uses **TC39 ECMAScript decorators** (Stage 3 spec) only. Do not use TypeScript's legacy experimental decorators.
+
+- Root `tsconfig.json` sets `"lib": ["Decorators", "esnext.decorators"]` — no `experimentalDecorators`, no `emitDecoratorMetadata`, no `reflect-metadata`
+- Never add `experimentalDecorators: true` or `emitDecoratorMetadata: true` to any `tsconfig.json` in the main packages
+- `tsconfig.legacy.json` and the NestJS benchmark configs intentionally use the legacy flags for third-party comparison only — do not copy those settings
+
 ## Git discipline
 
 Never use `git stash` under any circumstances. Not to save work, not to switch context, not to resolve conflicts. No exceptions. If uncommitted changes exist and you need to switch state, stop and ask for guidance.

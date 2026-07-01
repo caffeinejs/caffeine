@@ -4,11 +4,21 @@ import { watch } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { run as generate } from './command/generate/index.js'
+import { run as scaffold } from './command/scaffold/index.js'
 
-type CommandRunner = (opts: { cwd: string, config?: string }) => Promise<void>
+interface CommandOpts {
+  cwd: string
+  config?: string
+  flavor?: string
+  arch?: string
+  name?: string
+}
+
+type CommandRunner = (opts: CommandOpts) => Promise<void>
 
 const commands: Record<string, CommandRunner> = {
   generate,
+  scaffold,
 }
 
 const { values, positionals } = parseArgs({
@@ -17,6 +27,8 @@ const { values, positionals } = parseArgs({
     config: { type: 'string', short: 'c' },
     cwd: { type: 'string' },
     watch: { type: 'boolean', short: 'w', default: false },
+    flavor: { type: 'string', short: 'f' },
+    arch: { type: 'string', short: 'a' },
   },
   allowPositionals: true,
 })
@@ -31,7 +43,13 @@ if (!command) {
 }
 
 const cwd = values.cwd ? resolve(values.cwd) : process.cwd()
-const opts = { cwd, config: values.config }
+const opts: CommandOpts = {
+  cwd,
+  config: values.config,
+  flavor: values.flavor,
+  arch: values.arch,
+  name: positionals[1],
+}
 
 if (values.watch) {
   await command(opts)
