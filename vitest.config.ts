@@ -5,6 +5,7 @@ export default defineConfig({
     projects: [
       './core/vitest.config.ts',
       './core/vitest.leak.config.ts',
+      './crema/vitest.config.ts',
       './http/vitest.config.ts',
       './http-fastify/vitest.config.ts',
       './http-hono/vitest.config.ts',
