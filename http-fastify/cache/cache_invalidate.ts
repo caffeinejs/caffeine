@@ -4,10 +4,14 @@ import { CacheInvalidateOptions, CacheStore } from './types.js'
 
 export function cacheInvalidateConfigurer(store: CacheStore): RouteConfigurer {
   return input => {
-    const invalidateHandler = async (
+    if (input.routeDef.config?.cacheInvalidate === undefined || input.routeDef.config?.cacheInvalidate === false) {
+      return
+    }
+
+    async function invalidateHandler(
       request: FastifyRequest,
       reply: FastifyReply,
-    ): Promise<unknown> => {
+    ): Promise<unknown> {
       const config = request.routeOptions.config as unknown as Record<string, unknown> | undefined
       const opts = config?.cacheInvalidate as CacheInvalidateOptions | undefined
       if (!opts || reply.statusCode < 200 || reply.statusCode >= 300) {

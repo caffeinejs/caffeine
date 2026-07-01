@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
 import { Adapter, AdapterIn, Router } from '@caffeinejs/http'
-import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RouteOptions, type FastifyError } from 'fastify'
+import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions, type FastifyError } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { FastifyContext } from './context.js'
@@ -122,7 +122,13 @@ export class FastifyAdapter<
             }
           }
 
-          const routeDef: RouteOptions = {
+          const routeDef: RouteOptions<
+            RawServerBase,
+            RawRequestDefaultExpression<RawServerBase>,
+            RawReplyDefaultExpression<RawServerBase>,
+            RouteGenericInterface,
+            any
+          > = {
             method: [...new Set(route.method.map(m => m.toUpperCase()))],
             url: joinPaths(basePath, route.path),
             schema: route.schema as FastifySchema,

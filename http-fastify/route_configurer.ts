@@ -1,11 +1,17 @@
 import { Route, Router } from '@caffeinejs/http'
-import { FastifyInstance, FastifyRequest, RouteOptions } from 'fastify'
+import { FastifyInstance, FastifyRequest, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
 
 export interface RouteConfigurerIn<REQ extends FastifyRequest = FastifyRequest> {
   server: FastifyInstance
   router: Router<REQ>
   route: Route<REQ>
-  routeDef: RouteOptions
+  routeDef: RouteOptions<
+    RawServerBase,
+    RawRequestDefaultExpression<RawServerBase>,
+    RawReplyDefaultExpression<RawServerBase>,
+    RouteGenericInterface,
+    any
+  >
 }
 
 export type RouteConfigurer

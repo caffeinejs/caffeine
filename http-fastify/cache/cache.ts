@@ -92,7 +92,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
     // Before sending the response,
     // we need to build the cache control headers and store the response in the cache
     async function onSend(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
-      if (!request.caffeineContext || request.caffeineContext.get(kServedFromCache)) {
+      if (request.caffeineContext && request.caffeineContext.get(kServedFromCache)) {
         return payload
       }
 
@@ -191,8 +191,16 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
       return payload
     }
 
-    ;(input.routeDef.onRequest as Array<RouteOptions['onRequest']>).push(onRequest)
-    ;(input.routeDef.onSend as Array<RouteOptions['onSend']>).push(onSend)
+    // If @Cache is not configured or is disabled with @Cache(false),
+    // we don't need to add the onRequest hook
+    if (input.routeDef.config?.cache) {
+      ;(input.routeDef.onRequest as Array<RouteOptions['onRequest']>).push(onRequest)
+    }
+
+    // A disabled @Cache(false) route still needs to set the no-cache headers in onSend
+    if (input.routeDef.config?.cache !== undefined) {
+      ;(input.routeDef.onSend as Array<RouteOptions['onSend']>).push(onSend)
+    }
   }
 }
 
