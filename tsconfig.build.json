@@ -30,6 +30,9 @@
     },
     {
       "path": "./plugins/vite/tsconfig.build.json"
+    },
+    {
+      "path": "./plugins/eslint/tsconfig.build.json"
     }
   ]
 }

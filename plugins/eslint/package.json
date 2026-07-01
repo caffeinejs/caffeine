@@ -1,0 +1,26 @@
+{
+  "name": "@caffeinejs/eslint-plugin",
+  "version": "0.0.0",
+  "description": "CaffeineJS ESLint plugin",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "eslint": ">=9"
+  }
+}
