@@ -3,10 +3,13 @@
 import { watch } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { loadConfig } from './config.js'
-import { generate } from './generator.js'
-import { generateModules } from './modules_generator.js'
-import { scan } from './scanner.js'
+import { run as generate } from './command/generate/index.js'
+
+type CommandRunner = (opts: { cwd: string, config?: string }) => Promise<void>
+
+const commands: Record<string, CommandRunner> = {
+  generate,
+}
 
 const { values, positionals } = parseArgs({
   args: process.argv.slice(2),
@@ -18,57 +21,20 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
 })
 
-const command = positionals[0]
+const commandName = positionals[0] ?? ''
+const command = commands[commandName]
 
-if (command !== 'generate') {
-  console.error('Usage: caffeine generate [--config <path>] [--cwd <dir>] [--watch]')
+if (!command) {
+  console.error('Usage: caffeine <command> [options]')
+  console.error(`Commands: ${Object.keys(commands).join(', ')}`)
   process.exit(1)
 }
 
 const cwd = values.cwd ? resolve(values.cwd) : process.cwd()
-
-async function run(): Promise<void> {
-  const config = await loadConfig(cwd, values.config)
-
-  if (!config.generate && !config.modules) {
-    console.error('[caffeine] config must define at least one of: generate, modules')
-    process.exit(1)
-  }
-
-  const allOutputs = [
-    config.generate?.output,
-    config.modules?.output ?? 'app.mod.ts',
-  ].filter((o): o is string => o !== undefined)
-
-  if (config.generate) {
-    const { include, exclude = [], output, importExtension = '.js' } = config.generate
-    const outputPath = resolve(cwd, output)
-    const files = await scan({ root: cwd, include, exclude: [...exclude, ...allOutputs] })
-    const changed = await generate({ files, output: outputPath, importExtension })
-
-    if (changed) {
-      console.log('[caffeine] generated', output, `(${files.length} files)`)
-    } else {
-      console.log('[caffeine] up to date', output)
-    }
-  }
-
-  if (config.modules) {
-    const { include, exclude = [], output = 'app.mod.ts', importExtension = '.js' } = config.modules
-    const outputPath = resolve(cwd, output)
-    const files = await scan({ root: cwd, include, exclude: [...exclude, ...allOutputs] })
-    const changed = await generateModules({ files, output: outputPath, importExtension })
-
-    if (changed) {
-      console.log('[caffeine] generated modules', output, `(${files.length} files)`)
-    } else {
-      console.log('[caffeine] up to date modules', output)
-    }
-  }
-}
+const opts = { cwd, config: values.config }
 
 if (values.watch) {
-  await run()
+  await command(opts)
 
   let debounce: ReturnType<typeof setTimeout> | undefined
   watch(cwd, { recursive: true }, (event, filename) => {
@@ -77,11 +43,11 @@ if (values.watch) {
     }
     clearTimeout(debounce)
     debounce = setTimeout(() => {
-      void run()
+      void command(opts)
     }, 50)
   })
 
   console.log('[caffeine] watching for file changes...')
 } else {
-  await run()
+  await command(opts)
 }
