@@ -163,9 +163,9 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
     pipelining: 10,
   }
 
-  await autocannon({ ...cannonOpts, duration: 10 })
+  await autocannon({ ...cannonOpts, duration: 5 })
 
-  const result = await autocannon({ ...cannonOpts, duration: 40 })
+  const result = await autocannon({ ...cannonOpts, duration: 10 })
 
   activeChild = null
   await killProcess(child)

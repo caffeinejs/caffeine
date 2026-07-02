@@ -40,48 +40,31 @@ app.post<{
     params: schema,
     querystring: schema,
     body: schema,
-    // response: {
-    //   200: {
-    //     type: 'object',
-    //     properties: {
-    //       params: schema,
-    //       query: schema,
-    //       body: schema,
-    //       header: schema,
-    //       big: {
-    //         type: 'array',
-    //         items: {
-    //           type: 'object',
-    //           properties: {
-    //             id: { type: 'number' },
-    //             message: { type: 'string' },
-    //             active: { type: 'boolean' },
-    //             cities: { type: 'array', items: { type: 'string' } },
-    //           },
-    //         },
-    //       },
-    //     },
-    //   },
-    // },
+    response: {
+      200: {
+        type: 'object',
+        properties: {
+          params: schema,
+          query: schema,
+          body: schema,
+        },
+      },
+    },
   },
 }, (req, reply) => {
   const p = req.params
   const q = req.query
+  const h = req.headers
   const b = req.body
 
-  reply.header('text', req.headers['text'])
-  reply.header('num', req.headers['num'])
-  reply.header('bool', req.headers['bool'])
+  reply.header('text', h.text)
+  reply.header('num', h.num)
+  reply.header('bool', h.bool)
 
   reply.send({
     params: { text: p.text, num: p.num, bool: p.bool },
     query: { text: q.text, num: q.num, bool: q.bool },
     body: { text: b.text, num: b.num, bool: b.bool },
-    header: {
-      text: req.headers['text'] as string,
-      num: parseInt(req.headers['num'] as string, 10),
-      bool: req.headers['bool'] === 'true',
-    },
   })
 })
 

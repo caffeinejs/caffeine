@@ -159,9 +159,9 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
 
   await waitForReady(serverUrl)
 
-  await autocannon({ url: serverUrl, connections: 100, duration: 10, pipelining: 10 })
+  await autocannon({ url: serverUrl, connections: 100, duration: 5, pipelining: 10 })
 
-  const result = await autocannon({ url: serverUrl, connections: 100, duration: 40, pipelining: 10 })
+  const result = await autocannon({ url: serverUrl, connections: 100, duration: 15, pipelining: 10 })
 
   activeChild = null
   await killProcess(child)

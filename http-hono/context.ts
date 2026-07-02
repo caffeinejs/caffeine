@@ -64,15 +64,14 @@ export class HonoContext<SCHEMA extends HonoRouteSchema = HonoRouteSchema> imple
     return this
   }
 
-  header(key: string, value: string): this
-  header(headers: Record<string, string>): this
-  header(keyOrHeaders: string | Record<string, string>, value?: string): this {
-    if (typeof keyOrHeaders === 'string') {
-      this.c.header(keyOrHeaders, value!)
-    } else {
-      for (const [k, v] of Object.entries(keyOrHeaders)) {
-        this.c.header(k, v)
-      }
+  header(key: string, value: string): this {
+    this.c.header(key, value)
+    return this
+  }
+
+  headers(headers: Record<string, string>): this {
+    for (const [k, v] of Object.entries(headers)) {
+      this.c.header(k, v)
     }
     return this
   }

@@ -1,6 +1,42 @@
-import { zValidator } from '@hono/zod-validator'
+import Ajv from 'ajv'
+import fastJsonStringify from 'fast-json-stringify'
 import { Hono } from 'hono'
-import { z } from 'zod'
+import { validator } from 'hono/validator'
+
+const fieldJsonSchema = {
+  type: 'object',
+  required: ['text', 'num', 'bool'],
+  properties: {
+    text: { type: 'string' },
+    num: { type: 'number' },
+    bool: { type: 'boolean' },
+  },
+}
+
+const ajv = new Ajv({ coerceTypes: true })
+const validateParams = ajv.compile(fieldJsonSchema)
+const validateQuery = ajv.compile(fieldJsonSchema)
+const validateBody = ajv.compile(fieldJsonSchema)
+
+const fieldShape = {
+  type: 'object' as const,
+  properties: {
+    text: { type: 'string' as const },
+    num: { type: 'number' as const },
+    bool: { type: 'boolean' as const },
+  },
+  required: ['text', 'num', 'bool'] as string[],
+}
+
+const stringify = fastJsonStringify({
+  type: 'object',
+  properties: {
+    params: fieldShape,
+    query: fieldShape,
+    body: fieldShape,
+  },
+  required: ['params', 'query', 'body'],
+})
 
 export const app = new Hono()
 
@@ -19,51 +55,44 @@ app.use('/api/*', async (c, next) => {
 
 app.get('/health', c => c.json({ ok: true }))
 
-const schema = z.object({
-  text: z.string(),
-  num: z.union([z.number(), z.string().transform(v => parseInt(v, 10))]),
-  bool: z.union([z.boolean(), z.string().transform(v => v === 'true')]),
-})
-
 app.post(
   '/api/test/:text/:num/:bool',
-  zValidator('param', schema),
-  zValidator('query', schema),
-  zValidator('json', schema),
+  validator('param', (value, c) => {
+    if (!validateParams(value)) {
+      return c.json({ error: 'Bad Request' }, 400)
+    }
+    return value
+  }),
+  validator('query', (value, c) => {
+    if (!validateQuery(value)) {
+      return c.json({ error: 'Bad Request' }, 400)
+    }
+    return value
+  }),
+  validator('json', (value, c) => {
+    if (!validateBody(value)) {
+      return c.json({ error: 'Bad Request' }, 400)
+    }
+    return value
+  }),
   c => {
     const params = c.req.valid('param')
     const query = c.req.valid('query')
     const body = c.req.valid('json')
+    const header = c.req.header()
 
-    const hText = c.req.header('text') ?? ''
-    const hNum = c.req.header('num') ?? ''
-    const hBool = c.req.header('bool') ?? ''
+    c.header('text', header.text)
+    c.header('num', header.num)
+    c.header('bool', header.bool)
 
-    c.header('text', hText)
-    c.header('num', hNum)
-    c.header('bool', hBool)
-
-    return c.json({
-      params: {
-        text: params.text,
-        num: params.num,
-        bool: params.bool,
-      },
-      query: {
-        text: query.text,
-        num: query.num,
-        bool: query.bool,
-      },
-      body: {
-        text: body.text,
-        num: body.num,
-        bool: body.bool,
-      },
-      header: {
-        text: hText,
-        num: parseInt(hNum, 10),
-        bool: hBool === 'true',
-      },
-    })
+    return c.newResponse(
+      stringify({
+        params,
+        query,
+        body,
+      }),
+      200,
+      { 'content-type': 'application/json' },
+    )
   },
 )

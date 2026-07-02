@@ -36,14 +36,10 @@ export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = f
 
   get signal(): AbortSignal
 
-  get<T = unknown>(key: string): T | undefined
-
-  set<T = unknown>(key: string, value: T): this
-
   status(code: number): this
 
   header(key: string, value: string): this
-  header(headers: Record<string, string>): this
+  headers(headers: Record<string, string>): this
 
   cookie(name: string, value: string, opts?: CO): this
 

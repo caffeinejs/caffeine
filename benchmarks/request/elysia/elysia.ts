@@ -24,7 +24,6 @@ new Elysia({ adapter: node() })
         params: { text: params.text, num: params.num, bool: params.bool },
         query: { text: query.text, num: query.num, bool: query.bool },
         body: { text: body.text, num: body.num, bool: body.bool },
-        header: { text: hText, num: parseInt(hNum, 10), bool: hBool === 'true' },
       }
     },
     {

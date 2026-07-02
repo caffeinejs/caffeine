@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { parseDuration } from '@caffeinejs/http'
+import { FastifyContextRequest } from '../context.js'
 import { RouteConfigurer } from '../route_configurer.js'
 import { CacheOptions, CacheStore, ETagGenerator } from './types.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
@@ -7,17 +8,15 @@ import { buildCacheControl, generateETag, matchesETag } from './_util.js'
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
 
-const kServedFromCache = Symbol('caffeine.http.cache.served_from_cache')
-
 export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator): RouteConfigurer {
   return input => {
     // OnRequest phase: check if the request is cacheable and return the cached response if it is
     async function onRequest(request: FastifyRequest, reply: FastifyReply) {
-      const config = request.routeOptions.config as unknown as Record<string, unknown> | undefined
-      const opts = config?.cache as CacheOptions | false | undefined
+      const config = request.routeOptions.config as unknown as Record<string, unknown>
+      const opts = config.cache as CacheOptions | false
 
       // No @Cache decorator, or @Cache(false) — nothing to serve from cache
-      if (opts === undefined || opts === false) {
+      if (opts === false) {
         return
       }
 
@@ -47,7 +46,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
 
       // Vary-aware cache key — must match key used in onSend
       const key = opts.key
-        ? opts.key(request.caffeineContext.req)
+        ? opts.key(new FastifyContextRequest(request))
         : defaultCacheKey(request, opts.vary)
       const segment = opts.segment ?? ''
       const cached = await store.get(key, segment)
@@ -62,7 +61,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
       const ifNoneMatch = request.headers['if-none-match']
       if (ifNoneMatch) {
         if (cached.etag && matchesETag(ifNoneMatch, cached.etag)) {
-          request.caffeineContext.set(kServedFromCache, true)
+          request.caffeineResponseCached = true
           return reply.code(304)
             .headers(cached.headers)
             .send()
@@ -71,7 +70,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
         const ifModifiedSince = request.headers['if-modified-since']
         if (ifModifiedSince && cached.lastModified) {
           if (Date.parse(cached.lastModified) <= Date.parse(ifModifiedSince)) {
-            request.caffeineContext.set(kServedFromCache, true)
+            request.caffeineResponseCached = true
             return reply.code(304)
               .headers(cached.headers)
               .send()
@@ -80,7 +79,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
       }
 
       // RFC 7230 §3.3 — HEAD responses must not include a body
-      request.caffeineContext.set(kServedFromCache, true)
+      request.caffeineResponseCached = true
       reply.status(200).headers(cached.headers)
       if (request.method === 'HEAD') {
         return reply.send()
@@ -92,12 +91,12 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
     // Before sending the response,
     // we need to build the cache control headers and store the response in the cache
     async function onSend(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
-      if (request.caffeineContext && request.caffeineContext.get(kServedFromCache)) {
+      if (request.caffeineResponseCached) {
         return payload
       }
 
-      const config = request.routeOptions.config as unknown as Record<string, unknown> | undefined
-      const opts = config?.cache as CacheOptions | false | undefined
+      const config = request.routeOptions.config as unknown as Record<string, unknown>
+      const opts = config.cache as CacheOptions | false
 
       // @Cache(false): actively disable caching with the full set of no-cache headers
       if (opts === false) {
@@ -105,10 +104,6 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
         reply.header('Expires', '0')
         reply.header('Pragma', 'no-cache')
         reply.header('Surrogate-Control', 'no-store')
-        return payload
-      }
-
-      if (!opts) {
         return payload
       }
 
@@ -175,7 +170,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
 
         // Vary-aware cache key — must match key used in onRequest
         const key = opts.key
-          ? opts.key(request.caffeineContext.req)
+          ? opts.key(new FastifyContextRequest(request))
           : defaultCacheKey(request, opts.vary)
 
         const segment = opts.segment ?? ''

@@ -62,20 +62,17 @@ class TestController {
     @Param() params: Schema,
     @Query() query: Schema,
     @Body() body: Schema,
-    @Headers('text') hText: string,
-    @Headers('num') hNum: string,
-    @Headers('bool') hBool: string,
+    @Headers() headers: Record<string, string>,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
-    res.header('text', hText)
-    res.header('num', hNum)
-    res.header('bool', hBool)
+    res.header('text', headers.text)
+    res.header('num', headers.num)
+    res.header('bool', headers.bool)
 
     return {
       params: { text: params.text, num: params.num, bool: params.bool },
       query: { text: query.text, num: query.num, bool: query.bool },
       body: { text: body.text, num: body.num, bool: body.bool },
-      header: { text: hText, num: parseInt(hNum, 10), bool: hBool === 'true' },
     }
   }
 }

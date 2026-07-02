@@ -27,22 +27,20 @@ export class FastifyContext<
   RawRequestDefaultExpression<RawServerDefault>,
   CookieSerializeOptions
 > {
-  #req: FastifyContextRequest<SCHEMA>
+  #req!: FastifyContextRequest<SCHEMA>
+  #fastifyRequest: FastifyRequest
   #reply: REPLY
-  #signal: AbortSignal
-  #store: Map<unknown, unknown> | undefined
 
   constructor(
     request: FastifyRequest,
     reply: REPLY,
   ) {
-    this.#req = new FastifyContextRequest<SCHEMA>(request)
     this.#reply = reply
-    this.#signal = request.signal
+    this.#fastifyRequest = request
   }
 
   get req(): FastifyContextRequest<SCHEMA> {
-    return this.#req
+    return this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest)
   }
 
   get statusCode(): number {
@@ -50,21 +48,7 @@ export class FastifyContext<
   }
 
   get signal(): AbortSignal {
-    return this.#signal
-  }
-
-  get<T>(key: unknown): T | undefined {
-    return this.#store?.get(key) as T | undefined
-  }
-
-  set(key: unknown, value: unknown): this {
-    if (!this.#store) {
-      this.#store = new Map()
-    }
-
-    this.#store.set(key, value)
-
-    return this
+    return this.#fastifyRequest.signal
   }
 
   status(code: number): this {
@@ -72,14 +56,13 @@ export class FastifyContext<
     return this
   }
 
-  header(key: string, value: string): this
-  header(headers: Record<string, string>): this
-  header(keyOrHeaders: string | Record<string, string>, value?: string): this {
-    if (typeof keyOrHeaders === 'string') {
-      this.#reply.header(keyOrHeaders, value!)
-    } else {
-      this.#reply.headers(keyOrHeaders)
-    }
+  header(key: string, value: string): this {
+    this.#reply.header(key, value)
+    return this
+  }
+
+  headers(headers: Record<string, string>): this {
+    this.#reply.headers(headers)
     return this
   }
 

@@ -11,6 +11,13 @@ import { cacheConfigurer } from './cache/cache.js'
 import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { MemoryCacheStore } from './cache/index.js'
 
+declare module 'fastify' {
+  interface FastifyRequest {
+    caffeineResponseCached: boolean
+    caffeineContext: FastifyContext
+  }
+}
+
 export interface FastifyAdapterOptions {
   cache?: {
     store?: CacheStore
@@ -42,13 +49,6 @@ export class FastifyAdapter<
     configurers.push(cacheConfigurer(store, this.#options?.cache?.etagGenerator))
     configurers.push(cacheInvalidateConfigurer(store))
 
-    // Decorating the Fastify request with the Caffeine context
-    this.#fastify.decorateRequest('caffeineContext', null as unknown as FastifyContext)
-    this.#fastify.addHook('onRequest', (req, reply, done) => {
-      req.caffeineContext = new FastifyContext(req, reply)
-      done()
-    })
-
     this.#fastify.setErrorHandler((error, request, reply) => {
       const err = error as FastifyError
       request.log.error({ err }, err.message)
@@ -76,6 +76,18 @@ export class FastifyAdapter<
       this.#fastify.register(async server => {
         const controller = router.controller
         const isSingleton = router.binding.scopeId === Scopes.SINGLETON
+        const isContextNeeded = router.routes.some(route => route.parameters.some(p => p.type === 'context'))
+
+        server.decorateRequest('caffeineResponseCached', false)
+        // If a route requires the 'context' parameter,
+        // we need to decorate the request with the Caffeine context
+        if (isContextNeeded) {
+          server.decorateRequest('caffeineContext', null as unknown as FastifyContext)
+          server.addHook('onRequest', (req, reply, done) => {
+            req.caffeineContext = new FastifyContext(req, reply)
+            done()
+          })
+        }
 
         for (const route of routes) {
           let dispatch: (req: REQ, res: RES) => unknown
@@ -122,6 +134,34 @@ export class FastifyAdapter<
             }
           }
 
+          // Compiling the route response details that we know beforehand.
+          // This will be consolidated into a single object within the reserved 'caffeine' key.
+          const status = route.statusCode!
+          const hasStatus = typeof status === 'number' && status > 0
+          const contentType = route.contentType ?? router.contentType
+          const hasContentType = typeof contentType === 'string' && contentType.length > 0
+          const header = [] as Array<[string, string | string[]]>
+          if (router.header) {
+            for (const [k, v] of router.header) {
+              header.push([k, v])
+            }
+          }
+          if (route.header) {
+            for (const [k, v] of route.header) {
+              header.push([k, v])
+            }
+          }
+          const hasHeader = header.length > 0
+
+          config.caffeine = {
+            hasStatus,
+            status,
+            hasContentType,
+            contentType,
+            hasHeader,
+            header,
+          }
+
           const routeDef: RouteOptions<
             RawServerBase,
             RawRequestDefaultExpression<RawServerBase>,
@@ -137,24 +177,21 @@ export class FastifyAdapter<
             config,
             ...options,
             handler: function (req, res) {
-              if (router.header) {
-                for (const [k, v] of router.header) {
-                  res.header(k, v)
+              const config = req.routeOptions.config.caffeine
+
+              if (config.hasHeader) {
+                for (let i = 0; i < config.header.length; i++) {
+                  const item = config.header[i]
+                  res.header(item[0], item[1])
                 }
               }
 
-              if (route.header) {
-                for (const [k, v] of route.header) {
-                  res.header(k, v)
-                }
+              if (config.hasContentType) {
+                res.type(config.contentType)
               }
 
-              if (route.contentType) {
-                res.type(route.contentType)
-              }
-
-              if (route.statusCode !== undefined) {
-                res.code(route.statusCode)
+              if (config.hasStatus) {
+                res.code(config.status)
               }
 
               return dispatch(req as REQ, res as RES)
@@ -163,7 +200,8 @@ export class FastifyAdapter<
 
           normalizeRouteDef(routeDef)
 
-          const routeFn = (s: typeof server, def: RouteOptions) => s.route(def)
+          const routeFn = (s: typeof server, def: RouteOptions) =>
+            s.route(tidy(def))
 
           for (const configurer of configurers) {
             configurer({ server, router, route, routeDef })
@@ -303,4 +341,27 @@ function normalizeRouteDef(routeDef: RouteOptions) {
     const hook = routeDef[key]
     routeDef[key] = (hook ? (Array.isArray(hook) ? hook : [hook]) : []) as any
   }
+}
+
+function tidy(routeDef: RouteOptions): RouteOptions {
+  for (const key of ROUTE_HOOK_KEYS) {
+    const hook = routeDef[key]
+    if (hook === undefined) {
+      continue
+    }
+
+    if (Array.isArray(hook)) {
+      if (hook.length === 0) {
+        routeDef[key] = undefined
+        continue
+      }
+
+      if (hook.length === 1) {
+        routeDef[key] = hook[0] as any
+        continue
+      }
+    }
+  }
+
+  return routeDef
 }

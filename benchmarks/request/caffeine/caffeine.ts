@@ -27,8 +27,6 @@ const responseSchema = {
       params: schema,
       query: schema,
       body: schema,
-      header: schema,
-
     },
   },
 }
@@ -41,30 +39,23 @@ class AppController {
   }
 
   @Post('/api/test/:text/:num/:bool')
-  @Params([
-    param(),
-    query(),
-    body(),
-    header(),
-    context(),
-  ])
+  @Params([context(), param(), query(), body(), header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
   helloWorld(
+    ctx: FastifyContext,
     params: DataSchema,
     query: DataSchema,
     body: DataSchema,
-    header: DataSchema,
-    ctx: FastifyContext,
+    header: Record<string, string>,
   ) {
     ctx.header('text', header.text)
-    ctx.header('num', header.num.toString())
-    ctx.header('bool', header.bool.toString())
+    ctx.header('num', header.num)
+    ctx.header('bool', header.bool)
 
     return {
       params: { text: params.text, num: params.num, bool: params.bool },
       query: { text: query.text, num: query.num, bool: query.bool },
       body: { text: body.text, num: body.num, bool: body.bool },
-      header: { text: header.text, num: header.num, bool: header.bool },
     }
   }
 }

@@ -137,7 +137,10 @@ function buildPicker<
     case 'url':
       return req => req.url
     case 'path':
-      return req => req.url.split('?')[0]
+      return req => {
+        const i = req.url.indexOf('?')
+        return i === -1 ? req.url : req.url.slice(0, i)
+      }
     case 'signal':
       return req => req.signal
     case 'port':
