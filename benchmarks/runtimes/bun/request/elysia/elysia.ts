@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 
 const PORT = parseInt(process.env.PORT ?? '3024', 10)
 
-new Elysia()
+new Elysia({ aot: true })
   .onRequest(({ set }) => {
     set.headers['x-request-id'] = Math.random().toString(36)
       .slice(2)

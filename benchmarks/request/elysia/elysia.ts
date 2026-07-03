@@ -3,12 +3,12 @@ import { Elysia, t } from 'elysia'
 
 const PORT = parseInt(process.env.PORT ?? '3024', 10)
 
-new Elysia({ adapter: node() })
+new Elysia({ adapter: node(), aot: true })
+  .get('/health', () => ({ ok: true }))
   .onRequest(({ set }) => {
     set.headers['x-request-id'] = Math.random().toString(36)
       .slice(2)
   })
-  .get('/health', () => ({ ok: true }))
   .post(
     '/api/test/:text/:num/:bool',
     ({ params, query, body, request, set }) => {

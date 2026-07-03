@@ -70,7 +70,7 @@ const REQUEST_HEADERS = {
   bool: 'true',
 }
 
-const READY_TIMEOUT = process.env.CI === 'true' ? 60_000 : 10_000
+const READY_TIMEOUT = process.env.CI === 'true' ? 60_000 : 30_000
 
 async function waitForReady(url: string, timeoutMs = READY_TIMEOUT): Promise<void> {
   const deadline = Date.now() + timeoutMs
