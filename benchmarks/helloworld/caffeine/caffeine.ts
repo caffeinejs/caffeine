@@ -1,5 +1,5 @@
 import { Controller, Get, newHTTP } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '@caffeinejs/http-fastify'
+import { fastifyAdapterFactory } from '@caffeinejs/http'
 import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)

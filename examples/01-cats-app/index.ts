@@ -1,7 +1,7 @@
 import './src/__caffeine__.gen.js'
 import Fastify from 'fastify'
 import { newHTTP } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '@caffeinejs/http-fastify'
+import { fastifyAdapterFactory } from '@caffeinejs/http'
 
 const fastify = Fastify({ logger: true, routerOptions: { ignoreTrailingSlash: true } })
 const app = newHTTP(fastifyAdapterFactory(fastify))

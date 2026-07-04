@@ -31,7 +31,7 @@
     "@caffeinejs/application": "*"
   },
   "devDependencies": {
-    "@caffeinejs/http-fastify": "*",
+    "@caffeinejs/http": "*",
     "fastify": "^5.8.5"
   }
 }

@@ -42,7 +42,7 @@
       "path": "./application"
     },
     {
-      "path": "./http-fastify"
+      "path": "./http"
     },
     {
       "path": "./cli"

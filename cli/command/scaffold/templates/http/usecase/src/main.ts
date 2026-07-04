@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { fastifyAdapterFactory } from '@caffeinejs/http-fastify'
+import { fastifyAdapterFactory } from '@caffeinejs/http'
 import { newHTTP } from '@caffeinejs/application'
 import './presentation/example.controller.js'
 

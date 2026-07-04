@@ -8,7 +8,7 @@
       "path": "./crema/tsconfig.build.json"
     },
     {
-      "path": "./http-fastify/tsconfig.build.json"
+      "path": "./http/tsconfig.build.json"
     },
     {
       "path": "./application/tsconfig.build.json"

@@ -67,7 +67,7 @@ jobs:
           path: |
             core/dist/
             application/dist/
-            http-fastify/dist/
+            http/dist/
           retention-days: 1
 
   test:

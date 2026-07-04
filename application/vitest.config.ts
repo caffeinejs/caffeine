@@ -13,7 +13,7 @@ export default defineConfig({
   ],
   oxc: false,
   test: {
-    name: 'http',
+    name: 'application',
     include: ['**/*.test.ts'],
     environment: 'node',
     passWithNoTests: true,
