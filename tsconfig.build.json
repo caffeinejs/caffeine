@@ -11,9 +11,6 @@
       "path": "./http-fastify/tsconfig.build.json"
     },
     {
-      "path": "./http-hono/tsconfig.build.json"
-    },
-    {
       "path": "./http/tsconfig.build.json"
     },
     {

@@ -68,7 +68,6 @@ jobs:
             core/dist/
             http/dist/
             http-fastify/dist/
-            http-hono/dist/
           retention-days: 1
 
   test:

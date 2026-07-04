@@ -45,9 +45,6 @@
       "path": "./http-fastify"
     },
     {
-      "path": "./http-hono"
-    },
-    {
       "path": "./cli"
     },
     {

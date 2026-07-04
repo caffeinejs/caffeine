@@ -8,7 +8,6 @@ export default defineConfig({
       './crema/vitest.config.ts',
       './http/vitest.config.ts',
       './http-fastify/vitest.config.ts',
-      './http-hono/vitest.config.ts',
       './testing/vitest.config.ts',
       './plugins/eslint/vitest.config.ts',
     ],

@@ -26,7 +26,6 @@ test\:%: ## run the test suite of a single package (e.g. test:http)
 
 .PHONY: check
 check: ## run all checks
-	@npm run fmt
 	@npm run lint:fix
 	@npm run lint:markdown
 	@npm run build
