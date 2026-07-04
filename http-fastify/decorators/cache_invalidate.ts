@@ -1,4 +1,4 @@
-import { configureRoute } from '@caffeinejs/http'
+import { configureRoute } from '@caffeinejs/application'
 import { CacheInvalidateOptions } from '../cache/types.js'
 
 export type { CacheInvalidateOptions }

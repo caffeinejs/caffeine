@@ -1,4 +1,4 @@
-import { configureRoute } from '@caffeinejs/http'
+import { configureRoute } from '@caffeinejs/application'
 import { kBodyBuffer } from './keys/keys.js'
 
 export function BodyAsBuffer() {

@@ -9,7 +9,7 @@
   "workspaces": [
     "core",
     "crema",
-    "http",
+    "application",
     "http-fastify",
     "cli",
     "devtools",

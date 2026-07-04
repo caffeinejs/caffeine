@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@caffeinejs/core": "*",
-    "@caffeinejs/http": "*",
+    "@caffeinejs/application": "*",
     "lru-cache": "^11.0.0"
   },
   "peerDependencies": {

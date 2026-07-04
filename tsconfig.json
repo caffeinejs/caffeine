@@ -39,7 +39,7 @@
       "path": "./crema"
     },
     {
-      "path": "./http"
+      "path": "./application"
     },
     {
       "path": "./http-fastify"

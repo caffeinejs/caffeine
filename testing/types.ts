@@ -1,4 +1,4 @@
-import type { Router } from '@caffeinejs/http'
+import type { Router } from '@caffeinejs/application'
 
 export interface Fetchable {
   fetch(request: Request): Promise<Response>

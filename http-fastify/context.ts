@@ -1,5 +1,5 @@
 import { IncomingMessage } from 'http'
-import { Context, Req, RouteValidationSchema, UnsignedCookie } from '@caffeinejs/http'
+import { Context, Req, RouteValidationSchema, UnsignedCookie } from '@caffeinejs/application'
 import { FastifyRequest, RawServerDefault, RawRequestDefaultExpression, FastifyReply } from 'fastify'
 import { CookieSerializeOptions } from '@fastify/cookie'
 

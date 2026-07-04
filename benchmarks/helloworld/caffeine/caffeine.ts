@@ -1,4 +1,4 @@
-import { Controller, Get, newHTTP } from '@caffeinejs/http'
+import { Controller, Get, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '@caffeinejs/http-fastify'
 import fastify from 'fastify'
 

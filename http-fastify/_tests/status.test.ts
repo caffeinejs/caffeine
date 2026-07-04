@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Post, Status, newHTTP } from '@caffeinejs/http'
+import { Controller, Get, Post, Status, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Status', () => {

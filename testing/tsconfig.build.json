@@ -5,7 +5,7 @@
       "path": "../core/tsconfig.build.json"
     },
     {
-      "path": "../http/tsconfig.build.json"
+      "path": "../application/tsconfig.build.json"
     }
   ],
   "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.test-d.ts", "**/*.spec.ts", "vitest.config.ts"]

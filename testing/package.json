@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@caffeinejs/core": "*",
-    "@caffeinejs/http": "*"
+    "@caffeinejs/application": "*"
   },
   "devDependencies": {
     "@caffeinejs/http-fastify": "*",

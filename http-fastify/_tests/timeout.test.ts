@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, newHTTP, Timeout } from '@caffeinejs/http'
+import { Controller, Get, newHTTP, Timeout } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Timeout', () => {

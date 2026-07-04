@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Params, Post, Put, Status, body, param } from '@caffeinejs/http'
+import { Controller, Delete, Get, Params, Post, Put, Status, body, param } from '@caffeinejs/application'
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsService } from './cats.service.js'
 

@@ -1,5 +1,5 @@
-import { configureRoute } from '@caffeinejs/http'
-import { configureRouter } from '@caffeinejs/http/decorators/registrar'
+import { configureRoute } from '@caffeinejs/application'
+import { configureRouter } from '@caffeinejs/application/decorators/registrar'
 import { FastifyCompressOptions } from '@fastify/compress'
 
 export function Compress(options: FastifyCompressOptions | false) {

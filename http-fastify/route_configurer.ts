@@ -1,4 +1,4 @@
-import { Route, Router } from '@caffeinejs/http'
+import { Route, Router } from '@caffeinejs/application'
 import { FastifyInstance, FastifyRequest, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
 
 export interface RouteConfigurerIn<REQ extends FastifyRequest = FastifyRequest> {

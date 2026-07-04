@@ -1,5 +1,5 @@
-import { configureRoute, type Duration } from '@caffeinejs/http'
-import { configureRouter } from '@caffeinejs/http/decorators/registrar'
+import { configureRoute, type Duration } from '@caffeinejs/application'
+import { configureRouter } from '@caffeinejs/application/decorators/registrar'
 import { CacheOptions } from '../cache/types.js'
 
 export type { Duration }

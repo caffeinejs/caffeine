@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import cors from '@fastify/cors'
-import { Controller, Get, newHTTP } from '@caffeinejs/http'
+import { Controller, Get, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 import { CORS } from '../decorators/index.js'
 

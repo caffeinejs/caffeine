@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Context, context, Controller, Get, Header, newHTTP, Params, Post } from '@caffeinejs/http'
+import { Context, context, Controller, Get, Header, newHTTP, Params, Post } from '@caffeinejs/application'
 import fastify from 'fastify'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 

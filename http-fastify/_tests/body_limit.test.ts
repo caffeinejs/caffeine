@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, newHTTP, BodyLimit } from '@caffeinejs/http'
+import { Controller, Post, newHTTP, BodyLimit } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('BodyLimit', () => {

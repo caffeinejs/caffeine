@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/core'
-import { Adapter, AdapterIn, Router } from '@caffeinejs/http'
+import { Adapter, AdapterIn, Router } from '@caffeinejs/application'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions, type FastifyError } from 'fastify'
 import { compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'

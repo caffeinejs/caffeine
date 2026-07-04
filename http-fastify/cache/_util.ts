@@ -1,4 +1,4 @@
-import { parseDuration } from '@caffeinejs/http'
+import { parseDuration } from '@caffeinejs/application'
 import { CacheOptions, ETagGenerator } from './types.js'
 
 // RFC 7232 §3.2 — weak comparison: strip W/ prefix, handle comma-separated list and wildcard

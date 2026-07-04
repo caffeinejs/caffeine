@@ -1,7 +1,7 @@
 /// <reference types="@fastify/multipart" />
 /// <reference types="@fastify/cookie" />
 import { Readable } from 'node:stream'
-import { ParameterPickOptions } from '@caffeinejs/http'
+import { ParameterPickOptions } from '@caffeinejs/application'
 import { FastifyRequest, FastifyReply } from 'fastify'
 import type { WebMultipartFile, MultipartFileNode, MultipartField } from './multipart.js'
 

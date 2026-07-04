@@ -1,4 +1,4 @@
-import { body, context, Controller, Get, header, newHTTP, param, Params, Post, query, Schema } from '@caffeinejs/http'
+import { body, context, Controller, Get, header, newHTTP, param, Params, Post, query, Schema } from '@caffeinejs/application'
 import { fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http-fastify'
 import fastify from 'fastify'
 

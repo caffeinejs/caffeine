@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
-import type { Application } from '@caffeinejs/http'
-import { HttpCollector } from '../collectors/http.collector.js'
+import type { Application } from '@caffeinejs/application'
+import { HttpCollector } from '../collectors/application.collector.js'
 import { DevtoolsStore } from '../store.js'
 import type { DevtoolsEvent } from '../types.js'
 import { serveStatic } from './static.js'

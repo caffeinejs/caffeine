@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, newHTTP } from '@caffeinejs/http'
+import { Controller, Get, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Adapter Lifecycle', () => {

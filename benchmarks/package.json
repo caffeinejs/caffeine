@@ -28,7 +28,7 @@
     "@adonisjs/http-server": "^9.1.0",
     "@adonisjs/logger": "^7.1.1",
     "@caffeinejs/core": "*",
-    "@caffeinejs/http": "*",
+    "@caffeinejs/application": "*",
     "@caffeinejs/http-fastify": "*",
     "@elysiajs/node": "^1.4.5",
     "@hono/node-server": "^1.0.0",

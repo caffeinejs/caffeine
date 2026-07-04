@@ -2,7 +2,7 @@ import type { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import multipartPlugin from '@fastify/multipart'
-import { Controller, Post, Params, query, newHTTP, webStreamFile, webStreamFiles, webStreamParts, streamFile, streamFiles, streamParts, file, files, formData } from '@caffeinejs/http'
+import { Controller, Post, Params, query, newHTTP, webStreamFile, webStreamFiles, webStreamParts, streamFile, streamFiles, streamParts, file, files, formData } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 import { WebMultipartFile, MultipartFileNode, MultipartField } from '../multipart.js'
 

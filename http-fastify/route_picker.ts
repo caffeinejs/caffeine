@@ -1,4 +1,4 @@
-import { ParameterPickOptions } from '@caffeinejs/http'
+import { ParameterPickOptions } from '@caffeinejs/application'
 import { FastifyRequest } from 'fastify'
 
 export function fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {

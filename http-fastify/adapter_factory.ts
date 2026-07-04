@@ -1,4 +1,4 @@
-import { AdapterFactory } from '@caffeinejs/http'
+import { AdapterFactory } from '@caffeinejs/application'
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { FastifyAdapter, type FastifyAdapterOptions } from './adapter.js'
 

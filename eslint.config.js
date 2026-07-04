@@ -43,7 +43,7 @@ export default defineConfig(
           project: [
             './tsconfig.json',
             './core/tsconfig.json',
-            './http/tsconfig.json',
+            './application/tsconfig.json',
             './http-fastify-adapter/tsconfig.json',
             './testing/tsconfig.json',
             './benchmarks/tsconfig.json',

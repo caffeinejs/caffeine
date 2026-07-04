@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Delete, Get, Post, Status, newHTTP } from '@caffeinejs/http'
+import { Controller, Delete, Get, Post, Status, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory, Cache, CacheInvalidate, MemoryCacheStore } from '../index.js'
 
 describe('Cache-Control headers', () => {

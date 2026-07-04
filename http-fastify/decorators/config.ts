@@ -1,5 +1,5 @@
-import { configureRoute } from '@caffeinejs/http'
-import { configureRouter } from '@caffeinejs/http/decorators/registrar'
+import { configureRoute } from '@caffeinejs/application'
+import { configureRouter } from '@caffeinejs/application/decorators/registrar'
 
 export function Config(config: Record<string | symbol, unknown>) {
   return (fn: Function, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {

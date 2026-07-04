@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import compress from '@fastify/compress'
-import { Controller, Get, newHTTP } from '@caffeinejs/http'
+import { Controller, Get, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory, Compress } from '../index.js'
 
 describe('Compress', () => {

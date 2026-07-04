@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Header, newHTTP } from '@caffeinejs/http'
+import { Controller, Get, Header, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Fetch API Response Support', () => {
