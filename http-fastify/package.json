@@ -45,9 +45,6 @@
     "@fastify/cors": {
       "optional": true
     },
-    "@fastify/multipart": {
-      "optional": true
-    },
     "fastify": {
       "optional": false
     },

@@ -57,16 +57,40 @@ export function address<R = unknown>(): ParameterPickOptions<R> {
   return { type: 'address' }
 }
 
-export function parts<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:parts' }
+export function webStreamParts<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:streamparts:web' }
 }
 
-export function files<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:files' }
+export function webStreamFiles<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:streamfiles:web' }
+}
+
+export function webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
+  return { name: fieldname, type: 'multipart:streamfile:web' }
+}
+
+export function streamParts<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:streamparts' }
+}
+
+export function streamFiles<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:streamfiles' }
+}
+
+export function streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
+  return { name: fieldname, type: 'multipart:streamfile' }
 }
 
 export function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
-  return { name: fieldname, type: 'multipart:file' }
+  return { name: fieldname, type: 'multipart:file', async: true }
+}
+
+export function files<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:files', async: true }
+}
+
+export function formData<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'multipart:formdata', async: true }
 }
 
 export function cookie<R = unknown>(name?: string): ParameterPickOptions<R> {

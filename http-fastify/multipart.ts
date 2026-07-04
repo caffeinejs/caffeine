@@ -1,6 +1,6 @@
-import type { FastifyRequest } from 'fastify'
+import type { Readable } from 'node:stream'
 
-export interface MultipartFile {
+export interface WebMultipartFile {
   type: 'file'
   fieldname: string
   filename: string
@@ -8,14 +8,16 @@ export interface MultipartFile {
   stream: ReadableStream<Uint8Array>
 }
 
+export interface MultipartFileNode {
+  type: 'file'
+  fieldname: string
+  filename: string
+  mimetype: string
+  stream: Readable
+}
+
 export interface MultipartField {
   type: 'field'
   fieldname: string
   value: string
-}
-
-export function assertMultipartRegistered(req: FastifyRequest): void {
-  if (typeof (req as unknown as Record<string, unknown>).parts !== 'function') {
-    throw new Error('Cannot read multipart: @fastify/multipart plugin is not registered on this Fastify instance')
-  }
 }

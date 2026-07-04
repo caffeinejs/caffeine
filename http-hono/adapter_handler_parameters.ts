@@ -21,7 +21,7 @@ type Picker<CTX extends Context = Context> = (c: CTX) => unknown
 
 export type MultipartData = Record<string, string | File | (string | File)[]>
 
-export interface MultipartFile {
+export interface WebMultipartFile {
   type: 'file'
   fieldname: string
   filename: string
@@ -187,10 +187,10 @@ function buildPicker<CTX extends Context = Context>(
       return c => (c.req.raw as { socket?: { localPort?: number } }).socket?.localPort ?? null
     case 'address':
       return c => (c.req.raw as { socket?: { remoteAddress?: string } }).socket?.remoteAddress
-    case 'multipart:parts':
+    case 'multipart:streamparts:web':
       return c => {
         const data = getParsedMultipart(c)
-        return new ReadableStream<MultipartFile | MultipartField>({
+        return new ReadableStream<WebMultipartFile | MultipartField>({
           start(controller) {
             for (const [fieldname, value] of Object.entries(data)) {
               for (const v of Array.isArray(value) ? value : [value]) {
@@ -211,10 +211,10 @@ function buildPicker<CTX extends Context = Context>(
           },
         })
       }
-    case 'multipart:files':
+    case 'multipart:streamfiles:web':
       return c => {
         const data = getParsedMultipart(c)
-        return new ReadableStream<MultipartFile>({
+        return new ReadableStream<WebMultipartFile>({
           start(controller) {
             for (const [fieldname, value] of Object.entries(data)) {
               for (const v of Array.isArray(value) ? value : [value]) {
@@ -233,10 +233,10 @@ function buildPicker<CTX extends Context = Context>(
           },
         })
       }
-    case 'multipart:file':
+    case 'multipart:streamfile:web':
       return c => {
         const data = getParsedMultipart(c)
-        return new ReadableStream<MultipartFile>({
+        return new ReadableStream<WebMultipartFile>({
           start(controller) {
             for (const [fname, value] of Object.entries(data)) {
               if (!field || fname === field) {

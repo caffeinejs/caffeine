@@ -3,7 +3,7 @@
 import { Readable } from 'node:stream'
 import { ParameterPickOptions } from '@caffeinejs/http'
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { assertMultipartRegistered, MultipartFile, MultipartField } from './multipart.js'
+import type { WebMultipartFile, MultipartFileNode, MultipartField } from './multipart.js'
 
 type Picker<
   REQ extends FastifyRequest = FastifyRequest,
@@ -147,13 +147,11 @@ function buildPicker<
       return req => req.port
     case 'address':
       return req => req.socket.remoteAddress
-    case 'multipart:parts':
+    case 'multipart:streamparts:web':
       return req => {
-        assertMultipartRegistered(req)
-
         const iter = req.parts()[Symbol.asyncIterator]()
 
-        return new ReadableStream<MultipartFile | MultipartField>({
+        return new ReadableStream<WebMultipartFile | MultipartField>({
           async pull(controller) {
             const { value, done } = await iter.next()
             if (done) {
@@ -179,13 +177,11 @@ function buildPicker<
           },
         })
       }
-    case 'multipart:files':
+    case 'multipart:streamfiles:web':
       return req => {
-        assertMultipartRegistered(req)
-
         const iter = req.files()[Symbol.asyncIterator]()
 
-        return new ReadableStream<MultipartFile>({
+        return new ReadableStream<WebMultipartFile>({
           async pull(controller) {
             const { value, done } = await iter.next()
             if (done) {
@@ -203,14 +199,12 @@ function buildPicker<
           },
         })
       }
-    case 'multipart:file':
+    case 'multipart:streamfile:web':
       return req => {
-        assertMultipartRegistered(req)
-
         const fieldname = field
         const iter = req.files()[Symbol.asyncIterator]()
 
-        return new ReadableStream<MultipartFile>({
+        return new ReadableStream<WebMultipartFile>({
           async pull(controller) {
             while (true) {
               const { value, done } = await iter.next()
@@ -238,6 +232,92 @@ function buildPicker<
             }
           },
         })
+      }
+    case 'multipart:streamparts':
+      return req => {
+        async function* gen() {
+          for await (const part of req.parts()) {
+            if (part.type === 'file') {
+              yield { type: 'file' as const, fieldname: part.fieldname, filename: part.filename, mimetype: part.mimetype, stream: part.file } satisfies MultipartFileNode
+            } else {
+              yield { type: 'field' as const, fieldname: part.fieldname, value: part.value as string } satisfies MultipartField
+            }
+          }
+        }
+        return Readable.from(gen(), { objectMode: true })
+      }
+    case 'multipart:streamfiles':
+      return req => {
+        async function* gen() {
+          for await (const f of req.files()) {
+            yield { type: 'file' as const, fieldname: f.fieldname, filename: f.filename, mimetype: f.mimetype, stream: f.file } satisfies MultipartFileNode
+          }
+        }
+        return Readable.from(gen(), { objectMode: true })
+      }
+    case 'multipart:streamfile':
+      return req => {
+        const name = field
+        async function* gen() {
+          for await (const f of req.files()) {
+            if (!name || f.fieldname === name) {
+              yield { type: 'file' as const, fieldname: f.fieldname, filename: f.filename, mimetype: f.mimetype, stream: f.file } satisfies MultipartFileNode
+              return
+            }
+            for await (const _ of f.file) { /* drain */ }
+          }
+        }
+        return Readable.from(gen(), { objectMode: true })
+      }
+    case 'multipart:file':
+      return req => {
+        const name = field
+        return (async () => {
+          for await (const f of req.files()) {
+            if (!name || f.fieldname === name) {
+              const chunks: Uint8Array[] = []
+              for await (const chunk of f.file) {
+                chunks.push(chunk)
+              }
+              return new File([Buffer.concat(chunks)], f.filename, { type: f.mimetype })
+            }
+            for await (const _ of f.file) { /* drain */ }
+          }
+          return undefined
+        })()
+      }
+    case 'multipart:files':
+      return req => {
+        return (async () => {
+          const out: File[] = []
+          for await (const f of req.files()) {
+            const chunks: Uint8Array[] = []
+            for await (const chunk of f.file) {
+              chunks.push(chunk)
+            }
+            out.push(new File([Buffer.concat(chunks)], f.filename, { type: f.mimetype }))
+          }
+          return out
+        })()
+      }
+    case 'multipart:formdata':
+      return req => {
+        return (async () => {
+          const fd = new FormData()
+          for await (const part of req.parts()) {
+            if (part.type === 'file') {
+              const chunks: Uint8Array[] = []
+              for await (const chunk of part.file) {
+                chunks.push(chunk)
+              }
+              const webFile = new File([Buffer.concat(chunks)], part.filename, { type: part.mimetype })
+              fd.append(part.fieldname, webFile, part.filename)
+            } else {
+              fd.append(part.fieldname, part.value as string)
+            }
+          }
+          return fd
+        })()
       }
     case 'cookie':
       if (field) {

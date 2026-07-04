@@ -46,6 +46,19 @@ import { noop } from '../_noop.js'
 - The `.name` property and `code` string must align with the class name: `ErrFoo` → `this.name = 'ErrFoo'`, `code = 'ERR_FOO'`
 - Errors with fixed, context-free solutions may call `solutions()` inside their constructor. Contextual errors with variable message content call `solutions()` at the throw site.
 
+## Inline type imports
+
+Never use inline dynamic-import syntax as a type reference (`import('node:stream').Readable`). Always declare a top-level `import type` statement and reference the type by name.
+
+```ts
+// correct
+import type { Readable } from 'node:stream'
+async upload(stream: Readable) { ... }
+
+// wrong
+async upload(stream: import('node:stream').Readable) { ... }
+```
+
 ## Import extensions
 
 All imports must include the `.js` extension, including TypeScript source files.
