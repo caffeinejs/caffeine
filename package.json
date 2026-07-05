@@ -8,7 +8,6 @@
   "type": "module",
   "workspaces": [
     "core",
-    "crema",
     "application",
     "http",
     "cli",
