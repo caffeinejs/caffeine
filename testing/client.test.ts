@@ -1,8 +1,8 @@
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Injectable } from '@caffeinejs/core'
-import { Application, Controller, Delete, Get, Post, Params, body, newHTTP, param } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '@caffeinejs/http'
+import { Application, Controller, Delete, Get, Post, Params, newHTTP } from '@caffeinejs/application'
+import { body, fastifyAdapterFactory, param } from '@caffeinejs/http'
 import { ErrNoRoutesForController, testClient } from './index.js'
 
 @Injectable()

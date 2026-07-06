@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { compose, ParameterPicker, ParameterPickOptions } from './route_picker.js'
+import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/application'
+
+function compose<R>(req: R, ...fns: Array<(req: R) => Array<unknown>>): Array<unknown> {
+  return fns.reduce((acc, fn) => [...acc, ...fn(req)], [] as Array<unknown>)
+}
 
 describe('Request Parameter', () => {
   interface Request {

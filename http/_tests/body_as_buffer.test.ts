@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, Params, body, newHTTP } from '@caffeinejs/application'
+import { Controller, Post, Params, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory, BodyAsBuffer } from '../index.js'
+import { body } from '../route_picker.js'
 
 describe('BodyAsBuffer', () => {
   it('delivers the body as a Buffer regardless of content-type', async () => {

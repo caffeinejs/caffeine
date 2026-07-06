@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Context, context, Controller, Get, Header, newHTTP, Params, Post } from '@caffeinejs/application'
+import { Context, Controller, Get, Header, newHTTP, Params, Post } from '@caffeinejs/application'
 import fastify from 'fastify'
+import { context } from '../route_picker.js'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Redirect', () => {

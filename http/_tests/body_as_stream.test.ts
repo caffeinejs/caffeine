@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, Params, body, newHTTP } from '@caffeinejs/application'
+import { Controller, Post, Params, newHTTP } from '@caffeinejs/application'
 import { fastifyAdapterFactory, BodyAsStream } from '../index.js'
+import { body } from '../route_picker.js'
 
 describe('BodyAsStream', () => {
   it('delivers the body as a ReadableStream', async () => {
