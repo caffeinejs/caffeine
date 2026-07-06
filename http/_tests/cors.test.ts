@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import cors from '@fastify/cors'
-import { Controller, Get, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 import { CORS } from '../decorators/index.js'
 
@@ -18,7 +18,7 @@ describe('CORS', () => {
       const server = fastify()
       await server.register(cors, { origin: '*' })
 
-      const app = newHTTP(fastifyAdapterFactory(server))
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await server.inject({
@@ -42,7 +42,7 @@ describe('CORS', () => {
       const server = fastify()
       await server.register(cors, { origin: 'https://allowed.com', methods: ['GET', 'POST'] })
 
-      const app = newHTTP(fastifyAdapterFactory(server))
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await server.inject({
@@ -68,7 +68,7 @@ describe('CORS', () => {
       void [NoCorsController]
 
       const server = fastify()
-      const app = newHTTP(fastifyAdapterFactory(server))
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await server.inject({
@@ -106,7 +106,7 @@ describe('CORS', () => {
       const server = fastify()
       await server.register(cors, { origin: 'https://global.com' })
 
-      const app = newHTTP(fastifyAdapterFactory(server))
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const resSpecific = await server.inject({
@@ -146,7 +146,7 @@ describe('CORS', () => {
       const server = fastify()
       await server.register(cors, { origin: '*' })
 
-      const app = newHTTP(fastifyAdapterFactory(server))
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const resDisabled = await server.inject({
@@ -187,7 +187,7 @@ describe('CORS', () => {
       const server = fastify()
       await server.register(cors, { origin: '*' })
 
-      const app = newHTTP(fastifyAdapterFactory(server))
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const resOff = await server.inject({

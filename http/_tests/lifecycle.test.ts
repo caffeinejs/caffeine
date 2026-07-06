@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Adapter Lifecycle', () => {
@@ -18,7 +18,7 @@ describe('Adapter Lifecycle', () => {
 
     void [LifecycleController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
 
     app.onReady(async () => {
       order.push('ready-hook')
@@ -41,7 +41,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc2Controller]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
 
     const order: number[] = []
     app
@@ -63,7 +63,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc3Controller]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
 
     const closeFired = vi.fn()
     app.onClose(async () => {
@@ -85,7 +85,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc4Controller]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const beforeClose = await app.instance.inject({ method: 'GET', url: '/lc4/ping' })

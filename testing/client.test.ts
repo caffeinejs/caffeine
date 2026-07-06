@@ -1,7 +1,7 @@
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Injectable } from '@caffeinejs/core'
-import { Application, Controller, Delete, Get, Post, Params, newHTTP } from '@caffeinejs/application'
+import { WebApplication, Controller, Delete, Get, Post, Params, createWebApplication } from '@caffeinejs/application'
 import { body, fastifyAdapterFactory, param } from '@caffeinejs/http'
 import { ErrNoRoutesForController, testClient } from './index.js'
 
@@ -57,11 +57,11 @@ void [TaskStore, TaskController]
 class NoRouteController {}
 
 describe('testClient()', () => {
-  let app: Application<any, any, any>
+  let app: WebApplication<any, any, any>
   let baseUrl: string
 
   beforeAll(async () => {
-    app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
     await app.ready()
     baseUrl = await app.instance.listen({ port: 0, host: '127.0.0.1' })
   })

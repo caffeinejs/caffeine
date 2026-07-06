@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import compress from '@fastify/compress'
-import { Controller, Get, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory, Compress } from '../index.js'
 
 describe('Compress', () => {
@@ -19,7 +19,7 @@ describe('Compress', () => {
     const server = fastify()
     await server.register(compress, { global: true })
 
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await server.inject({
@@ -52,7 +52,7 @@ describe('Compress', () => {
     const server = fastify()
     await server.register(compress, { global: true })
 
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const resOff = await server.inject({
@@ -95,7 +95,7 @@ describe('Compress', () => {
     // Default threshold is 1024 bytes — small payload won't be compressed globally
     await server.register(compress, { global: true, threshold: 1024 })
 
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const resLow = await server.inject({

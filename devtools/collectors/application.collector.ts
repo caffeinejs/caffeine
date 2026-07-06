@@ -1,11 +1,11 @@
-import type { Application } from '@caffeinejs/application'
+import type { WebApplication } from '@caffeinejs/application'
 import type { DevtoolsStore } from '../store.js'
 import type { RouteSnapshot } from '../types.js'
 
 export class HttpCollector {
   constructor(private readonly store: DevtoolsStore) {}
 
-  attach(app: Application<any, any, any>): void {
+  attach(app: WebApplication<any, any, any>): void {
     const snapshots: RouteSnapshot[] = []
 
     for (const router of app.routers) {

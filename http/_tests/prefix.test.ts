@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Prefix, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, Prefix, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Prefix', () => {
@@ -16,7 +16,7 @@ describe('Prefix', () => {
 
     void [UsersController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const hit = await app.instance.inject({ method: 'GET', url: '/v1/users/list' })
@@ -47,7 +47,7 @@ describe('Prefix', () => {
 
     void [ItemsController, ItemsV2Controller]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const v1 = await app.instance.inject({ method: 'GET', url: '/v1/items/all' })

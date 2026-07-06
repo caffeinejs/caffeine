@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, newHTTP, Timeout } from '@caffeinejs/application'
+import { Controller, Get, createWebApplication, Timeout } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Timeout', () => {
@@ -24,7 +24,7 @@ describe('Timeout', () => {
 
     void [TimedClassController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const slowRes = await app.instance.inject({ method: 'GET', url: '/timed-class/slow' })
@@ -48,7 +48,7 @@ describe('Timeout', () => {
 
     void [TimedController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/timed/slow' })

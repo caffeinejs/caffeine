@@ -1,4 +1,5 @@
-export { type Adapter, type AdapterFactory, type AdapterFactoryIn, type AdapterIn, Application } from './application.js'
+export { type Adapter, type AdapterFactory, type AdapterFactoryIn, type AdapterIn, WebApplication } from './application.js'
+export { WebApplicationBuilder } from './builder.js'
 export type * from './context.js'
 export * from './decorators/index.js'
 export { type RouteBuilder, type RouterBuilder } from './decorators/registrar/index.js'

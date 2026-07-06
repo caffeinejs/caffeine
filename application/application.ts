@@ -1,4 +1,4 @@
-import { Container, Module } from '@caffeinejs/core'
+import { Container } from '@caffeinejs/core'
 import { Router } from './route.js'
 
 export interface AdapterIn<R> {
@@ -20,7 +20,7 @@ export interface AdapterFactoryIn {
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
   = (kit: AdapterFactoryIn) => A
 
-export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
+export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   #container: Container
   #routers: Router<R>[]
   #adapter: A
@@ -43,11 +43,6 @@ export class Application<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
 
   get routers(): Router<R>[] {
     return this.#routers
-  }
-
-  addModules(module: Module, ...modules: Module[]): this {
-    this.#container.addModules(module, ...modules)
-    return this
   }
 
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Header, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, Header, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Header', () => {
@@ -17,7 +17,7 @@ describe('Header', () => {
 
     void [VersionedController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const resA = await app.instance.inject({ method: 'GET', url: '/versioned/a' })
@@ -40,7 +40,7 @@ describe('Header', () => {
 
     void [TargetedController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const hit = await app.instance.inject({ method: 'GET', url: '/targeted/with-header' })
@@ -60,7 +60,7 @@ describe('Header', () => {
 
     void [MultiClassController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/multi-class/route' })
@@ -78,7 +78,7 @@ describe('Header', () => {
 
     void [MultiMethodController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/multi-method/route' })
@@ -97,7 +97,7 @@ describe('Header', () => {
 
     void [OverrideController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/override/route' })

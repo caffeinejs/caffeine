@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, newHTTP, BodyLimit } from '@caffeinejs/application'
+import { Controller, Post, createWebApplication, BodyLimit } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('BodyLimit', () => {
@@ -16,7 +16,7 @@ describe('BodyLimit', () => {
 
     void [LimitedController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const over = await app.instance.inject({
@@ -47,7 +47,7 @@ describe('BodyLimit', () => {
 
     void [MixedLimitController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const body = 'x'.repeat(50)

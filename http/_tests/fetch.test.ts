@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Header, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, Header, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Fetch API Response Support', () => {
@@ -18,7 +18,7 @@ describe('Fetch API Response Support', () => {
 
     void [FetchController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/fetch/json' })
@@ -39,7 +39,7 @@ describe('Fetch API Response Support', () => {
 
     void [NoBodyController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/fetch/empty' })
@@ -64,7 +64,7 @@ describe('Fetch API Response Support', () => {
 
     void [BufferController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/fetch/buf' })
@@ -90,7 +90,7 @@ describe('Fetch API Response Support', () => {
 
     void [BinaryController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/fetch/binary' })
@@ -113,7 +113,7 @@ describe('Fetch API Response Support', () => {
 
       void [MixClassController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
       const res = await app.instance.inject({ method: 'GET', url: '/mix-class/route' })
@@ -134,7 +134,7 @@ describe('Fetch API Response Support', () => {
 
       void [MixMethodController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
       const res = await app.instance.inject({ method: 'GET', url: '/mix-method/route' })
@@ -155,7 +155,7 @@ describe('Fetch API Response Support', () => {
 
       void [OverrideClassController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
       const res = await app.instance.inject({ method: 'GET', url: '/override-class/route' })
@@ -175,7 +175,7 @@ describe('Fetch API Response Support', () => {
 
       void [OverrideMethodController]
 
-      const app = newHTTP(fastifyAdapterFactory(fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
       const res = await app.instance.inject({ method: 'GET', url: '/override-method/route' })

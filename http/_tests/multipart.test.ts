@@ -2,7 +2,7 @@ import type { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import multipartPlugin from '@fastify/multipart'
-import { Controller, Post, Params, newHTTP } from '@caffeinejs/application'
+import { Controller, Post, Params, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 import { file, files, formData, query, streamFile, streamFiles, streamParts, webStreamFile, webStreamFiles, webStreamParts } from '../route_picker.js'
 import { WebMultipartFile, MultipartFileNode, MultipartField } from '../multipart.js'
@@ -84,7 +84,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -120,7 +120,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -152,7 +152,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -184,7 +184,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -217,7 +217,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -248,7 +248,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -283,7 +283,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -320,7 +320,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -353,7 +353,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -388,7 +388,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -418,7 +418,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -454,7 +454,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -494,7 +494,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -530,7 +530,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -568,7 +568,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({
@@ -609,7 +609,7 @@ describe('Multipart file upload', () => {
 
     const server = fastify()
     await server.register(multipartPlugin)
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.instance.inject({

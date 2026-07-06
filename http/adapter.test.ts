@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import supertest from 'supertest'
 import Fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
-import { Controller, Get, Method, newHTTP, Params } from '@caffeinejs/application'
+import { Controller, Get, Method, createWebApplication, Params } from '@caffeinejs/application'
 import { CaffeineIoC, Scopes, Injectable, Lifetime } from '@caffeinejs/core'
 import { address, context, cookie, header, method, param, path, pick, port, query, signal, signedCookie, url } from './route_picker.js'
 import { FastifyAdapter } from './adapter.js'
@@ -46,7 +46,7 @@ describe('Fastify Adapter', () => {
 
       void [TestController]
 
-      const app = newHTTP(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
       await supertest(app.instance.server)
@@ -81,7 +81,7 @@ describe('Fastify Adapter', () => {
 
       void [PickersController]
 
-      const app = newHTTP(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
       const res = await app.instance.inject({ method: 'GET', url: '/test/pickers?foo=bar' })
@@ -108,7 +108,7 @@ describe('Fastify Adapter', () => {
 
       void [AsyncPickController]
 
-      const app = newHTTP(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
       const res = await app.instance.inject({ method: 'GET', url: '/async-pick/value' })
@@ -131,7 +131,7 @@ describe('Fastify Adapter', () => {
 
       void [MixedPickController]
 
-      const app = newHTTP(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
       const res = await app.instance.inject({ method: 'GET', url: '/mixed-pick/42' })
@@ -154,7 +154,7 @@ describe('Fastify Adapter', () => {
 
       void [MethodController]
 
-      const app = newHTTP(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
       for (const m of methods) {
@@ -181,7 +181,7 @@ describe('Fastify Adapter', () => {
 
       void [RequestScopedController]
 
-      const app = newHTTP(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
       const r1 = await app.instance.inject({ method: 'GET', url: '/req-ctrl/id' })
@@ -215,7 +215,7 @@ describe('Fastify Adapter', () => {
 
       void [TransientController]
 
-      const app = newHTTP(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
       const r1 = await app.instance.inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
@@ -243,7 +243,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/session', { headers: { Cookie: 'session=abc123' } })
@@ -265,7 +265,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
@@ -291,7 +291,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie, { secret: SECRET })
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${signed}` } })
@@ -313,7 +313,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie, { secret: 'test-secret' })
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
@@ -336,7 +336,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/set')
@@ -360,7 +360,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/get', { headers: { Cookie: 'token=secret' } })
@@ -386,7 +386,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie, { secret: SECRET })
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${signed}` } })
@@ -409,7 +409,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = newHTTP(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
       await app.ready()
 
       const res = await app.fetch('/ck/delete')

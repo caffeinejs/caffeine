@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Post, Status, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '../adapter_factory.js'
 
 describe('Status', () => {
@@ -16,7 +16,7 @@ describe('Status', () => {
 
     void [StatusController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'POST', url: '/status/created' })
@@ -35,7 +35,7 @@ describe('Status', () => {
 
     void [StatusDefaultController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.instance.inject({ method: 'GET', url: '/status-default/ok' })

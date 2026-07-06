@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, Params, newHTTP } from '@caffeinejs/application'
+import { Controller, Post, Params, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory, BodyAsStream } from '../index.js'
 import { body } from '../route_picker.js'
 
@@ -24,7 +24,7 @@ describe('BodyAsStream', () => {
 
     void [StreamController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const payload = Buffer.from('hello stream world')
@@ -58,7 +58,7 @@ describe('BodyAsStream', () => {
 
     void [StreamBinaryController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
@@ -91,7 +91,7 @@ describe('BodyAsStream', () => {
 
     void [StreamJsonController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const jsonStr = JSON.stringify({ key: 'value' })
@@ -126,7 +126,7 @@ describe('BodyAsStream', () => {
 
     void [MixedController]
 
-    const app = newHTTP(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const streamRes = await app.instance.inject({

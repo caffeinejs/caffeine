@@ -1,4 +1,4 @@
-import { Controller, Get, newHTTP } from '@caffeinejs/application'
+import { Controller, Get, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory } from '@caffeinejs/http'
 import fastify from 'fastify'
 
@@ -14,7 +14,7 @@ class AppController {
 
 void [AppController]
 
-const app = newHTTP(fastifyAdapterFactory(fastify({ logger: false })))
+const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
 
 await app.ready()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

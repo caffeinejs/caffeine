@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import compress from '@fastify/compress'
-import { Controller, Post, newHTTP } from '@caffeinejs/application'
+import { Controller, Post, createWebApplication } from '@caffeinejs/application'
 import { fastifyAdapterFactory, Encoding } from '../index.js'
 
 async function gzip(data: string): Promise<Buffer> {
@@ -42,7 +42,7 @@ describe('Encoding', () => {
     const server = fastify()
     await server.register(compress, { global: true })
 
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
@@ -72,7 +72,7 @@ describe('Encoding', () => {
     const server = fastify()
     await server.register(compress, { global: true })
 
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const gzipPayload = await gzip(JSON.stringify({ msg: 'hello' }))
@@ -116,7 +116,7 @@ describe('Encoding', () => {
     const server = fastify()
     await server.register(compress, { global: true })
 
-    const app = newHTTP(fastifyAdapterFactory(server))
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))

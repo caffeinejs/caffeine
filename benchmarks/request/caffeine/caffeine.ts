@@ -1,4 +1,4 @@
-import { Controller, Get, newHTTP, Params, Post, Schema } from '@caffeinejs/application'
+import { Controller, Get, createWebApplication, Params, Post, Schema } from '@caffeinejs/application'
 import { body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
 import fastify from 'fastify'
 
@@ -81,7 +81,7 @@ server.addHook('preHandler', (req, reply, done) => {
   done()
 })
 
-const app = newHTTP(fastifyAdapterFactory(server))
+const app = createWebApplication(fastifyAdapterFactory(server)).build()
 
 await app.ready()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })
