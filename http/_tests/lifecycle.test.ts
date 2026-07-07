@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '../adapter_factory.js'
+import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Adapter Lifecycle', () => {
   it('onReady hook fires after routes are registered', async () => {

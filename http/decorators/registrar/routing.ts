@@ -1,6 +1,6 @@
-import { Binding, Key, Provider } from '@caffeinejs/core'
-import { Route, Router, RouteValidationSchema } from '../../route.js'
-import { ParameterPickOptions } from '../../route_picker.js'
+import type { ParameterPickOptions } from '@caffeinejs/application'
+import type { RouteValidationSchema } from '../../route.js'
+import type { RouteAuthzOptions, RouterSpec, RouteSpec } from './routing.definition.js'
 import { mergeValue } from './_merge.js'
 
 export class RouterBuilder {
@@ -12,6 +12,7 @@ export class RouterBuilder {
   #routes?: RouteBuilder[]
   #bodyLimit?: number
   #timeout?: number
+  #authorize?: RouteAuthzOptions
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
@@ -59,6 +60,11 @@ export class RouterBuilder {
     return this
   }
 
+  authorize(opts: RouteAuthzOptions) {
+    this.#authorize = opts
+    return this
+  }
+
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -101,19 +107,12 @@ export class RouterBuilder {
     return this
   }
 
-  describe<R = unknown>(): Exclude<Router<R>, 'key' | 'binding' | 'controller'> {
-    return this.toRouter(
-      null as unknown as Key,
-      null as unknown as Binding<unknown>,
-      null as unknown as Provider<Record<string | symbol, (...args: unknown[]) => unknown>>,
-    )
+  // TODO: remove this
+  describe<R = unknown>(): RouterSpec<R> {
+    return this.toRouter()
   }
 
-  toRouter<R>(
-    key: Key,
-    binding: Binding<unknown>,
-    controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>,
-  ): Router<R> {
+  toRouter<R>(): RouterSpec<R> {
     return {
       path: normalizePrefix(this.#path ?? ''),
       prefix: this.#prefix,
@@ -123,12 +122,10 @@ export class RouterBuilder {
       contentType: this.#produces,
       bodyLimit: this.#bodyLimit,
       timeout: this.#timeout,
+      authz: this.#authorize,
       config: this.#config,
       options: this.#options,
       extras: this.#extras,
-      key,
-      binding,
-      controller,
     }
   }
 }
@@ -145,6 +142,7 @@ export class RouteBuilder {
   #bodyLimit?: number
   #timeout?: number
   #statusCode?: number
+  #authorize?: RouteAuthzOptions
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
@@ -208,6 +206,11 @@ export class RouteBuilder {
     return this
   }
 
+  authorize(opts: RouteAuthzOptions): this {
+    this.#authorize = opts
+    return this
+  }
+
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -250,7 +253,7 @@ export class RouteBuilder {
     return this
   }
 
-  toRoute<R>(): Route<R> {
+  toRoute<R>(): RouteSpec<R> {
     return {
       path: normalizePath(this.#path ?? ''),
       method: [...(this.#method ?? [])],
@@ -263,6 +266,7 @@ export class RouteBuilder {
       timeout: this.#timeout,
       header: this.#header,
       statusCode: this.#statusCode,
+      authz: this.#authorize,
       config: this.#config,
       options: this.#options,
       extras: this.#extras,

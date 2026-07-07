@@ -1,4 +1,4 @@
-import { RouteValidationSchema } from '../route.js'
+import type { RouteValidationSchema } from '../route.js'
 import { configureRoute } from './registrar/registrar.js'
 
 export function Schema<S extends RouteValidationSchema>(schema: S) {

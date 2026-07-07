@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, createWebApplication, BodyLimit } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '../adapter_factory.js'
+import { Controller, Post, createWebApplication, BodyLimit, fastifyAdapterFactory } from '../index.js'
 
 describe('BodyLimit', () => {
   it('class-level @BodyLimit rejects bodies exceeding the limit with 413', async () => {

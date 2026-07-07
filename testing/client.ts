@@ -1,4 +1,4 @@
-import { getRouter } from '@caffeinejs/application'
+import { getRouter } from '@caffeinejs/http'
 import { ErrNoRouter } from './error.js'
 import { mergeRequest, resolveRouteUrl } from './_util.js'
 import type { Fetchable, RouterCtor, TestClient } from './types.js'

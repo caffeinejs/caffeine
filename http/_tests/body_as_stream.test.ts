@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, Params, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory, BodyAsStream } from '../index.js'
+import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory, BodyAsStream } from '../index.js'
 import { body } from '../route_picker.js'
 
 describe('BodyAsStream', () => {

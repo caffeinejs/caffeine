@@ -11,6 +11,14 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./decorators": {
+      "types": "./dist/decorators/index.d.ts",
+      "default": "./dist/decorators/index.js"
+    },
+    "./decorators/registrar": {
+      "types": "./dist/decorators/registrar/index.d.ts",
+      "default": "./dist/decorators/registrar/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -25,6 +33,7 @@
   "dependencies": {
     "@caffeinejs/core": "*",
     "@caffeinejs/application": "*",
+    "jose": "^5.0.0",
     "lru-cache": "^11.0.0"
   },
   "peerDependencies": {

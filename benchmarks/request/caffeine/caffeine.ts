@@ -1,5 +1,4 @@
-import { Controller, Get, createWebApplication, Params, Post, Schema } from '@caffeinejs/application'
-import { body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
+import { Controller, Get, createWebApplication, Params, Post, Schema, body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
 import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)

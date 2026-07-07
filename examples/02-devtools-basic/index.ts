@@ -1,7 +1,6 @@
 import fastify from 'fastify'
 import { CaffeineIoC, Injectable } from '@caffeinejs/core'
-import { Controller, Delete, Get, Post, Params, createWebApplication } from '@caffeinejs/application'
-import { body, fastifyAdapterFactory, param } from '@caffeinejs/http'
+import { Controller, Delete, Get, Post, Params, createWebApplication, body, fastifyAdapterFactory, param } from '@caffeinejs/http'
 import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
 
 // --- services ---

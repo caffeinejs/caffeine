@@ -1,6 +1,6 @@
-import { configureRoute, type Duration } from '@caffeinejs/application'
-import { configureRouter } from '@caffeinejs/application/decorators/registrar'
+import type { Duration } from '@caffeinejs/application'
 import { CacheOptions } from '../cache/types.js'
+import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export type { Duration }
 export type { CacheOptions } from '../cache/types.js'

@@ -1,6 +1,5 @@
-import { configureRoute } from '@caffeinejs/application'
-import { configureRouter } from '@caffeinejs/application/decorators/registrar'
 import { FastifyCompressOptions } from '@fastify/compress'
+import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export function Compress(options: FastifyCompressOptions | false) {
   return (fn: Function, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {

@@ -8,7 +8,7 @@ describe('RouterBuilder cumulative merge', () => {
     const router = new RouterBuilder()
       .config('cors', { origin: 'http://a.com' })
       .config('cors', { methods: ['GET'] })
-      .toRouter(null as any, null as any, null as any)
+      .toRouter()
 
     expect(router.config?.get('cors')).toEqual({ origin: 'http://a.com', methods: ['GET'] })
   })
@@ -17,7 +17,7 @@ describe('RouterBuilder cumulative merge', () => {
     const router = new RouterBuilder()
       .options('compress', { threshold: 100 })
       .options('compress', { encodings: ['gzip'] })
-      .toRouter(null as any, null as any, null as any)
+      .toRouter()
 
     expect(router.options?.get('compress')).toEqual({ threshold: 100, encodings: ['gzip'] })
   })
@@ -26,7 +26,7 @@ describe('RouterBuilder cumulative merge', () => {
     const router = new RouterBuilder()
       .config('x', 1)
       .config('x', 2)
-      .toRouter(null as any, null as any, null as any)
+      .toRouter()
 
     expect(router.config?.get('x')).toBe(2)
   })
@@ -35,7 +35,7 @@ describe('RouterBuilder cumulative merge', () => {
     const router = new RouterBuilder()
       .options('compress', { threshold: 100 })
       .options('compress', false as any)
-      .toRouter(null as any, null as any, null as any)
+      .toRouter()
 
     expect(router.options?.get('compress')).toBe(false)
   })

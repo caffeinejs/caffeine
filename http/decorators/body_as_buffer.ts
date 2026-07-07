@@ -1,4 +1,4 @@
-import { configureRoute } from '@caffeinejs/application'
+import { configureRoute } from './registrar/registrar.js'
 import { kBodyBuffer } from './keys/keys.js'
 
 export function BodyAsBuffer() {

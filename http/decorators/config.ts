@@ -1,5 +1,4 @@
-import { configureRoute } from '@caffeinejs/application'
-import { configureRouter } from '@caffeinejs/application/decorators/registrar'
+import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export function Config(config: Record<string | symbol, unknown>) {
   return (fn: Function, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {

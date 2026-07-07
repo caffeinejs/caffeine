@@ -1,12 +1,10 @@
-import type { Router } from '@caffeinejs/application'
-
 export interface Fetchable {
   fetch(request: Request): Promise<Response>
 }
 
 export type RouterCtor = abstract new (...args: never[]) => object
 
-export type RouterDescriptor = Exclude<Router<unknown>, 'key' | 'binding' | 'controller'>
+export type RouterDescriptor = { path: string, prefix?: string }
 
 export type RouteMethods<C extends RouterCtor> = {
   [K in keyof InstanceType<C>]: InstanceType<C>[K] extends (...args: never[]) => unknown

@@ -1,0 +1,7 @@
+export { AuthenticationBuilder } from './builder.js'
+export type { AuthenticationHandler } from './handler.js'
+export { BaseAuthenticationHandler } from './handler.js'
+export { JWTAuthenticationHandler } from './handler/jwt.js'
+export type { JWTAuthenticationOptions } from './handler/jwt_options.js'
+export { AuthenticationCoordinator as AuthenticationService } from './service.js'
+export { AuthenticateResult, AuthenticationProperties, AuthenticationTicket } from './ticket.js'

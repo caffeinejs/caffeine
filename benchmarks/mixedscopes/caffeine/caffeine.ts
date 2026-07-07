@@ -1,7 +1,6 @@
 import { provide, Scopes, type Provider } from '@caffeinejs/core'
 import { Injectable, Lifetime } from '@caffeinejs/core'
-import { Controller, Get, createWebApplication, Params, Post, Schema } from '@caffeinejs/application'
-import { body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
+import { Controller, Get, createWebApplication, Params, Post, Schema, body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
 import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3030', 10)

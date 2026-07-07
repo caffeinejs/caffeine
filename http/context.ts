@@ -1,7 +1,72 @@
 import { IncomingMessage } from 'http'
-import { Context, Req, RouteValidationSchema, UnsignedCookie } from '@caffeinejs/application'
 import { FastifyRequest, RawServerDefault, RawRequestDefaultExpression, FastifyReply } from 'fastify'
 import { CookieSerializeOptions } from '@fastify/cookie'
+import type { RouteValidationSchema } from './route.js'
+import { type Principal } from './security/principal.js'
+
+export type UnsignedCookie = string | false | undefined
+
+export interface Req<
+  RAW = unknown,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>,
+  TAsync extends boolean = false,
+> {
+  get raw(): RAW
+  get url(): string
+  get method(): string
+
+  query(): TQuery
+  query(key: string): string | undefined
+
+  queries(key: string): string[] | undefined
+
+  header(): THeaders
+  header(key: string): string | undefined
+
+  hasHeader(key: string): boolean
+
+  param(): TParams
+  param(key: string): string | undefined
+
+  cookie(): Record<string, string>
+  cookie(name: string): string | undefined
+
+  signedCookie(): TAsync extends true ? Promise<Record<string, UnsignedCookie>> : Record<string, UnsignedCookie>
+  signedCookie(name: string): TAsync extends true ? Promise<UnsignedCookie> : UnsignedCookie
+}
+
+export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = false> {
+  get req(): Req<REQ, Record<string, string>, Record<string, string>, Record<string, string>, TAsync>
+
+  get statusCode(): number
+
+  get signal(): AbortSignal
+
+  get user(): Principal
+
+  status(code: number): this
+
+  header(key: string, value: string): this
+  headers(headers: Record<string, string>): this
+
+  cookie(name: string, value: string, opts?: CO): this
+
+  deleteCookie(name: string, opts?: CO): this
+
+  body(body?: unknown): this
+
+  notFound(body?: unknown): this
+
+  badRequest(body?: unknown): this
+
+  unprocessableEntity(body?: unknown): this
+
+  internalServerError(body: unknown): this
+
+  redirect(url: string, status?: number): this
+}
 
 export interface FastifyRouteSchema<
   _TParams = Record<string, string>,
@@ -43,6 +108,10 @@ export class FastifyContext<
     return this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest)
   }
 
+  get user(): Principal {
+    return this.#fastifyRequest.user
+  }
+
   get statusCode(): number {
     return this.#reply.statusCode
   }
@@ -71,13 +140,13 @@ export class FastifyContext<
     return this
   }
 
-  notFound(body?: unknown): this {
-    this.#reply.code(404).send(body)
+  badRequest(body?: unknown): this {
+    this.#reply.code(400).send(body)
     return this
   }
 
-  badRequest(body?: unknown): this {
-    this.#reply.code(400).send(body)
+  notFound(body?: unknown): this {
+    this.#reply.code(404).send(body)
     return this
   }
 
@@ -86,7 +155,7 @@ export class FastifyContext<
     return this
   }
 
-  internalServerError(body: unknown): this {
+  internalServerError(body?: unknown): this {
     this.#reply.code(500).send(body)
     return this
   }

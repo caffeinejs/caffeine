@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Header, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '../adapter_factory.js'
+import { Controller, Get, Header, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Header', () => {
   it('applies class-level header to all routes', async () => {

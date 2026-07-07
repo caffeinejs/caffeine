@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import cors from '@fastify/cors'
-import { Controller, Get, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '../adapter_factory.js'
-import { CORS } from '../decorators/index.js'
+import { Controller, Get, createWebApplication, fastifyAdapterFactory, CORS } from '../index.js'
 
 describe('CORS', () => {
   describe('global @fastify/cors registration', () => {

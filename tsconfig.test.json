@@ -6,7 +6,10 @@
     "noEmit": true,
     "composite": false,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "paths": {
+      "@caffeinejs/http": ["./http/index.ts"]
+    }
   },
   "include": [
     "**/*.test.ts",

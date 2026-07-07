@@ -1,5 +1,4 @@
-import { Controller, Get, Params, Post } from '@caffeinejs/application'
-import { body } from '@caffeinejs/http'
+import { Controller, Get, Params, Post, body } from '@caffeinejs/http'
 import { CreateExampleUseCase } from '../application/usecases/create-example.usecase.js'
 import { ListExamplesUseCase } from '../application/usecases/list-examples.usecase.js'
 

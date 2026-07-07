@@ -1,5 +1,4 @@
-import { configureRoute } from '@caffeinejs/application'
-import { configureRouter } from '@caffeinejs/application/decorators/registrar'
+import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 type EncodingToken = 'zstd' | 'br' | 'deflate' | 'gzip' | 'identity'
 

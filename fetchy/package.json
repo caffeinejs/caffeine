@@ -1,0 +1,29 @@
+{
+  "name": "@caffeinejs/fetchy",
+  "version": "0.0.0",
+  "description": "CaffeineJS fetchy package",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/application": "^0.0.0",
+    "@caffeinejs/core": "^0.0.0"
+  }
+}

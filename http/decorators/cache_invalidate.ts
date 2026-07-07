@@ -1,5 +1,5 @@
-import { configureRoute } from '@caffeinejs/application'
 import { CacheInvalidateOptions } from '../cache/types.js'
+import { configureRoute } from './registrar/registrar.js'
 
 export type { CacheInvalidateOptions }
 

@@ -45,6 +45,7 @@ export default defineConfig(
             './core/tsconfig.json',
             './application/tsconfig.json',
             './http/tsconfig.json',
+            './fetchy/tsconfig.json',
             './testing/tsconfig.json',
             './benchmarks/tsconfig.json',
             './examples/*/tsconfig.json',
@@ -82,7 +83,7 @@ export default defineConfig(
       }],
       '@stylistic/max-statements-per-line': ['error', { max: 1 }],
       '@stylistic/arrow-parens': ['error', 'as-needed'],
-      '@stylistic/newline-per-chained-call': ['error'],
+      '@stylistic/newline-per-chained-call': ['error', { ignoreChainWithDepth: 5 }],
 
       'n/no-missing-import': 'off',
       'n/no-unpublished-import': 'off',

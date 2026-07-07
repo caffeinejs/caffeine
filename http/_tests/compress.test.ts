@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import compress from '@fastify/compress'
-import { Controller, Get, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory, Compress } from '../index.js'
+import { Controller, Get, createWebApplication, fastifyAdapterFactory, Compress } from '../index.js'
 
 describe('Compress', () => {
   it('compresses responses when @fastify/compress is registered globally', async () => {

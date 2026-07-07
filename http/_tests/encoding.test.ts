@@ -3,8 +3,7 @@ import { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import compress from '@fastify/compress'
-import { Controller, Post, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory, Encoding } from '../index.js'
+import { Controller, Post, createWebApplication, fastifyAdapterFactory, Encoding } from '../index.js'
 
 async function gzip(data: string): Promise<Buffer> {
   const chunks: Buffer[] = []

@@ -1,0 +1,139 @@
+import { Context } from '../../context.js'
+import { RouteAuthzOptions } from '../../decorators/registrar/routing.definition.js'
+import { Principal } from '../principal.js'
+import { AuthzRouteService } from './authz_route_service.js'
+import { AuthorizationOptions } from './builder.js'
+import { PolicyBuilder } from './policy.builder.js'
+
+export interface AuthzPolicy {
+  readonly name: string
+  readonly requirements: readonly AuthzRequirement[]
+  readonly authenticationSchemes?: readonly string[]
+}
+
+export interface AuthzRequirement {
+  readonly kind: string
+}
+
+export abstract class AuthzRequirementHandler<R extends AuthzRequirement> {
+  abstract get kind(): string
+
+  abstract handle(
+    ctx: Context,
+    user: Principal,
+    requirement: R,
+    resource?: unknown,
+  ): AuthzPolicyResult | Promise<AuthzPolicyResult>
+}
+
+export interface AuthzResult {
+  readonly ok: boolean
+  readonly reason?: Error | string
+  readonly failedPolicy?: string
+  readonly failedRequirement?: AuthzRequirement
+}
+
+export interface AuthzPolicyResult {
+  ok: boolean
+  reason?: Error | string
+}
+
+export type PolicyEvaluator
+  = (ctx: Context, user: Principal, resource?: unknown) => AuthzResult | Promise<AuthzPolicyResult>
+
+export function newPolicyEvaluator(
+  policy: AuthzPolicy,
+  handlers: Map<string, AuthzRequirementHandler<AuthzRequirement>>,
+): PolicyEvaluator {
+  const compiled
+    = new Array<[AuthzRequirement, AuthzRequirementHandler<AuthzRequirement>]>(policy.requirements.length)
+
+  for (let i = 0; i < policy.requirements.length; i++) {
+    const requirement = policy.requirements[i]
+    const handler = handlers.get(requirement.kind)
+    if (!handler) {
+      throw new Error(`Handler for requirement ${requirement.kind} not found`)
+    }
+
+    compiled[i] = [requirement, handler]
+  }
+
+  return async (ctx: Context, user: Principal, resource?: unknown) => {
+    for (const [requirement, handler] of compiled) {
+      const result = await handler.handle(ctx, user, requirement, resource)
+      if (!result.ok) {
+        // Fail-fast: upon first failure,
+        // stop executing and return the result immediately.
+        return { ok: false, failedRequirement: requirement, failedPolicy: policy.name }
+      }
+    }
+
+    return { ok: true }
+  }
+}
+
+export function compileRoutePolicy(
+  options: AuthorizationOptions,
+  evaluators: Map<string, PolicyEvaluator>,
+  handlers: Map<string, AuthzRequirementHandler<AuthzRequirement>>,
+  routerOptions: RouteAuthzOptions = {},
+  routeOptions: RouteAuthzOptions = {},
+): AuthzRouteService | undefined {
+  const anonymous
+    = (routerOptions.allowAnonymous !== undefined && routerOptions.allowAnonymous)
+      || (routeOptions.allowAnonymous !== undefined && routeOptions.allowAnonymous)
+
+  if (anonymous) {
+    return undefined
+  }
+
+  const routerPolicies = normPolicy(routerOptions.policy)
+  const routePolicies = normPolicy(routeOptions.policy)
+
+  const routerEmpty = !routerPolicies.length
+    && !routerOptions.roles?.length
+    && !routerOptions.schemes?.length
+  const routeEmpty = !routePolicies.length
+    && !routeOptions.roles?.length
+    && !routeOptions.schemes?.length
+
+  if (routerEmpty && routeEmpty) {
+    return new AuthzRouteService([newPolicyEvaluator(options.authorizeDecoratorDefaultPolicy, handlers)])
+  }
+
+  const policyNames = new Set<string>()
+  for (const name of routerPolicies) {
+    policyNames.add(name)
+  }
+  for (const name of routePolicies) {
+    policyNames.add(name)
+  }
+
+  const evals = new Array<PolicyEvaluator>()
+  for (const name of policyNames) {
+    const e = evaluators.get(name)
+    evals.push(e ?? denyAll)
+  }
+
+  const builder = new PolicyBuilder()
+
+  if (routerOptions.roles && routerOptions.roles.length > 0) {
+    builder.requireRole(...routerOptions.roles)
+  }
+  if (routeOptions.roles && routeOptions.roles.length > 0) {
+    builder.requireRole(...routeOptions.roles)
+  }
+
+  evals.push(newPolicyEvaluator(builder.build(), handlers))
+
+  return new AuthzRouteService(evals)
+}
+
+const denyAll: PolicyEvaluator = async () => ({ ok: false })
+
+function normPolicy(policy: string | string[] | undefined): string[] {
+  if (policy == null) {
+    return []
+  }
+  return Array.isArray(policy) ? policy : [policy]
+}

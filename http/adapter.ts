@@ -1,20 +1,24 @@
 import { Readable } from 'node:stream'
-import { Container, Scopes } from '@caffeinejs/core'
-import { Adapter, AdapterIn, Router } from '@caffeinejs/application'
+import { Scopes } from '@caffeinejs/core'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions, type FastifyError } from 'fastify'
+import type { Adapter, AdapterIn, AdapterToolKit } from './application.js'
+import type { Router } from './route.js'
+import type { AuthenticationOptions } from './security/auth/builder.js'
+import { newAnonymousUser, type Principal } from './security/principal.js'
 import { compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
-import { FastifyContext } from './context.js'
 import { CacheStore, ETagGenerator } from './cache/types.js'
 import { RouteConfigurer } from './route_configurer.js'
 import { cacheConfigurer } from './cache/cache.js'
 import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { MemoryCacheStore } from './cache/index.js'
+import { FastifyContext } from './context.js'
+import { AuthenticationCoordinator } from './security/auth/service.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
     caffeineResponseCached: boolean
-    caffeineContext: FastifyContext
+    user: Principal
   }
 }
 
@@ -32,20 +36,40 @@ export class FastifyAdapter<
   RES extends FastifyReply = FastifyReply,
 > implements Adapter<SERVER, REQ> {
   #fastify: SERVER
-  #container: Container
+  #kit: AdapterToolKit
   #options: FastifyAdapterOptions | undefined
 
-  constructor(container: Container, fastify: SERVER, options?: FastifyAdapterOptions) {
+  constructor(
+    kit: AdapterToolKit,
+    fastify: SERVER,
+    options?: FastifyAdapterOptions,
+  ) {
     this.#fastify = fastify
-    this.#container = container
+    this.#kit = kit
     this.#options = options
   }
 
   async setup(input: AdapterIn<REQ>): Promise<void> {
     const routers = input.routers as Router<REQ>[]
     const store = this.#options?.cache?.store ?? new MemoryCacheStore()
-
     const configurers = [...(this.#options?.configurers ?? [])]
+
+    // Global: caffeineContext decoration + hook
+    this.#fastify.decorateRequest('caffeineContext', null as unknown as FastifyContext)
+    this.#fastify.addHook('onRequest', (req, reply, done) => {
+      req.caffeineContext = new FastifyContext(req, reply)
+      done()
+    })
+
+    // Auth: resolve coordinator and options once; decorate user field once
+    let coordinator: AuthenticationCoordinator | undefined
+    let authOpts: AuthenticationOptions | undefined
+    if (this.#kit.authentication.enabled) {
+      coordinator = this.#kit.authentication.coordinator
+      authOpts = this.#kit.authentication.options
+      this.#fastify.decorateRequest<Principal | null>('user', null)
+    }
+
     configurers.push(cacheConfigurer(store, this.#options?.cache?.etagGenerator))
     configurers.push(cacheInvalidateConfigurer(store))
 
@@ -59,11 +83,11 @@ export class FastifyAdapter<
     })
 
     const needsRequestScope = routers.some(
-      router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
+      router => this.#kit.container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
 
     if (needsRequestScope) {
-      const man = this.#container.requestScopeManager
+      const man = this.#kit.container.requestScopeManager
       this.#fastify.addHook('onRequest', (_req, _res, done) => {
         man.run(() => done())
       })
@@ -76,17 +100,33 @@ export class FastifyAdapter<
       this.#fastify.register(async server => {
         const controller = router.controller
         const isSingleton = router.binding.scopeId === Scopes.SINGLETON
-        const isContextNeeded = router.routes.some(route => route.parameters.some(p => p.type === 'context'))
 
         server.decorateRequest('caffeineResponseCached', false)
-        // If a route requires the 'context' parameter,
-        // we need to decorate the request with the Caffeine context
-        if (isContextNeeded) {
-          server.decorateRequest('caffeineContext', null as unknown as FastifyContext)
-          server.addHook('onRequest', (req, reply, done) => {
-            req.caffeineContext = new FastifyContext(req, reply)
-            done()
-          })
+
+        // Auth: one hook per router scope
+        if (coordinator && authOpts) {
+          const schemes = authOpts.defaultAuthenticateScheme
+            ? [authOpts.defaultAuthenticateScheme]
+            : []
+
+          if (schemes.length > 0) {
+            server.addHook('onRequest', async req => {
+              let user: Principal | null = null
+              for (const scheme of schemes) {
+                const result = await coordinator.authenticate(req.caffeineContext, scheme)
+                if (result.succeeded) {
+                  if (user) {
+                    for (const identity of result.ticket!.principal.identities) {
+                      user.addIdentity(identity)
+                    }
+                  } else {
+                    user = result.ticket!.principal
+                  }
+                }
+              }
+              req.user = user ?? newAnonymousUser()
+            })
+          }
         }
 
         for (const route of routes) {
@@ -106,13 +146,7 @@ export class FastifyAdapter<
 
           // Route Config
           // https://fastify.dev/docs/latest/Reference/Routes/#config
-          // This can be user-provided, or framework-level (Eg. @CORS).
           const config: Record<string | symbol, unknown> = {}
-          if (router.config) {
-            for (const [k, v] of router.config) {
-              config[k] = v
-            }
-          }
           if (route.config) {
             for (const [k, v] of route.config) {
               config[k] = v
@@ -121,31 +155,18 @@ export class FastifyAdapter<
 
           // Route Options
           // https://fastify.dev/docs/latest/Reference/Routes/#routes-options
-          // This can be user-provided, or framework-level (Eg. @Compress).
           const options: Record<string | symbol, unknown> = {}
-          if (router.options) {
-            for (const [k, v] of router.options) {
-              options[k] = v
-            }
-          }
           if (route.options) {
             for (const [k, v] of route.options) {
               options[k] = v
             }
           }
 
-          // Compiling the route response details that we know beforehand.
-          // This will be consolidated into a single object within the reserved 'caffeine' key.
           const status = route.statusCode!
           const hasStatus = typeof status === 'number' && status > 0
-          const contentType = route.contentType ?? router.contentType
+          const contentType = route.contentType
           const hasContentType = typeof contentType === 'string' && contentType.length > 0
           const header = [] as Array<[string, string | string[]]>
-          if (router.header) {
-            for (const [k, v] of router.header) {
-              header.push([k, v])
-            }
-          }
           if (route.header) {
             for (const [k, v] of route.header) {
               header.push([k, v])
@@ -172,8 +193,8 @@ export class FastifyAdapter<
             method: [...new Set(route.method.map(m => m.toUpperCase()))],
             url: joinPaths(basePath, route.path),
             schema: route.schema as FastifySchema,
-            bodyLimit: route.bodyLimit ?? router.bodyLimit,
-            handlerTimeout: route.timeout ?? router.timeout,
+            bodyLimit: route.bodyLimit,
+            handlerTimeout: route.timeout,
             config,
             ...options,
             handler: function (req, res) {
@@ -200,6 +221,40 @@ export class FastifyAdapter<
 
           normalizeRouteDef(routeDef)
 
+          // Authz: per-route, delegates challenge/forbid to handler
+          if (route.authorization.authorizer != null) {
+            const onRequest = routeDef.onRequest as
+                Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
+            const authz = route.authorization.authorizer
+
+            onRequest.push(async (req, reply) => {
+              if (reply.sent) {
+                return
+              }
+              const ctx = req.caffeineContext
+              const result = await authz.authorize(ctx, req.user)
+              if (result.ok) {
+                return
+              }
+
+              if (!ctx.user.authenticated) {
+                if (coordinator) {
+                  await coordinator.challenge(ctx)
+                }
+                if (!reply.sent) {
+                  void reply.code(ctx.statusCode || 401).send()
+                }
+              } else {
+                if (coordinator) {
+                  await coordinator.forbid(ctx)
+                }
+                if (!reply.sent) {
+                  void reply.code(ctx.statusCode || 403).send()
+                }
+              }
+            })
+          }
+
           const routeFn = (s: typeof server, def: RouteOptions) =>
             s.route(tidy(def))
 
@@ -209,12 +264,10 @@ export class FastifyAdapter<
 
           // BodyAsBuffer
           // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
-          // We need to register an inner plugin, so we can remove all content type parsers,
-          // and add a custom content type parser for the raw body.
           if (route.extras?.get(kBodyBuffer)) {
             server.register(async innerServer => {
               innerServer.removeAllContentTypeParsers()
-              innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit ?? router.bodyLimit }, function (_request, payload, done) {
+              innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit }, function (_request, payload, done) {
                 const chunks: Buffer[] = []
                 payload.on('data', (chunk: Buffer) => chunks.push(chunk))
                 payload.on('end', () => done(null, Buffer.concat(chunks)))

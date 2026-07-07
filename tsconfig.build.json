@@ -8,6 +8,9 @@
       "path": "./http/tsconfig.build.json"
     },
     {
+      "path": "./fetchy/tsconfig.build.json"
+    },
+    {
       "path": "./application/tsconfig.build.json"
     },
     {

@@ -2,19 +2,24 @@ import { describe, it, expect } from 'vitest'
 import supertest from 'supertest'
 import Fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
-import { Controller, Get, Method, createWebApplication, Params } from '@caffeinejs/application'
 import { CaffeineIoC, Scopes, Injectable, Lifetime } from '@caffeinejs/core'
 import { address, context, cookie, header, method, param, path, pick, port, query, signal, signedCookie, url } from './route_picker.js'
-import { FastifyAdapter } from './adapter.js'
-import { fastifyAdapterFactory } from './adapter_factory.js'
-import { FastifyContext } from './context.js'
+import { Controller, Get, Method, createWebApplication, Params, fastifyAdapterFactory, FastifyAdapter, FastifyContext, type AdapterToolKit } from './index.js'
+
+function makeKit(): AdapterToolKit {
+  return {
+    container: new CaffeineIoC(),
+    authentication: { enabled: false },
+    authorization: { enabled: false },
+  }
+}
 
 describe('Fastify Adapter', () => {
   it('exposes the underlying server as a Supertest-compatible listener', async () => {
     const app = Fastify()
     app.get('/', () => ({ ok: true }))
 
-    const adapter = new FastifyAdapter(new CaffeineIoC(), app)
+    const adapter = new FastifyAdapter(makeKit(), app)
     await adapter.setup({ routers: [] })
 
     expect(adapter.instance).toBe(app)
@@ -26,7 +31,7 @@ describe('Fastify Adapter', () => {
     const app = Fastify()
     app.get('/', () => ({ ok: true }))
 
-    const adapter = new FastifyAdapter(new CaffeineIoC(), app)
+    const adapter = new FastifyAdapter(makeKit(), app)
     await adapter.setup({ routers: [] })
     const result = await adapter.instance.inject('/')
 

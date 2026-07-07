@@ -10,6 +10,7 @@
     "core",
     "application",
     "http",
+    "fetchy",
     "cli",
     "devtools",
     "devtools/ui",

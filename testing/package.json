@@ -28,7 +28,8 @@
   },
   "dependencies": {
     "@caffeinejs/core": "*",
-    "@caffeinejs/application": "*"
+    "@caffeinejs/application": "*",
+    "@caffeinejs/http": "*"
   },
   "devDependencies": {
     "@caffeinejs/http": "*",

@@ -1,5 +1,7 @@
 import { Container } from '@caffeinejs/core'
-import { Router } from './route.js'
+import type { Router } from './route.js'
+import { AuthenticationCoordinator } from './security/auth/service.js'
+import { AuthenticationOptions } from './security/auth/builder.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]
@@ -13,12 +15,20 @@ export interface Adapter<I, R> {
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 }
 
-export interface AdapterFactoryIn {
+export interface AdapterToolKit {
   container: Container
+  authentication: {
+    enabled: boolean
+    coordinator?: AuthenticationCoordinator
+    options?: AuthenticationOptions
+  }
+  authorization: {
+    enabled: boolean
+  }
 }
 
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
-  = (kit: AdapterFactoryIn) => A
+  = (kit: AdapterToolKit) => A
 
 export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   #container: Container
@@ -51,7 +61,7 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
 
   async ready(): Promise<void> {
     await this.#container.init()
-    await this.#adapter.setup({ routers: this.#routers })
+    await this.#adapter.setup({ routers: this.#routers } as AdapterIn<R>)
 
     for (const hook of this.#readyHooks) {
       await hook()

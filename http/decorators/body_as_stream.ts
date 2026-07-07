@@ -1,4 +1,4 @@
-import { configureRoute } from '@caffeinejs/application'
+import { configureRoute } from './registrar/registrar.js'
 import { kBodyStream } from './keys/keys.js'
 
 export function BodyAsStream() {

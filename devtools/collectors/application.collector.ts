@@ -1,4 +1,4 @@
-import type { WebApplication } from '@caffeinejs/application'
+import type { WebApplication } from '@caffeinejs/http'
 import type { DevtoolsStore } from '../store.js'
 import type { RouteSnapshot } from '../types.js'
 

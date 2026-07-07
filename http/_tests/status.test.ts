@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '../adapter_factory.js'
+import { Controller, Get, Post, Status, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Status', () => {
   it('returns the custom status code set by @Status', async () => {

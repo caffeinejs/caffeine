@@ -1,8 +1,7 @@
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 import { Injectable } from '@caffeinejs/core'
-import { WebApplication, Controller, Get, Post, Params, createWebApplication } from '@caffeinejs/application'
-import { body, fastifyAdapterFactory } from '@caffeinejs/http'
+import { WebApplication, Controller, Get, Post, Params, createWebApplication, body, fastifyAdapterFactory } from '@caffeinejs/http'
 import { ErrFetchFailed, typedClient } from './index.js'
 import type { Fetchable } from './index.js'
 

@@ -1,8 +1,7 @@
 import { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Delete, Get, Post, Status, createWebApplication } from '@caffeinejs/application'
-import { fastifyAdapterFactory, Cache, CacheInvalidate, MemoryCacheStore } from '../index.js'
+import { Controller, Delete, Get, Post, Status, createWebApplication, fastifyAdapterFactory, Cache, CacheInvalidate, MemoryCacheStore } from '../index.js'
 
 describe('Cache-Control headers', () => {
   describe('ttl', () => {
@@ -16,7 +15,8 @@ describe('Cache-Control headers', () => {
       void [TtlNumController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-ttl-num/data' })
@@ -34,7 +34,8 @@ describe('Cache-Control headers', () => {
       void [TtlStrMController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-ttl-str-m/data' })
@@ -51,7 +52,8 @@ describe('Cache-Control headers', () => {
       void [TtlCompoundController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-ttl-compound/data' })
@@ -70,7 +72,8 @@ describe('Cache-Control headers', () => {
       void [SharedMaxAgeController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-smaxage/data' })
@@ -90,7 +93,8 @@ describe('Cache-Control headers', () => {
       void [StaleWhileRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-swr/data' })
@@ -107,7 +111,8 @@ describe('Cache-Control headers', () => {
       void [StaleIfErrorController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-sie/data' })
@@ -126,7 +131,8 @@ describe('Cache-Control headers', () => {
       void [PrivateCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-private/data' })
@@ -143,7 +149,8 @@ describe('Cache-Control headers', () => {
       void [PublicCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-public/data' })
@@ -162,7 +169,8 @@ describe('Cache-Control headers', () => {
       void [NoStoreController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-nostore/data' })
@@ -179,7 +187,8 @@ describe('Cache-Control headers', () => {
       void [NoCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-nocache/data' })
@@ -196,7 +205,8 @@ describe('Cache-Control headers', () => {
       void [MustRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-mustrevalidate/data' })
@@ -213,7 +223,8 @@ describe('Cache-Control headers', () => {
       void [ImmutableController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-cc-immutable/data' })
@@ -231,7 +242,8 @@ describe('Cache-Control headers', () => {
     void [EmptyOptionsController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-cc-empty/data' })
@@ -250,7 +262,8 @@ describe('Vary header', () => {
     void [VarySingleController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-vary-single/data' })
@@ -267,7 +280,8 @@ describe('Vary header', () => {
     void [VaryMultiController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-vary-multi/data' })
@@ -284,7 +298,8 @@ describe('Vary header', () => {
     void [VaryNoneController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-vary-none/data' })
@@ -303,7 +318,8 @@ describe('ETag', () => {
     void [ETagPresentController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-etag-present/data' })
@@ -322,7 +338,8 @@ describe('ETag', () => {
     void [ETagStableController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res1 = await server.inject({ method: 'GET', url: '/cache-etag-stable/data' })
@@ -345,7 +362,8 @@ describe('ETag', () => {
     void [ETagDiffController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const resA = await server.inject({ method: 'GET', url: '/cache-etag-diff/a' })
@@ -366,7 +384,8 @@ describe('ETag', () => {
     void [ETagDisabledController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-etag-disabled/data' })
@@ -383,7 +402,8 @@ describe('ETag', () => {
     void [ETagNoStoreController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-etag-nostore/data' })
@@ -400,7 +420,8 @@ describe('ETag', () => {
     void [ETagStreamController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-etag-stream/data' })
@@ -420,7 +441,8 @@ describe('304 Not Modified', () => {
     void [Match304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res1 = await server.inject({ method: 'GET', url: '/cache-304-match/data' })
@@ -446,7 +468,8 @@ describe('304 Not Modified', () => {
     void [NoMatch304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-304-nomatch/data' })
@@ -471,7 +494,8 @@ describe('304 Not Modified', () => {
 
     const store = new MemoryCacheStore()
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } }))
+      .build()
     await app.ready()
 
     const res1 = await server.inject({ method: 'GET', url: '/cache-304-stale/data' })
@@ -498,7 +522,8 @@ describe('304 Not Modified', () => {
     void [Head304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res1 = await server.inject({ method: 'GET', url: '/cache-304-head/data' })
@@ -529,7 +554,8 @@ describe('Cache store', () => {
     void [StoreBupassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res1 = await server.inject({ method: 'GET', url: '/cache-store-bypass/data' })
@@ -556,7 +582,8 @@ describe('Cache store', () => {
     void [StoreNoStoreController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-store-nostore/data' })
@@ -579,7 +606,8 @@ describe('Cache store', () => {
     void [StorePostDefaultController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'POST', url: '/cache-store-post-default/data' })
@@ -602,7 +630,8 @@ describe('Cache store', () => {
     void [StorePostCustomController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res1 = await server.inject({ method: 'POST', url: '/cache-store-post-custom/data' })
@@ -640,7 +669,8 @@ describe('Cache store', () => {
     server.setNotFoundHandler((_req, reply) => {
       void reply.code(400).send({ error: 'bad' })
     })
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-store-status/ok' })
@@ -664,7 +694,8 @@ describe('Cache store', () => {
 
     const store = new MemoryCacheStore()
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-store-clear/data' })
@@ -696,7 +727,8 @@ describe('Cache key', () => {
     void [KeyDefaultController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-key-default/data' })
@@ -727,7 +759,8 @@ describe('Cache key', () => {
     void [KeyUrlsController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-key-urls/a' })
@@ -754,7 +787,8 @@ describe('Cache key', () => {
     void [KeyCustomPathController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-key-custom-path/data?v=1' })
@@ -777,7 +811,8 @@ describe('Cache key', () => {
     void [KeyCustomQueryController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-key-custom-query/data?lang=en' })
@@ -804,7 +839,8 @@ describe('Decorator scope', () => {
     void [ScopeClassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const resA = await server.inject({ method: 'GET', url: '/cache-scope-class/a' })
@@ -827,7 +863,8 @@ describe('Decorator scope', () => {
     void [ScopeMethodController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const resCached = await server.inject({ method: 'GET', url: '/cache-scope-method/cached' })
@@ -848,7 +885,8 @@ describe('Decorator scope', () => {
     void [ScopeReplaceController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-scope-replace/route' })
@@ -872,7 +910,8 @@ describe('Undecorated routes', () => {
     void [UndecoratedController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res1 = await server.inject({ method: 'GET', url: '/cache-undecorated/data' })
@@ -895,7 +934,8 @@ describe('@Cache(false)', () => {
     void [CacheFalseMethodController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const res = await server.inject({ method: 'GET', url: '/cache-false-method/data' })
@@ -919,7 +959,8 @@ describe('@Cache(false)', () => {
     void [CacheFalseClassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     const resA = await server.inject({ method: 'GET', url: '/cache-false-class/a' })
@@ -944,7 +985,8 @@ describe('@Cache(false)', () => {
     void [CacheFalseNoCacheController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      .build()
     await app.ready()
 
     await server.inject({ method: 'GET', url: '/cache-false-nocache/data' })
@@ -971,7 +1013,8 @@ describe('Bug fixes', () => {
       void [Bug1EtagFalseController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({ method: 'GET', url: '/cache-bug1-etag-false/data' })
@@ -995,7 +1038,8 @@ describe('Bug fixes', () => {
       void [Bug1InmIgnoredController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-bug1-inm-ignored/data' })
@@ -1025,7 +1069,8 @@ describe('Bug fixes', () => {
       void [Bug2PrivateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({ method: 'GET', url: '/cache-bug2-private/data' })
@@ -1054,7 +1099,8 @@ describe('Bug fixes', () => {
       void [Bug3VarySeparateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({
@@ -1085,7 +1131,8 @@ describe('Bug fixes', () => {
       void [Bug3VaryHitController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({
@@ -1116,7 +1163,8 @@ describe('Bug fixes', () => {
       void [Bug3VaryMultiController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       // same Accept-Language, different Accept → separate entry
@@ -1158,7 +1206,8 @@ describe('Bug fixes', () => {
       void [Bug4CCNoCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-bug4-cc-nocache/data' })
@@ -1193,7 +1242,8 @@ describe('Bug fixes', () => {
       void [Bug4PragmaController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-bug4-pragma/data' })
@@ -1220,7 +1270,8 @@ describe('Bug fixes', () => {
       void [Bug5HeadNoBodyController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const getRes = await server.inject({ method: 'GET', url: '/cache-bug5-head-nobody/data' })
@@ -1243,7 +1294,8 @@ describe('Bug fixes', () => {
       void [Bug5Head304Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const getRes = await server.inject({ method: 'GET', url: '/cache-bug5-head-304/data' })
@@ -1276,7 +1328,8 @@ describe('Bug fixes', () => {
       void [VaryStarController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({ method: 'GET', url: '/cache-vary-star/data' })
@@ -1317,7 +1370,8 @@ describe('Bug fixes', () => {
       void [SegmentController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: spyStore } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: spyStore } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-segment/data' })
@@ -1342,7 +1396,8 @@ describe('Bug fixes', () => {
       void [AuthPrivateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({
@@ -1379,7 +1434,8 @@ describe('Bug fixes', () => {
       void [AuthPublicOverrideController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({
@@ -1423,7 +1479,8 @@ describe('Bug fixes', () => {
       void [KeyEncodeController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: spyStore } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: spyStore } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-key-encode/data?a=1&b=2' })
@@ -1452,7 +1509,8 @@ describe('Bug fixes', () => {
       void [ReqNoStoreController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-req-nostore/data' })
@@ -1484,7 +1542,8 @@ describe('Bug fixes', () => {
       void [Headers304Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({ method: 'GET', url: '/cache-304-headers/data' })
@@ -1513,7 +1572,8 @@ describe('Bug fixes', () => {
       void [InmWildcardController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-inm-wildcard/data' })
@@ -1536,7 +1596,8 @@ describe('Bug fixes', () => {
       void [InmListController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({ method: 'GET', url: '/cache-inm-list/data' })
@@ -1560,7 +1621,8 @@ describe('Bug fixes', () => {
       void [InmWeakController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({ method: 'GET', url: '/cache-inm-weak/data' })
@@ -1598,7 +1660,8 @@ describe('Bug fixes', () => {
       void [SegIsoBController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } }))
+        .build()
       await app.ready()
 
       // Prime both segments
@@ -1628,7 +1691,8 @@ describe('Bug fixes', () => {
       void [ProxyRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-proxy-revalidate/data' })
@@ -1659,7 +1723,8 @@ describe('Bug fixes', () => {
       void [InvalidateSelfController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-invalidate-self/resource' })
@@ -1693,7 +1758,8 @@ describe('Bug fixes', () => {
       void [InvalidatePathsController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-invalidate-paths/resource' })
@@ -1727,7 +1793,8 @@ describe('Bug fixes', () => {
       void [Invalidate4xxController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-invalidate-4xx/resource' })
@@ -1752,7 +1819,8 @@ describe('Bug fixes', () => {
       void [OnlyIfCachedMissController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({
@@ -1778,7 +1846,8 @@ describe('Bug fixes', () => {
       void [OnlyIfCachedHitController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-only-if-cached-hit/data' })
@@ -1805,7 +1874,8 @@ describe('Bug fixes', () => {
       void [NoTransformController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-no-transform/data' })
@@ -1825,7 +1895,8 @@ describe('Bug fixes', () => {
       void [LastModifiedController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res = await server.inject({ method: 'GET', url: '/cache-last-modified/data' })
@@ -1842,7 +1913,8 @@ describe('Bug fixes', () => {
       void [ImsMatchController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       const res1 = await server.inject({ method: 'GET', url: '/cache-ims-match/data' })
@@ -1868,7 +1940,8 @@ describe('Bug fixes', () => {
       void [ImsStaleController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-ims-stale/data' })
@@ -1892,7 +1965,8 @@ describe('Bug fixes', () => {
       void [InmPrecedenceController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-inm-precedence/data' })
@@ -1927,7 +2001,8 @@ describe('Bug fixes', () => {
       void [ReqMaxAge0Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } })).build()
+      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+        .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-req-maxage0/data' })

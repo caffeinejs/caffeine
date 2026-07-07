@@ -1,6 +1,5 @@
 import { FastifyCorsOptions } from '@fastify/cors'
-import { configureRoute } from '@caffeinejs/application'
-import { configureRouter } from '@caffeinejs/application/decorators/registrar'
+import { configureRoute, configureRouter } from './registrar/registrar.js'
 
 export function CORS(options: FastifyCorsOptions | boolean) {
   return (fn: Function, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {

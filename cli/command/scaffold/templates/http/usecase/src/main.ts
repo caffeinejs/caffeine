@@ -1,6 +1,5 @@
 import Fastify from 'fastify'
-import { fastifyAdapterFactory } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/application'
+import { fastifyAdapterFactory, createWebApplication } from '@caffeinejs/http'
 import './presentation/example.controller.js'
 
 const app = createWebApplication(fastifyAdapterFactory(Fastify({ logger: true }))).build()

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, createWebApplication, Timeout } from '@caffeinejs/application'
-import { fastifyAdapterFactory } from '../adapter_factory.js'
+import { Controller, Get, createWebApplication, Timeout, fastifyAdapterFactory } from '../index.js'
 
 describe('Timeout', () => {
   it('method-level @Timeout overrides class-level timeout', async () => {

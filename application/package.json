@@ -11,14 +11,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./decorators": {
-      "types": "./dist/decorators.d.ts",
-      "default": "./dist/decorators.js"
-    },
-    "./decorators/registrar": {
-      "types": "./dist/decorators/registrar/index.d.ts",
-      "default": "./dist/decorators/registrar/index.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
