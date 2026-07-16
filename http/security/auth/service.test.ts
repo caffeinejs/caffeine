@@ -1,20 +1,27 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Context } from '../../context.js'
-import { Claim } from '../claim.js'
-import { Identity } from '../identity.js'
-import { Principal } from '../principal.js'
-import { AuthenticateResult, AuthenticationProperties, AuthenticationTicket } from './ticket.js'
+import { Claim, Identity, Principal } from '../index.js'
+import { AuthenticateResult, AuthenticationTicket } from './ticket.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
-import { AuthenticationCoordinator } from './service.js'
+import { AuthenticationService } from './service.js'
 import type { AuthenticationHandler } from './handler.js'
 
 const ctx = {} as unknown as Context
 
-function makeProvider(handlers: Record<string, AuthenticationHandler>, defaultScheme = '') {
+function makeProvider(
+  handlers: Record<string, AuthenticationHandler>,
+  defaultScheme = '',
+  challengeScheme?: string,
+  forbidScheme?: string,
+) {
   const schemes = new Map(
     Object.entries(handlers).map(([name, h]) => [name, { get: () => h }]),
   )
-  return new AuthenticationSchemeProvider(schemes, { defaultAuthenticateScheme: defaultScheme })
+  return new AuthenticationSchemeProvider(schemes, {
+    defaultAuthenticateScheme: defaultScheme,
+    defaultChallengeScheme: challengeScheme,
+    defaultForbidScheme: forbidScheme,
+  })
 }
 
 function makePrincipal(sub = 'user'): Principal {
@@ -34,7 +41,7 @@ function makeHandler(result: AuthenticateResult): AuthenticationHandler {
 describe('AuthenticationCoordinator', () => {
   describe('authenticate()', () => {
     it('returns none when scheme is not registered', async () => {
-      const coordinator = new AuthenticationCoordinator(makeProvider({}))
+      const coordinator = new AuthenticationService(makeProvider({}))
       const result = await coordinator.authenticate(ctx, 'Bearer')
 
       expect(result.succeeded).toBe(false)
@@ -43,7 +50,7 @@ describe('AuthenticationCoordinator', () => {
 
     it('passes ctx to the handler', async () => {
       const handler = makeHandler(AuthenticateResult.none())
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
 
       await coordinator.authenticate(ctx, 'Bearer')
 
@@ -53,7 +60,7 @@ describe('AuthenticationCoordinator', () => {
     it('returns handler result unchanged when authentication fails', async () => {
       const err = new Error('bad token')
       const handler = makeHandler(AuthenticateResult.fail(err))
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
 
       const result = await coordinator.authenticate(ctx, 'Bearer')
 
@@ -64,7 +71,7 @@ describe('AuthenticationCoordinator', () => {
     it('returns handler result unchanged when success and no mapper', async () => {
       const ticket = new AuthenticationTicket(makePrincipal(), 'Bearer')
       const handler = makeHandler(AuthenticateResult.success(ticket))
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
 
       const result = await coordinator.authenticate(ctx, 'Bearer')
 
@@ -78,7 +85,7 @@ describe('AuthenticationCoordinator', () => {
       const ticket = new AuthenticationTicket(original, 'Bearer')
       const handler = makeHandler(AuthenticateResult.success(ticket))
       const mapperFn = vi.fn().mockReturnValue(mapped)
-      const coordinator = new AuthenticationCoordinator(
+      const coordinator = new AuthenticationService(
         makeProvider({ Bearer: handler }),
         { get: () => mapperFn },
       )
@@ -91,10 +98,10 @@ describe('AuthenticationCoordinator', () => {
     })
 
     it('preserves original ticket properties when mapper is applied', async () => {
-      const props = new AuthenticationProperties(new Map([['key', 'val']]))
+      const props = {}
       const ticket = new AuthenticationTicket(makePrincipal(), 'Bearer', props)
       const handler = makeHandler(AuthenticateResult.success(ticket))
-      const coordinator = new AuthenticationCoordinator(
+      const coordinator = new AuthenticationService(
         makeProvider({ Bearer: handler }),
         { get: () => vi.fn().mockReturnValue(makePrincipal('mapped')) },
       )
@@ -107,7 +114,7 @@ describe('AuthenticationCoordinator', () => {
     it('does not call mapper when authentication does not succeed', async () => {
       const mapperFn = vi.fn()
       const handler = makeHandler(AuthenticateResult.fail(new Error('expired')))
-      const coordinator = new AuthenticationCoordinator(
+      const coordinator = new AuthenticationService(
         makeProvider({ Bearer: handler }),
         { get: () => mapperFn },
       )
@@ -121,8 +128,8 @@ describe('AuthenticationCoordinator', () => {
   describe('challenge()', () => {
     it('delegates to handler with ctx and properties', async () => {
       const handler = makeHandler(AuthenticateResult.none())
-      const props = new AuthenticationProperties()
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }, 'Bearer'))
+      const props = {}
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }, 'Bearer'))
 
       await coordinator.challenge(ctx, 'Bearer', props)
 
@@ -131,15 +138,28 @@ describe('AuthenticationCoordinator', () => {
 
     it('uses default scheme when schemeName is not provided', async () => {
       const handler = makeHandler(AuthenticateResult.none())
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }, 'Bearer'))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }, 'Bearer'))
 
       await coordinator.challenge(ctx)
 
       expect(handler.challenge).toHaveBeenCalled()
     })
 
+    it('uses defaultChallengeScheme over defaultAuthenticateScheme when set', async () => {
+      const jwtHandler = makeHandler(AuthenticateResult.none())
+      const basicHandler = makeHandler(AuthenticateResult.none())
+      const coordinator = new AuthenticationService(
+        makeProvider({ Bearer: jwtHandler, Basic: basicHandler }, 'Bearer', 'Basic'),
+      )
+
+      await coordinator.challenge(ctx)
+
+      expect(basicHandler.challenge).toHaveBeenCalled()
+      expect(jwtHandler.challenge).not.toHaveBeenCalled()
+    })
+
     it('throws when scheme is not found', () => {
-      const coordinator = new AuthenticationCoordinator(makeProvider({}, 'Bearer'))
+      const coordinator = new AuthenticationService(makeProvider({}, 'Bearer'))
 
       expect(() => coordinator.challenge(ctx, 'Bearer')).toThrow('Bearer')
     })
@@ -148,8 +168,8 @@ describe('AuthenticationCoordinator', () => {
   describe('forbid()', () => {
     it('delegates to handler with ctx and properties', async () => {
       const handler = makeHandler(AuthenticateResult.none())
-      const props = new AuthenticationProperties()
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }, 'Bearer'))
+      const props = {}
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }, 'Bearer'))
 
       await coordinator.forbid(ctx, 'Bearer', props)
 
@@ -158,15 +178,28 @@ describe('AuthenticationCoordinator', () => {
 
     it('uses default scheme when schemeName is not provided', async () => {
       const handler = makeHandler(AuthenticateResult.none())
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }, 'Bearer'))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }, 'Bearer'))
 
       await coordinator.forbid(ctx)
 
       expect(handler.forbid).toHaveBeenCalled()
     })
 
+    it('uses defaultForbidScheme over defaultAuthenticateScheme when set', async () => {
+      const jwtHandler = makeHandler(AuthenticateResult.none())
+      const basicHandler = makeHandler(AuthenticateResult.none())
+      const coordinator = new AuthenticationService(
+        makeProvider({ Bearer: jwtHandler, Basic: basicHandler }, 'Bearer', undefined, 'Basic'),
+      )
+
+      await coordinator.forbid(ctx)
+
+      expect(basicHandler.forbid).toHaveBeenCalled()
+      expect(jwtHandler.forbid).not.toHaveBeenCalled()
+    })
+
     it('throws when scheme is not found', () => {
-      const coordinator = new AuthenticationCoordinator(makeProvider({}, 'Bearer'))
+      const coordinator = new AuthenticationService(makeProvider({}, 'Bearer'))
 
       expect(() => coordinator.forbid(ctx, 'Bearer')).toThrow('Bearer')
     })
@@ -176,7 +209,7 @@ describe('AuthenticationCoordinator', () => {
     it('delegates to handler with ctx and ticket', async () => {
       const handler = makeHandler(AuthenticateResult.none())
       const ticket = new AuthenticationTicket(makePrincipal(), 'Bearer')
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
 
       await coordinator.persist(ctx, 'Bearer', ticket)
 
@@ -184,7 +217,7 @@ describe('AuthenticationCoordinator', () => {
     })
 
     it('throws when scheme is not found', () => {
-      const coordinator = new AuthenticationCoordinator(makeProvider({}))
+      const coordinator = new AuthenticationService(makeProvider({}))
       const ticket = new AuthenticationTicket(makePrincipal(), 'Bearer')
 
       expect(() => coordinator.persist(ctx, 'Bearer', ticket)).toThrow('Bearer')
@@ -194,8 +227,8 @@ describe('AuthenticationCoordinator', () => {
   describe('revoke()', () => {
     it('delegates to handler with ctx and properties', async () => {
       const handler = makeHandler(AuthenticateResult.none())
-      const props = new AuthenticationProperties()
-      const coordinator = new AuthenticationCoordinator(makeProvider({ Bearer: handler }))
+      const props = {}
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
 
       await coordinator.revoke(ctx, 'Bearer', props)
 
@@ -203,7 +236,7 @@ describe('AuthenticationCoordinator', () => {
     })
 
     it('throws when scheme is not found', () => {
-      const coordinator = new AuthenticationCoordinator(makeProvider({}))
+      const coordinator = new AuthenticationService(makeProvider({}))
 
       expect(() => coordinator.revoke(ctx, 'Bearer')).toThrow('Bearer')
     })

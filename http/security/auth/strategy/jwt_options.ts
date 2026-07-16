@@ -1,7 +1,7 @@
 import { KeyLike } from 'crypto'
 import { JWTPayload, JWTVerifyOptions } from 'jose'
 import { Context } from '../../../context.js'
-import { Claim } from '../../claim.js'
+import { Claim } from '../../index.js'
 
 export interface JWTAuthenticationOptions {
   secret: string | Uint8Array | KeyLike

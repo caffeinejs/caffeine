@@ -1,6 +1,6 @@
 import type { ParameterPickOptions } from '@caffeinejs/application'
 import { Binding, Key, Provider } from '@caffeinejs/core'
-import { AuthzRouteService } from './security/authz/authz_route_service.js'
+import { AuthzRouteService } from './security/authz/index.js'
 import { RouteAuthzOptions } from './decorators/registrar/routing.definition.js'
 
 export interface Router<R> {

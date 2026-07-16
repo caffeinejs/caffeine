@@ -1,12 +1,14 @@
-export type { AuthorizationOptions } from './builder.js'
-export { AuthorizationBuilder } from './builder.js'
+export type { AuthorizationOptions } from './authz.js'
+export { AuthorizationBuilder } from './authz.js'
 export {
   AssertionHandler,
   AuthenticatedUserHandler,
   ClaimHandler,
   RoleHandler,
 } from './handlers.js'
-export type { AuthzPolicy } from './policy.js'
-export type { RequireAssertion, RequireAuthenticatedUser, RequireClaim, RequireRole } from './requirement.js'
-export { requireAssertion, requireAuthenticatedUser, requireClaim, requireRole } from './requirement.js'
+export { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
+export type { AuthzPolicy, AuthzRequirement, PolicyEvaluator } from './policy.js'
+export { AuthzRequirementHandler, compileRoutePolicy } from './policy.js'
+export type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, RoleRequirement } from './policy_requirement.js'
+export { AuthzRouteService } from './route_service.js'
 export { AuthorizationService } from './service.js'

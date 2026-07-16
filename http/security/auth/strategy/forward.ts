@@ -1,7 +1,7 @@
 import { Context } from '../../../context.js'
 import type { AuthenticationHandler } from '../handler.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
-import { AuthenticateResult, AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
+import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 
 export type AuthenticationHandlerSelector
   = (ctx: Context, scheme: string) => Promise<string> | string
@@ -22,11 +22,11 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
     return this.#selectScheme(ctx).then(handler => handler.authenticate(ctx))
   }
 
-  challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+  challenge(ctx: Context, properties?: object): Promise<void> {
     return this.#selectScheme(ctx).then(handler => handler.challenge(ctx, properties))
   }
 
-  forbid(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+  forbid(ctx: Context, properties?: object): Promise<void> {
     return this.#selectScheme(ctx).then(handler => handler.forbid(ctx, properties))
   }
 
@@ -34,7 +34,7 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
     return this.#selectScheme(ctx).then(handler => handler.persist(ctx, ticket))
   }
 
-  revoke(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+  revoke(ctx: Context, properties?: object): Promise<void> {
     return this.#selectScheme(ctx).then(handler => handler.revoke(ctx, properties))
   }
 

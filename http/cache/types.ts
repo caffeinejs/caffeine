@@ -1,5 +1,5 @@
 import { Duration } from '@caffeinejs/application'
-import { FastifyContextRequest } from '../context.js'
+import { FastifyContextRequest } from '../FastifyContextRequest.js'
 
 export type ETagGenerator = (payload: Buffer) => string | Promise<string>
 

@@ -1,5 +1,5 @@
 import { Context } from '../../context.js'
-import { Principal } from '../principal.js'
+import { Principal } from '../index.js'
 import { AuthzResult, PolicyEvaluator } from './policy.js'
 
 export class AuthzRouteService {

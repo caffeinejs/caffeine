@@ -1,39 +1,8 @@
-import type { Principal } from '../principal.js'
-
-export class AuthenticationProperties {
-  readonly #items: Map<string, unknown>
-
-  constructor(items?: Map<string, unknown>) {
-    this.#items = items ?? new Map()
-  }
-
-  get items(): ReadonlyMap<string, unknown> {
-    return this.#items
-  }
-}
+import type { Principal } from '../index.js'
 
 export class AuthenticationTicket {
-  readonly #principal: Principal
-  readonly #scheme: string
-  readonly #properties: AuthenticationProperties
-
-  constructor(principal: Principal, scheme: string, properties?: AuthenticationProperties) {
-    this.#principal = principal
-    this.#scheme = scheme
-    this.#properties = properties ?? new AuthenticationProperties()
-  }
-
-  get principal(): Principal {
-    return this.#principal
-  }
-
-  get scheme(): string {
-    return this.#scheme
-  }
-
-  get properties(): AuthenticationProperties {
-    return this.#properties
-  }
+  constructor(
+    readonly principal: Principal, readonly scheme: string, readonly properties?: object) {}
 }
 
 export class AuthenticateResult {

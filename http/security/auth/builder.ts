@@ -1,33 +1,36 @@
-import { Provider, type Container, type Ctor, type Key } from '@caffeinejs/core'
+import { Provider, type Ctor, type Key } from '@caffeinejs/core'
 import { Context } from '../../context.js'
-import type { PrincipalMapper } from '../principal.js'
+import type { PrincipalMapper } from '../index.js'
+import { kConfigure, Service, ServiceKit } from '../../service.js'
 import type { AuthenticationHandler } from './handler.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
-import { AuthenticationCoordinator } from './service.js'
-import { JWTAuthenticationHandler } from './handler/jwt.js'
+import { AuthenticationService } from './service.js'
+import { BasicAuthenticationHandler } from './strategy/basic.js'
+import { BasicAuthenticationOptionsBuilder } from './strategy/basic_options.js'
+import { ForwardAuthenticationHandler } from './strategy/forward.js'
+import { JWTAuthenticationHandler } from './strategy/jwt.js'
 import { kAuthOpts } from './keys.js'
-import { JWTAuthenticationOptionsBuilder } from './handler/jwt_options.js'
-import { ForwardAuthenticationHandler } from './handler/forward.js'
+import { JWTAuthenticationOptionsBuilder } from './strategy/jwt_options.js'
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
+  defaultChallengeScheme?: string
+  defaultForbidScheme?: string
 }
 
-export class AuthenticationBuilder {
-  readonly #container: Container
+export class AuthenticationBuilder implements Service {
   readonly #schemes: Map<string, Key<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
 
   #mapper: PrincipalMapper | string | symbol | undefined
 
-  constructor(container: Container, options: Partial<AuthenticationOptions> = {}) {
-    this.#container = container
+  constructor(options: Partial<AuthenticationOptions> = {}) {
     this.#options = options
   }
 
-  addScheme(name: string, handler: AuthenticationHandler): this
-  addScheme(name: string, key: Key<AuthenticationHandler>): this
-  addScheme(name: string, keyOrHandler: Key<AuthenticationHandler> | AuthenticationHandler): this {
+  addStrategy(name: string, handler: AuthenticationHandler): this
+  addStrategy(name: string, key: Key<AuthenticationHandler>): this
+  addStrategy(name: string, keyOrHandler: Key<AuthenticationHandler> | AuthenticationHandler): this {
     this.#schemes.set(name, keyOrHandler)
     return this
   }
@@ -51,16 +54,48 @@ export class AuthenticationBuilder {
     const builder = new JWTAuthenticationOptionsBuilder()
     optsFn(builder)
 
-    return this.addScheme(name, new JWTAuthenticationHandler(name, builder.build()))
+    return this.addStrategy(name, new JWTAuthenticationHandler(name, builder.build()))
+  }
+
+  addBasicAuth(opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
+  addBasicAuth(name: string, opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
+  addBasicAuth(
+    optsOrName: ((opts: BasicAuthenticationOptionsBuilder) => void) | string,
+    options?: (opts: BasicAuthenticationOptionsBuilder) => void,
+  ): this {
+    const name = typeof optsOrName === 'string'
+      ? optsOrName
+      : 'Basic'
+    const optsFn = typeof optsOrName === 'string'
+      ? options
+      : optsOrName
+    if (!optsFn) {
+      throw new Error('Options are required')
+    }
+
+    const builder = new BasicAuthenticationOptionsBuilder()
+    optsFn(builder)
+
+    return this.addStrategy(name, new BasicAuthenticationHandler(name, builder.build()))
   }
 
   forward(name: string, selector: (ctx: Context) => string | Promise<string>): this {
     const handler = new ForwardAuthenticationHandler(selector)
-    return this.addScheme(name, handler)
+    return this.addStrategy(name, handler)
   }
 
   default(name: string): this {
     this.#options.defaultAuthenticateScheme = name
+    return this
+  }
+
+  defaultChallenge(name: string): this {
+    this.#options.defaultChallengeScheme = name
+    return this
+  }
+
+  defaultForbid(name: string): this {
+    this.#options.defaultForbidScheme = name
     return this
   }
 
@@ -69,18 +104,29 @@ export class AuthenticationBuilder {
     return this
   }
 
-  build(): { coordinator: AuthenticationCoordinator, options: AuthenticationOptions } {
+  [kConfigure](kit: ServiceKit): Promise<void> {
     const opts = this.#options
     const firstScheme = this.#schemes.keys().next().value as string | undefined
 
+    const schemeCount = this.#schemes.size
+    const defaultScheme = opts.defaultAuthenticateScheme ?? (schemeCount === 1 ? firstScheme : undefined)
+    if (!defaultScheme) {
+      throw new Error(
+        schemeCount === 0
+          ? 'Cannot configure authentication: no strategies are registered'
+          : 'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
+      )
+    }
     const options: AuthenticationOptions = {
-      defaultAuthenticateScheme: opts.defaultAuthenticateScheme ?? firstScheme ?? '',
+      defaultAuthenticateScheme: defaultScheme,
+      defaultChallengeScheme: opts.defaultChallengeScheme,
+      defaultForbidScheme: opts.defaultForbidScheme,
     }
 
     const schemes = new Map<string, Provider<AuthenticationHandler>>()
     for (const [name, keyOrHandler] of this.#schemes) {
       const handler: Provider<AuthenticationHandler> = isConstructable(keyOrHandler)
-        ? this.#container.wrap(keyOrHandler)
+        ? kit.container.wrap(keyOrHandler)
         : { get: () => keyOrHandler as AuthenticationHandler }
       schemes.set(name, handler)
     }
@@ -88,10 +134,10 @@ export class AuthenticationBuilder {
     const mapper = this.#mapper === undefined
       ? undefined
       : typeof this.#mapper === 'string' || typeof this.#mapper === 'symbol'
-        ? this.#container.wrap<PrincipalMapper>(this.#mapper)
+        ? kit.container.wrap<PrincipalMapper>(this.#mapper)
         : { get: () => this.#mapper as PrincipalMapper }
     const schemeProvider = new AuthenticationSchemeProvider(schemes, options)
-    const service = new AuthenticationCoordinator(schemeProvider, mapper)
+    const service = new AuthenticationService(schemeProvider, mapper)
 
     for (const [, handler] of schemes) {
       if (handler instanceof ForwardAuthenticationHandler) {
@@ -99,10 +145,12 @@ export class AuthenticationBuilder {
       }
     }
 
-    this.#container.bind(AuthenticationCoordinator).toValue(service)
-    this.#container.bind(kAuthOpts).toValue(options)
+    kit.container.bind(AuthenticationService).toValue(service).internal()
+    kit.container.bind(kAuthOpts).toValue(options).internal()
 
-    return { coordinator: service, options }
+    kit.feats.toggleAuthentication(true)
+
+    return Promise.resolve()
   }
 }
 

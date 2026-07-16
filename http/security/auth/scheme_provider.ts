@@ -18,4 +18,12 @@ export class AuthenticationSchemeProvider {
   get defaultAuthenticateScheme(): string {
     return this.#options.defaultAuthenticateScheme
   }
+
+  get defaultChallengeScheme(): string {
+    return this.#options.defaultChallengeScheme ?? this.#options.defaultAuthenticateScheme
+  }
+
+  get defaultForbidScheme(): string {
+    return this.#options.defaultForbidScheme ?? this.#options.defaultAuthenticateScheme
+  }
 }

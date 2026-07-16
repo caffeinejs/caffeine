@@ -4,13 +4,12 @@ import Fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
 import { CaffeineIoC, Scopes, Injectable, Lifetime } from '@caffeinejs/core'
 import { address, context, cookie, header, method, param, path, pick, port, query, signal, signedCookie, url } from './route_picker.js'
-import { Controller, Get, Method, createWebApplication, Params, fastifyAdapterFactory, FastifyAdapter, FastifyContext, type AdapterToolKit } from './index.js'
+import { Feats } from './feats.js'
+import { Controller, Get, Method, createWebApplication, Params, fastifyAdapterFactory, FastifyAdapter, FastifyContext, type AdapterFactoryIn } from './index.js'
 
-function makeKit(): AdapterToolKit {
+function makeKit(): AdapterFactoryIn {
   return {
     container: new CaffeineIoC(),
-    authentication: { enabled: false },
-    authorization: { enabled: false },
   }
 }
 
@@ -20,7 +19,14 @@ describe('Fastify Adapter', () => {
     app.get('/', () => ({ ok: true }))
 
     const adapter = new FastifyAdapter(makeKit(), app)
-    await adapter.setup({ routers: [] })
+    await adapter.setup({
+      routers: [],
+      feats: new Feats(),
+      services: {
+        auth: { enabled: false, coordinator: undefined, options: undefined },
+        authz: { enabled: false },
+      },
+    })
 
     expect(adapter.instance).toBe(app)
     await supertest(adapter.instance.server).get('/')
@@ -32,7 +38,14 @@ describe('Fastify Adapter', () => {
     app.get('/', () => ({ ok: true }))
 
     const adapter = new FastifyAdapter(makeKit(), app)
-    await adapter.setup({ routers: [] })
+    await adapter.setup({
+      routers: [],
+      feats: new Feats(),
+      services: {
+        auth: { enabled: false, coordinator: undefined, options: undefined },
+        authz: { enabled: false },
+      },
+    })
     const result = await adapter.instance.inject('/')
 
     expect(result.json()).toEqual({ ok: true })

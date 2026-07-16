@@ -1,10 +1,10 @@
 import { Readable } from 'node:stream'
-import { Scopes } from '@caffeinejs/core'
+import { Container, Scopes } from '@caffeinejs/core'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions, type FastifyError } from 'fastify'
-import type { Adapter, AdapterIn, AdapterToolKit } from './application.js'
+import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import type { Router } from './route.js'
 import type { AuthenticationOptions } from './security/auth/builder.js'
-import { newAnonymousUser, type Principal } from './security/principal.js'
+import { newAnonymousUser, type Principal } from './security/index.js'
 import { compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { CacheStore, ETagGenerator } from './cache/types.js'
@@ -13,7 +13,7 @@ import { cacheConfigurer } from './cache/cache.js'
 import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { MemoryCacheStore } from './cache/index.js'
 import { FastifyContext } from './context.js'
-import { AuthenticationCoordinator } from './security/auth/service.js'
+import { AuthenticationService } from './security/auth/service.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -36,16 +36,16 @@ export class FastifyAdapter<
   RES extends FastifyReply = FastifyReply,
 > implements Adapter<SERVER, REQ> {
   #fastify: SERVER
-  #kit: AdapterToolKit
+  #container: Container
   #options: FastifyAdapterOptions | undefined
 
   constructor(
-    kit: AdapterToolKit,
+    kit: AdapterFactoryIn,
     fastify: SERVER,
     options?: FastifyAdapterOptions,
   ) {
     this.#fastify = fastify
-    this.#kit = kit
+    this.#container = kit.container
     this.#options = options
   }
 
@@ -62,12 +62,17 @@ export class FastifyAdapter<
     })
 
     // Auth: resolve coordinator and options once; decorate user field once
-    let coordinator: AuthenticationCoordinator | undefined
+    let coordinator: AuthenticationService | undefined
     let authOpts: AuthenticationOptions | undefined
-    if (this.#kit.authentication.enabled) {
-      coordinator = this.#kit.authentication.coordinator
-      authOpts = this.#kit.authentication.options
+    if (input.services.auth.enabled) {
+      coordinator = input.services.auth.coordinator
+      authOpts = input.services.auth.options
       this.#fastify.decorateRequest<Principal | null>('user', null)
+    }
+
+    const anyRouteNeedsAuthz = routers.some(r => r.routes.some(rt => rt.authorization.enabled))
+    if (anyRouteNeedsAuthz && !input.services.auth.enabled) {
+      throw new Error('Cannot start application: authorization is configured but authentication is not')
     }
 
     configurers.push(cacheConfigurer(store, this.#options?.cache?.etagGenerator))
@@ -83,11 +88,11 @@ export class FastifyAdapter<
     })
 
     const needsRequestScope = routers.some(
-      router => this.#kit.container.hasScopeInGraph(router.key, Scopes.REQUEST),
+      router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
 
     if (needsRequestScope) {
-      const man = this.#kit.container.requestScopeManager
+      const man = this.#container.requestScopeManager
       this.#fastify.addHook('onRequest', (_req, _res, done) => {
         man.run(() => done())
       })
@@ -104,7 +109,7 @@ export class FastifyAdapter<
         server.decorateRequest('caffeineResponseCached', false)
 
         // Auth: one hook per router scope
-        if (coordinator && authOpts) {
+        if (input.services.auth.enabled && coordinator && authOpts) {
           const schemes = authOpts.defaultAuthenticateScheme
             ? [authOpts.defaultAuthenticateScheme]
             : []
@@ -221,36 +226,22 @@ export class FastifyAdapter<
 
           normalizeRouteDef(routeDef)
 
-          // Authz: per-route, delegates challenge/forbid to handler
-          if (route.authorization.authorizer != null) {
-            const onRequest = routeDef.onRequest as
-                Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
-            const authz = route.authorization.authorizer
+          // Authz: per-route, delegates challenge/forbid to the authentication handler
+          if (route.authorization.enabled && route.authorization.authorizer != null) {
+            const onRequest = routeDef.onRequest as Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
+            const authorizer = route.authorization.authorizer
 
-            onRequest.push(async (req, reply) => {
-              if (reply.sent) {
-                return
-              }
+            onRequest.push(async req => {
               const ctx = req.caffeineContext
-              const result = await authz.authorize(ctx, req.user)
+              const result = await authorizer.authorize(ctx, req.user)
               if (result.ok) {
                 return
               }
 
               if (!ctx.user.authenticated) {
-                if (coordinator) {
-                  await coordinator.challenge(ctx)
-                }
-                if (!reply.sent) {
-                  void reply.code(ctx.statusCode || 401).send()
-                }
+                return coordinator!.challenge(ctx)
               } else {
-                if (coordinator) {
-                  await coordinator.forbid(ctx)
-                }
-                if (!reply.sent) {
-                  void reply.code(ctx.statusCode || 403).send()
-                }
+                return coordinator!.forbid(ctx)
               }
             })
           }

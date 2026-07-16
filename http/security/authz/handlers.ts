@@ -1,9 +1,9 @@
 import { Context } from '../../context.js'
-import { Principal } from '../principal.js'
-import type { RequireAssertion, RequireAuthenticatedUser, RequireClaim, RequireRole } from './requirement.js'
+import { Principal } from '../index.js'
+import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, RoleRequirement } from './policy_requirement.js'
 import { AuthzPolicyResult, AuthzRequirementHandler } from './policy.js'
 
-export class AuthenticatedUserHandler extends AuthzRequirementHandler<RequireAuthenticatedUser> {
+export class AuthenticatedUserHandler extends AuthzRequirementHandler<AuthenticatedUserRequirement> {
   get kind(): string {
     return 'authenticated'
   }
@@ -17,12 +17,12 @@ export class AuthenticatedUserHandler extends AuthzRequirementHandler<RequireAut
   }
 }
 
-export class RoleHandler extends AuthzRequirementHandler<RequireRole> {
+export class RoleHandler extends AuthzRequirementHandler<RoleRequirement> {
   get kind(): string {
     return 'role'
   }
 
-  async handle(ctx: Context, user: Principal, requirement: RequireRole): Promise<AuthzPolicyResult> {
+  async handle(ctx: Context, user: Principal, requirement: RoleRequirement): Promise<AuthzPolicyResult> {
     if (requirement.roles.every(role => user.isInRole(role))) {
       return { ok: true }
     }
@@ -31,12 +31,12 @@ export class RoleHandler extends AuthzRequirementHandler<RequireRole> {
   }
 }
 
-export class ClaimHandler extends AuthzRequirementHandler<RequireClaim> {
+export class ClaimHandler extends AuthzRequirementHandler<ClaimRequirement> {
   get kind(): string {
     return 'claim'
   }
 
-  async handle(ctx: Context, user: Principal, requirement: RequireClaim): Promise<AuthzPolicyResult> {
+  async handle(ctx: Context, user: Principal, requirement: ClaimRequirement): Promise<AuthzPolicyResult> {
     if (requirement.claimValues.length === 0 && user.hasClaim(requirement.claim)) {
       return { ok: true }
     }
@@ -49,12 +49,12 @@ export class ClaimHandler extends AuthzRequirementHandler<RequireClaim> {
   }
 }
 
-export class AssertionHandler extends AuthzRequirementHandler<RequireAssertion> {
+export class AssertionHandler extends AuthzRequirementHandler<AssertionRequirement> {
   get kind(): string {
     return 'assertion'
   }
 
-  async handle(ctx: Context, user: Principal, requirement: RequireAssertion): Promise<AuthzPolicyResult> {
+  async handle(ctx: Context, user: Principal, requirement: AssertionRequirement): Promise<AuthzPolicyResult> {
     const passed = await requirement.assertion(ctx)
     if (passed) {
       return { ok: true }

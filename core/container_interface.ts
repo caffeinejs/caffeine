@@ -185,6 +185,7 @@ export type ContainerOps = Pick<Container,
   | 'getMany'
   | 'getOptional'
   | 'wrap'
+  | 'wrapMany'
   | 'getBinding'
   | 'getBindings'
   | 'getBindingsBy'

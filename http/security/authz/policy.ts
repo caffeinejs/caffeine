@@ -1,14 +1,14 @@
 import { Context } from '../../context.js'
 import { RouteAuthzOptions } from '../../decorators/registrar/routing.definition.js'
-import { Principal } from '../principal.js'
-import { AuthzRouteService } from './authz_route_service.js'
-import { AuthorizationOptions } from './builder.js'
-import { PolicyBuilder } from './policy.builder.js'
+import { Principal } from '../index.js'
+import { AuthzRouteService } from './route_service.js'
+import { AuthorizationOptions } from './authz.js'
+import { PolicyBuilder } from './policy_builder.js'
 
 export interface AuthzPolicy {
   readonly name: string
   readonly requirements: readonly AuthzRequirement[]
-  readonly authenticationSchemes?: readonly string[]
+  readonly authenticationStrategies?: readonly string[]
 }
 
 export interface AuthzRequirement {
@@ -19,11 +19,7 @@ export abstract class AuthzRequirementHandler<R extends AuthzRequirement> {
   abstract get kind(): string
 
   abstract handle(
-    ctx: Context,
-    user: Principal,
-    requirement: R,
-    resource?: unknown,
-  ): AuthzPolicyResult | Promise<AuthzPolicyResult>
+    ctx: Context, user: Principal, requirement: R, resource?: unknown): AuthzPolicyResult | Promise<AuthzPolicyResult>
 }
 
 export interface AuthzResult {
@@ -39,7 +35,7 @@ export interface AuthzPolicyResult {
 }
 
 export type PolicyEvaluator
-  = (ctx: Context, user: Principal, resource?: unknown) => AuthzResult | Promise<AuthzPolicyResult>
+  = (ctx: Context, user: Principal, resource?: unknown) => AuthzResult | Promise<AuthzResult>
 
 export function newPolicyEvaluator(
   policy: AuthzPolicy,
@@ -87,8 +83,8 @@ export function compileRoutePolicy(
     return undefined
   }
 
-  const routerPolicies = normPolicy(routerOptions.policy)
-  const routePolicies = normPolicy(routeOptions.policy)
+  const routerPolicies = normalizePolicy(routerOptions.policy)
+  const routePolicies = normalizePolicy(routeOptions.policy)
 
   const routerEmpty = !routerPolicies.length
     && !routerOptions.roles?.length
@@ -112,16 +108,20 @@ export function compileRoutePolicy(
   const evals = new Array<PolicyEvaluator>()
   for (const name of policyNames) {
     const e = evaluators.get(name)
-    evals.push(e ?? denyAll)
+    if (!e) {
+      throw new Error(`Policy evaluator for ${name} not found`)
+    }
+
+    evals.push(e)
   }
 
   const builder = new PolicyBuilder()
 
   if (routerOptions.roles && routerOptions.roles.length > 0) {
-    builder.requireRole(...routerOptions.roles)
+    builder.role(...routerOptions.roles)
   }
   if (routeOptions.roles && routeOptions.roles.length > 0) {
-    builder.requireRole(...routeOptions.roles)
+    builder.role(...routeOptions.roles)
   }
 
   evals.push(newPolicyEvaluator(builder.build(), handlers))
@@ -129,11 +129,10 @@ export function compileRoutePolicy(
   return new AuthzRouteService(evals)
 }
 
-const denyAll: PolicyEvaluator = async () => ({ ok: false })
-
-function normPolicy(policy: string | string[] | undefined): string[] {
+function normalizePolicy(policy: string | string[] | undefined): string[] {
   if (policy == null) {
     return []
   }
+
   return Array.isArray(policy) ? policy : [policy]
 }

@@ -1,12 +1,12 @@
 import type { Context } from '../../context.js'
-import type { AuthenticateResult, AuthenticationProperties, AuthenticationTicket } from './ticket.js'
+import type { AuthenticateResult, AuthenticationTicket } from './ticket.js'
 
 export interface AuthenticationHandler {
   authenticate(ctx: Context): Promise<AuthenticateResult>
-  challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void>
-  forbid(ctx: Context, properties?: AuthenticationProperties): Promise<void>
+  challenge(ctx: Context, properties?: object): Promise<void>
+  forbid(ctx: Context, properties?: object): Promise<void>
   persist(ctx: Context, ticket: AuthenticationTicket): Promise<void>
-  revoke(ctx: Context, properties?: AuthenticationProperties): Promise<void>
+  revoke(ctx: Context, properties?: object): Promise<void>
 }
 
 export abstract class BaseAuthenticationHandler<TOptions> implements AuthenticationHandler {

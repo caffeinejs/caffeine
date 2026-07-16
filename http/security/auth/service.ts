@@ -1,10 +1,10 @@
 import type { Provider } from '@caffeinejs/core'
 import type { Context } from '../../context.js'
-import type { PrincipalMapper } from '../principal.js'
+import type { PrincipalMapper } from '../index.js'
 import type { AuthenticationSchemeProvider } from './scheme_provider.js'
-import { AuthenticateResult, AuthenticationProperties, AuthenticationTicket } from './ticket.js'
+import { AuthenticateResult, AuthenticationTicket } from './ticket.js'
 
-export class AuthenticationCoordinator {
+export class AuthenticationService {
   readonly #schemeProvider: AuthenticationSchemeProvider
   readonly #mapper: Provider<PrincipalMapper> | undefined
 
@@ -34,12 +34,8 @@ export class AuthenticationCoordinator {
     return result
   }
 
-  challenge(
-    ctx: Context,
-    schemeName?: string,
-    properties?: AuthenticationProperties,
-  ): Promise<void> {
-    const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
+  challenge(ctx: Context, schemeName?: string, properties?: object): Promise<void> {
+    const name = schemeName ?? this.#schemeProvider.defaultChallengeScheme
     const scheme = this.#schemeProvider.schemeFor(name)
     if (!scheme) {
       throw new Error(`Scheme ${name} not found`)
@@ -48,12 +44,8 @@ export class AuthenticationCoordinator {
     return scheme.get().challenge(ctx, properties)
   }
 
-  forbid(
-    ctx: Context,
-    schemeName?: string,
-    properties?: AuthenticationProperties,
-  ): Promise<void> {
-    const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
+  forbid(ctx: Context, schemeName?: string, properties?: object): Promise<void> {
+    const name = schemeName ?? this.#schemeProvider.defaultForbidScheme
     const scheme = this.#schemeProvider.schemeFor(name)
     if (!scheme) {
       throw new Error(`Scheme ${name} not found`)
@@ -62,11 +54,7 @@ export class AuthenticationCoordinator {
     return scheme.get().forbid(ctx, properties)
   }
 
-  persist(
-    ctx: Context,
-    schemeName: string,
-    ticket: AuthenticationTicket,
-  ): Promise<void> {
+  persist(ctx: Context, schemeName: string, ticket: AuthenticationTicket): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
     const scheme = this.#schemeProvider.schemeFor(name)
     if (!scheme) {
@@ -76,11 +64,7 @@ export class AuthenticationCoordinator {
     return scheme.get().persist(ctx, ticket)
   }
 
-  revoke(
-    ctx: Context,
-    schemeName: string,
-    properties?: AuthenticationProperties,
-  ): Promise<void> {
+  revoke(ctx: Context, schemeName: string, properties?: object): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
     const scheme = this.#schemeProvider.schemeFor(name)
     if (!scheme) {

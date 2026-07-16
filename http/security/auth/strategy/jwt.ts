@@ -1,11 +1,9 @@
 import { jwtVerify } from 'jose'
 import type { JWTPayload, KeyLike } from 'jose'
 import type { Context } from '../../../context.js'
-import { Claim } from '../../claim.js'
+import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import { BaseAuthenticationHandler } from '../handler.js'
-import { Identity } from '../../identity.js'
-import { Principal } from '../../principal.js'
 import type { JWTAuthenticationOptions } from './jwt_options.js'
 
 export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthenticationOptions> {
@@ -73,10 +71,6 @@ function mapClaims(payload: JWTPayload): Claim[] {
 
   for (let i = 0; i < entries.length; i++) {
     const [type, value] = entries[i]
-    if (value === undefined || value === null) {
-      continue
-    }
-
     claims[i] = new Claim(type, value, issuer)
   }
 

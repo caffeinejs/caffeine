@@ -1,10 +1,15 @@
 import { Container } from '@caffeinejs/core'
 import type { Router } from './route.js'
-import { AuthenticationCoordinator } from './security/auth/service.js'
-import { AuthenticationOptions } from './security/auth/builder.js'
+import { Feats } from './feats.js'
+import { kConfigure, Service, ServiceKit, Services } from './service.js'
+import { buildRouting } from './routing/routing.js'
+import { AuthenticationService } from './security/auth/service.js'
+import { kAuthOpts } from './security/auth/keys.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]
+  feats: Feats
+  services: Services
 }
 
 export interface Adapter<I, R> {
@@ -15,32 +20,28 @@ export interface Adapter<I, R> {
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 }
 
-export interface AdapterToolKit {
+export interface AdapterFactoryIn {
   container: Container
-  authentication: {
-    enabled: boolean
-    coordinator?: AuthenticationCoordinator
-    options?: AuthenticationOptions
-  }
-  authorization: {
-    enabled: boolean
-  }
 }
 
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
-  = (kit: AdapterToolKit) => A
+  = (input: AdapterFactoryIn) => A
 
 export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   #container: Container
-  #routers: Router<R>[]
+  #feats: Feats
+  #routers: Router<R>[] = []
+  #services: Service[]
   #adapter: A
+  #ready: boolean = false
   #readyHooks: Array<() => Promise<void>> = []
   #closeHooks: Array<() => Promise<void>> = []
 
-  constructor(container: Container, routers: Router<R>[], adapter: A) {
+  constructor(container: Container, adapter: A, services: Service[]) {
     this.#container = container
-    this.#routers = routers
     this.#adapter = adapter
+    this.#feats = new Feats()
+    this.#services = services
   }
 
   get container(): Container {
@@ -52,6 +53,10 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   }
 
   get routers(): Router<R>[] {
+    if (!this.#ready) {
+      throw new Error('Application is not ready')
+    }
+
     return this.#routers
   }
 
@@ -60,12 +65,36 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   }
 
   async ready(): Promise<void> {
+    const kit: ServiceKit = { container: this.#container, feats: this.#feats }
+    await Promise.all(this.#services
+      .map(service => service[kConfigure](kit)))
+
     await this.#container.init()
-    await this.#adapter.setup({ routers: this.#routers } as AdapterIn<R>)
+
+    this.#routers = buildRouting<R>(this.#container, this.#feats)
+
+    const services: Services = {
+      auth: {
+        enabled: this.#feats.authentication,
+        coordinator: this.#container.getOptional(AuthenticationService),
+        options: this.#container.getOptional(kAuthOpts),
+      },
+      authz: {
+        enabled: this.#feats.authorization,
+      },
+    }
+
+    await this.#adapter.setup({
+      routers: this.#routers,
+      feats: this.#feats,
+      services,
+    })
 
     for (const hook of this.#readyHooks) {
       await hook()
     }
+
+    this.#ready = true
   }
 
   async close(): Promise<void> {
