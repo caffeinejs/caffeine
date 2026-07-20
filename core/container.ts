@@ -1131,8 +1131,8 @@ export class CaffeineIoC implements Container {
     this.mapAbstract(canonical)
   }
 
-  private async refresh(): Promise<void> {
-    return (this.scopes.get(Scopes.REFRESH) as RefreshScope).refresh()
+  private async refresh(label?: symbol): Promise<void> {
+    return (this.scopes.get(Scopes.REFRESH) as RefreshScope).refresh(label)
   }
 
   private unref(key: Key) {

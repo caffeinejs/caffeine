@@ -110,6 +110,58 @@ describe('Refresh Scope', function () {
     })
   })
 
+  describe('when refreshing by label', function () {
+    it('only resets bindings tagged with the given label', async function () {
+      const kLabel = Symbol('refresh-label-a')
+
+      class LabeledA {
+        readonly id = Math.random()
+      }
+
+      class LabeledB {
+        readonly id = Math.random()
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(LabeledA).toSelf().lifetime(Scopes.REFRESH).labels(kLabel)
+      di.bind(LabeledB).toSelf().lifetime(Scopes.REFRESH)
+      await di.init()
+
+      const a1 = di.get(LabeledA)
+      const b1 = di.get(LabeledB)
+
+      await di.refresher.refresh(kLabel)
+
+      expect(di.get(LabeledA).id).not.toBe(a1.id)
+      expect(di.get(LabeledB).id).toBe(b1.id)
+    })
+
+    it('leaves all bindings untouched when label matches nothing', async function () {
+      const kLabel = Symbol('refresh-label-unused')
+
+      class StableA {
+        readonly id = Math.random()
+      }
+
+      class StableB {
+        readonly id = Math.random()
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(StableA).toSelf().lifetime(Scopes.REFRESH)
+      di.bind(StableB).toSelf().lifetime(Scopes.REFRESH)
+      await di.init()
+
+      const a1 = di.get(StableA)
+      const b1 = di.get(StableB)
+
+      await di.refresher.refresh(kLabel)
+
+      expect(di.get(StableA).id).toBe(a1.id)
+      expect(di.get(StableB).id).toBe(b1.id)
+    })
+  })
+
   describe('when request a scope refresh', function () {
     it('should reset refresh scoped components', async function () {
       const di = new CaffeineIoC()

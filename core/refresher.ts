@@ -8,11 +8,14 @@
  */
 export interface Refresher {
   /**
-   * Refreshes all refresh-scoped instances.
+   * Refreshes refresh-scoped instances.
+   * When `label` is provided, only bindings tagged with that label are refreshed.
+   * When omitted, all refresh-scoped bindings are refreshed.
    *
-   * @returns A promise that resolves when the container is refreshed.
+   * @param label - Optional symbol label to scope the refresh to a subset of bindings.
+   * @returns A promise that resolves when the refresh is complete.
    */
-  refresh(): Promise<void>
+  refresh(label?: symbol): Promise<void>
 }
 
 /**
