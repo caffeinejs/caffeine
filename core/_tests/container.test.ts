@@ -16,7 +16,7 @@ import { ContainerBindingOps } from '../container_interface.js'
 import { Inject } from '../decorators/inject.js'
 import { Primary } from '../decorators/primary.js'
 import { ErrInvalidContainerState, ErrUnresolvableDependencies } from '../errors.js'
-import { optional, allOf, defer } from '../injection.js'
+import { $i } from '../injection.js'
 
 describe('Scope removal does not affect existing containers', function () {
   it('should successfully dispose even when the scope factory is removed from the registry after container creation', async function () {
@@ -537,7 +537,7 @@ describe('async singleton resolution timing (L-3)', function () {
         const kOptional = Symbol('arfr-optional')
         const di = new CaffeineIoC({ decorators: false })
         di.bind('svc')
-          .toFunction((_: unknown) => ({}), [optional(kOptional)])
+          .toFunction((_: unknown) => ({}), [$i.optional(kOptional)])
 
         expect(() => di.assertResolvable()).not.toThrow()
       })
@@ -554,7 +554,7 @@ describe('async singleton resolution timing (L-3)', function () {
           .toValue(new ImplB())
           .names(kShared)
         di.bind('consumer')
-          .toFunction((_: unknown) => ({}), [allOf(kShared)])
+          .toFunction((_: unknown) => ({}), [$i.allOf(kShared)])
 
         expect(() => di.assertResolvable()).not.toThrow()
       })
@@ -604,7 +604,7 @@ describe('async singleton resolution timing (L-3)', function () {
         di.bind('svc')
           .toFunction(
             (_: unknown) => ({}),
-            [defer(() => kDeferred)],
+            [$i.defer(() => kDeferred)],
           )
 
         expect(() => di.assertResolvable()).not.toThrow()
@@ -616,7 +616,7 @@ describe('async singleton resolution timing (L-3)', function () {
         di.bind('svc')
           .toFunction(
             (_: unknown) => ({}),
-            [defer(() => kDeferred)],
+            [$i.defer(() => kDeferred)],
           )
 
         expect(() => di.assertResolvable())

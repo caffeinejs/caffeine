@@ -3,7 +3,7 @@ import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { CaffeineIoC } from '../container.js'
-import { allOf } from '../injection.js'
+import { $i } from '../injection.js'
 
 describe('given multiple named injectables sharing the same name', function () {
   describe('and one of them asking to inject all others via that shared name', function () {
@@ -30,7 +30,7 @@ describe('given multiple named injectables sharing the same name', function () {
     }
 
     @Named(kProcessor)
-    @Injectable([allOf(kProcessor)])
+    @Injectable([$i.allOf(kProcessor)])
     class Root {
       constructor(readonly processors: Processor[]) {}
 
@@ -74,7 +74,7 @@ describe('given multiple injectables extending the same abstract class', functio
       }
     }
 
-    @Injectable([allOf(Processor)])
+    @Injectable([$i.allOf(Processor)])
     @Extends()
     class Root extends Processor {
       constructor(readonly processors: Processor[]) {

@@ -8,7 +8,7 @@ import {
   InjectionResolverFactory,
   unbindResolver,
 } from '../injection_resolver.js'
-import { allOf, optional, provide } from '../injection.js'
+import { $i } from '../injection.js'
 import { standardFactory } from '../internal/core/resolver/index.js'
 
 const sentinel = { value: 42 }
@@ -81,12 +81,12 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.bind(Consumer)
-      .toSelf([provide(kMissing)])
+      .toSelf([$i.provide(kMissing)])
 
     await expect(di.init()).rejects.toBeInstanceOf(ErrNoResolutionForKey)
   })
 
-  it('should return a Provider whose get() is undefined when provide() target is optional and missing', async function () {
+  it('should return a Provider whose get() is undefined when $i.provide() target is optional and missing', async function () {
     const kMissing = Symbol('missing-optional-l2')
 
     class OptConsumer {
@@ -113,7 +113,7 @@ describe('defaultResolverFactory', function () {
 
     const resolver = standardFactory({
       container: di,
-      descriptor: optional(kMissing),
+      descriptor: $i.optional(kMissing),
       key: 'consumer',
       kind: 'constructor',
       member: 'miss',
@@ -138,7 +138,7 @@ describe('defaultResolverFactory', function () {
 
     const resolver = standardFactory({
       container: di,
-      descriptor: allOf(kShared),
+      descriptor: $i.allOf(kShared),
       key: 'consumer',
       kind: 'constructor',
       member: 'm',

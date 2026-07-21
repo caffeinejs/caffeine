@@ -1,11 +1,11 @@
 import { Worker } from 'node:worker_threads'
-import { Keys, provide, type Provider, type Refresher } from '@caffeinejs/core'
+import { Keys, type Provider, type Refresher } from '@caffeinejs/core'
 import { Injectable, PostConstruct, PreDestroy } from '@caffeinejs/core'
 import { AppConfig } from '../../app.config.js'
 import { DataConfig } from './data.config.js'
 import { WorkerData, WorkerMessage } from './gcs.watcher.worker.js'
 
-@Injectable([AppConfig, Keys.kRefresher, provide(DataConfig)])
+@Injectable([AppConfig, Keys.kRefresher, $i.provide(DataConfig)])
 export class GcsWatcher {
   private worker?: Worker
 

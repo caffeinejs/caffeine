@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { CaffeineIoC } from '../container.js'
-import { mapped, optional } from '../injection.js'
+import { $i } from '../injection.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Lazy } from '../decorators/lazy.js'
 
@@ -39,7 +39,7 @@ describe('Inject Into Map', function () {
     }
   }
 
-  @Injectable([mapped(kMap)])
+  @Injectable([$i.mapped(kMap)])
   class Welcome {
     constructor(readonly greeters: Map<string, Greeter>) {}
   }
@@ -53,7 +53,7 @@ describe('Inject Into Map', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      const consumer = di.build(OptConsumer, [optional(mapped(kMap))])
+      const consumer = di.build(OptConsumer, [$i.optional($i.mapped(kMap))])
       expect(consumer.greeters).toBeInstanceOf(Map)
       expect(consumer.greeters!.get('hi')).toBeInstanceOf(Hi)
       expect(consumer.greeters!.get('bye')).toBeInstanceOf(Bye)
@@ -69,7 +69,7 @@ describe('Inject Into Map', function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
-      const consumer = di.build(OptConsumer, [optional(mapped(kAbsent))])
+      const consumer = di.build(OptConsumer, [$i.optional($i.mapped(kAbsent))])
       expect(consumer.data).toBeUndefined()
     })
   })

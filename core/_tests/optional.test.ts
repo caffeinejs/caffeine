@@ -4,7 +4,7 @@ import { Lazy } from '../decorators/lazy.js'
 import { Profile } from '../decorators/profile.js'
 import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey, ErrNoUniqueInjectionForKey } from '../errors.js'
-import { optional } from '../injection.js'
+import { $i } from '../injection.js'
 
 describe('Optional Injections', function () {
   describe('with no default values', function () {
@@ -14,7 +14,7 @@ describe('Optional Injections', function () {
       run(): void
     }
 
-    @Injectable([optional(Repo)])
+    @Injectable([$i.optional(Repo)])
     class OptSvc {
       constructor(readonly repo?: Repo) {}
     }
@@ -26,7 +26,7 @@ describe('Optional Injections', function () {
       constructor(readonly repo?: Repo) {}
     }
 
-    @Injectable([optional('service')])
+    @Injectable([$i.optional('service')])
     class Ctrl {
       constructor(readonly service?: Service) {}
     }
@@ -61,12 +61,12 @@ describe('Optional Injections', function () {
     @Injectable()
     class Reg {}
 
-    @Injectable([optional(kVal)])
+    @Injectable([$i.optional(kVal)])
     class OptStr {
       constructor(readonly value: string = 'optional') {}
     }
 
-    @Injectable([Reg, optional(Dep)])
+    @Injectable([Reg, $i.optional(Dep)])
     class Test {
       constructor(
         readonly reg: Reg,

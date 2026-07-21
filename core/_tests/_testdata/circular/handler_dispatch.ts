@@ -1,6 +1,6 @@
 import { Injectable } from '../../../decorators/injectable.js'
 import { Extends } from '../../../decorators/extends.js'
-import { allOf, defer } from '../../../injection.js'
+import { $i } from '../../../injection.js'
 
 export abstract class DispatchHandler {}
 
@@ -12,7 +12,7 @@ export class DispatchHandlerA extends DispatchHandler {}
 @Injectable()
 export class DispatchHandlerB extends DispatchHandler {}
 
-@Injectable([allOf(defer(() => DispatchHandler))])
+@Injectable([$i.allOf($i.defer(() => DispatchHandler))])
 export class Dispatcher {
   constructor(readonly handlers: DispatchHandler[]) {}
 }

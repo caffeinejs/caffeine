@@ -1,6 +1,5 @@
 import { ErrMissingInjectionKey, ErrNoResolutionForKey } from '../../../errors.js'
 import { solutions } from '../../util/errutil/index.js'
-import { allOf, defer, optional } from '../../../injection.js'
 import { InjectionResolverFactory } from '../../../injection_resolver.js'
 import { TypedKey, keyStr } from '../../../key.js'
 import { excludeSelf, uniqueBindingOrThrow } from './_binding_util.js'
@@ -16,7 +15,7 @@ export const standardFactory: InjectionResolverFactory = ctx => {
       `${describeContext(ctx)}: no injection key provided`
       + solutions(
         `- Provide an injection key`,
-        `- For circular dependencies, use ${defer.name}(() => key) to defer resolution`,
+        `- For circular dependencies, use defer(() => key) to defer resolution`,
       ),
     )
   }
@@ -31,7 +30,7 @@ export const standardFactory: InjectionResolverFactory = ctx => {
       `${describeContext(ctx)}: no binding registered for key "${keyStr(ctx.descriptor.key)}"`
       + solutions(
         `- Register a binding for key "${keyStr(ctx.descriptor.key)}"`,
-        `- If the dependency is optional, use ${optional.name}(key)`,
+        `- If the dependency is optional, use optional(key)`,
       ),
     )
   }
@@ -45,7 +44,7 @@ const multipleFactory: InjectionResolverFactory = ctx => {
       `${describeContext(ctx)}: no injection key provided`
       + solutions(
         `- Provide an injection key`,
-        `- For circular dependencies, use ${allOf.name}(${defer.name}(() => key)) to defer resolution`,
+        `- For circular dependencies, use allOf(defer(() => key)) to defer resolution`,
       ),
     )
   }

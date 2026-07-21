@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { CaffeineIoC } from '../container.js'
-import { optional } from '../injection.js'
+import { $i } from '../injection.js'
 
 describe('CaffeineIoC', function () {
   const kTestName = Symbol('test-name')
@@ -15,7 +15,7 @@ describe('CaffeineIoC', function () {
 
   class Opt {}
 
-  @Injectable([Dep, optional(Opt)])
+  @Injectable([Dep, $i.optional(Opt)])
   @Named(kTestName)
   class NamedTest {
     constructor(

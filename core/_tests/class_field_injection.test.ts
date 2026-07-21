@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Inject } from '../decorators/inject.js'
 import { CaffeineIoC } from '../container.js'
-import { optional } from '../injection.js'
+import { $i } from '../injection.js'
 import { ErrInvalidBinding } from '../errors.js'
 
 describe('class field injection', function () {
@@ -114,7 +114,7 @@ describe('class field injection', function () {
       fieldDep!: DepA
 
       // optional dep not bound to the container — must remain undefined
-      @Inject(optional(kNone))
+      @Inject($i.optional(kNone))
       optionalDep!: string | undefined
 
       // required setter
@@ -235,7 +235,7 @@ describe('class field injection', function () {
       di.bind(WithOptional)
         .toSelf()
         .injectProperty('required', DepA)
-        .injectProperty('absent', optional(DepC))
+        .injectProperty('absent', $i.optional(DepC))
       await di.init()
 
       const instance = di.get(WithOptional)

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { CaffeineIoC } from '../container.js'
-import { optional } from '../injection.js'
+import { $i } from '../injection.js'
 
 describe('Functions', function () {
   describe('given a function that returns another function', function () {
@@ -26,7 +26,7 @@ describe('Functions', function () {
         `received: ${message} - ${dep.value} - ${nm.id} - ${opt === undefined}`
 
       di.bind(kFn)
-        .toFunction(fn, [Dep, kVal, optional(Opt)])
+        .toFunction(fn, [Dep, kVal, $i.optional(Opt)])
       await di.init()
 
       const theFunction = di.get<(message: string) => string>(kFn)

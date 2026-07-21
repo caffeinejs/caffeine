@@ -17,7 +17,7 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  * @Injectable()
  * class LowPriorityHandler implements Handler {}
  *
- * @Injectable([ordered(Handler)])
+ * @Injectable([$i.ordered(Handler)])
  * class Pipeline {
  *   constructor(readonly handlers: Handler[]) {} // [HighPriorityHandler, LowPriorityHandler]
  * }

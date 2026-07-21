@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey } from '../errors.js'
-import { allOf, mapped, provide } from '../injection.js'
+import { $i } from '../injection.js'
 import type { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -135,7 +135,7 @@ describe('abstract-classes: allOf with @Extends', function () {
     process(input: string) { return input.replace(/<[^>]*>/g, '') }
   }
 
-  @Injectable([allOf(AcProcessor)])
+  @Injectable([$i.allOf(AcProcessor)])
   class AcPipeline {
     constructor(readonly processors: AcProcessor[]) {}
     run(input: string): string {
@@ -191,9 +191,9 @@ describe('abstract-classes: @Primary', function () {
   })
 })
 
-// ─── abstract-classes: @Named + mapped() ─────────────────────────────────────
+// ─── abstract-classes: @Named + $i.mapped() ─────────────────────────────────────
 
-describe('abstract-classes: @Named + mapped()', function () {
+describe('abstract-classes: @Named + $i.mapped()', function () {
   abstract class AcNotificationSender {
     abstract send(message: string, to: string): string
   }
@@ -217,7 +217,7 @@ describe('abstract-classes: @Named + mapped()', function () {
     constructor(readonly sender: AcNotificationSender) {}
   }
 
-  @Injectable([mapped(AcNotificationSender)])
+  @Injectable([$i.mapped(AcNotificationSender)])
   class AcNotificationRouter {
     constructor(readonly senders: Map<string, AcNotificationSender>) {}
     route(channel: string, message: string, to: string) {
@@ -240,13 +240,13 @@ describe('abstract-classes: @Named + mapped()', function () {
     expect(svc.sender).toBeInstanceOf(AcEmailSender)
   })
 
-  it('mapped() injects Map<name, impl> for all named @Extends', function () {
+  it('$i.mapped() injects Map<name, impl> for all named @Extends', function () {
     const router = di.get(AcNotificationRouter)
     expect(router.senders.get('acEmail')).toBeInstanceOf(AcEmailSender)
     expect(router.senders.get('acSms')).toBeInstanceOf(AcSmsSender)
   })
 
-  it('mapped() router dispatches to correct sender', function () {
+  it('$i.mapped() router dispatches to correct sender', function () {
     const router = di.get(AcNotificationRouter)
     expect(router.route('acSms', 'hello', 'user@example.com')).toBe('sms:user@example.com:hello')
   })
@@ -484,7 +484,7 @@ describe('interfaces: allOf with symbol token', function () {
     process(input: string) { return input.trim() }
   }
 
-  @Injectable([allOf(kIfProcessor)])
+  @Injectable([$i.allOf(kIfProcessor)])
   class IfPipeline {
     constructor(readonly processors: IfProcessor[]) {}
     run(input: string): string {
@@ -498,7 +498,7 @@ describe('interfaces: allOf with symbol token', function () {
     await di.init()
   })
 
-  it('collects all symbol-keyed implementations via allOf()', function () {
+  it('collects all symbol-keyed implementations via $i.allOf()', function () {
     const pipeline = di.get(IfPipeline)
     expect(pipeline.processors).toHaveLength(2)
   })
@@ -571,7 +571,7 @@ describe('interfaces: @Named dispatch for interfaces', function () {
     constructor(readonly sender: IfNotificationSender) {}
   }
 
-  @Injectable([mapped(kIfNotificationSender)])
+  @Injectable([$i.mapped(kIfNotificationSender)])
   class IfNotificationRouter {
     constructor(readonly senders: Map<string, IfNotificationSender>) {}
   }
@@ -587,7 +587,7 @@ describe('interfaces: @Named dispatch for interfaces', function () {
     expect(svc.sender).toBeInstanceOf(IfEmailSender)
   })
 
-  it('mapped() injects Map<name, impl> for interface token', function () {
+  it('$i.mapped() injects Map<name, impl> for interface token', function () {
     const router = di.get(IfNotificationRouter)
     expect(router.senders.get('ifEmail')).toBeInstanceOf(IfEmailSender)
     expect(router.senders.get('ifSms')).toBeInstanceOf(IfSmsSender)
@@ -1958,9 +1958,9 @@ describe('lazy-bindings: manual .lazy() API', function () {
   })
 })
 
-// ─── mixing-scopes: Provider<T> with provide() ────────────────────────────────
+// ─── mixing-scopes: Provider<T> with $i.provide() ────────────────────────────────
 
-describe('mixing-scopes: Provider<T> with provide()', function () {
+describe('mixing-scopes: Provider<T> with $i.provide()', function () {
   @Injectable()
   @Lifetime(Scopes.TRANSIENT)
   class MsEmailSender {
@@ -1968,7 +1968,7 @@ describe('mixing-scopes: Provider<T> with provide()', function () {
     send(to: string, body: string) { return `sent:${to}` }
   }
 
-  @Injectable([provide(MsEmailSender)])
+  @Injectable([$i.provide(MsEmailSender)])
   @Lifetime(Scopes.SINGLETON)
   class MsNotificationService {
     constructor(readonly sender: Provider<MsEmailSender>) {}
@@ -1983,7 +1983,7 @@ describe('mixing-scopes: Provider<T> with provide()', function () {
     await di.init()
   })
 
-  it('provide() wraps dependency in Provider interface', function () {
+  it('$i.provide() wraps dependency in Provider interface', function () {
     const svc = di.get(MsNotificationService)
     expect(svc.sender).toBeDefined()
     expect(typeof svc.sender.get).toBe('function')
@@ -2011,7 +2011,7 @@ describe('mixing-scopes: singleton holds Provider for short-lived dep', function
     readonly requestId = Math.random().toString(36)
   }
 
-  @Injectable([provide(MsRequestContext)])
+  @Injectable([$i.provide(MsRequestContext)])
   @Lifetime(Scopes.SINGLETON)
   class MsOrderController {
     constructor(readonly ctx: Provider<MsRequestContext>) {}

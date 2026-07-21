@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { Named } from '../decorators/named.js'
 import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
-import { allOf } from '../injection.js'
+import { $i } from '../injection.js'
 import { UseFactory } from '../decorators/use_factory.js'
 import { Provides } from '../decorators/provides.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
@@ -116,7 +116,7 @@ describe('Real World', function () {
   @Injectable()
   @Named(kSms)
   class SmsNotificationService implements NotificationService {
-    @Inject(allOf(kRegions))
+    @Inject($i.allOf(kRegions))
     regions!: string[]
 
     message = 'sms'

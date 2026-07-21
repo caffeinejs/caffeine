@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../container.js'
-import { allOf, defer, optional } from '../injection.js'
+import { $i } from '../injection.js'
 import { ErrScopeMismatch } from '../errors.js'
 import { Scopes } from '../scope.js'
 
-describe('defer() composition', function () {
-  describe('optional(defer())', function () {
+describe('$i.defer() composition', function () {
+  describe('$i.optional($i.defer())', function () {
     it('injects the instance when dep is registered', async function () {
       class Dep {
         tag() {
@@ -21,7 +21,7 @@ describe('defer() composition', function () {
       di.bind(Dep)
         .toSelf()
       di.bind(Owner)
-        .toSelf([optional(defer(() => Dep))])
+        .toSelf([$i.optional($i.defer(() => Dep))])
       await di.init()
 
       const owner = di.get(Owner)
@@ -41,7 +41,7 @@ describe('defer() composition', function () {
 
         const di = new CaffeineIoC({ decorators: false })
         di.bind(Owner)
-          .toSelf([optional(defer(() => MissingDep))])
+          .toSelf([$i.optional($i.defer(() => MissingDep))])
         await di.init()
 
         const owner = di.get(Owner)
@@ -51,7 +51,7 @@ describe('defer() composition', function () {
     })
   })
 
-  describe('allOf(defer())', function () {
+  describe('$i.allOf($i.defer())', function () {
     it('injects all bindings for the deferred key', async function () {
       const kPlugin = Symbol('plugin')
 
@@ -79,7 +79,7 @@ describe('defer() composition', function () {
         .toSelf()
         .names(kPlugin)
       di.bind(Host)
-        .toSelf([allOf(defer(() => kPlugin))])
+        .toSelf([$i.allOf($i.defer(() => kPlugin))])
       await di.init()
 
       const host = di.get(Host)
@@ -99,7 +99,7 @@ describe('defer() composition', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(Host)
-        .toSelf([allOf(defer(() => kAbsent))])
+        .toSelf([$i.allOf($i.defer(() => kAbsent))])
       await di.init()
 
       const host = di.get(Host)
@@ -107,7 +107,7 @@ describe('defer() composition', function () {
         .toEqual([])
     })
 
-    it('strict mode: throws ErrScopeMismatch when SINGLETON depends on TRANSIENT via allOf(defer())', async function () {
+    it('strict mode: throws ErrScopeMismatch when SINGLETON depends on TRANSIENT via $i.allOf($i.defer())', async function () {
       class TransientDep {}
 
       class SingletonOwner {
@@ -119,7 +119,7 @@ describe('defer() composition', function () {
         .toSelf()
         .lifetime(Scopes.TRANSIENT)
       di.bind(SingletonOwner)
-        .toSelf([allOf(defer(() => TransientDep))])
+        .toSelf([$i.allOf($i.defer(() => TransientDep))])
         .lifetime(Scopes.SINGLETON)
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)

@@ -106,16 +106,16 @@ type ObjectInjectionSpec = {
  * }
  * ```
  */
-export function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
     if (!isValidKey(descriptor.key)) {
       throw new ErrMissingInjectionKey(
-        `Cannot call ${allOf.name}: descriptor does not have a valid key`
+        `Cannot call 'allOf': descriptor does not have a valid key`
         + solutions(
-          `- Pass a key directly or use an injection function that resolves to a key, e.g. ${allOf.name}(${optional.name}(key))`,
-          `- A circular module import may have caused the key to be undefined at declaration time — use ${allOf.name}(${defer.name}(() => ClassName)) to defer resolution`,
+          `- Pass a key directly or use an injection function that resolves to a key, e.g. allOf(optional(key))`,
+          `- A circular module import may have caused the key to be undefined at declaration time — use allOf(defer(() => ClassName)) to defer resolution`,
         ),
       )
     }
@@ -124,7 +124,7 @@ export function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDesc
   }
 
   if (keyOrDescriptor == null) {
-    throw new ErrMissingInjectionKey(`Cannot call ${allOf.name}: key is null or undefined`)
+    throw new ErrMissingInjectionKey(`Cannot call 'allOf': key is null or undefined`)
   }
 
   return { key: keyOrDescriptor as Key, multiple: true, resolver: BuiltInResolvers.DEFAULT }
@@ -157,16 +157,16 @@ export function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDesc
  * }
  * ```
  */
-export function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
     if (!isValidKey(descriptor.key)) {
       throw new ErrMissingInjectionKey(
-        `Cannot call ${ordered.name}: descriptor does not have a valid key`
+        `Cannot call 'ordered': descriptor does not have a valid key`
         + solutions(
-          `- Pass a key directly or use an injection function that resolves to a key, e.g. ${ordered.name}(${optional.name}(key))`,
-          `- A circular module import may have caused the key to be undefined at declaration time — use ${ordered.name}(${defer.name}(() => ClassName)) to defer resolution`,
+          `- Pass a key directly or use an injection function that resolves to a key, e.g. ordered(optional(key))`,
+          `- A circular module import may have caused the key to be undefined at declaration time — use ordered(defer(() => ClassName)) to defer resolution`,
         ),
       )
     }
@@ -175,7 +175,7 @@ export function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDe
   }
 
   if (keyOrDescriptor == null) {
-    throw new ErrMissingInjectionKey(`Cannot call ${ordered.name}: key is null or undefined`)
+    throw new ErrMissingInjectionKey(`Cannot call 'ordered': key is null or undefined`)
   }
 
   return { key: keyOrDescriptor as Key, resolver: BuiltInResolvers.ORDERED }
@@ -208,12 +208,12 @@ export function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDe
  *
  * ```
  */
-export function mapped(key: Key): InjectionDescriptor {
+function mapped(key: Key): InjectionDescriptor {
   if (key == null) {
     throw new ErrMissingInjectionKey(
-      `Cannot call ${mapped.name}: key is null or undefined`
+      `Cannot call 'mapped': key is null or undefined`
       + solutions(
-        `- A circular module import may have caused the key to be undefined at declaration time — use ${mapped.name}(${defer.name}(() => ClassName)) to defer resolution`,
+        `- A circular module import may have caused the key to be undefined at declaration time — use mapped(defer(() => ClassName)) to defer resolution`,
         `- Verify that the key is correctly imported`,
       ),
     )
@@ -236,7 +236,7 @@ export function mapped(key: Key): InjectionDescriptor {
  * }
  * ```
  */
-export function defer(keyFn: () => Key): InjectionDescriptor {
+function defer(keyFn: () => Key): InjectionDescriptor {
   return { key: new DeferredCtor(keyFn), resolver: BuiltInResolvers.DEFER }
 }
 
@@ -253,7 +253,7 @@ export function defer(keyFn: () => Key): InjectionDescriptor {
  * }
  * ```
  */
-export function optional(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function optional(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
   if (isValidKey(keyOrDescriptor)) {
     return { key: keyOrDescriptor as Key, optional: true }
   }
@@ -282,7 +282,7 @@ export function optional(keyOrDescriptor: Key | InjectionDescriptor): InjectionD
  * }
  * ```
  */
-export function object(spec: ObjectInjectionSpec): InjectionDescriptor {
+function object(spec: ObjectInjectionSpec): InjectionDescriptor {
   return { resolver: BuiltInResolvers.OBJECT, args: parseObjectSpec(spec) }
 }
 
@@ -302,12 +302,12 @@ export function object(spec: ObjectInjectionSpec): InjectionDescriptor {
  * }
  * ```
  */
-export function provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(
-      `Cannot call ${provide.name}: key is null or undefined`
+      `Cannot call 'provide': key is null or undefined`
       + solutions(
-        `- A circular module import may have caused the key to be undefined at declaration time — use ${provide.name}(${defer.name}(() => ClassName)) to defer resolution`,
+        `- A circular module import may have caused the key to be undefined at declaration time — use provide(defer(() => ClassName)) to defer resolution`,
         `- Verify that the key is correctly imported`,
       ),
     )
@@ -321,7 +321,7 @@ export function provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDe
 
   if (!isValidKey(descriptor.key)) {
     throw new ErrMissingInjectionKey(
-      `Cannot call ${provide.name}: descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
+      `Cannot call 'provide': descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
     )
   }
 
@@ -342,7 +342,7 @@ export function provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDe
  * }
  * ```
  */
-export function useValue<T = unknown>(value: T): InjectionDescriptor {
+function useValue<T = unknown>(value: T): InjectionDescriptor {
   return { resolver: BuiltInResolvers.VALUE, args: value }
 }
 
@@ -352,7 +352,7 @@ export function useValue<T = unknown>(value: T): InjectionDescriptor {
  * @param key - The key to compose the injection descriptors for.
  * @param fns - The injection functions to compose.
  */
-export function compose(key: Key, ...fns: Array<(key: Key) => InjectionDescriptor>): InjectionDescriptor {
+function compose(key: Key, ...fns: Array<(key: Key) => InjectionDescriptor>): InjectionDescriptor {
   return fns.reduce((acc, fn) => ({ ...acc, ...fn(key) }), {} as InjectionDescriptor)
 }
 
@@ -381,4 +381,16 @@ function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
   }
 
   return { children }
+}
+
+export const $i = {
+  allOf,
+  ordered,
+  mapped,
+  defer,
+  optional,
+  object,
+  provide,
+  useValue,
+  compose,
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
-import { allOf, defer, object, optional } from '../injection.js'
+import { $i } from '../injection.js'
 import { ErrCircularDependency } from '../errors.js'
 import { Bar, BarTransient } from './_testdata/circular/Bar.js'
 import { Foo, FooTransient } from './_testdata/circular/Foo.js'
@@ -90,7 +90,7 @@ describe('Circular References', function () {
 
   @Injectable()
   class PropConsumer {
-    @Inject(defer(() => PropService))
+    @Inject($i.defer(() => PropService))
     svc!: PropService
   }
 
@@ -118,7 +118,7 @@ describe('Circular References', function () {
   class MethodConsumer {
     svc!: MethodService
 
-    @Inject([defer(() => MethodService)])
+    @Inject([$i.defer(() => MethodService)])
     init(svc: MethodService) {
       this.svc = svc
     }
@@ -221,7 +221,7 @@ describe('Circular References', function () {
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
       di.bind(OptA)
-        .toSelf([optional(OptB)])
+        .toSelf([$i.optional(OptB)])
         .lazy()
       di.bind(OptB)
         .toSelf([OptA])
@@ -230,7 +230,7 @@ describe('Circular References', function () {
       await di.init()
     })
 
-    it('should not throw when the dep that closes the cycle uses defer()', async function () {
+    it('should not throw when the dep that closes the cycle uses $i.defer()', async function () {
       class DeferA {
         constructor(readonly b: DeferB) {}
       }
@@ -241,7 +241,7 @@ describe('Circular References', function () {
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
       di.bind(DeferA)
-        .toSelf([defer(() => DeferB)])
+        .toSelf([$i.defer(() => DeferB)])
       di.bind(DeferB)
         .toSelf([DeferA])
 
@@ -294,7 +294,7 @@ describe('Circular References', function () {
       class HandlerC extends Handler {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA).toSelf([allOf(defer(() => Handler))])
+      di.bind(HandlerA).toSelf([$i.allOf($i.defer(() => Handler))])
         .extends(Handler)
       di.bind(HandlerB).toSelf()
         .extends(Handler)
@@ -317,7 +317,7 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA).toSelf([allOf(defer(() => Handler))])
+      di.bind(HandlerA).toSelf([$i.allOf($i.defer(() => Handler))])
         .extends(Handler)
       await di.init()
 
@@ -342,7 +342,7 @@ describe('Circular References', function () {
         .extends(Handler)
       await di.init()
 
-      const dispatcher = di.build(Dispatcher, [allOf(defer(() => Handler))])
+      const dispatcher = di.build(Dispatcher, [$i.allOf($i.defer(() => Handler))])
       expect(dispatcher.handlers).toHaveLength(2)
       expect(dispatcher.handlers.some(h => h instanceof HandlerA)).toBe(true)
       expect(dispatcher.handlers.some(h => h instanceof HandlerB)).toBe(true)
@@ -361,7 +361,7 @@ describe('Circular References', function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(DepA).toSelf()
       di.bind(DepB).toSelf()
-      di.bind(Consumer).toSelf([object({ a: defer(() => DepA), b: DepB })])
+      di.bind(Consumer).toSelf([$i.object({ a: $i.defer(() => DepA), b: DepB })])
       await di.init()
 
       const consumer = di.get(Consumer)
@@ -381,7 +381,7 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ServiceA).toSelf([object({ b: defer(() => ServiceB) })])
+      di.bind(ServiceA).toSelf([$i.object({ b: $i.defer(() => ServiceB) })])
       di.bind(ServiceB).toSelf([ServiceA])
       await di.init()
 
@@ -399,7 +399,7 @@ describe('Circular References', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(Dep).toSelf()
-      di.bind(Consumer).toSelf([object({ dep: optional(defer(() => Dep)) })])
+      di.bind(Consumer).toSelf([$i.object({ dep: $i.optional($i.defer(() => Dep)) })])
       await di.init()
 
       const consumer = di.get(Consumer)
@@ -414,14 +414,14 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Consumer).toSelf([object({ dep: optional(defer(() => Dep)) })])
+      di.bind(Consumer).toSelf([$i.object({ dep: $i.optional($i.defer(() => Dep)) })])
       await di.init()
 
       const consumer = di.get(Consumer)
       expect(consumer.deps.dep).toBeUndefined()
     })
 
-    it('should resolve allOf(defer()) in object injection', async function () {
+    it('should resolve $i.allOf($i.defer()) in object injection', async function () {
       abstract class Handler {}
 
       class HandlerA extends Handler {}
@@ -436,7 +436,7 @@ describe('Circular References', function () {
         .extends(Handler)
       di.bind(HandlerB).toSelf()
         .extends(Handler)
-      di.bind(Consumer).toSelf([object({ handlers: allOf(defer(() => Handler)) })])
+      di.bind(Consumer).toSelf([$i.object({ handlers: $i.allOf($i.defer(() => Handler)) })])
       await di.init()
 
       const consumer = di.get(Consumer)

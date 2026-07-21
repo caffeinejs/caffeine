@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  $i,
   Async,
   CaffeineIoC,
   Configuration,
@@ -8,7 +9,6 @@ import {
   Injectable,
   Profile,
   Provides,
-  optional,
 } from '@caffeinejs/core'
 import { InstanceTracker } from './tracker.js'
 import { TestContainer } from './test_container.js'
@@ -44,7 +44,7 @@ describe('TestContainer', function () {
     repo!: Repository
   }
 
-  @Injectable([optional(UnrelatedService)])
+  @Injectable([$i.optional(UnrelatedService)])
   class WithOptionalDep {
     constructor(readonly dep: UnrelatedService | undefined = undefined) {}
   }

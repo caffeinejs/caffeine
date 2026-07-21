@@ -7,7 +7,7 @@ import { Named } from '../decorators/named.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { CaffeineIoC } from '../container.js'
 import { Scopes } from '../scope.js'
-import { allOf, optional, provide } from '../injection.js'
+import { $i } from '../injection.js'
 import { ErrInvalidBinding } from '../errors.js'
 import { Provider } from '../provider.js'
 
@@ -47,13 +47,13 @@ describe('Method Injections', function () {
     }
   }
 
-  describe('when setting a transient dependency in a singleton component - using provide()', function () {
+  describe('when setting a transient dependency in a singleton component - using $i.provide()', function () {
     @Injectable()
     class SingleInject {
       id: string = randomUUID()
       transient!: Provider<TransientDep>
 
-      @Inject([provide(TransientDep)])
+      @Inject([$i.provide(TransientDep)])
       setOneParameter(transient: Provider<TransientDep>) {
         this.transient = transient
       }
@@ -88,7 +88,7 @@ describe('Method Injections', function () {
       id: string = randomUUID()
       dep!: Provider<SingletonDep>
 
-      @Inject([provide(SingletonDep)])
+      @Inject([$i.provide(SingletonDep)])
       setDep(dep: Provider<SingletonDep>) {
         this.dep = dep
       }
@@ -118,7 +118,7 @@ describe('Method Injections', function () {
       val!: string
       bases!: Base[]
 
-      @Inject([provide(TransientDep), kVal, allOf(kBs)])
+      @Inject([$i.provide(TransientDep), kVal, $i.allOf(kBs)])
       setDiff(transient: Provider<TransientDep>, val: string, bases: Base[]) {
         this.transient = transient
         this.val = val
@@ -165,7 +165,7 @@ describe('Method Injections', function () {
       bases!: Base[]
       base!: Base
 
-      @Inject([provide(TransientDep)])
+      @Inject([$i.provide(TransientDep)])
       setTransient(transient: Provider<TransientDep>) {
         this.transient = transient
       }
@@ -175,7 +175,7 @@ describe('Method Injections', function () {
         this.val = val
       }
 
-      @Inject([allOf(kBs), kBase])
+      @Inject([$i.allOf(kBs), kBase])
       setBase(bases: Base[], base: Base) {
         this.bases = bases
         this.base = base
@@ -390,7 +390,7 @@ describe('Method Injections', function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(Svc)
         .toSelf()
-        .injectMethod('setOpt', optional(kOpt))
+        .injectMethod('setOpt', $i.optional(kOpt))
       await di.init()
 
       expect(di.get(Svc).opt)

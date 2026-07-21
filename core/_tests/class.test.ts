@@ -5,7 +5,7 @@ import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { CaffeineIoC } from '../container.js'
 import { ErrInvalidDecorator, ErrNoUniqueInjectionForKey, ErrNoResolutionForKey } from '../errors.js'
-import { allOf, useValue } from '../injection.js'
+import { $i } from '../injection.js'
 
 describe('Class', function () {
   describe('when using dependencies with default configurations', function () {
@@ -123,7 +123,7 @@ describe('Class', function () {
       }
     }
 
-    @Injectable([allOf(kIdentifier)])
+    @Injectable([$i.allOf(kIdentifier)])
     class Lang {
       constructor(readonly all: Base[]) {}
     }
@@ -301,13 +301,13 @@ describe('Class', function () {
     })
   })
 
-  describe('useValue() injection', function () {
-    @Injectable([useValue('injected-constant')])
+  describe('$i.useValue() injection', function () {
+    @Injectable([$i.useValue('injected-constant')])
     class SingleValueDep {
       constructor(readonly label: string) {}
     }
 
-    @Injectable([useValue('host'), useValue(8080)])
+    @Injectable([$i.useValue('host'), $i.useValue(8080)])
     class MultiValueDep {
       constructor(
         readonly host: string,
@@ -320,7 +320,7 @@ describe('Class', function () {
       tag = 'bare'
     }
 
-    @Injectable([BareDep, useValue('mixed')])
+    @Injectable([BareDep, $i.useValue('mixed')])
     class MixedDep {
       constructor(
         readonly dep: BareDep,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
-import { object, allOf, optional } from '../injection.js'
+import { $i } from '../injection.js'
 import { CaffeineIoC } from '../container.js'
 
 describe('Destructuring', function () {
@@ -28,11 +28,11 @@ describe('Destructuring', function () {
   class Dep3 {}
 
   @Injectable([
-    object({
+    $i.object({
       dep1: Dep1,
-      dep2: optional(Dep2),
+      dep2: $i.optional(Dep2),
       dep3: kDep,
-      base: allOf(kBase),
+      base: $i.allOf(kBase),
     }),
   ])
   class Root {
@@ -40,11 +40,11 @@ describe('Destructuring', function () {
   }
 
   @Injectable([
-    object({ dep1: Dep1, dep2: optional(Dep2) }),
-    object({ dep3: kDep }),
-    optional(Dep2),
-    allOf(kBase),
-    object({ base: allOf(kBase) }),
+    $i.object({ dep1: Dep1, dep2: $i.optional(Dep2) }),
+    $i.object({ dep3: kDep }),
+    $i.optional(Dep2),
+    $i.allOf(kBase),
+    $i.object({ base: $i.allOf(kBase) }),
   ])
   class DiffTypes {
     constructor(
@@ -57,10 +57,10 @@ describe('Destructuring', function () {
   }
 
   @Injectable([
-    object({
+    $i.object({
       services: {
         db: Dep1,
-        cache: optional(Dep2),
+        cache: $i.optional(Dep2),
       },
       config: {
         auth: { token: kDep },
@@ -72,7 +72,7 @@ describe('Destructuring', function () {
   }
 
   @Injectable([
-    object({
+    $i.object({
       [kSymbolField]: Dep1,
     }),
   ])

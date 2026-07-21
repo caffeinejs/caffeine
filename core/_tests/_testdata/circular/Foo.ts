@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { Injectable } from '../../../decorators/injectable.js'
-import { defer } from '../../../injection.js'
+import { $i } from '../../../injection.js'
 import { Scopes } from '../../../scope.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
 import { Bar, BarTransient } from './Bar.js'
 
-@Injectable([defer(() => Bar)])
+@Injectable([$i.defer(() => Bar)])
 export class Foo {
   uuid: string = randomUUID()
 
@@ -18,7 +18,7 @@ export class Foo {
   }
 }
 
-@Injectable([defer(() => BarTransient)])
+@Injectable([$i.defer(() => BarTransient)])
 @Lifetime(Scopes.TRANSIENT)
 export class FooTransient {
   uuid: string = randomUUID()

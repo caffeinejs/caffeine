@@ -3,7 +3,7 @@ import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { CaffeineIoC } from '../container.js'
-import { optional } from '../injection.js'
+import { $i } from '../injection.js'
 import { Configuration } from '../decorators/configuration.js'
 import { ContainerBindingOps } from '../container_interface.js'
 
@@ -33,13 +33,13 @@ describe('Conditionals', function () {
       constructor(readonly pass: Pass) {}
     }
 
-    @Injectable([optional(NoPass)])
+    @Injectable([$i.optional(NoPass)])
     class RefNotPassed {
       constructor(readonly noPass: NoPass | undefined) {}
     }
     void RefNotPassed
 
-    @Injectable([optional(NoPass)])
+    @Injectable([$i.optional(NoPass)])
     class RefNotPassedOptional {
       constructor(readonly noPass?: NoPass) {}
     }
@@ -73,7 +73,7 @@ describe('Conditionals', function () {
       di.bind(RefPassed)
         .toSelf([Pass])
       di.bind(RefNotPassedOptional)
-        .toSelf([optional(NoPass)])
+        .toSelf([$i.optional(NoPass)])
       await di.init()
 
       const refPassed = di.get(RefPassed)

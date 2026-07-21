@@ -13,7 +13,7 @@ import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Primary } from '../decorators/primary.js'
 import { Provides } from '../decorators/provides.js'
 import { ErrOutOfScope, ErrNoResolutionForKey, ErrRepeatedInjectableConfiguration } from '../errors.js'
-import { allOf, defer, provide } from '../injection.js'
+import { $i } from '../injection.js'
 import { Scopes } from '../scope.js'
 import { Provider } from '../provider.js'
 
@@ -259,7 +259,7 @@ describe('D1: injectAll with zero matching bindings — returns empty array', fu
       .toFunction((deps: unknown[]) => {
         captured = deps
         return {}
-      }, [allOf(kD1Missing)])
+      }, [$i.allOf(kD1Missing)])
 
     await di.init()
     di.get(kD1Consumer)
@@ -338,7 +338,7 @@ describe('D2: getMany() with @Primary — primary instance is first in result', 
 })
 
 describe('D3: Property injection on TRANSIENT — each instance receives fresh injection', function () {
-  describe('when container is strict and it is mixing singleton and transient dependencies - without using provide()', function () {
+  describe('when container is strict and it is mixing singleton and transient dependencies - without using $i.provide()', function () {
     it('should throw ErrScopeMismatch', async function () {
       @Injectable()
       class EC_D3SingletonDep {}
@@ -368,14 +368,14 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
     })
   })
 
-  describe('when container is strict and it is mixing singleton and transient dependencies - using provide()', function () {
+  describe('when container is strict and it is mixing singleton and transient dependencies - using $i.provide()', function () {
     it('should inject the singleton dep into every new transient instance', async function () {
       @Injectable()
       class EC_D3SingletonDep {}
 
       @Injectable()
       class EC_D3TransientConsumer {
-        @Inject(provide(EC_D3SingletonDep))
+        @Inject($i.provide(EC_D3SingletonDep))
         dep!: Provider<EC_D3SingletonDep>
       }
 
@@ -624,7 +624,7 @@ describe('F3: @Interceptor on TRANSIENT — invoked for every new resolution', f
 
 describe('Self-referencing', function () {
   describe('when a class references itself', function () {
-    @Injectable([defer(() => Service)])
+    @Injectable([$i.defer(() => Service)])
     class Service {
       constructor(readonly dep: Service) {}
 
@@ -654,7 +654,7 @@ describe('Self-referencing', function () {
     it('should allow using manual binding using deferred injection', async function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(Service)
-        .toSelf([defer(() => Service)])
+        .toSelf([$i.defer(() => Service)])
       await di.init()
 
       const service = di.get(Service)

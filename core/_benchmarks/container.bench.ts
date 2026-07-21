@@ -5,7 +5,7 @@ import { Provides } from '../decorators/provides.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
-import { object, allOf, optional } from '../injection.js'
+import { $i } from '../injection.js'
 import { CaffeineIoC } from '../container.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Scopes } from '../scope.js'
@@ -98,7 +98,7 @@ class JSONLogger implements Logger {
 @Injectable()
 class Simple {}
 
-@Injectable([RepoDb, kNotification, Act, allOf(kLog), optional(Maybe)])
+@Injectable([RepoDb, kNotification, Act, $i.allOf(kLog), $i.optional(Maybe)])
 class Root {
   constructor(
     readonly repo: Repo,
@@ -109,7 +109,7 @@ class Root {
   ) {}
 }
 
-@Injectable([Act, allOf(kLog), optional(Maybe)])
+@Injectable([Act, $i.allOf(kLog), $i.optional(Maybe)])
 class RootWithMethodInjection {
   repo!: Repo
   notification!: Notification
@@ -127,7 +127,7 @@ class RootWithMethodInjection {
   }
 }
 
-@Injectable([Act, allOf(kLog), optional(Maybe)])
+@Injectable([Act, $i.allOf(kLog), $i.optional(Maybe)])
 class RootWithAll {
   repo!: Repo
 
@@ -213,7 +213,7 @@ class JSONLoggerT implements Logger {
   info(): void {}
 }
 
-@Injectable([RepoDbT, kNotificationT, ActT, allOf(kLogT), optional(Maybe)])
+@Injectable([RepoDbT, kNotificationT, ActT, $i.allOf(kLogT), $i.optional(Maybe)])
 @Lifetime(Scopes.TRANSIENT)
 class RootTransient {
   constructor(
@@ -225,7 +225,7 @@ class RootTransient {
   ) {}
 }
 
-@Injectable([RepoDb, Act, allOf(kLog), optional(Maybe)])
+@Injectable([RepoDb, Act, $i.allOf(kLog), $i.optional(Maybe)])
 class RootWithProps {
   @Inject(kNotification)
   notification!: Notification
@@ -247,9 +247,9 @@ class Dep1 {}
 class Dep2 {}
 
 @Injectable([
-  object({
+  $i.object({
     dep1: Dep1,
-    dep2: optional(Dep2),
+    dep2: $i.optional(Dep2),
     nested: { inner: Dep1 },
   }),
 ])
@@ -258,7 +258,7 @@ class DestructuringRoot {
   constructor(readonly args: { dep1: Dep1, dep2?: Dep2, nested: { inner: Dep1 } }) {}
 }
 
-@Injectable([Act, allOf(kLog), optional(Maybe)])
+@Injectable([Act, $i.allOf(kLog), $i.optional(Maybe)])
 class RootWith2Props {
   @Inject(kNotification)
   notification!: Notification

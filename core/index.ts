@@ -18,7 +18,6 @@ export type { BindingGraph, EdgeKind, GraphEdge, GraphNode } from './graph.js'
 export { buildBindingGraph, graphToDot, graphToJson, graphToMarkdown, graphToMermaid, graphToText } from './graph.js'
 export type * from './hooks.js'
 export * from './injection.js'
-export * as inject from './injection.js'
 export {
   bindResolver,
   BuiltInResolvers,

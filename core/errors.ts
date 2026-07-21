@@ -9,7 +9,6 @@ import { Provides } from './decorators/provides.js'
 import { Ctor } from './types.js'
 import { Extends } from './decorators/extends.js'
 import { solutions } from './internal/util/errutil/index.js'
-import { allOf } from './injection.js'
 
 /**
  * CaffeineIoCError is the base error class for all errors thrown by the CaffeineIoC library.
@@ -32,7 +31,7 @@ export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
     super(
       (message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`)
       + solutions(
-        `Use ${allOf.name}(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
+        `Use allOf(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
         `Use @${Named.name} providing a name to differentiate injectables and inject the dependency using it`,
         `Use @${Primary.name} to specify an unique injectable`,
         `Use @${ConditionalOn.name} to conditionally register injectables, leaving only one for the given key`,
@@ -278,7 +277,7 @@ export class ErrScopeMismatch extends CaffeineIoCError {
       + violations.map(v => `  - ${v}`)
         .join('\n')
         + solutions(
-          'Use provide(key) injection function and declare the parameter as Provider<T> to inject different-scoped dependencies',
+          'Use $i.provide(key) injection function and declare the parameter as Provider<T> to inject different-scoped dependencies',
           'Or align the scopes: make the dependency use the same scope as the consumer',
           'Or disable scope checks with { checks: { scopes: \'off\' } } in the container options',
         ),

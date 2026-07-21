@@ -1,7 +1,7 @@
 import { describe, it, expect, afterAll } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { ErrScopeMismatch } from '../errors.js'
-import { provide, allOf } from '../injection.js'
+import { $i } from '../injection.js'
 import { Scopes, bindScope, unbindScope } from '../scope.js'
 import { ResolutionContext } from '../resolution_context.js'
 
@@ -80,7 +80,7 @@ describe('checks:scopes', function () {
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })
 
-    it('allows singleton → provide(transient)', async function () {
+    it('allows singleton → $i.provide(transient)', async function () {
       const kDep = Symbol('sm-dep-spt')
       const kOwner = Symbol('sm-owner-spt')
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
@@ -89,13 +89,13 @@ describe('checks:scopes', function () {
         .toValue('dep')
         .lifetime(Scopes.TRANSIENT)
       di.bind(kOwner)
-        .toFunction((_: unknown) => ({}), [provide(kDep)])
+        .toFunction((_: unknown) => ({}), [$i.provide(kDep)])
         .lifetime(Scopes.SINGLETON)
 
       await expect(di.init()).resolves.not.toThrow()
     })
 
-    it('allows transient → provide(singleton)', async function () {
+    it('allows transient → $i.provide(singleton)', async function () {
       const kDep = Symbol('sm-dep-tps')
       const kOwner = Symbol('sm-owner-tps')
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
@@ -104,7 +104,7 @@ describe('checks:scopes', function () {
         .toValue('dep')
         .lifetime(Scopes.SINGLETON)
       di.bind(kOwner)
-        .toFunction((_: unknown) => ({}), [provide(kDep)])
+        .toFunction((_: unknown) => ({}), [$i.provide(kDep)])
         .lifetime(Scopes.TRANSIENT)
 
       await expect(di.init()).resolves.not.toThrow()
@@ -119,7 +119,7 @@ describe('checks:scopes', function () {
         .toValue('dep')
         .lifetime(Scopes.TRANSIENT)
       di.bind(kOwner)
-        .toFunction((_: unknown[]) => ({}), [allOf(kDep)])
+        .toFunction((_: unknown[]) => ({}), [$i.allOf(kDep)])
         .lifetime(Scopes.SINGLETON)
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
@@ -295,7 +295,7 @@ describe('checks:scopes', function () {
       expect(caught!.message.toLowerCase())
         .toContain('transient')
       expect(caught!.message.toLowerCase())
-        .toContain('provide(')
+        .toContain('$i.provide(')
     })
   })
 
@@ -401,14 +401,14 @@ describe('checks:scopes', function () {
       await expect(di.init()).resolves.not.toThrow()
     })
 
-    it('skips provide() injections regardless of scope mismatch', async function () {
+    it('skips $i.provide() injections regardless of scope mismatch', async function () {
       const kDep = Symbol('cso-dep-prov')
       const kOwner = Symbol('cso-owner-prov')
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep).toValue('dep')
         .lifetime(Scopes.TRANSIENT)
-      di.bind(kOwner).toFunction((_: unknown) => ({}), [provide(kDep)])
+      di.bind(kOwner).toFunction((_: unknown) => ({}), [$i.provide(kDep)])
 
       await expect(di.init()).resolves.not.toThrow()
     })

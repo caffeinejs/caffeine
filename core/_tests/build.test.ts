@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { ErrInvalidContainerState, ErrMissingInjectionKey, ErrNoResolutionForKey } from '../errors.js'
-import { allOf, optional, provide } from '../injection.js'
+import { $i } from '../injection.js'
 import { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
 
@@ -105,7 +105,7 @@ describe('build()', function () {
     })
   })
 
-  describe('with optional()', function () {
+  describe('with $i.optional()', function () {
     it('should inject the dep when it is registered', async function () {
       class Logger {}
 
@@ -119,7 +119,7 @@ describe('build()', function () {
         .toSelf()
       await di.init()
 
-      const svc = di.build(Service, [optional(Logger)])
+      const svc = di.build(Service, [$i.optional(Logger)])
 
       expect(svc.logger)
         .toBeInstanceOf(Logger)
@@ -135,14 +135,14 @@ describe('build()', function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
-      const svc = di.build(Service, [optional(Logger)])
+      const svc = di.build(Service, [$i.optional(Logger)])
 
       expect(svc.logger)
         .toBeUndefined()
     })
   })
 
-  describe('with allOf()', function () {
+  describe('with $i.allOf()', function () {
     it('should inject an array of all implementations for an abstract key', async function () {
       abstract class Handler {}
       class HandlerA extends Handler {}
@@ -163,7 +163,7 @@ describe('build()', function () {
         .extends(Handler)
       await di.init()
 
-      const dispatcher = di.build(Dispatcher, [allOf(Handler)])
+      const dispatcher = di.build(Dispatcher, [$i.allOf(Handler)])
 
       expect(dispatcher.handlers)
         .toHaveLength(2)
@@ -183,14 +183,14 @@ describe('build()', function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
-      const runner = di.build(Runner, [allOf(Plugin)])
+      const runner = di.build(Runner, [$i.allOf(Plugin)])
 
       expect(runner.plugins)
         .toEqual([])
     })
   })
 
-  describe('with provide()', function () {
+  describe('with $i.provide()', function () {
     it('should inject a Provider whose .get() returns the dep', async function () {
       class Connection {}
 
@@ -204,7 +204,7 @@ describe('build()', function () {
         .toSelf()
       await di.init()
 
-      const worker = di.build(Worker, [provide(Connection)])
+      const worker = di.build(Worker, [$i.provide(Connection)])
 
       expect(worker.connProvider.get())
         .toBeInstanceOf(Connection)
@@ -224,7 +224,7 @@ describe('build()', function () {
         .lifetime(Scopes.TRANSIENT)
       await di.init()
 
-      const handler = di.build(Handler, [provide(Request)])
+      const handler = di.build(Handler, [$i.provide(Request)])
 
       const r1 = handler.requestProvider.get()
       const r2 = handler.requestProvider.get()
@@ -236,7 +236,7 @@ describe('build()', function () {
       expect(r1).not.toBe(r2)
     })
 
-    it('should inject all providers when combined with allOf()', async function () {
+    it('should inject all providers when combined with $i.allOf()', async function () {
       abstract class Validator {}
       class ValidatorA extends Validator {}
       class ValidatorB extends Validator {}
@@ -256,7 +256,7 @@ describe('build()', function () {
         .extends(Validator)
       await di.init()
 
-      const pipeline = di.build(Pipeline, [allOf(provide(Validator))])
+      const pipeline = di.build(Pipeline, [$i.allOf($i.provide(Validator))])
 
       const validators = pipeline.validatorsProvider.get()
       expect(validators)
@@ -283,7 +283,7 @@ describe('when target type is registered in the container', function () {
     expect(built).not.toBe(singleton)
   })
 
-  it('should include the registered binding of the built type when using allOf()', async function () {
+  it('should include the registered binding of the built type when using $i.allOf()', async function () {
     abstract class Handler {}
     class HandlerA extends Handler {}
     class HandlerB extends Handler {}
@@ -309,7 +309,7 @@ describe('when target type is registered in the container', function () {
       .extends(Handler)
     await di.init()
 
-    const dispatcher = di.build(Dispatcher, [allOf(Handler)])
+    const dispatcher = di.build(Dispatcher, [$i.allOf(Handler)])
 
     expect(dispatcher.handlers)
       .toHaveLength(3)
@@ -393,7 +393,7 @@ describe('builder()', function () {
         .toBe(c2.tracker)
     })
 
-    it('should allow re-resolution on each .get() call when using provide()', async function () {
+    it('should allow re-resolution on each .get() call when using $i.provide()', async function () {
       class Session {}
 
       class Controller {
@@ -407,7 +407,7 @@ describe('builder()', function () {
         .lifetime(Scopes.TRANSIENT)
       await di.init()
 
-      const factory = di.builder(Controller, [provide(Session)])
+      const factory = di.builder(Controller, [$i.provide(Session)])
 
       const ctrl1 = factory()
       const ctrl2 = factory()

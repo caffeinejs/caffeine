@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
 import { CaffeineIoC } from '../../container.js'
 import { ErrCircularDependency } from '../../errors.js'
-import { defer, optional } from '../../injection.js'
+import { $i } from '../../injection.js'
 import { addBackEdge, buildAcyclicEdges, buildDiFromEdges } from './helpers/cycle_di_builder.js'
 
 function maxAcyclicEdges(nodeCount: number): number {
@@ -55,7 +55,7 @@ describe('detectCycles via init (property)', function () {
   it('optional closing edge does not trigger ErrCircularDependency at init', async function () {
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
     di.bind('a')
-      .toFunction((_b: unknown) => ({}), [optional('b')])
+      .toFunction((_b: unknown) => ({}), [$i.optional('b')])
       .lazy()
     di.bind('b')
       .toFunction((_a: unknown) => ({}), ['a'])
@@ -69,7 +69,7 @@ describe('detectCycles via init (property)', function () {
     di.bind('a')
       .toFunction(
         (_b: unknown) => ({}),
-        [defer(() => 'b')],
+        [$i.defer(() => 'b')],
       )
     di.bind('b')
       .toFunction((_a: unknown) => ({}), ['a'])

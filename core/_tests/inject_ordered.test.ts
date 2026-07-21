@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Order } from '../decorators/order.js'
-import { ordered } from '../injection.js'
+import { $i } from '../injection.js'
 import { mod } from '../module.js'
 
-describe('ordered() injection', function () {
+describe('$i.ordered() injection', function () {
   describe('given multiple bindings with @Order — resolves in ascending order', function () {
     const kHandler = Symbol('handler-ordered-asc')
 
@@ -31,7 +31,7 @@ describe('ordered() injection', function () {
       name() { return 'C' }
     }
 
-    @Injectable([ordered(kHandler)])
+    @Injectable([$i.ordered(kHandler)])
     class Pipeline {
       constructor(readonly handlers: Handler[]) {}
     }
@@ -64,7 +64,7 @@ describe('ordered() injection', function () {
       label() { return 'B' }
     }
 
-    @Injectable([ordered(kTied)])
+    @Injectable([$i.ordered(kTied)])
     class TiedConsumer {
       constructor(readonly items: Tied[]) {}
     }
@@ -103,7 +103,7 @@ describe('ordered() injection', function () {
       label() { return 'second' }
     }
 
-    @Injectable([ordered(kStep)])
+    @Injectable([$i.ordered(kStep)])
     class Chain {
       constructor(readonly steps: Step[]) {}
     }
@@ -123,7 +123,7 @@ describe('ordered() injection', function () {
   describe('given no bindings registered for the key', function () {
     const kEmpty = Symbol('handler-ordered-empty')
 
-    @Injectable([ordered(kEmpty)])
+    @Injectable([$i.ordered(kEmpty)])
     class Consumer {
       constructor(readonly items: unknown[]) {}
     }
@@ -138,7 +138,7 @@ describe('ordered() injection', function () {
   })
 })
 
-describe('ordered() with .order() binder option', function () {
+describe('$i.ordered() with .order() binder option', function () {
   it('sorts injected array by .order() value', async function () {
     abstract class Plugin {
       abstract id(): string
@@ -173,7 +173,7 @@ describe('ordered() with .order() binder option', function () {
 
     const plugins = di.build(
       (items: Plugin[]) => items,
-      [ordered(Plugin)],
+      [$i.ordered(Plugin)],
     ) as Plugin[]
 
     expect(plugins.map(p => p.id())).toEqual(['alpha', 'beta', 'gamma'])
@@ -212,7 +212,7 @@ describe('ordered() with .order() binder option', function () {
 
     const svcs = di.build(
       (items: Svc[]) => items,
-      [ordered(Svc)],
+      [$i.ordered(Svc)],
     ) as Svc[]
 
     expect(svcs.map(s => s.tag())).toEqual(['A', 'B', 'C'])

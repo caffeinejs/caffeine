@@ -1,5 +1,5 @@
 import { InjectionResolver, InjectionResolverFactory } from '../../../injection_resolver.js'
-import { allOf, ObjectInjection, ObjectInjections, optional } from '../../../injection.js'
+import { ObjectInjection, ObjectInjections } from '../../../injection.js'
 import { ContainerOps } from '../../../container_interface.js'
 import { DeferredCtor } from '../../../deferred_ctor.js'
 import { ErrNoResolutionForKey } from '../../../errors.js'
@@ -72,8 +72,8 @@ function compileObjectNode(
         `Cannot resolve "${keyStr(key)}" object field "${fieldPath}": no binding registered for key "${keyStr(node.key)}"`
         + solutions(
           `Register a binding for key "${keyStr(node.key)}"`,
-          `For multiple injections, use ${allOf.name}(key)`,
-          `If the dependency is optional, use ${optional.name}(key)`,
+          `For multiple injections, use allOf(key)`,
+          `If the dependency is optional, use optional(key)`,
         ),
       )
     }

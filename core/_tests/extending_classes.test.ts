@@ -5,7 +5,7 @@ import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { allOf } from '../injection.js'
+import { $i } from '../injection.js'
 import { CaffeineIoC } from '../container.js'
 import { ErrInvalidBinding, ErrInvalidDecorator } from '../errors.js'
 import { Scopes } from '../scope.js'
@@ -147,7 +147,7 @@ describe('Abstract Classes', function () {
     })
 
     it('should inject all implementations by the abstract class key', async function () {
-      @Injectable([allOf(Repo)])
+      @Injectable([$i.allOf(Repo)])
       class DbService {
         constructor(readonly repos: Repo[]) {}
       }
@@ -173,7 +173,7 @@ describe('Abstract Classes', function () {
     })
 
     it('should inject all named implementations ', async function () {
-      @Injectable([allOf(kAll)])
+      @Injectable([$i.allOf(kAll)])
       class AllRepoService {
         constructor(readonly repos: Repo[]) {}
       }
@@ -192,7 +192,7 @@ describe('Abstract Classes', function () {
 
     describe('when mixing injections', function () {
       it('should resolve the dependencies following the injection specification', async function () {
-        @Injectable([Repo, kSql, allOf(Repo), allOf(kAll)])
+        @Injectable([Repo, kSql, $i.allOf(Repo), $i.allOf(kAll)])
         class DbService {
           constructor(
             readonly repo: Repo,
@@ -283,7 +283,7 @@ describe('Abstract Classes', function () {
       }
     }
 
-    @Injectable([InMemoryRepo, MySqlRepo, allOf(Repo), Repo])
+    @Injectable([InMemoryRepo, MySqlRepo, $i.allOf(Repo), Repo])
     class Service {
       constructor(
         readonly inMemory: InMemoryRepo,

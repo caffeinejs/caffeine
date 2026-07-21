@@ -9,7 +9,7 @@ import { Scopes } from '../scope.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Interceptor } from '../decorators/interceptor.js'
 import { ErrInvalidDecorator } from '../errors.js'
-import { defer, provide } from '../injection.js'
+import { $i } from '../injection.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Profile } from '../decorators/profile.js'
 import { Provider } from '../provider.js'
@@ -253,12 +253,12 @@ describe('Configuration', function () {
     it('should resolve circular dependencies', async function () {
       @Configuration()
       class CircularConf {
-        @Provides(Foo, [provide(defer(() => Bar))])
+        @Provides(Foo, [$i.provide($i.defer(() => Bar))])
         foo(bar: Provider<Bar>) {
           return new Foo(bar.get()!)
         }
 
-        @Provides(Bar, [provide(defer(() => Foo))])
+        @Provides(Bar, [$i.provide($i.defer(() => Foo))])
         @Lifetime(Scopes.TRANSIENT)
         bar(foo: Provider<Foo>) {
           return new Bar(foo.get()!)

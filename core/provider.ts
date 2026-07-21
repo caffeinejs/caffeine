@@ -10,7 +10,7 @@
  * class TransientComponent {
  * }
  *
- * @Injectable([provide(TransientComponent)])
+ * @Injectable([$i.provide(TransientComponent)])
  * @Lifetime(Scopes.SINGLETON)
  * class SingletonComponent {
  *   constructor(readonly transient: Provider<TransientComponent>) {}

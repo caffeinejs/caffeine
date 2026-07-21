@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../../../container.js'
 import { ErrMissingInjectionKey, ErrNoResolutionForKey } from '../../../errors.js'
 import { BuiltInResolvers } from '../../../injection_resolver.js'
-import { mapped, optional } from '../../../injection.js'
+import { $i } from '../../../injection.js'
 import { mappedFactory } from './index.js'
 
-function ctx(container: CaffeineIoC, descriptor: ReturnType<typeof mapped | typeof optional>, key: any = 'Consumer') {
+function ctx(container: CaffeineIoC, descriptor: ReturnType<typeof $i.mapped | typeof $i.optional>, key: any = 'Consumer') {
   return { container, descriptor, key, kind: 'constructor' as const, member: '', index: 0 }
 }
 
@@ -15,7 +15,7 @@ describe('mappedFactory', function () {
       const kKey = Symbol('map-no-ctx-key')
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => mappedFactory(ctx(di, mapped(kKey), null)))
+      expect(() => mappedFactory(ctx(di, $i.mapped(kKey), null)))
         .toThrow(ErrMissingInjectionKey)
     })
 
@@ -36,7 +36,7 @@ describe('mappedFactory', function () {
       const kAbsent = Symbol('map-absent-required')
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => mappedFactory(ctx(di, mapped(kAbsent))))
+      expect(() => mappedFactory(ctx(di, $i.mapped(kAbsent))))
         .toThrow(ErrNoResolutionForKey)
     })
 
@@ -44,7 +44,7 @@ describe('mappedFactory', function () {
       const kAbsent = Symbol('map-absent-optional')
       const di = new CaffeineIoC({ decorators: false })
 
-      const resolver = mappedFactory(ctx(di, optional(mapped(kAbsent))))
+      const resolver = mappedFactory(ctx(di, $i.optional($i.mapped(kAbsent))))
       expect(resolver()).toBeUndefined()
     })
   })
@@ -64,7 +64,7 @@ describe('mappedFactory', function () {
         .names('input')
       await di.init()
 
-      const resolver = mappedFactory(ctx(di, mapped(Widget)))
+      const resolver = mappedFactory(ctx(di, $i.mapped(Widget)))
       const result = resolver() as Map<string, Widget>
 
       expect(result).toBeInstanceOf(Map)
@@ -85,7 +85,7 @@ describe('mappedFactory', function () {
         .extends(Store)
       await di.init()
 
-      const resolver = mappedFactory(ctx(di, mapped(Store)))
+      const resolver = mappedFactory(ctx(di, $i.mapped(Store)))
       const result = resolver() as Map<unknown, unknown>
 
       expect(result).toBeInstanceOf(Map)
@@ -105,7 +105,7 @@ describe('mappedFactory', function () {
         .extends(Plugin)
       await di.init()
 
-      const resolver = mappedFactory(ctx(di, mapped(Plugin)))
+      const resolver = mappedFactory(ctx(di, $i.mapped(Plugin)))
       const result = resolver() as Map<string, Plugin>
 
       expect(result.size).toBe(1)

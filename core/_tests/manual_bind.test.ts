@@ -7,7 +7,7 @@ import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
 import { CaffeineIoC } from '../container.js'
 import { ErrInvalidBinding, ErrNoResolutionForKey } from '../errors.js'
-import { useValue } from '../injection.js'
+import { $i } from '../injection.js'
 import { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
 
@@ -817,7 +817,7 @@ describe('Manual Binding', function () {
     })
   })
 
-  describe('useValue()', function () {
+  describe('$i.useValue()', function () {
     it('should inject a string constant', async function () {
       class StringParam {
         constructor(readonly val: string) {}
@@ -825,7 +825,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(StringParam)
-        .toSelf([useValue('hello')])
+        .toSelf([$i.useValue('hello')])
       await di.init()
 
       expect(di.get(StringParam).val)
@@ -839,7 +839,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(NumParam)
-        .toSelf([useValue(42)])
+        .toSelf([$i.useValue(42)])
       await di.init()
 
       expect(di.get(NumParam).val)
@@ -856,7 +856,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(ConfigConsumer)
-        .toSelf([useValue(config)])
+        .toSelf([$i.useValue(config)])
       await di.init()
 
       expect(di.get(ConfigConsumer).config)
@@ -870,7 +870,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(NullParam)
-        .toSelf([useValue(null)])
+        .toSelf([$i.useValue(null)])
       await di.init()
 
       expect(di.get(NullParam).val)
@@ -884,7 +884,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(UndefinedParam)
-        .toSelf([useValue(undefined)])
+        .toSelf([$i.useValue(undefined)])
       await di.init()
 
       expect(di.get(UndefinedParam).val)
@@ -901,7 +901,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(MultiParam)
-        .toSelf([useValue('localhost'), useValue(3000)])
+        .toSelf([$i.useValue('localhost'), $i.useValue(3000)])
       await di.init()
 
       expect(di.get(MultiParam).host)

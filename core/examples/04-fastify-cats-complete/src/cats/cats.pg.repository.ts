@@ -1,12 +1,12 @@
 import pg from 'pg'
-import { provide, type Provider } from '@caffeinejs/core'
+import { type Provider } from '@caffeinejs/core'
 import { Extends, Injectable } from '@caffeinejs/core'
 import { kPgPool } from '../keys.js'
 import { RequestContext } from '../util/request/request.context.js'
 import type { Cat, CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsRepository } from './cats.repository.js'
 
-@Injectable([kPgPool, provide(RequestContext)])
+@Injectable([kPgPool, $i.provide(RequestContext)])
 @Extends()
 export class CatsPgRepository extends CatsRepository {
   constructor(private readonly pool: pg.Pool, private readonly ctx: Provider<RequestContext>) {

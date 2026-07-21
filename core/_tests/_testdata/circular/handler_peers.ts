@@ -1,11 +1,11 @@
 import { Injectable } from '../../../decorators/injectable.js'
 import { Extends } from '../../../decorators/extends.js'
-import { allOf, defer } from '../../../injection.js'
+import { $i } from '../../../injection.js'
 
 export abstract class Handler {}
 
 @Extends(Handler)
-@Injectable([allOf(defer(() => Handler))])
+@Injectable([$i.allOf($i.defer(() => Handler))])
 export class HandlerA extends Handler {
   constructor(readonly peers: Handler[]) { super() }
 }

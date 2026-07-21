@@ -510,7 +510,7 @@ export class CaffeineIoC implements Container {
    *   constructor(readonly service: RegisteredService, readonly repo: Repository) {}
    * }
    *
-   * const instance = container.build(Unregistered, [RegisteredService, optional(Repository)])
+   * const instance = container.build(Unregistered, [RegisteredService, $i.optional(Repository)])
    * ```
    */
   build<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections: (Injection | undefined | null)[] = []): T {
@@ -537,7 +537,7 @@ export class CaffeineIoC implements Container {
    *   constructor(readonly service: RegisteredService, readonly repo: Repository) {}
    * }
    *
-   * const builder = container.builder(Unregistered, [RegisteredService, optional(Repository)])
+   * const builder = container.builder(Unregistered, [RegisteredService, $i.optional(Repository)])
    * const instance = builder()
    * ```
    */

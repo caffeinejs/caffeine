@@ -47,7 +47,7 @@ export class Binder<TValue> {
    * ```ts
    * container
    *  .bind(key)
-   *  .toClass(Controller, [Repository, optional(NotificationService)])
+   *  .toClass(Controller, [Repository, $i.optional(NotificationService)])
    * ```
    */
   toClass<V extends TValue>(ctor: Ctor<V>, injections: Injection[] = []): BinderOptions<V> {
@@ -83,7 +83,7 @@ export class Binder<TValue> {
    * ```ts
    * container
    *  .bind(Controller)
-   *  .toSelf([Repository, optional(NotificationService)])
+   *  .toSelf([Repository, $i.optional(NotificationService)])
    *
    * const controller = container.get(Controller)
    * ```

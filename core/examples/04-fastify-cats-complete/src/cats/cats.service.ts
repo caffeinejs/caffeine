@@ -1,4 +1,4 @@
-import { provide, type Provider } from '@caffeinejs/core'
+import { $i, type Provider } from '@caffeinejs/core'
 import { Injectable } from '@caffeinejs/core'
 import { DataConfig } from '../util/gcs/data.config.js'
 import { RequestContext } from '../util/request/request.context.js'
@@ -6,7 +6,7 @@ import type { Cat, CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsCache } from './cats.cache.js'
 import { CatsRepository } from './cats.repository.js'
 
-@Injectable([CatsRepository, CatsCache, provide(RequestContext), provide(DataConfig)])
+@Injectable([CatsRepository, CatsCache, $i.provide(RequestContext), $i.provide(DataConfig)])
 export class CatsService {
   constructor(
     private readonly repo: CatsRepository,

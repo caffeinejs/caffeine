@@ -1,5 +1,5 @@
 import { CaffeineIoC } from '../../../container.js'
-import { defer, optional } from '../../../injection.js'
+import { $i } from '../../../injection.js'
 import type { Injection } from '../../../injection.js'
 
 export type CycleEdge = {
@@ -33,11 +33,11 @@ function fnWithArity(arity: number): (...args: unknown[]) => object {
 
 function toInjection(edge: CycleEdge): Injection {
   if (edge.optional) {
-    return optional(edge.to)
+    return $i.optional(edge.to)
   }
 
   if (edge.defer) {
-    return defer(() => edge.to)
+    return $i.defer(() => edge.to)
   }
 
   return edge.to

@@ -1,6 +1,5 @@
 import { ErrMissingInjectionKey } from '../../../errors.js'
 import { solutions } from '../../util/errutil/index.js'
-import { ordered } from '../../../injection.js'
 import { InjectionResolverFactory } from '../../../injection_resolver.js'
 import { TypedKey } from '../../../key.js'
 import { excludeSelf } from './_binding_util.js'
@@ -12,7 +11,7 @@ export const orderedFactory: InjectionResolverFactory = ctx => {
       `${describeContext(ctx)}: no injection key provided`
       + solutions(
         `- Provide an injection key`,
-        `- For circular dependencies, use ${ordered.name}(defer(() => key)) to defer resolution`,
+        `- For circular dependencies, use ordered(defer(() => key)) to defer resolution`,
       ),
     )
   }
