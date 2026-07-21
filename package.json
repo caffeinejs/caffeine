@@ -26,6 +26,7 @@
     "clean": "npm run clean:dist --workspaces --if-present && tsc --build --clean tsconfig.build.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:property": "vitest run prop.test",
     "test:watch": "vitest",
     "test:typecheck": "tsc -p tsconfig.test.json",
     "test:typecheck:benchmarks": "npm run test:typecheck -w @caffeinejs/benchmarks",

@@ -79,14 +79,26 @@ export class AuthorizationBuilder implements Service {
   }
 
   [kConfigure](kit: ServiceKit): Promise<void> {
-    kit.container.bind(AuthenticatedUserHandler).toSelf()
-      .lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal()
-    kit.container.bind(RoleHandler).toSelf()
-      .lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal()
-    kit.container.bind(ClaimHandler).toSelf()
-      .lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal()
-    kit.container.bind(AssertionHandler).toSelf()
-      .lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal()
+    kit.container.bind(AuthenticatedUserHandler)
+      .toSelf()
+      .lifetime(Scopes.SINGLETON)
+      .extends(AuthzRequirementHandler)
+      .internal()
+    kit.container.bind(RoleHandler)
+      .toSelf()
+      .lifetime(Scopes.SINGLETON)
+      .extends(AuthzRequirementHandler)
+      .internal()
+    kit.container.bind(ClaimHandler)
+      .toSelf()
+      .lifetime(Scopes.SINGLETON)
+      .extends(AuthzRequirementHandler)
+      .internal()
+    kit.container.bind(AssertionHandler)
+      .toSelf()
+      .lifetime(Scopes.SINGLETON)
+      .extends(AuthzRequirementHandler)
+      .internal()
 
     kit.container
       .bind(AuthorizationService)
@@ -108,6 +120,7 @@ export class AuthorizationBuilder implements Service {
       .toFactory(ctx => {
         const handlers
           = ctx.container.getMany(AuthzRequirementHandler)
+
         return new Map(handlers.map(h => [h.kind, h]))
       })
       .lifetime(Scopes.SINGLETON)
@@ -118,6 +131,7 @@ export class AuthorizationBuilder implements Service {
       .toFactory(ctx => {
         const handlers
           = ctx.container.get<Map<string, AuthzRequirementHandler<AuthzRequirement>>>(kAuthzHandlers)
+
         return new Map(this.#policies
           .entries()
           .map(([name, policy]) => [name, newPolicyEvaluator(policy, handlers)]))

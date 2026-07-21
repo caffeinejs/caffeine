@@ -14,6 +14,7 @@ import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { MemoryCacheStore } from './cache/index.js'
 import { FastifyContext } from './context.js'
 import { AuthenticationService } from './security/auth/service.js'
+import { isOidcError } from './security/auth/strategy/oidc/index.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -73,6 +74,44 @@ export class FastifyAdapter<
     const anyRouteNeedsAuthz = routers.some(r => r.routes.some(rt => rt.authorization.enabled))
     if (anyRouteNeedsAuthz && !input.services.auth.enabled) {
       throw new Error('Cannot start application: authorization is configured but authentication is not')
+    }
+
+    const oidcMeta = input.services.oidc
+    if (oidcMeta) {
+      const compiledPaths = new Set(
+        routers.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))),
+      )
+
+      for (const { callbackPath } of oidcMeta.handlers) {
+        if (compiledPaths.has(callbackPath)) {
+          throw new Error(
+            `Cannot start application: OIDC callbackPath "${callbackPath}" conflicts with a registered controller route`,
+          )
+        }
+      }
+
+      this.#fastify.addHook('onReady', async () => {
+        if (!this.#fastify.hasRequestDecorator('cookies')) {
+          throw new Error(
+            'Cannot start application: OIDC authentication requires @fastify/cookie to be registered',
+          )
+        }
+      })
+
+      for (const { callbackPath, handler } of oidcMeta.handlers) {
+        this.#fastify.get(callbackPath, async (req, reply) => {
+          try {
+            await handler.processCallback(req.caffeineContext)
+          } catch (e) {
+            // The diagnostic detail (state, nonce, signature, token exchange) stays in the
+            // logs: every failure mode must look identical to a client probing the callback.
+            req.log.error({ err: e }, 'OIDC callback failed')
+            const status = isOidcError(e) ? e.statusCode : 400
+            const error = isOidcError(e) ? e.publicMessage : 'Authentication failed'
+            return reply.status(status).send({ error, statusCode: status })
+          }
+        })
+      }
     }
 
     configurers.push(cacheConfigurer(store, this.#options?.cache?.etagGenerator))

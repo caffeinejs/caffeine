@@ -1,0 +1,235 @@
+import { describe, it, expect } from 'vitest'
+import { OidcAuthenticationOptionsBuilder } from './options.js'
+
+function minimal() {
+  return new OidcAuthenticationOptionsBuilder()
+    .clientId('cid')
+    .clientSecret('csecret')
+    .sessionSecret('session-secret-at-least-32-chars!!')
+    .callbackUrl('https://app.example.com/auth/callback')
+    .discoveryUrl('https://accounts.example.com')
+}
+
+describe('OidcAuthenticationOptionsBuilder.build()', () => {
+  it('throws without clientId', () => {
+    expect(() =>
+      new OidcAuthenticationOptionsBuilder()
+        .clientSecret('s').sessionSecret('s'.repeat(32)).callbackUrl('https://x.com/cb')
+        .discoveryUrl('https://x.com')
+        .build(),
+    ).toThrow('clientId is required')
+  })
+
+  it('throws without clientSecret', () => {
+    expect(() =>
+      new OidcAuthenticationOptionsBuilder()
+        .clientId('id').sessionSecret('s'.repeat(32)).callbackUrl('https://x.com/cb')
+        .discoveryUrl('https://x.com')
+        .build(),
+    ).toThrow('clientSecret is required')
+  })
+
+  it('throws without sessionSecret', () => {
+    expect(() =>
+      new OidcAuthenticationOptionsBuilder()
+        .clientId('id').clientSecret('s').callbackUrl('https://x.com/cb')
+        .discoveryUrl('https://x.com')
+        .build(),
+    ).toThrow('sessionSecret is required')
+  })
+
+  it('throws without callbackUrl', () => {
+    expect(() =>
+      new OidcAuthenticationOptionsBuilder()
+        .clientId('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .discoveryUrl('https://x.com')
+        .build(),
+    ).toThrow('callbackUrl is required')
+  })
+
+  it('throws without discoveryUrl or manual endpoints', () => {
+    expect(() =>
+      new OidcAuthenticationOptionsBuilder()
+        .clientId('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .callbackUrl('https://x.com/cb')
+        .build(),
+    ).toThrow('provide discoveryUrl or all of')
+  })
+
+  it('throws with only partial manual endpoints', () => {
+    expect(() =>
+      new OidcAuthenticationOptionsBuilder()
+        .clientId('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .callbackUrl('https://x.com/cb')
+        .authorizationEndpoint('https://x.com/auth')
+        .tokenEndpoint('https://x.com/token')
+        .build(),
+    ).toThrow('provide discoveryUrl or all of')
+  })
+
+  it('succeeds with discoveryUrl', () => {
+    const opts = minimal().build()
+    expect(opts.clientId).toBe('cid')
+    expect(opts.discoveryUrl).toBe('https://accounts.example.com')
+  })
+
+  it('succeeds with full manual endpoints', () => {
+    const opts = new OidcAuthenticationOptionsBuilder()
+      .clientId('cid').clientSecret('s').sessionSecret('s'.repeat(32))
+      .callbackUrl('https://app.example.com/cb')
+      .authorizationEndpoint('https://x.com/auth')
+      .tokenEndpoint('https://x.com/token')
+      .jwksUri('https://x.com/jwks')
+      .issuer('https://x.com')
+      .build()
+    expect(opts.authorizationEndpoint).toBe('https://x.com/auth')
+    expect(opts.issuer).toBe('https://x.com')
+  })
+
+  it('applies defaults for optional fields', () => {
+    const opts = minimal().build()
+    // https callback -> secure -> __Host- prefixed names
+    expect(opts.sessionCookieName).toBe('__Host-oidc_session')
+    expect(opts.sessionCookieTtlSeconds).toBe(3600)
+    expect(opts.stateCookieName).toBe('__Host-oidc_state')
+    expect(opts.defaultRedirectPath).toBe('/')
+    expect(opts.roleClaimType).toBe('roles')
+    expect(opts.allowPlainPkce).toBe(false)
+    expect(opts.clockToleranceSeconds).toBe(60)
+    expect(opts.httpTimeoutMs).toBe(5000)
+    expect(opts.scopes).toEqual(['openid', 'profile', 'email'])
+    // Secure by default: the callbackUrl above is https.
+    expect(opts.secureCookie).toBe(true)
+  })
+
+  describe('sessionSecret strength', () => {
+    it('throws when sessionSecret is shorter than 32 characters', () => {
+      expect(() =>
+        new OidcAuthenticationOptionsBuilder()
+          .clientId('id').clientSecret('s').sessionSecret('s'.repeat(31))
+          .callbackUrl('https://x.com/cb')
+          .discoveryUrl('https://x.com')
+          .build(),
+      ).toThrow('sessionSecret must be at least 32 characters')
+    })
+
+    it('accepts a sessionSecret of exactly 32 characters', () => {
+      const opts = new OidcAuthenticationOptionsBuilder()
+        .clientId('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .callbackUrl('https://x.com/cb')
+        .discoveryUrl('https://x.com')
+        .build()
+      expect(opts.sessionSecret).toHaveLength(32)
+    })
+  })
+
+  describe('secureCookie default', () => {
+    it('defaults to true for an https callbackUrl', () => {
+      expect(minimal().build().secureCookie).toBe(true)
+    })
+
+    it('defaults to false for an http callbackUrl (local development)', () => {
+      const opts = minimal().callbackUrl('http://localhost:3000/auth/callback').build()
+      expect(opts.secureCookie).toBe(false)
+    })
+
+    it('honours an explicit override over the derived default', () => {
+      expect(minimal().secureCookie(false).build().secureCookie).toBe(false)
+      const forced = minimal()
+        .callbackUrl('http://localhost:3000/auth/callback')
+        .secureCookie(true)
+        .build()
+      expect(forced.secureCookie).toBe(true)
+    })
+
+    it('throws when callbackUrl is not a valid URL', () => {
+      expect(() => minimal().callbackUrl('/auth/callback').build())
+        .toThrow('is not a valid URL')
+    })
+  })
+
+  describe('__Host- cookie prefix', () => {
+    it('uses __Host- names when the cookie is secure', () => {
+      const opts = minimal().build()
+      expect(opts.sessionCookieName).toBe('__Host-oidc_session')
+      expect(opts.stateCookieName).toBe('__Host-oidc_state')
+    })
+
+    it('falls back to unprefixed names over http, where __Host- is illegal', () => {
+      const opts = minimal().callbackUrl('http://localhost:3000/cb').build()
+      expect(opts.sessionCookieName).toBe('__oidc_session')
+      expect(opts.stateCookieName).toBe('__oidc_state')
+    })
+
+    it('honours explicit cookie names', () => {
+      const opts = minimal().sessionCookieName('sess').stateCookieName('st').build()
+      expect(opts.sessionCookieName).toBe('sess')
+      expect(opts.stateCookieName).toBe('st')
+    })
+  })
+
+  describe('endpoint TLS enforcement', () => {
+    it('rejects a plain http issuer', () => {
+      expect(() =>
+        new OidcAuthenticationOptionsBuilder()
+          .clientId('id').clientSecret('s').sessionSecret('s'.repeat(32))
+          .callbackUrl('https://x.com/cb')
+          .authorizationEndpoint('http://x.com/auth')
+          .tokenEndpoint('https://x.com/token')
+          .jwksUri('https://x.com/jwks')
+          .issuer('https://x.com')
+          .build(),
+      ).toThrow('must use https')
+    })
+
+    it('allows http on loopback for local development', () => {
+      const opts = new OidcAuthenticationOptionsBuilder()
+        .clientId('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .callbackUrl('http://localhost:3000/cb')
+        .authorizationEndpoint('http://localhost:8080/auth')
+        .tokenEndpoint('http://localhost:8080/token')
+        .jwksUri('http://localhost:8080/jwks')
+        .issuer('http://localhost:8080')
+        .build()
+      expect(opts.issuer).toBe('http://localhost:8080')
+    })
+  })
+
+  describe('defaultRedirectPath', () => {
+    it('rejects a protocol-relative path', () => {
+      expect(() => minimal().defaultRedirectPath('//evil.com').build())
+        .toThrow('must be a same-site absolute path')
+    })
+
+    it('rejects an absolute off-site URL', () => {
+      expect(() => minimal().defaultRedirectPath('https://evil.com').build())
+        .toThrow('must be a same-site absolute path')
+    })
+
+    it('accepts a same-site absolute path', () => {
+      expect(minimal().defaultRedirectPath('/home').build().defaultRedirectPath).toBe('/home')
+    })
+
+    // Regression, found by options.prop.test.ts. The URL parser strips tab/LF/CR before
+    // resolving, so these clear a naive prefix check and then resolve to //evil.com.
+    it.each(['/\t/evil.com', '/\n/evil.com', '/\r/evil.com'])(
+      'rejects a control character smuggling a protocol-relative prefix (%j)',
+      path => {
+        expect(() => minimal().defaultRedirectPath(path).build())
+          .toThrow('must be a same-site absolute path')
+      },
+    )
+  })
+
+  describe('openid scope', () => {
+    it('re-adds openid when the caller replaces the default scopes', () => {
+      const opts = minimal().scopes('profile', 'email').build()
+      expect(opts.scopes).toEqual(['openid', 'profile', 'email'])
+    })
+
+    it('does not duplicate openid when already present', () => {
+      const opts = minimal().scopes('openid', 'groups').build()
+      expect(opts.scopes).toEqual(['openid', 'groups'])
+    })
+  })
+})

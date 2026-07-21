@@ -11,6 +11,8 @@ import { ForwardAuthenticationHandler } from './strategy/forward.js'
 import { JWTAuthenticationHandler } from './strategy/jwt.js'
 import { kAuthOpts } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './strategy/jwt_options.js'
+import { GOOGLE_ISSUER, OidcAuthenticationHandler, OidcAuthenticationOptionsBuilder, kOidcMeta } from './strategy/oidc/index.js'
+import type { OidcMeta } from './strategy/oidc/index.js'
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
@@ -21,6 +23,7 @@ export interface AuthenticationOptions {
 export class AuthenticationBuilder implements Service {
   readonly #schemes: Map<string, Key<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
+  readonly #oidcHandlers: OidcAuthenticationHandler[] = []
 
   #mapper: PrincipalMapper | string | symbol | undefined
 
@@ -77,6 +80,21 @@ export class AuthenticationBuilder implements Service {
     optsFn(builder)
 
     return this.addStrategy(name, new BasicAuthenticationHandler(name, builder.build()))
+  }
+
+  addOidc(name: string, configure: (opts: OidcAuthenticationOptionsBuilder) => void): this {
+    const builder = new OidcAuthenticationOptionsBuilder()
+    configure(builder)
+    const handler = new OidcAuthenticationHandler(name, builder.build())
+    this.#oidcHandlers.push(handler)
+    return this.addStrategy(name, handler)
+  }
+
+  addOidcGoogle(name: string, configure: (opts: OidcAuthenticationOptionsBuilder) => void): this {
+    return this.addOidc(name, opts => {
+      opts.discoveryUrl(GOOGLE_ISSUER).issuer(GOOGLE_ISSUER)
+      configure(opts)
+    })
   }
 
   forward(name: string, selector: (ctx: Context) => string | Promise<string>): this {
@@ -147,6 +165,13 @@ export class AuthenticationBuilder implements Service {
 
     kit.container.bind(AuthenticationService).toValue(service).internal()
     kit.container.bind(kAuthOpts).toValue(options).internal()
+
+    if (this.#oidcHandlers.length > 0) {
+      const meta: OidcMeta = {
+        handlers: this.#oidcHandlers.map(h => ({ callbackPath: h.callbackPath, handler: h })),
+      }
+      kit.container.bind(kOidcMeta).toValue(meta).internal()
+    }
 
     kit.feats.toggleAuthentication(true)
 
