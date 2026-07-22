@@ -5,8 +5,8 @@ import { kConfigure, Service, ServiceKit, Services } from './service.js'
 import { buildRouting } from './routing/routing.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts } from './security/auth/keys.js'
-import { kOidcMeta } from './security/auth/strategy/oidc/index.js'
-import type { OidcMeta } from './security/auth/strategy/oidc/index.js'
+import { kOidcMeta } from './security/auth/oidc/index.js'
+import type { OidcMeta } from './security/auth/oidc/index.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]

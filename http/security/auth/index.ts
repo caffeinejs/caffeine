@@ -1,5 +1,15 @@
+export { BasicAuthenticationHandler, type BasicAuthenticationOptions } from './basic/index.js'
 export { AuthenticationBuilder } from './builder.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
+export { JWTAuthenticationHandler, type JWTAuthenticationOptions } from './jwt/index.js'
+export {
+  googleOidcPreset,
+  OidcAuthenticationHandler,
+  type OidcAuthenticationOptions,
+  OidcAuthenticationOptionsBuilder,
+  type RemoteAuthenticationSession,
+  type RemoteAuthenticationTicket,
+  type RemoteAuthenticationTicketStore,
+} from './oidc/index.js'
 export { AuthenticationService } from './service.js'
-export { BasicAuthenticationHandler, type BasicAuthenticationOptions, JWTAuthenticationHandler, type JWTAuthenticationOptions } from './strategy/index.js'
 export { AuthenticateResult, AuthenticationTicket } from './ticket.js'

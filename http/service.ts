@@ -2,7 +2,7 @@ import { Container } from '@caffeinejs/core'
 import { Feats } from './feats.js'
 import { AuthenticationOptions } from './security/auth/builder.js'
 import { AuthenticationService } from './security/auth/service.js'
-import type { OidcMeta } from './security/auth/strategy/oidc/index.js'
+import type { OidcMeta } from './security/auth/oidc/index.js'
 
 export interface ServiceKit {
   container: Container

@@ -14,7 +14,7 @@ import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { MemoryCacheStore } from './cache/index.js'
 import { FastifyContext } from './context.js'
 import { AuthenticationService } from './security/auth/service.js'
-import { isOidcError } from './security/auth/strategy/oidc/index.js'
+import { isOidcError } from './security/auth/oidc/index.js'
 
 declare module 'fastify' {
   interface FastifyRequest {

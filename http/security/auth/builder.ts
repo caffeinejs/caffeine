@@ -5,14 +5,20 @@ import { kConfigure, Service, ServiceKit } from '../../service.js'
 import type { AuthenticationHandler } from './handler.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
-import { BasicAuthenticationHandler } from './strategy/basic.js'
-import { BasicAuthenticationOptionsBuilder } from './strategy/basic_options.js'
-import { ForwardAuthenticationHandler } from './strategy/forward.js'
-import { JWTAuthenticationHandler } from './strategy/jwt.js'
+import { BasicAuthenticationHandler } from './basic/basic.js'
+import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
+import { ForwardAuthenticationHandler } from './forward/forward.js'
+import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { kAuthOpts } from './keys.js'
-import { JWTAuthenticationOptionsBuilder } from './strategy/jwt_options.js'
-import { GOOGLE_ISSUER, OidcAuthenticationHandler, OidcAuthenticationOptionsBuilder, kOidcMeta } from './strategy/oidc/index.js'
-import type { OidcMeta } from './strategy/oidc/index.js'
+import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
+import { GOOGLE_ISSUER, OidcAuthenticationHandler, OidcAuthenticationOptionsBuilder, kOidcMeta } from './oidc/index.js'
+import {
+  githubOAuth2Preset,
+  OAuth2AuthenticationHandler,
+  OAuth2AuthenticationOptionsBuilder,
+} from './oauth/index.js'
+import type { GithubPresetOptions } from './oauth/provider/github.js'
+import type { OAuthCallbackHandler, OidcMeta } from './oidc/index.js'
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
@@ -23,7 +29,7 @@ export interface AuthenticationOptions {
 export class AuthenticationBuilder implements Service {
   readonly #schemes: Map<string, Key<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
-  readonly #oidcHandlers: OidcAuthenticationHandler[] = []
+  readonly #oidcHandlers: OAuthCallbackHandler[] = []
 
   #mapper: PrincipalMapper | string | symbol | undefined
 
@@ -85,7 +91,7 @@ export class AuthenticationBuilder implements Service {
   addOidc(name: string, configure: (opts: OidcAuthenticationOptionsBuilder) => void): this {
     const builder = new OidcAuthenticationOptionsBuilder()
     configure(builder)
-    const handler = new OidcAuthenticationHandler(name, builder.build())
+    const handler = new OidcAuthenticationHandler(name, builder.build(name))
     this.#oidcHandlers.push(handler)
     return this.addStrategy(name, handler)
   }
@@ -95,6 +101,41 @@ export class AuthenticationBuilder implements Service {
       opts.discoveryUrl(GOOGLE_ISSUER).issuer(GOOGLE_ISSUER)
       configure(opts)
     })
+  }
+
+  /**
+   * Registers a plain OAuth 2.0 strategy, for providers that do not implement OpenID Connect.
+   *
+   * Prefer `addOidc` wherever a provider supports it: a signed id_token is a stronger identity
+   * assertion than a JSON body fetched with a bearer token.
+   */
+  addOAuth2(name: string, configure: (opts: OAuth2AuthenticationOptionsBuilder) => void): this {
+    const builder = new OAuth2AuthenticationOptionsBuilder()
+    configure(builder)
+    // Raw options, not `build(name)`: the handler constructor is the single resolution point,
+    // so resolving here as well would validate and default the options twice.
+    const handler = new OAuth2AuthenticationHandler(name, builder.toOptions())
+    this.#oidcHandlers.push(handler)
+    return this.addStrategy(name, handler)
+  }
+
+  /** Registers a GitHub sign-in. GitHub speaks OAuth 2.0 only — it has no OIDC endpoint. */
+  addGithub(
+    name: string,
+    configure: (opts: OAuth2AuthenticationOptionsBuilder) => void,
+    preset: GithubPresetOptions = {},
+  ): this {
+    const builder = new OAuth2AuthenticationOptionsBuilder()
+    configure(builder)
+    // Raw options: the preset supplies the endpoints, subjectClaim and scope defaults that
+    // resolution requires, so it must run before resolution, not after. `build(name)` here
+    // threw "authorizationEndpoint is required" before the preset could fill them in.
+    const handler = new OAuth2AuthenticationHandler(
+      name,
+      githubOAuth2Preset({ ...builder.toOptions(), ...preset }),
+    )
+    this.#oidcHandlers.push(handler)
+    return this.addStrategy(name, handler)
   }
 
   forward(name: string, selector: (ctx: Context) => string | Promise<string>): this {
@@ -157,9 +198,13 @@ export class AuthenticationBuilder implements Service {
     const schemeProvider = new AuthenticationSchemeProvider(schemes, options)
     const service = new AuthenticationService(schemeProvider, mapper)
 
-    for (const [, handler] of schemes) {
-      if (handler instanceof ForwardAuthenticationHandler) {
-        handler.setSchemeProvider(schemeProvider)
+    // Iterate the raw registrations, not `schemes`: those hold Provider wrappers, and an
+    // instanceof against the wrapper never matches — which left every forwarded handler
+    // without a scheme provider. Reading the raw value also avoids `provider.get()`, which
+    // would eagerly instantiate every container-bound handler at configure time.
+    for (const keyOrHandler of this.#schemes.values()) {
+      if (keyOrHandler instanceof ForwardAuthenticationHandler) {
+        keyOrHandler.setSchemeProvider(schemeProvider)
       }
     }
 
@@ -167,6 +212,8 @@ export class AuthenticationBuilder implements Service {
     kit.container.bind(kAuthOpts).toValue(options).internal()
 
     if (this.#oidcHandlers.length > 0) {
+      this.#assertOidcIsolation(defaultScheme)
+
       const meta: OidcMeta = {
         handlers: this.#oidcHandlers.map(h => ({ callbackPath: h.callbackPath, handler: h })),
       }
@@ -176,6 +223,87 @@ export class AuthenticationBuilder implements Service {
     kit.feats.toggleAuthentication(true)
 
     return Promise.resolve()
+  }
+
+  /**
+   * Rejects configurations where two OIDC strategies would collide or one would be unreachable.
+   *
+   * Every check here is for a failure that is silent at runtime: colliding cookies look like
+   * random logouts, a duplicate callback path resolves to whichever route registered first,
+   * and a second strategy that is never the default simply never authenticates anyone. All of
+   * them are cheap to detect at startup and expensive to diagnose in production.
+   *
+   * Note that two strategies sharing an *issuer* is allowed: one identity provider with two
+   * client registrations is a normal setup, and it is safe once cookies, callback paths and
+   * derived keys are distinct.
+   */
+  #assertOidcIsolation(defaultScheme: string): void {
+    const seen = new Map<string, Map<string, string>>([
+      ['callbackPath', new Map()],
+      ['session cookie name', new Map()],
+      ['state cookie name', new Map()],
+    ])
+
+    // Two handlers sharing a scheme name derive their sealed-cookie keys from the same HKDF
+    // namespace, so a session sealed by one could be opened by the other even across protocols
+    // (an OAuth2 identity, from an unverified JSON body, accepted as OIDC). The cookie-name
+    // checks below do not catch it because the protocol prefix makes the names differ; unique
+    // names are the invariant that actually keeps the key namespaces apart, so enforce it here.
+    const names = new Set<string>()
+
+    for (const handler of this.#oidcHandlers) {
+      if (names.has(handler.schemeName)) {
+        throw new Error(
+          `Cannot configure authentication: two OAuth strategies share the name "${handler.schemeName}"`,
+        )
+      }
+      names.add(handler.schemeName)
+
+      const values: Array<[string, string]> = [
+        ['callbackPath', handler.callbackPath],
+        ['session cookie name', handler.sessionCookieName],
+        ['state cookie name', handler.stateCookieName],
+      ]
+
+      for (const [label, value] of values) {
+        const owners = seen.get(label)!
+        const owner = owners.get(value)
+        if (owner !== undefined) {
+          throw new Error(
+            `Cannot configure authentication: OIDC strategies "${owner}" and "${handler.schemeName}" `
+            + `share the ${label} "${value}"`,
+          )
+        }
+        owners.set(value, handler.schemeName)
+      }
+    }
+
+    if (this.#oidcHandlers.length < 2) {
+      return
+    }
+
+    // The request pipeline authenticates the default scheme only, so with several OIDC
+    // strategies every one but the default would be dead weight. Forward is what lets the
+    // application pick per request.
+    const registered = this.#schemes.get(defaultScheme)
+
+    // A default that names nothing must not pass silently: an undefined lookup used to make the
+    // guard below a no-op, so a typo'd default sailed through startup and failed only at request
+    // time when the scheme could not be resolved. The Forward default must be registered as a
+    // handler instance (which `forward()` does) rather than a bare container Key, so that the
+    // check below can see it without eagerly instantiating every container-bound handler.
+    if (registered === undefined) {
+      throw new Error(
+        `Cannot configure authentication: the default authenticate scheme "${defaultScheme}" is not a registered strategy`,
+      )
+    }
+
+    if (!(registered instanceof ForwardAuthenticationHandler)) {
+      throw new Error(
+        'Cannot configure authentication: multiple OAuth strategies require a Forward default '
+        + `authenticate scheme, but "${defaultScheme}" is not one`,
+      )
+    }
   }
 }
 

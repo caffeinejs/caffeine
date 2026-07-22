@@ -1,7 +1,7 @@
 {
   "name": "@caffeinejs/fetchy",
   "version": "0.0.0",
-  "description": "CaffeineJS fetchy package",
+  "description": "CaffeineJS declarative, TC39-decorator-based HTTP client",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -10,6 +10,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./decorators": {
+      "types": "./dist/decorators/index.d.ts",
+      "default": "./dist/decorators/index.js"
+    },
+    "./builtin/fetch": {
+      "types": "./dist/builtin/fetch/index.d.ts",
+      "default": "./dist/builtin/fetch/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -21,9 +29,5 @@
     "build": "tsc --build --force tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "@caffeinejs/application": "^0.0.0",
-    "@caffeinejs/core": "^0.0.0"
   }
 }
