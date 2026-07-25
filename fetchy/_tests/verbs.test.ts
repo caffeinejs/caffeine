@@ -4,9 +4,13 @@ import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorator
 import { Path } from '../decorators/path.js'
 import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { noop } from '../noop.js'
+import { captureMetadata } from './capture_metadata.js'
 
 describe('verb decorators', () => {
   it('writes httpMethod and path into the method registrar entry, with no owner resolution', () => {
+    const { capture, metadata } = captureMetadata()
+
+    @capture
     class UsersAPI {
       @GET('/users')
       list(): Promise<unknown> {
@@ -49,7 +53,7 @@ describe('verb decorators', () => {
       }
     }
 
-    const methods = getMethodBuilders((UsersAPI as unknown as { [Symbol.metadata]: object })[Symbol.metadata])
+    const methods = getMethodBuilders(metadata())
 
     expect(methods.get('list')?.toMethodSpec().httpMethod).toBe('GET')
     expect(methods.get('list')?.toMethodSpec().path).toBe('/users')
@@ -75,7 +79,38 @@ describe('verb decorators', () => {
     expect(() => new UsersAPI().list()).toThrow(/never passed to FetchyClient.create/)
   })
 
+  it('writes httpMethod and path into the method registrar entry when declared as a field', () => {
+    const { capture, metadata } = captureMetadata()
+
+    @capture
+    class UsersAPI {
+      @GET('/users')
+      list!: () => Promise<unknown>
+
+      @POST('/users')
+      create!: () => Promise<unknown>
+    }
+
+    const methods = getMethodBuilders(metadata())
+
+    expect(methods.get('list')?.toMethodSpec().httpMethod).toBe('GET')
+    expect(methods.get('list')?.toMethodSpec().path).toBe('/users')
+    expect(methods.get('create')?.toMethodSpec().httpMethod).toBe('POST')
+  })
+
+  it('throws ErrFetchyClientNotBuilt when a field-declared operation is called without create()', () => {
+    class UsersAPI {
+      @GET('/users')
+      list!: () => Promise<unknown>
+    }
+
+    expect(() => new UsersAPI().list()).toThrow(/never passed to FetchyClient.create/)
+  })
+
   it('@Path sets the class-level base path', () => {
+    const { capture, metadata } = captureMetadata()
+
+    @capture
     @Path('/api/users')
     class UsersAPI {
       @GET('/{id}')
@@ -84,8 +119,6 @@ describe('verb decorators', () => {
       }
     }
 
-    const metadata = (UsersAPI as unknown as { [Symbol.metadata]: object })[Symbol.metadata]
-
-    expect(getClassBuilder(metadata)?.toClassSpec().path).toBe('/api/users')
+    expect(getClassBuilder(metadata())?.toClassSpec().path).toBe('/api/users')
   })
 })

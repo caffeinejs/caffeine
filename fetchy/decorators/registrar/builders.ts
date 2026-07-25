@@ -1,12 +1,13 @@
 import type { ParamDescriptor } from '../../internal/param_descriptor.js'
 import { normalizePath } from '../../internal/path_util.js'
+import type { ResponseConverter } from '../../response_converter.js'
 import type { ClassSpec, MethodSpec } from './builders.definition.js'
 
 export class ClassBuilder {
   #path?: string
   #headers?: Headers
   #requestType?: string
-  #responseType?: string
+  #responseConverter?: ResponseConverter
 
   path(path: string): this {
     this.#path = path
@@ -15,7 +16,7 @@ export class ClassBuilder {
 
   header(name: string, value: string): this {
     this.#headers ??= new Headers()
-    this.#headers.append(name, value)
+    this.#headers.set(name, value)
     return this
   }
 
@@ -24,8 +25,8 @@ export class ClassBuilder {
     return this
   }
 
-  responseType(type: string): this {
-    this.#responseType = type
+  responseConverter(converter: ResponseConverter): this {
+    this.#responseConverter = converter
     return this
   }
 
@@ -34,7 +35,7 @@ export class ClassBuilder {
       path: normalizePath(this.#path ?? ''),
       headers: this.#headers ?? new Headers(),
       requestType: this.#requestType,
-      responseType: this.#responseType,
+      responseConverter: this.#responseConverter,
     }
   }
 }
@@ -44,22 +45,18 @@ export class MethodBuilder {
   #path?: string
   #headers?: Headers
   #params: ParamDescriptor[] = []
-  #bodyIndex = -1
-  #argLen = 0
   #formURLEncoded = false
   #requestType?: string
-  #responseType?: string
-
-  /**
-   * Runtime wiring set by `FetchyClient.create()` — not decorator configuration, deliberately
-   * excluded from `toMethodSpec()`'s snapshot.
-   */
-  invoker: ((...args: unknown[]) => unknown) | null = null
-  /** Set once this method has been merged/validated/wired by a `FetchyClient.create()` call. */
-  processed = false
+  #responseConverter?: ResponseConverter
+  #kind: 'method' | 'field' = 'method'
 
   httpMethod(method: string): this {
     this.#httpMethod = method
+    return this
+  }
+
+  kind(kind: 'method' | 'field'): this {
+    this.#kind = kind
     return this
   }
 
@@ -70,22 +67,12 @@ export class MethodBuilder {
 
   header(name: string, value: string): this {
     this.#headers ??= new Headers()
-    this.#headers.append(name, value)
+    this.#headers.set(name, value)
     return this
   }
 
   param(descriptor: ParamDescriptor): this {
     this.#params.push(descriptor)
-
-    if (descriptor.kind === 'body') {
-      this.#bodyIndex = descriptor.index
-    }
-
-    return this
-  }
-
-  argLen(length: number): this {
-    this.#argLen = length
     return this
   }
 
@@ -99,8 +86,8 @@ export class MethodBuilder {
     return this
   }
 
-  responseType(type: string): this {
-    this.#responseType = type
+  responseConverter(converter: ResponseConverter): this {
+    this.#responseConverter = converter
     return this
   }
 
@@ -110,11 +97,10 @@ export class MethodBuilder {
       path: normalizePath(this.#path ?? ''),
       headers: this.#headers ?? new Headers(),
       params: [...this.#params],
-      bodyIndex: this.#bodyIndex,
-      argLen: this.#argLen,
       formURLEncoded: this.#formURLEncoded,
       requestType: this.#requestType,
-      responseType: this.#responseType,
+      responseConverter: this.#responseConverter,
+      kind: this.#kind,
     }
   }
 }

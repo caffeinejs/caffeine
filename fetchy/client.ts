@@ -1,8 +1,8 @@
 import type { Call, CallFactory } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
-import { getClassBuilder, getMethodBuilders } from './decorators/registrar/registrar.js'
-import type { ClassSpec, MethodBuilder, MethodSpec } from './decorators/registrar/index.js'
-import { ErrFetchyEmptyClient, ErrFetchyInvalidRoute } from './errors.js'
+import { getAPI } from './decorators/registrar/registrar.js'
+import type { ClassSpec, MethodSpec } from './decorators/registrar/index.js'
+import { ErrFetchyEmptyClient, ErrFetchyInvalidRoute, ErrFetchyMissingAPIDecorator } from './errors.js'
 import { mergeHeaders } from './headers_util.js'
 import type { Interceptor } from './interceptor.js'
 import { joinPaths } from './internal/path_util.js'
@@ -20,13 +20,6 @@ export interface FetchyClientOptions {
   responseConverter?: ResponseConverter
 }
 
-const DEFAULT_CLASS_SPEC: ClassSpec = {
-  path: '',
-  headers: new Headers(),
-  requestType: undefined,
-  responseType: undefined,
-}
-
 function mergeClassIntoMethod(defaults: ClassSpec, spec: MethodSpec): MethodSpec {
   const requestType = spec.requestType ?? defaults.requestType
 
@@ -35,7 +28,7 @@ function mergeClassIntoMethod(defaults: ClassSpec, spec: MethodSpec): MethodSpec
     path: joinPaths(defaults.path, spec.path),
     headers: mergeHeaders(defaults.headers, spec.headers),
     requestType,
-    responseType: spec.responseType ?? defaults.responseType,
+    responseConverter: spec.responseConverter ?? defaults.responseConverter,
     formURLEncoded: spec.formURLEncoded || requestType === 'form',
   }
 }
@@ -59,6 +52,10 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
 
   if (hasFormFields && !spec.formURLEncoded) {
     throw new ErrFetchyInvalidRoute(name, '@Field() requires @FormURLEncoded() on the method or class')
+  }
+
+  if (hasFormFields && bodyParamCount > 0) {
+    throw new ErrFetchyInvalidRoute(name, '@Body() and @Field() cannot be used on the same method')
   }
 
   const pathKeys = new Set(
@@ -87,13 +84,14 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
 
 /**
  * Runtime registry produced by {@link FetchyBuilder}. `create()` turns a decorated class into a
- * working client by reading its configuration from the class's registrar entries (looked up via
- * `TargetAPI[Symbol.metadata]` as an opaque WeakMap key — see `decorators/registrar/registrar.ts`).
+ * working client by reading its configuration from the class's `@API()`-drained registry entry
+ * (looked up by the class constructor itself — see `decorators/registrar/registrar.ts`), then
+ * assigning a freshly-built HTTP-performing implementation onto each decorated method name as an
+ * own property of the created instance — shadowing the class's own (throwing) method body.
  *
- * Note: a decorated method's built invoker lives on the class's own (shared) `MethodBuilder`, not
- * on the created instance — calling `create()` a second time on the same class reuses the first
- * invocation's wiring rather than replacing it. Each decorated class is expected to be built by
- * one canonical client configuration.
+ * Each `create()` call is fully independent: it builds its own instance and its own invokers, so
+ * calling `create()` multiple times on the same class (e.g. with different `baseURL`s) never
+ * shares wiring between instances.
  */
 export class FetchyClient {
   private readonly call: Call
@@ -102,45 +100,45 @@ export class FetchyClient {
     this.call = options.callFactory.provide(options.baseURL)
   }
 
-  private static mixin<T extends AnyCtor>(superclass: T) {
-    return class extends superclass {}
-  }
-
   create<T extends AnyCtor>(TargetAPI: T, ...args: ConstructorParameters<T>): InstanceType<T> {
-    const metadata = (TargetAPI as unknown as { [Symbol.metadata]?: object })[Symbol.metadata]
-    const methods = metadata ? getMethodBuilders(metadata) : new Map<string | symbol, MethodBuilder>()
+    const entry = getAPI(TargetAPI)
+
+    if (!entry) {
+      throw new ErrFetchyMissingAPIDecorator(TargetAPI.name)
+    }
+
+    const { classSpec, methods } = entry
 
     if (methods.size === 0) {
       throw new ErrFetchyEmptyClient(TargetAPI.name)
     }
 
-    const classSpec = (metadata && getClassBuilder(metadata)?.toClassSpec()) ?? DEFAULT_CLASS_SPEC
-    const responseConverter = this.options.responseConverter ?? JSONResponseConverter
+    const instance = new TargetAPI(...args) as InstanceType<T>
 
     for (const [name, builder] of methods) {
-      if (builder.processed) {
-        continue
-      }
-
       const spec = mergeClassIntoMethod(classSpec, builder.toMethodSpec())
       validateMethodSpec(String(name), spec)
 
-      builder.invoker = buildInvoker(
-        {
-          baseURL: this.options.baseURL,
-          call: this.call,
-          interceptors: this.options.interceptors,
-          responseConverter,
-          errorResponseConverter: responseConverter,
-          callAdapterFactories: this.options.callAdapterFactories,
-        },
-        spec,
-      )
-      builder.processed = true
+      const responseConverter = spec.responseConverter ?? this.options.responseConverter ?? JSONResponseConverter
+
+      Object.defineProperty(instance, name, {
+        value: buildInvoker(
+          {
+            baseURL: this.options.baseURL,
+            call: this.call,
+            interceptors: this.options.interceptors,
+            responseConverter,
+            errorResponseConverter: responseConverter,
+            callAdapterFactories: this.options.callAdapterFactories,
+          },
+          spec,
+        ),
+        writable: true,
+        configurable: true,
+        enumerable: spec.kind === 'field',
+      })
     }
 
-    const Extended = FetchyClient.mixin(TargetAPI)
-
-    return new Extended(...args) as InstanceType<T>
+    return instance
   }
 }

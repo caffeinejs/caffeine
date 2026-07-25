@@ -26,7 +26,7 @@ function terminalInterceptor(call: Call): Interceptor {
 
 /**
  * Wires a single decorated method's request builder, interceptor chain, response handler and
- * response converter into the function that becomes `methodMeta.invoker`.
+ * response converter into the function `FetchyClient.create()` assigns onto the created instance.
  */
 export function buildInvoker(context: InvokerContext, meta: MethodSpec): (...args: unknown[]) => unknown {
   const requestBuilder = new RequestBuilder(context.baseURL, meta)

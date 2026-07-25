@@ -1,20 +1,18 @@
 import { ClassBuilder, MethodBuilder } from './builders.js'
-
-// `Symbol.metadata` is not yet a native well-known symbol in current JS engines. Compilers that
-// implement the decorator metadata proposal (e.g. swc, TypeScript) fall back to
-// `Symbol.for('Symbol.metadata')` when the native symbol is absent, so the literal `Symbol.metadata`
-// must be polyfilled to that same registered symbol here — before any decorated class is evaluated —
-// or `SomeClass[Symbol.metadata]` will never match what the compiled decorator helper actually wrote.
-// This is only needed because `FetchyClient.create()` looks up `TargetAPI[Symbol.metadata]` as a
-// WeakMap key from outside decorator scope; `ctx.metadata` itself is never mutated below, only used
-// as an opaque WeakMap key, matching how `@caffeinejs/http`'s own registrar uses it.
-;(Symbol as { metadata?: symbol }).metadata ??= Symbol.for('Symbol.metadata')
+import type { ClassSpec } from './builders.definition.js'
 
 const MethodRegistry = new WeakMap<object, Map<string | symbol, MethodBuilder>>()
 const ClassRegistry = new WeakMap<object, ClassBuilder>()
 
+interface APIEntry {
+  classSpec: ClassSpec
+  methods: ReadonlyMap<string | symbol, MethodBuilder>
+}
+
+const APIRegistry = new WeakMap<Function, APIEntry>()
+
 export function configureMethod(
-  ctx: ClassMethodDecoratorContext,
+  ctx: ClassMethodDecoratorContext | ClassFieldDecoratorContext,
   mut: (spec: MethodBuilder) => void,
 ): MethodBuilder {
   let methods = MethodRegistry.get(ctx.metadata)
@@ -31,6 +29,7 @@ export function configureMethod(
     methods.set(ctx.name, method)
   }
 
+  method.kind(ctx.kind)
   mut(method)
 
   return method
@@ -53,4 +52,33 @@ export function getMethodBuilders(metadata: object): ReadonlyMap<string | symbol
 
 export function getClassBuilder(metadata: object): ClassBuilder | undefined {
   return ClassRegistry.get(metadata)
+}
+
+/**
+ * Drains the `ctx.metadata`-keyed method registry into a registry keyed by the real class
+ * constructor. Must be called from a class decorator (`@API()`) — method/field decorators always
+ * run before any class decorator, so every method already registered under `ctx.metadata` (the
+ * same object `@GET`/`@POST`/etc. saw) is complete by the time this runs.
+ */
+export function configureAPIAndRegisterMethods(
+  ctx: ClassDecoratorContext,
+  target: Function,
+  mut: (spec: ClassBuilder) => void,
+): void {
+  let classBuilder = ClassRegistry.get(ctx.metadata)
+
+  if (!classBuilder) {
+    classBuilder = new ClassBuilder()
+    ClassRegistry.set(ctx.metadata, classBuilder)
+  }
+
+  mut(classBuilder)
+
+  const methods = MethodRegistry.get(ctx.metadata) ?? new Map<string | symbol, MethodBuilder>()
+
+  APIRegistry.set(target, { classSpec: classBuilder.toClassSpec(), methods })
+}
+
+export function getAPI(target: Function): APIEntry | undefined {
+  return APIRegistry.get(target)
 }

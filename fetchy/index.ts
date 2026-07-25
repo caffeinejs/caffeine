@@ -12,12 +12,11 @@ export {
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidRoute,
+  ErrFetchyMissingAPIDecorator,
   ErrFetchyNoParameterHandler,
-  ErrFetchyNoResponseConverter,
   FetchyError,
 } from './errors.js'
 export { mergeHeaders } from './headers_util.js'
-export { isOk } from './http_response.js'
 export type { Interceptor, InterceptorFunction } from './interceptor.js'
 export { toInterceptor } from './interceptor.js'
 export { MediaTypes } from './media_types.js'

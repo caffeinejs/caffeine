@@ -1,24 +1,28 @@
 import { ErrFetchyClientNotBuilt, ErrFetchyInvalidDecoratorTarget } from '../errors.js'
 import { configureMethod } from './registrar/registrar.js'
 
-type DecoratedMethod = (...args: any[]) => any
-
 function decorateVerb(httpMethod: string, path: string) {
-  return function <T extends DecoratedMethod>(_value: T, context: ClassMethodDecoratorContext): T {
-    if (context.kind !== 'method') {
-      throw new ErrFetchyInvalidDecoratorTarget(httpMethod, 'a method')
+  // Return type deliberately `any`: this must satisfy both the method decorator return type
+  // (`void | Method`) and the field decorator return type (`void | Initializer`) at each use
+  // site, and no single concrete type (including `unknown`) is assignable to both at once.
+  return function (
+    _value: unknown,
+    context: ClassMethodDecoratorContext | ClassFieldDecoratorContext,
+  ): any {
+    if (context.kind !== 'method' && context.kind !== 'field') {
+      throw new ErrFetchyInvalidDecoratorTarget(httpMethod, 'a method or field')
     }
 
     const name = String(context.name)
-    const builder = configureMethod(context, spec => spec.httpMethod(httpMethod).path(path))
+    configureMethod(context, spec => spec.httpMethod(httpMethod).path(path))
 
-    return function (this: unknown, ...args: unknown[]) {
-      if (!builder.invoker) {
-        throw new ErrFetchyClientNotBuilt(name)
-      }
+    const stub = (): never => {
+      throw new ErrFetchyClientNotBuilt(name)
+    }
 
-      return builder.invoker(...args)
-    } as T
+    // Field decorators return an *initializer* (called at construction time with the field's
+    // current value) rather than the value itself — methods get the stand-in directly.
+    return context.kind === 'field' ? () => stub : stub
   }
 }
 

@@ -8,14 +8,16 @@ import type { APIParameterSpec } from './params/api_parameter_spec.js'
  * (`Param`, `Query`, `QueryName`, `Header`, `Body`, `Field`, `SignalParam`) instead.
  */
 export function Params(specs: APIParameterSpec[]) {
-  return function (_value: Function, context: ClassMethodDecoratorContext): void {
-    if (context.kind !== 'method') {
-      throw new ErrFetchyInvalidDecoratorTarget('Params', 'a method')
+  return function (
+    _value: unknown,
+    context: ClassMethodDecoratorContext | ClassFieldDecoratorContext,
+  ): void {
+    if (context.kind !== 'method' && context.kind !== 'field') {
+      throw new ErrFetchyInvalidDecoratorTarget('Params', 'a method or field')
     }
 
     configureMethod(context, spec => {
       specs.forEach((s, index) => s.apply({ spec, index }))
-      spec.argLen(specs.length)
     })
   }
 }

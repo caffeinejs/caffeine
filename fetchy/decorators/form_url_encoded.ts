@@ -1,13 +1,13 @@
 import { MediaTypes } from '../media_types.js'
 import { configureClass, configureMethod } from './registrar/registrar.js'
-import { classOrMethod } from './_decorator_util.js'
+import { classOrMember } from './_decorator_util.js'
 
 /**
  * Marks a method's (or every method's, at class level) request body as
  * `application/x-www-form-urlencoded`, to be populated from `@Field()` parameters.
  */
 export function FormURLEncoded() {
-  return classOrMethod(
+  return classOrMember(
     'FormURLEncoded',
     (_target, context) => configureClass(context, spec => {
       spec.requestType('form')

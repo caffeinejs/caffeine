@@ -1,9 +1,3 @@
-export function appendHeaders(target: Headers, source: Record<string, string>): void {
-  for (const [key, value] of Object.entries(source)) {
-    target.append(key, value)
-  }
-}
-
 /**
  * Merges class-level default headers with method-level headers, with method-level values winning
  * on key conflicts.

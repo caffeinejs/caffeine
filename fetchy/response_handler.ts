@@ -1,5 +1,4 @@
 import { ErrFetchyHTTP } from './errors.js'
-import { isOk } from './http_response.js'
 import type { ResponseConverter } from './response_converter.js'
 
 export interface ResponseHandler {
@@ -14,7 +13,7 @@ export class DefaultResponseHandler implements ResponseHandler {
   constructor(private readonly errorBodyConverter: ResponseConverter) {}
 
   async handle(request: Request, response: Response): Promise<Response> {
-    if (isOk(response)) {
+    if (response.ok) {
       return response
     }
 

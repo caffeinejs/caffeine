@@ -41,6 +41,19 @@ export class ErrFetchyEmptyClient extends FetchyError {
 }
 
 /**
+ * Thrown when `create()` is called on a class that was never decorated with `@API()`.
+ */
+export class ErrFetchyMissingAPIDecorator extends FetchyError {
+  constructor(className: string) {
+    super(
+      `Cannot create client for "${className}": missing @API() class decorator`,
+      'ERR_FETCHY_MISSING_API_DECORATOR',
+    )
+    this.name = 'ErrFetchyMissingAPIDecorator'
+  }
+}
+
+/**
  * Thrown when a parameter descriptor has no matching handling logic. Defensive: unreachable with
  * the fixed set of parameter kinds shipped in v1.
  */
@@ -51,20 +64,6 @@ export class ErrFetchyNoParameterHandler extends FetchyError {
       'ERR_FETCHY_NO_PARAMETER_HANDLER',
     )
     this.name = 'ErrFetchyNoParameterHandler'
-  }
-}
-
-/**
- * Thrown when a response's declared type does not match any registered converter and there is no
- * raw fallback available.
- */
-export class ErrFetchyNoResponseConverter extends FetchyError {
-  constructor(responseType: string, method: string) {
-    super(
-      `No response converter for type "${responseType}" was found for method "${method}"`,
-      'ERR_FETCHY_NO_RESPONSE_CONVERTER',
-    )
-    this.name = 'ErrFetchyNoResponseConverter'
   }
 }
 

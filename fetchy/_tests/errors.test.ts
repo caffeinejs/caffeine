@@ -7,7 +7,6 @@ import {
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidRoute,
   ErrFetchyNoParameterHandler,
-  ErrFetchyNoResponseConverter,
 } from '../errors.js'
 
 describe('errors', () => {
@@ -16,7 +15,6 @@ describe('errors', () => {
     ['ErrFetchyInvalidRoute', () => new ErrFetchyInvalidRoute('getUser', 'missing HTTP method'), 'ERR_FETCHY_INVALID_ROUTE'],
     ['ErrFetchyEmptyClient', () => new ErrFetchyEmptyClient('UsersAPI'), 'ERR_FETCHY_EMPTY_CLIENT'],
     ['ErrFetchyNoParameterHandler', () => new ErrFetchyNoParameterHandler('model', 'getUser', 0), 'ERR_FETCHY_NO_PARAMETER_HANDLER'],
-    ['ErrFetchyNoResponseConverter', () => new ErrFetchyNoResponseConverter('xml', 'getUser'), 'ERR_FETCHY_NO_RESPONSE_CONVERTER'],
     ['ErrFetchyClientNotBuilt', () => new ErrFetchyClientNotBuilt('getUser'), 'ERR_FETCHY_CLIENT_NOT_BUILT'],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()

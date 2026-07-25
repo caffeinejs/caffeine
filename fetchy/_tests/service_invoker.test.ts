@@ -11,11 +11,10 @@ function methodSpec(overrides: Partial<MethodSpec> = {}): MethodSpec {
     path: '',
     headers: new Headers(),
     params: [],
-    bodyIndex: -1,
-    argLen: 0,
     formURLEncoded: false,
     requestType: undefined,
-    responseType: undefined,
+    responseConverter: undefined,
+    kind: 'method',
     ...overrides,
   }
 }
