@@ -1,12 +1,12 @@
-import type { ApiParameterSpec } from './api_parameter_spec.js'
+import type { APIParameterSpec } from './api_parameter_spec.js'
 
 /**
  * Binds an argument to a `{key}` path placeholder.
  */
-export function Param(key: string): ApiParameterSpec {
+export function Param(key: string): APIParameterSpec {
   return {
-    apply({ meta, index }) {
-      meta.params.push({ kind: 'path', key, index })
+    apply({ spec, index }) {
+      spec.param({ kind: 'path', key, index })
     },
   }
 }

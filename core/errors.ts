@@ -56,8 +56,8 @@ export class ErrNoResolutionForKey extends CaffeineIoCError {
  * ErrScopeNotRegistered is an error that is thrown when binding to a scope that is not registered.
  */
 export class ErrScopeNotRegistered extends CaffeineIoCError {
-  constructor(scopeId: Identifier) {
-    super(`Scope "${scopeId.toString()}" is not registered: use bindScope() to register it`, 'ERR_SCOPE_NOT_REGISTERED')
+  constructor(scopeID: Identifier) {
+    super(`Scope "${scopeID.toString()}" is not registered: use bindScope() to register it`, 'ERR_SCOPE_NOT_REGISTERED')
     this.name = 'ErrScopeNotRegistered'
   }
 }
@@ -66,8 +66,8 @@ export class ErrScopeNotRegistered extends CaffeineIoCError {
  * ErrScopeAlreadyRegistered is an error that is thrown when binding to a scope that is already registered.
  */
 export class ErrScopeAlreadyRegistered extends CaffeineIoCError {
-  constructor(scopeId: Identifier) {
-    super(`Scope "${scopeId.toString()}" is already registered`, 'ERR_SCOPE_ALREADY_REGISTERED')
+  constructor(scopeID: Identifier) {
+    super(`Scope "${scopeID.toString()}" is already registered`, 'ERR_SCOPE_ALREADY_REGISTERED')
     this.name = 'ErrScopeAlreadyRegistered'
   }
 }
@@ -175,9 +175,9 @@ export class ErrOutOfScope extends CaffeineIoCError {
  * with a different scope than the {@link Configuration} class.
  */
 export class ErrScopeMismatchInConfiguration extends CaffeineIoCError {
-  constructor(className: string, methodName: string, configScopeId: Identifier, methodScopeId: Identifier) {
+  constructor(className: string, methodName: string, configScopeID: Identifier, methodScopeID: Identifier) {
     super(
-      `Cannot configure provider "${methodName}" in "${className}": the @${Configuration.name} class declares scope "${String(configScopeId)}" but the method declares scope "${String(methodScopeId)}"`
+      `Cannot configure provider "${methodName}" in "${className}": the @${Configuration.name} class declares scope "${String(configScopeID)}" but the method declares scope "${String(methodScopeID)}"`
       + solutions(
         `Remove the scope configuration from the "${methodName}" method and let the @${Configuration.name} class scope apply to all provided components`,
         `Remove the scope from @${Configuration.name} and decorate each @${Provides.name} method individually with @${Lifetime.name}()`,

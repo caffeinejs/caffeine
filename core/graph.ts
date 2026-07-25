@@ -4,7 +4,7 @@ import { Key, isNamedKey, keyStr } from './key.js'
 export interface GraphNode {
   id: number
   label: string
-  scopeId: string
+  scopeID: string
   names: string[]
   labels: string[]
   primary: boolean
@@ -14,8 +14,8 @@ export interface GraphNode {
 export type EdgeKind = 'injection' | 'property-injection' | 'method-injection' | 'named-group' | 'label-group'
 
 export interface GraphEdge {
-  fromId: number
-  toId: number
+  fromID: number
+  toID: number
   kind: EdgeKind
   meta?: string
 }
@@ -39,7 +39,7 @@ export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph):
     return ''
   }
 
-  const nodeById = new Map(graph.nodes.map(n => [n.id, n]))
+  const nodeByID = new Map(graph.nodes.map(n => [n.id, n]))
   const lines: string[] = []
 
   lines.push('## Bindings')
@@ -48,19 +48,19 @@ export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph):
   lines.push('| --- | --- | --- | --- | --- | --- | --- |')
 
   for (const node of graph.nodes) {
-    const deps = nodeDependencyLabels(node.id, graph.edges, nodeById)
+    const deps = nodeDependencyLabels(node.id, graph.edges, nodeByID)
     const depsCell = deps.length > 0 ? deps.join(', ') : '-'
     const names = node.names.length > 0 ? node.names.join(', ') : '-'
     const labels = node.labels.length > 0 ? node.labels.join(', ') : '-'
     lines.push(
-      `| ${node.label} | ${depsCell} | ${node.scopeId} | ${names} | ${labels} | ${node.primary} | ${node.lazy} |`,
+      `| ${node.label} | ${depsCell} | ${node.scopeID} | ${names} | ${labels} | ${node.primary} | ${node.lazy} |`,
     )
   }
 
   const depNodes = graph.nodes.filter(n =>
     graph.edges.some(
       e =>
-        e.fromId === n.id
+        e.fromID === n.id
         && (e.kind === 'injection' || e.kind === 'property-injection' || e.kind === 'method-injection'),
     ),
   )
@@ -72,7 +72,7 @@ export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph):
 
     for (const node of depNodes) {
       lines.push(`- ${node.label}`)
-      for (const dep of nodeDependencyLabels(node.id, graph.edges, nodeById)) {
+      for (const dep of nodeDependencyLabels(node.id, graph.edges, nodeByID)) {
         lines.push(`  - ${dep}`)
       }
     }
@@ -84,13 +84,13 @@ export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph):
   for (const edge of graph.edges) {
     if (edge.kind === 'named-group' && edge.meta) {
       const s = namedGroups.get(edge.meta) ?? new Set<number>()
-      s.add(edge.fromId)
-      s.add(edge.toId)
+      s.add(edge.fromID)
+      s.add(edge.toID)
       namedGroups.set(edge.meta, s)
     } else if (edge.kind === 'label-group' && edge.meta) {
       const s = labelGroups.get(edge.meta) ?? new Set<number>()
-      s.add(edge.fromId)
-      s.add(edge.toId)
+      s.add(edge.fromID)
+      s.add(edge.toID)
       labelGroups.set(edge.meta, s)
     }
   }
@@ -101,12 +101,12 @@ export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph):
     lines.push('')
 
     for (const [name, ids] of namedGroups) {
-      const nodeLabels = [...ids].map(id => nodeById.get(id)?.label ?? String(id))
+      const nodeLabels = [...ids].map(id => nodeByID.get(id)?.label ?? String(id))
       lines.push(`- qualifier \`${name}\`: ${nodeLabels.join(', ')}`)
     }
 
     for (const [label, ids] of labelGroups) {
-      const nodeLabels = [...ids].map(id => nodeById.get(id)?.label ?? String(id))
+      const nodeLabels = [...ids].map(id => nodeByID.get(id)?.label ?? String(id))
       lines.push(`- label \`${label}\`: ${nodeLabels.join(', ')}`)
     }
   }
@@ -134,16 +134,16 @@ export function graphToMermaid(input: Iterable<[Key, Binding]> | BindingGraph): 
 
   const lines: string[] = ['%%{init: {"flowchart": {"htmlLabels": false}}}%%', 'flowchart LR']
 
-  const nodeByIdMermaid = new Map(graph.nodes.map(n => [n.id, n]))
+  const nodeByIDMermaid = new Map(graph.nodes.map(n => [n.id, n]))
 
   for (const node of graph.nodes) {
-    const deps = nodeDependencyLabels(node.id, graph.edges, nodeByIdMermaid)
+    const deps = nodeDependencyLabels(node.id, graph.edges, nodeByIDMermaid)
     const primaryTag = node.primary ? '\\n[primary]' : ''
     const depsTag = deps.length > 0
       ? `\\n---\\n${deps.map(escapeMermaid)
         .join('\\n')}`
       : ''
-    const label = `${escapeMermaid(node.label)}\\n${node.scopeId}${primaryTag}${depsTag}`
+    const label = `${escapeMermaid(node.label)}\\n${node.scopeID}${primaryTag}${depsTag}`
     lines.push(`  n${node.id}["${label}"]`)
   }
 
@@ -151,7 +151,7 @@ export function graphToMermaid(input: Iterable<[Key, Binding]> | BindingGraph): 
     const isDashed = edge.kind === 'named-group' || edge.kind === 'label-group'
     const arrow = isDashed ? '-.->' : '-->'
     const label = edge.meta ? `|"${escapeMermaid(edge.meta)}"| ` : ''
-    lines.push(`  n${edge.fromId} ${arrow} ${label}n${edge.toId}`)
+    lines.push(`  n${edge.fromID} ${arrow} ${label}n${edge.toID}`)
   }
 
   return lines.join('\n')
@@ -182,16 +182,16 @@ export function graphToDot(input: Iterable<[Key, Binding]> | BindingGraph): stri
     '  node [shape=box, style="rounded,filled", fillcolor=white]',
   ]
 
-  const nodeByIdDot = new Map(graph.nodes.map(n => [n.id, n]))
+  const nodeByIDDot = new Map(graph.nodes.map(n => [n.id, n]))
 
   for (const node of graph.nodes) {
-    const deps = nodeDependencyLabels(node.id, graph.edges, nodeByIdDot)
+    const deps = nodeDependencyLabels(node.id, graph.edges, nodeByIDDot)
     const primaryTag = node.primary ? '\\n[primary]' : ''
     const depsTag = deps.length > 0
       ? `\\n---\\n${deps.map(escapeDot)
         .join('\\n')}`
       : ''
-    const label = `${escapeDot(node.label)}\\n${node.scopeId}${primaryTag}${depsTag}`
+    const label = `${escapeDot(node.label)}\\n${node.scopeID}${primaryTag}${depsTag}`
     lines.push(`  n${node.id} [label="${label}"]`)
   }
 
@@ -205,7 +205,7 @@ export function graphToDot(input: Iterable<[Key, Binding]> | BindingGraph): stri
       attrs.push('style=dashed')
     }
     const attrStr = attrs.length > 0 ? ` [${attrs.join(', ')}]` : ''
-    lines.push(`  n${edge.fromId} -> n${edge.toId}${attrStr}`)
+    lines.push(`  n${edge.fromID} -> n${edge.toID}${attrStr}`)
   }
 
   lines.push('}')
@@ -220,7 +220,7 @@ export function graphToDot(input: Iterable<[Key, Binding]> | BindingGraph): stri
  *
  * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a JSON string.
  */
-export function graphToJson(input: Iterable<[Key, Binding]> | BindingGraph): string {
+export function graphToJSON(input: Iterable<[Key, Binding]> | BindingGraph): string {
   return JSON.stringify(resolveGraph(input), null, 2)
 }
 
@@ -238,13 +238,13 @@ export function graphToText(input: Iterable<[Key, Binding]> | BindingGraph): str
     return ''
   }
 
-  const nodeById = new Map(graph.nodes.map(n => [n.id, n]))
+  const nodeByID = new Map(graph.nodes.map(n => [n.id, n]))
   const lines: string[] = []
 
   for (const node of graph.nodes) {
     lines.push(formatNodeText(node))
 
-    const deps = nodeDependencyLabels(node.id, graph.edges, nodeById, formatNodeText)
+    const deps = nodeDependencyLabels(node.id, graph.edges, nodeByID, formatNodeText)
     for (let i = 0; i < deps.length; i++) {
       lines.push(`  ${i < deps.length - 1 ? '├─' : '└─'} ${deps[i]}`)
     }
@@ -257,11 +257,11 @@ export function graphToText(input: Iterable<[Key, Binding]> | BindingGraph): str
 
 // Graph Internal Utilities
 
-function scopeStr(scopeId: string | symbol): string {
-  if (typeof scopeId === 'symbol') {
-    return scopeId.description ?? scopeId.toString()
+function scopeStr(scopeID: string | symbol): string {
+  if (typeof scopeID === 'symbol') {
+    return scopeID.description ?? scopeID.toString()
   }
-  return String(scopeId)
+  return String(scopeID)
 }
 
 function isBindingGraph(input: Iterable<[Key, Binding]> | BindingGraph): input is BindingGraph {
@@ -280,7 +280,7 @@ function resolveGraph(input: Iterable<[Key, Binding]> | BindingGraph): BindingGr
 }
 
 function formatNodeText(node: GraphNode): string {
-  const attrs: string[] = [`scope=${node.scopeId}`]
+  const attrs: string[] = [`scope=${node.scopeID}`]
   if (node.primary) {
     attrs.push('primary')
   }
@@ -297,14 +297,14 @@ function formatNodeText(node: GraphNode): string {
 }
 
 function nodeDependencyLabels(
-  nodeId: number,
+  nodeID: number,
   edges: GraphEdge[],
-  nodeById: Map<number, GraphNode>,
+  nodeByID: Map<number, GraphNode>,
   fmtNode: (node: GraphNode) => string = n => n.label,
 ): string[] {
   const injEdges = edges.filter(
     e =>
-      e.fromId === nodeId
+      e.fromID === nodeID
       && (e.kind === 'injection' || e.kind === 'property-injection' || e.kind === 'method-injection'),
   )
 
@@ -316,19 +316,19 @@ function nodeDependencyLabels(
   for (const edge of injEdges) {
     const meta = edge.meta ?? ''
     const existing = byMeta.get(meta) ?? []
-    existing.push(edge.toId)
+    existing.push(edge.toID)
     byMeta.set(meta, existing)
   }
 
   const labels: string[] = []
   for (const [, targetIds] of byMeta) {
     if (targetIds.length === 1) {
-      const target = nodeById.get(targetIds[0])
+      const target = nodeByID.get(targetIds[0])
       if (target) {
         labels.push(fmtNode(target))
       }
     } else {
-      const targets = targetIds.map(id => nodeById.get(id))
+      const targets = targetIds.map(id => nodeByID.get(id))
         .filter((n): n is GraphNode => n != null)
       if (targets.length > 0) {
         const sharedNames = targets.reduce<string[]>(
@@ -352,13 +352,13 @@ function nodeDependencyLabels(
 
 export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGraph {
   const entries = Array.from(bindings)
-  const keyToId = new Map<Key, number>()
+  const keyToID = new Map<Key, number>()
   const nameToIds = new Map<string, number[]>()
   const labelToIds = new Map<string, number[]>()
   const nodes: GraphNode[] = []
 
   for (const [key, binding] of entries) {
-    keyToId.set(key, binding.id)
+    keyToID.set(key, binding.id)
 
     const names = binding.names.map(n => keyStr(n))
     const labels = binding.labels.map(l => l.description ?? l.toString())
@@ -366,7 +366,7 @@ export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGr
     nodes.push({
       id: binding.id,
       label: keyStr(key),
-      scopeId: scopeStr(binding.scopeId),
+      scopeID: scopeStr(binding.scopeID),
       names,
       labels,
       primary: binding.primary ?? false,
@@ -388,14 +388,14 @@ export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGr
 
   const edges: GraphEdge[] = []
 
-  function addInjectionEdge(fromId: number, injKey: Key | undefined, kind: EdgeKind, meta: string): void {
+  function addInjectionEdge(fromID: number, injKey: Key | undefined, kind: EdgeKind, meta: string): void {
     if (injKey == null) {
       return
     }
 
-    const directId = keyToId.get(injKey)
-    if (directId !== undefined) {
-      edges.push({ fromId, toId: directId, kind, meta })
+    const directID = keyToID.get(injKey)
+    if (directID !== undefined) {
+      edges.push({ fromID, toID: directID, kind, meta })
       return
     }
 
@@ -403,27 +403,27 @@ export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGr
       const name = keyStr(injKey)
       const targetIds = nameToIds.get(name)
       if (targetIds) {
-        for (const toId of targetIds) {
-          edges.push({ fromId, toId, kind, meta })
+        for (const toID of targetIds) {
+          edges.push({ fromID, toID, kind, meta })
         }
       }
     }
   }
 
   for (const [key, binding] of entries) {
-    const fromId = keyToId.get(key)!
+    const fromID = keyToID.get(key)!
 
     for (let i = 0; i < binding.injections.length; i++) {
-      addInjectionEdge(fromId, binding.injections[i].key, 'injection', `param[${i}]`)
+      addInjectionEdge(fromID, binding.injections[i].key, 'injection', `param[${i}]`)
     }
 
     for (const [propName, inj] of binding.injectableProperties) {
-      addInjectionEdge(fromId, inj.key, 'property-injection', String(propName))
+      addInjectionEdge(fromID, inj.key, 'property-injection', String(propName))
     }
 
     for (const [methodName, injList] of binding.injectableMethods) {
       for (let i = 0; i < injList.length; i++) {
-        addInjectionEdge(fromId, injList[i].key, 'method-injection', `${String(methodName)}[${i}]`)
+        addInjectionEdge(fromID, injList[i].key, 'method-injection', `${String(methodName)}[${i}]`)
       }
     }
   }
@@ -431,7 +431,7 @@ export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGr
   for (const [name, ids] of nameToIds) {
     if (ids.length > 1) {
       for (let i = 0; i < ids.length - 1; i++) {
-        edges.push({ fromId: ids[i], toId: ids[i + 1], kind: 'named-group', meta: name })
+        edges.push({ fromID: ids[i], toID: ids[i + 1], kind: 'named-group', meta: name })
       }
     }
   }
@@ -439,7 +439,7 @@ export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGr
   for (const [label, ids] of labelToIds) {
     if (ids.length > 1) {
       for (let i = 0; i < ids.length - 1; i++) {
-        edges.push({ fromId: ids[i], toId: ids[i + 1], kind: 'label-group', meta: label })
+        edges.push({ fromID: ids[i], toID: ids[i + 1], kind: 'label-group', meta: label })
       }
     }
   }

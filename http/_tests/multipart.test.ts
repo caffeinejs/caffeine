@@ -198,16 +198,16 @@ describe('Multipart file upload', () => {
 
   it('webStreamFile() combined with query() — both params resolved', async () => {
     let receivedFile: WebMultipartFile | undefined
-    let receivedUserId: string | undefined
+    let receivedUserID: string | undefined
 
     @Controller('/up5')
     class Up5Controller {
       @Post('/upload')
-      @Params([webStreamFile('avatar'), query('userId')])
-      async upload(f: ReadableStream<WebMultipartFile>, userId: string) {
+      @Params([webStreamFile('avatar'), query('userID')])
+      async upload(f: ReadableStream<WebMultipartFile>, userID: string) {
         const [first] = await readStream(f)
         receivedFile = first
-        receivedUserId = userId
+        receivedUserID = userID
         return {}
       }
     }
@@ -221,13 +221,13 @@ describe('Multipart file upload', () => {
 
     await app.instance.inject({
       method: 'POST',
-      url: '/up5/upload?userId=user-42',
+      url: '/up5/upload?userID=user-42',
       headers: multipartHeaders(),
       payload: multipartBody([{ name: 'avatar', filename: 'pic.png', content: 'png', mime: 'image/png' }]),
     })
 
     expect(receivedFile!.filename).toBe('pic.png')
-    expect(receivedUserId).toBe('user-42')
+    expect(receivedUserID).toBe('user-42')
   })
 
   it('webStreamFiles() — emits all file parts', async () => {

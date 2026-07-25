@@ -101,7 +101,7 @@ describe('Class', function () {
   })
 
   describe('when injecting multiple dependencies with the same key', function () {
-    const kIdentifier = Symbol('testId')
+    const kIdentifier = Symbol('testID')
 
     abstract class Base {
       abstract hello(): string

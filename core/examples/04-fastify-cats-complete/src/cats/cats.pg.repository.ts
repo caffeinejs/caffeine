@@ -14,7 +14,7 @@ export class CatsPgRepository extends CatsRepository {
   }
 
   async findAll(): Promise<Cat[]> {
-    console.log(`[${this.ctx.get().correlationId}] findAll`)
+    console.log(`[${this.ctx.get().correlationID}] findAll`)
 
     const result = await this.pool.query<Cat>('SELECT id, name, breed, age FROM cats ORDER BY id')
 
@@ -22,7 +22,7 @@ export class CatsPgRepository extends CatsRepository {
   }
 
   async findOne(id: number): Promise<Cat | undefined> {
-    console.log(`[${this.ctx.get().correlationId}] findOne id=${id}`)
+    console.log(`[${this.ctx.get().correlationID}] findOne id=${id}`)
 
     const result = await this.pool.query<Cat>('SELECT id, name, breed, age FROM cats WHERE id = $1', [id])
 
@@ -30,7 +30,7 @@ export class CatsPgRepository extends CatsRepository {
   }
 
   async create(dto: CreateCatDTO): Promise<Cat> {
-    console.log(`[${this.ctx.get().correlationId}] create`)
+    console.log(`[${this.ctx.get().correlationID}] create`)
 
     const result = await this.pool.query<Cat>(
       'INSERT INTO cats (name, breed, age) VALUES ($1, $2, $3) RETURNING id, name, breed, age',
@@ -41,7 +41,7 @@ export class CatsPgRepository extends CatsRepository {
   }
 
   async update(id: number, dto: UpdateCatDTO): Promise<Cat | undefined> {
-    console.log(`[${this.ctx.get().correlationId}] update id=${id}`)
+    console.log(`[${this.ctx.get().correlationID}] update id=${id}`)
 
     const fields: string[] = []
     const values: unknown[] = []
@@ -76,7 +76,7 @@ export class CatsPgRepository extends CatsRepository {
   }
 
   async remove(id: number): Promise<boolean> {
-    console.log(`[${this.ctx.get().correlationId}] remove id=${id}`)
+    console.log(`[${this.ctx.get().correlationID}] remove id=${id}`)
 
     const result = await this.pool.query('DELETE FROM cats WHERE id = $1', [id])
 

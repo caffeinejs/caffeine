@@ -75,7 +75,7 @@ describe('BodyAsStream', () => {
 
   it('receives JSON payload as a stream without parsing', async () => {
     @Controller('/stream-json')
-    class StreamJsonController {
+    class StreamJSONController {
       @BodyAsStream()
       @Post('/data')
       @Params([body()])
@@ -88,7 +88,7 @@ describe('BodyAsStream', () => {
       }
     }
 
-    void [StreamJsonController]
+    void [StreamJSONController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()

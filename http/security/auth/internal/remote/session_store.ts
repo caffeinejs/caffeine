@@ -60,7 +60,7 @@ export async function decodeSession(
 }
 
 /**
- * The cookie payload when an `OidcTicketStore` is configured: an opaque key and nothing else.
+ * The cookie payload when an `OIDCTicketStore` is configured: an opaque key and nothing else.
  *
  * Sealed under its own purpose rather than left bare. The key carries no user data, so this
  * is not for confidentiality — it is for expiry, tamper-evidence, and to keep the two cookie

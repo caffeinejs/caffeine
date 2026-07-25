@@ -8,7 +8,7 @@ export { SINGLETON }
 export function binding(
   id: number,
   opts: {
-    scopeId?: symbol
+    scopeID?: symbol
     names?: (string | symbol)[]
     labels?: symbol[]
     primary?: boolean
@@ -20,7 +20,7 @@ export function binding(
 ): Binding {
   return newBinding({
     id,
-    scopeId: opts.scopeId ?? SINGLETON,
+    scopeID: opts.scopeID ?? SINGLETON,
     factory: undefined as any,
     names: opts.names ?? [],
     labels: opts.labels ?? [],

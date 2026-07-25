@@ -3,5 +3,5 @@ export interface Call {
 }
 
 export interface CallFactory {
-  provide(baseUrl: string): Call
+  provide(baseURL: string): Call
 }

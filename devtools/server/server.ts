@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http'
 import type { WebApplication } from '@caffeinejs/http'
-import { HttpCollector } from '../collectors/application.collector.js'
+import { HTTPCollector } from '../collectors/application.collector.js'
 import { DevtoolsStore } from '../store.js'
 import type { DevtoolsEvent } from '../types.js'
 import { serveStatic } from './static.js'
@@ -14,7 +14,7 @@ export class DevtoolsServer {
   private readonly store = new DevtoolsStore()
   private readonly ws = new WsBroadcaster()
   private server: Server | null = null
-  private readonly httpCollector = new HttpCollector(this.store)
+  private readonly httpCollector = new HTTPCollector(this.store)
 
   constructor(private readonly options: DevtoolsOptions = {}) {}
 

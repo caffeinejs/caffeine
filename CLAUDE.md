@@ -46,6 +46,37 @@ import { noop } from '../_noop.js'
 - The `.name` property and `code` string must align with the class name: `ErrFoo` → `this.name = 'ErrFoo'`, `code = 'ERR_FOO'`
 - Errors with fixed, context-free solutions may call `solutions()` inside their constructor. Contextual errors with variable message content call `solutions()` at the throw site.
 
+## Acronym casing
+
+Acronyms and initialisms carry a **single consistent case** — never JS Title-case. Follow the Go convention: `URL` not `Url`, `ID` not `Id`, `OIDC` not `Oidc`, `HTTP` not `Http`, `JSON` not `Json`.
+
+- **PascalCase** (types, classes, enum members): acronym always uppercase — `HTTPClient`, `OIDCConfig`, `JWTVerifier`, `ErrOIDCCallback`.
+- **camelCase** (vars, methods, params, properties): a **leading** acronym is fully lowercased; a **mid/trailing** acronym is fully uppercased.
+- `SCREAMING_SNAKE` (error `code`, env vars) already conforms — `ERR_OIDC_CALLBACK` is unchanged.
+
+```ts
+// correct
+class HTTPClient {}
+const oidcConfig = {}
+function parseJSON(s: string) {}
+const clientID = ''
+const authURL = ''
+
+// wrong
+class HttpClient {}
+const OidcConfig = {}
+function parseJson(s: string) {}
+const clientId = ''
+const authUrl = ''
+```
+
+Exceptions:
+
+1. **`IoC`** stays stylized — `CaffeineIoC`, `IoC`. Deliberate brand exception, not `IOC`.
+2. **External / interop names** that mirror a third-party contract keep the upstream spelling: Node (`IncomingHttpHeaders`, `EnvHttpProxyAgent`, `executionAsyncId`, `checkServerIdentity`, `urlToHttpOptions`), WebCrypto (`AlgorithmIdentifier`, `JsonWebKey`, `JsonWebKeyInput`), inspector/CDP (`BreakpointId`, `CallFrameId`, `ExecutionContextId`), fast-check (`fc.webUrl`), ESLint (`messageId`), JS built-ins (`toJSON`).
+3. **Wire / protocol tokens** are data, not identifiers — leave them exactly as the spec writes them: the `Set-Cookie` attribute `HttpOnly` (RFC 6265), OIDC/OAuth snake_case params (`client_id`, `redirect_uri`, `jwks_uri`), and the JOSE `typ` values (`oidc-state+jwt`). Only the surrounding TS identifiers change (`redirectUri` → `redirectURI`), never the string sent on the wire.
+4. **A substring is not an acronym** — `Identity`, `Identifier`, `Candidate`, `Validate`, `Hidden` merely contain acronym letters. Never rewrite them.
+
 ## Inline type imports
 
 Never use inline dynamic-import syntax as a type reference (`import('node:stream').Readable`). Always declare a top-level `import type` statement and reference the type by name.

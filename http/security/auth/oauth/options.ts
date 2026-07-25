@@ -24,7 +24,7 @@ type DefaultedKey
     | 'roleClaimType'
     | 'httpTimeoutMs'
     | 'showPii'
-    | 'usePkce'
+    | 'usePKCE'
     | 'subjectClaim'
 
 /**
@@ -37,14 +37,14 @@ type DefaultedKey
  * a JSON body fetched with a bearer token.
  */
 export interface ResolvedOAuth2AuthenticationOptions {
-  clientId: string
+  clientID: string
   clientSecret: string
 
   authorizationEndpoint: string
   tokenEndpoint: string
   userInfoEndpoint: string
 
-  callbackUrl: string
+  callbackURL: string
   defaultRedirectPath: string
   scopes: string[]
 
@@ -64,7 +64,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
    * Turn it off only for a provider that rejects the parameters outright. Without PKCE the
    * flow leans entirely on the client secret and the state cookie.
    */
-  usePkce: boolean
+  usePKCE: boolean
 
   /**
    * Which user info field holds the stable user identifier.
@@ -105,7 +105,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
     tokens: RemoteAuthenticationTokens,
   ) => Promise<void> | void
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context, authorizationUrl: string) => Promise<void> | void
+  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
   /** Full override of claim construction. `claimActions.remove` still applies afterwards. */
   claimMapper?: (userInfo: Record<string, unknown>) => Claim[]
@@ -119,10 +119,10 @@ export function resolveOAuth2Options(
   scheme: string,
 ): ResolvedOAuth2AuthenticationOptions {
   const required: Array<[string, string | undefined]> = [
-    ['clientId', input.clientId],
+    ['clientID', input.clientID],
     ['clientSecret', input.clientSecret],
     ['sessionSecret', input.sessionSecret],
-    ['callbackUrl', input.callbackUrl],
+    ['callbackURL', input.callbackURL],
     ['authorizationEndpoint', input.authorizationEndpoint],
     ['tokenEndpoint', input.tokenEndpoint],
     ['userInfoEndpoint', input.userInfoEndpoint],
@@ -141,7 +141,7 @@ export function resolveOAuth2Options(
 
   // The callback carries the authorization code and the endpoints carry the token and the
   // access token; over plain http every one of them is interceptable.
-  for (const label of ['callbackUrl', 'authorizationEndpoint', 'tokenEndpoint', 'userInfoEndpoint'] as const) {
+  for (const label of ['callbackURL', 'authorizationEndpoint', 'tokenEndpoint', 'userInfoEndpoint'] as const) {
     assertSecureEndpoint(label, input[label]!)
   }
 
@@ -152,14 +152,14 @@ export function resolveOAuth2Options(
     )
   }
 
-  const secureCookie = input.secureCookie ?? defaultSecureCookie(input.callbackUrl!)
+  const secureCookie = input.secureCookie ?? defaultSecureCookie(input.callbackURL!)
 
   return {
     ...input,
-    clientId: input.clientId!,
+    clientID: input.clientID!,
     clientSecret: input.clientSecret!,
     sessionSecret: input.sessionSecret!,
-    callbackUrl: input.callbackUrl!,
+    callbackURL: input.callbackURL!,
     authorizationEndpoint: input.authorizationEndpoint!,
     tokenEndpoint: input.tokenEndpoint!,
     userInfoEndpoint: input.userInfoEndpoint!,
@@ -172,7 +172,7 @@ export function resolveOAuth2Options(
     roleClaimType: input.roleClaimType ?? 'roles',
     httpTimeoutMs: input.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
     showPii: input.showPii ?? false,
-    usePkce: input.usePkce ?? true,
+    usePKCE: input.usePKCE ?? true,
     subjectClaim: input.subjectClaim ?? 'id',
   }
 }
@@ -180,8 +180,8 @@ export function resolveOAuth2Options(
 export class OAuth2AuthenticationOptionsBuilder {
   readonly #options: Partial<OAuth2AuthenticationOptions> = {}
 
-  clientId(id: string): this {
-    this.#options.clientId = id
+  clientID(id: string): this {
+    this.#options.clientID = id
     return this
   }
 
@@ -205,8 +205,8 @@ export class OAuth2AuthenticationOptionsBuilder {
     return this
   }
 
-  callbackUrl(url: string): this {
-    this.#options.callbackUrl = url
+  callbackURL(url: string): this {
+    this.#options.callbackURL = url
     return this
   }
 
@@ -261,8 +261,8 @@ export class OAuth2AuthenticationOptionsBuilder {
   }
 
   /** Off only for a provider that rejects the PKCE parameters outright. */
-  usePkce(use: boolean): this {
-    this.#options.usePkce = use
+  usePKCE(use: boolean): this {
+    this.#options.usePKCE = use
     return this
   }
 

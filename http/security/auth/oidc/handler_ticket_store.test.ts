@@ -6,15 +6,15 @@ import { Claim } from '../../index.js'
 import { claimsToSession, encodeSession, encodeTicketRef } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
-import type { OidcAuthenticationOptions } from './options.js'
-import { OidcAuthenticationHandler } from './handler.js'
+import type { OIDCAuthenticationOptions } from './options.js'
+import { OIDCAuthenticationHandler } from './handler.js'
 
 /** The strategy name these handlers are registered under; cookies are sealed per scheme. */
 const SCHEME = 'OIDC'
 
 /**
  * These tests exercise the handler, not a store implementation, so they use the smallest
- * store that satisfies the contract. The shipped `TestOidcTicketStore` lives in
+ * store that satisfies the contract. The shipped `TestOIDCTicketStore` lives in
  * `@caffeinejs/testing`, which depends on this package — importing it back would make the
  * dependency circular for no gain here.
  */
@@ -50,13 +50,13 @@ const CALLBACK_PATH = '/auth/callback'
 const SUBJECT = 'user123'
 const EMAIL = 'jane.doe@example.com'
 
-function makeBaseOptions(overrides: Partial<OidcAuthenticationOptions> = {}): OidcAuthenticationOptions {
+function makeBaseOptions(overrides: Partial<OIDCAuthenticationOptions> = {}): OIDCAuthenticationOptions {
   return {
-    clientId: CLIENT_ID,
+    clientID: CLIENT_ID,
     clientSecret: 'test-client-secret',
-    discoveryUrl: ISSUER,
+    discoveryURL: ISSUER,
     issuer: ISSUER,
-    callbackUrl: CALLBACK_URL,
+    callbackURL: CALLBACK_URL,
     sessionSecret: SESSION_SECRET,
     sessionCookieName: '__oidc_session',
     sessionCookieTtlSeconds: 3600,
@@ -104,7 +104,7 @@ const DISCOVERY_DOCUMENT = {
   code_challenge_methods_supported: ['S256'],
 }
 
-describe('OidcAuthenticationHandler with a ticket store', () => {
+describe('OIDCAuthenticationHandler with a ticket store', () => {
   let privateKey: KeyLike
   let jwksResolver: (uri: string) => JWTVerifyGetKey
   let store: FakeTicketStore
@@ -142,7 +142,7 @@ describe('OidcAuthenticationHandler with a ticket store', () => {
 
   /** Runs a full authorization callback and returns the session cookie value it set. */
   async function signIn(
-    handler: OidcAuthenticationHandler,
+    handler: OIDCAuthenticationHandler,
     existingSessionCookie?: string,
   ): Promise<string> {
     const nonce = 'test-nonce'
@@ -169,7 +169,7 @@ describe('OidcAuthenticationHandler with a ticket store', () => {
   }
 
   function handlerWith(store?: RemoteAuthenticationTicketStore) {
-    return new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ticketStore: store }))
+    return new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ticketStore: store }))
   }
 
   describe('sign-in', () => {
@@ -406,7 +406,7 @@ describe('ticket key generation', () => {
     const pair = await generateKeyPair('RS256')
     const jwk = await exportJWK(pair.publicKey)
     const localJwks = createLocalJWKSet({ keys: [{ ...jwk, kid: 'k1', use: 'sig' }] })
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver: () => localJwks as JWTVerifyGetKey,
       ticketStore: capturing,
     }))
@@ -478,7 +478,7 @@ describe('RemoteAuthenticationTicket shape', () => {
 
     // A claimMapper may legitimately drop `sub`, so the subject must come from the validated
     // id_token payload — otherwise the ticket would be unrevocable by user.
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver: () => localJwks as JWTVerifyGetKey,
       ticketStore: capturing,
       claimMapper: () => [new Claim('email', EMAIL, ISSUER)],
@@ -540,7 +540,7 @@ describe('RP-initiated logout', () => {
     }))
   }
 
-  async function signIn(handler: OidcAuthenticationHandler, nonce = 'n', discovery = {}) {
+  async function signIn(handler: OIDCAuthenticationHandler, nonce = 'n', discovery = {}) {
     mockFetch(nonce, discovery)
     const stateCookie = await encodeState(
       { state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
@@ -557,12 +557,12 @@ describe('RP-initiated logout', () => {
 
   it('refuses to configure saveTokens without a ticket store', () => {
     // The alternative home for a refresh token is the session cookie, which the client holds.
-    expect(() => new OidcAuthenticationHandler('OIDC', makeBaseOptions({ saveTokens: true })))
+    expect(() => new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ saveTokens: true })))
       .toThrow('saveTokens requires a ticketStore')
   })
 
   it('does not keep tokens unless asked', async () => {
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ticketStore: store }))
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ticketStore: store }))
     await signIn(handler)
 
     const ticket = [...store.tickets.values()][0]
@@ -570,11 +570,11 @@ describe('RP-initiated logout', () => {
   })
 
   it('redirects to the provider with the id_token_hint', async () => {
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver,
       ticketStore: store,
       saveTokens: true,
-      postLogoutRedirectUri: 'https://app.example.com/goodbye',
+      postLogoutRedirectURI: 'https://app.example.com/goodbye',
     }))
     const sessionCookie = await signIn(handler)
 
@@ -594,7 +594,7 @@ describe('RP-initiated logout', () => {
    * signed out — on a shared machine the next person is one click from their account.
    */
   it('drops the local session as well as redirecting', async () => {
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver, ticketStore: store, saveTokens: true,
     }))
     const sessionCookie = await signIn(handler)
@@ -611,7 +611,7 @@ describe('RP-initiated logout', () => {
   })
 
   it('still signs out locally when no tokens were saved', async () => {
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver, ticketStore: store,
     }))
     const sessionCookie = await signIn(handler)
@@ -626,7 +626,7 @@ describe('RP-initiated logout', () => {
   })
 
   it('reports a provider that advertises no end_session_endpoint', async () => {
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver, ticketStore: store,
     }))
     await signIn(handler, 'n', { end_session_endpoint: undefined })
@@ -641,7 +641,7 @@ describe('RP-initiated logout', () => {
    * a down /.well-known left the user fully authenticated behind a 500.
    */
   it('signs out locally even when the discovery endpoint is unreachable', async () => {
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver,
       ticketStore: store,
       saveTokens: true,
@@ -665,7 +665,7 @@ describe('RP-initiated logout', () => {
   })
 
   it('drops the local session even when no logout endpoint can be resolved', async () => {
-    const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
       jwksResolver, ticketStore: store,
     }))
     const sessionCookie = await signIn(handler, 'n', { end_session_endpoint: undefined })

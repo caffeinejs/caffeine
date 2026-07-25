@@ -53,12 +53,12 @@ void [PetStore, PetsRouter]
 
 describe('typedClient()', () => {
   let app: WebApplication<any, any, any>
-  let baseUrl: string
+  let baseURL: string
 
   beforeAll(async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
     await app.ready()
-    baseUrl = await app.instance.listen({ port: 0, host: '127.0.0.1' })
+    baseURL = await app.instance.listen({ port: 0, host: '127.0.0.1' })
   })
 
   afterAll(async () => {
@@ -66,7 +66,7 @@ describe('typedClient()', () => {
   })
 
   it('resolves all() to controller return type and parses JSON array', async () => {
-    const client = typedClient(PetsRouter, baseUrl)
+    const client = typedClient(PetsRouter, baseURL)
     const pets = await client.all()
 
     expectTypeOf(pets).toEqualTypeOf<PetSummary[]>()
@@ -74,7 +74,7 @@ describe('typedClient()', () => {
   })
 
   it('resolves adopt() to controller return type and parses JSON object', async () => {
-    const client = typedClient(PetsRouter, baseUrl)
+    const client = typedClient(PetsRouter, baseURL)
     const pet = await client.adopt({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ species: 'cat', name: 'Luna' }),
@@ -85,7 +85,7 @@ describe('typedClient()', () => {
   })
 
   it('resolves status() to string and returns plain text', async () => {
-    const client = typedClient(PetsRouter, baseUrl)
+    const client = typedClient(PetsRouter, baseURL)
     const result = await client.status()
 
     expectTypeOf(result).toEqualTypeOf<string>()
@@ -100,7 +100,7 @@ describe('typedClient()', () => {
   })
 
   it('returns independent clients for same controller with different targets', async () => {
-    const remote = typedClient(PetsRouter, baseUrl)
+    const remote = typedClient(PetsRouter, baseURL)
     const inProcess = typedClient(PetsRouter, app)
     const [remoteResult, inProcessResult] = await Promise.all([remote.all(), inProcess.all()])
 

@@ -16,9 +16,9 @@ import { Configuration } from './configuration.js'
  * ```ts
  * @Configuration()
  * class AppConfig {
- *   @Provides(HttpClient)
- *   httpClient(): HttpClient {
- *     return new HttpClient({ timeout: 5000 })
+ *   @Provides(HTTPClient)
+ *   httpClient(): HTTPClient {
+ *     return new HTTPClient({ timeout: 5000 })
  *   }
  * }
  * ```

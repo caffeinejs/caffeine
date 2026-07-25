@@ -26,20 +26,20 @@ const CALLBACK_PATH = '/oidc/callback'
 /** Cookie names and derived keys are namespaced by the strategy this app registers. */
 const SCHEME = 'Google'
 
-function makeOidcApp(
+function makeOIDCApp(
   fastifyInstance: ReturnType<typeof fastify>,
   jwksResolver?: (uri: string) => JWTVerifyGetKey,
 ) {
   const builder = createWebApplication(fastifyAdapterFactory(fastifyInstance))
-  builder.authentication.addOidc('Google', opts => {
+  builder.authentication.addOIDC('Google', opts => {
     opts
-      .clientId(CLIENT_ID)
+      .clientID(CLIENT_ID)
       .clientSecret('oidc-client-secret')
       .sessionSecret(SESSION_SECRET)
-      .callbackUrl(CALLBACK_URL)
+      .callbackURL(CALLBACK_URL)
       .authorizationEndpoint(`${ISSUER}/auth`)
       .tokenEndpoint(`${ISSUER}/token`)
-      .jwksUri(`${ISSUER}/jwks`)
+      .jwksURI(`${ISSUER}/jwks`)
       .issuer(ISSUER)
     if (jwksResolver) {
       opts.jwksResolver(jwksResolver)
@@ -66,17 +66,17 @@ describe('OIDC integration', () => {
   it('no session → protected route → 302 to provider auth URL with required params', async () => {
     @Authorize()
     @Controller('/oidc-int-challenge')
-    class OidcIntChallengeController {
+    class OIDCIntChallengeController {
       @Get('/')
       index() {
         return { ok: true }
       }
     }
-    void [OidcIntChallengeController]
+    void [OIDCIntChallengeController]
 
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOidcApp(f).build()
+    const app = makeOIDCApp(f).build()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-challenge')
@@ -112,7 +112,7 @@ describe('OIDC integration', () => {
       vi.unstubAllGlobals()
     })
 
-    async function signIdToken(nonce: string) {
+    async function signIDToken(nonce: string) {
       return new SignJWT({ sub: 'oidc-sub', email: 'test@oidc.com', nonce })
         .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
         .setIssuer(ISSUER)
@@ -124,7 +124,7 @@ describe('OIDC integration', () => {
     function mockTokenEndpoint(nonce: string) {
       vi.stubGlobal('fetch', vi.fn(async (_url: string, opts?: RequestInit) => {
         if (opts?.method === 'POST') {
-          const idToken = await signIdToken(nonce)
+          const idToken = await signIDToken(nonce)
           return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
         }
         return { ok: false, status: 404 }
@@ -138,7 +138,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie(nonce)
       const f = fastify()
       f.register(FastifyCookie)
-      const app = makeOidcApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver).build()
       await app.ready()
 
       const res = await app.fetch(
@@ -155,7 +155,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie('n', 'correct-state')
       const f = fastify()
       f.register(FastifyCookie)
-      const app = makeOidcApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver).build()
       await app.ready()
 
       const res = await app.fetch(
@@ -171,7 +171,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie('correct-nonce')
       const f = fastify()
       f.register(FastifyCookie)
-      const app = makeOidcApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver).build()
       await app.ready()
 
       const res = await app.fetch(
@@ -187,7 +187,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie('correct-nonce')
       const f = fastify({ logger: false })
       f.register(FastifyCookie)
-      const app = makeOidcApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver).build()
       await app.ready()
 
       const res = await app.fetch(
@@ -210,23 +210,23 @@ describe('OIDC integration', () => {
   it('session cookie → 200 with correct claims on protected route', async () => {
     @Authorize()
     @Controller('/oidc-int-session')
-    class OidcIntSessionController {
+    class OIDCIntSessionController {
       @Params([context()])
       @Get('/')
       index(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }
-    void [OidcIntSessionController]
+    void [OIDCIntSessionController]
 
-    const sessionJwt = await makeSessionCookie([new Claim('sub', 'oidc-int-user', ISSUER)])
+    const sessionJWT = await makeSessionCookie([new Claim('sub', 'oidc-int-user', ISSUER)])
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOidcApp(f).build()
+    const app = makeOIDCApp(f).build()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-session', {
-      headers: { cookie: `__Host-oidc_Google_session=${sessionJwt}` },
+      headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
     })
 
     expect(res.status).toBe(200)
@@ -237,7 +237,7 @@ describe('OIDC integration', () => {
   it('@AllowAnonymous overrides class-level @Authorize → 200 with no session', async () => {
     @Authorize()
     @Controller('/oidc-int-anon')
-    class OidcIntAnonController {
+    class OIDCIntAnonController {
       @AllowAnonymous()
       @Get('/public')
       public() {
@@ -249,11 +249,11 @@ describe('OIDC integration', () => {
         return { ok: true }
       }
     }
-    void [OidcIntAnonController]
+    void [OIDCIntAnonController]
 
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOidcApp(f).build()
+    const app = makeOIDCApp(f).build()
     await app.ready()
 
     const [pub, prot] = await Promise.all([
@@ -268,25 +268,25 @@ describe('OIDC integration', () => {
   it('@Authorize({ roles }) + matching role → 200', async () => {
     @Authorize({ roles: ['admin'] })
     @Controller('/oidc-int-role-ok')
-    class OidcIntRoleOkController {
+    class OIDCIntRoleOkController {
       @Get('/')
       index() {
         return { ok: true }
       }
     }
-    void [OidcIntRoleOkController]
+    void [OIDCIntRoleOkController]
 
-    const sessionJwt = await makeSessionCookie([
+    const sessionJWT = await makeSessionCookie([
       new Claim('sub', 'admin', ISSUER),
       new Claim('roles', 'admin', ISSUER),
     ])
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOidcApp(f).build()
+    const app = makeOIDCApp(f).build()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-role-ok', {
-      headers: { cookie: `__Host-oidc_Google_session=${sessionJwt}` },
+      headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
     })
     expect(res.status).toBe(200)
   })
@@ -294,31 +294,31 @@ describe('OIDC integration', () => {
   it('@Authorize({ roles }) + wrong role → 403', async () => {
     @Authorize({ roles: ['admin'] })
     @Controller('/oidc-int-role-403')
-    class OidcIntRole403Controller {
+    class OIDCIntRole403Controller {
       @Get('/')
       index() {
         return { ok: true }
       }
     }
-    void [OidcIntRole403Controller]
+    void [OIDCIntRole403Controller]
 
-    const sessionJwt = await makeSessionCookie([
+    const sessionJWT = await makeSessionCookie([
       new Claim('sub', 'viewer', ISSUER),
       new Claim('roles', 'viewer', ISSUER),
     ])
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOidcApp(f).build()
+    const app = makeOIDCApp(f).build()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-role-403', {
-      headers: { cookie: `__Host-oidc_Google_session=${sessionJwt}` },
+      headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
     })
     expect(res.status).toBe(403)
   })
 
   it('throws at startup if @fastify/cookie is not registered', async () => {
-    const builder = makeOidcApp(fastify())
+    const builder = makeOIDCApp(fastify())
     await expect(builder.build().ready()).rejects.toThrow('@fastify/cookie')
   })
 
@@ -334,7 +334,7 @@ describe('OIDC integration', () => {
 
     const f = fastify()
     f.register(FastifyCookie)
-    const builder = makeOidcApp(f)
+    const builder = makeOIDCApp(f)
     await expect(builder.build().ready()).rejects.toThrow('conflicts with a registered controller route')
   })
 })

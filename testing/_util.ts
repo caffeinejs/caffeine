@@ -1,12 +1,12 @@
 import type { RouterDescriptor } from './types.js'
 
-export function resolveRouteUrl(
-  baseUrl: string,
+export function resolveRouteURL(
+  baseURL: string,
   router: RouterDescriptor,
   routePath: string,
-  requestUrl?: string,
+  requestURL?: string,
 ): string {
-  const origin = baseUrl.replace(/\/+$/, '')
+  const origin = baseURL.replace(/\/+$/, '')
   const prefix = router.prefix ?? ''
   const segments = [prefix, router.path, routePath].filter(s => s.length > 0)
   const joined = segments.join('/').replace(/\/+/g, '/')
@@ -14,8 +14,8 @@ export function resolveRouteUrl(
   const path = joinPaths('', rawPath)
   const url = new URL(path, `${origin}/`)
 
-  if (requestUrl) {
-    const incoming = new URL(requestUrl, `${origin}/`)
+  if (requestURL) {
+    const incoming = new URL(requestURL, `${origin}/`)
     for (const [key, value] of incoming.searchParams) {
       url.searchParams.append(key, value)
     }

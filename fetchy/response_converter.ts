@@ -6,7 +6,7 @@ export interface ResponseConverter<T = unknown> {
  * Default response converter: parses the body as JSON, treating an empty (204) response as
  * `undefined`.
  */
-export const JsonResponseConverter: ResponseConverter = {
+export const JSONResponseConverter: ResponseConverter = {
   async convert(response: Response): Promise<unknown> {
     if (response.status === 204) {
       return undefined

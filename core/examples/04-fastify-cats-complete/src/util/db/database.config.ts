@@ -11,7 +11,7 @@ export class DatabaseConfig {
   @OnPreDestroy((pool: Pool) => pool.end())
   pgPool(): Pool {
     return new Pool({
-      connectionString: this.config.databaseUrl, onConnect: () => {
+      connectionString: this.config.databaseURL, onConnect: () => {
         console.log('Connected to database')
       },
     })

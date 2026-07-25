@@ -6,7 +6,7 @@ export type WorkerData = {
   bucket: string
   object: string
   pollIntervalMs: number
-  projectId: string
+  projectID: string
 }
 
 export type WorkerMessage
@@ -15,11 +15,11 @@ export type WorkerMessage
 
 if (!isMainThread && parentPort) {
   const port = parentPort
-  const { endpoint, bucket, object, pollIntervalMs, projectId } = workerData as WorkerData
+  const { endpoint, bucket, object, pollIntervalMs, projectID } = workerData as WorkerData
 
   const storage = new Storage({
     apiEndpoint: endpoint,
-    projectId,
+    projectID,
   })
 
   let lastGeneration: string | undefined

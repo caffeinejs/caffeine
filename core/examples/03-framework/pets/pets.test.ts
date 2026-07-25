@@ -9,7 +9,7 @@ describe('PetsController', function () {
 
     const mockRepo: PetsRepository = {
       all: vi.fn(),
-      byId: vi.fn(),
+      byID: vi.fn(),
       create: vi.fn()
         .mockReturnValue(created),
       update: vi.fn(),

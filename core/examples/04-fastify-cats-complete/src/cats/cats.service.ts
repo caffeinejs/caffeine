@@ -23,12 +23,12 @@ export class CatsService {
     const config = this.dataConfig.get()
     const featureFlags = config.data['featureFlags']
     if (featureFlags !== undefined) {
-      console.log(`[${this.ctx.get().correlationId}] featureFlags=${JSON.stringify(featureFlags)}`)
+      console.log(`[${this.ctx.get().correlationID}] featureFlags=${JSON.stringify(featureFlags)}`)
     }
 
     const cached = await this.cache.get(id)
     if (cached) {
-      console.log(`[${this.ctx.get().correlationId}] cache hit id=${id}`)
+      console.log(`[${this.ctx.get().correlationID}] cache hit id=${id}`)
       return cached
     }
 

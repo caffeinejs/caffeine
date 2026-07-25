@@ -3,7 +3,7 @@ import { Get } from '../decorators/verbs.js'
 import { Controller } from '../decorators/controller.js'
 import { getRouter } from '../decorators/registrar/registrar.js'
 
-describe('HttpAdapter', () => {
+describe('HTTPAdapter', () => {
   it('should be defined', () => {
     @Controller('/test')
     class TestController {

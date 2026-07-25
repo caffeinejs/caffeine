@@ -1,6 +1,6 @@
 import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from '@caffeinejs/http'
 
-export interface TestOidcTicketStoreOptions {
+export interface TestOIDCTicketStoreOptions {
   /**
    * Time source for ticket expiry, in milliseconds.
    *
@@ -28,11 +28,11 @@ interface StoredTicket {
  * is the right trade: an index has to be kept in step with expiry and eviction, and an index
  * that drifts is worse than no index in exactly the operation that exists for erasure.
  */
-export class TestOidcTicketStore implements RemoteAuthenticationTicketStore {
+export class TestOIDCTicketStore implements RemoteAuthenticationTicketStore {
   readonly #tickets = new Map<string, StoredTicket>()
   readonly #now: () => number
 
-  constructor(options?: TestOidcTicketStoreOptions) {
+  constructor(options?: TestOIDCTicketStoreOptions) {
     this.#now = options?.clock?.now ?? (() => performance.now())
   }
 

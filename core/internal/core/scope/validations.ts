@@ -26,25 +26,25 @@ export function checkScopes(ctx: ScopeValidationContext, entries: IterableIterat
 }
 
 function checkNoMix(ctx: ScopeValidationContext, entries: IterableIterator<[Key, Binding]>): void {
-  runCheck(entries, ctx, (ownerScopeId, depScopeId) => ownerScopeId !== depScopeId)
+  runCheck(entries, ctx, (ownerScopeID, depScopeID) => ownerScopeID !== depScopeID)
 }
 
 function checkCompatibleScopes(ctx: ScopeValidationContext, entries: IterableIterator<[Key, Binding]>): void {
-  runCheck(entries, ctx, (ownerScopeId, depScopeId) => isDurable(ownerScopeId, ctx) && !isDurable(depScopeId, ctx))
+  runCheck(entries, ctx, (ownerScopeID, depScopeID) => isDurable(ownerScopeID, ctx) && !isDurable(depScopeID, ctx))
 }
 
-function isDurable(scopeId: Identifier, ctx: ScopeValidationContext): boolean {
-  if (scopeId === Scopes.TRANSIENT) {
+function isDurable(scopeID: Identifier, ctx: ScopeValidationContext): boolean {
+  if (scopeID === Scopes.TRANSIENT) {
     return false
   }
 
-  return ctx.scopes.get(scopeId)?.durable ?? false
+  return ctx.scopes.get(scopeID)?.durable ?? false
 }
 
 function runCheck(
   entries: IterableIterator<[Key, Binding]>,
   ctx: ScopeValidationContext,
-  isViolation: (ownerScopeId: Identifier, depScopeId: Identifier) => boolean,
+  isViolation: (ownerScopeID: Identifier, depScopeID: Identifier) => boolean,
 ): void {
   const violations: string[] = []
 
@@ -52,7 +52,7 @@ function runCheck(
     for (let i = 0; i < binding.injections.length; i++) {
       checkInjection(
         ownerKey,
-        binding.scopeId,
+        binding.scopeID,
         binding.injections[i],
         `"${keyStr(ownerKey)}" constructor param[${i}]`,
         violations,
@@ -64,7 +64,7 @@ function runCheck(
     for (const [prop, desc] of binding.injectableProperties) {
       checkInjection(
         ownerKey,
-        binding.scopeId,
+        binding.scopeID,
         desc,
         `"${keyStr(ownerKey)}".${String(prop)}`,
         violations,
@@ -77,7 +77,7 @@ function runCheck(
       for (let i = 0; i < descs.length; i++) {
         checkInjection(
           ownerKey,
-          binding.scopeId,
+          binding.scopeID,
           descs[i],
           `"${keyStr(ownerKey)}".${String(method)}[${i}]`,
           violations,
@@ -95,19 +95,19 @@ function runCheck(
 
 function checkInjection(
   ownerKey: Key,
-  ownerScopeId: Identifier,
+  ownerScopeID: Identifier,
   inj: InjectionDescriptor,
   location: string,
   violations: string[],
   ctx: ScopeValidationContext,
-  isViolation: (ownerScopeId: Identifier, depScopeId: Identifier) => boolean,
+  isViolation: (ownerScopeID: Identifier, depScopeID: Identifier) => boolean,
 ): void {
   if (inj.resolver === BuiltInResolvers.PROVIDER) {
     return
   }
 
   if (inj.resolver === BuiltInResolvers.OBJECT) {
-    checkObjectInjection(ownerKey, ownerScopeId, inj.args as ObjectInjections, location, violations, ctx, isViolation)
+    checkObjectInjection(ownerKey, ownerScopeID, inj.args as ObjectInjections, location, violations, ctx, isViolation)
     return
   }
 
@@ -119,9 +119,9 @@ function checkInjection(
   const depBindings = ctx.getBindings(depKey as TypedKey<unknown>)
 
   for (const dep of depBindings) {
-    if (isViolation(ownerScopeId, dep.scopeId)) {
+    if (isViolation(ownerScopeID, dep.scopeID)) {
       violations.push(
-        `"${keyStr(ownerKey)}" (${scopeLabel(ownerScopeId)}) depends on "${keyStr(depKey)}" (${scopeLabel(dep.scopeId)}) at ${location}`,
+        `"${keyStr(ownerKey)}" (${scopeLabel(ownerScopeID)}) depends on "${keyStr(depKey)}" (${scopeLabel(dep.scopeID)}) at ${location}`,
       )
     }
   }
@@ -129,12 +129,12 @@ function checkInjection(
 
 function checkObjectInjection(
   ownerKey: Key,
-  ownerScopeId: Identifier,
+  ownerScopeID: Identifier,
   obj: ObjectInjections,
   location: string,
   violations: string[],
   ctx: ScopeValidationContext,
-  isViolation: (ownerScopeId: Identifier, depScopeId: Identifier) => boolean,
+  isViolation: (ownerScopeID: Identifier, depScopeID: Identifier) => boolean,
 ): void {
   const props: Array<string | symbol> = [...Object.keys(obj.children), ...Object.getOwnPropertySymbols(obj.children)]
 
@@ -144,10 +144,10 @@ function checkObjectInjection(
 
     if ('children' in child) {
       checkObjectInjection(
-        ownerKey, ownerScopeId, child as ObjectInjections, childLocation, violations, ctx, isViolation,
+        ownerKey, ownerScopeID, child as ObjectInjections, childLocation, violations, ctx, isViolation,
       )
     } else {
-      checkInjection(ownerKey, ownerScopeId, child as InjectionDescriptor, childLocation, violations, ctx, isViolation)
+      checkInjection(ownerKey, ownerScopeID, child as InjectionDescriptor, childLocation, violations, ctx, isViolation)
     }
   }
 }

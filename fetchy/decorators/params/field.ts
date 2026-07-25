@@ -1,12 +1,12 @@
-import type { ApiParameterSpec } from './api_parameter_spec.js'
+import type { APIParameterSpec } from './api_parameter_spec.js'
 
 /**
- * Binds an argument to a form field. Requires `@FormUrlEncoded()` on the same method or class.
+ * Binds an argument to a form field. Requires `@FormURLEncoded()` on the same method or class.
  */
-export function Field(key: string): ApiParameterSpec {
+export function Field(key: string): APIParameterSpec {
   return {
-    apply({ meta, index }) {
-      meta.params.push({ kind: 'form-field', key, index })
+    apply({ spec, index }) {
+      spec.param({ kind: 'form-field', key, index })
     },
   }
 }

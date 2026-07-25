@@ -1,6 +1,6 @@
+import type { MethodSpec } from './decorators/registrar/index.js'
 import { pathParamPattern } from './internal/path_util.js'
-import type { MethodMeta } from './metadata.js'
-import { JsonRequestBodyConverter } from './request_body_converter.js'
+import { JSONRequestBodyConverter } from './request_body_converter.js'
 
 function appendQueryEntry(query: string[], key: string, value: unknown): void {
   if (value === undefined || value === null) {
@@ -22,8 +22,8 @@ function appendQueryEntry(query: string[], key: string, value: unknown): void {
  */
 export class RequestBuilder {
   constructor(
-    private readonly baseUrl: string,
-    private readonly meta: MethodMeta,
+    private readonly baseURL: string,
+    private readonly meta: MethodSpec,
   ) {}
 
   toRequest(args: readonly unknown[]): Request {
@@ -58,7 +58,7 @@ export class RequestBuilder {
           }
           break
         case 'body':
-          body = JsonRequestBodyConverter.convert(value)
+          body = JSONRequestBodyConverter.convert(value)
           break
         case 'form-field':
           formFields ??= new URLSearchParams()
@@ -87,7 +87,7 @@ export class RequestBuilder {
       input.signal = signal
     }
 
-    const url = `${this.baseUrl}${path}${queryString}`
+    const url = `${this.baseURL}${path}${queryString}`
 
     return new Request(url, input)
   }

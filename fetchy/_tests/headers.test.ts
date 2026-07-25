@@ -2,37 +2,37 @@ import { describe, expect, it } from 'vitest'
 
 import { Accept } from '../decorators/accept.js'
 import { ContentType } from '../decorators/content_type.js'
-import { FormUrlEncoded } from '../decorators/form_url_encoded.js'
+import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { HeaderMap } from '../decorators/header_map.js'
+import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { GET, POST } from '../decorators/verbs.js'
-import { allMethodMeta, readClassMeta } from '../metadata.js'
 import { noop } from '../noop.js'
 
-function metadataOf(ctor: Function): DecoratorMetadataObject {
-  return (ctor as unknown as { [Symbol.metadata]: DecoratorMetadataObject })[Symbol.metadata]
+function metadataOf(ctor: Function): object {
+  return (ctor as unknown as { [Symbol.metadata]: object })[Symbol.metadata]
 }
 
 describe('header/form decorators', () => {
-  it('@HeaderMap/@ContentType/@Accept at class level write into ClassMeta', () => {
+  it('@HeaderMap/@ContentType/@Accept at class level write into the class registrar entry', () => {
     @HeaderMap({ 'x-api-key': 'secret' })
     @ContentType('application/json')
     @Accept('application/json')
-    class Api {
+    class API {
       @GET('/x')
       get(): Promise<unknown> {
         return noop()
       }
     }
 
-    const meta = readClassMeta(metadataOf(Api))
+    const spec = getClassBuilder(metadataOf(API))?.toClassSpec()
 
-    expect(meta?.headers.get('x-api-key')).toBe('secret')
-    expect(meta?.headers.get('content-type')).toBe('application/json')
-    expect(meta?.headers.get('accept')).toBe('application/json')
+    expect(spec?.headers.get('x-api-key')).toBe('secret')
+    expect(spec?.headers.get('content-type')).toBe('application/json')
+    expect(spec?.headers.get('accept')).toBe('application/json')
   })
 
-  it('@HeaderMap/@ContentType/@Accept at method level write into that method\'s MethodMeta only', () => {
-    class Api {
+  it('@HeaderMap/@ContentType/@Accept at method level write into that method\'s registrar entry only', () => {
+    class API {
       @GET('/x')
       @HeaderMap({ 'x-trace': '1' })
       @ContentType('text/plain')
@@ -46,41 +46,41 @@ describe('header/form decorators', () => {
       }
     }
 
-    const methods = allMethodMeta(metadataOf(Api))
+    const methods = getMethodBuilders(metadataOf(API))
 
-    expect(methods.get('one')?.headers.get('x-trace')).toBe('1')
-    expect(methods.get('one')?.headers.get('content-type')).toBe('text/plain')
-    expect(methods.get('two')?.headers.has('x-trace')).toBe(false)
+    expect(methods.get('one')?.toMethodSpec().headers.get('x-trace')).toBe('1')
+    expect(methods.get('one')?.toMethodSpec().headers.get('content-type')).toBe('text/plain')
+    expect(methods.get('two')?.toMethodSpec().headers.has('x-trace')).toBe(false)
   })
 
-  it('@FormUrlEncoded sets formUrlEncoded/requestType and the content-type header at method level', () => {
-    class Api {
+  it('@FormURLEncoded sets formURLEncoded/requestType and the content-type header at method level', () => {
+    class API {
       @POST('/form')
-      @FormUrlEncoded()
+      @FormURLEncoded()
       submit(): Promise<unknown> {
         return noop()
       }
     }
 
-    const method = allMethodMeta(metadataOf(Api)).get('submit')
+    const spec = getMethodBuilders(metadataOf(API)).get('submit')?.toMethodSpec()
 
-    expect(method?.formUrlEncoded).toBe(true)
-    expect(method?.requestType).toBe('form')
-    expect(method?.headers.get('content-type')).toBe('application/x-www-form-urlencoded')
+    expect(spec?.formURLEncoded).toBe(true)
+    expect(spec?.requestType).toBe('form')
+    expect(spec?.headers.get('content-type')).toBe('application/x-www-form-urlencoded')
   })
 
-  it('@FormUrlEncoded at class level sets requestType without the per-method flag', () => {
-    @FormUrlEncoded()
-    class Api {
+  it('@FormURLEncoded at class level sets requestType without the per-method flag', () => {
+    @FormURLEncoded()
+    class API {
       @POST('/form')
       submit(): Promise<unknown> {
         return noop()
       }
     }
 
-    const meta = readClassMeta(metadataOf(Api))
+    const spec = getClassBuilder(metadataOf(API))?.toClassSpec()
 
-    expect(meta?.requestType).toBe('form')
-    expect(meta?.headers.get('content-type')).toBe('application/x-www-form-urlencoded')
+    expect(spec?.requestType).toBe('form')
+    expect(spec?.headers.get('content-type')).toBe('application/x-www-form-urlencoded')
   })
 })

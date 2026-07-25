@@ -16,7 +16,7 @@ function toSnapshot(key: Key, binding: Binding): BindingSnapshot {
   return {
     id: binding.id,
     key: keyLabel(key),
-    scopeId: String(binding.scopeId),
+    scopeID: String(binding.scopeID),
     names: (binding.names ?? []).map(String),
     labels: (binding.labels ?? []).map(String),
     primary: binding.primary ?? false,
@@ -49,7 +49,7 @@ export class ContainerCollector {
       const event: DevtoolsEvent = {
         kind: 'binding:registered',
         ts: Date.now(),
-        payload: { id: binding.id, key: keyLabel(key), scopeId: String(binding.scopeId) },
+        payload: { id: binding.id, key: keyLabel(key), scopeID: String(binding.scopeID) },
       }
       this.store.pushEvent(event)
       this.broadcast(event)

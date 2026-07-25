@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import { redactPii } from '../internal/remote/pii.js'
-import { ErrOidcCallback } from './errors.js'
+import { ErrOIDCCallback } from './errors.js'
 
 /**
  * Maps an id_token signing algorithm to the digest used for its hash claims.
@@ -45,7 +45,7 @@ export function assertAccessTokenHash(
   const actual = Buffer.from(atHash)
 
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
-    throw new ErrOidcCallback(
+    throw new ErrOIDCCallback(
       'Cannot process OIDC callback: at_hash does not match the access token'
       + ` (expected ${redactPii('at_hash', computed, showPii)},`
       + ` received ${redactPii('at_hash', atHash, showPii)})`,

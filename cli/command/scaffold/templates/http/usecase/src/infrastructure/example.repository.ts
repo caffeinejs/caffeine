@@ -9,7 +9,7 @@ export class ExampleRepository {
     return this.items
   }
 
-  findById(id: string): Example | undefined {
+  findByID(id: string): Example | undefined {
     return this.items.find(item => item.id === id)
   }
 

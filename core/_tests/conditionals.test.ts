@@ -254,8 +254,8 @@ describe('Conditionals', function () {
 
       const kTxt = Symbol('txt')
       const kVal = Symbol('val')
-      const kJson = Symbol('json')
-      const kXml = Symbol('xml')
+      const kJSON = Symbol('json')
+      const kXML = Symbol('xml')
 
       @Configuration()
       @ConditionalOn(() => {
@@ -284,7 +284,7 @@ describe('Conditionals', function () {
         return true
       })
       class Conf {
-        @Provides(kJson)
+        @Provides(kJSON)
         @ConditionalOn(() => {
           spy2()
           return true
@@ -297,7 +297,7 @@ describe('Conditionals', function () {
           return 'json'
         }
 
-        @Provides(kXml)
+        @Provides(kXML)
         @ConditionalOn(() => {
           spy2()
           return false
@@ -331,9 +331,9 @@ describe('Conditionals', function () {
 
         expect(di.has(Conf))
           .toBeTruthy()
-        expect(di.has(kJson))
+        expect(di.has(kJSON))
           .toBeTruthy()
-        expect(di.has(kXml))
+        expect(di.has(kXML))
           .toBeFalsy()
         expect(spy2)
           .toHaveBeenCalledTimes(4)

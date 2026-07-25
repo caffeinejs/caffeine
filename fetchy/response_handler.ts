@@ -1,4 +1,4 @@
-import { ErrFetchyHttp } from './errors.js'
+import { ErrFetchyHTTP } from './errors.js'
 import { isOk } from './http_response.js'
 import type { ResponseConverter } from './response_converter.js'
 
@@ -8,7 +8,7 @@ export interface ResponseHandler {
 
 /**
  * Passes successful responses through untouched; on a non-ok response, attempts to convert the
- * body (best-effort — parse failures fall back to `undefined`) and throws {@link ErrFetchyHttp}.
+ * body (best-effort — parse failures fall back to `undefined`) and throws {@link ErrFetchyHTTP}.
  */
 export class DefaultResponseHandler implements ResponseHandler {
   constructor(private readonly errorBodyConverter: ResponseConverter) {}
@@ -26,13 +26,13 @@ export class DefaultResponseHandler implements ResponseHandler {
       body = undefined
     }
 
-    throw new ErrFetchyHttp(request, response, body)
+    throw new ErrFetchyHTTP(request, response, body)
   }
 }
 
 /**
  * Passes every response through untouched, including non-ok ones. Used for raw-response methods
- * that want to inspect the status themselves instead of relying on {@link ErrFetchyHttp}.
+ * that want to inspect the status themselves instead of relying on {@link ErrFetchyHTTP}.
  */
 export const NoopResponseHandler: ResponseHandler = {
   handle(_request: Request, response: Response): Promise<Response> {

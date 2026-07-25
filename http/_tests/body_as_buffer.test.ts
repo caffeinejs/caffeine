@@ -64,7 +64,7 @@ describe('BodyAsBuffer', () => {
 
   it('receives JSON payload as raw Buffer without parsing', async () => {
     @Controller('/raw-json')
-    class RawJsonController {
+    class RawJSONController {
       @BodyAsBuffer()
       @Post('/data')
       @Params([body()])
@@ -73,7 +73,7 @@ describe('BodyAsBuffer', () => {
       }
     }
 
-    void [RawJsonController]
+    void [RawJSONController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()

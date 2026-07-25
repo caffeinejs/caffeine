@@ -14,7 +14,7 @@ export {
   RemoteAuthenticationError,
 } from './errors.js'
 export { redactPii, redactPiiList } from './pii.js'
-export { generateCodeChallenge, generateCodeVerifier, selectPkceMethod } from './pkce.js'
+export { generateCodeChallenge, generateCodeVerifier, selectPKCEMethod } from './pkce.js'
 export {
   claimsToSession,
   decodeSession,

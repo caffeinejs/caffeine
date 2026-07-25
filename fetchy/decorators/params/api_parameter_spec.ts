@@ -1,7 +1,7 @@
-import type { MethodMeta } from '../../metadata.js'
+import type { MethodBuilder } from '../registrar/builders.js'
 
-export interface ApiParameterApplyContext {
-  meta: MethodMeta
+export interface APIParameterApplyContext {
+  spec: MethodBuilder
   index: number
 }
 
@@ -10,6 +10,6 @@ export interface ApiParameterApplyContext {
  * consumed positionally by `@Params([...])`. TC39 has no parameter decorators, so this is the
  * substitute extension point for binding method arguments to parts of the outgoing request.
  */
-export interface ApiParameterSpec {
-  apply(ctx: ApiParameterApplyContext): void
+export interface APIParameterSpec {
+  apply(ctx: APIParameterApplyContext): void
 }

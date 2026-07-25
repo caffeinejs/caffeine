@@ -19,9 +19,9 @@ export const DEFAULT_HTTP_TIMEOUT_MS = 5000
  * Production is secure by default while local `http://localhost` development still works.
  * Unparseable URLs fail closed.
  */
-export function defaultSecureCookie(callbackUrl: string): boolean {
+export function defaultSecureCookie(callbackURL: string): boolean {
   try {
-    return new URL(callbackUrl).protocol === 'https:'
+    return new URL(callbackURL).protocol === 'https:'
   } catch {
     return true
   }

@@ -6,8 +6,8 @@ import { ForwardAuthenticationHandler } from '../forward/forward.js'
 import { kConfigure, type ServiceKit } from '../../../service.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
-import { OidcAuthenticationHandler } from './handler.js'
-import { resolveOidcOptions, sanitizeSchemeName } from './options.js'
+import { OIDCAuthenticationHandler } from './handler.js'
+import { resolveOIDCOptions, sanitizeSchemeName } from './options.js'
 
 const SESSION_SECRET = 'multi-idp-test-secret-at-least-32ch!!'
 const GOOGLE = 'https://accounts.google.example.com'
@@ -15,11 +15,11 @@ const OKTA = 'https://okta.example.com'
 
 function optionsFor(issuer: string, overrides: Record<string, unknown> = {}) {
   return {
-    clientId: 'client',
+    clientID: 'client',
     clientSecret: 'secret',
     sessionSecret: SESSION_SECRET,
-    callbackUrl: `https://app.example.com/auth/${issuer.includes('okta') ? 'okta' : 'google'}`,
-    discoveryUrl: issuer,
+    callbackURL: `https://app.example.com/auth/${issuer.includes('okta') ? 'okta' : 'google'}`,
+    discoveryURL: issuer,
     issuer,
     ...overrides,
   }
@@ -72,8 +72,8 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
  * able to touch each other's cookies.
  */
 describe('two OIDC strategies on default configuration', () => {
-  const google = new OidcAuthenticationHandler('Google', optionsFor(GOOGLE))
-  const okta = new OidcAuthenticationHandler('Okta', optionsFor(OKTA))
+  const google = new OIDCAuthenticationHandler('Google', optionsFor(GOOGLE))
+  const okta = new OIDCAuthenticationHandler('Okta', optionsFor(OKTA))
 
   it('T-MULTI-01: writes to different cookie names', () => {
     expect(google.sessionCookieName).toBe('__Host-oidc_Google_session')
@@ -137,7 +137,7 @@ describe('two OIDC strategies on default configuration', () => {
 
 describe('cookie name derivation', () => {
   it('sanitizes characters a cookie name cannot carry', () => {
-    const handler = new OidcAuthenticationHandler('My IdP', optionsFor(GOOGLE))
+    const handler = new OIDCAuthenticationHandler('My IdP', optionsFor(GOOGLE))
     expect(handler.sessionCookieName).toBe('__Host-oidc_My_IdP_session')
   })
 
@@ -151,20 +151,20 @@ describe('cookie name derivation', () => {
   })
 
   it('drops the __Host- prefix over http, where it is illegal', () => {
-    const handler = new OidcAuthenticationHandler('Dev', optionsFor(GOOGLE, {
-      callbackUrl: 'http://localhost:3000/cb',
+    const handler = new OIDCAuthenticationHandler('Dev', optionsFor(GOOGLE, {
+      callbackURL: 'http://localhost:3000/cb',
     }))
     expect(handler.sessionCookieName).toBe('__oidc_Dev_session')
   })
 })
 
 describe('startup validation', () => {
-  const addOidc = (b: AuthenticationBuilder, name: string, issuer: string, overrides = {}) =>
-    b.addOidc(name, o => {
+  const addOIDC = (b: AuthenticationBuilder, name: string, issuer: string, overrides = {}) =>
+    b.addOIDC(name, o => {
       const opts = optionsFor(issuer, overrides)
-      o.clientId(opts.clientId).clientSecret(opts.clientSecret)
-        .sessionSecret(opts.sessionSecret).callbackUrl(opts.callbackUrl)
-        .discoveryUrl(opts.discoveryUrl)
+      o.clientID(opts.clientID).clientSecret(opts.clientSecret)
+        .sessionSecret(opts.sessionSecret).callbackURL(opts.callbackURL)
+        .discoveryURL(opts.discoveryURL)
         .issuer(opts.issuer)
       if ('sessionCookieName' in opts) {
         o.sessionCookieName(opts.sessionCookieName as string)
@@ -173,40 +173,40 @@ describe('startup validation', () => {
 
   it('T-MULTI-02: rejects two strategies sharing a callback path', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Google', GOOGLE)
-      addOidc(b, 'Okta', OKTA, { callbackUrl: 'https://app.example.com/auth/google' })
+      addOIDC(b, 'Google', GOOGLE)
+      addOIDC(b, 'Okta', OKTA, { callbackURL: 'https://app.example.com/auth/google' })
       b.forward('auth', () => 'Google').default('auth')
     })).rejects.toThrow(/share the callbackPath/)
   })
 
   it('rejects two strategies sharing an explicit session cookie name', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
-      addOidc(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
+      addOIDC(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
+      addOIDC(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
       b.forward('auth', () => 'Google').default('auth')
     })).rejects.toThrow(/share the session cookie name "shared"/)
   })
 
   it('names both offending strategies', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
-      addOidc(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
+      addOIDC(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
+      addOIDC(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
       b.forward('auth', () => 'Google').default('auth')
     })).rejects.toThrow(/"Google" and "Okta"/)
   })
 
   it('T-MULTI-07: rejects several OIDC strategies without a Forward default', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Google', GOOGLE)
-      addOidc(b, 'Okta', OKTA)
+      addOIDC(b, 'Google', GOOGLE)
+      addOIDC(b, 'Okta', OKTA)
       b.default('Google')
     })).rejects.toThrow(/require a Forward default authenticate scheme/)
   })
 
   it('T-MULTI-08: accepts several OIDC strategies behind a Forward default', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Google', GOOGLE)
-      addOidc(b, 'Okta', OKTA)
+      addOIDC(b, 'Google', GOOGLE)
+      addOIDC(b, 'Okta', OKTA)
       b.forward('auth', () => 'Google').default('auth')
     })).resolves.toBeUndefined()
   })
@@ -215,8 +215,8 @@ describe('startup validation', () => {
   // broken config passed startup and failed only at request time. It must be rejected here.
   it('T-MULTI-08b: rejects a default scheme that names no registered strategy', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Google', GOOGLE)
-      addOidc(b, 'Okta', OKTA)
+      addOIDC(b, 'Google', GOOGLE)
+      addOIDC(b, 'Okta', OKTA)
       b.forward('auth', () => 'Google').default('AuthTypo')
     })).rejects.toThrow(/"AuthTypo" is not a registered strategy/)
   })
@@ -226,15 +226,15 @@ describe('startup validation', () => {
   // other checks, so name uniqueness is enforced directly.
   it('T-MULTI-08c: rejects two OAuth strategies sharing a name', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Duplicate', GOOGLE)
-      addOidc(b, 'Duplicate', OKTA, { callbackUrl: 'https://app.example.com/auth/okta' })
+      addOIDC(b, 'Duplicate', GOOGLE)
+      addOIDC(b, 'Duplicate', OKTA, { callbackURL: 'https://app.example.com/auth/okta' })
       b.forward('auth', () => 'Duplicate').default('auth')
     })).rejects.toThrow(/two OAuth strategies share the name "Duplicate"/)
   })
 
   it('does not require Forward for a single OIDC strategy', async () => {
     await expect(configure(b => {
-      addOidc(b, 'Google', GOOGLE)
+      addOIDC(b, 'Google', GOOGLE)
       b.default('Google')
     })).resolves.toBeUndefined()
   })
@@ -249,13 +249,13 @@ describe('startup validation', () => {
    */
   it('T-MULTI-09: allows two strategies against the same issuer', async () => {
     await expect(configure(b => {
-      b.addOidc('Users', o => o.clientId('users-client').clientSecret('s')
-        .sessionSecret(SESSION_SECRET).callbackUrl('https://app.example.com/auth/users')
-        .discoveryUrl(GOOGLE)
+      b.addOIDC('Users', o => o.clientID('users-client').clientSecret('s')
+        .sessionSecret(SESSION_SECRET).callbackURL('https://app.example.com/auth/users')
+        .discoveryURL(GOOGLE)
         .issuer(GOOGLE))
-      b.addOidc('Admins', o => o.clientId('admins-client').clientSecret('s')
-        .sessionSecret(SESSION_SECRET).callbackUrl('https://app.example.com/auth/admins')
-        .discoveryUrl(GOOGLE)
+      b.addOIDC('Admins', o => o.clientID('admins-client').clientSecret('s')
+        .sessionSecret(SESSION_SECRET).callbackURL('https://app.example.com/auth/admins')
+        .discoveryURL(GOOGLE)
         .issuer(GOOGLE))
       b.forward('auth', () => 'Users').default('auth')
     })).resolves.toBeUndefined()
@@ -309,22 +309,22 @@ describe('Forward wiring through configure', () => {
 })
 
 describe('configuration hardening', () => {
-  it('T-MULTI-06: rejects a non-loopback http callbackUrl', () => {
-    expect(() => resolveOidcOptions(optionsFor(GOOGLE, {
-      callbackUrl: 'http://app.example.com/cb',
+  it('T-MULTI-06: rejects a non-loopback http callbackURL', () => {
+    expect(() => resolveOIDCOptions(optionsFor(GOOGLE, {
+      callbackURL: 'http://app.example.com/cb',
     }), 'Google')).toThrow('must use https')
   })
 
   it('T-MULTI-06: allows http on loopback for local development', () => {
-    expect(() => resolveOidcOptions(optionsFor(GOOGLE, {
-      callbackUrl: 'http://localhost:3000/cb',
+    expect(() => resolveOIDCOptions(optionsFor(GOOGLE, {
+      callbackURL: 'http://localhost:3000/cb',
     }), 'Google')).not.toThrow()
   })
 
-  it('requires a pinned issuer alongside discoveryUrl', () => {
+  it('requires a pinned issuer alongside discoveryURL', () => {
     const { issuer, ...withoutIssuer } = optionsFor(GOOGLE)
     void issuer
-    expect(() => resolveOidcOptions(withoutIssuer as never, 'Google'))
-      .toThrow('issuer is required when discoveryUrl is set')
+    expect(() => resolveOIDCOptions(withoutIssuer as never, 'Google'))
+      .toThrow('issuer is required when discoveryURL is set')
   })
 })

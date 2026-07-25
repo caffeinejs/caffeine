@@ -7,9 +7,9 @@ import { Query } from '../decorators/params/query.js'
 import { Params } from '../decorators/params.js'
 import { Path } from '../decorators/path.js'
 import { GET, POST } from '../decorators/verbs.js'
-import { ErrFetchyEmptyClient, ErrFetchyHttp, ErrFetchyInvalidRoute } from '../errors.js'
+import { ErrFetchyEmptyClient, ErrFetchyHTTP, ErrFetchyInvalidRoute } from '../errors.js'
 import { noop } from '../noop.js'
-import { fakeJsonResponse, TestCallFactory } from './test_call_factory.js'
+import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
 
 interface User {
   id: string
@@ -23,7 +23,7 @@ interface User {
 describe('FetchyClient end-to-end (fake CallFactory)', () => {
   it('builds a request from decorators, dispatches it, and converts the JSON response', async () => {
     @Path('/users')
-    class UsersApi {
+    class UsersAPI {
       @GET('/{id}')
       @Params([Param('id'), Query('active')])
       getUser(_id: string, _active: boolean): Promise<User> {
@@ -32,11 +32,11 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
     }
 
     const callFactory = new TestCallFactory()
-    const client = newClient().baseUrl('http://example.test').callFactory(callFactory).build()
-    const api = client.create(UsersApi)
+    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const api = client.create(UsersAPI)
 
     const testCall = callFactory.calls[0]
-    testCall.willRespond(fakeJsonResponse(200, { id: '1', name: 'Ada' }))
+    testCall.willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const user = await api.getUser('1', true)
 
@@ -47,7 +47,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
 
   it('POSTs a JSON body', async () => {
     @Path('/users')
-    class UsersApi {
+    class UsersAPI {
       @POST('/')
       @Params([Body()])
       createUser(_body: { name: string }): Promise<User> {
@@ -56,10 +56,10 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
     }
 
     const callFactory = new TestCallFactory()
-    const client = newClient().baseUrl('http://example.test').callFactory(callFactory).build()
-    const api = client.create(UsersApi)
+    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const api = client.create(UsersAPI)
 
-    callFactory.calls[0].willRespond(fakeJsonResponse(201, { id: '2', name: 'Grace' }))
+    callFactory.calls[0].willRespond(fakeJSONResponse(201, { id: '2', name: 'Grace' }))
 
     const user = await api.createUser({ name: 'Grace' })
 
@@ -69,9 +69,9 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
     expect(user).toEqual({ id: '2', name: 'Grace' })
   })
 
-  it('throws ErrFetchyHttp on a non-ok response', async () => {
+  it('throws ErrFetchyHTTP on a non-ok response', async () => {
     @Path('/users')
-    class UsersApi {
+    class UsersAPI {
       @GET('/{id}')
       @Params([Param('id')])
       getUser(_id: string): Promise<User> {
@@ -80,18 +80,18 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
     }
 
     const callFactory = new TestCallFactory()
-    const client = newClient().baseUrl('http://example.test').callFactory(callFactory).build()
-    const api = client.create(UsersApi)
+    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const api = client.create(UsersAPI)
 
-    callFactory.calls[0].willRespond(fakeJsonResponse(404, { message: 'not found' }, 'Not Found'))
+    callFactory.calls[0].willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
 
-    await expect(api.getUser('404')).rejects.toBeInstanceOf(ErrFetchyHttp)
+    await expect(api.getUser('404')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
   it('throws ErrFetchyEmptyClient for a class with no decorated methods', () => {
     class Empty {}
 
-    const client = newClient().baseUrl('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
 
     expect(() => client.create(Empty)).toThrow(ErrFetchyEmptyClient)
   })
@@ -105,7 +105,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const client = newClient().baseUrl('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
 
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
   })
@@ -118,7 +118,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const client = newClient().baseUrl('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
 
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
   })

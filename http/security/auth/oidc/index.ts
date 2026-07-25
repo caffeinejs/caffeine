@@ -1,4 +1,4 @@
-export { generateCodeChallenge, generateCodeVerifier, selectPkceMethod } from '../internal/remote/pkce.js'
+export { generateCodeChallenge, generateCodeVerifier, selectPKCEMethod } from '../internal/remote/pkce.js'
 export {
   claimsToSession,
   decodeSession,
@@ -9,33 +9,33 @@ export {
 } from '../internal/remote/session_store.js'
 export { decodeState, encodeState, type RemoteAuthenticationState, STATE_TTL_SECONDS } from '../internal/remote/state_store.js'
 export { type RemoteAuthenticationTicket, type RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
-export { fetchDiscovery, type OidcDiscoveryDocument } from './discovery.js'
+export { fetchDiscovery, type OIDCDiscoveryDocument } from './discovery.js'
 export {
-  ErrOidcCallback,
-  ErrOidcConfiguration,
-  ErrOidcDiscovery,
-  ErrOidcSession,
-  isOidcError,
-  OidcError,
+  ErrOIDCCallback,
+  ErrOIDCConfiguration,
+  ErrOIDCDiscovery,
+  ErrOIDCSession,
+  isOIDCError,
+  OIDCError,
 } from './errors.js'
-export { OidcAuthenticationHandler } from './handler.js'
+export { OIDCAuthenticationHandler } from './handler.js'
 export {
   assertSecureEndpoint,
   isSafeReturnPath,
   MIN_SESSION_SECRET_LENGTH,
-  type OidcAuthenticationOptions,
-  OidcAuthenticationOptionsBuilder,
-  type OidcTokens,
-  type ResolvedOidcAuthenticationOptions,
-  resolveOidcOptions,
+  type OIDCAuthenticationOptions,
+  OIDCAuthenticationOptionsBuilder,
+  type OIDCTokens,
+  type ResolvedOIDCAuthenticationOptions,
+  resolveOIDCOptions,
   sanitizeSchemeName,
   type TokenEndpointAuthMethod,
 } from './options.js'
-export { GOOGLE_ISSUER, googleOidcPreset } from './provider/google.js'
+export { GOOGLE_ISSUER, googleOIDCPreset } from './provider/google.js'
 
 import type { Context } from '../../../context.js'
 
-export const kOidcMeta: unique symbol = Symbol('caffeinejs.oidc.meta')
+export const kOIDCMeta: unique symbol = Symbol('caffeinejs.oidc.meta')
 
 /**
  * The callback surface the adapter needs, satisfied by every OAuth-family handler.
@@ -51,11 +51,11 @@ export interface OAuthCallbackHandler {
   processCallback(ctx: Context): Promise<void>
 }
 
-export interface OidcHandlerEntry {
+export interface OIDCHandlerEntry {
   callbackPath: string
   handler: OAuthCallbackHandler
 }
 
-export interface OidcMeta {
-  handlers: OidcHandlerEntry[]
+export interface OIDCMeta {
+  handlers: OIDCHandlerEntry[]
 }

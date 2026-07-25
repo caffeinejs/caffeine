@@ -10,7 +10,7 @@ function newContainerFromSnapshot(snap: Snapshot, options?: Partial<Options>): C
 }
 
 const kDb = Symbol('db')
-const kApi = Symbol('api')
+const kAPI = Symbol('api')
 const kLabel = Symbol('label')
 
 describe('ContainerSnapshot', function () {
@@ -91,7 +91,7 @@ describe('ContainerSnapshot', function () {
     it('multiple bindings are all captured', async function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(kDb).toValue('db-url')
-      di.bind(kApi).toValue('api-url')
+      di.bind(kAPI).toValue('api-url')
       await di.init()
 
       const snap = di.snapshot()
@@ -102,7 +102,7 @@ describe('ContainerSnapshot', function () {
       await testDi.init()
 
       expect(testDi.get(kDb)).toBe('db-url')
-      expect(testDi.get(kApi)).toBe('api-url')
+      expect(testDi.get(kAPI)).toBe('api-url')
     })
   })
 
@@ -137,7 +137,7 @@ describe('ContainerSnapshot', function () {
     it('exclude() removes specified keys', async function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(kDb).toValue('db-url')
-      di.bind(kApi).toValue('api-url')
+      di.bind(kAPI).toValue('api-url')
       await di.init()
 
       const snap = di.snapshot().exclude(kDb)
@@ -147,7 +147,7 @@ describe('ContainerSnapshot', function () {
       const testDi = newContainerFromSnapshot(snap)
       await testDi.init()
 
-      expect(testDi.has(kApi)).toBe(true)
+      expect(testDi.has(kAPI)).toBe(true)
       expect(testDi.has(kDb)).toBe(false)
     })
 
@@ -155,7 +155,7 @@ describe('ContainerSnapshot', function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(kDb).toValue('db-url')
         .labels(kLabel)
-      di.bind(kApi).toValue('api-url')
+      di.bind(kAPI).toValue('api-url')
       await di.init()
 
       const snap = di.snapshot().filter((_, binding) => binding.labels.includes(kLabel))
@@ -166,7 +166,7 @@ describe('ContainerSnapshot', function () {
       await testDi.init()
 
       expect(testDi.has(kDb)).toBe(true)
-      expect(testDi.has(kApi)).toBe(false)
+      expect(testDi.has(kAPI)).toBe(false)
     })
 
     it('filter() returning false for all produces empty snapshot', async function () {

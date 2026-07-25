@@ -2,7 +2,7 @@ import type { Identifier, Key, PostProcessor, ResolutionContext } from '@caffein
 
 export interface InstantiationEvent {
   key: Key
-  scopeId: Identifier
+  scopeID: Identifier
   instance: unknown
   timestamp: number
 }
@@ -17,7 +17,7 @@ export class InstanceTracker implements PostProcessor {
   afterInit(ctx: ResolutionContext, instance: unknown): unknown {
     this.#events.push({
       key: ctx.key,
-      scopeId: ctx.binding.scopeId,
+      scopeID: ctx.binding.scopeID,
       instance,
       timestamp: performance.now(),
     })

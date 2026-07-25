@@ -1,6 +1,6 @@
 import { getRouter } from '@caffeinejs/http'
 import { ErrNoRouter } from './error.js'
-import { mergeRequest, resolveRouteUrl } from './_util.js'
+import { mergeRequest, resolveRouteURL } from './_util.js'
 import type { Fetchable, RouterCtor, TestClient } from './types.js'
 
 export function testClient<ROUTER extends RouterCtor>(
@@ -26,17 +26,17 @@ export function testClient<ROUTER extends RouterCtor>(
 
     client[route.handler] = async (input?: Request | RequestInit) => {
       let method: string
-      let requestUrl: string | undefined
+      let requestURL: string | undefined
 
       if (input instanceof Request) {
         method = input.method
-        requestUrl = input.url
+        requestURL = input.url
       } else {
         method = (input?.method ?? defaultMethod).toUpperCase()
-        requestUrl = undefined
+        requestURL = undefined
       }
 
-      const url = resolveRouteUrl(origin, router, route.path, requestUrl)
+      const url = resolveRouteURL(origin, router, route.path, requestURL)
 
       const request = input instanceof Request
         ? mergeRequest(input, { method, url })

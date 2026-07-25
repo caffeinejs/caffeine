@@ -38,7 +38,7 @@ export interface Options {
    *
    * @defaultValue `Scopes.SINGLETON`
    */
-  defaultScopeId?: Identifier
+  defaultScopeID?: Identifier
 
   /**
    * The parent container to use for the container.
@@ -138,7 +138,7 @@ export interface Container {
 
   has<T>(key: Key<T>): boolean
 
-  hasScopeInGraph(key: Key, scopeId: Identifier): boolean
+  hasScopeInGraph(key: Key, scopeID: Identifier): boolean
 
   build<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections?: (Injection | undefined | null)[]): T
 

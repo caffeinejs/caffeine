@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { jwtDecrypt } from 'jose'
 import { Claim } from '../../../index.js'
 import { keyFor } from './_sealed_cookie.js'
-import type { OidcTokenPurpose } from './_sealed_cookie.js'
+import type { OIDCTokenPurpose } from './_sealed_cookie.js'
 import { claimsToSession, decodeSession, encodeSession } from './session_store.js'
 import { decodeState, encodeState } from './state_store.js'
 
@@ -63,7 +63,7 @@ describe('session cookie confidentiality', () => {
 describe('cookie key separation', () => {
   // Uses the real derivation rather than replicating it: a test that reimplements the thing
   // it checks stops testing anything the moment the two drift.
-  const key = (purpose: OidcTokenPurpose, scheme = SCHEME) => keyFor(SECRET, purpose, scheme)
+  const key = (purpose: OIDCTokenPurpose, scheme = SCHEME) => keyFor(SECRET, purpose, scheme)
 
   it('seals the session under a key the state purpose cannot open', async () => {
     const token = await encodeSession(claimsToSession(PII_CLAIMS, 'Google'), SECRET, SCHEME, 3600)

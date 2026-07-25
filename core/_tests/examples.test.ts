@@ -164,20 +164,20 @@ describe('abstract-classes: allOf with @Extends', function () {
 
 describe('abstract-classes: @Primary', function () {
   abstract class AcUserRepository {
-    abstract findById(id: string): string
+    abstract findByID(id: string): string
   }
 
   @Injectable()
   @Extends()
   class AcInMemoryUserRepository extends AcUserRepository {
-    findById(id: string) { return `in-memory:${id}` }
+    findByID(id: string) { return `in-memory:${id}` }
   }
 
   @Primary()
   @Injectable()
   @Extends()
   class AcPrimaryUserRepository extends AcUserRepository {
-    findById(id: string) { return `primary:${id}` }
+    findByID(id: string) { return `primary:${id}` }
   }
 
   let di: CaffeineIoC
@@ -431,14 +431,14 @@ describe('abstract-classes: manual .extends() API', function () {
 
 describe('interfaces: symbol token pattern', function () {
   interface IfRepository {
-    findById(id: string): string | undefined
+    findByID(id: string): string | undefined
   }
 
   const kIfRepository = Symbol('IfRepository')
 
   @Injectable(kIfRepository)
   class IfInMemoryRepository implements IfRepository {
-    findById(id: string) { return `found:${id}` }
+    findByID(id: string) { return `found:${id}` }
   }
 
   @Injectable([kIfRepository])
@@ -459,7 +459,7 @@ describe('interfaces: symbol token pattern', function () {
   it('injects by symbol key into constructor', function () {
     const svc = di.get(IfUserService)
     expect(svc.repo).toBeInstanceOf(IfInMemoryRepository)
-    expect(svc.repo.findById('123')).toBe('found:123')
+    expect(svc.repo.findByID('123')).toBe('found:123')
   })
 })
 
@@ -514,7 +514,7 @@ describe('interfaces: allOf with symbol token', function () {
 
 describe('interfaces: @Primary for interfaces', function () {
   interface IfUserRepository {
-    findById(id: string): string
+    findByID(id: string): string
   }
 
   const kIfUserRepository = Symbol('IfUserRepository')
@@ -522,14 +522,14 @@ describe('interfaces: @Primary for interfaces', function () {
   @Named(kIfUserRepository)
   @Injectable()
   class IfMemoryUserRepository implements IfUserRepository {
-    findById(id: string) { return `memory:${id}` }
+    findByID(id: string) { return `memory:${id}` }
   }
 
   @Primary()
   @Named(kIfUserRepository)
   @Injectable()
   class IfPrimaryUserRepository implements IfUserRepository {
-    findById(id: string) { return `primary:${id}` }
+    findByID(id: string) { return `primary:${id}` }
   }
 
   let di: CaffeineIoC
@@ -541,7 +541,7 @@ describe('interfaces: @Primary for interfaces', function () {
   it('@Primary wins among symbol-keyed implementations', function () {
     const repo = di.get<IfUserRepository>(kIfUserRepository)
     expect(repo).toBeInstanceOf(IfPrimaryUserRepository)
-    expect(repo.findById('42')).toBe('primary:42')
+    expect(repo.findByID('42')).toBe('primary:42')
   })
 })
 
@@ -625,7 +625,7 @@ describe('interfaces: manual bind with interface symbol', function () {
 // ─── factory-classes: basic @Configuration + @Provides ───────────────────────
 
 describe('factory-classes: basic @Configuration + @Provides', function () {
-  class FcHttpClient {
+  class FcHTTPClient {
     readonly timeout: number
     constructor(opts: { timeout: number }) {
       this.timeout = opts.timeout
@@ -634,13 +634,13 @@ describe('factory-classes: basic @Configuration + @Provides', function () {
 
   @Configuration()
   class FcInfrastructureConfig {
-    @Provides(FcHttpClient)
-    httpClient(): FcHttpClient {
-      return new FcHttpClient({ timeout: 5_000 })
+    @Provides(FcHTTPClient)
+    httpClient(): FcHTTPClient {
+      return new FcHTTPClient({ timeout: 5_000 })
     }
 
     @Provides('fc.db.url')
-    dbUrl(): string {
+    dbURL(): string {
       return 'postgres://localhost/app'
     }
   }
@@ -652,8 +652,8 @@ describe('factory-classes: basic @Configuration + @Provides', function () {
   })
 
   it('provides value via factory method', function () {
-    expect(di.get(FcHttpClient)).toBeInstanceOf(FcHttpClient)
-    expect(di.get(FcHttpClient).timeout).toBe(5_000)
+    expect(di.get(FcHTTPClient)).toBeInstanceOf(FcHTTPClient)
+    expect(di.get(FcHTTPClient).timeout).toBe(5_000)
   })
 
   it('provides string value via factory method', function () {
@@ -2008,7 +2008,7 @@ describe('mixing-scopes: singleton holds Provider for short-lived dep', function
   @Injectable()
   @Lifetime(Scopes.TRANSIENT)
   class MsRequestContext {
-    readonly requestId = Math.random().toString(36)
+    readonly requestID = Math.random().toString(36)
   }
 
   @Injectable([$i.provide(MsRequestContext)])
@@ -2017,7 +2017,7 @@ describe('mixing-scopes: singleton holds Provider for short-lived dep', function
     constructor(readonly ctx: Provider<MsRequestContext>) {}
     handle() {
       const context = this.ctx.get()
-      return `handling:${context.requestId}`
+      return `handling:${context.requestID}`
     }
   }
 

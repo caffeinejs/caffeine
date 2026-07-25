@@ -211,14 +211,14 @@ describe('Tag', function () {
       const kEndpoint = Symbol('endpoint')
 
       @Configuration()
-      class ApiConf {
+      class APIConf {
         @Provides(kEndpoint)
         @Tag(kPath, '/api/v1')
         endpoint() {
           return { url: '/api/v1' }
         }
       }
-      void ApiConf
+      void APIConf
 
       const di = new CaffeineIoC()
       const descriptors = di.getBindings(kEndpoint)

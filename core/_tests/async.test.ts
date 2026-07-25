@@ -242,50 +242,50 @@ describe('Async bindings with RefreshScope', function () {
   })
 
   it('should pre-cache async refresh-scoped binding and return T synchronously after init()', async function () {
-    class ApiToken {
+    class APIToken {
       constructor(readonly value: string) {}
     }
 
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(ApiToken)
-      .toAsyncFactory(async () => new ApiToken('token-v1'))
+    di.bind(APIToken)
+      .toAsyncFactory(async () => new APIToken('token-v1'))
       .lifetime(Scopes.REFRESH)
 
     await di.init()
 
-    const token = di.get(ApiToken)
+    const token = di.get(APIToken)
 
     expect(token)
-      .toBeInstanceOf(ApiToken)
-    expect((token as ApiToken).value)
+      .toBeInstanceOf(APIToken)
+    expect((token as APIToken).value)
       .toEqual('token-v1')
   })
 
   it('should produce a new instance after scope.refresh()', async function () {
-    class ApiToken {
+    class APIToken {
       constructor(readonly value: string) {}
     }
 
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(ApiToken)
-      .toAsyncFactory(async () => new ApiToken(`token-v${++counter}`))
+    di.bind(APIToken)
+      .toAsyncFactory(async () => new APIToken(`token-v${++counter}`))
       .lifetime(Scopes.REFRESH)
 
     await di.init()
-    const t1 = di.get(ApiToken)
+    const t1 = di.get(APIToken)
 
-    expect((t1 as ApiToken).value)
+    expect((t1 as APIToken).value)
       .toEqual('token-v1')
 
     await di.refresher.refresh()
 
-    const t2 = di.get(ApiToken)
+    const t2 = di.get(APIToken)
 
     expect(t2).not.toBe(t1)
-    expect((t2 as ApiToken).value)
+    expect((t2 as APIToken).value)
       .toEqual('token-v2')
   })
 

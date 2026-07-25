@@ -10,7 +10,7 @@ import {
   MIN_SESSION_SECRET_LENGTH,
 } from '../internal/remote/config.js'
 import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
-import { ErrOidcConfiguration } from './errors.js'
+import { ErrOIDCConfiguration } from './errors.js'
 
 /** The `openid` scope is REQUIRED by OpenID Connect Core — without it no id_token is issued. */
 const REQUIRED_SCOPE = 'openid'
@@ -34,7 +34,7 @@ type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 export type TokenEndpointAuthMethod = 'client_secret_basic' | 'client_secret_post'
 
 /** Raw tokens from the token endpoint, handed to `onTokenValidated`. */
-export interface OidcTokens {
+export interface OIDCTokens {
   /** The raw id_token JWT — required as `id_token_hint` for RP-initiated logout. */
   idToken: string
   accessToken?: string
@@ -45,10 +45,10 @@ export interface OidcTokens {
 }
 
 /**
- * Fields `resolveOidcOptions()` fills in when the caller omits them.
+ * Fields `resolveOIDCOptions()` fills in when the caller omits them.
  *
  * Doubles as the checklist the resolver must satisfy: because it returns
- * `ResolvedOidcAuthenticationOptions`, forgetting one of these is a compile error.
+ * `ResolvedOIDCAuthenticationOptions`, forgetting one of these is a compile error.
  */
 type DefaultedKey
   = | 'defaultRedirectPath'
@@ -58,7 +58,7 @@ type DefaultedKey
     | 'sessionCookieTtlSeconds'
     | 'secureCookie'
     | 'roleClaimType'
-    | 'allowPlainPkce'
+    | 'allowPlainPKCE'
     | 'clockToleranceSeconds'
     | 'httpTimeoutMs'
     | 'discoveryCacheTtlSeconds'
@@ -73,17 +73,17 @@ type DefaultedKey
  * Every defaulted field is required here so the handler never needs a `!` or a `??`
  * fallback — each such fallback is an opportunity to silently fail open.
  */
-export interface ResolvedOidcAuthenticationOptions {
-  clientId: string
+export interface ResolvedOIDCAuthenticationOptions {
+  clientID: string
   clientSecret: string
 
-  discoveryUrl?: string
+  discoveryURL?: string
   authorizationEndpoint?: string
   tokenEndpoint?: string
-  jwksUri?: string
+  jwksURI?: string
   issuer?: string
 
-  callbackUrl: string
+  callbackURL: string
   defaultRedirectPath: string
   scopes: string[]
 
@@ -95,7 +95,7 @@ export interface ResolvedOidcAuthenticationOptions {
 
   roleClaimType: string
   /** Permits the `plain` PKCE method against providers that do not advertise S256. */
-  allowPlainPkce: boolean
+  allowPlainPKCE: boolean
   /** Leeway for provider clock drift when validating id_token time claims. */
   clockToleranceSeconds: number
   /** Ceiling on discovery and token-exchange requests, so a hung provider cannot pin a request. */
@@ -114,7 +114,7 @@ export interface ResolvedOidcAuthenticationOptions {
    *
    * Scoped to this strategy rather than a process-wide static. Off by
    * default: error messages carry a redaction notice instead of claim values. Turning it on
-   * affects only the logged `message` — `OidcError.publicMessage`, all the client can see,
+   * affects only the logged `message` — `OIDCError.publicMessage`, all the client can see,
    * never carries user data either way.
    */
   showPii: boolean
@@ -166,7 +166,7 @@ export interface ResolvedOidcAuthenticationOptions {
    * IdPs, which is the intended behaviour: it stops the logout redirect being turned into an
    * open redirect.
    */
-  postLogoutRedirectUri?: string
+  postLogoutRedirectURI?: string
 
   /**
    * The logout endpoint, when discovery does not advertise one.
@@ -224,7 +224,7 @@ export interface ResolvedOidcAuthenticationOptions {
    * Without one the sealed cookie is the session
    * and cannot be revoked before its TTL expires. Deliberately not defaulted, and no
    * production implementation ships: supply one backed by whatever the deployment already
-   * shares. `TestOidcTicketStore` in `@caffeinejs/testing` covers tests.
+   * shares. `TestOIDCTicketStore` in `@caffeinejs/testing` covers tests.
    */
   ticketStore?: RemoteAuthenticationTicketStore
 
@@ -238,7 +238,7 @@ export interface ResolvedOidcAuthenticationOptions {
   onTokenValidated?: (
     ctx: Context,
     idTokenPayload: Record<string, unknown>,
-    tokens: OidcTokens,
+    tokens: OIDCTokens,
   ) => Promise<void> | void
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
   /**
@@ -247,71 +247,71 @@ export interface ResolvedOidcAuthenticationOptions {
    * flow stays correct no matter what the hook does. Use it to return `401` with the
    * login URL for SPA clients instead of the default `302`.
    */
-  onChallenge?: (ctx: Context, authorizationUrl: string) => Promise<void> | void
+  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
   claimMapper?: (idTokenPayload: Record<string, unknown>) => Claim[]
 
-  jwksResolver?: (jwksUri: string) => JWTVerifyGetKey
+  jwksResolver?: (jwksURI: string) => JWTVerifyGetKey
 }
 
 /** What the caller supplies — the defaulted fields are optional. */
-export type OidcAuthenticationOptions
-  = PartialBy<ResolvedOidcAuthenticationOptions, DefaultedKey>
+export type OIDCAuthenticationOptions
+  = PartialBy<ResolvedOIDCAuthenticationOptions, DefaultedKey>
 
 function withRequiredScope(scopes: string[]): string[] {
   return scopes.includes(REQUIRED_SCOPE) ? [...scopes] : [REQUIRED_SCOPE, ...scopes]
 }
 
-export function resolveOidcOptions(
-  input: OidcAuthenticationOptions,
+export function resolveOIDCOptions(
+  input: OIDCAuthenticationOptions,
   scheme: string,
-): ResolvedOidcAuthenticationOptions {
-  const { clientId, clientSecret, sessionSecret, callbackUrl } = input
+): ResolvedOIDCAuthenticationOptions {
+  const { clientID, clientSecret, sessionSecret, callbackURL } = input
 
-  if (!clientId) {
-    throw new ErrOidcConfiguration('Cannot configure OIDC: clientId is required')
+  if (!clientID) {
+    throw new ErrOIDCConfiguration('Cannot configure OIDC: clientID is required')
   }
   if (!clientSecret) {
-    throw new ErrOidcConfiguration('Cannot configure OIDC: clientSecret is required')
+    throw new ErrOIDCConfiguration('Cannot configure OIDC: clientSecret is required')
   }
   if (!sessionSecret) {
-    throw new ErrOidcConfiguration('Cannot configure OIDC: sessionSecret is required')
+    throw new ErrOIDCConfiguration('Cannot configure OIDC: sessionSecret is required')
   }
   if (sessionSecret.length < MIN_SESSION_SECRET_LENGTH) {
-    throw new ErrOidcConfiguration(
+    throw new ErrOIDCConfiguration(
       `Cannot configure OIDC: sessionSecret must be at least ${MIN_SESSION_SECRET_LENGTH} characters`,
     )
   }
-  if (!callbackUrl) {
-    throw new ErrOidcConfiguration('Cannot configure OIDC: callbackUrl is required')
+  if (!callbackURL) {
+    throw new ErrOIDCConfiguration('Cannot configure OIDC: callbackURL is required')
   }
 
   let callback: URL
   try {
-    callback = new URL(callbackUrl)
+    callback = new URL(callbackURL)
   } catch {
-    throw new ErrOidcConfiguration(`Cannot configure OIDC: callbackUrl "${callbackUrl}" is not a valid URL`)
+    throw new ErrOIDCConfiguration(`Cannot configure OIDC: callbackURL "${callbackURL}" is not a valid URL`)
   }
 
-  const hasDiscovery = Boolean(input.discoveryUrl)
+  const hasDiscovery = Boolean(input.discoveryURL)
   const hasManual = Boolean(
     input.authorizationEndpoint
     && input.tokenEndpoint
-    && input.jwksUri
+    && input.jwksURI
     && input.issuer,
   )
 
   if (!hasDiscovery && !hasManual) {
-    throw new ErrOidcConfiguration(
-      'Cannot configure OIDC: provide discoveryUrl or all of authorizationEndpoint, tokenEndpoint, jwksUri, and issuer',
+    throw new ErrOIDCConfiguration(
+      'Cannot configure OIDC: provide discoveryURL or all of authorizationEndpoint, tokenEndpoint, jwksURI, and issuer',
     )
   }
 
   // Without a pinned issuer the discovery document defines the issuer that every id_token is
   // then validated against, so a compromised or swapped document validates its own tokens.
   if (hasDiscovery && !input.issuer) {
-    throw new ErrOidcConfiguration(
-      'Cannot configure OIDC: issuer is required when discoveryUrl is set',
+    throw new ErrOIDCConfiguration(
+      'Cannot configure OIDC: issuer is required when discoveryURL is set',
     )
   }
 
@@ -319,17 +319,17 @@ export function resolveOidcOptions(
   // from the discovery document are checked again when that document is resolved.
   const endpoints: Array<[string, string | undefined]> = [
     // The callback receives the authorization code — over plain http it is interceptable.
-    ['callbackUrl', callbackUrl],
-    ['discoveryUrl', input.discoveryUrl],
+    ['callbackURL', callbackURL],
+    ['discoveryURL', input.discoveryURL],
     ['authorizationEndpoint', input.authorizationEndpoint],
     ['tokenEndpoint', input.tokenEndpoint],
-    ['jwksUri', input.jwksUri],
+    ['jwksURI', input.jwksURI],
     ['issuer', input.issuer],
     // The UserInfo request carries the access token in an Authorization header.
     ['userInfoEndpoint', input.userInfoEndpoint],
     // The logout request carries the id_token as `id_token_hint`.
     ['endSessionEndpoint', input.endSessionEndpoint],
-    ['postLogoutRedirectUri', input.postLogoutRedirectUri],
+    ['postLogoutRedirectURI', input.postLogoutRedirectURI],
   ]
   for (const [label, value] of endpoints) {
     if (value) {
@@ -339,7 +339,7 @@ export function resolveOidcOptions(
 
   const defaultRedirectPath = input.defaultRedirectPath ?? '/'
   if (!isSafeReturnPath(defaultRedirectPath)) {
-    throw new ErrOidcConfiguration(
+    throw new ErrOIDCConfiguration(
       `Cannot configure OIDC: defaultRedirectPath "${defaultRedirectPath}" must be a same-site absolute path`,
     )
   }
@@ -349,17 +349,17 @@ export function resolveOidcOptions(
   // than dropping them silently: a sign-out that needs `id_token_hint` would otherwise fail
   // at logout time, long after the misconfiguration was introduced.
   if (input.saveTokens && !input.ticketStore) {
-    throw new ErrOidcConfiguration('Cannot configure OIDC: saveTokens requires a ticketStore')
+    throw new ErrOIDCConfiguration('Cannot configure OIDC: saveTokens requires a ticketStore')
   }
 
   const secureCookie = input.secureCookie ?? defaultSecureCookie(callback.href)
 
   return {
     ...input,
-    clientId,
+    clientID,
     clientSecret,
     sessionSecret,
-    callbackUrl,
+    callbackURL,
     defaultRedirectPath,
     // The openid scope is REQUIRED — re-add it if the caller replaced the defaults.
     scopes: withRequiredScope(input.scopes ?? DEFAULT_SCOPES),
@@ -373,7 +373,7 @@ export function resolveOidcOptions(
     stateCookieName: input.stateCookieName ?? cookieName('state', scheme, secureCookie, 'oidc'),
     sessionCookieTtlSeconds: input.sessionCookieTtlSeconds ?? 3600,
     roleClaimType: input.roleClaimType ?? 'roles',
-    allowPlainPkce: input.allowPlainPkce ?? false,
+    allowPlainPKCE: input.allowPlainPKCE ?? false,
     clockToleranceSeconds: input.clockToleranceSeconds ?? 60,
     httpTimeoutMs: input.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
     discoveryCacheTtlSeconds: input.discoveryCacheTtlSeconds ?? 3600,
@@ -384,11 +384,11 @@ export function resolveOidcOptions(
   }
 }
 
-export class OidcAuthenticationOptionsBuilder {
-  readonly #options: Partial<OidcAuthenticationOptions> = {}
+export class OIDCAuthenticationOptionsBuilder {
+  readonly #options: Partial<OIDCAuthenticationOptions> = {}
 
-  clientId(id: string): this {
-    this.#options.clientId = id
+  clientID(id: string): this {
+    this.#options.clientID = id
     return this
   }
 
@@ -397,8 +397,8 @@ export class OidcAuthenticationOptionsBuilder {
     return this
   }
 
-  discoveryUrl(url: string): this {
-    this.#options.discoveryUrl = url
+  discoveryURL(url: string): this {
+    this.#options.discoveryURL = url
     return this
   }
 
@@ -412,8 +412,8 @@ export class OidcAuthenticationOptionsBuilder {
     return this
   }
 
-  jwksUri(uri: string): this {
-    this.#options.jwksUri = uri
+  jwksURI(uri: string): this {
+    this.#options.jwksURI = uri
     return this
   }
 
@@ -422,8 +422,8 @@ export class OidcAuthenticationOptionsBuilder {
     return this
   }
 
-  callbackUrl(url: string): this {
-    this.#options.callbackUrl = url
+  callbackURL(url: string): this {
+    this.#options.callbackURL = url
     return this
   }
 
@@ -460,7 +460,7 @@ export class OidcAuthenticationOptionsBuilder {
   /**
    * Sends the session and state cookies only over HTTPS.
    *
-   * Defaults to whether `callbackUrl` is an `https:` URL, so production is secure by
+   * Defaults to whether `callbackURL` is an `https:` URL, so production is secure by
    * default while local `http://localhost` development still works. Set explicitly to
    * override.
    */
@@ -479,8 +479,8 @@ export class OidcAuthenticationOptionsBuilder {
    * Permits the `plain` PKCE method. Off by default: RFC 7636 §4.4.2 and the OAuth 2.0
    * Security BCP require S256, and `plain` offers no protection against code interception.
    */
-  allowPlainPkce(allow: boolean): this {
-    this.#options.allowPlainPkce = allow
+  allowPlainPKCE(allow: boolean): this {
+    this.#options.allowPlainPKCE = allow
     return this
   }
 
@@ -514,27 +514,27 @@ export class OidcAuthenticationOptionsBuilder {
     return this
   }
 
-  onTokenValidated(cb: OidcAuthenticationOptions['onTokenValidated']): this {
+  onTokenValidated(cb: OIDCAuthenticationOptions['onTokenValidated']): this {
     this.#options.onTokenValidated = cb
     return this
   }
 
-  onFail(cb: OidcAuthenticationOptions['onFail']): this {
+  onFail(cb: OIDCAuthenticationOptions['onFail']): this {
     this.#options.onFail = cb
     return this
   }
 
-  onChallenge(cb: OidcAuthenticationOptions['onChallenge']): this {
+  onChallenge(cb: OIDCAuthenticationOptions['onChallenge']): this {
     this.#options.onChallenge = cb
     return this
   }
 
-  onForbid(cb: OidcAuthenticationOptions['onForbid']): this {
+  onForbid(cb: OIDCAuthenticationOptions['onForbid']): this {
     this.#options.onForbid = cb
     return this
   }
 
-  claimMapper(mapper: OidcAuthenticationOptions['claimMapper']): this {
+  claimMapper(mapper: OIDCAuthenticationOptions['claimMapper']): this {
     this.#options.claimMapper = mapper
     return this
   }
@@ -587,8 +587,8 @@ export class OidcAuthenticationOptionsBuilder {
   }
 
   /** Where the provider returns the user after ending its session. Must be registered there. */
-  postLogoutRedirectUri(url: string): this {
-    this.#options.postLogoutRedirectUri = url
+  postLogoutRedirectURI(url: string): this {
+    this.#options.postLogoutRedirectURI = url
     return this
   }
 
@@ -599,7 +599,7 @@ export class OidcAuthenticationOptionsBuilder {
   }
 
   /** OIDC Core §3.1.2.1 `prompt`. */
-  prompt(prompt: NonNullable<OidcAuthenticationOptions['prompt']>): this {
+  prompt(prompt: NonNullable<OIDCAuthenticationOptions['prompt']>): this {
     this.#options.prompt = prompt
     return this
   }
@@ -637,7 +637,7 @@ export class OidcAuthenticationOptionsBuilder {
   }
 
   /** Adjusts the authorization URL before the redirect. Protocol parameters are re-asserted after. */
-  onRedirectToProvider(cb: OidcAuthenticationOptions['onRedirectToProvider']): this {
+  onRedirectToProvider(cb: OIDCAuthenticationOptions['onRedirectToProvider']): this {
     this.#options.onRedirectToProvider = cb
     return this
   }
@@ -647,14 +647,14 @@ export class OidcAuthenticationOptionsBuilder {
    *
    * Without one the cookie is the session and signing out only clears the responding
    * browser's copy. No production store ships — supply one backed by shared infrastructure
-   * such as Redis; `TestOidcTicketStore` in `@caffeinejs/testing` covers tests.
+   * such as Redis; `TestOIDCTicketStore` in `@caffeinejs/testing` covers tests.
    */
   ticketStore(store: RemoteAuthenticationTicketStore): this {
     this.#options.ticketStore = store
     return this
   }
 
-  jwksResolver(resolver: OidcAuthenticationOptions['jwksResolver']): this {
+  jwksResolver(resolver: OIDCAuthenticationOptions['jwksResolver']): this {
     this.#options.jwksResolver = resolver
     return this
   }
@@ -663,8 +663,8 @@ export class OidcAuthenticationOptionsBuilder {
    * @param scheme - The strategy name, which namespaces the default cookie names and the
    * per-purpose key derivation. Required: without it two strategies share both.
    */
-  build(scheme: string): ResolvedOidcAuthenticationOptions {
-    return resolveOidcOptions(this.#options as OidcAuthenticationOptions, scheme)
+  build(scheme: string): ResolvedOIDCAuthenticationOptions {
+    return resolveOIDCOptions(this.#options as OIDCAuthenticationOptions, scheme)
   }
 }
 

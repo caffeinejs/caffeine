@@ -9,7 +9,7 @@ export * from './decorators/index.js'
 export {
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
-  ErrFetchyHttp,
+  ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidRoute,
   ErrFetchyNoParameterHandler,
@@ -23,9 +23,9 @@ export { toInterceptor } from './interceptor.js'
 export { MediaTypes } from './media_types.js'
 export { noop } from './noop.js'
 export type { RequestBodyConverter } from './request_body_converter.js'
-export { JsonRequestBodyConverter, RawRequestBodyConverter } from './request_body_converter.js'
+export { JSONRequestBodyConverter, RawRequestBodyConverter } from './request_body_converter.js'
 export { RequestBuilder } from './request_builder.js'
 export type { ResponseConverter } from './response_converter.js'
-export { JsonResponseConverter, RawResponseConverter } from './response_converter.js'
+export { JSONResponseConverter, RawResponseConverter } from './response_converter.js'
 export type { ResponseHandler } from './response_handler.js'
 export { DefaultResponseHandler, NoopResponseHandler } from './response_handler.js'

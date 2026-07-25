@@ -1,7 +1,7 @@
 export { testClient } from './client.js'
 export { typedClient } from './client_typed.js'
 export { ErrFetchFailed, ErrNoRouter as ErrNoRoutesForController } from './error.js'
-export { TestOidcTicketStore, type TestOidcTicketStoreOptions } from './oidc_ticket_store.js'
+export { TestOIDCTicketStore, type TestOIDCTicketStoreOptions } from './oidc_ticket_store.js'
 export { newTestContainer, TestContainer } from './test_container.js'
 export type { InstantiationEvent } from './tracker.js'
 export { InstanceTracker } from './tracker.js'

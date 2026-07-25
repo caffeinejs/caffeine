@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import type { Context } from '../../../context.js'
-import { Claim } from '../../index.js'
-import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
-import { encodeState } from '../internal/remote/state_store.js'
-import { AuthenticationBuilder } from '../builder.js'
-import { OAuth2AuthenticationHandler } from './handler.js'
-import { GITHUB_ENDPOINTS, githubOAuth2Preset } from './provider/github.js'
+import type { Context } from '../../../../context.js'
+import { Claim } from '../../../index.js'
+import { encodeSession, claimsToSession } from '../../internal/remote/session_store.js'
+import { encodeState } from '../../internal/remote/state_store.js'
+import { AuthenticationBuilder } from '../../builder.js'
+import { OAuth2AuthenticationHandler } from '../handler.js'
+import { GITHUB_ENDPOINTS, githubOAuth2Preset } from './github.js'
 
 const SESSION_SECRET = 'github-test-secret-at-least-32-chars!!'
 const SCHEME = 'GitHub'
@@ -13,10 +13,10 @@ const CALLBACK_URL = 'https://app.example.com/auth/github'
 
 function baseOptions(overrides: Record<string, unknown> = {}) {
   return githubOAuth2Preset({
-    clientId: 'client',
+    clientID: 'client',
     clientSecret: 'secret',
     sessionSecret: SESSION_SECRET,
-    callbackUrl: CALLBACK_URL,
+    callbackURL: CALLBACK_URL,
     ...overrides,
   })
 }
@@ -366,16 +366,16 @@ describe('builder registration', () => {
   it('addGithub configures without throwing', () => {
     expect(() =>
       new AuthenticationBuilder().addGithub('GitHub', o => o
-        .clientId('id').clientSecret('secret')
-        .sessionSecret(SESSION_SECRET).callbackUrl(CALLBACK_URL)),
+        .clientID('id').clientSecret('secret')
+        .sessionSecret(SESSION_SECRET).callbackURL(CALLBACK_URL)),
     ).not.toThrow()
   })
 
   it('addGithub honours a preset option after configure', () => {
     expect(() =>
       new AuthenticationBuilder().addGithub('GitHub', o => o
-        .clientId('id').clientSecret('secret')
-        .sessionSecret(SESSION_SECRET).callbackUrl(CALLBACK_URL), { includeEmail: true }),
+        .clientID('id').clientSecret('secret')
+        .sessionSecret(SESSION_SECRET).callbackURL(CALLBACK_URL), { includeEmail: true }),
     ).not.toThrow()
   })
 
@@ -384,8 +384,8 @@ describe('builder registration', () => {
     // would re-default and, historically, could reject an already-resolved object.
     expect(() =>
       new AuthenticationBuilder().addOAuth2('Custom', o => o
-        .clientId('id').clientSecret('secret')
-        .sessionSecret(SESSION_SECRET).callbackUrl(CALLBACK_URL)
+        .clientID('id').clientSecret('secret')
+        .sessionSecret(SESSION_SECRET).callbackURL(CALLBACK_URL)
         .authorizationEndpoint('https://p.example.com/auth')
         .tokenEndpoint('https://p.example.com/token')
         .userInfoEndpoint('https://p.example.com/me')),
@@ -401,8 +401,8 @@ describe('builder registration', () => {
 describe('githubOAuth2Preset scope defaulting', () => {
   it('defaults the scope when handed an empty array', () => {
     const opts = githubOAuth2Preset({
-      clientId: 'id', clientSecret: 'secret',
-      sessionSecret: SESSION_SECRET, callbackUrl: CALLBACK_URL,
+      clientID: 'id', clientSecret: 'secret',
+      sessionSecret: SESSION_SECRET, callbackURL: CALLBACK_URL,
       scopes: [],
       includeEmail: true,
     })
@@ -412,8 +412,8 @@ describe('githubOAuth2Preset scope defaulting', () => {
 
   it('respects an explicit non-empty scope', () => {
     const opts = githubOAuth2Preset({
-      clientId: 'id', clientSecret: 'secret',
-      sessionSecret: SESSION_SECRET, callbackUrl: CALLBACK_URL,
+      clientID: 'id', clientSecret: 'secret',
+      sessionSecret: SESSION_SECRET, callbackURL: CALLBACK_URL,
       scopes: ['repo'],
     })
     expect(opts.scopes).toEqual(['repo'])

@@ -1,4 +1,4 @@
-import type { MethodMeta } from './metadata.js'
+import type { MethodSpec } from './decorators/registrar/index.js'
 
 /**
  * Adapts the final (already request-built, intercepted, converted) method invoker into a
@@ -10,5 +10,5 @@ export interface CallAdapter<T> {
 }
 
 export interface CallAdapterFactory {
-  provide(meta: MethodMeta): CallAdapter<unknown> | null
+  provide(spec: MethodSpec): CallAdapter<unknown> | null
 }

@@ -21,7 +21,7 @@ export class ErrFetchyInvalidDecoratorTarget extends FetchyError {
 /**
  * Thrown at client build time when a decorated method's configuration is structurally invalid
  * (missing HTTP method, a body on GET/HEAD/OPTIONS, a path parameter with no matching `{key}`
- * placeholder, a form field without `@FormUrlEncoded`, more than one `@Body()`, and so on).
+ * placeholder, a form field without `@FormURLEncoded`, more than one `@Body()`, and so on).
  */
 export class ErrFetchyInvalidRoute extends FetchyError {
   constructor(method: string, reason: string) {
@@ -72,7 +72,7 @@ export class ErrFetchyNoResponseConverter extends FetchyError {
  * Thrown by the default response handler when the underlying HTTP call resolves with a non-ok
  * response. Carries the originating request and response for inspection by callers.
  */
-export class ErrFetchyHttp extends FetchyError {
+export class ErrFetchyHTTP extends FetchyError {
   readonly request: Request
   readonly status: number
   readonly statusText: string
@@ -84,7 +84,7 @@ export class ErrFetchyHttp extends FetchyError {
       `Request "${request.method} ${request.url}" failed with status ${response.status} ${response.statusText}`,
       'ERR_FETCHY_HTTP',
     )
-    this.name = 'ErrFetchyHttp'
+    this.name = 'ErrFetchyHTTP'
     this.request = request
     this.status = response.status
     this.statusText = response.statusText

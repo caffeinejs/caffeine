@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
-  ErrFetchyHttp,
+  ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidRoute,
   ErrFetchyNoParameterHandler,
@@ -14,7 +14,7 @@ describe('errors', () => {
   it.each([
     ['ErrFetchyInvalidDecoratorTarget', () => new ErrFetchyInvalidDecoratorTarget('Path', 'a class'), 'ERR_FETCHY_INVALID_DECORATOR_TARGET'],
     ['ErrFetchyInvalidRoute', () => new ErrFetchyInvalidRoute('getUser', 'missing HTTP method'), 'ERR_FETCHY_INVALID_ROUTE'],
-    ['ErrFetchyEmptyClient', () => new ErrFetchyEmptyClient('UsersApi'), 'ERR_FETCHY_EMPTY_CLIENT'],
+    ['ErrFetchyEmptyClient', () => new ErrFetchyEmptyClient('UsersAPI'), 'ERR_FETCHY_EMPTY_CLIENT'],
     ['ErrFetchyNoParameterHandler', () => new ErrFetchyNoParameterHandler('model', 'getUser', 0), 'ERR_FETCHY_NO_PARAMETER_HANDLER'],
     ['ErrFetchyNoResponseConverter', () => new ErrFetchyNoResponseConverter('xml', 'getUser'), 'ERR_FETCHY_NO_RESPONSE_CONVERTER'],
     ['ErrFetchyClientNotBuilt', () => new ErrFetchyClientNotBuilt('getUser'), 'ERR_FETCHY_CLIENT_NOT_BUILT'],
@@ -26,13 +26,13 @@ describe('errors', () => {
     expect(error).toBeInstanceOf(Error)
   })
 
-  it('ErrFetchyHttp carries request/response details', () => {
+  it('ErrFetchyHTTP carries request/response details', () => {
     const request = new Request('http://x.test/users/1', { method: 'GET' })
     const response = new Response(null, { status: 404, statusText: 'Not Found' })
 
-    const error = new ErrFetchyHttp(request, response, { message: 'not found' })
+    const error = new ErrFetchyHTTP(request, response, { message: 'not found' })
 
-    expect(error.name).toBe('ErrFetchyHttp')
+    expect(error.name).toBe('ErrFetchyHTTP')
     expect(error.code).toBe('ERR_FETCHY_HTTP')
     expect(error.status).toBe(404)
     expect(error.statusText).toBe('Not Found')

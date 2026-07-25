@@ -11,14 +11,14 @@ import type { ResponseConverter } from './response_converter.js'
  * `.callFactory()` is never called.
  */
 export class FetchyBuilder {
-  private _baseUrl = ''
+  private _baseURL = ''
   private _callFactory: CallFactory | undefined
   private readonly _interceptors: Interceptor[] = []
   private readonly _callAdapterFactories: CallAdapterFactory[] = []
   private _responseConverter: ResponseConverter | undefined
 
-  baseUrl(url: string): this {
-    this._baseUrl = url.endsWith('/') ? url.slice(0, -1) : url
+  baseURL(url: string): this {
+    this._baseURL = url.endsWith('/') ? url.slice(0, -1) : url
     return this
   }
 
@@ -44,7 +44,7 @@ export class FetchyBuilder {
 
   build(): FetchyClient {
     return new FetchyClient({
-      baseUrl: this._baseUrl,
+      baseURL: this._baseURL,
       callFactory: this._callFactory ?? new FetchCallFactory(),
       interceptors: this._interceptors,
       callAdapterFactories: this._callAdapterFactories,

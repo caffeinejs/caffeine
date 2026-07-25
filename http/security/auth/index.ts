@@ -3,10 +3,10 @@ export { AuthenticationBuilder } from './builder.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { JWTAuthenticationHandler, type JWTAuthenticationOptions } from './jwt/index.js'
 export {
-  googleOidcPreset,
-  OidcAuthenticationHandler,
-  type OidcAuthenticationOptions,
-  OidcAuthenticationOptionsBuilder,
+  googleOIDCPreset,
+  OIDCAuthenticationHandler,
+  type OIDCAuthenticationOptions,
+  OIDCAuthenticationOptionsBuilder,
   type RemoteAuthenticationSession,
   type RemoteAuthenticationTicket,
   type RemoteAuthenticationTicketStore,

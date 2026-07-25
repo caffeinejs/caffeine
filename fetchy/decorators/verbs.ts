@@ -1,6 +1,5 @@
 import { ErrFetchyClientNotBuilt, ErrFetchyInvalidDecoratorTarget } from '../errors.js'
-import { normalizePath } from '../internal/path_util.js'
-import { methodMeta } from '../metadata.js'
+import { configureMethod } from './registrar/registrar.js'
 
 type DecoratedMethod = (...args: any[]) => any
 
@@ -11,16 +10,14 @@ function decorateVerb(httpMethod: string, path: string) {
     }
 
     const name = String(context.name)
-    const meta = methodMeta(context.metadata, context.name)
-    meta.httpMethod = httpMethod
-    meta.path = normalizePath(path)
+    const builder = configureMethod(context, spec => spec.httpMethod(httpMethod).path(path))
 
     return function (this: unknown, ...args: unknown[]) {
-      if (!meta.invoker) {
+      if (!builder.invoker) {
         throw new ErrFetchyClientNotBuilt(name)
       }
 
-      return meta.invoker(...args)
+      return builder.invoker(...args)
     } as T
   }
 }

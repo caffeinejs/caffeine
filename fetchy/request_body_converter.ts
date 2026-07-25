@@ -12,7 +12,7 @@ export interface RequestBodyConverter {
  * Default request body converter: passes through values that are already valid fetch body types
  * (string, `Blob`, `URLSearchParams`, typed arrays), JSON-stringifies everything else.
  */
-export const JsonRequestBodyConverter: RequestBodyConverter = {
+export const JSONRequestBodyConverter: RequestBodyConverter = {
   convert(value: unknown): RequestBody {
     if (value === null || value === undefined) {
       return null

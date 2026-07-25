@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../container.js'
-import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJson, graphToText } from '../graph.js'
+import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJSON, graphToText } from '../graph.js'
 import { Scopes } from '../scope.js'
 
 class ServiceB {}
@@ -85,13 +85,13 @@ describe('graph functions with container as iterable', function () {
     expect(output).toContain('ServiceB')
   })
 
-  it('graphToJson serializes injection edges from container', function () {
+  it('graphToJSON serializes injection edges from container', function () {
     const di = new CaffeineIoC({ decorators: false })
     di.bind(ServiceA).toClass(ServiceA, [ServiceB, ServiceC])
     di.bind(ServiceB).toSelf()
     di.bind(ServiceC).toSelf()
 
-    const parsed = JSON.parse(graphToJson(di))
+    const parsed = JSON.parse(graphToJSON(di))
     const labels = parsed.nodes.map((n: { label: string }) => n.label)
 
     expect(labels).toContain('ServiceA')

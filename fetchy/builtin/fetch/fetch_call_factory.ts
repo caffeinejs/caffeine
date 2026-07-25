@@ -6,7 +6,7 @@ import { FetchCall } from './fetch_call.js'
  * `.callFactory()` was configured.
  */
 export class FetchCallFactory implements CallFactory {
-  provide(_baseUrl: string): Call {
+  provide(_baseURL: string): Call {
     return new FetchCall()
   }
 }

@@ -105,54 +105,54 @@ const Registry = new Map<Identifier, ScopeFactory>()
 /**
  * Binds a {@link ScopeFactory} to the given scope identifier.
  *
- * @param scopeId - The scope identifier to bind the factory to.
+ * @param scopeID - The scope identifier to bind the factory to.
  * @param factory - A {@link ScopeFactory}.
  *
  * @example
  * ```ts
- * bindScope(customScopeId, container => new CustomScope(container))
+ * bindScope(customScopeID, container => new CustomScope(container))
  * ```
  *
  * @throws {@link ErrScopeAlreadyRegistered} if the scope identifier is already registered.
  */
-export function bindScope(scopeId: Identifier, factory: ScopeFactory): void {
-  notNil(scopeId)
+export function bindScope(scopeID: Identifier, factory: ScopeFactory): void {
+  notNil(scopeID)
   notNil(factory)
 
-  if (Registry.has(scopeId)) {
-    throw new ErrScopeAlreadyRegistered(scopeId)
+  if (Registry.has(scopeID)) {
+    throw new ErrScopeAlreadyRegistered(scopeID)
   }
 
-  Registry.set(scopeId, factory)
+  Registry.set(scopeID, factory)
 }
 
 /**
  * Removes the {@link ScopeFactory} bound to the given scope identifier from the registry.
  *
- * @param scopeId - The scope identifier to unbind the factory from.
+ * @param scopeID - The scope identifier to unbind the factory from.
  */
-export function unbindScope(scopeId: Identifier): void {
-  Registry.delete(notNil(scopeId))
+export function unbindScope(scopeID: Identifier): void {
+  Registry.delete(notNil(scopeID))
 }
 
 /**
  * Checks if the given scope identifier exists in the registry.
  *
- * @param scopeId - The scope identifier to check.
+ * @param scopeID - The scope identifier to check.
  */
-export function hasScope(scopeId: Identifier): boolean {
-  return scopeId === Scopes.TRANSIENT || Registry.has(scopeId)
+export function hasScope(scopeID: Identifier): boolean {
+  return scopeID === Scopes.TRANSIENT || Registry.has(scopeID)
 }
 
 export function scopeEntries(): IterableIterator<[Identifier, ScopeFactory]> {
   return Registry.entries()
 }
 
-export function scopeLabel(scopeId: Identifier): string {
-  const factory = Registry.get(scopeId)
+export function scopeLabel(scopeID: Identifier): string {
+  const factory = Registry.get(scopeID)
   if (factory && kScopeName in factory) {
     return factory[kScopeName] as string
   }
 
-  return String(scopeId)
+  return String(scopeID)
 }

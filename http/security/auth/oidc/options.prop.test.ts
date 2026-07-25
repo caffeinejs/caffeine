@@ -4,10 +4,10 @@ import {
   assertSecureEndpoint,
   defaultSecureCookie,
   isSafeReturnPath,
-  resolveOidcOptions,
+  resolveOIDCOptions,
   sanitizeSchemeName,
 } from './options.js'
-import type { OidcAuthenticationOptions } from './options.js'
+import type { OIDCAuthenticationOptions } from './options.js'
 
 /** Cookie defaults and derived keys are namespaced by strategy. */
 const SCHEME = 'OIDC'
@@ -98,20 +98,20 @@ describe('defaultSecureCookie (property)', () => {
 
 /** Minimal valid input; the resolver rejects anything less. */
 const optionsArb = fc.record({
-  clientId: fc.string({ minLength: 1 }),
+  clientID: fc.string({ minLength: 1 }),
   clientSecret: fc.string({ minLength: 1 }),
   sessionSecret: fc.string({ minLength: 32, maxLength: 64 }),
-  callbackUrl: fc.constantFrom(
+  callbackURL: fc.constantFrom(
     'https://app.example.com/auth/callback',
     'http://localhost:3000/auth/callback',
   ),
-  discoveryUrl: fc.constant('https://accounts.example.com'),
+  discoveryURL: fc.constant('https://accounts.example.com'),
   // Pinned alongside the discovery URL: the resolver now requires it.
   issuer: fc.constant('https://accounts.example.com'),
   scopes: fc.option(fc.array(fc.string({ minLength: 1 }).filter(s => !s.includes(' ')), { maxLength: 5 }), {
     nil: undefined,
   }),
-}) as fc.Arbitrary<OidcAuthenticationOptions>
+}) as fc.Arbitrary<OIDCAuthenticationOptions>
 
 /** Undefined where the name is unusable, so preconditions can filter instead of throwing. */
 function trySanitize(scheme: string): string | undefined {
@@ -122,35 +122,35 @@ function trySanitize(scheme: string): string | undefined {
   }
 }
 
-describe('resolveOidcOptions (property)', () => {
-  // Load-bearing: addOidc calls build() (which resolves) and hands the result to the
+describe('resolveOIDCOptions (property)', () => {
+  // Load-bearing: addOIDC calls build() (which resolves) and hands the result to the
   // handler constructor (which resolves again), so every application double-resolves.
   it.prop([optionsArb])('is idempotent', input => {
-    const once = resolveOidcOptions(input, SCHEME)
-    const twice = resolveOidcOptions(once, SCHEME)
+    const once = resolveOIDCOptions(input, SCHEME)
+    const twice = resolveOIDCOptions(once, SCHEME)
     expect(twice).toEqual(once)
   })
 
   it.prop([optionsArb])('always yields exactly one openid scope', input => {
-    const { scopes } = resolveOidcOptions(input, SCHEME)
+    const { scopes } = resolveOIDCOptions(input, SCHEME)
     expect(scopes.filter(s => s === 'openid')).toHaveLength(1)
   })
 
   it.prop([optionsArb])('preserves every scope the caller supplied', input => {
-    const resolved = resolveOidcOptions(input, SCHEME)
+    const resolved = resolveOIDCOptions(input, SCHEME)
     for (const scope of input.scopes ?? []) {
       expect(resolved.scopes).toContain(scope)
     }
   })
 
   it.prop([optionsArb])('prefixes cookie names with __Host- exactly when secure', input => {
-    const { secureCookie, sessionCookieName, stateCookieName } = resolveOidcOptions(input, SCHEME)
+    const { secureCookie, sessionCookieName, stateCookieName } = resolveOIDCOptions(input, SCHEME)
     expect(sessionCookieName.startsWith('__Host-')).toBe(secureCookie)
     expect(stateCookieName.startsWith('__Host-')).toBe(secureCookie)
   })
 
   it.prop([optionsArb])('never returns a defaultRedirectPath it would itself reject', input => {
-    expect(isSafeReturnPath(resolveOidcOptions(input, SCHEME).defaultRedirectPath)).toBe(true)
+    expect(isSafeReturnPath(resolveOIDCOptions(input, SCHEME).defaultRedirectPath)).toBe(true)
   })
 
   // The isolation guarantee, stated over every valid input rather than one example: two
@@ -160,8 +160,8 @@ describe('resolveOidcOptions (property)', () => {
     (input, a, b) => {
       const [sa, sb] = [trySanitize(a), trySanitize(b)]
       fc.pre(sa !== undefined && sb !== undefined && sa !== sb)
-      const first = resolveOidcOptions(input, a)
-      const second = resolveOidcOptions(input, b)
+      const first = resolveOIDCOptions(input, a)
+      const second = resolveOIDCOptions(input, b)
 
       expect(first.sessionCookieName).not.toBe(second.sessionCookieName)
       expect(first.stateCookieName).not.toBe(second.stateCookieName)
@@ -172,7 +172,7 @@ describe('resolveOidcOptions (property)', () => {
     'never derives a session cookie name equal to the state cookie name',
     (input, scheme) => {
       fc.pre(trySanitize(scheme) !== undefined)
-      const { sessionCookieName, stateCookieName } = resolveOidcOptions(input, scheme)
+      const { sessionCookieName, stateCookieName } = resolveOIDCOptions(input, scheme)
       expect(sessionCookieName).not.toBe(stateCookieName)
     },
   )

@@ -4,12 +4,12 @@ import { extendInjectableAttributes, extendMemberInjectableAttributes } from './
 import { defineClassOrMemberDecorator } from './util/index.js'
 
 /**
- * Registers the component with a custom scope identified by `scopeId`.
+ * Registers the component with a custom scope identified by `scopeID`.
  *
  * Sets the scope that controls instance sharing for this component.
  * Note that custom scope implementations must be registered before use.
  *
- * @param scopeId - Identifier of the scope.
+ * @param scopeID - Identifier of the scope.
  *
  * @example
  * ```ts
@@ -18,11 +18,11 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  * class Service {}
  * ```
  */
-export function Lifetime(scopeId: Identifier) {
-  notNil(scopeId, `@${Lifetime.name}(): parameter scopeId is required.`)
+export function Lifetime(scopeID: Identifier) {
+  notNil(scopeID, `@${Lifetime.name}(): parameter scopeID is required.`)
 
   return defineClassOrMemberDecorator(
-    (target, ctx) => extendInjectableAttributes(ctx.metadata, target, config => config.scope(scopeId)),
-    ctx => extendMemberInjectableAttributes(ctx.metadata, ctx.name!, config => config.scope(scopeId)),
+    (target, ctx) => extendInjectableAttributes(ctx.metadata, target, config => config.scope(scopeID)),
+    ctx => extendMemberInjectableAttributes(ctx.metadata, ctx.name!, config => config.scope(scopeID)),
   )
 }

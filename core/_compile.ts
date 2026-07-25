@@ -62,8 +62,8 @@ export function compileFactory<T>(
   key: Key<T>,
   binding: Binding<T>,
 ): void {
-  const scopeId = binding.scopeId
-  const scope = scopeId !== Scopes.TRANSIENT ? scopes.get(scopeId)! : undefined
+  const scopeID = binding.scopeID
+  const scope = scopeID !== Scopes.TRANSIENT ? scopes.get(scopeID)! : undefined
   const ctor: Ctor | undefined
     = (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
@@ -141,7 +141,7 @@ export function compileFactory<T>(
   }
 
   binding.unscopedFactory = factory
-  binding.factory = scopeId === Scopes.TRANSIENT ? factory : scopedFactory(scope!, factory)
+  binding.factory = scopeID === Scopes.TRANSIENT ? factory : scopedFactory(scope!, factory)
   binding.ctx = { container, key, binding }
 
   scope?.configure(binding)

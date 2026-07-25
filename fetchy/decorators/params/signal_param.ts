@@ -1,12 +1,12 @@
-import type { ApiParameterSpec } from './api_parameter_spec.js'
+import type { APIParameterSpec } from './api_parameter_spec.js'
 
 /**
  * Binds an `AbortSignal` argument, used to cancel the outgoing request.
  */
-export function SignalParam(): ApiParameterSpec {
+export function SignalParam(): APIParameterSpec {
   return {
-    apply({ meta, index }) {
-      meta.params.push({ kind: 'signal', index })
+    apply({ spec, index }) {
+      spec.param({ kind: 'signal', index })
     },
   }
 }

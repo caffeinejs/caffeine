@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { buildBindingGraph, graphToJson, graphToDot, graphToMermaid } from '../../graph.js'
+import { buildBindingGraph, graphToJSON, graphToDot, graphToMermaid } from '../../graph.js'
 import { binding } from './helpers/binding_factory.js'
 
 class NodeA {}
@@ -49,9 +49,9 @@ describe('buildBindingGraph (property)', function () {
       const nodeIds = new Set(graph.nodes.map(n => n.id))
 
       for (const edge of graph.edges) {
-        expect(nodeIds.has(edge.fromId))
+        expect(nodeIds.has(edge.fromID))
           .toBe(true)
-        expect(nodeIds.has(edge.toId))
+        expect(nodeIds.has(edge.toID))
           .toBe(true)
       }
     },
@@ -74,7 +74,7 @@ describe('buildBindingGraph (property)', function () {
     },
   )
 
-  it.prop([fc.integer({ min: 1, max: 4 })], { numRuns: 30 })('graphToJson preserves node and edge counts', count => {
+  it.prop([fc.integer({ min: 1, max: 4 })], { numRuns: 30 })('graphToJSON preserves node and edge counts', count => {
     const entries: [typeof NodeA, ReturnType<typeof binding>][] = []
 
     for (let i = 0; i < count; i++) {
@@ -83,7 +83,7 @@ describe('buildBindingGraph (property)', function () {
     }
 
     const graph = buildBindingGraph(entries)
-    const parsed = JSON.parse(graphToJson(graph))
+    const parsed = JSON.parse(graphToJSON(graph))
 
     expect(parsed.nodes)
       .toHaveLength(graph.nodes.length)
@@ -100,6 +100,6 @@ describe('buildBindingGraph (property)', function () {
 
     expect(() => graphToDot(entries)).not.toThrow()
     expect(() => graphToMermaid(entries)).not.toThrow()
-    expect(() => JSON.parse(graphToJson(entries))).not.toThrow()
+    expect(() => JSON.parse(graphToJSON(entries))).not.toThrow()
   })
 })

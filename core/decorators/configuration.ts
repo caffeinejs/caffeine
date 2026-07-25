@@ -54,8 +54,8 @@ export function Configuration<T>(injections?: Injection[]) {
       : undefined
 
     for (const [method, factory] of members) {
-      if (!isNil(classBinding.scopeId) && !isNil(factory.scopeId) && classBinding.scopeId !== factory.scopeId) {
-        throw new ErrScopeMismatchInConfiguration(target.name, String(method), classBinding.scopeId!, factory.scopeId!)
+      if (!isNil(classBinding.scopeID) && !isNil(factory.scopeID) && classBinding.scopeID !== factory.scopeID) {
+        throw new ErrScopeMismatchInConfiguration(target.name, String(method), classBinding.scopeID!, factory.scopeID!)
       }
 
       if (factory.bindingKey === undefined) {
@@ -87,9 +87,9 @@ export function Configuration<T>(injections?: Injection[]) {
         factoryConfig.primary(primary)
       }
 
-      const scopeId = isNil(classBinding.scopeId) ? factory.scopeId : classBinding.scopeId
-      if (scopeId !== undefined) {
-        factoryConfig.scope(scopeId)
+      const scopeID = isNil(classBinding.scopeID) ? factory.scopeID : classBinding.scopeID
+      if (scopeID !== undefined) {
+        factoryConfig.scope(scopeID)
       }
 
       for (const c of fb.conditionals.slice().reverse()) {

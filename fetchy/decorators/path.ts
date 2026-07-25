@@ -1,6 +1,5 @@
 import { ErrFetchyInvalidDecoratorTarget } from '../errors.js'
-import { classMeta } from '../metadata.js'
-import { normalizePath } from '../internal/path_util.js'
+import { configureClass } from './registrar/registrar.js'
 
 /**
  * Sets the base path used as a prefix for every decorated method's path on the class.
@@ -11,6 +10,6 @@ export function Path(path: string) {
       throw new ErrFetchyInvalidDecoratorTarget('Path', 'a class')
     }
 
-    classMeta(context.metadata).path = normalizePath(path)
+    configureClass(context, spec => spec.path(path))
   }
 }

@@ -5,9 +5,9 @@ import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { decodeSession, encodeSession, claimsToSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
-import { OidcAuthenticationHandler } from './handler.js'
+import { OIDCAuthenticationHandler } from './handler.js'
 import { accessTokenHash } from './_at_hash.js'
-import type { OidcAuthenticationOptions } from './options.js'
+import type { OIDCAuthenticationOptions } from './options.js'
 
 /** The strategy name these handlers are registered under; cookies are sealed per scheme. */
 const SCHEME = 'OIDC'
@@ -18,13 +18,13 @@ const ISSUER = 'https://accounts.example.com'
 const CALLBACK_URL = 'https://app.example.com/auth/callback'
 const CALLBACK_PATH = '/auth/callback'
 
-function makeBaseOptions(overrides: Partial<OidcAuthenticationOptions> = {}): OidcAuthenticationOptions {
+function makeBaseOptions(overrides: Partial<OIDCAuthenticationOptions> = {}): OIDCAuthenticationOptions {
   return {
-    clientId: CLIENT_ID,
+    clientID: CLIENT_ID,
     clientSecret: 'test-client-secret',
-    discoveryUrl: ISSUER,
+    discoveryURL: ISSUER,
     issuer: ISSUER,
-    callbackUrl: CALLBACK_URL,
+    callbackURL: CALLBACK_URL,
     sessionSecret: SESSION_SECRET,
     sessionCookieName: '__oidc_session',
     sessionCookieTtlSeconds: 3600,
@@ -72,10 +72,10 @@ const DISCOVERY_DOCUMENT = {
   code_challenge_methods_supported: ['S256', 'plain'],
 }
 
-describe('OidcAuthenticationHandler', () => {
+describe('OIDCAuthenticationHandler', () => {
   describe('authenticate() — session validation', () => {
     it('returns none() when no session cookie', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx } = makeCtx()
       const result = await handler.authenticate(ctx)
       expect(result.succeeded).toBe(false)
@@ -87,7 +87,7 @@ describe('OidcAuthenticationHandler', () => {
       const session = claimsToSession(claims, 'OIDC')
       const jwt = await encodeSession(session, SESSION_SECRET, SCHEME, 3600)
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx } = makeCtx({ cookies: { __oidc_session: jwt } })
       const result = await handler.authenticate(ctx)
 
@@ -97,7 +97,7 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     it('returns fail() when session cookie is expired or tampered', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx } = makeCtx({ cookies: { __oidc_session: 'invalid.jwt.token' } })
       const result = await handler.authenticate(ctx)
 
@@ -107,12 +107,12 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     it('returns fail() when a state cookie is replayed as a session cookie', async () => {
-      const stateJwt = await encodeState(
+      const stateJWT = await encodeState(
         { state: 's', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
         SESSION_SECRET, SCHEME,
       )
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
-      const { ctx } = makeCtx({ cookies: { __oidc_session: stateJwt } })
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+      const { ctx } = makeCtx({ cookies: { __oidc_session: stateJWT } })
       const result = await handler.authenticate(ctx)
 
       expect(result.succeeded).toBe(false)
@@ -121,7 +121,7 @@ describe('OidcAuthenticationHandler', () => {
 
     it('fires onFail with the error when the session cookie is invalid', async () => {
       const onFail = vi.fn()
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ onFail }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ onFail }))
       const { ctx } = makeCtx({ cookies: { __oidc_session: 'invalid.jwt.token' } })
 
       await handler.authenticate(ctx)
@@ -133,7 +133,7 @@ describe('OidcAuthenticationHandler', () => {
 
     it('does not fire onFail when no session cookie is present', async () => {
       const onFail = vi.fn()
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ onFail }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ onFail }))
       const { ctx } = makeCtx()
 
       const result = await handler.authenticate(ctx)
@@ -157,7 +157,7 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     it('redirects to provider authorization URL', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx, redirect } = makeCtx({ url: '/protected' })
       await handler.challenge(ctx)
 
@@ -168,7 +168,7 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     it('authorization URL contains required OAuth params', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx, redirect } = makeCtx({ url: '/protected' })
       await handler.challenge(ctx)
 
@@ -185,7 +185,7 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     it('sets state cookie on context', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx, cookie } = makeCtx()
       await handler.challenge(ctx)
 
@@ -202,10 +202,10 @@ describe('OidcAuthenticationHandler', () => {
         json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
       }))
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx } = makeCtx()
 
-      await expect(handler.challenge(ctx)).rejects.toThrow('enable allowPlainPkce')
+      await expect(handler.challenge(ctx)).rejects.toThrow('enable allowPlainPKCE')
     })
 
     it('uses plain pkce when discovery only lists plain and it is explicitly allowed', async () => {
@@ -214,7 +214,7 @@ describe('OidcAuthenticationHandler', () => {
         json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
       }))
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ allowPlainPkce: true }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ allowPlainPKCE: true }))
       const { ctx, redirect } = makeCtx()
       await handler.challenge(ctx)
 
@@ -228,7 +228,7 @@ describe('OidcAuthenticationHandler', () => {
         json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, issuer: 'https://attacker.example.com' }),
       }))
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ issuer: ISSUER }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ issuer: ISSUER }))
       const { ctx } = makeCtx()
 
       await expect(handler.challenge(ctx)).rejects.toThrow('does not match the configured issuer')
@@ -236,7 +236,7 @@ describe('OidcAuthenticationHandler', () => {
 
     it('hands the authorization URL to onChallenge instead of redirecting', async () => {
       const onChallenge = vi.fn()
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ onChallenge }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ onChallenge }))
       const { ctx, redirect, cookie } = makeCtx()
 
       await handler.challenge(ctx)
@@ -257,13 +257,13 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     it('stores returnTo (current URL) in state cookie', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx, cookie } = makeCtx({ url: '/dashboard?tab=settings' })
       await handler.challenge(ctx)
 
-      const [, stateCookieJwt] = cookie.mock.calls[0] as [string, string]
+      const [, stateCookieJWT] = cookie.mock.calls[0] as [string, string]
       const { decodeState } = await import('../internal/remote/state_store.js')
-      const stored = await decodeState(stateCookieJwt, SESSION_SECRET, SCHEME)
+      const stored = await decodeState(stateCookieJWT, SESSION_SECRET, SCHEME)
       expect(stored.returnTo).toBe('/dashboard?tab=settings')
     })
   })
@@ -282,8 +282,8 @@ describe('OidcAuthenticationHandler', () => {
       vi.unstubAllGlobals()
     })
 
-    async function secureFlagFor(options: OidcAuthenticationOptions) {
-      const handler = new OidcAuthenticationHandler('OIDC', options)
+    async function secureFlagFor(options: OIDCAuthenticationOptions) {
+      const handler = new OIDCAuthenticationHandler('OIDC', options)
       const { ctx, cookie } = makeCtx()
       await handler.challenge(ctx)
 
@@ -291,29 +291,29 @@ describe('OidcAuthenticationHandler', () => {
       return opts.secure
     }
 
-    function withoutSecureCookie(callbackUrl: string): OidcAuthenticationOptions {
-      const opts = makeBaseOptions({ callbackUrl })
+    function withoutSecureCookie(callbackURL: string): OIDCAuthenticationOptions {
+      const opts = makeBaseOptions({ callbackURL })
       delete opts.secureCookie
       return opts
     }
 
-    it('defaults to secure when secureCookie is omitted and callbackUrl is https', async () => {
+    it('defaults to secure when secureCookie is omitted and callbackURL is https', async () => {
       expect(await secureFlagFor(withoutSecureCookie('https://app.example.com/cb'))).toBe(true)
     })
 
-    it('defaults to non-secure when secureCookie is omitted and callbackUrl is http', async () => {
+    it('defaults to non-secure when secureCookie is omitted and callbackURL is http', async () => {
       expect(await secureFlagFor(withoutSecureCookie('http://localhost:3000/cb'))).toBe(false)
     })
 
     it('honours an explicit secureCookie override on an http callback', async () => {
-      const opts = makeBaseOptions({ callbackUrl: 'http://localhost:3000/cb', secureCookie: true })
+      const opts = makeBaseOptions({ callbackURL: 'http://localhost:3000/cb', secureCookie: true })
       expect(await secureFlagFor(opts)).toBe(true)
     })
   })
 
   describe('revoke()', () => {
     it('clears the session cookie so the user is signed out', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx, deleteCookie } = makeCtx()
 
       await handler.revoke(ctx)
@@ -330,7 +330,7 @@ describe('OidcAuthenticationHandler', () => {
       const session = claimsToSession(claims, 'OIDC')
       const jwt = await encodeSession(session, SESSION_SECRET, SCHEME, 3600)
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ roleClaimType: 'groups' }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ roleClaimType: 'groups' }))
       const { ctx } = makeCtx({ cookies: { __oidc_session: jwt } })
       const result = await handler.authenticate(ctx)
 
@@ -341,7 +341,7 @@ describe('OidcAuthenticationHandler', () => {
 
   describe('forbid()', () => {
     it('sets 403 by default', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions())
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx, status } = makeCtx()
 
       await handler.forbid(ctx)
@@ -350,7 +350,7 @@ describe('OidcAuthenticationHandler', () => {
 
     it('delegates to onForbid when provided', async () => {
       const onForbid = vi.fn()
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ onForbid }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ onForbid }))
       const { ctx, status } = makeCtx()
 
       await handler.forbid(ctx)
@@ -372,7 +372,7 @@ describe('OidcAuthenticationHandler', () => {
       jwksResolver = () => localJwks as JWTVerifyGetKey
     })
 
-    async function signIdToken(nonce: string, extraClaims: Record<string, unknown> = {}) {
+    async function signIDToken(nonce: string, extraClaims: Record<string, unknown> = {}) {
       return new SignJWT({ sub: 'user123', email: 'user@example.com', nonce, ...extraClaims })
         .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
         .setIssuer(ISSUER)
@@ -391,7 +391,7 @@ describe('OidcAuthenticationHandler', () => {
           return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, ...discovery }) }
         }
         if (opts?.method === 'POST') {
-          const idToken = await signIdToken(nonce, extraClaims)
+          const idToken = await signIDToken(nonce, extraClaims)
           return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
         }
         return { ok: false, status: 404 }
@@ -412,7 +412,7 @@ describe('OidcAuthenticationHandler', () => {
 
     describe('authorization error response', () => {
       it('reports the provider error rather than a missing code', async () => {
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
           url: CALLBACK_PATH,
           query: { error: 'access_denied', error_description: 'User denied consent' },
@@ -427,7 +427,7 @@ describe('OidcAuthenticationHandler', () => {
       // error_description is provider-authored free text: it can name the user or say why
       // they were refused, so it is redacted on the same terms as the token-endpoint one.
       it('redacts the provider description by default', async () => {
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
           url: CALLBACK_PATH,
           query: { error: 'access_denied', error_description: 'jane.doe@example.com denied consent' },
@@ -439,7 +439,7 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       it('reveals the provider description when showPii is on', async () => {
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, showPii: true }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, showPii: true }))
         const { ctx } = makeCtx({
           url: CALLBACK_PATH,
           query: { error: 'access_denied', error_description: 'jane.doe@example.com denied consent' },
@@ -450,7 +450,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('keeps the description out of publicMessage either way', async () => {
         for (const showPii of [false, true]) {
-          const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, showPii }))
+          const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, showPii }))
           const { ctx } = makeCtx({
             url: CALLBACK_PATH,
             query: { error: 'access_denied', error_description: 'jane.doe@example.com denied consent' },
@@ -463,7 +463,7 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       it('reports an error with no description', async () => {
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({ url: CALLBACK_PATH, query: { error: 'server_error' } })
 
         await expect(handler.processCallback(ctx)).rejects.toThrow('provider returned "server_error"')
@@ -473,12 +473,12 @@ describe('OidcAuthenticationHandler', () => {
     describe('RFC 9207 iss validation', () => {
       it('rejects an iss that is not the provider issuer', async () => {
         const nonce = 'iss-nonce'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st', iss: 'https://attacker.example.com' },
         })
 
@@ -487,12 +487,12 @@ describe('OidcAuthenticationHandler', () => {
 
       it('accepts a matching iss', async () => {
         const nonce = 'iss-ok'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st', iss: ISSUER },
         })
 
@@ -501,12 +501,12 @@ describe('OidcAuthenticationHandler', () => {
 
       it('accepts an absent iss from a provider that does not advertise the parameter', async () => {
         const nonce = 'iss-absent'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -520,12 +520,12 @@ describe('OidcAuthenticationHandler', () => {
       // would let the mix-up defence be switched off by the attacker it defends against.
       it('rejects an absent iss when the provider advertises the parameter', async () => {
         const nonce = 'iss-required'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce, {}, { authorization_response_iss_parameter_supported: true })
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -534,12 +534,12 @@ describe('OidcAuthenticationHandler', () => {
 
       it('accepts a matching iss when the provider advertises the parameter', async () => {
         const nonce = 'iss-required-ok'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce, {}, { authorization_response_iss_parameter_supported: true })
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st', iss: ISSUER },
         })
 
@@ -549,14 +549,14 @@ describe('OidcAuthenticationHandler', () => {
       it('rejects a wrong iss whether or not the provider advertises the parameter', async () => {
         for (const advertised of [undefined, true]) {
           const nonce = `iss-wrong-${String(advertised)}`
-          const stateCookieJwt = await makeStateCookie(nonce)
+          const stateCookieJWT = await makeStateCookie(nonce)
           mockFetch(nonce, {}, advertised === undefined
             ? {}
             : { authorization_response_iss_parameter_supported: advertised })
 
-          const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+          const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
           const { ctx } = makeCtx({
-            cookies: { __oidc_state: stateCookieJwt },
+            cookies: { __oidc_state: stateCookieJWT },
             query: { code: 'c', state: 'st', iss: 'https://attacker.example.com' },
           })
 
@@ -574,7 +574,7 @@ describe('OidcAuthenticationHandler', () => {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken(nonce)
+            const idToken = await signIDToken(nonce)
             return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
           }
           return { ok: false, status: 404 }
@@ -584,7 +584,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('does not refetch within the ttl', async () => {
         const calls = countingFetch('n')
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
 
         await handler.challenge(makeCtx().ctx)
         await handler.challenge(makeCtx().ctx)
@@ -602,7 +602,7 @@ describe('OidcAuthenticationHandler', () => {
        */
       it('fetches discovery once when challenges overlap', async () => {
         const calls = countingFetch('n')
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
 
         // Started without awaiting between them, so neither can observe the other's memo.
         await Promise.all([
@@ -618,7 +618,7 @@ describe('OidcAuthenticationHandler', () => {
       // process lifetime means a handler can keep using terms the issuer has retired.
       it('refetches once the ttl has elapsed', async () => {
         const calls = countingFetch('n')
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           discoveryCacheTtlSeconds: 0,
         }))
@@ -630,21 +630,21 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       it('refetches the JWKS when discovery rotates jwks_uri', async () => {
-        let jwksUri = `${ISSUER}/.well-known/jwks.json`
+        let jwksURI = `${ISSUER}/.well-known/jwks.json`
         const seen: string[] = []
 
         vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
           if (typeof url === 'string' && url.includes('openid-configuration')) {
-            return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, jwks_uri: jwksUri }) }
+            return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, jwks_uri: jwksURI }) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken('n')
+            const idToken = await signIDToken('n')
             return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
           }
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver: (uri: string) => {
             seen.push(uri)
             return jwksResolver(uri)
@@ -667,7 +667,7 @@ describe('OidcAuthenticationHandler', () => {
 
         // A resolver memoised for the process lifetime keeps fetching keys from an endpoint
         // the issuer has retired, and every id_token then fails to verify.
-        jwksUri = `${ISSUER}/.well-known/jwks-2.json`
+        jwksURI = `${ISSUER}/.well-known/jwks-2.json`
         await callback()
 
         expect(seen).toEqual([
@@ -686,13 +686,13 @@ describe('OidcAuthenticationHandler', () => {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken('n')
+            const idToken = await signIDToken('n')
             return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
           }
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver: (uri: string) => {
             seen.push(uri)
             return jwksResolver(uri)
@@ -716,7 +716,7 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       /**
-       * A provider that advertises no usable PKCE method makes selectPkceMethod throw. The
+       * A provider that advertises no usable PKCE method makes selectPKCEMethod throw. The
        * document must not be cached as fresh in that state: if it were, the first challenge
        * would fail correctly and every later one would find the cache fresh, skip re-derivation,
        * and send a PKCE-less request with code_challenge_method=undefined.
@@ -724,11 +724,11 @@ describe('OidcAuthenticationHandler', () => {
       it('does not cache a document whose PKCE derivation throws', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => ({
           ok: true,
-          // plain only, and allowPlainPkce defaults off -> selectPkceMethod throws.
+          // plain only, and allowPlainPKCE defaults off -> selectPKCEMethod throws.
           json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
         })))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
 
         await expect(handler.challenge(makeCtx().ctx)).rejects.toThrow(/PKCE/)
         // The poisoned-cache bug made this second call resolve with pkceMethod undefined.
@@ -744,7 +744,7 @@ describe('OidcAuthenticationHandler', () => {
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           discoveryCacheTtlSeconds: 0,
         }))
@@ -773,7 +773,7 @@ describe('OidcAuthenticationHandler', () => {
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver: resolver ? () => resolver : jwksResolver,
         }))
         const { ctx } = makeCtx({
@@ -823,19 +823,19 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     describe('authorization parameters', () => {
-      async function challengeUrl(overrides: Record<string, unknown>) {
+      async function challengeURL(overrides: Record<string, unknown>) {
         vi.stubGlobal('fetch', vi.fn(async () => ({
           ok: true,
           json: () => Promise.resolve(DISCOVERY_DOCUMENT),
         })))
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ...overrides }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ...overrides }))
         const { ctx, redirect } = makeCtx()
         await handler.challenge(ctx)
         return new URL(redirect.mock.calls[0][0] as string)
       }
 
       it('sends the configured parameters', async () => {
-        const url = await challengeUrl({
+        const url = await challengeURL({
           prompt: 'login',
           loginHint: 'jane@example.com',
           acrValues: ['urn:mace:incommon:iap:silver', 'phr'],
@@ -849,20 +849,20 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       it('sends none of them by default', async () => {
-        const url = await challengeUrl({})
+        const url = await challengeURL({})
         for (const key of ['prompt', 'login_hint', 'acr_values', 'max_age']) {
           expect(url.searchParams.get(key)).toBeNull()
         }
       })
 
       it('carries provider-specific extras', async () => {
-        const url = await challengeUrl({ extraAuthorizationParams: { audience: 'https://api.example.com' } })
+        const url = await challengeURL({ extraAuthorizationParams: { audience: 'https://api.example.com' } })
         expect(url.searchParams.get('audience')).toBe('https://api.example.com')
       })
 
       // Extras are applied before the protocol parameters precisely so this cannot happen.
       it('does not let an extra displace a protocol parameter', async () => {
-        const url = await challengeUrl({
+        const url = await challengeURL({
           extraAuthorizationParams: { redirect_uri: 'https://evil.example.com/cb', nonce: 'attacker-nonce' },
         })
 
@@ -871,7 +871,7 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       it('lets the redirect hook add and adjust non-guarded parameters', async () => {
-        const url = await challengeUrl({
+        const url = await challengeURL({
           prompt: 'login',
           onRedirectToProvider: (_ctx: unknown, u: URL) => {
             u.searchParams.set('prompt', 'consent')
@@ -889,7 +889,7 @@ describe('OidcAuthenticationHandler', () => {
        * flow would look broken.
        */
       it('does not let the redirect hook strip PKCE', async () => {
-        const url = await challengeUrl({
+        const url = await challengeURL({
           onRedirectToProvider: (_ctx: unknown, u: URL) => {
             u.searchParams.delete('code_challenge')
             u.searchParams.delete('code_challenge_method')
@@ -901,7 +901,7 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       it('does not let the redirect hook change where the code is sent', async () => {
-        const url = await challengeUrl({
+        const url = await challengeURL({
           onRedirectToProvider: (_ctx: unknown, u: URL) => {
             u.searchParams.set('redirect_uri', 'https://evil.example.com/cb')
             u.searchParams.set('client_id', 'other-client')
@@ -923,7 +923,7 @@ describe('OidcAuthenticationHandler', () => {
        * is unreachable from application code.
        */
       it('does not let the redirect hook move the request off-origin', async () => {
-        const url = await challengeUrl({
+        const url = await challengeURL({
           onRedirectToProvider: (_ctx: unknown, u: URL) => {
             u.host = 'evil.example.com'
             u.protocol = 'http:'
@@ -947,7 +947,7 @@ describe('OidcAuthenticationHandler', () => {
       ) {
         const nonce = 'age'
         mockFetch(nonce, extraClaims)
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           maxAgeSeconds: 300,
           ...options,
@@ -1004,7 +1004,7 @@ describe('OidcAuthenticationHandler', () => {
             return { ok: status < 400, status, json: () => Promise.resolve(userInfo) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken(nonce)
+            const idToken = await signIDToken(nonce)
             return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
           }
           return { ok: false, status: 404 }
@@ -1012,7 +1012,7 @@ describe('OidcAuthenticationHandler', () => {
         return seen
       }
 
-      async function runCallback(handler: OidcAuthenticationHandler, nonce: string) {
+      async function runCallback(handler: OIDCAuthenticationHandler, nonce: string) {
         const { ctx, cookie } = makeCtx({
           cookies: { __oidc_state: await makeStateCookie(nonce) },
           query: { code: 'c', state: 'st' },
@@ -1024,7 +1024,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('does not call the endpoint unless asked', async () => {
         const seen = mockWithUserInfo('n', { sub: 'user123' })
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
 
         await runCallback(handler, 'n')
 
@@ -1033,7 +1033,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('merges user info claims with the access token', async () => {
         const seen = mockWithUserInfo('n', { sub: 'user123', name: 'Jane Doe', groups: ['admin'] })
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           getClaimsFromUserInfoEndpoint: true,
         }))
@@ -1053,7 +1053,7 @@ describe('OidcAuthenticationHandler', () => {
        */
       it('does not let user info overwrite an id_token claim', async () => {
         mockWithUserInfo('n', { sub: 'user123', email: 'attacker@evil.example.com' })
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           getClaimsFromUserInfoEndpoint: true,
         }))
@@ -1068,7 +1068,7 @@ describe('OidcAuthenticationHandler', () => {
       // session. The spec says MUST NOT be used; using nothing at all is the safe reading.
       it('rejects a user info response whose sub does not match the id_token', async () => {
         mockWithUserInfo('n', { sub: 'someone-else', name: 'Mallory' })
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           getClaimsFromUserInfoEndpoint: true,
         }))
@@ -1082,7 +1082,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('does not leak either sub when showPii is off', async () => {
         mockWithUserInfo('n', { sub: 'someone-else' })
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           getClaimsFromUserInfoEndpoint: true,
         }))
@@ -1097,7 +1097,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('reports a provider that advertises no userinfo_endpoint', async () => {
         mockFetch('n')
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           getClaimsFromUserInfoEndpoint: true,
         }))
@@ -1111,7 +1111,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('fails the sign-in when the endpoint errors', async () => {
         mockWithUserInfo('n', {}, 503)
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           getClaimsFromUserInfoEndpoint: true,
         }))
@@ -1127,10 +1127,10 @@ describe('OidcAuthenticationHandler', () => {
     describe('claim hygiene', () => {
       it('applies removeClaims even when a claimMapper is set', async () => {
         const nonce = 'mapper-remove'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           claimMapper: () => [
             new Claim('sub', 'u1', ISSUER),
@@ -1139,7 +1139,7 @@ describe('OidcAuthenticationHandler', () => {
           claimActions: { remove: ['birthdate'] },
         }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1154,15 +1154,15 @@ describe('OidcAuthenticationHandler', () => {
       // registered claim keeps it. Only the caller's explicit remove list is applied on top.
       it('leaves registered claims a custom mapper deliberately emits', async () => {
         const nonce = 'mapper-registered'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           claimMapper: () => [new Claim('sub', 'u1', ISSUER), new Claim('sid', 'session-1', ISSUER)],
         }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1180,7 +1180,7 @@ describe('OidcAuthenticationHandler', () => {
         mockFetch(nonce)
         // Sealed under this handler's key so it decrypts, but naming another strategy: the
         // payload binding is what rejects it.
-        const stateCookieJwt = await encodeState(
+        const stateCookieJWT = await encodeState(
           {
             state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256',
             returnTo: '/dashboard', scheme: 'SomeOtherStrategy', issuer: ISSUER,
@@ -1189,9 +1189,9 @@ describe('OidcAuthenticationHandler', () => {
           SCHEME,
         )
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1201,7 +1201,7 @@ describe('OidcAuthenticationHandler', () => {
       it('rejects state minted against a different issuer', async () => {
         const nonce = 'other-issuer'
         mockFetch(nonce)
-        const stateCookieJwt = await encodeState(
+        const stateCookieJWT = await encodeState(
           {
             state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256',
             returnTo: '/dashboard', scheme: SCHEME, issuer: 'https://old-provider.example.com',
@@ -1210,9 +1210,9 @@ describe('OidcAuthenticationHandler', () => {
           SCHEME,
         )
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1222,13 +1222,13 @@ describe('OidcAuthenticationHandler', () => {
 
     it('sets session cookie and redirects on successful callback', async () => {
       const nonce = 'test-nonce'
-      const stateCookieJwt = await makeStateCookie(nonce)
+      const stateCookieJWT = await makeStateCookie(nonce)
       mockFetch(nonce)
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx, cookie, redirect } = makeCtx({
         url: CALLBACK_PATH + '?code=auth-code&state=st',
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'auth-code', state: 'st' },
       })
 
@@ -1244,13 +1244,13 @@ describe('OidcAuthenticationHandler', () => {
 
     it('deletes state cookie during callback', async () => {
       const nonce = 'n1'
-      const stateCookieJwt = await makeStateCookie(nonce)
+      const stateCookieJWT = await makeStateCookie(nonce)
       mockFetch(nonce)
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx, deleteCookie } = makeCtx({
         url: CALLBACK_PATH,
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'code', state: 'st' },
       })
 
@@ -1259,39 +1259,39 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     it('throws when code query param is missing', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({ url: CALLBACK_PATH, query: { state: 'st' } })
       await expect(handler.processCallback(ctx)).rejects.toThrow('missing code parameter')
     })
 
     it('throws when state cookie is missing', async () => {
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({ url: CALLBACK_PATH, query: { code: 'c', state: 'st' } })
       await expect(handler.processCallback(ctx)).rejects.toThrow('missing state cookie')
     })
 
     it('throws when state param does not match stored state', async () => {
-      const stateCookieJwt = await encodeState(
+      const stateCookieJWT = await encodeState(
         { state: 'correct', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
         SESSION_SECRET, SCHEME,
       )
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
         url: CALLBACK_PATH,
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'wrong' },
       })
       await expect(handler.processCallback(ctx)).rejects.toThrow('state mismatch')
     })
 
     it('throws when nonce in id_token does not match stored nonce', async () => {
-      const stateCookieJwt = await makeStateCookie('correct-nonce')
+      const stateCookieJWT = await makeStateCookie('correct-nonce')
       mockFetch('wrong-nonce')
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
         url: CALLBACK_PATH,
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1300,12 +1300,12 @@ describe('OidcAuthenticationHandler', () => {
 
     it('fires onFail when the callback fails, then rethrows', async () => {
       const onFail = vi.fn()
-      const stateCookieJwt = await makeStateCookie('correct-nonce')
+      const stateCookieJWT = await makeStateCookie('correct-nonce')
       mockFetch('wrong-nonce')
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onFail }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onFail }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1319,12 +1319,12 @@ describe('OidcAuthenticationHandler', () => {
     it('does not fire onFail on a successful callback', async () => {
       const onFail = vi.fn()
       const nonce = 'ok-nonce'
-      const stateCookieJwt = await makeStateCookie(nonce)
+      const stateCookieJWT = await makeStateCookie(nonce)
       mockFetch(nonce)
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onFail }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onFail }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1339,7 +1339,7 @@ describe('OidcAuthenticationHandler', () => {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken(nonce)
+            const idToken = await signIDToken(nonce)
             return {
               ok: true,
               json: () => Promise.resolve({
@@ -1360,12 +1360,12 @@ describe('OidcAuthenticationHandler', () => {
       it('hands the full token set to onTokenValidated', async () => {
         const onTokenValidated = vi.fn()
         const nonce = 'tokens-nonce'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFullTokenResponse(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onTokenValidated }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onTokenValidated }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1382,45 +1382,45 @@ describe('OidcAuthenticationHandler', () => {
 
       it('never writes the tokens into the session cookie', async () => {
         const nonce = 'no-leak-nonce'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFullTokenResponse(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
         await handler.processCallback(ctx)
 
-        const [, sessionJwt] = cookie.mock.calls[0] as [string, string]
+        const [, sessionJWT] = cookie.mock.calls[0] as [string, string]
         // Refresh tokens are long-lived credentials and the cookie is client-side.
-        expect(sessionJwt).not.toContain('the-refresh-token')
-        expect(sessionJwt).not.toContain('the-access-token')
+        expect(sessionJWT).not.toContain('the-refresh-token')
+        expect(sessionJWT).not.toContain('the-access-token')
 
         const { decodeSession } = await import('../internal/remote/session_store.js')
-        const session = await decodeSession(sessionJwt, SESSION_SECRET, SCHEME)
+        const session = await decodeSession(sessionJWT, SESSION_SECRET, SCHEME)
         expect(JSON.stringify(session)).not.toContain('the-refresh-token')
         expect(JSON.stringify(session)).not.toContain('the-access-token')
       })
 
       it('rejects an id_token whose at_hash does not bind the access token', async () => {
         const nonce = 'at-hash-bad'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
           if (typeof url === 'string' && url.includes('.well-known')) {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken(nonce, { at_hash: accessTokenHash('a-different-token', 'RS256') })
+            const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('a-different-token', 'RS256') })
             return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
           }
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1429,21 +1429,21 @@ describe('OidcAuthenticationHandler', () => {
 
       it('accepts an id_token whose at_hash binds the access token', async () => {
         const nonce = 'at-hash-ok'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
           if (typeof url === 'string' && url.includes('.well-known')) {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken(nonce, { at_hash: accessTokenHash('the-access-token', 'RS256') })
+            const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('the-access-token', 'RS256') })
             return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
           }
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1453,26 +1453,26 @@ describe('OidcAuthenticationHandler', () => {
 
     describe('token endpoint client authentication', () => {
       async function exchangeWith(
-        options: Partial<OidcAuthenticationOptions>,
+        options: Partial<OIDCAuthenticationOptions>,
         discovery: Record<string, unknown> = DISCOVERY_DOCUMENT,
       ) {
         const nonce = 'auth-nonce'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         const fetchMock = vi.fn(async (url: string, opts?: RequestInit) => {
           if (typeof url === 'string' && url.includes('.well-known')) {
             return { ok: true, json: () => Promise.resolve(discovery) }
           }
           if (opts?.method === 'POST') {
-            const idToken = await signIdToken(nonce)
+            const idToken = await signIDToken(nonce)
             return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
           }
           return { ok: false, status: 404 }
         })
         vi.stubGlobal('fetch', fetchMock)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ...options }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ...options }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
         await handler.processCallback(ctx)
@@ -1557,12 +1557,12 @@ describe('OidcAuthenticationHandler', () => {
       }
 
       async function nonceMismatch(showPii: boolean) {
-        const stateCookieJwt = await makeStateCookie('the-real-nonce')
+        const stateCookieJWT = await makeStateCookie('the-real-nonce')
         mockFetch('the-wrong-nonce')
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, showPii }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, showPii }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1595,7 +1595,7 @@ describe('OidcAuthenticationHandler', () => {
       })
 
       it('redacts the claim listing when sub is missing', async () => {
-        const stateCookieJwt = await makeStateCookie('sub-nonce')
+        const stateCookieJWT = await makeStateCookie('sub-nonce')
         vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
           if (typeof url === 'string' && url.includes('.well-known')) {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
@@ -1610,9 +1610,9 @@ describe('OidcAuthenticationHandler', () => {
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1626,23 +1626,23 @@ describe('OidcAuthenticationHandler', () => {
     describe('claimActions', () => {
       it('removes the named claims from the session', async () => {
         const nonce = 'actions-nonce'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce, { name: 'Jane Doe', picture: 'https://x/p.jpg', birthdate: '1985-07-04' })
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
           jwksResolver,
           claimActions: { remove: ['picture', 'birthdate'] },
         }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
         await handler.processCallback(ctx)
 
-        const [, sessionJwt] = cookie.mock.calls[0] as [string, string]
+        const [, sessionJWT] = cookie.mock.calls[0] as [string, string]
         const { decodeSession } = await import('../internal/remote/session_store.js')
-        const types = (await decodeSession(sessionJwt, SESSION_SECRET, SCHEME)).claims.map(c => c.type)
+        const types = (await decodeSession(sessionJWT, SESSION_SECRET, SCHEME)).claims.map(c => c.type)
 
         expect(types).toContain('sub')
         expect(types).toContain('name')
@@ -1654,8 +1654,8 @@ describe('OidcAuthenticationHandler', () => {
     describe('id_token claim validation', () => {
       it('rejects an id_token without a sub claim', async () => {
         const nonce = 'no-sub'
-        const stateCookieJwt = await makeStateCookie(nonce)
-        // signIdToken always sets sub, so sign one explicitly without it.
+        const stateCookieJWT = await makeStateCookie(nonce)
+        // signIDToken always sets sub, so sign one explicitly without it.
         vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
           if (typeof url === 'string' && url.includes('.well-known')) {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
@@ -1672,9 +1672,9 @@ describe('OidcAuthenticationHandler', () => {
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1683,7 +1683,7 @@ describe('OidcAuthenticationHandler', () => {
 
       async function callbackWithAudience(aud: string[], azp?: string) {
         const nonce = 'aud-nonce'
-        const stateCookieJwt = await makeStateCookie(nonce)
+        const stateCookieJWT = await makeStateCookie(nonce)
         vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
           if (typeof url === 'string' && url.includes('.well-known')) {
             return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
@@ -1704,9 +1704,9 @@ describe('OidcAuthenticationHandler', () => {
           return { ok: false, status: 404 }
         }))
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
         return handler.processCallback(ctx)
@@ -1718,7 +1718,7 @@ describe('OidcAuthenticationHandler', () => {
 
       it('rejects multiple audiences whose azp is another client', async () => {
         await expect(callbackWithAudience([CLIENT_ID, 'other'], 'other'))
-          .rejects.toThrow('azp does not match clientId')
+          .rejects.toThrow('azp does not match clientID')
       })
 
       it('accepts multiple audiences when azp matches this client', async () => {
@@ -1728,7 +1728,7 @@ describe('OidcAuthenticationHandler', () => {
 
     it('throws when the token endpoint returns a non-ok status with no error body', async () => {
       const nonce = 'bad-status'
-      const stateCookieJwt = await makeStateCookie(nonce)
+      const stateCookieJWT = await makeStateCookie(nonce)
       vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
         if (typeof url === 'string' && url.includes('.well-known')) {
           return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
@@ -1739,9 +1739,9 @@ describe('OidcAuthenticationHandler', () => {
         return { ok: false, status: 404 }
       }))
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1749,9 +1749,9 @@ describe('OidcAuthenticationHandler', () => {
     })
 
     // The token-endpoint errors go through the callbackFailure seam, so they carry the strategy
-    // name like every other callback failure — a bare ErrOidcCallback would have dropped it.
+    // name like every other callback failure — a bare ErrOIDCCallback would have dropped it.
     it('brands a token-endpoint failure with the strategy name', async () => {
-      const stateCookieJwt = await makeStateCookie('n')
+      const stateCookieJWT = await makeStateCookie('n')
       vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
         if (typeof url === 'string' && url.includes('.well-known')) {
           return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
@@ -1762,9 +1762,9 @@ describe('OidcAuthenticationHandler', () => {
         return { ok: false, status: 404 }
       }))
 
-      const handler = new OidcAuthenticationHandler('Okta', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('Okta', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
-        cookies: { [handler.stateCookieName]: stateCookieJwt },
+        cookies: { [handler.stateCookieName]: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1774,7 +1774,7 @@ describe('OidcAuthenticationHandler', () => {
     // A literal `null` JSON body parses without throwing; the `?? {}` keeps the `.error` access
     // from becoming a TypeError, matching the OAuth2 handler.
     it('handles a null token-endpoint body without crashing', async () => {
-      const stateCookieJwt = await makeStateCookie('n')
+      const stateCookieJWT = await makeStateCookie('n')
       vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
         if (typeof url === 'string' && url.includes('.well-known')) {
           return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
@@ -1785,9 +1785,9 @@ describe('OidcAuthenticationHandler', () => {
         return { ok: false, status: 404 }
       }))
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1797,12 +1797,12 @@ describe('OidcAuthenticationHandler', () => {
     it('calls onTokenValidated hook with id_token payload', async () => {
       const onTokenValidated = vi.fn()
       const nonce = 'hook-nonce'
-      const stateCookieJwt = await makeStateCookie(nonce)
+      const stateCookieJWT = await makeStateCookie(nonce)
       mockFetch(nonce)
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onTokenValidated }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onTokenValidated }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1815,20 +1815,20 @@ describe('OidcAuthenticationHandler', () => {
 
     it('excludes registered JWT claims from the default claim mapping', async () => {
       const nonce = 'registered-nonce'
-      const stateCookieJwt = await makeStateCookie(nonce)
+      const stateCookieJWT = await makeStateCookie(nonce)
       mockFetch(nonce, { groups: ['admin'] })
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx, cookie } = makeCtx({
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
       await handler.processCallback(ctx)
 
-      const [, sessionJwt] = cookie.mock.calls[0] as [string, string]
+      const [, sessionJWT] = cookie.mock.calls[0] as [string, string]
       const { decodeSession } = await import('../internal/remote/session_store.js')
-      const session = await decodeSession(sessionJwt, SESSION_SECRET, SCHEME)
+      const session = await decodeSession(sessionJWT, SESSION_SECRET, SCHEME)
       const types = session.claims.map(c => c.type)
 
       // User claims survive.
@@ -1845,16 +1845,16 @@ describe('OidcAuthenticationHandler', () => {
     describe('returnTo open-redirect guard', () => {
       async function callbackWithReturnTo(returnTo: string) {
         const nonce = 'redirect-nonce'
-        const stateCookieJwt = await encodeState(
+        const stateCookieJWT = await encodeState(
           { state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo, scheme: SCHEME, issuer: ISSUER },
           SESSION_SECRET,
           SCHEME,
         )
         mockFetch(nonce)
 
-        const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx, redirect } = makeCtx({
-          cookies: { __oidc_state: stateCookieJwt },
+          cookies: { __oidc_state: stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1882,20 +1882,20 @@ describe('OidcAuthenticationHandler', () => {
     it('uses claimMapper when provided', async () => {
       const claimMapper = vi.fn().mockReturnValue([new Claim('mapped', 'value', 'iss')])
       const nonce = 'mapper-nonce'
-      const stateCookieJwt = await makeStateCookie(nonce)
+      const stateCookieJWT = await makeStateCookie(nonce)
       mockFetch(nonce)
 
-      const handler = new OidcAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, claimMapper }))
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, claimMapper }))
       const { ctx, cookie } = makeCtx({
-        cookies: { __oidc_state: stateCookieJwt },
+        cookies: { __oidc_state: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
       await handler.processCallback(ctx)
       expect(claimMapper).toHaveBeenCalledOnce()
-      const [, sessionJwt] = cookie.mock.calls[0] as [string, string]
+      const [, sessionJWT] = cookie.mock.calls[0] as [string, string]
       const { decodeSession } = await import('../internal/remote/session_store.js')
-      const session = await decodeSession(sessionJwt, SESSION_SECRET, SCHEME)
+      const session = await decodeSession(sessionJWT, SESSION_SECRET, SCHEME)
       expect(session.claims[0].type).toBe('mapped')
     })
   })

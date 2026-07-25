@@ -9,6 +9,6 @@ export class CacheConfig {
   @Provides(Redis)
   @OnPreDestroy((redis: Redis) => redis.quit())
   redis(): Redis {
-    return new Redis(this.config.redisUrl)
+    return new Redis(this.config.redisURL)
   }
 }

@@ -14,7 +14,7 @@ import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { MemoryCacheStore } from './cache/index.js'
 import { FastifyContext } from './context.js'
 import { AuthenticationService } from './security/auth/service.js'
-import { isOidcError } from './security/auth/oidc/index.js'
+import { isOIDCError } from './security/auth/oidc/index.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -106,8 +106,8 @@ export class FastifyAdapter<
             // The diagnostic detail (state, nonce, signature, token exchange) stays in the
             // logs: every failure mode must look identical to a client probing the callback.
             req.log.error({ err: e }, 'OIDC callback failed')
-            const status = isOidcError(e) ? e.statusCode : 400
-            const error = isOidcError(e) ? e.publicMessage : 'Authentication failed'
+            const status = isOIDCError(e) ? e.statusCode : 400
+            const error = isOIDCError(e) ? e.publicMessage : 'Authentication failed'
             return reply.status(status).send({ error, statusCode: status })
           }
         })
@@ -143,7 +143,7 @@ export class FastifyAdapter<
 
       this.#fastify.register(async server => {
         const controller = router.controller
-        const isSingleton = router.binding.scopeId === Scopes.SINGLETON
+        const isSingleton = router.binding.scopeID === Scopes.SINGLETON
 
         server.decorateRequest('caffeineResponseCached', false)
 

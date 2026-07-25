@@ -1,10 +1,10 @@
-import { classMeta, methodMeta } from '../metadata.js'
+import { configureClass, configureMethod } from './registrar/registrar.js'
 import { classOrMethod } from './_decorator_util.js'
 
 export function Accept(value: string) {
   return classOrMethod(
     'Accept',
-    (_target, context) => classMeta(context.metadata).headers.append('accept', value),
-    context => methodMeta(context.metadata, context.name).headers.append('accept', value),
+    (_target, context) => configureClass(context, spec => spec.header('accept', value)),
+    context => configureMethod(context, spec => spec.header('accept', value)),
   )
 }

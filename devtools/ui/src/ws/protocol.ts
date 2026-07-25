@@ -1,7 +1,7 @@
 export interface GraphNode {
   id: number
   label: string
-  scopeId: string
+  scopeID: string
   names: string[]
   labels: string[]
   primary: boolean
@@ -9,8 +9,8 @@ export interface GraphNode {
 }
 
 export interface GraphEdge {
-  fromId: number
-  toId: number
+  fromID: number
+  toID: number
   kind: string
   meta?: string
 }
@@ -23,7 +23,7 @@ export interface BindingGraph {
 export interface BindingSnapshot {
   id: number
   key: string
-  scopeId: string
+  scopeID: string
   names: string[]
   labels: string[]
   primary: boolean

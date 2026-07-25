@@ -116,17 +116,17 @@ export function defineMemberInjection<T = unknown>(
  * @framework
  */
 export function extendMemberInjectableAttributes(
-  metaId: TypeID,
+  metaID: TypeID,
   name: string | symbol,
   configure: (config: DecoratedBindingConfig) => void,
 ): void {
-  const metadata = getInjectionMetadata(idfy(metaId))
+  const metadata = getInjectionMetadata(idfy(metaID))
 
   try {
     configure(metadata.memberFor(name))
   } catch (error: unknown) {
     throw new ErrInvalidDecorator(
-      `Invalid decorator configuration for member "${String(name)}" on class "${String(metaId)}":\n${(error as Error).message}`,
+      `Invalid decorator configuration for member "${String(name)}" on class "${String(metaID)}":\n${(error as Error).message}`,
     )
   }
 }

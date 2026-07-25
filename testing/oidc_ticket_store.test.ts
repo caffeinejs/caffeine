@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { RemoteAuthenticationTicket } from '@caffeinejs/http'
-import { TestOidcTicketStore } from './oidc_ticket_store.js'
+import { TestOIDCTicketStore } from './oidc_ticket_store.js'
 
 /**
  * The store expires tickets against a monotonic clock, which fake timers do not reach.
@@ -22,21 +22,21 @@ function ticket(subject: string): RemoteAuthenticationTicket {
   }
 }
 
-describe('TestOidcTicketStore', () => {
+describe('TestOIDCTicketStore', () => {
   it('round-trips a stored ticket', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     await store.store('k1', ticket('u1'), 3600)
 
     expect(await store.retrieve('k1')).toEqual(ticket('u1'))
   })
 
   it('returns undefined for an unknown key', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     expect(await store.retrieve('nope')).toBeUndefined()
   })
 
   it('returns undefined after remove', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     await store.store('k1', ticket('u1'), 3600)
     await store.remove('k1')
 
@@ -44,12 +44,12 @@ describe('TestOidcTicketStore', () => {
   })
 
   it('removing an unknown key is a no-op', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     await expect(store.remove('nope')).resolves.toBeUndefined()
   })
 
   it('clear() forgets everything', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     await store.store('a', ticket('u1'), 3600)
     await store.store('b', ticket('u2'), 3600)
 
@@ -60,10 +60,10 @@ describe('TestOidcTicketStore', () => {
   })
 })
 
-describe('TestOidcTicketStore expiry', () => {
+describe('TestOIDCTicketStore expiry', () => {
   it('stops returning a ticket once its ttl has passed', async () => {
     const clock = manualClock()
-    const store = new TestOidcTicketStore({ clock })
+    const store = new TestOIDCTicketStore({ clock })
     await store.store('k1', ticket('u1'), 60)
 
     clock.advance(59_000)
@@ -75,7 +75,7 @@ describe('TestOidcTicketStore expiry', () => {
 
   it('drops expired tickets from the count', async () => {
     const clock = manualClock()
-    const store = new TestOidcTicketStore({ clock })
+    const store = new TestOIDCTicketStore({ clock })
     await store.store('a', ticket('u1'), 60)
     await store.store('b', ticket('u2'), 600)
 
@@ -86,7 +86,7 @@ describe('TestOidcTicketStore expiry', () => {
 
   it('does not accumulate expired tickets', async () => {
     const clock = manualClock()
-    const store = new TestOidcTicketStore({ clock })
+    const store = new TestOIDCTicketStore({ clock })
 
     for (let i = 0; i < 50; i++) {
       await store.store(`k${i}`, ticket(`u${i}`), 60)
@@ -97,11 +97,11 @@ describe('TestOidcTicketStore expiry', () => {
   })
 })
 
-describe('TestOidcTicketStore.removeBySubject()', () => {
+describe('TestOIDCTicketStore.removeBySubject()', () => {
   // The reason a ticket store exists at all: revoking every session a user holds, which a
   // self-contained session cookie can never do.
   it('revokes every session belonging to the subject', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     await store.store('a', ticket('u1'), 3600)
     await store.store('b', ticket('u1'), 3600)
     await store.store('c', ticket('u1'), 3600)
@@ -114,7 +114,7 @@ describe('TestOidcTicketStore.removeBySubject()', () => {
   })
 
   it('leaves other subjects untouched', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     await store.store('a', ticket('u1'), 3600)
     await store.store('b', ticket('u2'), 3600)
 
@@ -125,7 +125,7 @@ describe('TestOidcTicketStore.removeBySubject()', () => {
   })
 
   it('is a no-op for an unknown subject', async () => {
-    const store = new TestOidcTicketStore()
+    const store = new TestOIDCTicketStore()
     await store.store('a', ticket('u1'), 3600)
 
     await expect(store.removeBySubject('nobody')).resolves.toBeUndefined()

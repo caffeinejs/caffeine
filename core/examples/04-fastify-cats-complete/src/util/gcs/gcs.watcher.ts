@@ -30,7 +30,7 @@ export class GcsWatcher {
         bucket: this.config.gcsBucket,
         object: this.config.gcsObject,
         pollIntervalMs: this.config.gcsPollIntervalMs,
-        projectId: this.config.gcsProjectId,
+        projectID: this.config.gcsProjectID,
       } as WorkerData,
     })
 

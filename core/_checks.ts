@@ -10,9 +10,9 @@ import { keyStr, Key, TypedKey } from './key.js'
  * configured circular references.
  */
 export function checkCircularReferences(registry: Map<Key, Binding>, bindings: Map<Key, Binding[]>): void {
-  const bindingIdToKey = new Map<number, Key>()
+  const bindingIDToKey = new Map<number, Key>()
   for (const [key, binding] of registry.entries()) {
-    bindingIdToKey.set(binding.id, key)
+    bindingIDToKey.set(binding.id, key)
   }
 
   const adj = new Map<Key, Key[]>()
@@ -38,7 +38,7 @@ export function checkCircularReferences(registry: Map<Key, Binding>, bindings: M
         const abstracts = bindings.get(depKey)
         if (abstracts) {
           for (const b of abstracts) {
-            const concreteKey = bindingIdToKey.get(b.id)
+            const concreteKey = bindingIDToKey.get(b.id)
             if (concreteKey != null) {
               deps.push(concreteKey)
             }

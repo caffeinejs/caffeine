@@ -741,7 +741,7 @@ describe('Cache key', () => {
     let bCount = 0
 
     @Controller('/cache-key-urls')
-    class KeyUrlsController {
+    class KeyURLsController {
       @Cache({ ttl: 60 })
       @Get('/a')
       a() {
@@ -756,7 +756,7 @@ describe('Cache key', () => {
         return { n: bCount }
       }
     }
-    void [KeyUrlsController]
+    void [KeyURLsController]
 
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))

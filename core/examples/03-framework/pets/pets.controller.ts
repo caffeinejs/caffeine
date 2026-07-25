@@ -24,8 +24,8 @@ export class PetsController {
 
   @Get(':id')
   @Params([Path('id')])
-  byId(id: string) {
-    return this.petsRepository.byId(Number(id))
+  byID(id: string) {
+    return this.petsRepository.byID(Number(id))
   }
 
   @Put(':id')

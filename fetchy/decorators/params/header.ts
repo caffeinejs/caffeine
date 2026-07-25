@@ -1,12 +1,12 @@
-import type { ApiParameterSpec } from './api_parameter_spec.js'
+import type { APIParameterSpec } from './api_parameter_spec.js'
 
 /**
  * Binds an argument to a request header.
  */
-export function Header(key: string): ApiParameterSpec {
+export function Header(key: string): APIParameterSpec {
   return {
-    apply({ meta, index }) {
-      meta.params.push({ kind: 'header', key, index })
+    apply({ spec, index }) {
+      spec.param({ kind: 'header', key, index })
     },
   }
 }

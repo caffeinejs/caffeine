@@ -2,13 +2,13 @@ import type { Call } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import { ChainExecutor } from './chain.js'
 import type { Interceptor } from './interceptor.js'
-import type { MethodMeta } from './metadata.js'
+import type { MethodSpec } from './decorators/registrar/index.js'
 import { RequestBuilder } from './request_builder.js'
 import type { ResponseConverter } from './response_converter.js'
 import { DefaultResponseHandler } from './response_handler.js'
 
 export interface InvokerContext {
-  baseUrl: string
+  baseURL: string
   call: Call
   interceptors: readonly Interceptor[]
   responseConverter: ResponseConverter
@@ -28,8 +28,8 @@ function terminalInterceptor(call: Call): Interceptor {
  * Wires a single decorated method's request builder, interceptor chain, response handler and
  * response converter into the function that becomes `methodMeta.invoker`.
  */
-export function buildInvoker(context: InvokerContext, meta: MethodMeta): (...args: unknown[]) => unknown {
-  const requestBuilder = new RequestBuilder(context.baseUrl, meta)
+export function buildInvoker(context: InvokerContext, meta: MethodSpec): (...args: unknown[]) => unknown {
+  const requestBuilder = new RequestBuilder(context.baseURL, meta)
   const responseHandler = new DefaultResponseHandler(context.errorResponseConverter)
   const interceptors = [...context.interceptors, terminalInterceptor(context.call)]
 

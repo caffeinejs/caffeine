@@ -1,22 +1,31 @@
 import { describe, expect, it } from 'vitest'
 
-import { MethodMeta } from '../metadata.js'
+import type { MethodSpec } from '../decorators/registrar/index.js'
 import { RequestBuilder } from '../request_builder.js'
 
-function methodMeta(overrides: Partial<MethodMeta> = {}): MethodMeta {
-  const meta = new MethodMeta()
-  Object.assign(meta, overrides)
-  return meta
+function methodMeta(overrides: Partial<MethodSpec> = {}): MethodSpec {
+  return {
+    httpMethod: '',
+    path: '',
+    headers: new Headers(),
+    params: [],
+    bodyIndex: -1,
+    argLen: 0,
+    formURLEncoded: false,
+    requestType: undefined,
+    responseType: undefined,
+    ...overrides,
+  }
 }
 
 describe('RequestBuilder', () => {
   it('substitutes path parameters', () => {
     const meta = methodMeta({
       httpMethod: 'GET',
-      path: '/users/{id}/posts/{postId}',
+      path: '/users/{id}/posts/{postID}',
       params: [
         { kind: 'path', key: 'id', index: 0 },
-        { kind: 'path', key: 'postId', index: 1 },
+        { kind: 'path', key: 'postID', index: 1 },
       ],
     })
 
@@ -97,7 +106,7 @@ describe('RequestBuilder', () => {
     const meta = methodMeta({
       httpMethod: 'POST',
       path: '/form',
-      formUrlEncoded: true,
+      formURLEncoded: true,
       params: [
         { kind: 'form-field', key: 'name', index: 0 },
         { kind: 'form-field', key: 'age', index: 1 },

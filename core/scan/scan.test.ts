@@ -151,11 +151,11 @@ describe('scan()', function () {
   })
 
   it('excludes a file given as a file:// URL string', async function () {
-    const serviceUrl = new URL('_testdata/app/service.ts', import.meta.url).href
+    const serviceURL = new URL('_testdata/app/service.ts', import.meta.url).href
 
     const loaded = await scan({
       dir: join(dir, '_testdata/app'),
-      exclude: serviceUrl,
+      exclude: serviceURL,
     })
 
     expect(loaded.some(m => m.endsWith('service.ts')))
@@ -165,11 +165,11 @@ describe('scan()', function () {
   })
 
   it('excludes a file given as a URL object', async function () {
-    const serviceUrl = new URL('_testdata/app/service.ts', import.meta.url)
+    const serviceURL = new URL('_testdata/app/service.ts', import.meta.url)
 
     const loaded = await scan({
       dir: join(dir, '_testdata/app'),
-      exclude: serviceUrl,
+      exclude: serviceURL,
     })
 
     expect(loaded.some(m => m.endsWith('service.ts')))
@@ -179,12 +179,12 @@ describe('scan()', function () {
   })
 
   it('excludes multiple files given as an array', async function () {
-    const serviceUrl = new URL('_testdata/app/service.ts', import.meta.url).href
-    const configUrl = new URL('_testdata/app/config.ts', import.meta.url).href
+    const serviceURL = new URL('_testdata/app/service.ts', import.meta.url).href
+    const configURL = new URL('_testdata/app/config.ts', import.meta.url).href
 
     const loaded = await scan({
       dir: join(dir, '_testdata/app'),
-      exclude: [serviceUrl, configUrl],
+      exclude: [serviceURL, configURL],
     })
 
     expect(loaded.some(m => m.endsWith('service.ts')))

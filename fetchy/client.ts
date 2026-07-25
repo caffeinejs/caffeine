@@ -1,67 +1,76 @@
 import type { Call, CallFactory } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
+import { getClassBuilder, getMethodBuilders } from './decorators/registrar/registrar.js'
+import type { ClassSpec, MethodBuilder, MethodSpec } from './decorators/registrar/index.js'
 import { ErrFetchyEmptyClient, ErrFetchyInvalidRoute } from './errors.js'
 import { mergeHeaders } from './headers_util.js'
 import type { Interceptor } from './interceptor.js'
 import { joinPaths } from './internal/path_util.js'
-import { allMethodMeta, ClassMeta, readClassMeta } from './metadata.js'
-import type { MethodMeta } from './metadata.js'
-import { JsonResponseConverter } from './response_converter.js'
+import { JSONResponseConverter } from './response_converter.js'
 import type { ResponseConverter } from './response_converter.js'
 import { buildInvoker } from './service_invoker.js'
 
 type AnyCtor = new (...args: any[]) => any
 
 export interface FetchyClientOptions {
-  baseUrl: string
+  baseURL: string
   callFactory: CallFactory
   interceptors: readonly Interceptor[]
   callAdapterFactories: readonly CallAdapterFactory[]
   responseConverter?: ResponseConverter
 }
 
-function mergeClassIntoMethod(defaults: ClassMeta, meta: MethodMeta): void {
-  meta.path = joinPaths(defaults.path, meta.path)
-  meta.headers = mergeHeaders(defaults.headers, meta.headers)
-  meta.requestType ??= defaults.requestType
-  meta.responseType ??= defaults.responseType
+const DEFAULT_CLASS_SPEC: ClassSpec = {
+  path: '',
+  headers: new Headers(),
+  requestType: undefined,
+  responseType: undefined,
+}
 
-  if (!meta.formUrlEncoded && meta.requestType === 'form') {
-    meta.formUrlEncoded = true
+function mergeClassIntoMethod(defaults: ClassSpec, spec: MethodSpec): MethodSpec {
+  const requestType = spec.requestType ?? defaults.requestType
+
+  return {
+    ...spec,
+    path: joinPaths(defaults.path, spec.path),
+    headers: mergeHeaders(defaults.headers, spec.headers),
+    requestType,
+    responseType: spec.responseType ?? defaults.responseType,
+    formURLEncoded: spec.formURLEncoded || requestType === 'form',
   }
 }
 
-function validateMethodMeta(name: string, meta: MethodMeta): void {
-  if (!meta.httpMethod) {
+function validateMethodSpec(name: string, spec: MethodSpec): void {
+  if (!spec.httpMethod) {
     throw new ErrFetchyInvalidRoute(name, 'missing an HTTP verb decorator (@GET/@POST/etc)')
   }
 
-  const bodyParamCount = meta.params.filter(param => param.kind === 'body').length
+  const bodyParamCount = spec.params.filter(param => param.kind === 'body').length
 
   if (bodyParamCount > 1) {
     throw new ErrFetchyInvalidRoute(name, 'more than one @Body() parameter is not allowed')
   }
 
-  if (bodyParamCount > 0 && (meta.httpMethod === 'GET' || meta.httpMethod === 'HEAD' || meta.httpMethod === 'OPTIONS')) {
-    throw new ErrFetchyInvalidRoute(name, `${meta.httpMethod} requests cannot have a body`)
+  if (bodyParamCount > 0 && (spec.httpMethod === 'GET' || spec.httpMethod === 'HEAD' || spec.httpMethod === 'OPTIONS')) {
+    throw new ErrFetchyInvalidRoute(name, `${spec.httpMethod} requests cannot have a body`)
   }
 
-  const hasFormFields = meta.params.some(param => param.kind === 'form-field')
+  const hasFormFields = spec.params.some(param => param.kind === 'form-field')
 
-  if (hasFormFields && !meta.formUrlEncoded) {
-    throw new ErrFetchyInvalidRoute(name, '@Field() requires @FormUrlEncoded() on the method or class')
+  if (hasFormFields && !spec.formURLEncoded) {
+    throw new ErrFetchyInvalidRoute(name, '@Field() requires @FormURLEncoded() on the method or class')
   }
 
   const pathKeys = new Set(
-    meta.params.filter(param => param.kind === 'path').map(param => (param as { key: string }).key),
+    spec.params.filter(param => param.kind === 'path').map(param => (param as { key: string }).key),
   )
-  const placeholders = new Set(Array.from(meta.path.matchAll(/\{(\w+)\}/g), match => match[1]))
+  const placeholders = new Set(Array.from(spec.path.matchAll(/\{(\w+)\}/g), match => match[1]))
 
   for (const key of pathKeys) {
     if (!placeholders.has(key)) {
       throw new ErrFetchyInvalidRoute(
         name,
-        `@Param("${key}") has no matching "{${key}}" placeholder in path "${meta.path}"`,
+        `@Param("${key}") has no matching "{${key}}" placeholder in path "${spec.path}"`,
       )
     }
   }
@@ -78,10 +87,11 @@ function validateMethodMeta(name: string, meta: MethodMeta): void {
 
 /**
  * Runtime registry produced by {@link FetchyBuilder}. `create()` turns a decorated class into a
- * working client by reading its configuration straight from `TargetApi[Symbol.metadata]`.
+ * working client by reading its configuration from the class's registrar entries (looked up via
+ * `TargetAPI[Symbol.metadata]` as an opaque WeakMap key — see `decorators/registrar/registrar.ts`).
  *
- * Note: a decorated method's built invoker lives on the class's own (shared) metadata, not on the
- * created instance — calling `create()` a second time on the same class reuses the first
+ * Note: a decorated method's built invoker lives on the class's own (shared) `MethodBuilder`, not
+ * on the created instance — calling `create()` a second time on the same class reuses the first
  * invocation's wiring rather than replacing it. Each decorated class is expected to be built by
  * one canonical client configuration.
  */
@@ -89,47 +99,47 @@ export class FetchyClient {
   private readonly call: Call
 
   constructor(private readonly options: FetchyClientOptions) {
-    this.call = options.callFactory.provide(options.baseUrl)
+    this.call = options.callFactory.provide(options.baseURL)
   }
 
   private static mixin<T extends AnyCtor>(superclass: T) {
     return class extends superclass {}
   }
 
-  create<T extends AnyCtor>(TargetApi: T, ...args: ConstructorParameters<T>): InstanceType<T> {
-    const metadata = (TargetApi as unknown as { [Symbol.metadata]?: DecoratorMetadataObject })[Symbol.metadata]
-    const methods = metadata ? allMethodMeta(metadata) : new Map<string | symbol, MethodMeta>()
+  create<T extends AnyCtor>(TargetAPI: T, ...args: ConstructorParameters<T>): InstanceType<T> {
+    const metadata = (TargetAPI as unknown as { [Symbol.metadata]?: object })[Symbol.metadata]
+    const methods = metadata ? getMethodBuilders(metadata) : new Map<string | symbol, MethodBuilder>()
 
     if (methods.size === 0) {
-      throw new ErrFetchyEmptyClient(TargetApi.name)
+      throw new ErrFetchyEmptyClient(TargetAPI.name)
     }
 
-    const defaults = (metadata && readClassMeta(metadata)) ?? new ClassMeta()
-    const responseConverter = this.options.responseConverter ?? JsonResponseConverter
+    const classSpec = (metadata && getClassBuilder(metadata)?.toClassSpec()) ?? DEFAULT_CLASS_SPEC
+    const responseConverter = this.options.responseConverter ?? JSONResponseConverter
 
-    for (const [name, meta] of methods) {
-      if (meta.processed) {
+    for (const [name, builder] of methods) {
+      if (builder.processed) {
         continue
       }
 
-      mergeClassIntoMethod(defaults, meta)
-      validateMethodMeta(String(name), meta)
+      const spec = mergeClassIntoMethod(classSpec, builder.toMethodSpec())
+      validateMethodSpec(String(name), spec)
 
-      meta.invoker = buildInvoker(
+      builder.invoker = buildInvoker(
         {
-          baseUrl: this.options.baseUrl,
+          baseURL: this.options.baseURL,
           call: this.call,
           interceptors: this.options.interceptors,
           responseConverter,
           errorResponseConverter: responseConverter,
           callAdapterFactories: this.options.callAdapterFactories,
         },
-        meta,
+        spec,
       )
-      meta.processed = true
+      builder.processed = true
     }
 
-    const Extended = FetchyClient.mixin(TargetApi)
+    const Extended = FetchyClient.mixin(TargetAPI)
 
     return new Extended(...args) as InstanceType<T>
   }

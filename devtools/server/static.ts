@@ -18,8 +18,8 @@ const UI_DIST = join(fileURLToPath(import.meta.url), '..', '..', '..', '..', 'ui
 
 export function serveStatic(req: IncomingMessage, res: ServerResponse): boolean {
   const url = req.url ?? '/'
-  const isApi = url.startsWith('/api/') || url === '/ws'
-  if (isApi) {
+  const isAPI = url.startsWith('/api/') || url === '/ws'
+  if (isAPI) {
     return false
   }
 

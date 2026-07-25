@@ -57,12 +57,12 @@ class NoRouteController {}
 
 describe('testClient()', () => {
   let app: WebApplication<any, any, any>
-  let baseUrl: string
+  let baseURL: string
 
   beforeAll(async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
     await app.ready()
-    baseUrl = await app.instance.listen({ port: 0, host: '127.0.0.1' })
+    baseURL = await app.instance.listen({ port: 0, host: '127.0.0.1' })
   })
 
   afterAll(async () => {
@@ -70,7 +70,7 @@ describe('testClient()', () => {
   })
 
   it('calls registered handlers via fetch Request', async () => {
-    const client = testClient(TaskController, baseUrl)
+    const client = testClient(TaskController, baseURL)
 
     expect(client.list).toBeTypeOf('function')
     expect(client.create).toBeTypeOf('function')
@@ -104,9 +104,9 @@ describe('testClient()', () => {
   })
 
   it('calls registered handlers via URL instance', async () => {
-    const client = testClient(TaskController, new URL(baseUrl))
+    const client = testClient(TaskController, new URL(baseURL))
 
-    const listRes = await client.list(new Request(`${baseUrl}/tasks`))
+    const listRes = await client.list(new Request(`${baseURL}/tasks`))
     expect(listRes.status).toBe(200)
     expect(await listRes.json()).toBeInstanceOf(Array)
 
@@ -119,11 +119,11 @@ describe('testClient()', () => {
   })
 
   it('throws when controller has no routes', () => {
-    expect(() => testClient(NoRouteController, baseUrl)).toThrow(ErrNoRoutesForController)
+    expect(() => testClient(NoRouteController, baseURL)).toThrow(ErrNoRoutesForController)
   })
 
   it('returns independent clients for same controller with different targets', async () => {
-    const remote = testClient(TaskController, baseUrl)
+    const remote = testClient(TaskController, baseURL)
     const inProcess = testClient(TaskController, app)
 
     const [remoteRes, inProcessRes] = await Promise.all([remote.list(), inProcess.list()])

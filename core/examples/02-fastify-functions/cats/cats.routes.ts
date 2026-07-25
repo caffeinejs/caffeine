@@ -8,7 +8,7 @@ import { CatsRepository } from './cats.repository.js'
 export const catsRoutes: FastifyPluginAsync<ContainerPluginOptions> = async function (fastify, opts) {
   const repository = opts.container.get<CatsRepository>(CATS_REPOSITORY)
 
-  async function byId(req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+  async function byID(req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const cat = repository.findOne(Number(req.params.id))
     if (cat === undefined) {
       return reply.code(404)
@@ -57,7 +57,7 @@ export const catsRoutes: FastifyPluginAsync<ContainerPluginOptions> = async func
       .send()
   }
 
-  fastify.get('/cats/:id', byId)
+  fastify.get('/cats/:id', byID)
   fastify.get('/cats', all)
   fastify.post('/cats', create)
   fastify.put('/cats/:id', update)

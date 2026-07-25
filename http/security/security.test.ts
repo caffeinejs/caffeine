@@ -403,20 +403,20 @@ describe('auth configurer (fake handler)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Section B — JwtBearerHandler integration (real tokens via SignJWT)
+// Section B — JWTBearerHandler integration (real tokens via SignJWT)
 // ---------------------------------------------------------------------------
 
-describe('JwtBearerHandler', () => {
+describe('JWTBearerHandler', () => {
   it('accepts a valid HS256 token on a protected route', async () => {
     @Authorize()
     @Controller('/jwt-valid')
-    class JwtValidController {
+    class JWTValidController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtValidController]
+    void [JWTValidController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -434,13 +434,13 @@ describe('JwtBearerHandler', () => {
   it('returns 401 with WWW-Authenticate: Bearer when no Authorization header', async () => {
     @Authorize()
     @Controller('/jwt-no-header')
-    class JwtNoHeaderController {
+    class JWTNoHeaderController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtNoHeaderController]
+    void [JWTNoHeaderController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -456,13 +456,13 @@ describe('JwtBearerHandler', () => {
   it('returns 401 for a malformed token', async () => {
     @Authorize()
     @Controller('/jwt-bad-token')
-    class JwtBadTokenController {
+    class JWTBadTokenController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtBadTokenController]
+    void [JWTBadTokenController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -479,13 +479,13 @@ describe('JwtBearerHandler', () => {
   it('returns 401 for an expired token', async () => {
     @Authorize()
     @Controller('/jwt-expired')
-    class JwtExpiredController {
+    class JWTExpiredController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtExpiredController]
+    void [JWTExpiredController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -503,13 +503,13 @@ describe('JwtBearerHandler', () => {
   it('returns 401 when issuer does not match', async () => {
     @Authorize()
     @Controller('/jwt-wrong-iss')
-    class JwtWrongIssController {
+    class JWTWrongIssController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtWrongIssController]
+    void [JWTWrongIssController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b =>
@@ -529,13 +529,13 @@ describe('JwtBearerHandler', () => {
   it('returns 401 when audience does not match', async () => {
     @Authorize()
     @Controller('/jwt-wrong-aud')
-    class JwtWrongAudController {
+    class JWTWrongAudController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtWrongAudController]
+    void [JWTWrongAudController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b =>
@@ -555,14 +555,14 @@ describe('JwtBearerHandler', () => {
   it('exposes sub claim via ctx.user.findFirst', async () => {
     @Authorize()
     @Controller('/jwt-sub-claim')
-    class JwtSubClaimController {
+    class JWTSubClaimController {
       @Params([context()])
       @Get('/')
       list(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }
-    void [JwtSubClaimController]
+    void [JWTSubClaimController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -582,13 +582,13 @@ describe('JwtBearerHandler', () => {
   it('maps a roles claim so isInRole works', async () => {
     @Authorize({ roles: ['admin'] })
     @Controller('/jwt-role')
-    class JwtRoleController {
+    class JWTRoleController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtRoleController]
+    void [JWTRoleController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -606,13 +606,13 @@ describe('JwtBearerHandler', () => {
   it('expands an array roles claim so each value becomes a separate Claim', async () => {
     @Authorize({ roles: ['editor'] })
     @Controller('/jwt-array-roles')
-    class JwtArrayRolesController {
+    class JWTArrayRolesController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtArrayRolesController]
+    void [JWTArrayRolesController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -632,13 +632,13 @@ describe('JwtBearerHandler', () => {
 
     @Authorize()
     @Controller('/jwt-on-validated')
-    class JwtOnValidatedController {
+    class JWTOnValidatedController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtOnValidatedController]
+    void [JWTOnValidatedController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b =>
@@ -663,13 +663,13 @@ describe('JwtBearerHandler', () => {
 
     @Authorize()
     @Controller('/jwt-on-fail')
-    class JwtOnFailController {
+    class JWTOnFailController {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtOnFailController]
+    void [JWTOnFailController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b =>
@@ -692,13 +692,13 @@ describe('JwtBearerHandler', () => {
   it('returns 403 when roles do not match even with valid JWT', async () => {
     @Authorize({ roles: ['admin'] })
     @Controller('/jwt-role-403')
-    class JwtRole403Controller {
+    class JWTRole403Controller {
       @Get('/')
       list() {
         return { ok: true }
       }
     }
-    void [JwtRole403Controller]
+    void [JWTRole403Controller]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
@@ -716,7 +716,7 @@ describe('JwtBearerHandler', () => {
   it('@AllowAnonymous on a method of a JWT-protected class skips verification', async () => {
     @Authorize()
     @Controller('/jwt-allow-anon')
-    class JwtAllowAnonController {
+    class JWTAllowAnonController {
       @Get('/protected')
       protected() {
         return { ok: true }
@@ -728,7 +728,7 @@ describe('JwtBearerHandler', () => {
         return { ok: true }
       }
     }
-    void [JwtAllowAnonController]
+    void [JWTAllowAnonController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))

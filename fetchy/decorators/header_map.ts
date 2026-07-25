@@ -1,5 +1,4 @@
-import { appendHeaders } from '../headers_util.js'
-import { classMeta, methodMeta } from '../metadata.js'
+import { configureClass, configureMethod } from './registrar/registrar.js'
 import { classOrMethod } from './_decorator_util.js'
 
 /**
@@ -9,7 +8,15 @@ import { classOrMethod } from './_decorator_util.js'
 export function HeaderMap(headers: Record<string, string>) {
   return classOrMethod(
     'HeaderMap',
-    (_target, context) => appendHeaders(classMeta(context.metadata).headers, headers),
-    context => appendHeaders(methodMeta(context.metadata, context.name).headers, headers),
+    (_target, context) => configureClass(context, spec => {
+      for (const [name, value] of Object.entries(headers)) {
+        spec.header(name, value)
+      }
+    }),
+    context => configureMethod(context, spec => {
+      for (const [name, value] of Object.entries(headers)) {
+        spec.header(name, value)
+      }
+    }),
   )
 }

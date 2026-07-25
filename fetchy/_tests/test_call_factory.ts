@@ -28,7 +28,7 @@ export class TestCall implements Call {
 export class TestCallFactory implements CallFactory {
   readonly calls: TestCall[] = []
 
-  provide(_baseUrl: string): Call {
+  provide(_baseURL: string): Call {
     const call = new TestCall()
     this.calls.push(call)
     return call
@@ -39,7 +39,7 @@ export class TestCallFactory implements CallFactory {
   }
 }
 
-export function fakeJsonResponse(status: number, body: unknown, statusText = 'OK'): Response {
+export function fakeJSONResponse(status: number, body: unknown, statusText = 'OK'): Response {
   return new Response(JSON.stringify(body), {
     status,
     statusText,

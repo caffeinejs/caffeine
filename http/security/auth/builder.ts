@@ -11,14 +11,14 @@ import { ForwardAuthenticationHandler } from './forward/forward.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { kAuthOpts } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
-import { GOOGLE_ISSUER, OidcAuthenticationHandler, OidcAuthenticationOptionsBuilder, kOidcMeta } from './oidc/index.js'
+import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder, kOIDCMeta } from './oidc/index.js'
 import {
   githubOAuth2Preset,
   OAuth2AuthenticationHandler,
   OAuth2AuthenticationOptionsBuilder,
 } from './oauth/index.js'
 import type { GithubPresetOptions } from './oauth/provider/github.js'
-import type { OAuthCallbackHandler, OidcMeta } from './oidc/index.js'
+import type { OAuthCallbackHandler, OIDCMeta } from './oidc/index.js'
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
@@ -88,17 +88,17 @@ export class AuthenticationBuilder implements Service {
     return this.addStrategy(name, new BasicAuthenticationHandler(name, builder.build()))
   }
 
-  addOidc(name: string, configure: (opts: OidcAuthenticationOptionsBuilder) => void): this {
-    const builder = new OidcAuthenticationOptionsBuilder()
+  addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
+    const builder = new OIDCAuthenticationOptionsBuilder()
     configure(builder)
-    const handler = new OidcAuthenticationHandler(name, builder.build(name))
+    const handler = new OIDCAuthenticationHandler(name, builder.build(name))
     this.#oidcHandlers.push(handler)
     return this.addStrategy(name, handler)
   }
 
-  addOidcGoogle(name: string, configure: (opts: OidcAuthenticationOptionsBuilder) => void): this {
-    return this.addOidc(name, opts => {
-      opts.discoveryUrl(GOOGLE_ISSUER).issuer(GOOGLE_ISSUER)
+  addOIDCGoogle(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
+    return this.addOIDC(name, opts => {
+      opts.discoveryURL(GOOGLE_ISSUER).issuer(GOOGLE_ISSUER)
       configure(opts)
     })
   }
@@ -106,7 +106,7 @@ export class AuthenticationBuilder implements Service {
   /**
    * Registers a plain OAuth 2.0 strategy, for providers that do not implement OpenID Connect.
    *
-   * Prefer `addOidc` wherever a provider supports it: a signed id_token is a stronger identity
+   * Prefer `addOIDC` wherever a provider supports it: a signed id_token is a stronger identity
    * assertion than a JSON body fetched with a bearer token.
    */
   addOAuth2(name: string, configure: (opts: OAuth2AuthenticationOptionsBuilder) => void): this {
@@ -212,12 +212,12 @@ export class AuthenticationBuilder implements Service {
     kit.container.bind(kAuthOpts).toValue(options).internal()
 
     if (this.#oidcHandlers.length > 0) {
-      this.#assertOidcIsolation(defaultScheme)
+      this.#assertOIDCIsolation(defaultScheme)
 
-      const meta: OidcMeta = {
+      const meta: OIDCMeta = {
         handlers: this.#oidcHandlers.map(h => ({ callbackPath: h.callbackPath, handler: h })),
       }
-      kit.container.bind(kOidcMeta).toValue(meta).internal()
+      kit.container.bind(kOIDCMeta).toValue(meta).internal()
     }
 
     kit.feats.toggleAuthentication(true)
@@ -237,7 +237,7 @@ export class AuthenticationBuilder implements Service {
    * client registrations is a normal setup, and it is safe once cookies, callback paths and
    * derived keys are distinct.
    */
-  #assertOidcIsolation(defaultScheme: string): void {
+  #assertOIDCIsolation(defaultScheme: string): void {
     const seen = new Map<string, Map<string, string>>([
       ['callbackPath', new Map()],
       ['session cookie name', new Map()],

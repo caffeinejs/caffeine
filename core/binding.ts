@@ -10,7 +10,7 @@ import { ContainerOps } from './container_interface.js'
 
 let _id = 0
 
-function newId() {
+function newID() {
   return _id++
 }
 
@@ -68,7 +68,7 @@ export interface Binding<T = any> {
   /**
    * The scope the binding is associated with.
    */
-  scopeId: Identifier
+  scopeID: Identifier
 
   /**
    * The names the binding is associated with.
@@ -197,7 +197,7 @@ export interface Binding<T = any> {
  */
 export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
   return {
-    id: initial.id === undefined ? newId() : initial.id,
+    id: initial.id === undefined ? newID() : initial.id,
     injections: initial.injections || [],
     injectionResolvers: initial.injectionResolvers || [],
     injectableProperties: initial.injectableProperties || new Map(),
@@ -218,7 +218,7 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     extend: initial.extend,
     type: initial.type,
     byPassPostProcessors: initial.byPassPostProcessors,
-    scopeId: initial.scopeId!,
+    scopeID: initial.scopeID!,
     unscopedFactory: initial.unscopedFactory!,
     factory: initial.factory!,
     factoryCreator: initial.factoryCreator,

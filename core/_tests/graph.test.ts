@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJson, graphToText } from '../graph.js'
+import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJSON, graphToText } from '../graph.js'
 import { binding } from './property/helpers/binding_factory.js'
 
 const TRANSIENT = Symbol('transient')
@@ -29,7 +29,7 @@ describe('buildBindingGraph', function () {
       .toBe(10)
     expect(node.label)
       .toBe('ServiceA')
-    expect(node.scopeId)
+    expect(node.scopeID)
       .toBe('singleton')
     expect(node.names)
       .toEqual(['svc'])
@@ -40,9 +40,9 @@ describe('buildBindingGraph', function () {
   })
 
   it('captures scope description for symbol scopes', function () {
-    const b = binding(1, { scopeId: TRANSIENT })
+    const b = binding(1, { scopeID: TRANSIENT })
     const graph = buildBindingGraph([[ServiceA, b]])
-    expect(graph.nodes[0].scopeId)
+    expect(graph.nodes[0].scopeID)
       .toBe('transient')
   })
 
@@ -57,9 +57,9 @@ describe('buildBindingGraph', function () {
     const edge = graph.edges.find(e => e.kind === 'injection')
     expect(edge)
       .toBeDefined()
-    expect(edge!.fromId)
+    expect(edge!.fromID)
       .toBe(1)
-    expect(edge!.toId)
+    expect(edge!.toID)
       .toBe(2)
     expect(edge!.meta)
       .toBe('param[0]')
@@ -96,9 +96,9 @@ describe('buildBindingGraph', function () {
     const edge = graph.edges.find(e => e.kind === 'property-injection')
     expect(edge)
       .toBeDefined()
-    expect(edge!.fromId)
+    expect(edge!.fromID)
       .toBe(1)
-    expect(edge!.toId)
+    expect(edge!.toID)
       .toBe(2)
     expect(edge!.meta)
       .toBe('myProp')
@@ -116,9 +116,9 @@ describe('buildBindingGraph', function () {
     const edge = graph.edges.find(e => e.kind === 'method-injection')
     expect(edge)
       .toBeDefined()
-    expect(edge!.fromId)
+    expect(edge!.fromID)
       .toBe(1)
-    expect(edge!.toId)
+    expect(edge!.toID)
       .toBe(2)
     expect(edge!.meta)
       .toBe('init[0]')
@@ -135,9 +135,9 @@ describe('buildBindingGraph', function () {
     const edge = graph.edges.find(e => e.kind === 'injection')
     expect(edge)
       .toBeDefined()
-    expect(edge!.fromId)
+    expect(edge!.fromID)
       .toBe(1)
-    expect(edge!.toId)
+    expect(edge!.toID)
       .toBe(2)
   })
 
@@ -159,9 +159,9 @@ describe('buildBindingGraph', function () {
     const edge = graph.edges.find(e => e.kind === 'named-group')
     expect(edge)
       .toBeDefined()
-    expect(edge!.fromId)
+    expect(edge!.fromID)
       .toBe(1)
-    expect(edge!.toId)
+    expect(edge!.toID)
       .toBe(2)
     expect(edge!.meta)
       .toBe('validator')
@@ -179,9 +179,9 @@ describe('buildBindingGraph', function () {
     const edge = graph.edges.find(e => e.kind === 'label-group')
     expect(edge)
       .toBeDefined()
-    expect(edge!.fromId)
+    expect(edge!.fromID)
       .toBe(1)
-    expect(edge!.toId)
+    expect(edge!.toID)
       .toBe(2)
     expect(edge!.meta)
       .toBe('myLabel')
@@ -215,9 +215,9 @@ describe('buildBindingGraph', function () {
     const injEdges = graph.edges.filter(e => e.kind === 'injection')
     expect(injEdges)
       .toHaveLength(2)
-    expect(injEdges.find(e => e.fromId === 1 && e.toId === 2))
+    expect(injEdges.find(e => e.fromID === 1 && e.toID === 2))
       .toBeDefined()
-    expect(injEdges.find(e => e.fromId === 2 && e.toId === 1))
+    expect(injEdges.find(e => e.fromID === 2 && e.toID === 1))
       .toBeDefined()
   })
 
@@ -241,7 +241,7 @@ describe('buildBindingGraph', function () {
     const bA = binding(1, { injections: [{ key: ServiceA }] })
     const graph = buildBindingGraph([[ServiceA, bA]])
 
-    const selfEdge = graph.edges.find(e => e.fromId === 1 && e.toId === 1)
+    const selfEdge = graph.edges.find(e => e.fromID === 1 && e.toID === 1)
     expect(selfEdge)
       .toBeDefined()
     expect(selfEdge!.kind)
@@ -555,9 +555,9 @@ describe('graphToDot', function () {
   })
 })
 
-describe('graphToJson', function () {
+describe('graphToJSON', function () {
   it('serializes an empty graph', function () {
-    const output = graphToJson([])
+    const output = graphToJSON([])
     const parsed = JSON.parse(output)
     expect(parsed.nodes)
       .toHaveLength(0)
@@ -568,7 +568,7 @@ describe('graphToJson', function () {
   it('serializes nodes and edges', function () {
     const bA = binding(1, { injections: [{ key: ServiceB }] })
     const bB = binding(2)
-    const output = graphToJson([
+    const output = graphToJSON([
       [ServiceA, bA],
       [ServiceB, bB],
     ])
@@ -578,7 +578,7 @@ describe('graphToJson', function () {
       .toHaveLength(2)
     expect(parsed.nodes[0].label)
       .toBe('ServiceA')
-    expect(parsed.nodes[0].scopeId)
+    expect(parsed.nodes[0].scopeID)
       .toBe('singleton')
     expect(parsed.edges[0].kind)
       .toBe('injection')
@@ -590,7 +590,7 @@ describe('graphToJson', function () {
     const label = Symbol('group')
     const bA = binding(1, { names: ['svc'], labels: [label], injections: [{ key: ServiceB }] })
     const bB = binding(2, { names: ['svc'], labels: [label] })
-    const output = graphToJson([
+    const output = graphToJSON([
       [ServiceA, bA],
       [ServiceB, bB],
     ])
@@ -606,14 +606,14 @@ describe('graphToJson', function () {
   it('accepts a pre-built BindingGraph', function () {
     const b = binding(1)
     const graph = buildBindingGraph([[ServiceA, b]])
-    const output = graphToJson(graph)
+    const output = graphToJSON(graph)
     expect(() => JSON.parse(output)).not.toThrow()
   })
 
   it('produces valid JSON for circular dependency bindings', function () {
     const bA = binding(1, { injections: [{ key: ServiceB }] })
     const bB = binding(2, { injections: [{ key: ServiceA }] })
-    const output = graphToJson([
+    const output = graphToJSON([
       [ServiceA, bA],
       [ServiceB, bB],
     ])

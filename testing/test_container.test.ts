@@ -421,7 +421,7 @@ describe('TestContainer', function () {
     const kCgConnStr = Symbol('kCgConnStr')
     const kCgDbPool = Symbol('kCgDbPool')
     const kCgDbConn = Symbol('kCgDbConn')
-    const kCgRedisUrl = Symbol('kCgRedisUrl')
+    const kCgRedisURL = Symbol('kCgRedisURL')
     const kCgCache = Symbol('kCgCache')
 
     class CgDbPool {
@@ -453,13 +453,13 @@ describe('TestContainer', function () {
         return new CgDbConn(pool)
       }
 
-      @Provides(kCgRedisUrl)
-      redisUrl(): string {
+      @Provides(kCgRedisURL)
+      redisURL(): string {
         return 'redis://test'
       }
 
       @Async()
-      @Provides(kCgCache, [kCgRedisUrl])
+      @Provides(kCgCache, [kCgRedisURL])
       async cacheClient(url: string): Promise<CgCacheClient> {
         return new CgCacheClient(url)
       }
@@ -578,7 +578,7 @@ describe('TestContainer', function () {
       expect(di.has(kCgDbPool)).toBe(false)
       expect(di.has(kCgConnStr)).toBe(false)
       expect(di.has(kCgCache)).toBe(true)
-      expect(di.has(kCgRedisUrl)).toBe(true)
+      expect(di.has(kCgRedisURL)).toBe(true)
     })
 
     it('isolate(kCgDbConn, false) prunes exclusive db deps, preserves CgInfraConfig shared by cache', function () {

@@ -48,9 +48,9 @@ export interface RemoteAuthenticationIdentity {
 
 /** The options every OAuth-family strategy shares. */
 export interface RemoteAuthenticationOptions {
-  clientId: string
+  clientID: string
   clientSecret: string
-  callbackUrl: string
+  callbackURL: string
   defaultRedirectPath: string
   scopes: string[]
 
@@ -66,7 +66,7 @@ export interface RemoteAuthenticationOptions {
 
   ticketStore?: RemoteAuthenticationTicketStore
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context, authorizationUrl: string) => Promise<void> | void
+  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
   /** Adjusts the authorization URL before the redirect. Guarded parameters are re-asserted. */
   onRedirectToProvider?: (ctx: Context, url: URL) => Promise<void> | void
@@ -90,7 +90,7 @@ export abstract class RemoteAuthenticationHandler<
   constructor(name: string, options: O) {
     super(options)
     this.name = name
-    this.#callbackPath = new URL(options.callbackUrl).pathname
+    this.#callbackPath = new URL(options.callbackURL).pathname
   }
 
   /** The strategy name this handler was registered under. */
@@ -132,7 +132,7 @@ export abstract class RemoteAuthenticationHandler<
   ): Promise<RemoteAuthenticationIdentity>
 
   /** Whether this strategy sends PKCE, and with which method. */
-  protected abstract resolvePkceMethod(): Promise<'S256' | 'plain' | 'none'>
+  protected abstract resolvePKCEMethod(): Promise<'S256' | 'plain' | 'none'>
 
   /** Wraps a callback failure in the protocol's error type. Override to change the class only. */
   protected callbackError(message: string): Error {
@@ -223,7 +223,7 @@ export abstract class RemoteAuthenticationHandler<
     const [issuer, endpoint, pkceMethod] = await Promise.all([
       this.resolveIssuer(),
       this.resolveAuthorizationEndpoint(),
-      this.resolvePkceMethod(),
+      this.resolvePKCEMethod(),
     ])
 
     const codeVerifier = generateCodeVerifier()
@@ -248,15 +248,15 @@ export abstract class RemoteAuthenticationHandler<
 
     ctx.cookie(this.options.stateCookieName, stateCookie, this.cookieOpts(STATE_TTL_SECONDS))
 
-    const authUrl = new URL(endpoint)
-    authUrl.searchParams.set('client_id', this.options.clientId)
-    authUrl.searchParams.set('redirect_uri', this.options.callbackUrl)
-    authUrl.searchParams.set('response_type', 'code')
-    authUrl.searchParams.set('scope', this.options.scopes.join(' '))
-    authUrl.searchParams.set('state', state)
+    const authURL = new URL(endpoint)
+    authURL.searchParams.set('client_id', this.options.clientID)
+    authURL.searchParams.set('redirect_uri', this.options.callbackURL)
+    authURL.searchParams.set('response_type', 'code')
+    authURL.searchParams.set('scope', this.options.scopes.join(' '))
+    authURL.searchParams.set('state', state)
     if (pkceMethod !== 'none') {
-      authUrl.searchParams.set('code_challenge', codeChallenge)
-      authUrl.searchParams.set('code_challenge_method', pkceMethod)
+      authURL.searchParams.set('code_challenge', codeChallenge)
+      authURL.searchParams.set('code_challenge_method', pkceMethod)
     }
     const guarded = new Set(this.guardedAuthorizationParams())
     for (const [key, value] of Object.entries(await this.authorizationParams({ state, nonce, codeChallenge }))) {
@@ -264,22 +264,22 @@ export abstract class RemoteAuthenticationHandler<
       // extension not a caller's either — provider-specific extras reach here as ordinary
       // entries, and one named `redirect_uri` would otherwise send the code somewhere else.
       // Guarded parameters the base does not set, such as the OIDC nonce, still pass through.
-      if (guarded.has(key) && authUrl.searchParams.has(key)) {
+      if (guarded.has(key) && authURL.searchParams.has(key)) {
         continue
       }
-      authUrl.searchParams.set(key, value)
+      authURL.searchParams.set(key, value)
     }
 
-    await this.#applyRedirectHook(ctx, authUrl)
+    await this.#applyRedirectHook(ctx, authURL)
 
     // The hook runs only after state, PKCE and the state cookie are in place, so overriding
     // the response can never bypass the flow's security machinery.
-    const authorizationUrl = authUrl.toString()
+    const authorizationURL = authURL.toString()
     if (this.options.onChallenge) {
-      return this.options.onChallenge(ctx, authorizationUrl)
+      return this.options.onChallenge(ctx, authorizationURL)
     }
 
-    ctx.redirect(authorizationUrl, 302)
+    ctx.redirect(authorizationURL, 302)
   }
 
   /**

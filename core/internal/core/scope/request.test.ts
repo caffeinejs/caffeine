@@ -1,4 +1,4 @@
-import Http, { IncomingMessage, ServerResponse } from 'http'
+import HTTP, { IncomingMessage, ServerResponse } from 'http'
 import { randomUUID } from 'node:crypto'
 import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 import Supertest from 'supertest'
@@ -63,7 +63,7 @@ describe('Request Scope', function () {
       })
     }
 
-    const server = Http.createServer(requestListener)
+    const server = HTTP.createServer(requestListener)
 
     afterAll(async () => {
       server.close()

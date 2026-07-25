@@ -8,17 +8,17 @@ import { Query } from '../decorators/params/query.js'
 import { QueryName } from '../decorators/params/query_name.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
 import { Params } from '../decorators/params.js'
+import { getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { GET, POST } from '../decorators/verbs.js'
-import { allMethodMeta } from '../metadata.js'
 import { noop } from '../noop.js'
 
-function metadataOf(ctor: Function): DecoratorMetadataObject {
-  return (ctor as unknown as { [Symbol.metadata]: DecoratorMetadataObject })[Symbol.metadata]
+function metadataOf(ctor: Function): object {
+  return (ctor as unknown as { [Symbol.metadata]: object })[Symbol.metadata]
 }
 
 describe('@Params', () => {
   it('records every parameter descriptor in declaration order', () => {
-    class Api {
+    class API {
       @GET('/users/{id}')
       @Params([Param('id'), Query('active'), QueryName(), Header('x-trace'), SignalParam()])
       get(
@@ -32,20 +32,20 @@ describe('@Params', () => {
       }
     }
 
-    const method = allMethodMeta(metadataOf(Api)).get('get')
+    const spec = getMethodBuilders(metadataOf(API)).get('get')?.toMethodSpec()
 
-    expect(method?.params).toEqual([
+    expect(spec?.params).toEqual([
       { kind: 'path', key: 'id', index: 0 },
       { kind: 'query', key: 'active', index: 1 },
       { kind: 'query-name', index: 2 },
       { kind: 'header', key: 'x-trace', index: 3 },
       { kind: 'signal', index: 4 },
     ])
-    expect(method?.argLen).toBe(5)
+    expect(spec?.argLen).toBe(5)
   })
 
   it('@Body records the body index', () => {
-    class Api {
+    class API {
       @POST('/users')
       @Params([Body()])
       create(_body: unknown): Promise<unknown> {
@@ -53,14 +53,14 @@ describe('@Params', () => {
       }
     }
 
-    const method = allMethodMeta(metadataOf(Api)).get('create')
+    const spec = getMethodBuilders(metadataOf(API)).get('create')?.toMethodSpec()
 
-    expect(method?.params).toEqual([{ kind: 'body', index: 0 }])
-    expect(method?.bodyIndex).toBe(0)
+    expect(spec?.params).toEqual([{ kind: 'body', index: 0 }])
+    expect(spec?.bodyIndex).toBe(0)
   })
 
   it('@Field records form-field descriptors', () => {
-    class Api {
+    class API {
       @POST('/form')
       @Params([Field('name'), Field('age')])
       submit(_name: string, _age: number): Promise<unknown> {
@@ -68,9 +68,9 @@ describe('@Params', () => {
       }
     }
 
-    const method = allMethodMeta(metadataOf(Api)).get('submit')
+    const spec = getMethodBuilders(metadataOf(API)).get('submit')?.toMethodSpec()
 
-    expect(method?.params).toEqual([
+    expect(spec?.params).toEqual([
       { kind: 'form-field', key: 'name', index: 0 },
       { kind: 'form-field', key: 'age', index: 1 },
     ])
@@ -78,7 +78,7 @@ describe('@Params', () => {
 
   it('does not affect decorator evaluation order relative to the verb decorator', () => {
     // @Params below @GET or above should be equivalent, since both write into the same
-    // shared context.metadata object rather than composing return values.
+    // shared context.metadata-keyed registrar entry rather than composing return values.
     class Below {
       @GET('/x')
       @Params([Param('id')])
@@ -87,9 +87,9 @@ describe('@Params', () => {
       }
     }
 
-    const method = allMethodMeta(metadataOf(Below)).get('get')
+    const spec = getMethodBuilders(metadataOf(Below)).get('get')?.toMethodSpec()
 
-    expect(method?.httpMethod).toBe('GET')
-    expect(method?.params).toEqual([{ kind: 'path', key: 'id', index: 0 }])
+    expect(spec?.httpMethod).toBe('GET')
+    expect(spec?.params).toEqual([{ kind: 'path', key: 'id', index: 0 }])
   })
 })

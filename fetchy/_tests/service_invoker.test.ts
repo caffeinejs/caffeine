@@ -1,24 +1,40 @@
 import { describe, expect, it } from 'vitest'
 
-import { JsonResponseConverter, RawResponseConverter } from '../response_converter.js'
+import type { MethodSpec } from '../decorators/registrar/index.js'
+import { JSONResponseConverter, RawResponseConverter } from '../response_converter.js'
 import { buildInvoker } from '../service_invoker.js'
-import { MethodMeta } from '../metadata.js'
-import { fakeJsonResponse, TestCall } from './test_call_factory.js'
+import { fakeJSONResponse, TestCall } from './test_call_factory.js'
+
+function methodSpec(overrides: Partial<MethodSpec> = {}): MethodSpec {
+  return {
+    httpMethod: '',
+    path: '',
+    headers: new Headers(),
+    params: [],
+    bodyIndex: -1,
+    argLen: 0,
+    formURLEncoded: false,
+    requestType: undefined,
+    responseType: undefined,
+    ...overrides,
+  }
+}
 
 describe('buildInvoker', () => {
   it('runs the request through the interceptor chain and converts the JSON response', async () => {
-    const meta = new MethodMeta()
-    meta.httpMethod = 'GET'
-    meta.path = '/users/{id}'
-    meta.params = [{ kind: 'path', key: 'id', index: 0 }]
+    const meta = methodSpec({
+      httpMethod: 'GET',
+      path: '/users/{id}',
+      params: [{ kind: 'path', key: 'id', index: 0 }],
+    })
 
     const call = new TestCall()
-    call.willRespond(fakeJsonResponse(200, { id: '1', name: 'Ada' }))
+    call.willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const seen: string[] = []
     const invoke = buildInvoker(
       {
-        baseUrl: 'http://example.test',
+        baseURL: 'http://example.test',
         call,
         interceptors: [
           {
@@ -28,8 +44,8 @@ describe('buildInvoker', () => {
             },
           },
         ],
-        responseConverter: JsonResponseConverter,
-        errorResponseConverter: JsonResponseConverter,
+        responseConverter: JSONResponseConverter,
+        errorResponseConverter: JSONResponseConverter,
         callAdapterFactories: [],
       },
       meta,
@@ -42,50 +58,49 @@ describe('buildInvoker', () => {
     expect(call.lastRequest?.method).toBe('GET')
   })
 
-  it('throws ErrFetchyHttp on a non-ok response, with the parsed error body', async () => {
-    const meta = new MethodMeta()
-    meta.httpMethod = 'GET'
-    meta.path = '/users/{id}'
-    meta.params = [{ kind: 'path', key: 'id', index: 0 }]
+  it('throws ErrFetchyHTTP on a non-ok response, with the parsed error body', async () => {
+    const meta = methodSpec({
+      httpMethod: 'GET',
+      path: '/users/{id}',
+      params: [{ kind: 'path', key: 'id', index: 0 }],
+    })
 
     const call = new TestCall()
-    call.willRespond(fakeJsonResponse(404, { message: 'not found' }, 'Not Found'))
+    call.willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
 
     const invoke = buildInvoker(
       {
-        baseUrl: 'http://example.test',
+        baseURL: 'http://example.test',
         call,
         interceptors: [],
-        responseConverter: JsonResponseConverter,
-        errorResponseConverter: JsonResponseConverter,
+        responseConverter: JSONResponseConverter,
+        errorResponseConverter: JSONResponseConverter,
         callAdapterFactories: [],
       },
       meta,
     )
 
     await expect(invoke('404')).rejects.toMatchObject({
-      name: 'ErrFetchyHttp',
+      name: 'ErrFetchyHTTP',
       status: 404,
       body: { message: 'not found' },
     })
   })
 
   it('supports a raw response converter that skips JSON parsing', async () => {
-    const meta = new MethodMeta()
-    meta.httpMethod = 'GET'
-    meta.path = '/raw'
+    const meta = methodSpec({ httpMethod: 'GET', path: '/raw' })
 
     const call = new TestCall()
-    const response = fakeJsonResponse(200, { ignored: true })
+    const response = fakeJSONResponse(200, { ignored: true })
     call.willRespond(response)
 
     const invoke = buildInvoker(
       {
-        baseUrl: 'http://example.test',
+        baseURL: 'http://example.test',
         call,
         interceptors: [],
         responseConverter: RawResponseConverter,
-        errorResponseConverter: JsonResponseConverter,
+        errorResponseConverter: JSONResponseConverter,
         callAdapterFactories: [],
       },
       meta,

@@ -3,7 +3,7 @@ import { Pet } from './pets.js'
 
 export interface PetsRepository {
   all(): Pet[]
-  byId(id: number): Pet | undefined
+  byID(id: number): Pet | undefined
   create(pet: Pet): Pet
   update(id: number, pet: Pet): Pet | undefined
   delete(id: number): boolean
@@ -18,7 +18,7 @@ export class PetsInMemoryRepository implements PetsRepository {
     return this.pets
   }
 
-  byId(id: number): Pet | undefined {
+  byID(id: number): Pet | undefined {
     return this.pets.find(p => p.id === id)
   }
 

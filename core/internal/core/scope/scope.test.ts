@@ -11,7 +11,7 @@ import { bindScope, hasScope, Scopes, Scope, unbindScope } from '../../../scope.
 import { ResolutionContext } from '../../../resolution_context.js'
 
 describe('Scoping', function () {
-  const kCustomScopeId = Symbol('custom')
+  const kCustomScopeID = Symbol('custom')
   const spy = vi.fn()
 
   class CustomScope implements Scope {
@@ -49,13 +49,13 @@ describe('Scoping', function () {
 
   @Injectable()
   @Lazy()
-  @Lifetime(kCustomScopeId)
+  @Lifetime(kCustomScopeID)
   class Dep {
     readonly id: string = randomUUID()
   }
 
   afterAll(() => {
-    unbindScope(kCustomScopeId)
+    unbindScope(kCustomScopeID)
     unbindScope('none')
   })
 
@@ -106,7 +106,7 @@ describe('Scoping', function () {
   it('should use scope specified with decorator when it is registered', async function () {
     const scope = new CustomScope()
 
-    bindScope(kCustomScopeId, () => scope)
+    bindScope(kCustomScopeID, () => scope)
 
     const di = new CaffeineIoC()
     await di.init()

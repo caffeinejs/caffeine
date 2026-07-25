@@ -50,14 +50,14 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(Service).lifetime(Scope.Singleton)
    * ```
    */
-  lifetime(scopeId: Identifier): BinderOptions<TValue> {
-    if (!hasScope(notNil(scopeId))) {
+  lifetime(scopeID: Identifier): BinderOptions<TValue> {
+    if (!hasScope(notNil(scopeID))) {
       throw new ErrInvalidBinding(
-        `Scope "${String(scopeId)}" is not registered: use bindScope() to register it before use`,
+        `Scope "${String(scopeID)}" is not registered: use bindScope() to register it before use`,
       )
     }
 
-    this.binding.scopeId = scopeId
+    this.binding.scopeID = scopeID
     this.sync()
 
     return this

@@ -1,13 +1,12 @@
-import type { ApiParameterSpec } from './api_parameter_spec.js'
+import type { APIParameterSpec } from './api_parameter_spec.js'
 
 /**
- * Binds an argument as the request body, converted per `methodMeta.requestType` (JSON by default).
+ * Binds an argument as the request body, converted per `MethodSpec.requestType` (JSON by default).
  */
-export function Body(): ApiParameterSpec {
+export function Body(): APIParameterSpec {
   return {
-    apply({ meta, index }) {
-      meta.params.push({ kind: 'body', index })
-      meta.bodyIndex = index
+    apply({ spec, index }) {
+      spec.param({ kind: 'body', index })
     },
   }
 }

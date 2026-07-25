@@ -5,20 +5,20 @@ import { Claim } from '../../index.js'
 import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
 import type { RemoteAuthenticationIdentity } from '../internal/remote/handler.js'
 import { redactPii, redactPiiList } from '../internal/remote/pii.js'
-import { selectPkceMethod } from '../internal/remote/pkce.js'
+import { selectPKCEMethod } from '../internal/remote/pkce.js'
 import type { RemoteAuthenticationState } from '../internal/remote/state_store.js'
 import { fetchUserInfo } from '../internal/remote/userinfo.js'
 import { fetchDiscovery } from './discovery.js'
-import type { OidcDiscoveryDocument } from './discovery.js'
+import type { OIDCDiscoveryDocument } from './discovery.js'
 import { assertAccessTokenHash } from './_at_hash.js'
-import { resolveOidcOptions } from './options.js'
+import { resolveOIDCOptions } from './options.js'
 import type {
-  OidcAuthenticationOptions,
-  OidcTokens,
-  ResolvedOidcAuthenticationOptions,
+  OIDCAuthenticationOptions,
+  OIDCTokens,
+  ResolvedOIDCAuthenticationOptions,
   TokenEndpointAuthMethod,
 } from './options.js'
-import { ErrOidcCallback, ErrOidcConfiguration, ErrOidcDiscovery, ErrOidcSession } from './errors.js'
+import { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession } from './errors.js'
 
 /**
  * Registered JWT/OIDC claims excluded from the default identity mapping.
@@ -55,26 +55,26 @@ const ID_TOKEN_ALGORITHMS = [
   'PS512',
 ]
 
-export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<ResolvedOidcAuthenticationOptions> {
-  #discovery: OidcDiscoveryDocument | undefined
+export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<ResolvedOIDCAuthenticationOptions> {
+  #discovery: OIDCDiscoveryDocument | undefined
   #pkceMethod: 'S256' | 'plain' | undefined
   #jwks: JWTVerifyGetKey | undefined
   #tokenAuthMethod: TokenEndpointAuthMethod | undefined
   #discoveryFetchedAt = 0
-  #inflight: Promise<OidcDiscoveryDocument> | undefined
+  #inflight: Promise<OIDCDiscoveryDocument> | undefined
 
-  constructor(name: string, options: OidcAuthenticationOptions) {
+  constructor(name: string, options: OIDCAuthenticationOptions) {
     // Resolving here rather than trusting the caller means there is exactly one path to a
     // configured handler: constructing one directly still validates and still defaults.
-    super(name, resolveOidcOptions(options, name))
+    super(name, resolveOIDCOptions(options, name))
   }
 
   protected override callbackError(message: string): Error {
-    return new ErrOidcCallback(message)
+    return new ErrOIDCCallback(message)
   }
 
   protected override sessionError(message: string): Error {
-    return new ErrOidcSession(message)
+    return new ErrOIDCSession(message)
   }
 
   // ---------------------------------------------------------------- protocol seams
@@ -88,10 +88,10 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
   }
 
   /**
-   * Never `none`: OpenID Connect flows here always carry PKCE, and `selectPkceMethod` throws
+   * Never `none`: OpenID Connect flows here always carry PKCE, and `selectPKCEMethod` throws
    * rather than degrade when a provider advertises neither method.
    */
-  protected override async resolvePkceMethod(): Promise<'S256' | 'plain'> {
+  protected override async resolvePKCEMethod(): Promise<'S256' | 'plain'> {
     await this.#resolveDiscovery()
     return this.#pkceMethod!
   }
@@ -160,7 +160,7 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       const jwks = this.#resolveJwks(discovery.jwks_uri)
       const { payload: p, protectedHeader } = await jwtVerify(tokens.idToken, jwks, {
         issuer: discovery.issuer,
-        audience: this.options.clientId,
+        audience: this.options.clientID,
         algorithms: ID_TOKEN_ALGORITHMS,
         clockTolerance: this.options.clockToleranceSeconds,
       })
@@ -213,9 +213,9 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       if (typeof payload.azp !== 'string') {
         throw this.callbackFailure('id_token has multiple audiences but no azp claim')
       }
-      if (payload.azp !== this.options.clientId) {
+      if (payload.azp !== this.options.clientID) {
         throw this.callbackFailure(
-          'id_token azp does not match clientId'
+          'id_token azp does not match clientID'
           + ` (azp ${redactPii('azp', payload.azp, showPii)})`,
         )
       }
@@ -279,21 +279,21 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     const endpoint = this.options.endSessionEndpoint
       ?? (await this.#resolveDiscovery()).end_session_endpoint
     if (!endpoint) {
-      throw new ErrOidcConfiguration(
+      throw new ErrOIDCConfiguration(
         'Cannot sign out: the provider advertises no end_session_endpoint',
       )
     }
 
     const url = new URL(endpoint)
-    url.searchParams.set('client_id', this.options.clientId)
+    url.searchParams.set('client_id', this.options.clientID)
     // RECOMMENDED rather than REQUIRED by the spec, and unavailable without `saveTokens`.
     // Providers that insist on it will say so; sending nothing is better than sending a
     // token belonging to some other session.
     if (idToken) {
       url.searchParams.set('id_token_hint', idToken)
     }
-    if (this.options.postLogoutRedirectUri) {
-      url.searchParams.set('post_logout_redirect_uri', this.options.postLogoutRedirectUri)
+    if (this.options.postLogoutRedirectURI) {
+      url.searchParams.set('post_logout_redirect_uri', this.options.postLogoutRedirectURI)
     }
 
     ctx.redirect(url.toString(), 302)
@@ -309,8 +309,8 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
    */
   async #mergeUserInfo(
     payload: Record<string, unknown>,
-    tokens: OidcTokens,
-    discovery: OidcDiscoveryDocument,
+    tokens: OIDCTokens,
+    discovery: OIDCDiscoveryDocument,
   ): Promise<Record<string, unknown>> {
     const endpoint = this.options.userInfoEndpoint ?? discovery.userinfo_endpoint
     if (!endpoint) {
@@ -352,14 +352,14 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
   async #exchangeCode(
     code: string,
     codeVerifier: string,
-    discovery: OidcDiscoveryDocument,
-  ): Promise<OidcTokens> {
+    discovery: OIDCDiscoveryDocument,
+  ): Promise<OIDCTokens> {
     const method = this.#resolveTokenAuthMethod(discovery)
 
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: this.options.callbackUrl,
+      redirect_uri: this.options.callbackURL,
       code_verifier: codeVerifier,
     })
 
@@ -368,11 +368,11 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     }
 
     if (method === 'client_secret_basic') {
-      headers.Authorization = basicAuthHeader(this.options.clientId, this.options.clientSecret)
+      headers.Authorization = basicAuthHeader(this.options.clientID, this.options.clientSecret)
     } else {
       // An authenticated client does not repeat its credentials in the body, and some
       // servers reject the duplication.
-      body.set('client_id', this.options.clientId)
+      body.set('client_id', this.options.clientID)
       body.set('client_secret', this.options.clientSecret)
     }
 
@@ -426,7 +426,7 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     }
   }
 
-  #resolveTokenAuthMethod(discovery: OidcDiscoveryDocument): TokenEndpointAuthMethod {
+  #resolveTokenAuthMethod(discovery: OIDCDiscoveryDocument): TokenEndpointAuthMethod {
     if (this.#tokenAuthMethod) {
       return this.#tokenAuthMethod
     }
@@ -447,7 +447,7 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       return this.#tokenAuthMethod = 'client_secret_post'
     }
 
-    throw new ErrOidcConfiguration(
+    throw new ErrOIDCConfiguration(
       'Cannot configure OIDC: provider supports neither client_secret_basic nor client_secret_post '
       + `(advertised: ${supported.join(', ')})`,
     )
@@ -465,7 +465,7 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
    * `#pkceMethod`, `#tokenAuthMethod` and `#jwks` and repopulates them across an `await`, so
    * two concurrent entries could have one read a field the other had just cleared.
    */
-  #resolveDiscovery(): Promise<OidcDiscoveryDocument> {
+  #resolveDiscovery(): Promise<OIDCDiscoveryDocument> {
     if (this.#discovery && !this.#discoveryIsStale()) {
       return Promise.resolve(this.#discovery)
     }
@@ -475,35 +475,35 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     })
   }
 
-  async #fetchDiscovery(): Promise<OidcDiscoveryDocument> {
-    let doc: OidcDiscoveryDocument
-    if (this.options.discoveryUrl) {
-      doc = await fetchDiscovery(this.options.discoveryUrl, this.options.httpTimeoutMs)
+  async #fetchDiscovery(): Promise<OIDCDiscoveryDocument> {
+    let doc: OIDCDiscoveryDocument
+    if (this.options.discoveryURL) {
+      doc = await fetchDiscovery(this.options.discoveryURL, this.options.httpTimeoutMs)
 
       // OIDC Discovery §4.3: the issuer in the document must match the expected issuer.
       // Without this, a compromised or misconfigured discovery endpoint gets to define the
       // issuer that every id_token is then validated against.
       if (this.options.issuer && doc.issuer !== this.options.issuer) {
-        throw new ErrOidcDiscovery(
+        throw new ErrOIDCDiscovery(
           `Cannot resolve OIDC discovery document: issuer "${doc.issuer}" does not match the configured issuer "${this.options.issuer}"`,
         )
       }
     } else {
-      // resolveOidcOptions() guarantees all four are present when discoveryUrl is absent.
+      // resolveOIDCOptions() guarantees all four are present when discoveryURL is absent.
       doc = {
         issuer: this.options.issuer as string,
         authorization_endpoint: this.options.authorizationEndpoint as string,
         token_endpoint: this.options.tokenEndpoint as string,
-        jwks_uri: this.options.jwksUri as string,
+        jwks_uri: this.options.jwksURI as string,
       }
     }
 
-    // Derive everything the document implies before committing any of it. `selectPkceMethod`
+    // Derive everything the document implies before committing any of it. `selectPKCEMethod`
     // can reject a provider that advertises no usable method, and if that throw landed after
     // `#discovery` were already assigned, the document would sit cached as fresh with
     // `#pkceMethod` left undefined — every later challenge would then skip re-derivation and
     // send a PKCE-less request. Nothing below this line can throw.
-    const pkceMethod = selectPkceMethod(doc.code_challenge_methods_supported, this.options.allowPlainPkce)
+    const pkceMethod = selectPKCEMethod(doc.code_challenge_methods_supported, this.options.allowPlainPKCE)
 
     // The JWKS resolver is discarded only when the endpoint actually moved. `createRemoteJWKSet`
     // keeps its own rotation cache and refetches on an unknown `kid`, so clearing it on every
@@ -525,7 +525,7 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
    * means always refetch, which is why the comparison is not `<=`.
    */
   #discoveryIsStale(): boolean {
-    if (!this.options.discoveryUrl) {
+    if (!this.options.discoveryURL) {
       return false
     }
 
@@ -533,9 +533,9 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     return ttlMs === 0 || Date.now() - this.#discoveryFetchedAt >= ttlMs
   }
 
-  #resolveJwks(jwksUri: string): JWTVerifyGetKey {
+  #resolveJwks(jwksURI: string): JWTVerifyGetKey {
     return this.#jwks ??= (
-      this.options.jwksResolver?.(jwksUri) ?? createRemoteJWKSet(new URL(jwksUri)) as JWTVerifyGetKey
+      this.options.jwksResolver?.(jwksURI) ?? createRemoteJWKSet(new URL(jwksURI)) as JWTVerifyGetKey
     )
   }
 }
@@ -546,7 +546,7 @@ export class OidcAuthenticationHandler extends RemoteAuthenticationHandler<Resol
  * Uses `URLSearchParams` rather than `encodeURIComponent`, which leaves `!~'()` unencoded
  * and would produce credentials a strict authorization server rejects.
  */
-function formUrlEncode(value: string): string {
+function formURLEncode(value: string): string {
   return new URLSearchParams({ v: value }).toString().slice(2)
 }
 
@@ -556,8 +556,8 @@ function formUrlEncode(value: string): string {
  * RFC 6749 §2.3.1 requires both the client id and secret to be form-urlencoded *before*
  * being joined and base64-encoded.
  */
-function basicAuthHeader(clientId: string, clientSecret: string): string {
-  const credentials = `${formUrlEncode(clientId)}:${formUrlEncode(clientSecret)}`
+function basicAuthHeader(clientID: string, clientSecret: string): string {
+  const credentials = `${formURLEncode(clientID)}:${formURLEncode(clientSecret)}`
   return `Basic ${Buffer.from(credentials).toString('base64')}`
 }
 

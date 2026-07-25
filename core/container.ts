@@ -42,7 +42,7 @@ import { Provider } from './provider.js'
 import { Keys } from './symbols.js'
 
 const DEFAULT_OPTIONS: Partial<Options> = {
-  defaultScopeId: Scopes.SINGLETON,
+  defaultScopeID: Scopes.SINGLETON,
   lazy: false,
   decorators: true,
   checks: {
@@ -66,7 +66,7 @@ export class CaffeineIoC implements Container {
   private readonly metadataReader: MetadataReader
   private readonly lazy?: boolean
   private readonly circularReferences: boolean
-  private readonly scopeId: Identifier
+  private readonly scopeID: Identifier
   private readonly scopes: Map<Identifier, Scope>
   private readonly scopeCheckMode: ScopeCheckMode
 
@@ -119,7 +119,7 @@ export class CaffeineIoC implements Container {
     this.lazy = opts.lazy
     this.circularReferences = opts.checks?.circularReferences ?? false
     this.scopeCheckMode = opts.checks?.scopes ?? 'no-mix'
-    this.scopeId = opts.defaultScopeId ?? Scopes.SINGLETON
+    this.scopeID = opts.defaultScopeID ?? Scopes.SINGLETON
     this.metadataReader = opts.metadataReader || (() => ({}))
     this.scopes = new Map<Identifier, Scope>()
     this.modules = allModuleFns
@@ -446,11 +446,11 @@ export class CaffeineIoC implements Container {
    * Checks if the given key has the given scope within its dependency graph.
    *
    * @param key - The key to check for.
-   * @param scopeId - The scope to check for.
+   * @param scopeID - The scope to check for.
    *
    * @returns True if the key or any of its underlying dependencies have the given scope.
    */
-  hasScopeInGraph(key: Key, scopeId: Identifier): boolean {
+  hasScopeInGraph(key: Key, scopeID: Identifier): boolean {
     if (!this.has(key)) {
       return false
     }
@@ -466,7 +466,7 @@ export class CaffeineIoC implements Container {
 
       visited.add(binding.id)
 
-      if (binding.scopeId === scopeId) {
+      if (binding.scopeID === scopeID) {
         return true
       }
 
@@ -652,7 +652,7 @@ export class CaffeineIoC implements Container {
   newChild(): CaffeineIoC {
     const child = new CaffeineIoC({
       lazy: this.lazy,
-      defaultScopeId: this.scopeId,
+      defaultScopeID: this.scopeID,
       profiles: [...this.profiles],
       parent: this,
       decorators: false,
@@ -739,7 +739,7 @@ export class CaffeineIoC implements Container {
     if (asyncBindings.length === 0) {
       await Promise.all(
         bindings.map((b: Binding) => this.preDestroyBinding(b)
-          .finally(() => this.scopes.get(b.scopeId)
+          .finally(() => this.scopes.get(b.scopeID)
             ?.reset(b))),
       )
 
@@ -756,7 +756,7 @@ export class CaffeineIoC implements Container {
       bindings
         .filter(b => !b.async)
         .map((b: Binding) => this.preDestroyBinding(b)
-          .finally(() => this.scopes.get(b.scopeId)
+          .finally(() => this.scopes.get(b.scopeID)
             ?.reset(b))),
     )
 
@@ -774,7 +774,7 @@ export class CaffeineIoC implements Container {
     }
 
     return this.preDestroyBinding(binding)
-      .finally(() => this.scopes.get(binding.scopeId)
+      .finally(() => this.scopes.get(binding.scopeID)
         ?.reset(binding))
   }
 
@@ -923,9 +923,9 @@ export class CaffeineIoC implements Container {
           continue
         }
 
-        const scope = this.scopes.get(binding.scopeId)
-        if (scope === undefined && binding.scopeId !== Scopes.TRANSIENT) {
-          throw new ErrScopeNotRegistered(binding.scopeId)
+        const scope = this.scopes.get(binding.scopeID)
+        if (scope === undefined && binding.scopeID !== Scopes.TRANSIENT) {
+          throw new ErrScopeNotRegistered(binding.scopeID)
         }
 
         if (binding.lazy || (scope?.lazy ?? true)) {
@@ -974,9 +974,9 @@ export class CaffeineIoC implements Container {
         disposers.push(
           this
             .preDestroyBinding(binding)
-            .finally(() => this.scopes.get(binding.scopeId)?.reset(binding)))
+            .finally(() => this.scopes.get(binding.scopeID)?.reset(binding)))
       } else {
-        disposers.push(Promise.resolve(this.scopes.get(binding.scopeId)?.reset(binding)))
+        disposers.push(Promise.resolve(this.scopes.get(binding.scopeID)?.reset(binding)))
       }
     }
 
@@ -1032,7 +1032,7 @@ export class CaffeineIoC implements Container {
               `${keyStr(key)}: `
               + `names=[${binding.names?.map(x => keyStr(x))
                 .join(', ')}], `
-                + `scope=${binding.scopeId.toString()}, `
+                + `scope=${binding.scopeID.toString()}, `
                 + `injections=[${binding.injections
                   ?.map(
                     spec =>
@@ -1075,7 +1075,7 @@ export class CaffeineIoC implements Container {
       }
 
       const allowed
-        = config.scopeId === undefined || config.scopeId === Scopes.SINGLETON || config.scopeId === Scopes.REFRESH
+        = config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
       if (!allowed) {
         throw new ErrInvalidBinding(
           `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
@@ -1091,11 +1091,11 @@ export class CaffeineIoC implements Container {
 
     const conf = { ...config, ...this.metadataReader(key) }
     const binding = newBinding(conf)
-    if (config.async && !binding.scopeId) {
-      binding.scopeId = Scopes.SINGLETON
+    if (config.async && !binding.scopeID) {
+      binding.scopeID = Scopes.SINGLETON
     }
 
-    const scopeId = binding.scopeId ? binding.scopeId : this.scopeId
+    const scopeID = binding.scopeID ? binding.scopeID : this.scopeID
     const ctor: Ctor | undefined
       = (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
@@ -1110,12 +1110,12 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    const scope = this.scopes.get(scopeId)
-    if (scope === undefined && scopeId !== Scopes.TRANSIENT) {
-      throw new ErrScopeNotRegistered(scopeId)
+    const scope = this.scopes.get(scopeID)
+    if (scope === undefined && scopeID !== Scopes.TRANSIENT) {
+      throw new ErrScopeNotRegistered(scopeID)
     }
 
-    binding.scopeId = scopeId
+    binding.scopeID = scopeID
 
     binding.lazy
       = binding.lazy === undefined && this.lazy === undefined
@@ -1189,10 +1189,10 @@ export class CaffeineIoC implements Container {
       return
     }
 
-    const scope = this.scopes.get(binding.scopeId)
+    const scope = this.scopes.get(binding.scopeID)
     if (scope === undefined) {
-      if (binding.scopeId !== Scopes.TRANSIENT) {
-        throw new ErrScopeNotRegistered(binding.scopeId)
+      if (binding.scopeID !== Scopes.TRANSIENT) {
+        throw new ErrScopeNotRegistered(binding.scopeID)
       }
       return
     }
@@ -1360,7 +1360,7 @@ export class CaffeineIoC implements Container {
   }
 
   private async resolveAsyncBinding(key: Key, binding: Binding): Promise<void> {
-    const scope = this.scopes.get(binding.scopeId) as SingletonScope
+    const scope = this.scopes.get(binding.scopeID) as SingletonScope
     await (binding.unscopedFactory({ container: this, key, binding }) as Promise<unknown>)
       .then(instance => {
         scope.set(binding, instance)
@@ -1374,7 +1374,7 @@ export class CaffeineIoC implements Container {
 
   private async resolveAsyncBindings(): Promise<void> {
     for (const [key, binding] of this._sortedAsyncEntries) {
-      const scope = this.scopes.get(binding.scopeId) as SingletonScope
+      const scope = this.scopes.get(binding.scopeID) as SingletonScope
       if (scope.cachedInstance(binding) != null) {
         continue
       }

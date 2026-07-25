@@ -42,10 +42,10 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
     return Promise.resolve(this.options.authorizationEndpoint)
   }
 
-  protected override resolvePkceMethod(): Promise<'S256' | 'plain' | 'none'> {
+  protected override resolvePKCEMethod(): Promise<'S256' | 'plain' | 'none'> {
     // S256 or nothing. `plain` offers no protection against code interception, and a provider
     // that cannot do S256 is better served by turning PKCE off knowingly.
-    return Promise.resolve(this.options.usePkce ? 'S256' : 'none')
+    return Promise.resolve(this.options.usePKCE ? 'S256' : 'none')
   }
 
   protected override authorizationParams(): Record<string, string> {
@@ -85,11 +85,11 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: this.options.callbackUrl,
-      client_id: this.options.clientId,
+      redirect_uri: this.options.callbackURL,
+      client_id: this.options.clientID,
       client_secret: this.options.clientSecret,
     })
-    if (this.options.usePkce) {
+    if (this.options.usePKCE) {
       body.set('code_verifier', stored.codeVerifier)
     }
 

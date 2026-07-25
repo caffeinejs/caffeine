@@ -2,7 +2,7 @@ import { Container } from '@caffeinejs/core'
 import { Feats } from './feats.js'
 import { AuthenticationOptions } from './security/auth/builder.js'
 import { AuthenticationService } from './security/auth/service.js'
-import type { OidcMeta } from './security/auth/oidc/index.js'
+import type { OIDCMeta } from './security/auth/oidc/index.js'
 
 export interface ServiceKit {
   container: Container
@@ -24,5 +24,5 @@ export interface Services {
   authz: {
     enabled: boolean
   }
-  oidc?: OidcMeta
+  oidc?: OIDCMeta
 }

@@ -16,7 +16,7 @@ export function generateCodeChallenge(verifier: string): string {
  * itself as the challenge and so gives no protection against code interception. A provider
  * advertising only `plain` is therefore rejected unless the caller opts in explicitly.
  */
-export function selectPkceMethod(supported?: string[], allowPlain = false): 'S256' | 'plain' {
+export function selectPKCEMethod(supported?: string[], allowPlain = false): 'S256' | 'plain' {
   if (!supported || supported.includes('S256')) {
     return 'S256'
   }
@@ -25,7 +25,7 @@ export function selectPkceMethod(supported?: string[], allowPlain = false): 'S25
     if (!allowPlain) {
       throw new ErrOAuthConfiguration(
         'Cannot configure authentication: provider advertises only the "plain" PKCE method — '
-        + 'enable allowPlainPkce to accept it',
+        + 'enable allowPlainPKCE to accept it',
       )
     }
 

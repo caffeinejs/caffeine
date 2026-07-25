@@ -403,7 +403,7 @@ describe('Manual Binding', function () {
 
         await di.init()
 
-        expect(di.getBindings(ReqDep)[0].scopeId)
+        expect(di.getBindings(ReqDep)[0].scopeID)
           .toEqual(Scopes.REQUEST)
       })
 
@@ -414,7 +414,7 @@ describe('Manual Binding', function () {
           .toSelf()
           .lifetime(Scopes.REFRESH)
 
-        expect(di.getBindings(RefreshDep)[0].scopeId)
+        expect(di.getBindings(RefreshDep)[0].scopeID)
           .toEqual(Scopes.REFRESH)
       })
     })

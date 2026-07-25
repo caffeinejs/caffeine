@@ -11,7 +11,7 @@ import { normalizeInjection } from '../util/util.js'
 
 export class DecoratedBindingConfig {
   #profiles?: Set<Identifier>
-  #scopeId?: Identifier
+  #scopeID?: Identifier
   #names?: Identifier[]
   #factory?: Factory<unknown> | AsyncFactory<unknown>
   #conditionals?: Conditional[]
@@ -46,8 +46,8 @@ export class DecoratedBindingConfig {
     return this.#profiles
   }
 
-  get scopeId(): Identifier | undefined {
-    return this.#scopeId
+  get scopeID(): Identifier | undefined {
+    return this.#scopeID
   }
 
   get bindingKey(): Key | undefined {
@@ -74,8 +74,8 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  scope(scopeId: Identifier): this {
-    this.#scopeId = scopeId
+  scope(scopeID: Identifier): this {
+    this.#scopeID = scopeID
     return this
   }
 
@@ -274,7 +274,7 @@ export class DecoratedBindingConfig {
       injectableMethods: this.#injectableMethods,
       interceptors: this.#interceptors,
       profiles: this.#profiles,
-      scopeId: this.#scopeId,
+      scopeID: this.#scopeID,
       names: this.#names,
       factory: this.#factory,
       conditionals: this.#conditionals,
