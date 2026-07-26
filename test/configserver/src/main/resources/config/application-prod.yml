@@ -1,0 +1,3 @@
+caffeine:
+  environment: production
+  debug: false

@@ -68,6 +68,17 @@ example\:devtools:
 	@npm run build
 	@npx tsx examples/02-devtools-basic/index.ts
 
+# Config Server (test infrastructure)
+# --
+
+.PHONY: configserver-up
+configserver-up: ## spin up the Spring Cloud Config Server locally (Docker)
+	@docker compose -f test/configserver/docker-compose.yml up --build
+
+.PHONY: configserver-down
+configserver-down: ## stop the Spring Cloud Config Server
+	@docker compose -f test/configserver/docker-compose.yml down
+
 # Misc
 # --
 
