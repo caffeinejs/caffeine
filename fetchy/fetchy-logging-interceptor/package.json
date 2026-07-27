@@ -1,0 +1,27 @@
+{
+  "name": "@caffeinejs/fetchy-logging-interceptor",
+  "version": "0.0.0",
+  "description": "OkHttp-style request/response logging interceptor for @caffeinejs/fetchy",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "package.json"],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/fetchy": "*",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3"
+  }
+}

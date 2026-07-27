@@ -1,0 +1,54 @@
+{
+  "name": "@caffeinejs/fetchy",
+  "version": "0.0.0",
+  "description": "CaffeineJS declarative, TC39-decorator-based HTTP client",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./decorators": {
+      "types": "./dist/decorators/index.d.ts",
+      "default": "./dist/decorators/index.js"
+    },
+    "./builtin/fetch": {
+      "types": "./dist/builtin/fetch/index.d.ts",
+      "default": "./dist/builtin/fetch/index.js"
+    },
+    "./builtin/callback": {
+      "types": "./dist/builtin/callback/index.d.ts",
+      "default": "./dist/builtin/callback/index.js"
+    },
+    "./builtin/retry": {
+      "types": "./dist/builtin/retry/index.d.ts",
+      "default": "./dist/builtin/retry/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run",
+    "bench": "node --expose-gc --import=tsx _benchmarks/post.bench.ts",
+    "bench:generate": "node ../../node_modules/@hey-api/openapi-ts/dist/run.mjs -f _benchmarks/heyapi.config.mjs && node ../../node_modules/orval/dist/bin/orval.mjs --config _benchmarks/orval.config.mjs"
+  },
+  "devDependencies": {
+    "@caffeinejs/fetchy-undici": "*",
+    "@hey-api/openapi-ts": "^0.99.0",
+    "axios": "^1.7.9",
+    "got": "^14.4.5",
+    "mitata": "^1.0.34",
+    "mlly": "^1.8.2",
+    "orval": "^8.23.0",
+    "tsx": "^4.22.4",
+    "undici": "^7.2.0"
+  }
+}

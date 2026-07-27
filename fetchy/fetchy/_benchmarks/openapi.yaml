@@ -1,0 +1,53 @@
+openapi: 3.0.3
+info:
+  title: fetchy benchmark API
+  version: 0.0.0
+servers:
+  - url: http://localhost:3100
+paths:
+  /{id}:
+    post:
+      operationId: postBench
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filter
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                context:
+                  type: string
+                active:
+                  type: boolean
+              required: [id, name, context, active]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+                  context:
+                    type: string
+                  active:
+                    type: boolean

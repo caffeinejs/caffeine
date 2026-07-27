@@ -1,0 +1,26 @@
+{
+  "name": "@caffeinejs/fetchy-undici",
+  "version": "0.0.0",
+  "description": "undici Pool-based transport for @caffeinejs/fetchy",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "package.json"],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/fetchy": "*",
+    "undici": "^7.2.0"
+  }
+}
