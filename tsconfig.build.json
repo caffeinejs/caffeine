@@ -8,7 +8,13 @@
       "path": "./http/tsconfig.build.json"
     },
     {
-      "path": "./fetchy/tsconfig.build.json"
+      "path": "./fetchy/fetchy/tsconfig.build.json"
+    },
+    {
+      "path": "./fetchy/fetchy-logging-interceptor/tsconfig.build.json"
+    },
+    {
+      "path": "./fetchy/fetchy-undici/tsconfig.build.json"
     },
     {
       "path": "./application/tsconfig.build.json"
@@ -30,6 +36,9 @@
     },
     {
       "path": "./plugins/eslint/tsconfig.build.json"
+    },
+    {
+      "path": "./config/tsconfig.build.json"
     }
   ]
 }

@@ -52,11 +52,16 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 bench: ## list available benchmarks
 	@echo "Available benchmarks: helloworld startup request request:bun mixedscopes"
 	@echo "Usage: make bench:<type> (e.g. make bench:helloworld)"
+	@echo "Fetchy HTTP client benchmark: make bench-fetchy"
 
 bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
 	@npm run build
 	@npm run build -w @caffeinejs/benchmarks
 	@npm run bench:$* -w @caffeinejs/benchmarks
+
+.PHONY: bench-fetchy
+bench-fetchy: ## run fetchy HTTP client benchmarks (vs fetch/axios/got/undici)
+	@npm run bench -w @caffeinejs/fetchy
 
 .PHONY: devtools
 devtools:
@@ -73,11 +78,26 @@ example\:devtools:
 
 .PHONY: configserver-up
 configserver-up: ## spin up the Spring Cloud Config Server locally (Docker)
-	@docker compose -f test/configserver/docker-compose.yml up --build
+	@docker compose -f test/services/configserver/docker-compose.yml up --build
 
 .PHONY: configserver-down
 configserver-down: ## stop the Spring Cloud Config Server
-	@docker compose -f test/configserver/docker-compose.yml down
+	@docker compose -f test/services/configserver/docker-compose.yml down
+
+.PHONY: oauthserver-up
+oauthserver-up: ## spin up the Spring Authorization Server locally (Docker)
+	@docker compose -f test/services/oauthserver/docker-compose.yml up --build -d
+	@echo "waiting for http://localhost:9000/actuator/health ..."
+	@until wget -qO- http://localhost:9000/actuator/health >/dev/null 2>&1; do sleep 2; done
+	@echo "oauthserver is up"
+
+.PHONY: oauthserver-down
+oauthserver-down: ## stop the Spring Authorization Server
+	@docker compose -f test/services/oauthserver/docker-compose.yml down
+
+.PHONY: test-e2e
+test-e2e: oauthserver-up ## run the OIDC/OAuth2 e2e against a real Spring Authorization Server
+	@npm run test:e2e; status=$$?; docker compose -f test/services/oauthserver/docker-compose.yml down; exit $$status
 
 # Misc
 # --

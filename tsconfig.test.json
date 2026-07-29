@@ -13,7 +13,8 @@
   },
   "include": [
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "test/**/*.e2e.ts"
   ],
   "exclude": [
     "**/dist",

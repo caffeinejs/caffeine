@@ -66,9 +66,9 @@ export class AuthenticationBuilder implements Service {
     return this.addStrategy(name, new JWTAuthenticationHandler(name, builder.build()))
   }
 
-  addBasicAuth(opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
-  addBasicAuth(name: string, opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
-  addBasicAuth(
+  addBasic(opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
+  addBasic(name: string, opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
+  addBasic(
     optsOrName: ((opts: BasicAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: BasicAuthenticationOptionsBuilder) => void,
   ): this {
@@ -119,7 +119,6 @@ export class AuthenticationBuilder implements Service {
     return this.addStrategy(name, handler)
   }
 
-  /** Registers a GitHub sign-in. GitHub speaks OAuth 2.0 only — it has no OIDC endpoint. */
   addGithub(
     name: string,
     configure: (opts: OAuth2AuthenticationOptionsBuilder) => void,

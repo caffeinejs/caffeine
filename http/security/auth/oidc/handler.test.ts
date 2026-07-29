@@ -40,7 +40,13 @@ function makeCtx(overrides: Partial<{
   url: string
   cookies: Record<string, string>
   query: Record<string, string>
-}> = {}): { ctx: Context, cookie: ReturnType<typeof vi.fn>, deleteCookie: ReturnType<typeof vi.fn>, redirect: ReturnType<typeof vi.fn>, status: ReturnType<typeof vi.fn> } {
+}> = {}): {
+  ctx: Context
+  cookie: ReturnType<typeof vi.fn>
+  deleteCookie: ReturnType<typeof vi.fn>
+  redirect: ReturnType<typeof vi.fn>
+  status: ReturnType<typeof vi.fn>
+} {
   const cookies = overrides.cookies ?? {}
   const query = overrides.query ?? {}
   const cookie = vi.fn().mockReturnThis()

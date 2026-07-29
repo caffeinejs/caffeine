@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream'
+import qs from 'fast-querystring'
 import { Container, Scopes } from '@caffeinejs/core'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions, type FastifyError } from 'fastify'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
@@ -13,6 +14,7 @@ import { cacheConfigurer } from './cache/cache.js'
 import { cacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { MemoryCacheStore } from './cache/index.js'
 import { FastifyContext } from './context.js'
+import { MediaTypes } from './media_types.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { isOIDCError } from './security/auth/oidc/index.js'
 
@@ -61,6 +63,14 @@ export class FastifyAdapter<
       req.caffeineContext = new FastifyContext(req, reply)
       done()
     })
+
+    // Global: parse application/x-www-form-urlencoded bodies (built-in, no dependency).
+    // Inherited by every router scope; the @BodyAsBuffer/@BodyAsStream scopes drop it explicitly.
+    this.#fastify.addContentTypeParser(
+      MediaTypes.APPLICATION_FORM_URLENCODED,
+      { parseAs: 'string', bodyLimit: 1_048_576 },
+      formBodyParser,
+    )
 
     // Auth: resolve coordinator and options once; decorate user field once
     let coordinator: AuthenticationService | undefined
@@ -397,6 +407,19 @@ export class FastifyAdapter<
         },
       )
     })
+  }
+}
+
+function formBodyParser(
+  _req: FastifyRequest,
+  body: string,
+  done: (err: Error | null, value?: unknown) => void,
+): void {
+  try {
+    done(null, qs.parse(body))
+  } catch (err) {
+    (err as { statusCode?: number }).statusCode = 400
+    done(err as Error)
   }
 }
 

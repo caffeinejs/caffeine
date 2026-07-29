@@ -27,7 +27,7 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
   it('throws when multiple strategies are registered and no default scheme is set', () => {
     const validate = vi.fn()
     const builder = new AuthenticationBuilder()
-      .addBasicAuth(o => o.validate(validate))
+      .addBasic(o => o.validate(validate))
       .addJWTBearer(o => o.secret('secret'))
 
     expect(() => builder[kConfigure](null as unknown as ServiceKit)).toThrow(
@@ -37,14 +37,14 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
 
   it('does not throw when exactly one strategy is registered and no default is set', async () => {
     const builder = new AuthenticationBuilder()
-      .addBasicAuth(o => o.validate(vi.fn()))
+      .addBasic(o => o.validate(vi.fn()))
 
     await expect(builder[kConfigure](makeKit())).resolves.toBeUndefined()
   })
 
   it('does not throw when an explicit default is set with one strategy', async () => {
     const builder = new AuthenticationBuilder()
-      .addBasicAuth(o => o.validate(vi.fn()))
+      .addBasic(o => o.validate(vi.fn()))
       .default('Basic')
 
     await expect(builder[kConfigure](makeKit())).resolves.toBeUndefined()
@@ -52,7 +52,7 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
 
   it('does not throw when an explicit default is set with multiple strategies', async () => {
     const builder = new AuthenticationBuilder()
-      .addBasicAuth(o => o.validate(vi.fn()))
+      .addBasic(o => o.validate(vi.fn()))
       .addJWTBearer(o => o.secret('secret'))
       .default('Basic')
 

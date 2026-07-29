@@ -42,7 +42,13 @@
       "path": "./http"
     },
     {
-      "path": "./fetchy"
+      "path": "./fetchy/fetchy"
+    },
+    {
+      "path": "./fetchy/fetchy-logging-interceptor"
+    },
+    {
+      "path": "./fetchy/fetchy-undici"
     },
     {
       "path": "./cli"

@@ -130,6 +130,8 @@ This project uses **TC39 ECMAScript decorators** (Stage 3 spec) only. Do not use
 
 Never use `git stash` under any circumstances. Not to save work, not to switch context, not to resolve conflicts. No exceptions. If uncommitted changes exist and you need to switch state, stop and ask for guidance.
 
+Never revert, discard, or `git checkout --` a file outside the current task's scope — including files a tool (e.g. `eslint --fix`) modified as a side effect of running against unrelated paths. That file's uncommitted state belongs to other in-progress work you don't have full context on; reverting it destroys work that isn't yours to discard. If a command unexpectedly touches an unrelated file, stop and report it — do not revert it yourself, even to be "safe." Ask the user how they want it handled.
+
 ## Build system
 
 - `npm run build` at the root compiles all packages via `tsc --build` (project references).

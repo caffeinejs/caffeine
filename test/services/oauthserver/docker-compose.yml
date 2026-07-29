@@ -1,0 +1,10 @@
+services:
+  oauthserver:
+    build: .
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9000/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
