@@ -1,5 +1,5 @@
 import { type Ctor, type Injection, Injectable, Label } from '@caffeinejs/di'
-import { Keys } from '@caffeinejs/std'
+import { Keys } from '../symbols.js'
 import { configureRouterAndRegisterRoutes } from './registrar/registrar.js'
 
 export function Controller(path: string, dependencies?: Injection[]) {

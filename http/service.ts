@@ -9,10 +9,10 @@ export interface ServiceKit {
   feats: Feats
 }
 
-export const kConfigure = Symbol('configure')
+export const kServiceConfigure = Symbol('configure')
 
 export interface Service {
-  [kConfigure](kit: ServiceKit): Promise<void>
+  [kServiceConfigure](kit: ServiceKit): Promise<void>
 }
 
 export interface Services {

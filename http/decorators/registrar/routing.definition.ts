@@ -1,4 +1,4 @@
-import type { ParameterPickOptions } from '@caffeinejs/std'
+import type { ParameterPickOptions } from '../../route_picker.js'
 import { RouteValidationSchema } from '../../route.js'
 
 export interface RouterSpec<R> {

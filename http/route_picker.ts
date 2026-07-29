@@ -1,5 +1,15 @@
-import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std'
 import { FastifyRequest } from 'fastify'
+
+export interface ParameterPickOptions<R> {
+  type: string
+  name?: string
+  picker?: ParameterPicker<R>
+  async?: boolean
+}
+
+export type ParameterPicker<R, O = unknown> = (req: R) => O | Promise<O>
+
+export type Picker<R> = (req: R, parameters: Array<ParameterPickOptions<R>>) => ParameterPicker<R, Array<unknown>>
 
 export function fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {
   return { type: 'fastify:request' }

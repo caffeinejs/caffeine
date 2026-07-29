@@ -1,5 +1,5 @@
-import type { ParameterPickOptions } from '@caffeinejs/std'
 import { Binding, Key, Provider } from '@caffeinejs/di'
+import type { ParameterPickOptions } from './route_picker.js'
 import { AuthzRouteService } from './security/authz/index.js'
 import { RouteAuthzOptions } from './decorators/registrar/routing.definition.js'
 

@@ -1,7 +1,7 @@
 import { Container } from '@caffeinejs/di'
 import type { Router } from './route.js'
 import { Feats } from './feats.js'
-import { kConfigure, Service, ServiceKit, Services } from './service.js'
+import { kServiceConfigure, Service, ServiceKit, Services } from './service.js'
 import { buildRouting } from './routing/routing.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
@@ -68,7 +68,7 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   async ready(): Promise<void> {
     const kit: ServiceKit = { container: this.#container, feats: this.#feats }
     await Promise.all(this.#services
-      .map(service => service[kConfigure](kit)))
+      .map(service => service[kServiceConfigure](kit)))
 
     await this.#container.init()
 

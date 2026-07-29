@@ -1,5 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { kConfigure, Service, ServiceKit } from '../../service.js'
+import { kServiceConfigure, Service, ServiceKit } from '../../service.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, RoleHandler } from './handlers.js'
@@ -78,7 +78,7 @@ export class AuthorizationBuilder implements Service {
     return this
   }
 
-  [kConfigure](kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     kit.container.bind(AuthenticatedUserHandler)
       .toSelf()
       .lifetime(Scopes.SINGLETON)

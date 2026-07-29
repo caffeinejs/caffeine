@@ -3,7 +3,7 @@ import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
-import { kConfigure, type ServiceKit } from '../../../service.js'
+import { kServiceConfigure, type ServiceKit } from '../../../service.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import { OIDCAuthenticationHandler } from './handler.js'
@@ -61,7 +61,7 @@ function makeKit(): ServiceKit {
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  await builder[kConfigure](makeKit())
+  await builder[kServiceConfigure](makeKit())
 }
 
 /**
@@ -284,7 +284,7 @@ describe('Forward wiring through configure', () => {
     builder.addStrategy('Target', target as never)
     builder.addStrategy('auth', forward)
     builder.default('auth')
-    await builder[kConfigure](makeKit())
+    await builder[kServiceConfigure](makeKit())
 
     // Before the fix this threw reading `defaultAuthenticateScheme` of undefined.
     await expect(forward.authenticate(makeCtx())).resolves.toMatchObject({ succeeded: true })

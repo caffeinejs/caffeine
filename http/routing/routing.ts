@@ -1,5 +1,6 @@
 import { Container } from '@caffeinejs/di'
-import { CaffeineError, Keys } from '@caffeinejs/std'
+import { ErrCaffeineWebApplication } from '../error.js'
+import { Keys } from '../symbols.js'
 import { Router } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
 import { Feats } from '../feats.js'
@@ -23,9 +24,9 @@ export function buildRouting<REQ>(container: Container, feats: Feats): Router<RE
     const { key, binding } = controllers[i]
     const rd = getRouter(key as Function)
     if (!rd) {
-      throw new CaffeineError(
+      throw new ErrCaffeineWebApplication(
         `Cannot build router: no route definition found for router "${String(key)}"`,
-        'HTTP_MISSING_ROUTER',
+        'ERR_HTTP_MISSING_ROUTER',
       )
     }
 

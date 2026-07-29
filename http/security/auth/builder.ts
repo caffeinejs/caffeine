@@ -1,7 +1,7 @@
 import { Provider, type Ctor, type Key } from '@caffeinejs/di'
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
-import { kConfigure, Service, ServiceKit } from '../../service.js'
+import { kServiceConfigure, Service, ServiceKit } from '../../service.js'
 import type { AuthenticationHandler } from './handler.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
@@ -162,7 +162,7 @@ export class AuthenticationBuilder implements Service {
     return this
   }
 
-  [kConfigure](kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const opts = this.#options
     const firstScheme = this.#schemes.keys().next().value as string | undefined
 
