@@ -42,6 +42,9 @@
       "path": "./http"
     },
     {
+      "path": "./openapi"
+    },
+    {
       "path": "./fetchy/fetchy"
     },
     {

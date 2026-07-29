@@ -7,6 +7,7 @@ export default defineConfig({
       './di/vitest.leak.config.ts',
       './std/vitest.config.ts',
       './http/vitest.config.ts',
+      './openapi/vitest.config.ts',
       './fetchy/fetchy/vitest.config.ts',
       './fetchy/fetchy-logging-interceptor/vitest.config.ts',
       './fetchy/fetchy-undici/vitest.config.ts',

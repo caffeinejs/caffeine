@@ -46,6 +46,7 @@ export default defineConfig(
             './di/tsconfig.json',
             './std/tsconfig.json',
             './http/tsconfig.json',
+            './openapi/tsconfig.json',
             './fetchy/*/tsconfig.json',
             './testing/tsconfig.json',
             './benchmarks/tsconfig.json',
