@@ -7,7 +7,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "core",
+    "di",
     "application",
     "http",
     "fetchy/*",
@@ -17,7 +17,7 @@
     "devtools/ui",
     "testing",
     "benchmarks",
-    "core/examples/*",
+    "di/examples/*",
     "examples/*",
     "plugins/*"
   ],

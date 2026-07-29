@@ -10,7 +10,7 @@
     "types": ["node"]
   },
   "include": [
-    "core/decorators/legacy/**/*.ts"
+    "di/decorators/legacy/**/*.ts"
   ],
   "exclude": [
     "**/node_modules",

@@ -1,4 +1,4 @@
-import { Provider, type Ctor, type Key } from '@caffeinejs/core'
+import { Provider, type Ctor, type Key } from '@caffeinejs/di'
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
 import { kConfigure, Service, ServiceKit } from '../../service.js'
@@ -9,9 +9,9 @@ import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import { ForwardAuthenticationHandler } from './forward/forward.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
-import { kAuthOpts } from './keys.js'
+import { kAuthOpts, kOIDCMeta } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
-import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder, kOIDCMeta } from './oidc/index.js'
+import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import {
   githubOAuth2Preset,
   OAuth2AuthenticationHandler,

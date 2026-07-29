@@ -9,7 +9,7 @@ import {
   Injectable,
   Profile,
   Provides,
-} from '@caffeinejs/core'
+} from '@caffeinejs/di'
 import { InstanceTracker } from './tracker.js'
 import { TestContainer } from './test_container.js'
 

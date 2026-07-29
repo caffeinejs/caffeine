@@ -1,4 +1,4 @@
-import type { Identifier, Key, PostProcessor, ResolutionContext } from '@caffeinejs/core'
+import type { Identifier, Key, PostProcessor, ResolutionContext } from '@caffeinejs/di'
 
 export interface InstantiationEvent {
   key: Key

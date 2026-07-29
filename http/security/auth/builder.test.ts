@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import type { Container } from '@caffeinejs/core'
+import type { Container } from '@caffeinejs/di'
 import type { ServiceKit } from '../../service.js'
 import type { Feats } from '../../feats.js'
 import { kConfigure } from '../../service.js'

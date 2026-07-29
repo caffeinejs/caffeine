@@ -1,11 +1,10 @@
-import { Container } from '@caffeinejs/core'
+import { Container } from '@caffeinejs/di'
 import type { Router } from './route.js'
 import { Feats } from './feats.js'
 import { kConfigure, Service, ServiceKit, Services } from './service.js'
 import { buildRouting } from './routing/routing.js'
 import { AuthenticationService } from './security/auth/service.js'
-import { kAuthOpts } from './security/auth/keys.js'
-import { kOIDCMeta } from './security/auth/oidc/index.js'
+import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 
 export interface AdapterIn<R> {

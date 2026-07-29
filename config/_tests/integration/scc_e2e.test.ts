@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/di'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { ConfigHandle } from '../../config_accessor.js'
 import type { ConfigSchema } from '../../schema.js'

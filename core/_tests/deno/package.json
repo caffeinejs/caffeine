@@ -1,8 +1,0 @@
-{
-  "name": "@caffeinejs/core-deno-compat",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@caffeinejs/core": "file:./vendor"
-  }
-}

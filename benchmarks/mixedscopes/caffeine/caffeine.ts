@@ -1,5 +1,5 @@
-import { provide, Scopes, type Provider } from '@caffeinejs/core'
-import { Injectable, Lifetime } from '@caffeinejs/core'
+import { provide, Scopes, type Provider } from '@caffeinejs/di'
+import { Injectable, Lifetime } from '@caffeinejs/di'
 import { Controller, Get, createWebApplication, Params, Post, Schema, body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
 import fastify from 'fastify'
 

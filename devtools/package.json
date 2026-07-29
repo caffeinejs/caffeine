@@ -23,7 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/core": "*",
+    "@caffeinejs/di": "*",
     "ws": "^8.18.3"
   },
   "peerDependencies": {

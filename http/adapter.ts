@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream'
 import qs from 'fast-querystring'
-import { Container, Scopes } from '@caffeinejs/core'
+import { Container, Scopes } from '@caffeinejs/di'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions, type FastifyError } from 'fastify'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import type { Router } from './route.js'

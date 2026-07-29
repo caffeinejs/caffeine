@@ -1,0 +1,3 @@
+caffeine:
+  greeting: hello-from-config-server
+  version: 1.0.0

@@ -1,4 +1,4 @@
-import type { Provider } from '@caffeinejs/core'
+import type { Provider } from '@caffeinejs/di'
 import type { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
 import type { AuthenticationSchemeProvider } from './scheme_provider.js'

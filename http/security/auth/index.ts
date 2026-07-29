@@ -2,6 +2,7 @@ export { BasicAuthenticationHandler, type BasicAuthenticationOptions } from './b
 export { AuthenticationBuilder } from './builder.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { JWTAuthenticationHandler, type JWTAuthenticationOptions } from './jwt/index.js'
+export { kOIDCMeta } from './keys.js'
 export {
   googleOIDCPreset,
   OIDCAuthenticationHandler,

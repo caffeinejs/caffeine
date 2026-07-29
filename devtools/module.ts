@@ -1,4 +1,4 @@
-import type { Module } from '@caffeinejs/core'
+import type { Module } from '@caffeinejs/di'
 import { ContainerCollector } from './collectors/container.collector.js'
 import { DevtoolsServer, type DevtoolsOptions } from './server/server.js'
 

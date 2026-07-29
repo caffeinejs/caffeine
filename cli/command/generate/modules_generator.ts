@@ -26,8 +26,8 @@ export async function generateModules(opts: GenerateModulesOptions): Promise<boo
   const content = [
     HEADER,
     '',
-    'import { kModule } from \'@caffeinejs/core\'',
-    'import type { Module } from \'@caffeinejs/core\'',
+    'import { kModule } from \'@caffeinejs/di\'',
+    'import type { Module } from \'@caffeinejs/di\'',
     ...imports,
     '',
     'function _pick(ns: Record<string, unknown>): Module[] {',

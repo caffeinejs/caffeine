@@ -1,4 +1,4 @@
-import type { BindingGraph } from '@caffeinejs/core'
+import type { BindingGraph } from '@caffeinejs/di'
 
 export type { BindingGraph }
 

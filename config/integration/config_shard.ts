@@ -1,4 +1,4 @@
-import { kSelfRefresh, type SelfRefreshable } from '@caffeinejs/core'
+import { kSelfRefresh, type SelfRefreshable } from '@caffeinejs/di'
 import type { ConfigBootstrapResult, BootstrapOptions } from '../bootstrap.js'
 import { bootstrapConfig } from '../bootstrap.js'
 import type { ConfigHandle } from '../config_accessor.js'

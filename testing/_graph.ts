@@ -1,5 +1,5 @@
-import { DeferredCtor } from '@caffeinejs/core'
-import type { Key, Snapshot } from '@caffeinejs/core'
+import { DeferredCtor } from '@caffeinejs/di'
+import type { Key, Snapshot } from '@caffeinejs/di'
 
 export function resolveKey(key: Key): Key {
   return key instanceof DeferredCtor ? key.unwrap() : key

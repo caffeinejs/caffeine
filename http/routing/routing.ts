@@ -1,4 +1,4 @@
-import { Container } from '@caffeinejs/core'
+import { Container } from '@caffeinejs/di'
 import { CaffeineError, Keys } from '@caffeinejs/application'
 import { Router } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'

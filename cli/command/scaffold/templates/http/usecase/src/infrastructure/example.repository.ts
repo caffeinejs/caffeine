@@ -1,4 +1,4 @@
-import { Injectable } from '@caffeinejs/core'
+import { Injectable } from '@caffeinejs/di'
 import type { Example } from '../domain/example.entity.js'
 
 @Injectable()

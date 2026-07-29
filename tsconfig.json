@@ -33,7 +33,7 @@
   },
   "references": [
     {
-      "path": "./core"
+      "path": "./di"
     },
     {
       "path": "./application"

@@ -7,7 +7,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "@caffeinejs/core": "*",
+    "@caffeinejs/di": "*",
     "@caffeinejs/application": "*",
     "@caffeinejs/http": "*",
     "fastify": "^5.8.5"

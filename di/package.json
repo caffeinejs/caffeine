@@ -1,0 +1,75 @@
+{
+  "name": "@caffeinejs/di",
+  "version": "0.0.0",
+  "description": "CaffeineJS IoC Container",
+  "license": "MIT",
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "node": {
+        "types": "./dist/index.nodejs.d.ts",
+        "default": "./dist/index.nodejs.js"
+      },
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./internals": {
+      "types": "./dist/decorators/registrar/index.d.ts",
+      "default": "./dist/decorators/registrar/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && npm run build:esm",
+    "build:esm": "tsc --build --force tsconfig.build.json",
+    "test:typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:property": "vitest run _tests/property",
+    "test:watch": "vitest",
+    "test:memory": "vitest run --config vitest.leak.config.ts",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:html": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text",
+    "test:browser": "esbuild dist/index.js --bundle --platform=browser --format=esm --outfile=/dev/null",
+    "test:deno": "npm run build && docker compose -f _tests/deno/docker-compose.yml up --build --abort-on-container-exit --exit-code-from deno",
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "lint:markdown": "markdownlint-cli2",
+    "docs:llms-full": "node tools/generate-llms-full.mjs",
+    "bench": "node --expose-gc --import=tsx _benchmarks/container.bench.ts",
+    "bench:compare": "node --expose-gc --import=tsx _benchmarks/compare_third_parties.bench.ts",
+    "bench:perf-compare": "node --expose-gc --import=tsx _benchmarks/perf_compare.bench.ts",
+    "bench:startup:compile": "esbuild _benchmarks/startup/di_app.ts _benchmarks/startup/di_scan_app.ts _benchmarks/startup/scan_types.ts _benchmarks/startup/di_standalone.ts _benchmarks/startup/nest_app.ts _benchmarks/startup/nest_standalone.ts --outdir=_benchmarks/startup/dist --format=esm --platform=node --target=node24 && tsc -p _benchmarks/_testdata/startup_legacy/tsconfig.json",
+    "bench:startup": "node --expose-gc --import=tsx _benchmarks/startup.bench.ts",
+    "bench:memory:compile": "esbuild _benchmarks/startup/di_memory.ts _benchmarks/startup/nest_memory.ts _benchmarks/startup/vanilla_memory.ts --outdir=_benchmarks/startup/dist --format=esm --platform=node --target=node24",
+    "bench:memory": "node --expose-gc --import=tsx _benchmarks/memory.bench.ts",
+    "bench:readme": "node tools/bench-report.mjs",
+    "example:javascript": "npm run start -w @caffeinejs/example-javascript",
+    "example:framework": "npm run start -w @caffeinejs/example-framework",
+    "example:fastify-functions": "npm run start -w @caffeinejs/example-fastify-functions",
+    "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete"
+  },
+  "devDependencies": {
+    "@loopback/context": "^8.0.13",
+    "@nestjs/common": "^11.1.24",
+    "@nestjs/core": "^11.1.24",
+    "@types/node": "^25.9.1",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "awilix": "^13.0.3",
+    "esbuild": "^0.28.0",
+    "eslint-plugin-jsdoc": "^63.0.2",
+    "injection-js": "^2.6.1",
+    "inversify": "^8.1.0",
+    "mitata": "^1.0.34",
+    "supertest": "^7.2.2",
+    "table": "^6.9.0",
+    "tsx": "^4.22.4",
+    "tsyringe": "^4.10.0",
+    "typedi": "^0.10.0"
+  }
+}

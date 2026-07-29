@@ -1,4 +1,4 @@
-import { Scopes } from '@caffeinejs/core'
+import { Scopes } from '@caffeinejs/di'
 import { kConfigure, Service, ServiceKit } from '../../service.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'

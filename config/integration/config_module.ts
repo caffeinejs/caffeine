@@ -1,4 +1,4 @@
-import { type Module, Scopes } from '@caffeinejs/core'
+import { type Module, Scopes } from '@caffeinejs/di'
 import type { BootstrapOptions } from '../bootstrap.js'
 import type { ConfigHandle } from '../config_accessor.js'
 import type { ConfigSchema } from '../schema.js'

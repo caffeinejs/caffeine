@@ -31,7 +31,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/core": "*",
+    "@caffeinejs/di": "*",
     "@caffeinejs/application": "*",
     "fast-querystring": "^1.1.2",
     "jose": "^5.0.0",

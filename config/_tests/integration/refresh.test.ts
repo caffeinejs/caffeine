@@ -1,4 +1,4 @@
-import { kSelfRefresh } from '@caffeinejs/core'
+import { kSelfRefresh } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { ErrConfigValidation } from '../../errors.js'
 import type { ConfigSchema } from '../../schema.js'

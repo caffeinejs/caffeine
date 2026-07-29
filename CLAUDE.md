@@ -106,16 +106,16 @@ import { Binding } from './Binding'
 
 ## Monorepo structure
 
-Packages: `core` (`@caffeinejs/core`), `http` (`@caffeinejs/http`), `http-fastify-adapter` (`@caffeinejs/http-fastify-adapter`). Examples live under `core/examples/`. Shared build tooling lives in `tools/`.
+Packages: `di` (`@caffeinejs/di`), `http` (`@caffeinejs/http`), `http-fastify-adapter` (`@caffeinejs/http-fastify-adapter`). Examples live under `di/examples/`. Shared build tooling lives in `tools/`.
 
 Cross-package imports use the package name, not relative paths across workspace boundaries.
 
 ```ts
 // correct — from http package
-import { CaffeineIoC } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/di'
 
 // wrong — leaks internal paths
-import { CaffeineIoC } from '../core/container.js'
+import { CaffeineIoC } from '../di/container.js'
 ```
 
 ## Decorators

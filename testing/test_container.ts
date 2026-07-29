@@ -1,5 +1,5 @@
-import { CaffeineIoC } from '@caffeinejs/core'
-import type { Binder, Container, Identifier, Key, Module, Snapshot } from '@caffeinejs/core'
+import { CaffeineIoC } from '@caffeinejs/di'
+import type { Binder, Container, Identifier, Key, Module, Snapshot } from '@caffeinejs/di'
 import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
 interface IsolationEntry {

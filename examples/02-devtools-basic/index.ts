@@ -1,5 +1,5 @@
 import fastify from 'fastify'
-import { CaffeineIoC, Injectable } from '@caffeinejs/core'
+import { CaffeineIoC, Injectable } from '@caffeinejs/di'
 import { Controller, Delete, Get, Post, Params, createWebApplication, body, fastifyAdapterFactory, param } from '@caffeinejs/http'
 import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
 

@@ -35,8 +35,6 @@ export { GOOGLE_ISSUER, googleOIDCPreset } from './provider/google.js'
 
 import type { Context } from '../../../context.js'
 
-export const kOIDCMeta: unique symbol = Symbol('caffeinejs.oidc.meta')
-
 /**
  * The callback surface the adapter needs, satisfied by every OAuth-family handler.
  *

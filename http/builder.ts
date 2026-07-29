@@ -1,4 +1,4 @@
-import { CaffeineIoC, type Container, type Module, type Options } from '@caffeinejs/core'
+import { CaffeineIoC, type Container, type Module, type Options } from '@caffeinejs/di'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'

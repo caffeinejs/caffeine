@@ -27,7 +27,7 @@
     "@adonisjs/events": "^10.2.0",
     "@adonisjs/http-server": "^9.1.0",
     "@adonisjs/logger": "^7.1.1",
-    "@caffeinejs/core": "*",
+    "@caffeinejs/di": "*",
     "@caffeinejs/application": "*",
     "@caffeinejs/http": "*",
     "@elysiajs/node": "^1.4.5",

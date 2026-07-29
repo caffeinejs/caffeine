@@ -6,7 +6,7 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "@caffeinejs/core": "*",
+    "@caffeinejs/di": "*",
     "@caffeinejs/devtools": "*",
     "@caffeinejs/application": "*",
     "@caffeinejs/http": "*",

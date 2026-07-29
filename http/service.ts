@@ -1,4 +1,4 @@
-import { Container } from '@caffeinejs/core'
+import { Container } from '@caffeinejs/di'
 import { Feats } from './feats.js'
 import { AuthenticationOptions } from './security/auth/builder.js'
 import { AuthenticationService } from './security/auth/service.js'

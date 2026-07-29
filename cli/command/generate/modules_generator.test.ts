@@ -62,7 +62,7 @@ describe('generateModules()', () => {
     expect(content).toContain('[kModule]')
   })
 
-  it('imports kModule and Module from @caffeinejs/core', async () => {
+  it('imports kModule and Module from @caffeinejs/di', async () => {
     const dir = tempDir()
     dirs.push(dir)
 
@@ -70,8 +70,8 @@ describe('generateModules()', () => {
     await generateModules({ files: [], output, importExtension: '.js' })
 
     const content = await Bun.file(output).text()
-    expect(content).toContain('import { kModule } from \'@caffeinejs/core\'')
-    expect(content).toContain('import type { Module } from \'@caffeinejs/core\'')
+    expect(content).toContain('import { kModule } from \'@caffeinejs/di\'')
+    expect(content).toContain('import type { Module } from \'@caffeinejs/di\'')
   })
 
   it('includes auto-generated header', async () => {

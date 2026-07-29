@@ -1,0 +1,8 @@
+{
+  "name": "@caffeinejs/di-deno-compat",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@caffeinejs/di": "file:./vendor"
+  }
+}

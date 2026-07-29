@@ -19,7 +19,7 @@
   "exclude": [
     "**/dist",
     "**/node_modules",
-    "core/decorators/legacy/**",
+    "di/decorators/legacy/**",
     "cli/**"
   ]
 }
