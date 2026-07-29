@@ -1,5 +1,5 @@
 {
-  "name": "@caffeinejs/application",
+  "name": "@caffeinejs/std",
   "version": "0.0.0",
   "description": "Caffeine http package",
   "license": "MIT",

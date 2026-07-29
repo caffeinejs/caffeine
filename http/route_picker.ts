@@ -1,4 +1,4 @@
-import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/application'
+import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std'
 import { FastifyRequest } from 'fastify'
 
 export function fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {

@@ -1,4 +1,4 @@
-import type { ParameterPickOptions } from '@caffeinejs/application'
+import type { ParameterPickOptions } from '@caffeinejs/std'
 import type { RouteValidationSchema } from '../../route.js'
 import type { RouteAuthzOptions, RouterSpec, RouteSpec } from './routing.definition.js'
 import { mergeValue } from './_merge.js'

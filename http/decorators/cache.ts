@@ -1,4 +1,4 @@
-import type { Duration } from '@caffeinejs/application'
+import type { Duration } from '@caffeinejs/std'
 import { CacheOptions } from '../cache/types.js'
 import { configureRoute, configureRouter } from './registrar/registrar.js'
 

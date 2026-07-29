@@ -8,7 +8,7 @@
   "type": "module",
   "workspaces": [
     "di",
-    "application",
+    "std",
     "http",
     "fetchy/*",
     "config",

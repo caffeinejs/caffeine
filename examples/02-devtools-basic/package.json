@@ -8,7 +8,7 @@
   "dependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/devtools": "*",
-    "@caffeinejs/application": "*",
+    "@caffeinejs/std": "*",
     "@caffeinejs/http": "*",
     "fastify": "^5.0.0"
   }

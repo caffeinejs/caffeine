@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
-import { parseDuration } from '@caffeinejs/application'
+import { parseDuration } from '@caffeinejs/std'
 import { FastifyContextRequest } from '../FastifyContextRequest.js'
 import { RouteConfigurer } from '../route_configurer.js'
 import { CacheOptions, CacheStore, ETagGenerator } from './types.js'

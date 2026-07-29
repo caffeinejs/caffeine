@@ -44,7 +44,7 @@ export default defineConfig(
           project: [
             './tsconfig.json',
             './di/tsconfig.json',
-            './application/tsconfig.json',
+            './std/tsconfig.json',
             './http/tsconfig.json',
             './fetchy/*/tsconfig.json',
             './testing/tsconfig.json',

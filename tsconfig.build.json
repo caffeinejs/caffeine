@@ -17,7 +17,7 @@
       "path": "./fetchy/fetchy-undici/tsconfig.build.json"
     },
     {
-      "path": "./application/tsconfig.build.json"
+      "path": "./std/tsconfig.build.json"
     },
     {
       "path": "./cli/tsconfig.build.json"

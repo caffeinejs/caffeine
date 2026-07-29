@@ -1,4 +1,4 @@
-import type { ParameterPickOptions } from '@caffeinejs/application'
+import type { ParameterPickOptions } from '@caffeinejs/std'
 import { configureRoute } from './registrar/registrar.js'
 
 export function Params(params: ParameterPickOptions<unknown>[]) {
