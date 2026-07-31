@@ -346,7 +346,45 @@ export class CaffeineIoC implements Container {
 
     if (bindings.length === 1) {
       return {
-        get: () => bindings[0].factory(bindings[0].ctx!) as T[],
+        get: () => [bindings[0].factory(bindings[0].ctx!)] as T[],
+      }
+    }
+
+    return {
+      get: () => {
+        const results = new Array<unknown>(bindings.length)
+        for (let i = 0; i < bindings.length; i++) {
+          results[i] = bindings[i].factory(bindings[i].ctx!)
+        }
+        return results as T[]
+      },
+    }
+  }
+
+  /**
+   * Wraps the given binding in a {@link Provider} that returns an instance on every {@link Provider.get} call.
+   *
+   * @param binding - The binding to wrap in a {@link Provider}.
+   *
+   * @returns A {@link Provider} of {@link T}.
+   */
+  wrapBinding<T = unknown>(binding: Binding<T>): Provider<T> {
+    return {
+      get: () => binding.factory(binding.ctx!) as T,
+    }
+  }
+
+  /**
+   * Wraps the given bindings in a {@link Provider} that returns an array of instances on every {@link Provider.get} call.
+   *
+   * @param bindings - The bindings to wrap in a {@link Provider}.
+   *
+   * @returns A {@link Provider} of {@link T}[].
+   */
+  wrapBindings<T = unknown>(bindings: Binding<T>[]): Provider<T[]> {
+    if (bindings.length === 1) {
+      return {
+        get: () => [bindings[0].factory(bindings[0].ctx!)] as T[],
       }
     }
 

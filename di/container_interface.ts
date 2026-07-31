@@ -128,6 +128,9 @@ export interface Container {
   wrap<T = unknown>(key: Key<T>): Provider<T>
   wrapMany<T = unknown>(key: Key<T>): Provider<T[]>
 
+  wrapBinding<T = unknown>(binding: Binding<T>): Provider<T>
+  wrapBindings<T = unknown>(bindings: Binding<T>[]): Provider<T[]>
+
   getBinding<T = unknown>(key: Key<T>): Binding<T>
 
   getBindings<T = unknown>(key: Key<T>): Binding<T>[]
@@ -186,6 +189,8 @@ export type ContainerOps = Pick<Container,
   | 'getOptional'
   | 'wrap'
   | 'wrapMany'
+  | 'wrapBinding'
+  | 'wrapBindings'
   | 'getBinding'
   | 'getBindings'
   | 'getBindingsBy'

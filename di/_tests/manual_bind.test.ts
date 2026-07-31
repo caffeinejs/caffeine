@@ -1058,4 +1058,79 @@ describe('wrapMany()', function () {
 
     expect(() => di.wrapMany(kMissing)).toThrow(ErrNoResolutionForKey)
   })
+
+  it('should return a Provider<T[]> with one element for a single binding (fast path)', async function () {
+    const kSingle = Symbol('wrap-many-single')
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind('solo').toValue('only-one')
+      .names(kSingle)
+    await di.init()
+
+    const provider: Provider<string[]> = di.wrapMany(kSingle)
+
+    expect(provider.get()).toEqual(['only-one'])
+    expect(provider.get()).toHaveLength(1)
+  })
+})
+
+describe('wrapBinding()', function () {
+  it('should return a Provider that resolves the binding on each get()', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind('svc').toValue({ name: 'service' })
+    await di.init()
+
+    const binding = di.getBinding<{ name: string }>('svc')
+    const provider: Provider<{ name: string }> = di.wrapBinding(binding)
+
+    expect(provider.get()).toEqual({ name: 'service' })
+    expect(provider.get()).toBe(provider.get())
+  })
+
+  it('should return a new instance on each get() for a transient binding', async function () {
+    class Dep {}
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Dep).toSelf()
+      .lifetime(Scopes.TRANSIENT)
+    await di.init()
+
+    const binding = di.getBinding(Dep)
+    const provider: Provider<Dep> = di.wrapBinding(binding)
+
+    expect(provider.get()).toBeInstanceOf(Dep)
+    expect(provider.get()).not.toBe(provider.get())
+  })
+})
+
+describe('wrapBindings()', function () {
+  it('should return a Provider<T[]> wrapping a single binding (fast path)', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind('solo').toValue('only-one')
+    await di.init()
+
+    const bindings = di.getBindings<string>('solo')
+    const provider: Provider<string[]> = di.wrapBindings(bindings)
+
+    expect(provider.get()).toEqual(['only-one'])
+  })
+
+  it('should return a Provider<T[]> resolving all bindings (loop path)', async function () {
+    const kShared = Symbol('wrap-bindings-shared')
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind('alpha').toValue('alpha')
+      .names(kShared)
+    di.bind('bravo').toValue('bravo')
+      .names(kShared)
+    await di.init()
+
+    const bindings = di.getBindings<string>(kShared)
+    const provider: Provider<string[]> = di.wrapBindings(bindings)
+    const results = provider.get()
+
+    expect(results).toHaveLength(2)
+    expect(results).toContain('alpha')
+    expect(results).toContain('bravo')
+  })
 })
