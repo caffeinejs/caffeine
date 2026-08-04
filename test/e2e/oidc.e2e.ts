@@ -64,7 +64,6 @@ function buildApp() {
     .jwksURI(`${OAUTH}/oauth2/jwks`)
     .issuer(OAUTH)
     .scopes('openid', 'profile', 'email'))
-  void builder.authorization
   return builder.build()
 }
 

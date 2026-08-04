@@ -45,7 +45,6 @@ function makeOIDCApp(
       opts.jwksResolver(jwksResolver)
     }
   })
-  void builder.authorization
   return builder
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, ErrNotFound, ErrUnauthorized, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
+import { Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
 // Side-effect import: registers HTTPProblemHandler / FallbackProblemHandler as global @Catch handlers.
 import './problem.handlers.js'
 import type { ProblemDetails } from './problem.js'
@@ -29,13 +29,13 @@ class ThingsController {
 
   @Get('/denied')
   denied(): unknown {
-    throw new ErrUnauthorized('Invalid credentials')
+    throw new ErrHTTPUnauthorized('Invalid credentials')
   }
 
   @Get('/:id')
   @Params([$p.param('id')])
   get(id: string): unknown {
-    throw new ErrNotFound(`The requested thing with ID "${id}" was not found`)
+    throw new ErrHTTPNotFound(`The requested thing with ID "${id}" was not found`)
   }
 }
 void [ThingsController]
@@ -47,7 +47,7 @@ async function buildApp() {
 }
 
 describe('RFC 9457 problem+json error handling', () => {
-  it('renders a thrown ErrNotFound as 404 problem+json', async () => {
+  it('renders a thrown ErrHTTPNotFound as 404 problem+json', async () => {
     const app = await buildApp()
 
     const res = await app.fetch('/things/abc')
@@ -94,7 +94,7 @@ describe('RFC 9457 problem+json error handling', () => {
     expect(body).not.toHaveProperty('errors')
   })
 
-  it('renders a thrown ErrUnauthorized as 401 problem+json', async () => {
+  it('renders a thrown ErrHTTPUnauthorized as 401 problem+json', async () => {
     const app = await buildApp()
 
     const res = await app.fetch('/things/denied')

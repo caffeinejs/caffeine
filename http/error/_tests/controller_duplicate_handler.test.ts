@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Catch, type Context, Controller, ErrConfiguration, ErrNotFound, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { Catch, type Context, Controller, ErrConfiguration, ErrHTTPNotFound, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
 // Isolated: two controller methods handling the same error type. buildRouting rejects at ready(),
 // which poisons every app build in the module — so it lives alone.
@@ -8,14 +8,14 @@ import { Catch, type Context, Controller, ErrConfiguration, ErrNotFound, Get, cr
 class DupController {
   @Get('/')
   get(): unknown {
-    throw new ErrNotFound('x')
+    throw new ErrHTTPNotFound('x')
   }
 
-  @Catch(ErrNotFound)
-  async first(_ctx: Context, _error: ErrNotFound): Promise<void> {}
+  @Catch(ErrHTTPNotFound)
+  async first(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
 
-  @Catch(ErrNotFound)
-  async second(_ctx: Context, _error: ErrNotFound): Promise<void> {}
+  @Catch(ErrHTTPNotFound)
+  async second(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
 }
 void [DupController]
 

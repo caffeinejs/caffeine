@@ -2,7 +2,7 @@ import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Injectable } from '@caffeinejs/di'
 import { WebApplication, Controller, Delete, Get, Post, Params, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
-import { ErrNoRoutesForController, testClient } from './index.js'
+import { ErrNoRoutesForController, newURL, testClient } from './index.js'
 
 @Injectable()
 class TaskStore {
@@ -17,6 +17,10 @@ class TaskStore {
 
   list(): { id: number, name: string }[] {
     return this.#tasks
+  }
+
+  find(id: number): { id: number, name: string } | undefined {
+    return this.#tasks.find(t => t.id === id)
   }
 
   remove(id: number): void {
@@ -35,6 +39,12 @@ class TaskController {
   @Get('/')
   list() {
     return this.#store.list()
+  }
+
+  @Get('/:id')
+  @Params([$p.param('id')])
+  find(id: string) {
+    return this.#store.find(Number(id)) ?? { id: Number(id), name: 'unknown' }
   }
 
   @Post('/')
@@ -130,5 +140,18 @@ describe('testClient()', () => {
 
     expect(remoteRes.status).toBe(200)
     expect(inProcessRes.status).toBe(200)
+  })
+
+  it('reaches a path-param route via a newURL-built Request', async () => {
+    const client = testClient(TaskController, app)
+    const created = await (await client.create({
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'findme' }),
+    })).json() as { id: number }
+
+    const res = await client.find(new Request(newURL('/tasks/:id').param('id', created.id).build()))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ id: created.id, name: 'findme' })
   })
 })

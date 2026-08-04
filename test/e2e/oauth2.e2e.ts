@@ -64,7 +64,6 @@ function buildApp() {
     .userInfoEndpoint(`${OAUTH}/userinfo`)
     .subjectClaim('sub')
     .scopes('openid', 'profile', 'email'))
-  void builder.authorization
   return builder.build()
 }
 

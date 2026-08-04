@@ -33,7 +33,6 @@ export interface Route<R> {
 }
 
 export interface RouteAuthorization {
-  enabled: boolean
   hasProtection: boolean
   options?: RouteAuthzOptions
   authorizer?: AuthzRouteService

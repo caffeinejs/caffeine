@@ -139,8 +139,6 @@ export class AuthorizationBuilder implements Service {
       .lifetime(Scopes.SINGLETON)
       .internal()
 
-    kit.feats.toggleAuthorization(true)
-
     return Promise.resolve()
   }
 }

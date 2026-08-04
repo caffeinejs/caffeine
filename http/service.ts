@@ -22,9 +22,6 @@ export interface Services {
     coordinator: AuthenticationService | undefined
     options: AuthenticationOptions | undefined
   }
-  authz: {
-    enabled: boolean
-  }
   oidc?: OIDCMeta
   errorHandling: ErrorHandlerProvider
 }

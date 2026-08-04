@@ -19,14 +19,14 @@ import { configureControllerErrorHandler } from './registrar/registrar.js'
  * @example
  * ```ts
  * // global handler class
- * @Catch(ErrNotFound, [PetRepository])
- * class NotFoundHandler extends ErrorHandler<ErrNotFound> { ... }
+ * @Catch(ErrHTTPNotFound, [PetRepository])
+ * class NotFoundHandler extends ErrorHandler<ErrHTTPNotFound> { ... }
  *
  * // per-controller handler method
  * @Controller('/pets')
  * class PetsController {
- *   @Catch(ErrNotFound)
- *   async handleNotFound(ctx: Context, error: ErrNotFound) { ctx.status(404).body({ error: error.message }) }
+ *   @Catch(ErrHTTPNotFound)
+ *   async handleNotFound(ctx: Context, error: ErrHTTPNotFound) { ctx.status(404).body({ error: error.message }) }
  * }
  * ```
  */

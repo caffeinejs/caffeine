@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Catch, Controller, ErrConfiguration, ErrNotFound, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { Catch, Controller, ErrConfiguration, ErrHTTPNotFound, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
 // Isolated: a single method is both a route (@Get) and an error handler (@Catch). buildRouting
 // rejects at ready(), poisoning every app build in the module — so it lives alone.
 @Controller('/both')
 class BothController {
   @Get('/')
-  @Catch(ErrNotFound)
+  @Catch(ErrHTTPNotFound)
   handle(): unknown {
-    throw new ErrNotFound('x')
+    throw new ErrHTTPNotFound('x')
   }
 }
 void [BothController]

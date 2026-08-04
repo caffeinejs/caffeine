@@ -1307,7 +1307,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
-      security: []
+      security:
+        - bearerAuth: []
   /inventories:
     get:
       summary: List Inventory
@@ -1341,7 +1342,7 @@ paths:
                 properties: {}
           headers: {}
       security:
-        - bearerToken: []
+        - bearerAuth: []
   /orders:
     parameters:
       - $ref: '#/components/parameters/TenantID'
@@ -1446,7 +1447,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
-      security: []
+      security:
+        - bearerAuth: []
   /orders/{id}:
     parameters:
       - name: id
@@ -1484,7 +1486,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-      security: []
+      security:
+        - bearerAuth: []
     delete:
       summary: Delete Order
       deprecated: false
@@ -1508,7 +1511,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-      security: []
+      security:
+        - bearerAuth: []
     post:
       summary: Callback Example
       deprecated: false
@@ -1689,7 +1693,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/UnprocessableEntity'
-      security: []
+      security:
+        - bearerAuth: []
     get:
       summary: Get User
       deprecated: false
@@ -1726,7 +1731,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-      security: []
+      security:
+        - bearerAuth: []
     delete:
       summary: Delete User
       deprecated: false
@@ -1749,7 +1755,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-      security: []
+      security:
+        - bearerAuth: []
   /auth/tokens:
     post:
       summary: Create Token (Login)

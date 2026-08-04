@@ -1,27 +1,19 @@
 import type { RouterDescriptor } from './types.js'
 
-export function resolveRouteURL(
-  baseURL: string,
-  router: RouterDescriptor,
-  routePath: string,
-  requestURL?: string,
-): string {
-  const origin = baseURL.replace(/\/+$/, '')
+// Joins prefix + controller path + route path into a single leading-slash path template,
+// e.g. { prefix: '/api', path: '/tasks' } + '/:id' → '/api/tasks/:id'.
+export function joinRoutePath(router: RouterDescriptor, routePath: string): string {
   const prefix = router.prefix ?? ''
   const segments = [prefix, router.path, routePath].filter(s => s.length > 0)
   const joined = segments.join('/').replace(/\/+/g, '/')
   const rawPath = joined.startsWith('/') ? joined : `/${joined}`
-  const path = joinPaths('', rawPath)
-  const url = new URL(path, `${origin}/`)
+  return trimTrailingSlash(rawPath)
+}
 
-  if (requestURL) {
-    const incoming = new URL(requestURL, `${origin}/`)
-    for (const [key, value] of incoming.searchParams) {
-      url.searchParams.append(key, value)
-    }
-  }
-
-  return url.toString()
+export function resolveRouteURL(baseURL: string, router: RouterDescriptor, routePath: string): string {
+  const origin = baseURL.replace(/\/+$/, '')
+  const path = joinRoutePath(router, routePath)
+  return new URL(path, `${origin}/`).toString()
 }
 
 export function mergeRequest(request: Request, overrides: { method: string, url: string }): Request {
@@ -42,7 +34,6 @@ export function mergeRequest(request: Request, overrides: { method: string, url:
   } as RequestInit)
 }
 
-function joinPaths(base: string, path: string): string {
-  const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
+function trimTrailingSlash(path: string): string {
+  return path.length > 1 ? path.replace(/\/$/, '') : path || '/'
 }

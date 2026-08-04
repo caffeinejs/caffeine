@@ -6,7 +6,7 @@ const secret = new TextEncoder().encode(JWT_SECRET)
 
 /**
  * Mints an HS256 JWT with the given subject and roles. The `roles` claim is what caffeine's JWT
- * bearer strategy reads (roleClaimType defaults to 'roles'), so `@Authorize({ roles: [...] })`
+ * bearer strategy reads (roleClaimType defaults to 'roles'), so `@Roles(...)`
  * gates on the scopes embedded here.
  */
 export async function signToken(sub: string, roles: string[]): Promise<string> {

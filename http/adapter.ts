@@ -130,7 +130,7 @@ export class FastifyAdapter<
       authOpts = input.services.auth.options
     }
 
-    const anyRouteNeedsAuthz = routers.some(r => r.routes.some(rt => rt.authorization.enabled))
+    const anyRouteNeedsAuthz = routers.some(r => r.routes.some(rt => rt.authorization.hasProtection))
     if (anyRouteNeedsAuthz && !input.services.auth.enabled) {
       throw new Error('Cannot start application: authorization is configured but authentication is not')
     }
@@ -363,7 +363,7 @@ export class FastifyAdapter<
           normalizeRouteDef(routeDef)
 
           // Authz: per-route, delegates challenge/forbid to the authentication handler
-          if (route.authorization.enabled && route.authorization.authorizer != null) {
+          if (route.authorization.authorizer != null) {
             const onRequest = routeDef.onRequest as Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
             const authorizer = route.authorization.authorizer
 
@@ -494,7 +494,14 @@ export class FastifyAdapter<
             }
           }
 
-          resolve(new Response(result.rawPayload, {
+          // Null-body statuses (204/205/304, plus 1xx) must be constructed with a null body, otherwise
+          // the Response constructor throws "Invalid response status code".
+          const nullBody = result.statusCode < 200
+            || result.statusCode === 204
+            || result.statusCode === 205
+            || result.statusCode === 304
+
+          resolve(new Response(nullBody ? null : result.rawPayload, {
             status: result.statusCode,
             statusText: result.statusMessage,
             headers: responseHeaders,

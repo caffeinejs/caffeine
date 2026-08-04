@@ -1,23 +1,12 @@
-import './__caffeine__.gen.js'
-import Fastify from 'fastify'
-import FastifyMultipart from '@fastify/multipart'
-import { createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { createContainer } from './app.container.js'
+import { buildApp } from './app.js'
 import { prisma } from './util/db/prisma.js'
-import { JWT_SECRET } from './features/auth/tokens.js'
 
-const fastify = Fastify({ logger: true, routerOptions: { ignoreTrailingSlash: true } })
-  .addHttpMethod('QUERY', { hasBody: true })
-
-await fastify.register(FastifyMultipart)
-
-const builder = createWebApplication(fastifyAdapterFactory(fastify))
-builder.authentication.addJWTBearer(o => o.secret(JWT_SECRET))
-void builder.authorization
-const app = builder.build()
+const app = buildApp(createContainer())
 
 app.onClose(() => prisma.$disconnect())
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(sig, () => app.close().then(() => process.exit(0)))
+  process.on(sig, () => void app.close().then(() => process.exit(0)))
 }
 
 await app.ready()

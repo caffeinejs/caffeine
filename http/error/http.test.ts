@@ -1,18 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, ErrBadRequest, ErrConflict, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, ErrHTTPBadRequest, ErrHTTPConflict, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 // No @Catch handlers in this file: thrown ErrHTTP errors fall through to the adapter's envelope.
 @Controller('/http-err')
 class HTTPErrController {
   @Get('/conflict')
   conflict(): unknown {
-    throw new ErrConflict('nope')
+    throw new ErrHTTPConflict('nope')
   }
 
   @Get('/zero-body')
   zero(): unknown {
-    throw new ErrBadRequest('bad', { body: 0 })
+    throw new ErrHTTPBadRequest('bad', { body: 0 })
   }
 }
 void [HTTPErrController]
@@ -27,7 +27,7 @@ describe('ErrHTTP envelope fallback', () => {
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({
       error: 'nope',
-      code: 'HTTP_ERROR',
+      code: 'ERR_HTTP_CONFLICT',
       statusCode: 409,
       message: 'nope',
     })

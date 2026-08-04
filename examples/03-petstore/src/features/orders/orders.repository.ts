@@ -1,11 +1,11 @@
 import { Injectable } from '@caffeinejs/di'
-import { ErrNotFound } from '@caffeinejs/http'
+import { ErrHTTPNotFound } from '@caffeinejs/http'
 import { Prisma, PrismaClient } from '@prisma/client'
 import type { CreateOrderDTO } from './order.js'
 import { toOrderDTO } from './order.js'
 
 // A 404 ErrHTTP so the global problem+json handler renders it without controller special-casing.
-export class ErrPetNotFound extends ErrNotFound {
+export class ErrPetNotFound extends ErrHTTPNotFound {
   constructor(petId: string) {
     super(`Cannot create order: pet "${petId}" does not exist`, { code: 'ERR_PET_NOT_FOUND' })
     this.name = 'ErrPetNotFound'

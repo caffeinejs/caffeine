@@ -1,4 +1,4 @@
-import { Controller, ErrUnauthorized, Params, Post, Schema, $p } from '@caffeinejs/http'
+import { Controller, ErrHTTPUnauthorized, Params, Post, Schema, $p } from '@caffeinejs/http'
 import { UsersRepository } from '../users/users.repository.js'
 import { signToken } from './tokens.js'
 
@@ -28,7 +28,7 @@ export class AuthController {
   async createToken(dto: LoginDTO) {
     const userId = await this.users.verifyCredentials(dto.username, dto.password)
     if (!userId) {
-      throw new ErrUnauthorized('Invalid credentials')
+      throw new ErrHTTPUnauthorized('Invalid credentials')
     }
     const token = await signToken(userId, ['write:pets'])
     return { token, expiresAt: new Date(Date.now() + 3_600_000).toISOString() }

@@ -31,7 +31,7 @@ function toProblemErrors(err: ValidationError): ProblemError[] {
   })
 }
 
-// Renders any thrown ErrHTTP (e.g. ErrNotFound → 404) as RFC 9457 problem+json.
+// Renders any thrown ErrHTTP (e.g. ErrHTTPNotFound → 404) as RFC 9457 problem+json.
 @Catch(ErrHTTP)
 export class HTTPProblemHandler extends ErrorHandler<ErrHTTP> {
   async handle(ctx: Context, err: ErrHTTP): Promise<void> {

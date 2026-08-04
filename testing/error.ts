@@ -7,6 +7,15 @@ export class ErrNoRouter extends Error {
   }
 }
 
+export class ErrMissingRouteParam extends Error {
+  readonly code = 'CAFFEINE_ERR_MISSING_ROUTE_PARAM'
+  readonly name = 'ErrMissingRouteParam'
+
+  constructor(param: string, path: string) {
+    super(`Cannot build route URL: missing path parameter ":${param}" for "${path}"`)
+  }
+}
+
 export class ErrFetchFailed extends Error {
   readonly code = 'CAFFEINE_ERR_FETCH_FAILED'
   readonly status: number

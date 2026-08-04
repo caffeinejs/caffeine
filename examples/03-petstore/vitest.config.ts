@@ -19,8 +19,10 @@ export default defineConfig({
   oxc: false,
   resolve: {
     alias: {
-      // Test the working-tree source, not a built dist.
+      // Test the working-tree source, not a built dist. Both must be source so the client, the
+      // controller, and getRouter share one @caffeinejs/http instance (single router registry).
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
+      '@caffeinejs/testing': fileURLToPath(new URL('../../testing/index.ts', import.meta.url)),
     },
   },
   test: {

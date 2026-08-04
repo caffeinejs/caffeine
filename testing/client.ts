@@ -25,22 +25,19 @@ export function testClient<ROUTER extends RouterCtor>(
     const defaultMethod = route.method[0].toUpperCase()
 
     client[route.handler] = async (input?: Request | RequestInit) => {
-      let method: string
-      let requestURL: string | undefined
-
+      // A Request carries its own concrete path (e.g. built via newURL for a param route): honor it,
+      // rebasing path + query onto the client's origin so remote/in-process targeting is preserved.
+      // A RequestInit has no URL, so resolve the route's template path (parameterless routes).
       if (input instanceof Request) {
-        method = input.method
-        requestURL = input.url
-      } else {
-        method = (input?.method ?? defaultMethod).toUpperCase()
-        requestURL = undefined
+        const incoming = new URL(input.url, `${origin}/`)
+        const url = new URL(incoming.pathname + incoming.search, `${origin}/`).toString()
+
+        return fetcher(mergeRequest(input, { method: input.method, url }))
       }
 
-      const url = resolveRouteURL(origin, router, route.path, requestURL)
-
-      const request = input instanceof Request
-        ? mergeRequest(input, { method, url })
-        : new Request(url, { ...input, method, duplex: input?.body ? 'half' : undefined } as RequestInit)
+      const method = (input?.method ?? defaultMethod).toUpperCase()
+      const url = resolveRouteURL(origin, router, route.path)
+      const request = new Request(url, { ...input, method, duplex: input?.body ? 'half' : undefined } as RequestInit)
 
       return fetcher(request)
     }

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { Injectable, Lifetime, Scopes } from '@caffeinejs/di'
-import { Catch, type Context, Controller, ErrNotFound, ErrorHandler, ErrorHandlerProvider, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
-import { ErrBadRequest, ErrConflict, ErrHTTP } from './http.js'
+import { Catch, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
+import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
 // ---------------------------------------------------------------------------
 // Unit — ErrorHandlerProvider.handlerFor (no container, no registry)
@@ -29,33 +29,33 @@ function mapOf(...entries: Array<[Ctor<Error>, Provider<ErrorHandler<Error>>]>) 
 describe('ErrorHandlerProvider', () => {
   it('returns the exact handler for the error class', () => {
     const p = providerOf('notFound')
-    const provider = new ErrorHandlerProvider(mapOf([ErrNotFound, p]))
+    const provider = new ErrorHandlerProvider(mapOf([ErrHTTPNotFound, p]))
 
-    expect(provider.handlerFor(new ErrNotFound())).toBe(p)
+    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(p)
   })
 
   it('walks the prototype chain to a base-class handler', () => {
     const p = providerOf('http')
     const provider = new ErrorHandlerProvider(mapOf([ErrHTTP, p]))
 
-    // ErrNotFound extends ErrHTTP — the base handler serves the subclass.
-    expect(provider.handlerFor(new ErrNotFound())).toBe(p)
+    // ErrHTTPNotFound extends ErrHTTP — the base handler serves the subclass.
+    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(p)
   })
 
   it('prefers the most specific handler over a base handler', () => {
     const specific = providerOf('notFound')
     const base = providerOf('http')
-    const provider = new ErrorHandlerProvider(mapOf([ErrHTTP, base], [ErrNotFound, specific]))
+    const provider = new ErrorHandlerProvider(mapOf([ErrHTTP, base], [ErrHTTPNotFound, specific]))
 
-    expect(provider.handlerFor(new ErrNotFound())).toBe(specific)
-    expect(provider.handlerFor(new ErrBadRequest())).toBe(base)
+    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(specific)
+    expect(provider.handlerFor(new ErrHTTPBadRequest())).toBe(base)
   })
 
   it('treats a handler registered for Error as a catch-all', () => {
     const p = providerOf('all')
     const provider = new ErrorHandlerProvider(mapOf([Error as Ctor<Error>, p]))
 
-    expect(provider.handlerFor(new ErrNotFound())).toBe(p)
+    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(p)
     expect(provider.handlerFor(new Error('x'))).toBe(p)
     expect(provider.handlerFor(new TypeError('x'))).toBe(p)
   })
@@ -63,12 +63,12 @@ describe('ErrorHandlerProvider', () => {
   it('returns undefined when nothing matches', () => {
     const provider = new ErrorHandlerProvider(mapOf())
 
-    expect(provider.handlerFor(new ErrNotFound())).toBeUndefined()
+    expect(provider.handlerFor(new ErrHTTPNotFound())).toBeUndefined()
   })
 })
 
 // ---------------------------------------------------------------------------
-// Integration — dispatch through the app. A specific @Catch(ErrNotFound)
+// Integration — dispatch through the app. A specific @Catch(ErrHTTPNotFound)
 // handler and a @Catch(Error) catch-all coexist without conflict.
 // ---------------------------------------------------------------------------
 
@@ -80,13 +80,13 @@ class Greeter {
 }
 
 // @Catch composes @Injectable: the [Greeter] dependency is injected into the handler.
-@Catch(ErrNotFound, [Greeter])
-class NotFoundHandler extends ErrorHandler<ErrNotFound> {
+@Catch(ErrHTTPNotFound, [Greeter])
+class NotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
   constructor(private readonly greeter: Greeter) {
     super()
   }
 
-  async handle(ctx: Context, error: ErrNotFound): Promise<void> {
+  async handle(ctx: Context, error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ error: error.message, via: this.greeter.greet() })
   }
 }
@@ -105,7 +105,7 @@ class PetsController {
   @Get('/:id')
   @Params([$p.param('id')])
   get(id: string): unknown {
-    throw new ErrNotFound(`Pet "${id}" not found`)
+    throw new ErrHTTPNotFound(`Pet "${id}" not found`)
   }
 }
 
@@ -146,27 +146,27 @@ describe('error handler dispatch', () => {
 // The global NotFoundHandler / CatchAllHandler above act as the fallback layer.
 // ---------------------------------------------------------------------------
 
-// Controller-scoped handler wins over the global @Catch(ErrNotFound) class for this controller.
+// Controller-scoped handler wins over the global @Catch(ErrHTTPNotFound) class for this controller.
 @Controller('/shop')
 class ShopController {
   @Get('/:id')
   @Params([$p.param('id')])
   get(id: string): unknown {
-    throw new ErrNotFound(`item ${id}`)
+    throw new ErrHTTPNotFound(`item ${id}`)
   }
 
-  @Catch(ErrNotFound)
-  async onNotFound(ctx: Context, error: ErrNotFound): Promise<void> {
+  @Catch(ErrHTTPNotFound)
+  async onNotFound(ctx: Context, error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ scoped: true, error: error.message })
   }
 }
 
-// A base-type handler catches subclasses (ErrConflict extends ErrHTTP).
+// A base-type handler catches subclasses (ErrHTTPConflict extends ErrHTTP).
 @Controller('/widgets')
 class WidgetsController {
   @Get('/conflict')
   conflict(): unknown {
-    throw new ErrConflict('dup')
+    throw new ErrHTTPConflict('dup')
   }
 
   @Catch(ErrHTTP)
@@ -183,8 +183,8 @@ class MixedController {
     throw new Error('plain')
   }
 
-  @Catch(ErrNotFound)
-  async onNotFound(ctx: Context, _error: ErrNotFound): Promise<void> {
+  @Catch(ErrHTTPNotFound)
+  async onNotFound(ctx: Context, _error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ nf: true })
   }
 }
@@ -198,11 +198,11 @@ class ScopedController {
   @Get('/boom')
   boom(): unknown {
     this.marker = 'touched'
-    throw new ErrNotFound('x')
+    throw new ErrHTTPNotFound('x')
   }
 
-  @Catch(ErrNotFound)
-  async onNotFound(ctx: Context, _error: ErrNotFound): Promise<void> {
+  @Catch(ErrHTTPNotFound)
+  async onNotFound(ctx: Context, _error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ marker: this.marker })
   }
 }
@@ -217,11 +217,11 @@ class TxController {
   @Get('/boom')
   boom(): unknown {
     this.marker = 'touched'
-    throw new ErrNotFound('x')
+    throw new ErrHTTPNotFound('x')
   }
 
-  @Catch(ErrNotFound)
-  async onNotFound(ctx: Context, _error: ErrNotFound): Promise<void> {
+  @Catch(ErrHTTPNotFound)
+  async onNotFound(ctx: Context, _error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ marker: this.marker })
   }
 }

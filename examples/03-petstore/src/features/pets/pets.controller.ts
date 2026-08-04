@@ -1,4 +1,4 @@
-import { AllowAnonymous, Authorize, Controller, Delete, ErrNotFound, Get, Params, Post, Put, Query, Schema, Status, $p } from '@caffeinejs/http'
+import { AllowAnonymous, Controller, Delete, ErrHTTPNotFound, Get, Params, Post, Put, Query, Roles, Schema, Status, $p } from '@caffeinejs/http'
 import type { CreatePetDTO, PetFilters, PetSearchCriteria, UpdatePetDTO } from './pet.js'
 import { createPetSchema, listPetsQuerySchema, petIdParamSchema, updatePetSchema } from './pet.js'
 import { PetsRepository } from './pets.repository.js'
@@ -19,7 +19,7 @@ interface PetQuery {
 export class PetsController {
   constructor(private readonly pets: PetsRepository) {}
 
-  // Public read — no @Authorize on the controller, so unguarded routes are open.
+  // Public read — no controller-level guard, so unguarded routes are open.
   @Get('/')
   @AllowAnonymous()
   @Schema({ querystring: listPetsQuerySchema })
@@ -52,14 +52,14 @@ export class PetsController {
   async get(id: string) {
     const pet = await this.pets.get(id)
     if (!pet) {
-      throw new ErrNotFound(`The requested pet with ID "${id}" was not found`)
+      throw new ErrHTTPNotFound(`The requested pet with ID "${id}" was not found`)
     }
     return pet
   }
 
   @Post('/')
   @Status(201)
-  @Authorize({ roles: ['write:pets'] })
+  @Roles('write:pets')
   @Schema({ body: createPetSchema })
   @Params([$p.body()])
   create(dto: CreatePetDTO) {
@@ -67,20 +67,20 @@ export class PetsController {
   }
 
   @Put('/:id')
-  @Authorize({ roles: ['write:pets'] })
+  @Roles('write:pets')
   @Schema({ params: petIdParamSchema, body: updatePetSchema })
   @Params([$p.param('id'), $p.body()])
   async update(id: string, dto: UpdatePetDTO) {
     const pet = await this.pets.update(id, dto)
     if (!pet) {
-      throw new ErrNotFound(`The requested pet with ID "${id}" was not found`)
+      throw new ErrHTTPNotFound(`The requested pet with ID "${id}" was not found`)
     }
     return pet
   }
 
   @Delete('/:id')
   @Status(204)
-  @Authorize({ roles: ['write:pets'] })
+  @Roles('write:pets')
   @Params([$p.param('id')])
   async remove(id: string) {
     await this.pets.remove(id)
@@ -89,13 +89,13 @@ export class PetsController {
   // Multipart upload — $p.file() yields a Web API File for the `file` field.
   @Post('/:id/images')
   @Status(201)
-  @Authorize({ roles: ['write:pets'] })
+  @Roles('write:pets')
   @Params([$p.param('id'), $p.file('file')])
   async uploadImage(id: string, file: File) {
     const url = `https://cdn.petstoreapi.com/pets/${id}/${file.name}`
     const pet = await this.pets.addPhoto(id, url)
     if (!pet) {
-      throw new ErrNotFound(`The requested pet with ID "${id}" was not found`)
+      throw new ErrHTTPNotFound(`The requested pet with ID "${id}" was not found`)
     }
     return { message: 'Image uploaded', success: true, photo: url }
   }

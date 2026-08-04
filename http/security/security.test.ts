@@ -15,6 +15,7 @@ import {
   Params,
   Post,
   Principal,
+  Roles,
   Status,
   createWebApplication,
   fastifyAdapterFactory,
@@ -111,7 +112,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -135,7 +135,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -159,7 +158,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -189,7 +187,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -218,7 +215,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -247,7 +243,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -276,7 +271,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -300,11 +294,56 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
     const res = await app.fetch('/auth-role-403')
+    expect(res.status).toBe(403)
+  })
+
+  it('@Roles gates identically to @Authorize({ roles }) — 200 with the role', async () => {
+    @Roles('admin')
+    @Controller('/roles-ok')
+    class RolesOkController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [RolesOkController]
+
+    const handler = new FakeAuthHandler()
+    handler.result = successTicket([{ type: 'roles', value: 'admin' }])
+
+    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    builder.authentication.addStrategy('default', handler).default('default')
+    const app = builder.build()
+    await app.ready()
+
+    const res = await app.fetch('/roles-ok')
+    expect(res.status).toBe(200)
+  })
+
+  it('@Roles returns 403 when the user lacks the required role', async () => {
+    @Roles('admin')
+    @Controller('/roles-403')
+    class Roles403Controller {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [Roles403Controller]
+
+    const handler = new FakeAuthHandler()
+    handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
+
+    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    builder.authentication.addStrategy('default', handler).default('default')
+    const app = builder.build()
+    await app.ready()
+
+    const res = await app.fetch('/roles-403')
     expect(res.status).toBe(403)
   })
 
@@ -333,7 +372,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', new CustomChallengeHandler()).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -367,7 +405,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', new CustomForbidHandler()).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -393,7 +430,6 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addStrategy('default', handler).default('default')
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -422,7 +458,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -446,7 +481,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -468,7 +502,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -491,7 +524,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -517,7 +549,6 @@ describe('JWTBearerHandler', () => {
     builder.authentication.addJWTBearer(b =>
       b.secret(TEST_SECRET).jwtOptions({ issuer: 'https://expected.example.com', algorithms: ['HS256'] }),
     )
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -543,7 +574,6 @@ describe('JWTBearerHandler', () => {
     builder.authentication.addJWTBearer(b =>
       b.secret(TEST_SECRET).jwtOptions({ audience: 'my-api', algorithms: ['HS256'] }),
     )
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -568,7 +598,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -594,7 +623,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -618,7 +646,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -646,7 +673,6 @@ describe('JWTBearerHandler', () => {
     builder.authentication.addJWTBearer(b =>
       b.secret(TEST_SECRET).onTokenValidated((_ctx, payload) => { onTokenValidated(payload) }),
     )
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -677,7 +703,6 @@ describe('JWTBearerHandler', () => {
     builder.authentication.addJWTBearer(b =>
       b.secret(TEST_SECRET).onFail((_ctx, err) => { onFail(err) }),
     )
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -704,7 +729,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -735,7 +759,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 
@@ -763,7 +786,6 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
-    void builder.authorization
     const app = builder.build()
     await app.ready()
 

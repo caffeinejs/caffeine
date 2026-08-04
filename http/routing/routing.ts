@@ -4,19 +4,13 @@ import { solutions } from '../error/util.js'
 import { Keys } from '../symbols.js'
 import { Router } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
-import { Feats } from '../feats.js'
 import { getRouter } from '../decorators/registrar/index.js'
 
-export function buildRouting<REQ>(container: Container, feats: Feats): Router<REQ>[] {
-  let authzEvaluators: Map<string, PolicyEvaluator> | undefined
-  let authzHandlers: Map<string, AuthzRequirementHandler<AuthzRequirement>> | undefined
-  let authzOptions: AuthorizationOptions | undefined
-
-  if (feats.authorization) {
-    authzEvaluators = container.get(kAuthzEvaluators)
-    authzHandlers = container.get(kAuthzHandlers)
-    authzOptions = container.get(kAuthzOpts)
-  }
+export function buildRouting<REQ>(container: Container): Router<REQ>[] {
+  // Authorization is always configured, so its evaluators/handlers/options are always bound.
+  const authzEvaluators: Map<string, PolicyEvaluator> = container.get(kAuthzEvaluators)
+  const authzHandlers: Map<string, AuthzRequirementHandler<AuthzRequirement>> = container.get(kAuthzHandlers)
+  const authzOptions: AuthorizationOptions = container.get(kAuthzOpts)
 
   const controllers = container.getBindingsByLabel(Keys.CONTROLLER)
   const routers = new Array<Router<REQ>>(controllers.length)
@@ -101,14 +95,13 @@ export function buildRouting<REQ>(container: Container, feats: Feats): Router<RE
             const isAnonymous = !!(router.authz?.allowAnonymous || route.authz?.allowAnonymous)
 
             return {
-              enabled: feats.authorization,
               hasProtection: hasDecoratorProtection && !isAnonymous,
               options: route.authz,
-              authorizer: feats.authorization && hasDecoratorProtection
+              authorizer: hasDecoratorProtection
                 ? compileRoutePolicy(
-                    authzOptions!,
-                    authzEvaluators!,
-                    authzHandlers!,
+                    authzOptions,
+                    authzEvaluators,
+                    authzHandlers,
                     router.authz,
                     route.authz,
                   )

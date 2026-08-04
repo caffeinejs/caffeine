@@ -14,7 +14,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   readonly #services: Service[] = []
 
   #authBuilder: AuthenticationBuilder | undefined
-  #authzBuilder: AuthorizationBuilder | undefined
+  readonly #authzBuilder: AuthorizationBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationOptions = {}) {
     const c = options.container
@@ -22,6 +22,9 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
       ? c as Container
       : new CaffeineIoC(c != null ? c as Partial<Options> : {})
     this.#adapterFactory = adapterFactory
+
+    this.#authzBuilder = new AuthorizationBuilder()
+    this.#services.push(this.#authzBuilder)
   }
 
   get authentication(): AuthenticationBuilder {
@@ -34,11 +37,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   get authorization(): AuthorizationBuilder {
-    if (this.#authzBuilder == null) {
-      this.#authzBuilder = new AuthorizationBuilder()
-      this.#services.push(this.#authzBuilder)
-    }
-
     return this.#authzBuilder
   }
 

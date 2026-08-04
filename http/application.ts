@@ -76,16 +76,13 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
 
     await this.#container.init()
 
-    this.#routers = buildRouting<R>(this.#container, this.#feats)
+    this.#routers = buildRouting<R>(this.#container)
 
     const services: Services = {
       auth: {
         enabled: this.#feats.authentication,
         coordinator: this.#container.getOptional(AuthenticationService),
         options: this.#container.getOptional(kAuthOpts),
-      },
-      authz: {
-        enabled: this.#feats.authorization,
       },
       oidc: this.#container.getOptional<OIDCMeta>(kOIDCMeta),
       errorHandling: this.#container.get(ErrorHandlerProvider),
