@@ -1,4 +1,4 @@
-import { Controller, Get, Params, Post, body } from '@caffeinejs/http'
+import { Controller, Get, Params, Post, $p } from '@caffeinejs/http'
 import { CreateExampleUseCase } from '../application/usecases/create-example.usecase.js'
 import { ListExamplesUseCase } from '../application/usecases/list-examples.usecase.js'
 
@@ -15,7 +15,7 @@ export class ExampleController {
   }
 
   @Post('/')
-  @Params([body()])
+  @Params([$p.body()])
   createOne(input: { name: string }) {
     return this.create.execute(input.name)
   }

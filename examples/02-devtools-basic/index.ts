@@ -1,6 +1,6 @@
 import fastify from 'fastify'
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import { Controller, Delete, Get, Post, Params, createWebApplication, body, fastifyAdapterFactory, param } from '@caffeinejs/http'
+import { Controller, Delete, Get, Post, Params, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
 import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
 
 // --- services ---
@@ -57,7 +57,7 @@ class TaskController {
   }
 
   @Post('/')
-  @Params([body()])
+  @Params([$p.body()])
   create(data: { name: string }) {
     const task = this.#store.add(data.name)
     this.#log.log('create', task.id)
@@ -65,7 +65,7 @@ class TaskController {
   }
 
   @Delete('/:id')
-  @Params([param('id')])
+  @Params([$p.param('id')])
   remove(id: string) {
     const numId = Number(id)
     this.#store.remove(numId)

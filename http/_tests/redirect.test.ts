@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { type Context, Controller, Get, Header, createWebApplication, Params, Post, fastifyAdapterFactory } from '../index.js'
-import { context } from '../route_picker.js'
+import { $p } from '../route_picker.js'
 
 describe('Redirect', () => {
   describe('given a router with different redirect strategies', () => {
     @Controller('/redirect')
     class RedirectController {
       @Get('/')
-      @Params([context()])
+      @Params([$p.context()])
       get(ctx: Context) {
         ctx.redirect('/foo')
       }

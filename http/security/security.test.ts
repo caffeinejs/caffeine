@@ -13,10 +13,12 @@ import {
   Claim,
   Identity,
   Params,
+  Post,
   Principal,
+  Status,
   createWebApplication,
   fastifyAdapterFactory,
-  context,
+  $p,
 } from '../index.js'
 
 // ---------------------------------------------------------------------------
@@ -378,7 +380,7 @@ describe('auth configurer (fake handler)', () => {
     @Authorize()
     @Controller('/auth-ctx-user')
     class CtxUserController {
-      @Params([context()])
+      @Params([$p.context()])
       @Get('/')
       list(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
@@ -556,7 +558,7 @@ describe('JWTBearerHandler', () => {
     @Authorize()
     @Controller('/jwt-sub-claim')
     class JWTSubClaimController {
-      @Params([context()])
+      @Params([$p.context()])
       @Get('/')
       list(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
@@ -711,6 +713,35 @@ describe('JWTBearerHandler', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(403)
+  })
+
+  it('a failed challenge halts before the handler even when @Status is set', async () => {
+    // Regression: challenge()/forbid() only set the status on the reply; the authz onRequest hook
+    // must finalize the response so the route handler never runs. Otherwise the handler executes
+    // (side effects and all) and an explicit @Status would overwrite the 401 with the success code.
+    let handlerRan = false
+
+    @Controller('/jwt-status-guard')
+    class JWTStatusGuardController {
+      @Post('/')
+      @Status(201)
+      @Authorize({ roles: ['admin'] })
+      create() {
+        handlerRan = true
+        return { ok: true }
+      }
+    }
+    void [JWTStatusGuardController]
+
+    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    builder.authentication.addJWTBearer(b => b.secret(TEST_SECRET))
+    void builder.authorization
+    const app = builder.build()
+    await app.ready()
+
+    const res = await app.fetch('/jwt-status-guard', { method: 'POST' })
+    expect(res.status).toBe(401)
+    expect(handlerRan).toBe(false)
   })
 
   it('@AllowAnonymous on a method of a JWT-protected class skips verification', async () => {

@@ -11,6 +11,28 @@ type Picker<
 >
   = (req: REQ, res: RES) => unknown
 
+// Compiles the parameter pickers into a function that returns the handler's argument list. Unlike
+// compileHandler, it does not bake in the target function — the caller resolves the instance and
+// invokes the method itself, so the same instance can be reused (e.g. for per-controller error
+// handling of transient-scoped controllers).
+export function compileArgs<
+  REQ extends FastifyRequest = FastifyRequest,
+  RES extends FastifyReply = FastifyReply,
+>(
+  params: ParameterPickOptions<REQ>[],
+): (req: REQ, res: RES) => unknown[] | Promise<unknown[]> {
+  if (params.length === 0) {
+    return () => []
+  }
+
+  const a = params.map(p => buildPicker<REQ, RES>(p))
+  const hasAsync = params.some(p => p.async === true)
+
+  return hasAsync
+    ? (req, res) => Promise.all(a.map(p => p(req, res)))
+    : (req, res) => a.map(p => p(req, res))
+}
+
 export function compileHandler<
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
@@ -131,7 +153,7 @@ function buildPicker<
         return req => req.headers
       }
     case 'context':
-      return req => req.caffeineContext
+      return req => req.httpContext
     case 'method':
       return req => req.method
     case 'url':

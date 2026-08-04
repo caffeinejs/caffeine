@@ -1,4 +1,4 @@
-import { Controller, Get, createWebApplication, Params, Post, Schema, body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
+import { Controller, Get, createWebApplication, Params, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
 import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
@@ -38,7 +38,7 @@ class AppController {
   }
 
   @Post('/api/test/:text/:num/:bool')
-  @Params([context(), param(), query(), body(), header()])
+  @Params([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
   helloWorld(
     ctx: FastifyContext,

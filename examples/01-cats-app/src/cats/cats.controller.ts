@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Params, Post, Put, Status, body, param } from '@caffeinejs/http'
+import { Controller, Delete, Get, Params, Post, Put, Status, $p } from '@caffeinejs/http'
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsService } from './cats.service.js'
 
@@ -12,7 +12,7 @@ export class CatsController {
   }
 
   @Get('/:id')
-  @Params([param('id')])
+  @Params([$p.param('id')])
   findOne(id: string) {
     const cat = this.cats.findOne(Number(id))
     if (!cat) {
@@ -23,13 +23,13 @@ export class CatsController {
 
   @Post('/')
   @Status(201)
-  @Params([body()])
+  @Params([$p.body()])
   create(dto: CreateCatDTO) {
     return this.cats.create(dto)
   }
 
   @Put('/:id')
-  @Params([param('id'), body()])
+  @Params([$p.param('id'), $p.body()])
   update(id: string, dto: UpdateCatDTO) {
     const cat = this.cats.update(Number(id), dto)
     if (!cat) {
@@ -39,7 +39,7 @@ export class CatsController {
   }
 
   @Delete('/:id')
-  @Params([param('id')])
+  @Params([$p.param('id')])
   remove(id: string) {
     this.cats.remove(Number(id))
     return new Response(null, { status: 204 })

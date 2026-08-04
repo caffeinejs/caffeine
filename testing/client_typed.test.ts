@@ -1,7 +1,7 @@
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Get, Post, Params, createWebApplication, body, fastifyAdapterFactory } from '@caffeinejs/http'
+import { WebApplication, Controller, Get, Post, Params, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
 import { ErrFetchFailed, typedClient } from './index.js'
 import type { Fetchable } from './index.js'
 
@@ -38,7 +38,7 @@ class PetsRouter {
   }
 
   @Post('/')
-  @Params([body()])
+  @Params([$p.body()])
   adopt(data: { species: string, name: string }): Pet {
     return this.#store.add(data.species, data.name)
   }

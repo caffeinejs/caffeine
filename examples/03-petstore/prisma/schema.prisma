@@ -1,0 +1,97 @@
+// Prisma schema for the 03-petstore example.
+// Models mirror the Modern Petstore OpenAPI 3.2 spec (docs/openapi.petstore.yaml).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Species {
+  DOG
+  CAT
+  RABBIT
+  BIRD
+  REPTILE
+  OTHER
+}
+
+enum Size {
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  UNKNOWN
+}
+
+enum PetStatus {
+  AVAILABLE
+  PENDING
+  ADOPTED
+  NOT_AVAILABLE
+}
+
+enum OrderStatus {
+  PLACED
+  APPROVED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Pet {
+  id           String    @id @default(uuid()) @db.Uuid
+  species      Species
+  name         String
+  breed        String?
+  ageMonths    Int
+  size         Size?
+  color        String?
+  gender       Gender?
+  goodWithKids Boolean?
+  price        Decimal   @db.Decimal(10, 2)
+  currency     String    @default("USD")
+  description  String?
+  status       PetStatus @default(AVAILABLE)
+  photos       String[]
+  medicalInfo  Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  orders Order[]
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  username  String   @unique
+  firstName String?
+  lastName  String?
+  email     String
+  phone     String?
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Order {
+  id          String      @id @default(uuid()) @db.Uuid
+  petId       String      @db.Uuid
+  userId      String?     @db.Uuid
+  status      OrderStatus @default(PLACED)
+  totalAmount Decimal     @db.Decimal(10, 2)
+  currency    String      @default("USD")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  pet  Pet   @relation(fields: [petId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
+}

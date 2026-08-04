@@ -6,7 +6,7 @@ import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import type { Router } from './route.js'
 import type { AuthenticationOptions } from './security/auth/builder.js'
 import { newAnonymousUser, type Principal } from './security/index.js'
-import { compileHandler } from './adapter_handler_parameters.js'
+import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { CacheStore, ETagGenerator } from './cache/types.js'
 import { RouteConfigurer } from './route_configurer.js'
@@ -17,10 +17,15 @@ import { FastifyContext } from './context.js'
 import { MediaTypes } from './media_types.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { isOIDCError } from './security/auth/oidc/index.js'
+import { resolveByErrorChain } from './error/error.js'
+import { ErrHTTP } from './error/http.js'
 
+// Augmenting Fastify with Caffeine-specific types.
 declare module 'fastify' {
   interface FastifyRequest {
-    caffeineResponseCached: boolean
+    httpContext: FastifyContext
+    responseCached: boolean
+    controller: Record<string | symbol, unknown> | null
     user: Principal
   }
 }
@@ -56,17 +61,62 @@ export class FastifyAdapter<
     const routers = input.routers as Router<REQ>[]
     const store = this.#options?.cache?.store ?? new MemoryCacheStore()
     const configurers = [...(this.#options?.configurers ?? [])]
+    const fastify = this.#fastify
 
-    // Global: caffeineContext decoration + hook
-    this.#fastify.decorateRequest('caffeineContext', null as unknown as FastifyContext)
-    this.#fastify.addHook('onRequest', (req, reply, done) => {
-      req.caffeineContext = new FastifyContext(req, reply)
+    // Decorating the request
+    fastify.decorateRequest<Principal | null>('user', null)
+    fastify.decorateRequest('controller', null)
+    fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
+
+    fastify.addHook('onRequest', (req, reply, done) => {
+      req.httpContext = new FastifyContext(req, reply)
       done()
     })
 
-    // Global: parse application/x-www-form-urlencoded bodies (built-in, no dependency).
-    // Inherited by every router scope; the @BodyAsBuffer/@BodyAsStream scopes drop it explicitly.
-    this.#fastify.addContentTypeParser(
+    // Error Handling
+    // --
+    const defaultErrorHandler = fastify.errorHandler
+    const errorManager = input.services.errorHandling
+
+    // The application-wide error handler. Also the fallback for per-controller (encapsulated)
+    // handlers when they do not handle a given error type.
+    const globalErrorHandler = async (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
+      const err = error instanceof Error ? error : new Error(String(error))
+      const handler = errorManager.handlerFor(err)
+
+      if (handler) {
+        await handler.get().handle(request.httpContext, err)
+        // The handler renders via ctx; finalize defensively so the request never hangs if it did not.
+        if (!reply.sent) {
+          return reply.send()
+        }
+
+        return
+      }
+
+      if (err instanceof ErrHTTP) {
+        reply.status(err.statusCode)
+
+        if (err.headers) {
+          reply.headers(err.headers)
+        }
+
+        const body = err.body !== undefined
+          ? err.body
+          : { error: err.message, code: err.code, statusCode: err.statusCode, message: err.message }
+
+        return reply.send(body)
+      }
+
+      request.log.error({ err }, err.message)
+
+      return defaultErrorHandler(error, request, reply)
+    }
+
+    fastify.setErrorHandler(globalErrorHandler)
+
+    // form-urlencoded body parser.
+    fastify.addContentTypeParser(
       MediaTypes.APPLICATION_FORM_URLENCODED,
       { parseAs: 'string', bodyLimit: 1_048_576 },
       formBodyParser,
@@ -78,7 +128,6 @@ export class FastifyAdapter<
     if (input.services.auth.enabled) {
       coordinator = input.services.auth.coordinator
       authOpts = input.services.auth.options
-      this.#fastify.decorateRequest<Principal | null>('user', null)
     }
 
     const anyRouteNeedsAuthz = routers.some(r => r.routes.some(rt => rt.authorization.enabled))
@@ -100,7 +149,7 @@ export class FastifyAdapter<
         }
       }
 
-      this.#fastify.addHook('onReady', async () => {
+      fastify.addHook('onReady', async () => {
         if (!this.#fastify.hasRequestDecorator('cookies')) {
           throw new Error(
             'Cannot start application: OIDC authentication requires @fastify/cookie to be registered',
@@ -109,9 +158,9 @@ export class FastifyAdapter<
       })
 
       for (const { callbackPath, handler } of oidcMeta.handlers) {
-        this.#fastify.get(callbackPath, async (req, reply) => {
+        fastify.get(callbackPath, async (req, reply) => {
           try {
-            await handler.processCallback(req.caffeineContext)
+            await handler.processCallback(req.httpContext)
           } catch (e) {
             // The diagnostic detail (state, nonce, signature, token exchange) stays in the
             // logs: every failure mode must look identical to a client probing the callback.
@@ -127,22 +176,13 @@ export class FastifyAdapter<
     configurers.push(cacheConfigurer(store, this.#options?.cache?.etagGenerator))
     configurers.push(cacheInvalidateConfigurer(store))
 
-    this.#fastify.setErrorHandler((error, request, reply) => {
-      const err = error as FastifyError
-      request.log.error({ err }, err.message)
-      void reply.status(err.statusCode ?? 500).send({
-        error: err.message,
-        statusCode: err.statusCode ?? 500,
-      })
-    })
-
     const needsRequestScope = routers.some(
       router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
 
     if (needsRequestScope) {
       const man = this.#container.requestScopeManager
-      this.#fastify.addHook('onRequest', (_req, _res, done) => {
+      fastify.addHook('onRequest', (_req, _res, done) => {
         man.run(() => done())
       })
     }
@@ -151,11 +191,46 @@ export class FastifyAdapter<
       const basePath = router.path
       const routes = router.routes
 
-      this.#fastify.register(async server => {
+      fastify.register(async server => {
         const controller = router.controller
         const isSingleton = router.binding.scopeID === Scopes.SINGLETON
 
-        server.decorateRequest('caffeineResponseCached', false)
+        server.decorateRequest('responseCached', false)
+
+        // Error Handling (per-controller @Catch methods)
+        // --
+        // When the controller declares @Catch methods, resolve its instance once per request in an
+        // onRequest hook (inside the live request scope) and install an encapsulated setErrorHandler.
+        // The handler runs the matching @Catch method on that same instance — correct for transient
+        // scope (no second get()) — and covers every phase in the plugin (validation, hooks, handler).
+        // Unmatched errors delegate to the app-wide globalErrorHandler.
+        if (router.errorHandlers?.size) {
+          const ref = isSingleton ? controller.get() : null
+          const errorHandlers = router.errorHandlers
+
+          server.addHook('onRequest', (req, _res, done) => {
+            req.controller = (ref ?? controller.get()) as Record<string | symbol, unknown>
+            done()
+          })
+
+          server.setErrorHandler(async (error: FastifyError, req: FastifyRequest, reply: FastifyReply) => {
+            const err = error instanceof Error ? error : new Error(String(error))
+            const instance = req.controller
+            const methodKey = instance ? resolveByErrorChain(errorHandlers, err) : undefined
+
+            if (instance && methodKey) {
+              const handle = instance[methodKey] as (...args: unknown[]) => unknown
+              await handle.apply(instance, [req.httpContext, err])
+              if (!reply.sent) {
+                await reply.send()
+              }
+
+              return
+            }
+
+            return globalErrorHandler(error, req, reply)
+          })
+        }
 
         // Auth: one hook per router scope
         if (input.services.auth.enabled && coordinator && authOpts) {
@@ -167,7 +242,7 @@ export class FastifyAdapter<
             server.addHook('onRequest', async req => {
               let user: Principal | null = null
               for (const scheme of schemes) {
-                const result = await coordinator.authenticate(req.caffeineContext, scheme)
+                const result = await coordinator.authenticate(req.httpContext, scheme)
                 if (result.succeeded) {
                   if (user) {
                     for (const identity of result.ticket!.principal.identities) {
@@ -186,15 +261,27 @@ export class FastifyAdapter<
         for (const route of routes) {
           let dispatch: (req: REQ, res: RES) => unknown
 
-          if (isSingleton) {
+          if (router.errorHandlers?.size) {
+            const pickArgs = compileArgs(route.parameters)
+            const handlerKey = route.handler
+
+            dispatch = async (req, res) => {
+              const instance = req.controller!
+              const args = await pickArgs(req, res)
+
+              return (instance[handlerKey] as (...args: unknown[]) => unknown).apply(instance, args)
+            }
+          } else if (isSingleton) {
             const ref = controller.get()
             const refFn = (ref[route.handler] as (...args: unknown[]) => unknown).bind(ref)
+
             dispatch = compileHandler(route.parameters, refFn)
           } else {
             const handlerKey = route.handler
+
             dispatch = compileHandler(route.parameters, (...args) => {
-              const inst = controller.get()
-              return (inst[handlerKey] as (...args: unknown[]) => unknown).apply(inst, args)
+              const ctrl = controller.get()
+              return (ctrl[handlerKey] as (...args: unknown[]) => unknown).apply(ctrl, args)
             })
           }
 
@@ -280,17 +367,25 @@ export class FastifyAdapter<
             const onRequest = routeDef.onRequest as Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
             const authorizer = route.authorization.authorizer
 
-            onRequest.push(async req => {
-              const ctx = req.caffeineContext
+            onRequest.push(async (req, reply) => {
+              const ctx = req.httpContext
               const result = await authorizer.authorize(ctx, req.user)
               if (result.ok) {
                 return
               }
 
               if (!ctx.user.authenticated) {
-                return coordinator!.challenge(ctx)
+                await coordinator!.challenge(ctx)
               } else {
-                return coordinator!.forbid(ctx)
+                await coordinator!.forbid(ctx)
+              }
+
+              // challenge()/forbid() only set status/headers (or a redirect) on the reply; they do
+              // not end the request. Finalize here so the route handler is skipped — otherwise the
+              // handler runs despite the failed check, and an explicit @Status would overwrite the
+              // challenge status. Redirect-based challenges (OIDC/OAuth2) have already sent.
+              if (!reply.sent) {
+                return reply.send()
               }
             })
           }
@@ -337,7 +432,7 @@ export class FastifyAdapter<
       }, { prefix: router.prefix })
     }
 
-    await this.#fastify.ready()
+    await fastify.ready()
   }
 
   async teardown(): Promise<void> {

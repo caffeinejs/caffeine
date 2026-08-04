@@ -1,0 +1,7 @@
+# Applies to repo-root build contexts (examples/03-petstore/Dockerfile).
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+.git
+examples/03-petstore/src/__caffeine__.gen.ts

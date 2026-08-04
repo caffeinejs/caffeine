@@ -1,3 +1,4 @@
+import type { Ctor } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '../../route_picker.js'
 import type { RouteValidationSchema } from '../../route.js'
 import type { RouteAuthzOptions, RouterSpec, RouteSpec } from './routing.definition.js'
@@ -16,6 +17,7 @@ export class RouterBuilder {
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
+  #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
 
   path(path: string) {
     this.#path = path
@@ -36,6 +38,11 @@ export class RouterBuilder {
 
   produces(produces: string) {
     this.#produces = produces
+    return this
+  }
+
+  errorHandlers(handlers: Array<[Ctor<Error>, string | symbol]>) {
+    this.#errorHandlers = handlers
     return this
   }
 
@@ -126,6 +133,7 @@ export class RouterBuilder {
       config: this.#config,
       options: this.#options,
       extras: this.#extras,
+      errorHandlers: this.#errorHandlers,
     }
   }
 }

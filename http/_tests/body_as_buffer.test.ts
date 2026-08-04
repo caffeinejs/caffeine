@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory, BodyAsBuffer } from '../index.js'
-import { body } from '../route_picker.js'
+import { $p } from '../route_picker.js'
 
 describe('BodyAsBuffer', () => {
   it('delivers the body as a Buffer regardless of content-type', async () => {
@@ -9,7 +9,7 @@ describe('BodyAsBuffer', () => {
     class RawController {
       @BodyAsBuffer()
       @Post('/upload')
-      @Params([body()])
+      @Params([$p.body()])
       upload(b: Buffer) {
         return { size: b.byteLength, isBuffer: Buffer.isBuffer(b) }
       }
@@ -38,7 +38,7 @@ describe('BodyAsBuffer', () => {
     class RawBinaryController {
       @BodyAsBuffer()
       @Post('/data')
-      @Params([body()])
+      @Params([$p.body()])
       data(b: Buffer) {
         return { bytes: Array.from(b) }
       }
@@ -67,7 +67,7 @@ describe('BodyAsBuffer', () => {
     class RawJSONController {
       @BodyAsBuffer()
       @Post('/data')
-      @Params([body()])
+      @Params([$p.body()])
       data(b: Buffer) {
         return { raw: b.toString('utf8') }
       }
@@ -96,13 +96,13 @@ describe('BodyAsBuffer', () => {
     class MixedController {
       @BodyAsBuffer()
       @Post('/raw')
-      @Params([body()])
+      @Params([$p.body()])
       rawRoute(b: Buffer) {
         return { isBuffer: Buffer.isBuffer(b) }
       }
 
       @Post('/parsed')
-      @Params([body()])
+      @Params([$p.body()])
       parsedRoute(b: unknown) {
         return { body: b }
       }

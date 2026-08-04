@@ -6,6 +6,7 @@ import { buildRouting } from './routing/routing.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
+import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/index.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]
@@ -67,8 +68,11 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
 
   async ready(): Promise<void> {
     const kit: ServiceKit = { container: this.#container, feats: this.#feats }
-    await Promise.all(this.#services
-      .map(service => service[kServiceConfigure](kit)))
+    const configurers = [...this.#services, new ErrorHandlingServiceConfigurer()]
+
+    await Promise
+      .all(configurers
+        .map(service => service[kServiceConfigure](kit)))
 
     await this.#container.init()
 
@@ -84,13 +88,10 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
         enabled: this.#feats.authorization,
       },
       oidc: this.#container.getOptional<OIDCMeta>(kOIDCMeta),
+      errorHandling: this.#container.get(ErrorHandlerProvider),
     }
 
-    await this.#adapter.setup({
-      routers: this.#routers,
-      feats: this.#feats,
-      services,
-    })
+    await this.#adapter.setup({ routers: this.#routers, feats: this.#feats, services })
 
     for (const hook of this.#readyHooks) {
       await hook()

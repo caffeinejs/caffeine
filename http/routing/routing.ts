@@ -1,5 +1,6 @@
-import { Container } from '@caffeinejs/di'
-import { ErrCaffeineWebApplication } from '../error.js'
+import { Container, Ctor } from '@caffeinejs/di'
+import { ErrCaffeineWebApplication, ErrConfiguration } from '../error/index.js'
+import { solutions } from '../error/util.js'
 import { Keys } from '../symbols.js'
 import { Router } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
@@ -38,6 +39,7 @@ export function buildRouting<REQ>(container: Container, feats: Feats): Router<RE
       key,
       binding,
       controller: container.wrap(key),
+      errorHandlers: buildErrorHandlerMap(router.errorHandlers, key, new Set(router.routes.map(r => r.handler))),
       routes: router.routes.map(route => {
         const config = new Map<string, unknown>()
         if (router.config) {
@@ -119,4 +121,37 @@ export function buildRouting<REQ>(container: Container, feats: Feats): Router<RE
   }
 
   return routers
+}
+
+// Converts the raw per-controller error-handler list into a lookup map, rejecting two handlers for
+// the same error type. Runs at build (app.ready()), so the throw is observable, not an import crash.
+function buildErrorHandlerMap(
+  handlers: Array<[Ctor<Error>, string | symbol]> | undefined,
+  controllerKey: unknown,
+  routeHandlers: Set<string | symbol>,
+): Map<Ctor<Error>, string | symbol> | undefined {
+  if (!handlers?.length) {
+    return undefined
+  }
+
+  const map = new Map<Ctor<Error>, string | symbol>()
+  for (const [errorType, methodKey] of handlers) {
+    if (routeHandlers.has(methodKey)) {
+      throw new ErrConfiguration(
+        `Method "${String(methodKey)}" in "${String(controllerKey)}" cannot be both a route and an error handler`
+        + solutions(`Move the "@Catch(${errorType.name})" handler to a method without a route verb decorator`),
+      )
+    }
+
+    if (map.has(errorType)) {
+      throw new ErrConfiguration(
+        `Ambiguous controller error handler: multiple handlers registered for "${errorType.name}" in "${String(controllerKey)}"`
+        + solutions(`Keep a single "@Catch(${errorType.name})" method per controller`),
+      )
+    }
+
+    map.set(errorType, methodKey)
+  }
+
+  return map
 }

@@ -48,6 +48,12 @@ export function Trace(path: string) {
   }
 }
 
+export function Query(path: string) {
+  return function (_target: Function, context: ClassMethodDecoratorContext): void {
+    configureMethod(context, path, 'query')
+  }
+}
+
 export function Method(method: string | string[]) {
   return function (_target: Function, context: ClassMethodDecoratorContext): void {
     configureRoute(context, spec => spec.method(method))

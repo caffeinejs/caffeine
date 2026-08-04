@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory, BodyAsStream } from '../index.js'
-import { body } from '../route_picker.js'
+import { $p } from '../route_picker.js'
 
 describe('BodyAsStream', () => {
   it('delivers the body as a ReadableStream', async () => {
@@ -9,7 +9,7 @@ describe('BodyAsStream', () => {
     class StreamController {
       @BodyAsStream()
       @Post('/upload')
-      @Params([body()])
+      @Params([$p.body()])
       async upload(stream: ReadableStream) {
         const isStream = stream instanceof ReadableStream
         const chunks: Uint8Array[] = []
@@ -44,7 +44,7 @@ describe('BodyAsStream', () => {
     class StreamBinaryController {
       @BodyAsStream()
       @Post('/data')
-      @Params([body()])
+      @Params([$p.body()])
       async data(stram: ReadableStream) {
         const chunks: Uint8Array[] = []
         for await (const chunk of stram) {
@@ -78,7 +78,7 @@ describe('BodyAsStream', () => {
     class StreamJSONController {
       @BodyAsStream()
       @Post('/data')
-      @Params([body()])
+      @Params([$p.body()])
       async data(stream: ReadableStream) {
         const chunks: Uint8Array[] = []
         for await (const chunk of stream) {
@@ -111,13 +111,13 @@ describe('BodyAsStream', () => {
     class MixedController {
       @BodyAsStream()
       @Post('/raw')
-      @Params([body()])
+      @Params([$p.body()])
       async rawRoute(stream: ReadableStream) {
         return { isStream: stream instanceof ReadableStream }
       }
 
       @Post('/parsed')
-      @Params([body()])
+      @Params([$p.body()])
       parsedRoute(b: unknown) {
         return { body: b }
       }

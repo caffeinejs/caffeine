@@ -1,0 +1,30 @@
+{
+  "name": "@caffeinejs/example-petstore",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "prisma generate && caffeine generate",
+    "start": "tsx src/main.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@caffeinejs/di": "*",
+    "@caffeinejs/std": "*",
+    "@caffeinejs/http": "*",
+    "@fastify/multipart": "^10.0.0",
+    "@prisma/client": "^6.2.1",
+    "fastify": "^5.8.5",
+    "jose": "^5.0.0"
+  },
+  "devDependencies": {
+    "@caffeinejs/cli": "*",
+    "@types/node": "^22.9.0",
+    "prisma": "^6.2.1",
+    "tsx": "^4.22.4"
+  }
+}

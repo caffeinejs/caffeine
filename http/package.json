@@ -50,7 +50,7 @@
       "optional": true
     },
     "@fastify/cookie": {
-      "optional": true
+      "optional": false
     },
     "@fastify/cors": {
       "optional": true

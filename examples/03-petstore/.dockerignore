@@ -1,0 +1,6 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.env
+examples/03-petstore/src/__caffeine__.gen.ts
+.git

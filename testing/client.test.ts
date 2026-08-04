@@ -1,7 +1,7 @@
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Delete, Get, Post, Params, createWebApplication, body, fastifyAdapterFactory, param } from '@caffeinejs/http'
+import { WebApplication, Controller, Delete, Get, Post, Params, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
 import { ErrNoRoutesForController, testClient } from './index.js'
 
 @Injectable()
@@ -38,13 +38,13 @@ class TaskController {
   }
 
   @Post('/')
-  @Params([body()])
+  @Params([$p.body()])
   create(data: { name: string }) {
     return this.#store.add(data.name)
   }
 
   @Delete('/:id')
-  @Params([param('id')])
+  @Params([$p.param('id')])
   remove(id: string) {
     this.#store.remove(Number(id))
     return { ok: true }

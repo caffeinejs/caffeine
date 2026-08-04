@@ -13,7 +13,7 @@ import {
   Params,
   createWebApplication,
   fastifyAdapterFactory,
-  context,
+  $p,
 } from '../../../index.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
@@ -211,7 +211,7 @@ describe('OIDC integration', () => {
     @Authorize()
     @Controller('/oidc-int-session')
     class OIDCIntSessionController {
-      @Params([context()])
+      @Params([$p.context()])
       @Get('/')
       index(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }

@@ -61,7 +61,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
       const ifNoneMatch = request.headers['if-none-match']
       if (ifNoneMatch) {
         if (cached.etag && matchesETag(ifNoneMatch, cached.etag)) {
-          request.caffeineResponseCached = true
+          request.responseCached = true
           return reply.code(304)
             .headers(cached.headers)
             .send()
@@ -70,7 +70,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
         const ifModifiedSince = request.headers['if-modified-since']
         if (ifModifiedSince && cached.lastModified) {
           if (Date.parse(cached.lastModified) <= Date.parse(ifModifiedSince)) {
-            request.caffeineResponseCached = true
+            request.responseCached = true
             return reply.code(304)
               .headers(cached.headers)
               .send()
@@ -79,7 +79,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
       }
 
       // RFC 7230 §3.3 — HEAD responses must not include a body
-      request.caffeineResponseCached = true
+      request.responseCached = true
       reply.status(200).headers(cached.headers)
       if (request.method === 'HEAD') {
         return reply.send()
@@ -91,7 +91,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
     // Before sending the response,
     // we need to build the cache control headers and store the response in the cache
     async function onSend(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
-      if (request.caffeineResponseCached) {
+      if (request.responseCached) {
         return payload
       }
 

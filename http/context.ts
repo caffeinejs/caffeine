@@ -79,12 +79,6 @@ export type InferParams<S> = S extends FastifyRouteSchema<infer P, any, any, any
 export type InferQuery<S> = S extends FastifyRouteSchema<any, infer Q, any, any> ? Q : Record<string, string>
 export type InferHeaders<S> = S extends FastifyRouteSchema<any, any, infer H, any> ? H : Record<string, string>
 
-declare module 'fastify' {
-  interface FastifyRequest {
-    caffeineContext: FastifyContext
-  }
-}
-
 export class FastifyContext<
   SCHEMA extends FastifyRouteSchema = FastifyRouteSchema,
   REPLY extends FastifyReply = FastifyReply,

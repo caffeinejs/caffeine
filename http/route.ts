@@ -1,4 +1,4 @@
-import { Binding, Key, Provider } from '@caffeinejs/di'
+import { Binding, Ctor, Key, Provider } from '@caffeinejs/di'
 import type { ParameterPickOptions } from './route_picker.js'
 import { AuthzRouteService } from './security/authz/index.js'
 import { RouteAuthzOptions } from './decorators/registrar/routing.definition.js'
@@ -10,6 +10,7 @@ export interface Router<R> {
   key: Key
   binding: Binding
   controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>
+  errorHandlers?: Map<Ctor<Error>, string | symbol>
 }
 
 export interface Route<R> {

@@ -1,6 +1,6 @@
 import { provide, Scopes, type Provider } from '@caffeinejs/di'
 import { Injectable, Lifetime } from '@caffeinejs/di'
-import { Controller, Get, createWebApplication, Params, Post, Schema, body, context, fastifyAdapterFactory, FastifyContext, header, param, query } from '@caffeinejs/http'
+import { Controller, Get, createWebApplication, Params, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
 import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3030', 10)
@@ -65,7 +65,7 @@ class AppController {
   }
 
   @Post('/api/test/:text/:num/:bool')
-  @Params([param(), query(), body(), header(), context()])
+  @Params([$p.param(), $p.query(), $p.body(), $p.header(), $p.context()])
   @Schema({ params: schema, querystring: schema, body: schema, headers: schema, response: responseSchema })
   test(
     params: DataSchema,
