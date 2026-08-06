@@ -1,22 +1,26 @@
-import { jwtVerify } from 'jose'
-import type { JWTPayload, KeyLike } from 'jose'
+import type { JWTPayload } from 'jose'
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import type { JWTAuthenticationOptions } from './jwt_options.js'
+import { JWTService } from './jwt_service.js'
 
 export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthenticationOptions> {
   readonly #name: string
-  readonly #secretKey: Uint8Array | KeyLike
+  readonly #jwt: JWTService
 
   constructor(name: string, options: JWTAuthenticationOptions) {
     super(options)
 
     this.#name = name
-    this.#secretKey = typeof options.secret === 'string'
-      ? new TextEncoder().encode(options.secret)
-      : options.secret
+
+    // A string/Uint8Array secret is symmetric; a KeyLike is an asymmetric public (verify) key.
+    const secret = options.secret
+    const algorithm = options.jwtOptions?.algorithms?.[0]
+    this.#jwt = typeof secret === 'string' || secret instanceof Uint8Array
+      ? new JWTService({ secret, algorithm })
+      : new JWTService({ publicKey: secret, algorithm })
   }
 
   async authenticate(ctx: Context): Promise<AuthenticateResult> {
@@ -28,7 +32,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
     const token = authHeader.slice(7).trim()
 
     try {
-      const { payload } = await jwtVerify(token, this.#secretKey, this.options.jwtOptions)
+      const payload = await this.#jwt.verify(token, this.options.jwtOptions)
 
       const claims = this.options.claimMapper ? this.options.claimMapper(payload) : mapClaims(payload)
       const identity = new Identity(this.#name, true, claims, this.options.roleClaimType)

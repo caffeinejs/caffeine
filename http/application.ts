@@ -6,7 +6,7 @@ import { buildRouting } from './routing/routing.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
-import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/index.js'
+import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]

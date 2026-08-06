@@ -9,9 +9,9 @@ export class AuthzRouteService {
     this.#evaluators = evaluators
   }
 
-  async authorize(ctx: Context, user: Principal): Promise<AuthzResult> {
+  async authorize(ctx: Context, user: Principal, resource?: unknown): Promise<AuthzResult> {
     for (const evaluator of this.#evaluators) {
-      const result = await evaluator(ctx, user)
+      const result = await evaluator(ctx, user, resource)
       if (!result.ok) {
         return result
       }

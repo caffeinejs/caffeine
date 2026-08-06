@@ -11,6 +11,15 @@ import { ForwardAuthenticationHandler } from './forward/forward.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { kAuthOpts, kOIDCMeta } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
+import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
+import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
+import { OpaqueTokenStore } from './opaque/opaque_token_store.js'
+import { CookieAuthenticationHandler } from './cookie/cookie.js'
+import { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
+import { RememberMeTokenStore } from './cookie/remember_me_token_store.js'
+import { CredentialsService, type CredentialsServiceOptions } from './credentials/credentials_service.js'
+import { PasswordHasher, ScryptPasswordHasher } from './credentials/password_hasher.js'
+import { UserProvider } from './credentials/user_provider.js'
 import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import {
   githubOAuth2Preset,
@@ -32,6 +41,7 @@ export class AuthenticationBuilder implements Service {
   readonly #oidcHandlers: OAuthCallbackHandler[] = []
 
   #mapper: PrincipalMapper | string | symbol | undefined
+  #credentials: CredentialsServiceOptions | undefined
 
   constructor(options: Partial<AuthenticationOptions> = {}) {
     this.#options = options
@@ -86,6 +96,60 @@ export class AuthenticationBuilder implements Service {
     optsFn(builder)
 
     return this.addStrategy(name, new BasicAuthenticationHandler(name, builder.build()))
+  }
+
+  addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
+  addCookie(name: string, opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
+  addCookie(
+    optsOrName: ((opts: CookieAuthenticationOptionsBuilder) => void) | string,
+    options?: (opts: CookieAuthenticationOptionsBuilder) => void,
+  ): this {
+    const name = typeof optsOrName === 'string'
+      ? optsOrName
+      : 'Cookie'
+    const optsFn = typeof optsOrName === 'string'
+      ? options
+      : optsOrName
+    if (!optsFn) {
+      throw new Error('Options are required')
+    }
+
+    const builder = new CookieAuthenticationOptionsBuilder()
+    optsFn(builder)
+
+    return this.addStrategy(name, new CookieAuthenticationHandler(name, builder.build()))
+  }
+
+  /**
+   * Registers the credential module: a `CredentialsService` (for login endpoints) plus a fallback
+   * `PasswordHasher` (`ScryptPasswordHasher`, overridable). The user must bind a `UserProvider`
+   * implementation to the container. Not a scheme — pair it with `addCookie` for session login.
+   */
+  addCredentials(options: CredentialsServiceOptions = {}): this {
+    this.#credentials = options
+    return this
+  }
+
+  addOpaqueToken(): this
+  addOpaqueToken(opts: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): this
+  addOpaqueToken(name: string, opts?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): this
+  addOpaqueToken(
+    optsOrName?: ((opts: OpaqueTokenAuthenticationOptionsBuilder) => void) | string,
+    options?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void,
+  ): this {
+    const name = typeof optsOrName === 'string'
+      ? optsOrName
+      : 'OpaqueToken'
+    const optsFn = typeof optsOrName === 'string'
+      ? options
+      : optsOrName
+
+    // The options callback is optional: `store` defaults to the `OpaqueTokenStore` token, so the
+    // zero-arg form works once the user has bound their store to the container.
+    const builder = new OpaqueTokenAuthenticationOptionsBuilder()
+    optsFn?.(builder)
+
+    return this.addStrategy(name, new OpaqueTokenAuthenticationHandler(name, builder.build()))
   }
 
   addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
@@ -205,10 +269,46 @@ export class AuthenticationBuilder implements Service {
       if (keyOrHandler instanceof ForwardAuthenticationHandler) {
         keyOrHandler.setSchemeProvider(schemeProvider)
       }
+
+      // Resolve each opaque-token store to a Provider and inject it. Reading the raw registration
+      // (not the wrapped `schemes` map) and deferring `.get()` keeps container-bound stores lazy,
+      // exactly as the Forward wiring above does. A missing `store` defaults to the
+      // `OpaqueTokenStore` abstract-class token.
+      if (keyOrHandler instanceof OpaqueTokenAuthenticationHandler) {
+        const store = keyOrHandler.options.store ?? OpaqueTokenStore
+        const provider: Provider<OpaqueTokenStore> = isKey(store)
+          ? kit.container.wrap<OpaqueTokenStore>(store)
+          : { get: () => store }
+        keyOrHandler.setStore(provider)
+      }
+
+      // Durable cookie remember-me needs a server-side token store and a user provider to reload the
+      // user on refresh. Wrap both lazily like the stores above (a `has()` check cannot see the
+      // `.extends()` polymorphic binding users register for these abstract tokens); an unbound token
+      // surfaces as a resolution error the first time remember-me is used.
+      if (keyOrHandler instanceof CookieAuthenticationHandler && keyOrHandler.options.rememberMe) {
+        keyOrHandler.setRememberDeps(
+          kit.container.wrap<RememberMeTokenStore>(RememberMeTokenStore),
+          kit.container.wrap<UserProvider>(UserProvider),
+        )
+      }
     }
 
     kit.container.bind(AuthenticationService).toValue(service).internal()
     kit.container.bind(kAuthOpts).toValue(options).internal()
+
+    if (this.#credentials !== undefined) {
+      // Default hasher is a fallback so a user-bound PasswordHasher wins. CredentialsService is a
+      // public binding (controllers inject it); it resolves the user-bound UserProvider and the
+      // PasswordHasher, and the configured options ride along in the closure (a value that is not a
+      // container key, so a plain DI injection cannot carry it).
+      const options = this.#credentials
+      kit.container.bind(PasswordHasher).toClass(ScryptPasswordHasher).fallback()
+      kit.container.bind(CredentialsService).toFunction(
+        (provider: UserProvider, hasher: PasswordHasher) => new CredentialsService(provider, hasher, options),
+        [UserProvider, PasswordHasher],
+      )
+    }
 
     if (this.#oidcHandlers.length > 0) {
       this.#assertOIDCIsolation(defaultScheme)
@@ -308,4 +408,8 @@ export class AuthenticationBuilder implements Service {
 
 function isConstructable<T>(value: unknown): value is Ctor<T> {
   return typeof value === 'function' && value.prototype !== undefined && value.prototype.constructor === value
+}
+
+function isKey<T>(value: Key<T> | T): value is Key<T> {
+  return typeof value === 'string' || typeof value === 'symbol' || isConstructable(value)
 }

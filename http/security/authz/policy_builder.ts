@@ -1,6 +1,7 @@
 import { Context } from '../../context.js'
+import type { Principal } from '../index.js'
 import { AuthzPolicy, type AuthzRequirement } from './policy.js'
-import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, RoleRequirement } from './policy_requirement.js'
+import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, ResourceRequirement, RoleRequirement } from './policy_requirement.js'
 
 export class PolicyBuilder {
   readonly #requirements: AuthzRequirement[] = []
@@ -23,6 +24,11 @@ export class PolicyBuilder {
 
   assert(pred: (ctx: Context) => boolean | Promise<boolean>): this {
     this.#requirements.push({ kind: 'assertion', assertion: pred } as AssertionRequirement)
+    return this
+  }
+
+  resource<R = unknown>(authorize: (user: Principal, resource: R, ctx: Context) => boolean | Promise<boolean>): this {
+    this.#requirements.push({ kind: 'resource', authorize } as ResourceRequirement)
     return this
   }
 

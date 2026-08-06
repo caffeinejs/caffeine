@@ -1,6 +1,6 @@
 import { Context } from '../../context.js'
 import { Principal } from '../index.js'
-import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, RoleRequirement } from './policy_requirement.js'
+import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, ResourceRequirement, RoleRequirement } from './policy_requirement.js'
 import { AuthzPolicyResult, AuthzRequirementHandler } from './policy.js'
 
 export class AuthenticatedUserHandler extends AuthzRequirementHandler<AuthenticatedUserRequirement> {
@@ -60,5 +60,20 @@ export class AssertionHandler extends AuthzRequirementHandler<AssertionRequireme
       return { ok: true }
     }
     return { ok: false, reason: 'Assertion failed' }
+  }
+}
+
+export class ResourceHandler extends AuthzRequirementHandler<ResourceRequirement> {
+  get kind(): string {
+    return 'resource'
+  }
+
+  async handle(
+    ctx: Context, user: Principal, requirement: ResourceRequirement, resource?: unknown): Promise<AuthzPolicyResult> {
+    const passed = await requirement.authorize(user, resource, ctx)
+    if (passed) {
+      return { ok: true }
+    }
+    return { ok: false, reason: 'Resource authorization failed' }
   }
 }

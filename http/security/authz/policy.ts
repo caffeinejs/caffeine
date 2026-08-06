@@ -48,7 +48,7 @@ export function newPolicyEvaluator(
     const requirement = policy.requirements[i]
     const handler = handlers.get(requirement.kind)
     if (!handler) {
-      throw new Error(`Handler for requirement ${requirement.kind} not found`)
+      throw new Error(`Cannot compile policy: handler for requirement "${requirement.kind}" not found`)
     }
 
     compiled[i] = [requirement, handler]
@@ -60,7 +60,7 @@ export function newPolicyEvaluator(
       if (!result.ok) {
         // Fail-fast: upon first failure,
         // stop executing and return the result immediately.
-        return { ok: false, failedRequirement: requirement, failedPolicy: policy.name }
+        return { ok: false, failedRequirement: requirement, failedPolicy: policy.name, reason: result.reason }
       }
     }
 
@@ -109,7 +109,7 @@ export function compileRoutePolicy(
   for (const name of policyNames) {
     const e = evaluators.get(name)
     if (!e) {
-      throw new Error(`Policy evaluator for ${name} not found`)
+      throw new Error(`Cannot compile route policy: evaluator for "${name}" not found`)
     }
 
     evals.push(e)

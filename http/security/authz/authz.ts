@@ -2,7 +2,7 @@ import { Scopes } from '@caffeinejs/di'
 import { kServiceConfigure, Service, ServiceKit } from '../../service.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
-import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, RoleHandler } from './handlers.js'
+import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 import { AuthorizationService } from './service.js'
 
@@ -99,12 +99,17 @@ export class AuthorizationBuilder implements Service {
       .lifetime(Scopes.SINGLETON)
       .extends(AuthzRequirementHandler)
       .internal()
+    kit.container.bind(ResourceHandler)
+      .toSelf()
+      .lifetime(Scopes.SINGLETON)
+      .extends(AuthzRequirementHandler)
+      .internal()
 
+    // Public (not internal): features inject AuthorizationService for imperative resource checks.
     kit.container
       .bind(AuthorizationService)
       .toSelf([kAuthzEvaluators])
       .lifetime(Scopes.SINGLETON)
-      .internal()
 
     kit.container
       .bind(kAuthzOpts)

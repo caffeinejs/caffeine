@@ -7,7 +7,10 @@ import { $p } from './route_picker.js'
 import { Controller, Get, Method, createWebApplication, Params, fastifyAdapterFactory, FastifyContext } from './index.js'
 
 describe('Fastify Adapter', () => {
-  it('exposes the underlying server as a Supertest-compatible listener', async () => {
+  // Opens a real ephemeral socket via Supertest (unlike the .inject() test below), so it can hang up
+  // under parallel-suite port/event-loop contention. Retry keeps the real-socket smoke test without
+  // making it flaky.
+  it('exposes the underlying server as a Supertest-compatible listener', { retry: 2 }, async () => {
     const server = Fastify()
     server.get('/', () => ({ ok: true }))
 
