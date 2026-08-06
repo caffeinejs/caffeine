@@ -33,7 +33,7 @@ jobs:
           check-latest: true
 
       - name: Install Linter
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts || (rm -rf node_modules ~/.npm && npm ci --ignore-scripts)
 
       - name: Matcher
         uses: xt0rted/markdownlint-problem-matcher@1a5fabfb577370cfdf5af944d418e4be3ea06f27
