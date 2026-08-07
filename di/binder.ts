@@ -15,7 +15,7 @@ import { functionFactory } from './internal/core/factory/function_closure.js'
 export class Binder<TValue> {
   private readonly key: Key<TValue> | undefined
   private readonly binding: Binding<any>
-  private readonly register: ((binding: Binding<any>) => void) | undefined
+  protected readonly register: ((binding: Binding<any>) => void) | undefined
 
   constructor(key: Key<TValue>, binding: Binding<TValue>, register?: (binding: Binding<any>) => void)
   constructor(binding: Binding<TValue>)

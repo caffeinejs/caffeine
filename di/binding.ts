@@ -7,6 +7,14 @@ import { InjectionResolver } from './injection_resolver.js'
 import { Ctor } from './types.js'
 import { ResolutionContext } from './resolution_context.js'
 import { ContainerOps } from './container_interface.js'
+/**
+ * Labels and tags attached to a single method or class via decorators.
+ * Exposed on `JoinPoint.meta` (method-level) and `JoinPoint.classMeta` (class-level).
+ */
+export interface MethodMeta {
+  labels: symbol[]
+  tags: Map<symbol, unknown>
+}
 
 let _id = 0
 
@@ -190,6 +198,13 @@ export interface Binding<T = any> {
    * Compiled resolution context for the binding.
    */
   ctx?: ResolutionContext
+
+  /**
+   * Per-method labels and tags extracted from method-level decorators (e.g. `@Tag`, `@Label`).
+   * Populated only when at least one method carries decorator metadata.
+   * Used by the AOP weaver to pass method-level config to `JoinPoint.meta`.
+   */
+  memberMeta?: Map<string | symbol, MethodMeta>
 }
 
 /**
@@ -230,6 +245,7 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     order: initial.order,
     async: initial.async,
     ctx: initial.ctx,
+    memberMeta: initial.memberMeta,
   }
 }
 

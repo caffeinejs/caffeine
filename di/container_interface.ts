@@ -1,6 +1,8 @@
 import { Identifier, Key, TypedKey, NamedKey } from './key.js'
 import { Binding } from './binding.js'
 import { Binder } from './binder.js'
+import type { AOPBinder } from './aop_binder.js'
+import type { MethodAspect } from './aop.js'
 import type { Snapshot } from './snapshot.js'
 import { MetadataReader } from './metadata_reader.js'
 import { HookListener } from './hooks.js'
@@ -153,6 +155,8 @@ export interface Container {
   rebind<T>(key: TypedKey<T>): Binder<T>
   rebind<T = unknown>(key: NamedKey): Binder<T>
 
+  aspect<T extends MethodAspect<any>>(cls: Ctor<T>): AOPBinder<T>
+
   addModules(module: Module, ...rest: Module[]): void
 
   resetInstances(): Promise<void>
@@ -207,5 +211,6 @@ export type ContainerBindingOps = Pick<Container,
   | 'postProcessors'
   | 'bind'
   | 'rebind'
+  | 'aspect'
   | 'entries'
 >

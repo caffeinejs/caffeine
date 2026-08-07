@@ -103,6 +103,16 @@ export class ErrInvalidDecorator extends CaffeineIoCError {
 }
 
 /**
+ * ErrInvalidAspect is an error that is thrown when an aspect is misconfigured at compile time.
+ */
+export class ErrInvalidAspect extends CaffeineIoCError {
+  constructor(message: string) {
+    super(message, 'ERR_INVALID_ASPECT')
+    this.name = 'ErrInvalidAspect'
+  }
+}
+
+/**
  * ErrInjectableBase is thrown when a class decorated with `@Injectable` is used as an extension base by another `@Injectable` class.
  */
 export class ErrInjectableBase extends CaffeineIoCError {

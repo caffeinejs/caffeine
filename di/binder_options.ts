@@ -34,7 +34,7 @@ export class BinderOptions<TValue> {
     }
   }
 
-  private sync(): void {
+  protected sync(): void {
     this.register?.(this.binding)
   }
 
@@ -50,7 +50,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(Service).lifetime(Scope.Singleton)
    * ```
    */
-  lifetime(scopeID: Identifier): BinderOptions<TValue> {
+  lifetime(scopeID: Identifier): this {
     if (!hasScope(notNil(scopeID))) {
       throw new ErrInvalidBinding(
         `Scope "${String(scopeID)}" is not registered: use bindScope() to register it before use`,
@@ -71,7 +71,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(Service).names('myService', 'legacyService')
    * ```
    */
-  names(name: Identifier, ...names: Identifier[]): BinderOptions<TValue> {
+  names(name: Identifier, ...names: Identifier[]): this {
     notNil(name, `Parameter name must not be null or undefined`)
 
     this.binding.names = [...new Set([...this.binding.names, ...[name, ...names]])]
@@ -88,7 +88,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(Service).lazy()
    * ```
    */
-  lazy(lazy = true): BinderOptions<TValue> {
+  lazy(lazy = true): this {
     this.binding.lazy = lazy
     this.sync()
 
@@ -103,7 +103,7 @@ export class BinderOptions<TValue> {
    * container.bind(Logger).toClass(FileLogger).primary()
    * ```
    */
-  primary(primary = true): BinderOptions<TValue> {
+  primary(primary = true): this {
     this.binding.primary = primary
     this.sync()
 
@@ -118,7 +118,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toValue(rawConfig).byPassPostProcessors()
    * ```
    */
-  byPassPostProcessors(): BinderOptions<TValue> {
+  byPassPostProcessors(): this {
     this.binding.byPassPostProcessors = true
     this.sync()
 
@@ -133,7 +133,7 @@ export class BinderOptions<TValue> {
    * container.bind(Logger).toClass(NoopLogger).fallback()
    * ```
    */
-  fallback(fallback = true): BinderOptions<TValue> {
+  fallback(fallback = true): this {
     this.binding.fallback = fallback
     this.sync()
 
@@ -153,7 +153,7 @@ export class BinderOptions<TValue> {
    * container.bind(PluginB).toClass(PluginB).extends(Plugin).order(2)
    * ```
    */
-  order(order: number): BinderOptions<TValue> {
+  order(order: number): this {
     this.binding.order = order
     this.sync()
 
@@ -168,7 +168,7 @@ export class BinderOptions<TValue> {
    * container.bind(Controller).toClass(Controller).injectProperty('repo', Repository)
    * ```
    */
-  injectProperty(property: Identifier, injection: Injection): BinderOptions<TValue> {
+  injectProperty(property: Identifier, injection: Injection): this {
     if (typeof this.key !== 'function') {
       throw new ErrInvalidBinding(
         `Cannot call injectProperty() on key "${String(this.key)}": property injection requires a class binding`,
@@ -194,7 +194,7 @@ export class BinderOptions<TValue> {
    * container.bind(Controller).toClass(Controller).injectMethod('init', Repository, Cache)
    * ```
    */
-  injectMethod(method: Identifier, ...deps: Injection[]): BinderOptions<TValue> {
+  injectMethod(method: Identifier, ...deps: Injection[]): this {
     if (typeof this.key !== 'function') {
       throw new ErrInvalidBinding(
         `Cannot call injectMethod() on key "${String(this.key)}": method injection requires a class binding`,
@@ -223,7 +223,7 @@ export class BinderOptions<TValue> {
    * container.getMany(Plugin) // [MyPlugin instance]
    * ```
    */
-  labels(label: symbol, ...labels: symbol[]): BinderOptions<TValue> {
+  labels(label: symbol, ...labels: symbol[]): this {
     notNil(label, `Parameter label must not be null or undefined`)
 
     this.binding.labels = [...new Set([...this.binding.labels, ...[label, ...labels]])]
@@ -232,8 +232,8 @@ export class BinderOptions<TValue> {
     return this
   }
 
-  tags(key: symbol, value: unknown): BinderOptions<TValue>
-  tags(entries: Map<symbol, unknown>): BinderOptions<TValue>
+  tags(key: symbol, value: unknown): this
+  tags(entries: Map<symbol, unknown>): this
   /**
    * Attaches arbitrary symbol-keyed metadata tags to the binding.
    *
@@ -245,7 +245,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(Service).tags(Priority, 10)
    * ```
    */
-  tags(keyOrEntries: symbol | Map<symbol, unknown>, value?: unknown): BinderOptions<TValue> {
+  tags(keyOrEntries: symbol | Map<symbol, unknown>, value?: unknown): this {
     notNil(keyOrEntries, `Parameter key or entries must not be null or undefined`)
 
     if (keyOrEntries instanceof Map) {
@@ -269,7 +269,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(Service).postConstruct(svc => svc.connect())
    * ```
    */
-  postConstruct(fn: (value: TValue) => void): BinderOptions<TValue> {
+  postConstruct(fn: (value: TValue) => void): this {
     notNil(fn, `Parameter fn must not be null or undefined`)
 
     this.binding.postConstruct = fn
@@ -286,7 +286,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(DbService).preDestroy(svc => svc.disconnect())
    * ```
    */
-  preDestroy(fn: (value: TValue) => void | Promise<void>): BinderOptions<TValue> {
+  preDestroy(fn: (value: TValue) => void | Promise<void>): this {
     notNil(fn, `Parameter fn must not be null or undefined`)
 
     this.binding.preDestroy = fn
@@ -303,7 +303,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(Service).intercept((instance, ctx) => new Proxy(instance, handler))
    * ```
    */
-  intercept(interceptor: PostResolutionInterceptor<TValue>): BinderOptions<TValue> {
+  intercept(interceptor: PostResolutionInterceptor<TValue>): this {
     notNil(interceptor, `Parameter interceptor must not be null or undefined`)
 
     this.binding.interceptors.push(interceptor)
@@ -320,7 +320,7 @@ export class BinderOptions<TValue> {
    * container.bind(key).toClass(ProdService).conditional(ctx => ctx.env === 'production')
    * ```
    */
-  conditional(fn: Conditional | Conditional[]): BinderOptions<TValue> {
+  conditional(fn: Conditional | Conditional[]): this {
     const fns = Array.isArray(fn) ? fn : [fn]
     this.binding.conditionals = [...this.binding.conditionals ?? [], ...fns]
     this.sync()
@@ -346,9 +346,9 @@ export class BinderOptions<TValue> {
    * container.get(Repo) // SqlRepo instance
    * ```
    */
-  extends(): BinderOptions<TValue>
-  extends(base: Ctor | AbstractCtor): BinderOptions<TValue>
-  extends(base?: Ctor | AbstractCtor): BinderOptions<TValue> {
+  extends(): this
+  extends(base: Ctor | AbstractCtor): this
+  extends(base?: Ctor | AbstractCtor): this {
     const concreteType: Ctor | undefined
       = this.binding.type !== undefined
         ? (this.binding.type as Ctor)
@@ -394,7 +394,7 @@ export class BinderOptions<TValue> {
    *
    * @internal
    */
-  internal(): BinderOptions<TValue> {
+  internal(): this {
     this.binding.internal = true
     this.sync()
 

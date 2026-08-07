@@ -1,3 +1,4 @@
+export * from './aspect.js'
 export * from './async.js'
 export * from './bypass_post_processors.js'
 export * from './compose_decorators.js'

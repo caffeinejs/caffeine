@@ -1,3 +1,4 @@
+import { AOPBinder } from './aop_binder.js'
 import { Binder } from './binder.js'
 import { newBinding, Binding } from './binding.js'
 import { Snapshot } from './snapshot.js'
@@ -38,6 +39,7 @@ import { RequestScopeManager } from './request_scope_manager.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
 import { checkCircularReferences, checkIfContainerIsResolvable } from './_checks.js'
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
+import { AOPPostProcessor, checkAspects, hasAnyAspects, kAspectLabel, type MethodAspect } from './aop.js'
 import { Provider } from './provider.js'
 import { Keys } from './symbols.js'
 
@@ -88,6 +90,7 @@ export class CaffeineIoC implements Container {
   }[] = []
 
   private _pendingConfigKeys: Map<Key, Key[]> = new Map()
+  private _pendingConditionalKeys = new Set<Key>()
   private _sortedAsyncEntries: [Key, Binding][] = []
 
   /**
@@ -668,6 +671,38 @@ export class CaffeineIoC implements Container {
   }
 
   /**
+   * Registers an AOP {@link MethodAspect}.
+   *
+   * @param cls - The aspect class to register. Must implement {@link MethodAspect}.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container is already initialized
+   *
+   * @example
+   * ```ts
+   * container
+   *   .aspect(LoggingAspect)
+   *   .toSelf()
+   *   .pointcuts($aop.forClass(UserService, 'findUser'))
+   *
+   * container
+   *   .aspect(MetricsAspect)
+   *   .toAsyncFactory(async () => new MetricsAspect(await buildClient()))
+   *   .pointcuts($aop.forClass(OrderService, $aop.matchMethodPattern(/^find/)))
+   * ```
+   */
+  aspect<T extends MethodAspect<any>>(cls: Ctor<T>): AOPBinder<T> {
+    notNil(cls)
+
+    if (this._ready) {
+      throw new ErrInvalidContainerState('Cannot bind: container is already initialized — call init() first')
+    }
+
+    const binding = newBinding<T>({ type: cls, labels: [kAspectLabel] })
+
+    return new AOPBinder<T>(cls, binding, b => this.configureBinding(cls, b))
+  }
+
+  /**
    * Adds new {@link Module}s to the container.
    * Modules will be applied during {@link init}.
    *
@@ -1167,6 +1202,10 @@ export class CaffeineIoC implements Container {
     this.mapNamed(canonical)
     this.mapLabeled(key, canonical)
     this.mapAbstract(canonical)
+
+    if (!this._compiled && config.conditionals.length > 0) {
+      this._pendingConditionalKeys.add(key)
+    }
   }
 
   private async refresh(label?: symbol): Promise<void> {
@@ -1220,6 +1259,7 @@ export class CaffeineIoC implements Container {
 
     this.registry.delete(key)
     this.bindings.delete(key)
+    this._pendingConditionalKeys.delete(key)
   }
 
   private async preDestroyBinding(binding: Binding): Promise<void> {
@@ -1389,6 +1429,12 @@ export class CaffeineIoC implements Container {
       this.registry.entries(),
     )
 
+    checkAspects(this.registry.entries())
+
+    if (hasAnyAspects()) {
+      this.postProcessors.add(new AOPPostProcessor())
+    }
+
     for (const [key, binding] of this.registry.entries()) {
       compileInjectionResolvers(this, key, binding)
       compileFactory(this, this.scopes, key, binding)
@@ -1453,12 +1499,18 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    const queue: Key[] = []
+    const aspectQueue: Key[] = []
+    const otherQueue: Key[] = []
     for (const [key, deg] of inDegree) {
       if (deg === 0) {
-        queue.push(key)
+        if (this.registry.get(key)?.labels.includes(kAspectLabel)) {
+          aspectQueue.push(key)
+        } else {
+          otherQueue.push(key)
+        }
       }
     }
+    const queue: Key[] = [...aspectQueue, ...otherQueue]
 
     const result: [Key, Binding][] = []
     while (queue.length > 0) {
@@ -1468,7 +1520,11 @@ export class CaffeineIoC implements Container {
         const newDeg = inDegree.get(dependent)! - 1
         inDegree.set(dependent, newDeg)
         if (newDeg === 0) {
-          queue.push(dependent)
+          if (this.registry.get(dependent)?.labels.includes(kAspectLabel)) {
+            queue.unshift(dependent)
+          } else {
+            queue.push(dependent)
+          }
         }
       }
     }
@@ -1601,6 +1657,7 @@ export class CaffeineIoC implements Container {
 
     this._pendingConditionals = []
     this._pendingConfigKeys.clear()
+    this._pendingConditionalKeys.clear()
   }
 }
 
