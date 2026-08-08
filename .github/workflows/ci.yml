@@ -60,14 +60,50 @@ jobs:
       - name: Memory Leak Test
         run: npm run test:memory
 
+      - name: Verify Build Outputs
+        run: |
+          missing=0
+          for d in \
+            di/dist \
+            std/dist \
+            http/dist \
+            openapi/dist \
+            config/dist \
+            testing/dist \
+            cli/dist \
+            fetchy/fetchy/dist \
+            fetchy/fetchy-undici/dist \
+            fetchy/fetchy-logging-interceptor/dist \
+            plugins/esbuild/dist \
+            plugins/eslint/dist \
+            plugins/vite/dist \
+            devtools/dist
+          do
+            if [ ! -d "$d" ]; then
+              echo "Missing build output: $d"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v7
         with:
           name: dist
+          # Workspace packages export entry points from dist/. Keep this list in sync
+          # with package.json workspaces that declare exports/types under dist/.
           path: |
-            core/dist/
-            application/dist/
+            di/dist/
+            std/dist/
             http/dist/
+            openapi/dist/
+            config/dist/
+            testing/dist/
+            cli/dist/
+            fetchy/*/dist/
+            plugins/*/dist/
+            devtools/dist/
+          if-no-files-found: error
           retention-days: 1
 
   test:
