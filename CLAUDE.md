@@ -136,3 +136,17 @@ Never revert, discard, or `git checkout --` a file outside the current task's sc
 
 - `npm run build` at the root compiles all packages via `tsc --build` (project references).
 - Do not edit `dist/` by hand.
+
+## npm scripts
+
+The root `.npmrc` sets `ignore-scripts=true` (a deliberate supply-chain guard). This suppresses dependency install scripts **and** npm's own `pre*`/`post*` run-hooks and `postinstall` (npm 11). Consequently, any "run X automatically before Y" must be an **explicit in-script `&&` chain**, never a lifecycle hook — a `pretest` hook will silently never fire.
+
+Reference pattern: the petstore's Prisma client must be generated before it type-checks, so `prisma:generate` is chained directly into the scripts that touch it:
+
+```jsonc
+"test": "npm run prisma:generate && vitest run",
+"test:coverage": "npm run prisma:generate && vitest run --coverage",
+"test:typecheck": "npm run prisma:generate && tsc -p tsconfig.test.json"
+```
+
+An explicit `npm run <name>` still executes under `ignore-scripts`; only auto-hooks are suppressed.

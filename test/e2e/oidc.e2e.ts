@@ -54,7 +54,7 @@ function buildApp() {
   const f = fastify()
   f.register(FastifyCookie)
   const builder = createWebApplication(fastifyAdapterFactory(f))
-  builder.authentication.addOIDC('spring', o => o
+  builder.authentication(auth => auth.addOIDC('spring', o => o
     .clientID('caffeine-oidc')
     .clientSecret('caffeine-oidc-secret')
     .sessionSecret(SESSION_SECRET)
@@ -63,7 +63,7 @@ function buildApp() {
     .tokenEndpoint(`${OAUTH}/oauth2/token`)
     .jwksURI(`${OAUTH}/oauth2/jwks`)
     .issuer(OAUTH)
-    .scopes('openid', 'profile', 'email'))
+    .scopes('openid', 'profile', 'email')))
   return builder.build()
 }
 

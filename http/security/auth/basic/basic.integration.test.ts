@@ -32,10 +32,10 @@ describe('BasicAuthenticationHandler (application)', () => {
     void [BasicOkController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication.addBasic(b => b.validate((_ctx, user, pass) =>
+    builder.authentication(auth => auth.addBasic(b => b.validate((_ctx, user, pass) =>
       user === 'alice' && pass === 'secret'
         ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
-        : null))
+        : null)))
     const app = builder.build()
     await app.ready()
 
@@ -56,7 +56,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     void [BasicChallengeController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication.addBasic(b => b.realm('My App').validate(() => null))
+    builder.authentication(auth => auth.addBasic(b => b.realm('My App').validate(() => null)))
     const app = builder.build()
     await app.ready()
 
@@ -77,7 +77,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     void [BasicBadController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication.addBasic(b => b.validate(() => null))
+    builder.authentication(auth => auth.addBasic(b => b.validate(() => null)))
     const app = builder.build()
     await app.ready()
 

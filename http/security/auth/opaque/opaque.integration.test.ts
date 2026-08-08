@@ -40,7 +40,7 @@ function opaqueBuilder() {
   const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
   // Only the policy this file's own controller references — no cross-section superset needed, since
   // each test file has an isolated decorator registrar.
-  builder.authorization.addPolicy('WriteOrders', b => b.requireAuthenticated().claim('scope', 'orders:write'))
+  builder.authorization(authz => authz.addPolicy('WriteOrders', b => b.requireAuthenticated().claim('scope', 'orders:write')))
   return builder
 }
 
@@ -58,7 +58,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueOkController]
 
     const builder = opaqueBuilder()
-    builder.authentication.addOpaqueToken()
+    builder.authentication(auth => auth.addOpaqueToken())
     const app = builder.build()
     await app.ready()
 
@@ -81,7 +81,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueNoneController]
 
     const builder = opaqueBuilder()
-    builder.authentication.addOpaqueToken()
+    builder.authentication(auth => auth.addOpaqueToken())
     const app = builder.build()
     await app.ready()
 
@@ -101,7 +101,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueBadController]
 
     const builder = opaqueBuilder()
-    builder.authentication.addOpaqueToken()
+    builder.authentication(auth => auth.addOpaqueToken())
     const app = builder.build()
     await app.ready()
 
@@ -121,7 +121,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueScopeController]
 
     const builder = opaqueBuilder()
-    builder.authentication.addOpaqueToken()
+    builder.authentication(auth => auth.addOpaqueToken())
     const app = builder.build()
     await app.ready()
 

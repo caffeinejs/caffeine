@@ -11,8 +11,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
     .addHttpMethod('QUERY', { hasBody: true })
   server.register(FastifyMultipart)
 
-  const builder = createWebApplication(fastifyAdapterFactory(server), { container })
-  builder.authentication.addJWTBearer(o => o.secret(JWT_SECRET))
-
-  return builder.build()
+  return createWebApplication(fastifyAdapterFactory(server), { container })
+    .authentication(auth => auth.addJWTBearer(o => o.secret(JWT_SECRET)))
+    .build()
 }

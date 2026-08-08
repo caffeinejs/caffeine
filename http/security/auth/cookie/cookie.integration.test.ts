@@ -108,9 +108,9 @@ async function buildApp() {
   // Fast hasher keeps the test snappy; overrides the fallback ScryptPasswordHasher from addCredentials.
   container.bind(PasswordHasher).toValue(new ScryptPasswordHasher({ N: 1024 }))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
-  builder.authentication
+  builder.authentication(auth => auth
     .addCookie(o => o.sessionSecret(SECRET).secure(false))
-    .addCredentials()
+    .addCredentials())
   const app = builder.build()
   await app.ready()
   return app
@@ -207,9 +207,9 @@ async function buildDurableApp() {
   container.bind(RememberMeTokenStore).toValue(store)
   container.bind(PasswordHasher).toValue(new ScryptPasswordHasher({ N: 1024 }))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
-  builder.authentication
+  builder.authentication(auth => auth
     .addCookie(o => o.sessionSecret(SECRET).secure(false).rememberMe())
-    .addCredentials()
+    .addCredentials())
   const app = builder.build()
   await app.ready()
   return { app, store }

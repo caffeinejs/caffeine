@@ -28,21 +28,24 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.#services.push(this.#authzBuilder)
   }
 
-  get authentication(): AuthenticationBuilder {
+  get container(): Container {
+    return this.#container
+  }
+
+  authentication(configure: (auth: AuthenticationBuilder) => void): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
       this.#services.push(this.#authBuilder)
     }
 
-    return this.#authBuilder
+    configure(this.#authBuilder)
+
+    return this
   }
 
-  get authorization(): AuthorizationBuilder {
-    return this.#authzBuilder
-  }
-
-  get container(): Container {
-    return this.#container
+  authorization(configure: (authz: AuthorizationBuilder) => void): this {
+    configure(this.#authzBuilder)
+    return this
   }
 
   addService(service: Service): this {

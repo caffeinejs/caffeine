@@ -14,7 +14,7 @@ import type { Principal } from '../../index.js'
  * }
  *
  * container.bind(DbOpaqueTokenStore).toSelf().extends()
- * builder.authentication.addOpaqueToken()
+ * builder.authentication(auth => auth.addOpaqueToken())
  * ```
  *
  * The store owns hashing, lookup, revocation and expiry: return `null` for any token that is unknown,

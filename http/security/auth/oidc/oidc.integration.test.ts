@@ -31,7 +31,7 @@ function makeOIDCApp(
   jwksResolver?: (uri: string) => JWTVerifyGetKey,
 ) {
   const builder = createWebApplication(fastifyAdapterFactory(fastifyInstance))
-  builder.authentication.addOIDC('Google', opts => {
+  builder.authentication(auth => auth.addOIDC('Google', opts => {
     opts
       .clientID(CLIENT_ID)
       .clientSecret('oidc-client-secret')
@@ -44,7 +44,7 @@ function makeOIDCApp(
     if (jwksResolver) {
       opts.jwksResolver(jwksResolver)
     }
-  })
+  }))
   return builder
 }
 

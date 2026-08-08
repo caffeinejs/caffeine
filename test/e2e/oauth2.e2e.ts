@@ -54,7 +54,7 @@ function buildApp() {
   const f = fastify()
   f.register(FastifyCookie)
   const builder = createWebApplication(fastifyAdapterFactory(f))
-  builder.authentication.addOAuth2('spring-oauth2', o => o
+  builder.authentication(auth => auth.addOAuth2('spring-oauth2', o => o
     .clientID('caffeine-oauth2')
     .clientSecret('caffeine-oauth2-secret')
     .sessionSecret(SESSION_SECRET)
@@ -63,7 +63,7 @@ function buildApp() {
     .tokenEndpoint(`${OAUTH}/oauth2/token`)
     .userInfoEndpoint(`${OAUTH}/userinfo`)
     .subjectClaim('sub')
-    .scopes('openid', 'profile', 'email'))
+    .scopes('openid', 'profile', 'email')))
   return builder.build()
 }
 

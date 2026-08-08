@@ -4,13 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "prisma generate && caffeine generate",
+    "prisma:generate": "prisma generate",
     "start": "tsx src/main.ts",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@caffeinejs/di": "*",

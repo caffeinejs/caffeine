@@ -30,7 +30,7 @@ async function signToken(payload: Record<string, unknown>): Promise<string> {
 describe('scheme negotiation (Forward, application)', () => {
   function forwardBuilder() {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication
+    builder.authentication(auth => auth
       .addBasic('Basic', b => b.validate((_ctx, user, pass) =>
         user === 'alice' && pass === 'secret'
           ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
@@ -38,7 +38,7 @@ describe('scheme negotiation (Forward, application)', () => {
       .addJWTBearer('Bearer', b => b.secret(TEST_SECRET))
       .forward('Forward', ctx =>
         ctx.req.header('authorization')?.startsWith('Basic ') ? 'Basic' : 'Bearer')
-      .default('Forward')
+      .default('Forward'))
     return builder
   }
 
