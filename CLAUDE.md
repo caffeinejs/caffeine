@@ -139,14 +139,6 @@ Never revert, discard, or `git checkout --` a file outside the current task's sc
 
 ## npm scripts
 
-The root `.npmrc` sets `ignore-scripts=true` (a deliberate supply-chain guard). This suppresses dependency install scripts **and** npm's own `pre*`/`post*` run-hooks and `postinstall` (npm 11). Consequently, any "run X automatically before Y" must be an **explicit in-script `&&` chain**, never a lifecycle hook — a `pretest` hook will silently never fire.
+The root `.npmrc` sets `ignore-scripts=true` (a deliberate supply-chain guard). This suppresses dependency install scripts **and** npm's own `pre*`/`post*` run-hooks and `postinstall` (npm 11). Consequently, any "run X automatically before Y" must be triggered explicitly — never a lifecycle hook, which will silently never fire. An explicit `npm run <name>` still executes under `ignore-scripts`; only auto-hooks are suppressed.
 
-Reference pattern: the petstore's Prisma client must be generated before it type-checks, so `prisma:generate` is chained directly into the scripts that touch it:
-
-```jsonc
-"test": "npm run prisma:generate && vitest run",
-"test:coverage": "npm run prisma:generate && vitest run --coverage",
-"test:typecheck": "npm run prisma:generate && tsc -p tsconfig.test.json"
-```
-
-An explicit `npm run <name>` still executes under `ignore-scripts`; only auto-hooks are suppressed.
+Keep package-specific setup out of the root scripts. The petstore example has two generated, untracked artifacts its specs import — the Prisma client and `src/__caffeine__.gen.ts` (`caffeine generate`). Rather than chaining codegen into the root `test`/`test:typecheck` (which would fire for every unrelated package), the petstore regenerates them in its **own vitest `globalSetup`** ([examples/03-petstore/vitest.globalsetup.ts](examples/03-petstore/vitest.globalsetup.ts) → `npm run generate`), so codegen runs only when the petstore's own vitest project runs. Its CI build job also generates them (via `npm run build --workspaces`) before the root type-check.

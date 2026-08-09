@@ -27,6 +27,7 @@ export default defineConfig({
   },
   test: {
     name: 'example-petstore',
+    globalSetup: ['./vitest.globalsetup.ts'],
     include: ['**/*.test.ts'],
     environment: 'node',
     testTimeout: 30000,

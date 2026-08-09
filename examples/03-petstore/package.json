@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "prisma generate && caffeine generate && tsc",
+    "build": "npm run generate && tsc",
+    "generate": "prisma generate && caffeine generate",
     "prisma:generate": "prisma generate",
     "start": "tsx src/main.ts",
     "db:migrate": "prisma migrate deploy",
@@ -12,10 +13,10 @@
   },
   "dependencies": {
     "@caffeinejs/di": "*",
-    "@caffeinejs/std": "*",
     "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
     "@fastify/multipart": "^10.0.0",
-    "@prisma/client": "^6.2.1",
+    "@prisma/client": "^6.19.3",
     "fastify": "^5.8.5",
     "jose": "^5.0.0"
   },
