@@ -77,8 +77,7 @@ jobs:
             plugins/esbuild/dist \
             plugins/eslint/dist \
             plugins/vite/dist \
-            devtools/dist \
-            examples/03-petstore/dist
+            devtools/dist
           do
             if [ ! -d "$d" ]; then
               echo "Missing build output: $d"
@@ -103,7 +102,6 @@ jobs:
             cli/dist/
             fetchy/*/dist/
             plugins/*/dist/
-            examples/*/dist/
             devtools/dist/
           if-no-files-found: error
           retention-days: 1
