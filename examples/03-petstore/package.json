@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "prisma generate && caffeine generate",
+    "build": "prisma generate && caffeine generate && tsc",
     "prisma:generate": "prisma generate",
     "start": "tsx src/main.ts",
     "db:migrate": "prisma migrate deploy",

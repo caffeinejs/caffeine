@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Params, Post, Put, Status, $p } from '@caffeinejs/http'
+import { Controller, Delete, Get, Params, Post, Put, Status, $p, ErrHTTPNotFound, Context } from '@caffeinejs/http'
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsService } from './cats.service.js'
 
@@ -16,16 +16,20 @@ export class CatsController {
   findOne(id: string) {
     const cat = this.cats.findOne(Number(id))
     if (!cat) {
-      return new Response(null, { status: 404 })
+      throw new ErrHTTPNotFound()
     }
+
     return cat
   }
 
   @Post('/')
   @Status(201)
-  @Params([$p.body()])
-  create(dto: CreateCatDTO) {
-    return this.cats.create(dto)
+  @Params([$p.context(), $p.body()])
+  create(ctx: Context, dto: CreateCatDTO) {
+    const cat = this.cats.create(dto)
+    ctx.header('Location', `/cats/${cat.id}`)
+
+    return cat
   }
 
   @Put('/:id')
@@ -33,8 +37,9 @@ export class CatsController {
   update(id: string, dto: UpdateCatDTO) {
     const cat = this.cats.update(Number(id), dto)
     if (!cat) {
-      return new Response(null, { status: 404 })
+      throw new ErrHTTPNotFound()
     }
+
     return cat
   }
 
@@ -42,6 +47,5 @@ export class CatsController {
   @Params([$p.param('id')])
   remove(id: string) {
     this.cats.remove(Number(id))
-    return new Response(null, { status: 204 })
   }
 }

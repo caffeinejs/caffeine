@@ -29,6 +29,7 @@ check: ## run all checks
 	@npm run lint:fix
 	@npm run lint:markdown
 	@npm run build
+	@npm run build:examples
 	@npm run test:typecheck
 	@npm run test:typecheck:benchmarks
 	@npm run test:memory
