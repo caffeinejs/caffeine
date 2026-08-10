@@ -3,7 +3,6 @@ import { ErrMissingInjectionKey } from './errors.js'
 import { solutions } from './internal/util/errutil/index.js'
 import { BuiltInResolvers } from './injection_resolver.js'
 import { Key, isValidKey } from './key.js'
-import { kValuesProvider } from './values_provider.js'
 
 /**
  * InjectionDescriptor describes an injection for a component dependency.
@@ -261,7 +260,7 @@ function optional(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescript
 
   const descriptor = keyOrDescriptor as InjectionDescriptor
 
-  if (!isValidKey(descriptor.key)) {
+  if (!descriptor.resolver && !isValidKey(descriptor.key)) {
     throw new ErrMissingInjectionKey(
       `Cannot mark injection as optional: descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
     )
@@ -349,13 +348,16 @@ function just<T = unknown>(value: T): InjectionDescriptor {
 
 /**
  * value creates an injection descriptor that injects a typed value from the registered
- * ValuesProvider by applying a selector function to it.
+ * ValuesProvider, using either a selector function or a dot-separated string path.
  *
- * Register a provider once with {@link Container.bindValuesProvider} before calling
- * `container.init()`. If no provider is registered and the injection is not optional,
- * {@link ErrNoValuesProvider} is thrown during init.
+ * An optional second argument sets a default value returned when the resolved value is
+ * `undefined` or when no provider is registered. Supplying a default prevents
+ * {@link ErrNoValuesProvider} from being thrown.
+ * Note that `null` is a valid value.
  *
- * @param selector - Function that receives the provider and returns the value to inject.
+ * @param access - Selector function or dot-path string to the desired value.
+ * @param defaultValue - Default returned when the resolved value is `undefined` or the
+ *   provider is absent. `null` is a valid default. Pass `undefined` (or omit) for no default.
  *
  * @example
  * ```ts
@@ -365,18 +367,21 @@ function just<T = unknown>(value: T): InjectionDescriptor {
  *
  * @Injectable([
  *   $i.value<AppConfig>(cfg => cfg.database.host),
- *   $i.value<AppConfig>(cfg => cfg.database.port),
+ *   $i.value<AppConfig>('database.port'),
+ *   $i.value<AppConfig>('database.host', 'fallback-host'),
  * ])
  * class Repository {
- *   constructor(readonly host: string, readonly port: number) {}
+ *   constructor(readonly host: string, readonly port: number, readonly fallback: string) {}
  * }
  * ```
  */
-function value<T = unknown, R = unknown>(selector: (provider: T) => R): InjectionDescriptor<R> {
+function value<T = unknown, R = unknown>(
+  access: ((provider: T) => R) | string,
+  defaultValue?: R,
+): InjectionDescriptor<R> {
   return {
-    key: kValuesProvider as unknown as Key,
     resolver: BuiltInResolvers.CONFIG,
-    args: selector as (provider: unknown) => unknown,
+    args: { access, defaultValue },
   }
 }
 

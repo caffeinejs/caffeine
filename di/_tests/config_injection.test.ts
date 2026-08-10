@@ -3,6 +3,8 @@ import { CaffeineIoC } from '../container.js'
 import { ErrNoValuesProvider } from '../errors.js'
 import { $i } from '../injection.js'
 import { configFactory } from '../internal/core/resolver/index.js'
+import { Scopes } from '../scope.js'
+import { kValuesProvider } from '../values_provider.js'
 
 function ctx(
   container: CaffeineIoC,
@@ -194,6 +196,222 @@ describe('$i.config', function () {
       di.bind(Svc).toClass(Svc, [$i.value<{ host: string }>(cfg => cfg.host)])
 
       await expect(di.init()).rejects.toThrow(ErrNoValuesProvider)
+    })
+  })
+
+  describe('string path access', function () {
+    it('resolves a top-level key via string path', async function () {
+      class Svc {
+        constructor(readonly host: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<{ host: string }>().toValue({ host: 'path-host' })
+      di.bind(Svc).toClass(Svc, [$i.value('host')])
+      await di.init()
+
+      expect(di.get(Svc).host).toBe('path-host')
+    })
+
+    it('resolves a nested key via string path', async function () {
+      type Cfg = { database: { host: string } }
+
+      class Svc {
+        constructor(readonly host: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<Cfg>().toValue({ database: { host: 'nested-host' } })
+      di.bind(Svc).toClass(Svc, [$i.value('database.host')])
+      await di.init()
+
+      expect(di.get(Svc).host).toBe('nested-host')
+    })
+
+    it('resolves a deeply nested key via string path', async function () {
+      type Cfg = { a: { b: { c: string } } }
+
+      class Svc {
+        constructor(readonly val: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<Cfg>().toValue({ a: { b: { c: 'deep' } } })
+      di.bind(Svc).toClass(Svc, [$i.value('a.b.c')])
+      await di.init()
+
+      expect(di.get(Svc).val).toBe('deep')
+    })
+
+    it('returns undefined for a missing intermediate key without throwing', async function () {
+      class Svc {
+        constructor(readonly val: unknown) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<Record<string, unknown>>().toValue({})
+      di.bind(Svc).toClass(Svc, [$i.optional($i.value('missing.key'))])
+      await di.init()
+
+      expect(di.get(Svc).val).toBeUndefined()
+    })
+  })
+
+  describe('default value', function () {
+    it('selector form: returns default when resolved value is undefined', async function () {
+      class Svc {
+        constructor(readonly val: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<{ host?: string }>().toValue({})
+      di.bind(Svc).toClass(Svc, [$i.value<{ host?: string }>(cfg => cfg.host, 'default-host')])
+      await di.init()
+
+      expect(di.get(Svc).val).toBe('default-host')
+    })
+
+    it('string path form: returns default when path resolves to undefined', async function () {
+      class Svc {
+        constructor(readonly val: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<Record<string, unknown>>().toValue({})
+      di.bind(Svc).toClass(Svc, [$i.value('host', 'path-default')])
+      await di.init()
+
+      expect(di.get(Svc).val).toBe('path-default')
+    })
+
+    it('does not use default when value is present and defined', async function () {
+      class Svc {
+        constructor(readonly val: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<{ host: string }>().toValue({ host: 'real-host' })
+      di.bind(Svc).toClass(Svc, [$i.value('host', 'should-not-appear')])
+      await di.init()
+
+      expect(di.get(Svc).val).toBe('real-host')
+    })
+
+    it('non-optional with default succeeds when provider is absent', async function () {
+      class Svc {
+        constructor(readonly val: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Svc).toClass(Svc, [$i.value('host', 'absent-default')])
+      await di.init()
+
+      expect(di.get(Svc).val).toBe('absent-default')
+    })
+
+    it('optional with default returns default when provider is absent', async function () {
+      class Svc {
+        constructor(readonly val: string | undefined) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Svc).toClass(Svc, [$i.optional($i.value('host', 'opt-default'))])
+      await di.init()
+
+      expect(di.get(Svc).val).toBe('opt-default')
+    })
+  })
+
+  describe('getter-based provider', function () {
+    it('selector form invokes getter on provider class', async function () {
+      class AppConfig {
+        private _host = 'computed-host'
+        get host() { return this._host }
+      }
+
+      class Svc {
+        constructor(readonly host: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<AppConfig>().toClass(AppConfig)
+      di.bind(Svc).toClass(Svc, [$i.value<AppConfig>(cfg => cfg.host)])
+      await di.init()
+
+      expect(di.get(Svc).host).toBe('computed-host')
+    })
+
+    it('string path form invokes getter on provider class', async function () {
+      class AppConfig {
+        private _host = 'path-computed-host'
+        get host() { return this._host }
+      }
+
+      class Svc {
+        constructor(readonly host: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<AppConfig>().toClass(AppConfig)
+      di.bind(Svc).toClass(Svc, [$i.value('host')])
+      await di.init()
+
+      expect(di.get(Svc).host).toBe('path-computed-host')
+    })
+
+    it('getter computing from multiple this fields works correctly', async function () {
+      class AppConfig {
+        readonly scheme = 'https'
+        readonly domain = 'example.com'
+        get baseURL() { return `${this.scheme}://${this.domain}` }
+      }
+
+      class Svc {
+        constructor(readonly url: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<AppConfig>().toClass(AppConfig)
+      di.bind(Svc).toClass(Svc, [$i.value<AppConfig>(cfg => cfg.baseURL)])
+      await di.init()
+
+      expect(di.get(Svc).url).toBe('https://example.com')
+    })
+  })
+
+  describe('refresh and reload', function () {
+    it('transient consumer sees mutation on the provider object between constructions', async function () {
+      const config = { host: 'initial' }
+
+      class Svc {
+        constructor(readonly host: string) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<typeof config>().toFactory(() => config)
+      di.bind(Svc).toClass(Svc, [$i.value<typeof config>(c => c.host)]).lifetime(Scopes.TRANSIENT)
+      await di.init()
+
+      expect(di.get(Svc).host).toBe('initial')
+      config.host = 'updated'
+      expect(di.get(Svc).host).toBe('updated')
+    })
+
+    it('transient consumer picks up new provider instance after resetInstance', async function () {
+      let counter = 0
+
+      class Svc {
+        constructor(readonly n: number) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<{ n: number }>().toFactory(() => ({ n: ++counter }))
+      di.bind(Svc).toClass(Svc, [$i.value<{ n: number }>(c => c.n)]).lifetime(Scopes.TRANSIENT)
+      await di.init()
+
+      expect(di.get(Svc).n).toBe(1)
+      await di.resetInstance(kValuesProvider)
+      expect(di.get(Svc).n).toBe(2)
     })
   })
 })
