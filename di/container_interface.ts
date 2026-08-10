@@ -152,6 +152,8 @@ export interface Container {
   bind<T>(key: TypedKey<T>): Binder<T>
   bind<T = unknown>(key: NamedKey): Binder<T>
 
+  bindValuesProvider<T = unknown>(): Binder<T>
+
   rebind<T>(key: TypedKey<T>): Binder<T>
   rebind<T = unknown>(key: NamedKey): Binder<T>
 
@@ -210,6 +212,7 @@ export type ContainerBindingOps = Pick<Container,
   | 'hooks'
   | 'postProcessors'
   | 'bind'
+  | 'bindValuesProvider'
   | 'rebind'
   | 'aspect'
   | 'entries'

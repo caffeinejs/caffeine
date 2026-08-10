@@ -232,6 +232,20 @@ export class ErrMissingInjectionKey extends CaffeineIoCError {
 }
 
 /**
+ * ErrNoValuesProvider is thrown when a config value injection is attempted but no ValuesProvider
+ * has been registered on the container.
+ */
+export class ErrNoValuesProvider extends CaffeineIoCError {
+  constructor(context: string) {
+    super(
+      `Cannot inject config value: no ValuesProvider is registered — call bindValuesProvider() before init()\n${context}`,
+      'ERR_NO_VALUES_PROVIDER',
+    )
+    this.name = 'ErrNoValuesProvider'
+  }
+}
+
+/**
  * ErrInvalidContainerState is an error that is thrown when an operation is not permitted
  * given the container's current initialization state.
  */

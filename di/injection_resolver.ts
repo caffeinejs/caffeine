@@ -1,6 +1,7 @@
 import { ContainerOps } from './container_interface.js'
 import { ErrResolverAlreadyRegistered, ErrUnknownResolver } from './errors.js'
 import {
+  configFactory,
   deferredFactory,
   standardFactory,
   objectFactory,
@@ -84,6 +85,7 @@ export type InjectionResolverFactory<T = unknown> = (ctx: InjectionResolverFacto
  * Built-in injection resolver factories.
  */
 export const BuiltInResolvers = {
+  CONFIG: Symbol('@caffeinejs/di:resolver.config'),
   DEFAULT: Symbol('@caffeinejs/di:resolver.default'),
   MAP: Symbol('@caffeinejs/di:resolver.map'),
   DEFER: Symbol('@caffeinejs/di:resolver.defer'),
@@ -94,6 +96,7 @@ export const BuiltInResolvers = {
 } as const
 
 const registry = new Map<symbol, InjectionResolverFactory>()
+  .set(BuiltInResolvers.CONFIG, configFactory)
   .set(BuiltInResolvers.DEFAULT, standardFactory)
   .set(BuiltInResolvers.MAP, mappedFactory)
   .set(BuiltInResolvers.DEFER, deferredFactory)

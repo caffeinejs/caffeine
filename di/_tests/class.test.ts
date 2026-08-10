@@ -301,13 +301,13 @@ describe('Class', function () {
     })
   })
 
-  describe('$i.useValue() injection', function () {
-    @Injectable([$i.useValue('injected-constant')])
+  describe('$i.just() injection', function () {
+    @Injectable([$i.just('injected-constant')])
     class SingleValueDep {
       constructor(readonly label: string) {}
     }
 
-    @Injectable([$i.useValue('host'), $i.useValue(8080)])
+    @Injectable([$i.just('host'), $i.just(8080)])
     class MultiValueDep {
       constructor(
         readonly host: string,
@@ -320,7 +320,7 @@ describe('Class', function () {
       tag = 'bare'
     }
 
-    @Injectable([BareDep, $i.useValue('mixed')])
+    @Injectable([BareDep, $i.just('mixed')])
     class MixedDep {
       constructor(
         readonly dep: BareDep,

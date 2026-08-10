@@ -1,3 +1,4 @@
+export * from './config.js'
 export * from './deferred.js'
 export * from './mapped.js'
 export * from './object.js'

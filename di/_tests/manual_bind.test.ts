@@ -817,7 +817,7 @@ describe('Manual Binding', function () {
     })
   })
 
-  describe('$i.useValue()', function () {
+  describe('$i.just()', function () {
     it('should inject a string constant', async function () {
       class StringParam {
         constructor(readonly val: string) {}
@@ -825,7 +825,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(StringParam)
-        .toSelf([$i.useValue('hello')])
+        .toSelf([$i.just('hello')])
       await di.init()
 
       expect(di.get(StringParam).val)
@@ -839,7 +839,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(NumParam)
-        .toSelf([$i.useValue(42)])
+        .toSelf([$i.just(42)])
       await di.init()
 
       expect(di.get(NumParam).val)
@@ -856,7 +856,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(ConfigConsumer)
-        .toSelf([$i.useValue(config)])
+        .toSelf([$i.just(config)])
       await di.init()
 
       expect(di.get(ConfigConsumer).config)
@@ -870,7 +870,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(NullParam)
-        .toSelf([$i.useValue(null)])
+        .toSelf([$i.just(null)])
       await di.init()
 
       expect(di.get(NullParam).val)
@@ -884,7 +884,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(UndefinedParam)
-        .toSelf([$i.useValue(undefined)])
+        .toSelf([$i.just(undefined)])
       await di.init()
 
       expect(di.get(UndefinedParam).val)
@@ -901,7 +901,7 @@ describe('Manual Binding', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(MultiParam)
-        .toSelf([$i.useValue('localhost'), $i.useValue(3000)])
+        .toSelf([$i.just('localhost'), $i.just(3000)])
       await di.init()
 
       expect(di.get(MultiParam).host)

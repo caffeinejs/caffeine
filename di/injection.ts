@@ -3,6 +3,7 @@ import { ErrMissingInjectionKey } from './errors.js'
 import { solutions } from './internal/util/errutil/index.js'
 import { BuiltInResolvers } from './injection_resolver.js'
 import { Key, isValidKey } from './key.js'
+import { kValuesProvider } from './values_provider.js'
 
 /**
  * InjectionDescriptor describes an injection for a component dependency.
@@ -100,7 +101,7 @@ type ObjectInjectionSpec = {
  *   }
  * }
  *
- * @Injectable([allOf(Validator)])
+ * @Injectable([$i.allOf(Validator)])
  * class Pipeline {
  *   constructor(readonly validators: Validator[]) {}
  * }
@@ -151,7 +152,7 @@ function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor 
  * @Injectable()
  * class LogHandler extends Handler { ... }
  *
- * @Injectable([ordered(Handler)])
+ * @Injectable([$i.ordered(Handler)])
  * class Pipeline {
  *   constructor(readonly handlers: Handler[]) {} // [AuthHandler, LogHandler]
  * }
@@ -199,7 +200,7 @@ function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescripto
  * @Named('comedy')
  * class Comedy implements Movie {}
  *
- * @Injectable([mapped('movie')])
+ * @Injectable([$i.mapped('movie')])
  * class MovieService {
  *   constructor(readonly movies: Map<string, Movie>) {}
  * }
@@ -230,7 +231,7 @@ function mapped(key: Key): InjectionDescriptor {
  *
  * @example
  * ```ts
- * @Injectable([defer(() => MovieService)])
+ * @Injectable([$i.defer(() => MovieService)])
  * class MovieController {
  *   constructor(readonly movieService: MovieService) {}
  * }
@@ -247,7 +248,7 @@ function defer(keyFn: () => Key): InjectionDescriptor {
  *
  * @example
  * ```ts
- * @Injectable([optional(MovieService)])
+ * @Injectable([$i.optional(MovieService)])
  * class MovieController {
  *   constructor(readonly movieService?: MovieService) {}
  * }
@@ -276,7 +277,7 @@ function optional(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescript
  *
  * @example
  * ```ts
- * @Injectable([object({ movieService: MovieService, userService: optional(UserService) })])
+ * @Injectable([$i.object({ movieService: MovieService, userService: $i.optional(UserService) })])
  * class MovieController {
  *   constructor({ movieService, userService }) {}
  * }
@@ -296,7 +297,7 @@ function object(spec: ObjectInjectionSpec): InjectionDescriptor {
  *
  * @example
  * ```ts
- * @Injectable([provide(MovieService)])
+ * @Injectable([$i.provide(MovieService)])
  * class MovieController {
  *   constructor(readonly movieService: Provider<MovieService>) {}
  * }
@@ -329,21 +330,54 @@ function provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescripto
 }
 
 /**
- * value creates an injection descriptor that injects a constant value.
+ * just creates an injection descriptor that injects a constant value.
  * Note that it accepts any value, and it does not validate undefined or null values.
  *
  * @param value - The value to inject.
  *
  * @example
  * ```ts
- * @Injectable([useValue('Hello, world!')])
+ * @Injectable([$i.just('Hello, world!')])
  * class HelloWorld {
  *   constructor(readonly message: string) {}
  * }
  * ```
  */
-function useValue<T = unknown>(value: T): InjectionDescriptor {
+function just<T = unknown>(value: T): InjectionDescriptor {
   return { resolver: BuiltInResolvers.VALUE, args: value }
+}
+
+/**
+ * value creates an injection descriptor that injects a typed value from the registered
+ * ValuesProvider by applying a selector function to it.
+ *
+ * Register a provider once with {@link Container.bindValuesProvider} before calling
+ * `container.init()`. If no provider is registered and the injection is not optional,
+ * {@link ErrNoValuesProvider} is thrown during init.
+ *
+ * @param selector - Function that receives the provider and returns the value to inject.
+ *
+ * @example
+ * ```ts
+ * type AppConfig = { database: { host: string; port: number } }
+ *
+ * di.bindValuesProvider<AppConfig>().toValue({ database: { host: 'localhost', port: 5432 } })
+ *
+ * @Injectable([
+ *   $i.value<AppConfig>(cfg => cfg.database.host),
+ *   $i.value<AppConfig>(cfg => cfg.database.port),
+ * ])
+ * class Repository {
+ *   constructor(readonly host: string, readonly port: number) {}
+ * }
+ * ```
+ */
+function value<T = unknown, R = unknown>(selector: (provider: T) => R): InjectionDescriptor<R> {
+  return {
+    key: kValuesProvider as unknown as Key,
+    resolver: BuiltInResolvers.CONFIG,
+    args: selector as (provider: unknown) => unknown,
+  }
 }
 
 /**
@@ -385,12 +419,13 @@ function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
 
 export const $i = {
   allOf,
+  value,
   ordered,
   mapped,
   defer,
   optional,
   object,
   provide,
-  useValue,
+  just,
   compose,
 }

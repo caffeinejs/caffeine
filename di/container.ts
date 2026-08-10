@@ -42,6 +42,7 @@ import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } 
 import { AOPPostProcessor, checkAspects, hasAnyAspects, kAspectLabel, type MethodAspect } from './aop.js'
 import { Provider } from './provider.js'
 import { Keys } from './symbols.js'
+import { kValuesProvider } from './values_provider.js'
 
 const DEFAULT_OPTIONS: Partial<Options> = {
   defaultScopeID: Scopes.SINGLETON,
@@ -82,13 +83,7 @@ export class CaffeineIoC implements Container {
   private _ready = false
   private _initializing = false
   private _compiled = false
-  private _pendingConditionals: {
-    key: Key
-    binding: Binding
-    fallback: boolean
-    providedByConfig?: Key
-  }[] = []
-
+  private _pendingConditionals: { key: Key, binding: Binding, fallback: boolean, providedByConfig?: Key }[] = []
   private _pendingConfigKeys: Map<Key, Key[]> = new Map()
   private _pendingConditionalKeys = new Set<Key>()
   private _sortedAsyncEntries: [Key, Binding][] = []
@@ -601,7 +596,7 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      const injection = typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep as Key }
+      const injection = typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep }
 
       resolvers[i] = compileDescriptorResolver(this, injection.key as Key, injection, 'constructor', '', i)
     }
@@ -638,6 +633,23 @@ export class CaffeineIoC implements Container {
     const binding = newBinding<T>(type ? decoratorConfigToBinding(type) : {})
 
     return new Binder<T>(key, binding, b => this.configureBinding(key as Key, b))
+  }
+
+  /**
+   * Registers a values provider under the well-known internal key, making it available for
+   * `$i.config` injections throughout the container.
+   *
+   * Syntax sugar for `bind(kValuesProvider)` — returns a {@link Binder} so the caller can
+   * choose any factory strategy and lifetime.
+   *
+   * @example
+   * ```ts
+   * di.bindValuesProvider<AppConfig>().toValue(configHandle)
+   * di.bindValuesProvider<AppConfig>().toClass(MyConfigProvider).lifetime(Scopes.Singleton)
+   * ```
+   */
+  bindValuesProvider<T = unknown>(): Binder<T> {
+    return this.bind<T>(kValuesProvider)
   }
 
   /**
