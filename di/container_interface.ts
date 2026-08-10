@@ -127,6 +127,9 @@ export interface Container {
   getMany<T>(key: TypedKey<T>): T[]
   getMany<T = unknown>(key: NamedKey): T[]
 
+  getManyOptional<T>(key: TypedKey<T>): T[]
+  getManyOptional<T = unknown>(key: NamedKey): T[]
+
   wrap<T = unknown>(key: Key<T>): Provider<T>
   wrapMany<T = unknown>(key: Key<T>): Provider<T[]>
 

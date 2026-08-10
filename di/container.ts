@@ -42,7 +42,6 @@ import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } 
 import { AOPPostProcessor, checkAspects, hasAnyAspects, kAspectLabel, type MethodAspect } from './aop.js'
 import { Provider } from './provider.js'
 import { Keys } from './symbols.js'
-import { kValuesProvider } from './values_provider.js'
 
 const DEFAULT_OPTIONS: Partial<Options> = {
   defaultScopeID: Scopes.SINGLETON,
@@ -649,7 +648,7 @@ export class CaffeineIoC implements Container {
    * ```
    */
   bindValuesProvider<T = unknown>(): Binder<T> {
-    return this.bind<T>(kValuesProvider)
+    return this.bind<T>(Keys.kValuesProvider)
   }
 
   /**

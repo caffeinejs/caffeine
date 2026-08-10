@@ -4,7 +4,7 @@ import { ErrNoValuesProvider } from '../errors.js'
 import { $i } from '../injection.js'
 import { configFactory } from '../internal/core/resolver/index.js'
 import { Scopes } from '../scope.js'
-import { kValuesProvider } from '../values_provider.js'
+import { Keys } from '../symbols.js'
 
 function ctx(
   container: CaffeineIoC,
@@ -410,7 +410,7 @@ describe('$i.config', function () {
       await di.init()
 
       expect(di.get(Svc).n).toBe(1)
-      await di.resetInstance(kValuesProvider)
+      await di.resetInstance(Keys.kValuesProvider)
       expect(di.get(Svc).n).toBe(2)
     })
   })

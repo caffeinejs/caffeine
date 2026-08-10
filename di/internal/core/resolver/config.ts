@@ -1,7 +1,7 @@
 import type { Binding } from '../../../binding.js'
 import { ErrNoValuesProvider } from '../../../errors.js'
 import type { InjectionResolverFactory } from '../../../injection_resolver.js'
-import { kValuesProvider } from '../../../values_provider.js'
+import { Keys } from '../../../symbols.js'
 import { describeContext } from './_fmt.js'
 
 type ValueArgs = {
@@ -14,7 +14,7 @@ export const configFactory: InjectionResolverFactory = ctx => {
   const hasDefault = defaultValue !== undefined
   const optional = ctx.descriptor.optional ?? false
 
-  const providerBinding = ctx.container.getBinding(kValuesProvider) as Binding<unknown> | undefined
+  const providerBinding = ctx.container.getBinding(Keys.kValuesProvider) as Binding<unknown> | undefined
 
   if (!providerBinding) {
     if (hasDefault) {
