@@ -1,10 +1,23 @@
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
-import { RouteConfigurer } from '../route_configurer.js'
+import { FeatureConfigurer, type RoutePhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
 import { CacheInvalidateOptions, CacheStore } from './types.js'
 
-export function cacheInvalidateConfigurer(store: CacheStore): RouteConfigurer {
-  return input => {
-    if (input.routeDef.config?.cacheInvalidate === undefined || input.routeDef.config?.cacheInvalidate === false) {
+/**
+ * Evicts cached entries after a successful mutating request, targeting the container-resolved
+ * {@link CacheStore} (the same instance the `cache` configurer writes to). Runs after `cache`.
+ */
+export class CacheInvalidateConfigurer extends FeatureConfigurer {
+  readonly name = 'cache-invalidate'
+  readonly after = ['cache']
+  #store!: CacheStore
+
+  configureServer = (ctx: ServerPhaseContext): void => {
+    this.#store = ctx.container.get(CacheStore)
+  }
+
+  configureRoute = (ctx: RoutePhaseContext): void => {
+    const store = this.#store
+    if (ctx.routeDef.config?.cacheInvalidate === undefined || ctx.routeDef.config?.cacheInvalidate === false) {
       return
     }
 
@@ -31,6 +44,6 @@ export function cacheInvalidateConfigurer(store: CacheStore): RouteConfigurer {
       return
     }
 
-    (input.routeDef.onSend as Array<RouteOptions['onSend']>).push(invalidateHandler)
+    (ctx.routeDef.onSend as Array<RouteOptions['onSend']>).push(invalidateHandler)
   }
 }

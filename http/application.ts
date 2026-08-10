@@ -8,6 +8,7 @@ import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
+import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]
@@ -69,7 +70,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
 
   async ready(): Promise<void> {
     const kit: ServiceKit = { container: this.#container, feats: this.#feats }
-    const configurers = [...this.#services, new ErrorHandlingServiceConfigurer()]
+    const configurers = [...this.#services, new ErrorHandlingServiceConfigurer(), new CacheServiceConfigurer()]
 
     await Promise
       .all(configurers

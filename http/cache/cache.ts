@@ -1,15 +1,51 @@
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { parseDuration } from '@caffeinejs/std'
 import { FastifyContextRequest } from '../context.js'
-import { RouteConfigurer } from '../route_configurer.js'
+import { FeatureConfigurer, type RoutePhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
 import { CacheOptions, CacheStore, ETagGenerator } from './types.js'
+import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
+const DEFAULT_STATUS_HEADER = 'X-Cache'
 
-export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator): RouteConfigurer {
-  return input => {
+// Cache-status values reported via the status header (default `X-Cache`).
+const CACHE_HIT = 'HIT'
+const CACHE_MISS = 'MISS'
+const CACHE_BYPASS = 'BYPASS'
+
+// Parses the numeric `max-age=N` from a request Cache-Control header. Returns undefined when absent.
+function requestMaxAge(cacheControl: string | undefined): number | undefined {
+  if (cacheControl == null) {
+    return undefined
+  }
+  const match = /(?:^|,)\s*max-age\s*=\s*(\d+)/.exec(cacheControl)
+
+  return match ? Number(match[1]) : undefined
+}
+
+/**
+ * Serves cacheable responses from and stores them into the container-resolved {@link CacheStore}, and
+ * emits `Cache-Control`/`ETag`/`Vary` headers per the route's `@Cache` options. The store and optional
+ * {@link ETagGenerator} are resolved from DI once, in {@link configureServer}.
+ */
+export class CacheConfigurer extends FeatureConfigurer {
+  readonly name = 'cache'
+  #store!: CacheStore
+  #etagGenerator: ETagGenerator | undefined
+  #statusHeader = DEFAULT_STATUS_HEADER
+
+  configureServer = (ctx: ServerPhaseContext): void => {
+    this.#store = ctx.container.get(CacheStore)
+    this.#etagGenerator = ctx.container.getOptional<ETagGenerator>(kETagGenerator)
+    this.#statusHeader = ctx.container.getOptional<string>(kCacheStatusHeader) ?? DEFAULT_STATUS_HEADER
+  }
+
+  configureRoute = (ctx: RoutePhaseContext): void => {
+    const store = this.#store
+    const etagGenerator = this.#etagGenerator
+    const statusHeader = this.#statusHeader
     // OnRequest phase: check if the request is cacheable and return the cached response if it is
     async function onRequest(request: FastifyRequest, reply: FastifyReply) {
       const config = request.routeOptions.config as unknown as Record<string, unknown>
@@ -29,11 +65,13 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
       const hasAuth = !!request.headers.authorization
       const effectivePrivacy = opts.privacy ?? (hasAuth ? 'private' : undefined)
       if (effectivePrivacy === 'private') {
+        reply.header(statusHeader, CACHE_BYPASS)
         return
       }
 
       // RFC 7234 §4.1 — Vary: * always fails to match; never serve from cache
       if (opts.vary?.includes('*')) {
+        reply.header(statusHeader, CACHE_BYPASS)
         return
       }
 
@@ -41,6 +79,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
       const reqCC = request.headers['cache-control']
       const reqMaxAge0 = reqCC != null && /(?:^|,)\s*max-age\s*=\s*0(?:\s*,|$)/.test(reqCC)
       if (reqCC?.includes('no-cache') || reqCC?.includes('no-store') || reqMaxAge0 || request.headers['pragma'] === 'no-cache') {
+        reply.header(statusHeader, CACHE_BYPASS)
         return
       }
 
@@ -54,6 +93,17 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
         if (reqCC?.includes('only-if-cached')) {
           return reply.code(504).send()
         }
+        reply.header(statusHeader, CACHE_MISS)
+        return
+      }
+
+      // RFC 9111 §4.2.3 — apparent age of the stored response, in whole seconds.
+      const age = cached.storedAt ? Math.max(0, Math.floor((Date.now() - cached.storedAt) / 1000)) : 0
+
+      // RFC 9111 §5.2.1.1 — a client's max-age caps how stale a response it will accept from the cache.
+      const reqMaxAge = requestMaxAge(reqCC)
+      if (reqMaxAge !== undefined && age > reqMaxAge) {
+        reply.header(statusHeader, CACHE_MISS)
         return
       }
 
@@ -64,6 +114,8 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
           request.responseCached = true
           return reply.code(304)
             .headers(cached.headers)
+            .header(statusHeader, CACHE_HIT)
+            .header('Age', String(age))
             .send()
         }
       } else {
@@ -73,6 +125,8 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
             request.responseCached = true
             return reply.code(304)
               .headers(cached.headers)
+              .header(statusHeader, CACHE_HIT)
+              .header('Age', String(age))
               .send()
           }
         }
@@ -80,7 +134,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
 
       // RFC 7230 §3.3 — HEAD responses must not include a body
       request.responseCached = true
-      reply.status(200).headers(cached.headers)
+      reply.status(200).headers(cached.headers).header(statusHeader, CACHE_HIT).header('Age', String(age))
       if (request.method === 'HEAD') {
         return reply.send()
       }
@@ -104,6 +158,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
         reply.header('Expires', '0')
         reply.header('Pragma', 'no-cache')
         reply.header('Surrogate-Control', 'no-store')
+        reply.header(statusHeader, CACHE_BYPASS)
         return payload
       }
 
@@ -179,6 +234,7 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
           payload: payload as string | Buffer,
           etag,
           lastModified,
+          storedAt: Date.now(),
           headers,
         }, parseDuration(opts.ttl!))
       }
@@ -188,15 +244,31 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
 
     // If @Cache is not configured or is disabled with @Cache(false),
     // we don't need to add the onRequest hook
-    if (input.routeDef.config?.cache) {
-      ;(input.routeDef.onRequest as Array<RouteOptions['onRequest']>).push(onRequest)
+    if (ctx.routeDef.config?.cache) {
+      ;(ctx.routeDef.onRequest as Array<RouteOptions['onRequest']>).push(onRequest)
     }
 
     // A disabled @Cache(false) route still needs to set the no-cache headers in onSend
-    if (input.routeDef.config?.cache !== undefined) {
-      ;(input.routeDef.onSend as Array<RouteOptions['onSend']>).push(onSend)
+    if (ctx.routeDef.config?.cache !== undefined) {
+      ;(ctx.routeDef.onSend as Array<RouteOptions['onSend']>).push(onSend)
     }
   }
+}
+
+// Canonicalizes a request URL so query parameters in a different order share one cache entry
+// (`?a=1&b=2` and `?b=2&a=1` are equivalent). Sorts the query keys; leaves query-less URLs untouched.
+function canonicalizeUrl(url: string): string {
+  const queryStart = url.indexOf('?')
+  if (queryStart === -1) {
+    return url
+  }
+
+  const path = url.slice(0, queryStart)
+  const params = new URLSearchParams(url.slice(queryStart + 1))
+  params.sort()
+  const query = params.toString()
+
+  return query ? `${path}?${query}` : path
 }
 
 // GET and HEAD have equivalent representations — they share the same cache entry.
@@ -204,9 +276,10 @@ export function cacheConfigurer(store: CacheStore, etagGenerator?: ETagGenerator
 // When vary headers are configured, their request values are appended to the key
 // so that different header combinations produce separate cache entries (RFC 7234 §4.1).
 function defaultCacheKey(request: FastifyRequest, vary?: string[]): string {
+  const url = canonicalizeUrl(request.url)
   const base = request.method === 'GET' || request.method === 'HEAD'
-    ? request.url
-    : `${request.method}:${request.url}`
+    ? url
+    : `${request.method}:${url}`
   if (!vary?.length) {
     return encodeURIComponent(base)
   }

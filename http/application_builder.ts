@@ -3,6 +3,7 @@ import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { Augment, BuilderPlugin, BuilderPluginContext } from './plugin.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
+import { CacheBuilder } from './cache/cache_builder.js'
 import { Service } from './service.js'
 
 export type WebApplicationOptions = {
@@ -15,6 +16,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   readonly #services: Service[] = []
 
   #authBuilder: AuthenticationBuilder | undefined
+  #cacheBuilder: CacheBuilder | undefined
   readonly #authzBuilder: AuthorizationBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationOptions = {}) {
@@ -45,6 +47,17 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 
   authorization(configure: (authz: AuthorizationBuilder) => void): this {
     configure(this.#authzBuilder)
+    return this
+  }
+
+  cache(configure: (cache: CacheBuilder) => void): this {
+    if (this.#cacheBuilder == null) {
+      this.#cacheBuilder = new CacheBuilder()
+      this.#services.push(this.#cacheBuilder)
+    }
+
+    configure(this.#cacheBuilder)
+
     return this
   }
 

@@ -7,6 +7,8 @@ export interface CacheEntry {
   payload: string | Buffer
   etag?: string
   lastModified?: string
+  /** Epoch milliseconds when the entry was stored; used to compute the `Age` header and honor request `max-age`. */
+  storedAt?: number
   headers: Record<string, string>
 }
 
@@ -15,12 +17,21 @@ export interface CacheInvalidateOptions {
   segment?: string
 }
 
-export interface CacheStore {
-  get(key: string, segment: string): Promise<CacheEntry | undefined>
-  set(key: string, segment: string, entry: CacheEntry, ttlSeconds: number): Promise<void>
-  delete(key: string, segment: string): Promise<void>
-  deleteMany(keys: string[], segment: string): Promise<void>
-  clear(segment?: string): Promise<void>
+/**
+ * Server-side store backing the cache feature.
+ *
+ * Abstract class rather than an interface so it is a runtime value: it doubles as the DI token and the
+ * base class. Bind a concrete store (`bind(CacheStore).toClass(RedisStore)` or
+ * `bind(RedisStore).toSelf().extends(CacheStore)`), like `RefreshTokenStore` / `OpaqueTokenStore` /
+ * `RememberMeTokenStore`. When no binding is registered, {@link MemoryCacheStore} resolves as a
+ * fallback.
+ */
+export abstract class CacheStore {
+  abstract get(key: string, segment: string): Promise<CacheEntry | undefined>
+  abstract set(key: string, segment: string, entry: CacheEntry, ttlSeconds: number): Promise<void>
+  abstract delete(key: string, segment: string): Promise<void>
+  abstract deleteMany(keys: string[], segment: string): Promise<void>
+  abstract clear(segment?: string): Promise<void>
 }
 
 export interface CacheOptions {

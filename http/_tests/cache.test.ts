@@ -1,7 +1,8 @@
 import { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Delete, Get, Post, Status, createWebApplication, fastifyAdapterFactory, Cache, CacheInvalidate, MemoryCacheStore } from '../index.js'
+import { CaffeineIoC } from '@caffeinejs/di'
+import { Controller, Delete, Get, Post, Status, createWebApplication, fastifyAdapterFactory, Cache, CacheInvalidate, MemoryCacheStore, CacheStore, kETagGenerator, type CacheEntry } from '../index.js'
 
 describe('Cache-Control headers', () => {
   describe('ttl', () => {
@@ -15,7 +16,7 @@ describe('Cache-Control headers', () => {
       void [TtlNumController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -34,7 +35,7 @@ describe('Cache-Control headers', () => {
       void [TtlStrMController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -52,7 +53,7 @@ describe('Cache-Control headers', () => {
       void [TtlCompoundController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -72,7 +73,7 @@ describe('Cache-Control headers', () => {
       void [SharedMaxAgeController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -93,7 +94,7 @@ describe('Cache-Control headers', () => {
       void [StaleWhileRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -111,7 +112,7 @@ describe('Cache-Control headers', () => {
       void [StaleIfErrorController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -131,7 +132,7 @@ describe('Cache-Control headers', () => {
       void [PrivateCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -149,7 +150,7 @@ describe('Cache-Control headers', () => {
       void [PublicCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -169,7 +170,7 @@ describe('Cache-Control headers', () => {
       void [NoStoreController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -187,7 +188,7 @@ describe('Cache-Control headers', () => {
       void [NoCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -205,7 +206,7 @@ describe('Cache-Control headers', () => {
       void [MustRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -223,7 +224,7 @@ describe('Cache-Control headers', () => {
       void [ImmutableController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -242,7 +243,7 @@ describe('Cache-Control headers', () => {
     void [EmptyOptionsController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -262,7 +263,7 @@ describe('Vary header', () => {
     void [VarySingleController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -280,7 +281,7 @@ describe('Vary header', () => {
     void [VaryMultiController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -298,7 +299,7 @@ describe('Vary header', () => {
     void [VaryNoneController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -318,7 +319,7 @@ describe('ETag', () => {
     void [ETagPresentController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -338,7 +339,7 @@ describe('ETag', () => {
     void [ETagStableController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -362,7 +363,7 @@ describe('ETag', () => {
     void [ETagDiffController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -384,7 +385,7 @@ describe('ETag', () => {
     void [ETagDisabledController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -402,7 +403,7 @@ describe('ETag', () => {
     void [ETagNoStoreController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -420,7 +421,7 @@ describe('ETag', () => {
     void [ETagStreamController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -441,7 +442,7 @@ describe('304 Not Modified', () => {
     void [Match304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -468,7 +469,7 @@ describe('304 Not Modified', () => {
     void [NoMatch304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -493,8 +494,10 @@ describe('304 Not Modified', () => {
     void [Stale304Controller]
 
     const store = new MemoryCacheStore()
+    const container = new CaffeineIoC()
+    container.bind(CacheStore).toValue(store)
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } }))
+    const app = createWebApplication(fastifyAdapterFactory(server), { container })
       .build()
     await app.ready()
 
@@ -522,7 +525,7 @@ describe('304 Not Modified', () => {
     void [Head304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -554,7 +557,7 @@ describe('Cache store', () => {
     void [StoreBupassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -582,7 +585,7 @@ describe('Cache store', () => {
     void [StoreNoStoreController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -606,7 +609,7 @@ describe('Cache store', () => {
     void [StorePostDefaultController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -630,7 +633,7 @@ describe('Cache store', () => {
     void [StorePostCustomController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -669,7 +672,7 @@ describe('Cache store', () => {
     server.setNotFoundHandler((_req, reply) => {
       void reply.code(400).send({ error: 'bad' })
     })
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -693,8 +696,10 @@ describe('Cache store', () => {
     void [StoreClearController]
 
     const store = new MemoryCacheStore()
+    const container = new CaffeineIoC()
+    container.bind(CacheStore).toValue(store)
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } }))
+    const app = createWebApplication(fastifyAdapterFactory(server), { container })
       .build()
     await app.ready()
 
@@ -727,7 +732,7 @@ describe('Cache key', () => {
     void [KeyDefaultController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -759,7 +764,7 @@ describe('Cache key', () => {
     void [KeyURLsController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -787,7 +792,7 @@ describe('Cache key', () => {
     void [KeyCustomPathController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -811,7 +816,7 @@ describe('Cache key', () => {
     void [KeyCustomQueryController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -839,7 +844,7 @@ describe('Decorator scope', () => {
     void [ScopeClassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -863,7 +868,7 @@ describe('Decorator scope', () => {
     void [ScopeMethodController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -885,7 +890,7 @@ describe('Decorator scope', () => {
     void [ScopeReplaceController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -910,7 +915,7 @@ describe('Undecorated routes', () => {
     void [UndecoratedController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -934,7 +939,7 @@ describe('@Cache(false)', () => {
     void [CacheFalseMethodController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -959,7 +964,7 @@ describe('@Cache(false)', () => {
     void [CacheFalseClassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -985,7 +990,7 @@ describe('@Cache(false)', () => {
     void [CacheFalseNoCacheController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+    const app = createWebApplication(fastifyAdapterFactory(server))
       .build()
     await app.ready()
 
@@ -1013,7 +1018,7 @@ describe('Bug fixes', () => {
       void [Bug1EtagFalseController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1038,7 +1043,7 @@ describe('Bug fixes', () => {
       void [Bug1InmIgnoredController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1069,7 +1074,7 @@ describe('Bug fixes', () => {
       void [Bug2PrivateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1099,7 +1104,7 @@ describe('Bug fixes', () => {
       void [Bug3VarySeparateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1131,7 +1136,7 @@ describe('Bug fixes', () => {
       void [Bug3VaryHitController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1163,7 +1168,7 @@ describe('Bug fixes', () => {
       void [Bug3VaryMultiController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1206,7 +1211,7 @@ describe('Bug fixes', () => {
       void [Bug4CCNoCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1242,7 +1247,7 @@ describe('Bug fixes', () => {
       void [Bug4PragmaController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1270,7 +1275,7 @@ describe('Bug fixes', () => {
       void [Bug5HeadNoBodyController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1294,7 +1299,7 @@ describe('Bug fixes', () => {
       void [Bug5Head304Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1328,7 +1333,7 @@ describe('Bug fixes', () => {
       void [VaryStarController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1345,21 +1350,20 @@ describe('Bug fixes', () => {
 
   describe('CacheStore segment', () => {
     it('segment passed to store.get and store.set', async () => {
-      const getCalls: string[] = []
-      const setCalls: string[] = []
-
-      const spyStore: import('../cache/types.js').CacheStore = {
-        async get(_key, segment) {
-          getCalls.push(segment)
+      class SpyStore extends CacheStore {
+        readonly getCalls: string[] = []
+        readonly setCalls: string[] = []
+        async get(_key: string, segment: string) {
+          this.getCalls.push(segment)
           return undefined
-        },
-        async set(_key, segment, _entry, _ttl) {
-          setCalls.push(segment)
-        },
-        async delete(_key, _segment) {},
-        async deleteMany(_keys, _segment) {},
-        async clear(_segment) {},
+        }
+
+        async set(_key: string, segment: string) { this.setCalls.push(segment) }
+        async delete() {}
+        async deleteMany() {}
+        async clear() {}
       }
+      const spyStore = new SpyStore()
 
       @Controller('/cache-segment')
       class SegmentController {
@@ -1369,14 +1373,18 @@ describe('Bug fixes', () => {
       }
       void [SegmentController]
 
+      // The container snapshots the global controller registry at construction, so it must be created
+      // after the controller above is declared.
+      const container = new CaffeineIoC()
+      container.bind(CacheStore).toValue(spyStore)
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: spyStore } }))
+      const app = createWebApplication(fastifyAdapterFactory(server), { container })
         .build()
       await app.ready()
 
       await server.inject({ method: 'GET', url: '/cache-segment/data' })
-      expect(getCalls).toEqual(['products'])
-      expect(setCalls).toEqual(['products'])
+      expect(spyStore.getCalls).toEqual(['products'])
+      expect(spyStore.setCalls).toEqual(['products'])
     })
   })
 
@@ -1396,7 +1404,7 @@ describe('Bug fixes', () => {
       void [AuthPrivateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1434,7 +1442,7 @@ describe('Bug fixes', () => {
       void [AuthPublicOverrideController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1457,18 +1465,20 @@ describe('Bug fixes', () => {
 
   describe('Cache key encoding', () => {
     it('defaultCacheKey passes encodeURIComponent-encoded key to store', async () => {
-      const keySeen: string[] = []
-
-      const spyStore: import('../cache/types.js').CacheStore = {
-        async get(key, _segment) {
-          keySeen.push(key)
+      class SpyStore extends CacheStore {
+        readonly keySeen: string[] = []
+        async get(key: string) {
+          this.keySeen.push(key)
           return undefined
-        },
-        async set(key, _segment, _entry, _ttl) { keySeen.push(key) },
-        async delete(_key, _segment) {},
-        async deleteMany(_keys, _segment) {},
-        async clear(_segment) {},
+        }
+
+        async set(key: string) { this.keySeen.push(key) }
+        async delete() {}
+        async deleteMany() {}
+        async clear() {}
       }
+      const spyStore = new SpyStore()
+      const keySeen = spyStore.keySeen
 
       @Controller('/cache-key-encode')
       class KeyEncodeController {
@@ -1478,8 +1488,12 @@ describe('Bug fixes', () => {
       }
       void [KeyEncodeController]
 
+      // The container snapshots the global controller registry at construction, so it must be created
+      // after the controller above is declared.
+      const container = new CaffeineIoC()
+      container.bind(CacheStore).toValue(spyStore)
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: spyStore } }))
+      const app = createWebApplication(fastifyAdapterFactory(server), { container })
         .build()
       await app.ready()
 
@@ -1509,7 +1523,7 @@ describe('Bug fixes', () => {
       void [ReqNoStoreController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1542,7 +1556,7 @@ describe('Bug fixes', () => {
       void [Headers304Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1572,7 +1586,7 @@ describe('Bug fixes', () => {
       void [InmWildcardController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1596,7 +1610,7 @@ describe('Bug fixes', () => {
       void [InmListController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1621,7 +1635,7 @@ describe('Bug fixes', () => {
       void [InmWeakController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1659,8 +1673,12 @@ describe('Bug fixes', () => {
       }
       void [SegIsoBController]
 
+      // The container snapshots the global controller registry at construction, so it must be created
+      // after the controllers above are declared.
+      const container = new CaffeineIoC()
+      container.bind(CacheStore).toValue(store)
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store } }))
+      const app = createWebApplication(fastifyAdapterFactory(server), { container })
         .build()
       await app.ready()
 
@@ -1691,7 +1709,7 @@ describe('Bug fixes', () => {
       void [ProxyRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1723,7 +1741,7 @@ describe('Bug fixes', () => {
       void [InvalidateSelfController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1758,7 +1776,7 @@ describe('Bug fixes', () => {
       void [InvalidatePathsController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1793,7 +1811,7 @@ describe('Bug fixes', () => {
       void [Invalidate4xxController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1819,7 +1837,7 @@ describe('Bug fixes', () => {
       void [OnlyIfCachedMissController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1846,7 +1864,7 @@ describe('Bug fixes', () => {
       void [OnlyIfCachedHitController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1874,7 +1892,7 @@ describe('Bug fixes', () => {
       void [NoTransformController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1895,7 +1913,7 @@ describe('Bug fixes', () => {
       void [LastModifiedController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1913,7 +1931,7 @@ describe('Bug fixes', () => {
       void [ImsMatchController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1940,7 +1958,7 @@ describe('Bug fixes', () => {
       void [ImsStaleController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -1965,7 +1983,7 @@ describe('Bug fixes', () => {
       void [InmPrecedenceController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -2001,7 +2019,7 @@ describe('Bug fixes', () => {
       void [ReqMaxAge0Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server, { cache: { store: new MemoryCacheStore() } }))
+      const app = createWebApplication(fastifyAdapterFactory(server))
         .build()
       await app.ready()
 
@@ -2016,5 +2034,446 @@ describe('Bug fixes', () => {
       expect(res.statusCode).toBe(200)
       expect(callCount).toBe(2)
     })
+  })
+})
+
+describe('Cache builder & container-managed store', () => {
+  // Minimal Map-backed CacheStore used to prove a configured store actually backs caching and to
+  // observe which store received the traffic (i.e. that the default MemoryCacheStore was overridden).
+  // Deliberately extends CacheStore directly — not MemoryCacheStore — so `instanceof` assertions are
+  // unambiguous.
+  class MapStore extends CacheStore {
+    readonly ops: string[] = []
+    readonly #entries = new Map<string, CacheEntry>()
+
+    async get(key: string, segment: string): Promise<CacheEntry | undefined> {
+      this.ops.push('get')
+      return this.#entries.get(`${segment}:${key}`)
+    }
+
+    async set(key: string, segment: string, entry: CacheEntry): Promise<void> {
+      this.ops.push('set')
+      this.#entries.set(`${segment}:${key}`, entry)
+    }
+
+    async delete(key: string, segment: string): Promise<void> {
+      this.#entries.delete(`${segment}:${key}`)
+    }
+
+    async deleteMany(keys: string[], segment: string): Promise<void> {
+      for (const key of keys) {
+        this.#entries.delete(`${segment}:${key}`)
+      }
+    }
+
+    async clear(): Promise<void> {
+      this.#entries.clear()
+    }
+  }
+
+  it('a raw container-bound CacheStore (toClass) overrides the default and backs caching', async () => {
+    let callCount = 0
+
+    @Controller('/cache-di-custom-store')
+    class CustomStoreController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() {
+        callCount++
+        return { count: callCount }
+      }
+    }
+    void [CustomStoreController]
+
+    const container = new CaffeineIoC()
+    container.bind(CacheStore).toClass(MapStore)
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
+    await app.ready()
+
+    await server.inject({ method: 'GET', url: '/cache-di-custom-store/data' })
+    const res2 = await server.inject({ method: 'GET', url: '/cache-di-custom-store/data' })
+
+    const resolved = app.container.get(CacheStore) as MapStore
+    expect(resolved).toBeInstanceOf(MapStore)
+    expect(resolved).not.toBeInstanceOf(MemoryCacheStore)
+    expect(resolved.ops).toContain('set')
+    expect(resolved.ops).toContain('get')
+    // Second request served from the custom store — handler ran only once.
+    expect(callCount).toBe(1)
+    expect(res2.json()).toEqual({ count: 1 })
+  })
+
+  it('zero configuration → default in-process store caches without any CacheStore binding', async () => {
+    let callCount = 0
+
+    @Controller('/cache-di-default')
+    class DefaultStoreController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() {
+        callCount++
+        return { count: callCount }
+      }
+    }
+    void [DefaultStoreController]
+
+    const server = fastify()
+    // No container option, no cache configuration — the CacheServiceConfigurer binds the default.
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    // The always-on CacheServiceConfigurer binds the default MemoryCacheStore under CacheStore.
+    expect(app.container.get(CacheStore)).toBeInstanceOf(MemoryCacheStore)
+
+    await server.inject({ method: 'GET', url: '/cache-di-default/data' })
+    await server.inject({ method: 'GET', url: '/cache-di-default/data' })
+    expect(callCount).toBe(1)
+  })
+
+  it('app.cache(c => c.store(...)) wires a custom store that backs caching', async () => {
+    let callCount = 0
+
+    @Controller('/cache-builder-store')
+    class BuilderStoreController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() {
+        callCount++
+        return { count: callCount }
+      }
+    }
+    void [BuilderStoreController]
+
+    const store = new MapStore()
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server))
+      .cache(c => c.store(store))
+      .build()
+    await app.ready()
+
+    await server.inject({ method: 'GET', url: '/cache-builder-store/data' })
+    const res2 = await server.inject({ method: 'GET', url: '/cache-builder-store/data' })
+
+    expect(app.container.get(CacheStore)).toBe(store)
+    expect(store.ops).toContain('set')
+    expect(store.ops).toContain('get')
+    expect(callCount).toBe(1)
+    expect(res2.json()).toEqual({ count: 1 })
+  })
+
+  it('app.cache(c => c.store(...).etagGenerator(...)) applies both', async () => {
+    @Controller('/cache-builder-both')
+    class BuilderBothController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [BuilderBothController]
+
+    const store = new MapStore()
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server))
+      .cache(c => c.store(store).etagGenerator(() => '"builder-etag"'))
+      .build()
+    await app.ready()
+
+    const res = await server.inject({ method: 'GET', url: '/cache-builder-both/data' })
+    expect(res.headers['etag']).toBe('"builder-etag"')
+    expect(store.ops).toContain('set')
+  })
+
+  it('a container-bound ETagGenerator (kETagGenerator) drives the ETag header', async () => {
+    @Controller('/cache-di-etag')
+    class ETagGenController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [ETagGenController]
+
+    const container = new CaffeineIoC()
+    container.bind(kETagGenerator).toValue(() => '"sentinel-etag"')
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
+    await app.ready()
+
+    const res = await server.inject({ method: 'GET', url: '/cache-di-etag/data' })
+    expect(res.headers['etag']).toBe('"sentinel-etag"')
+  })
+
+  it('a per-route @Cache({ etagGenerator }) still wins over the container-bound generator', async () => {
+    @Controller('/cache-di-etag-override')
+    class ETagOverrideController {
+      @Cache({ ttl: 60, etagGenerator: () => '"route-override"' })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [ETagOverrideController]
+
+    const container = new CaffeineIoC()
+    container.bind(kETagGenerator).toValue(() => '"sentinel-etag"')
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
+    await app.ready()
+
+    const res = await server.inject({ method: 'GET', url: '/cache-di-etag-override/data' })
+    expect(res.headers['etag']).toBe('"route-override"')
+  })
+})
+
+describe('X-Cache status header', () => {
+  it('MISS on first request, HIT on the second', async () => {
+    @Controller('/xc-basic')
+    class XCBasicController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [XCBasicController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    const res1 = await server.inject({ method: 'GET', url: '/xc-basic/data' })
+    expect(res1.headers['x-cache']).toBe('MISS')
+
+    const res2 = await server.inject({ method: 'GET', url: '/xc-basic/data' })
+    expect(res2.headers['x-cache']).toBe('HIT')
+  })
+
+  it('HIT on a 304 Not Modified served from cache', async () => {
+    @Controller('/xc-304')
+    class XC304Controller {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { v: 1 } }
+    }
+    void [XC304Controller]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    const res1 = await server.inject({ method: 'GET', url: '/xc-304/data' })
+    const etag = res1.headers['etag'] as string
+
+    const res2 = await server.inject({
+      method: 'GET',
+      url: '/xc-304/data',
+      headers: { 'if-none-match': etag },
+    })
+    expect(res2.statusCode).toBe(304)
+    expect(res2.headers['x-cache']).toBe('HIT')
+  })
+
+  it('BYPASS when the request sends Cache-Control: no-store', async () => {
+    @Controller('/xc-bypass')
+    class XCBypassController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [XCBypassController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    const res = await server.inject({
+      method: 'GET',
+      url: '/xc-bypass/data',
+      headers: { 'cache-control': 'no-store' },
+    })
+    expect(res.headers['x-cache']).toBe('BYPASS')
+  })
+
+  it('BYPASS on a @Cache(false) route', async () => {
+    @Controller('/xc-false')
+    class XCFalseController {
+      @Cache(false)
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [XCFalseController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    const res = await server.inject({ method: 'GET', url: '/xc-false/data' })
+    expect(res.headers['x-cache']).toBe('BYPASS')
+  })
+
+  it('app.cache(c => c.statusHeader(...)) renames the header', async () => {
+    @Controller('/xc-custom')
+    class XCCustomController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [XCCustomController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server))
+      .cache(c => c.statusHeader('X-My-Cache'))
+      .build()
+    await app.ready()
+
+    const res = await server.inject({ method: 'GET', url: '/xc-custom/data' })
+    expect(res.headers['x-cache']).toBeUndefined()
+    expect(res.headers['x-my-cache']).toBe('MISS')
+  })
+})
+
+describe('Canonical query keys', () => {
+  it('same params in a different order share one cache entry', async () => {
+    let callCount = 0
+
+    @Controller('/qk-order')
+    class QueryKeyOrderController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() {
+        callCount++
+        return { n: callCount }
+      }
+    }
+    void [QueryKeyOrderController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    await server.inject({ method: 'GET', url: '/qk-order/data?a=1&b=2' })
+    const res2 = await server.inject({ method: 'GET', url: '/qk-order/data?b=2&a=1' })
+
+    expect(callCount).toBe(1)
+    expect(res2.headers['x-cache']).toBe('HIT')
+  })
+
+  it('different param values still partition into separate entries', async () => {
+    let callCount = 0
+
+    @Controller('/qk-values')
+    class QueryKeyValuesController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() {
+        callCount++
+        return { n: callCount }
+      }
+    }
+    void [QueryKeyValuesController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    await server.inject({ method: 'GET', url: '/qk-values/data?a=1' })
+    await server.inject({ method: 'GET', url: '/qk-values/data?a=2' })
+    expect(callCount).toBe(2)
+  })
+})
+
+describe('Age header & request max-age', () => {
+  it('emits an Age header (seconds) on a cache hit', async () => {
+    @Controller('/age-hit')
+    class AgeHitController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [AgeHitController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    await server.inject({ method: 'GET', url: '/age-hit/data' })
+    const res2 = await server.inject({ method: 'GET', url: '/age-hit/data' })
+
+    expect(res2.headers['x-cache']).toBe('HIT')
+    expect(res2.headers['age']).toBeDefined()
+    expect(Number(res2.headers['age'])).toBeGreaterThanOrEqual(0)
+  })
+
+  it('request Cache-Control: max-age larger than the entry age is served from cache', async () => {
+    @Controller('/age-maxage-ok')
+    class AgeMaxAgeOkController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() { return { ok: true } }
+    }
+    void [AgeMaxAgeOkController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    await server.inject({ method: 'GET', url: '/age-maxage-ok/data' })
+    const res2 = await server.inject({
+      method: 'GET',
+      url: '/age-maxage-ok/data',
+      headers: { 'cache-control': 'max-age=100' },
+    })
+    expect(res2.headers['x-cache']).toBe('HIT')
+  })
+
+  it('request Cache-Control: max-age smaller than the entry age revalidates', async () => {
+    let callCount = 0
+
+    // A store that always returns an entry aged ~100s, so the max-age=10 request must revalidate.
+    class AgedStore extends CacheStore {
+      async get(): Promise<CacheEntry | undefined> {
+        return { payload: JSON.stringify({ ok: true }), headers: {}, storedAt: Date.now() - 100_000 }
+      }
+
+      async set() {}
+      async delete() {}
+      async deleteMany() {}
+      async clear() {}
+    }
+
+    @Controller('/age-maxage-stale')
+    class AgeMaxAgeStaleController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() {
+        callCount++
+        return { ok: true }
+      }
+    }
+    void [AgeMaxAgeStaleController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server))
+      .cache(c => c.store(new AgedStore()))
+      .build()
+    await app.ready()
+
+    const res = await server.inject({
+      method: 'GET',
+      url: '/age-maxage-stale/data',
+      headers: { 'cache-control': 'max-age=10' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['x-cache']).toBe('MISS')
+    expect(callCount).toBe(1)
+  })
+})
+
+describe('MemoryCacheStore maxBytes budget', () => {
+  it('evicts least-recently-used entries once the byte budget is exceeded', async () => {
+    const store = new MemoryCacheStore({ maxBytes: 200 })
+    const big = 'x'.repeat(150)
+
+    await store.set('a', 'seg', { payload: big, headers: {} }, 60)
+    await store.set('b', 'seg', { payload: big, headers: {} }, 60)
+
+    // Two ~151-byte entries exceed the 200-byte budget → the older 'a' is evicted, 'b' survives.
+    expect(await store.get('a', 'seg')).toBeUndefined()
+    expect(await store.get('b', 'seg')).toBeDefined()
   })
 })
