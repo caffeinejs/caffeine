@@ -1,6 +1,7 @@
 import type { Ctor } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '../../route_picker.js'
 import type { RouteValidationSchema } from '../../route.js'
+import type { ErrorHandlerRef } from '../../error/error.js'
 import type { RouteAuthzOptions, RouterSpec, RouteSpec } from './routing.definition.js'
 import { mergeValue } from './_merge.js'
 
@@ -18,6 +19,7 @@ export class RouterBuilder {
   #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
+  #catchBy?: ErrorHandlerRef[]
 
   path(path: string) {
     this.#path = path
@@ -43,6 +45,12 @@ export class RouterBuilder {
 
   errorHandlers(handlers: Array<[Ctor<Error>, string | symbol]>) {
     this.#errorHandlers = handlers
+    return this
+  }
+
+  catchBy(handlers: ErrorHandlerRef[]) {
+    this.#catchBy ??= []
+    this.#catchBy.push(...handlers)
     return this
   }
 
@@ -134,6 +142,7 @@ export class RouterBuilder {
       options: this.#options,
       extras: this.#extras,
       errorHandlers: this.#errorHandlers,
+      catchBy: this.#catchBy,
     }
   }
 }
@@ -154,6 +163,7 @@ export class RouteBuilder {
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
+  #catchBy?: ErrorHandlerRef[]
 
   header(name: string, value: string | string[]) {
     this.#header ??= new Map()
@@ -219,6 +229,12 @@ export class RouteBuilder {
     return this
   }
 
+  catchBy(handlers: ErrorHandlerRef[]): this {
+    this.#catchBy ??= []
+    this.#catchBy.push(...handlers)
+    return this
+  }
+
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -278,6 +294,7 @@ export class RouteBuilder {
       config: this.#config,
       options: this.#options,
       extras: this.#extras,
+      catchBy: this.#catchBy,
     }
   }
 }

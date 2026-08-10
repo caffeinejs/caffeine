@@ -9,6 +9,8 @@ import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import { ForwardAuthenticationHandler } from './forward/forward.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
+import { JWTService } from './jwt/jwt_service.js'
+import { jwtServiceKey } from './jwt/keys.js'
 import { kAuthOpts, kOIDCMeta } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
@@ -20,6 +22,9 @@ import { RememberMeTokenStore } from './cookie/remember_me_token_store.js'
 import { CredentialsService, type CredentialsServiceOptions } from './credentials/credentials_service.js'
 import { PasswordHasher, ScryptPasswordHasher } from './credentials/password_hasher.js'
 import { UserProvider } from './credentials/user_provider.js'
+import { RefreshTokenService } from './refresh/refresh_token_service.js'
+import { RefreshTokenStore } from './refresh/refresh_token_store.js'
+import { type RefreshTokenOptions, RefreshTokenOptionsBuilder } from './refresh/refresh_options.js'
 import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import {
   githubOAuth2Preset,
@@ -42,6 +47,7 @@ export class AuthenticationBuilder implements Service {
 
   #mapper: PrincipalMapper | string | symbol | undefined
   #credentials: CredentialsServiceOptions | undefined
+  #refresh: RefreshTokenOptions | undefined
 
   constructor(options: Partial<AuthenticationOptions> = {}) {
     this.#options = options
@@ -226,6 +232,19 @@ export class AuthenticationBuilder implements Service {
     return this
   }
 
+  /**
+   * Enables the bearer refresh-token grant. Binds a {@link RefreshTokenService} (issue / refresh /
+   * revoke) that signs access tokens with the default JWT scheme's shared service and persists refresh
+   * tokens in the container-bound {@link RefreshTokenStore}. Requires a JWT bearer scheme.
+   */
+  addRefreshTokens(configure: (options: RefreshTokenOptionsBuilder) => void): this {
+    const builder = new RefreshTokenOptionsBuilder()
+    configure(builder)
+    this.#refresh = builder.build()
+
+    return this
+  }
+
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const opts = this.#options
     const firstScheme = this.#schemes.keys().next().value as string | undefined
@@ -297,6 +316,19 @@ export class AuthenticationBuilder implements Service {
     kit.container.bind(AuthenticationService).toValue(service).internal()
     kit.container.bind(kAuthOpts).toValue(options).internal()
 
+    // Share each JWT scheme's service (verify + sign) for injection into token-issuing controllers.
+    // Every JWT scheme is reachable via its keyed token; the default JWT scheme (or the first, if the
+    // default is not a JWT scheme) is also bound under the bare `JWTService` token for the common case.
+    const jwtSchemes = [...this.#schemes]
+      .filter((entry): entry is [string, JWTAuthenticationHandler] => entry[1] instanceof JWTAuthenticationHandler)
+    for (const [name, handler] of jwtSchemes) {
+      kit.container.bind(jwtServiceKey(name)).toValue(handler.service)
+    }
+    if (jwtSchemes.length > 0) {
+      const preferred = jwtSchemes.find(([name]) => name === defaultScheme) ?? jwtSchemes[0]
+      kit.container.bind(JWTService).toValue(preferred[1].service)
+    }
+
     if (this.#credentials !== undefined) {
       // Default hasher is a fallback so a user-bound PasswordHasher wins. CredentialsService is a
       // public binding (controllers inject it); it resolves the user-bound UserProvider and the
@@ -307,6 +339,22 @@ export class AuthenticationBuilder implements Service {
       kit.container.bind(CredentialsService).toFunction(
         (provider: UserProvider, hasher: PasswordHasher) => new CredentialsService(provider, hasher, options),
         [UserProvider, PasswordHasher],
+      )
+    }
+
+    if (this.#refresh !== undefined) {
+      if (jwtSchemes.length === 0) {
+        throw new Error(
+          'Cannot configure refresh tokens: no JWT scheme is registered (add a JWT bearer scheme via addJWTBearer)',
+        )
+      }
+
+      // Signs with the shared (default) JWTService bound above and persists in the user-bound
+      // RefreshTokenStore; the resolver/TTLs ride along in the closure (not container keys).
+      const options = this.#refresh
+      kit.container.bind(RefreshTokenService).toFunction(
+        (jwt: JWTService, store: RefreshTokenStore) => new RefreshTokenService(jwt, store, options),
+        [JWTService, RefreshTokenStore],
       )
     }
 

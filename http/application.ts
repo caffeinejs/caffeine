@@ -1,4 +1,5 @@
 import { Container } from '@caffeinejs/di'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Router } from './route.js'
 import { Feats } from './feats.js'
 import { kServiceConfigure, Service, ServiceKit, Services } from './service.js'
@@ -29,7 +30,7 @@ export interface AdapterFactoryIn {
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
   = (input: AdapterFactoryIn) => A
 
-export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
+export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
   #container: Container
   #feats: Feats
   #routers: Router<R>[] = []
@@ -116,3 +117,9 @@ export class WebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
     return this
   }
 }
+
+export class WebApplication<
+  I = FastifyInstance,
+  R = FastifyRequest,
+  A extends Adapter<I, R> = Adapter<I, R>,
+> extends AbstractWebApplication<I, R, A> {}

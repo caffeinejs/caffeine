@@ -1,7 +1,11 @@
 import { Binding, Ctor, Key, Provider } from '@caffeinejs/di'
 import type { ParameterPickOptions } from './route_picker.js'
+import type { ErrorHandler } from './error/error.js'
 import { AuthzRouteService } from './security/authz/index.js'
 import { RouteAuthzOptions } from './decorators/registrar/routing.definition.js'
+
+/** Error types mapped to the handler class that renders them, as declared by `@CatchBy`. */
+export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
 
 export interface Router<R> {
   path: string
@@ -11,6 +15,7 @@ export interface Router<R> {
   binding: Binding
   controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>
   errorHandlers?: Map<Ctor<Error>, string | symbol>
+  catchBy?: CatchByMap
 }
 
 export interface Route<R> {
@@ -29,6 +34,7 @@ export interface Route<R> {
   config?: Map<string, unknown>
   options?: Map<string, unknown>
   extras?: Map<symbol, unknown>
+  catchBy?: CatchByMap
   authorization: RouteAuthorization
 }
 

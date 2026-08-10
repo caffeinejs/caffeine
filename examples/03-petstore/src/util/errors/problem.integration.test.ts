@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
+import { Catch, CatchBy, type Context, Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, ErrorHandler, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
 // Side-effect import: registers HTTPProblemHandler / FallbackProblemHandler as global @Catch handlers.
 import './problem.handlers.js'
 import type { ProblemDetails } from './problem.js'
@@ -39,6 +39,33 @@ class ThingsController {
   }
 }
 void [ThingsController]
+
+// A controller that opts out of the global problem+json rendering for 404s only. The handler is
+// declared { global: false } so it does not compete with HTTPProblemHandler, and is attached with
+// @CatchBy — which takes precedence over the global handler for this controller alone.
+@Catch(ErrHTTPNotFound, { global: false })
+class SilentNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
+  async handle(ctx: Context, _err: ErrHTTPNotFound): Promise<void> {
+    ctx.status(404).body({ found: false })
+  }
+}
+void [SilentNotFoundHandler]
+
+@CatchBy(SilentNotFoundHandler)
+@Controller('/gadgets')
+class GadgetsController {
+  @Get('/:id')
+  @Params([$p.param('id')])
+  get(id: string): unknown {
+    throw new ErrHTTPNotFound(`No gadget "${id}"`)
+  }
+
+  @Get('/boom')
+  boom(): unknown {
+    throw new Error('kaboom')
+  }
+}
+void [GadgetsController]
 
 async function buildApp() {
   const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
@@ -117,5 +144,25 @@ describe('RFC 9457 problem+json error handling', () => {
     const body = await res.json() as ProblemDetails
     expect(body.type).toBe('https://petstoreapi.com/errors/internal-server-error')
     expect(body.status).toBe(500)
+  })
+
+  it('lets a controller override the global 404 rendering with @CatchBy', async () => {
+    const app = await buildApp()
+
+    const res = await app.fetch('/gadgets/abc')
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ found: false })
+  })
+
+  it('still falls back to the global handler for types the @CatchBy handler does not cover', async () => {
+    const app = await buildApp()
+
+    const res = await app.fetch('/gadgets/boom')
+
+    expect(res.status).toBe(500)
+    expect(res.headers.get('content-type')).toContain('application/problem+json')
+    const body = await res.json() as ProblemDetails
+    expect(body.type).toBe('https://petstoreapi.com/errors/internal-server-error')
   })
 })

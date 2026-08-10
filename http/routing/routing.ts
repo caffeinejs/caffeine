@@ -1,8 +1,8 @@
 import { Container, Ctor } from '@caffeinejs/di'
-import { ErrCaffeineWebApplication, ErrConfiguration } from '../error/index.js'
+import { CatchMetadata, ErrCaffeineWebApplication, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
 import { solutions } from '../error/util.js'
 import { Keys } from '../symbols.js'
-import { Router } from '../route.js'
+import { CatchByMap, Router } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
 import { getRouter } from '../decorators/registrar/index.js'
 
@@ -34,6 +34,7 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
       binding,
       controller: container.wrap(key),
       errorHandlers: buildErrorHandlerMap(router.errorHandlers, key, new Set(router.routes.map(r => r.handler))),
+      catchBy: buildCatchByMap(container, router.catchBy, refName(key)),
       routes: router.routes.map(route => {
         const config = new Map<string, unknown>()
         if (router.config) {
@@ -90,6 +91,7 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
           config: config,
           options: options,
           extras: route.extras,
+          catchBy: buildCatchByMap(container, route.catchBy, `${refName(key)}.${String(route.handler)}`),
           authorization: (() => {
             const hasDecoratorProtection = router.authz !== undefined || route.authz !== undefined
             const isAnonymous = !!(router.authz?.allowAnonymous || route.authz?.allowAnonymous)
@@ -114,6 +116,64 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
   }
 
   return routers
+}
+
+function refName(ref: unknown): string {
+  return typeof ref === 'function' ? ref.name : String(ref)
+}
+
+// Resolves the "@CatchBy" references of a controller or route into a map of error type to handler
+// provider. Resolution goes through the container, so a reference by class or by "@Named" identifier
+// honours @Primary, @ConditionalOn and @Profile like any other injection point.
+function buildCatchByMap(
+  container: Container,
+  refs: ErrorHandlerRef[] | undefined,
+  owner: string,
+): CatchByMap | undefined {
+  if (!refs?.length) {
+    return undefined
+  }
+
+  const map: CatchByMap = new Map()
+  const owners = new Map<Ctor<Error>, string>()
+
+  for (const ref of refs) {
+    const name = refName(ref)
+    const binding = container.getBinding(ref)
+    if (!binding) {
+      throw new ErrConfiguration(
+        `Cannot resolve error handler "${name}" referenced by "${owner}": no binding registered`
+        + solutions(
+          `Decorate "${name}" with "@Catch(ErrorType)" so it is registered in the container`,
+          'Make sure the handler module is imported by the application',
+        ),
+      )
+    }
+
+    const meta = binding.tags.get(kErrorHandler) as CatchMetadata | undefined
+    if (!meta) {
+      throw new ErrConfiguration(
+        `Cannot use "${name}" as an error handler in "${owner}": it is not decorated with "@Catch"`
+        + solutions(`Decorate "${name}" with "@Catch(ErrorType)" to declare the errors it handles`),
+      )
+    }
+
+    const provider = container.wrapBinding<ErrorHandler<Error>>(binding)
+    for (const errorType of meta.errors) {
+      const previous = owners.get(errorType)
+      if (previous !== undefined) {
+        throw new ErrConfiguration(
+          `Ambiguous "@CatchBy" in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"`
+          + solutions(`Keep a single handler for "${errorType.name}" at this level`),
+        )
+      }
+
+      owners.set(errorType, name)
+      map.set(errorType, provider)
+    }
+  }
+
+  return map
 }
 
 // Converts the raw per-controller error-handler list into a lookup map, rejecting two handlers for

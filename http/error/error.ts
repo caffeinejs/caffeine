@@ -1,10 +1,19 @@
-import { Ctor, Provider, Scopes } from '@caffeinejs/di'
+import { Ctor, Identifier, Provider, Scopes } from '@caffeinejs/di'
 import { Context } from '../context.js'
 import { kServiceConfigure, Service, ServiceKit } from '../service.js'
 import { ErrConfiguration } from './common.js'
 import { solutions } from './util.js'
 
 export const kErrorHandler = Symbol('caffeine:http:error_handler')
+
+/**
+ * The value attached to a handler class binding under the {@link kErrorHandler} tag by `@Catch`.
+ * Read by the global handler scan and by the `@CatchBy` resolution in `buildRouting`.
+ */
+export interface CatchMetadata {
+  errors: Ctor<Error>[]
+  global: boolean
+}
 
 /**
  * Resolves the value mapped to an error by walking its prototype chain: the error's own class first,
@@ -38,6 +47,13 @@ export abstract class ErrorHandler<E extends Error> {
   abstract handle(ctx: Context, error: E): Promise<void>
 }
 
+/**
+ * A reference to an error handler class, as accepted by `@CatchBy`: either the class itself or a name
+ * assigned to it with `@Named`. Both are resolved through the container, so `@Primary`, `@ConditionalOn`
+ * and `@Profile` apply as they do anywhere else.
+ */
+export type ErrorHandlerRef = Ctor<ErrorHandler<Error>> | Identifier
+
 // ErrorHandlerProvider holds the mapping of error types to their handlers.
 // It's used to resolve the most specific handler for an error by walking its prototype chain.
 export class ErrorHandlerProvider {
@@ -60,8 +76,8 @@ export class ErrorHandlingServiceConfigurer implements Service {
     const handlers = new Map<Ctor<Error>, Provider<ErrorHandler<Error>>>()
 
     for (const errorHandler of handlerBinding) {
-      const err = errorHandler.tags.get(kErrorHandler) as Ctor<Error> | undefined
-      if (!err) {
+      const meta = errorHandler.tags.get(kErrorHandler) as CatchMetadata | undefined
+      if (!meta) {
         const name = errorHandler.type?.name ?? '<anonymous>'
         throw new ErrConfiguration(
           `Error handler "${name}" does not declare an error type`
@@ -72,14 +88,26 @@ export class ErrorHandlingServiceConfigurer implements Service {
         )
       }
 
-      if (handlers.has(err)) {
-        throw new ErrConfiguration(
-          `Ambiguous error handler: multiple handlers registered for "${err.name}"`
-          + solutions(`Remove the duplicate "@Catch(${err.name})" handler so only one handles this error type`),
-        )
+      // Non-global handlers stay bound in the container — reachable only through "@CatchBy" on a
+      // controller or route — so they never compete with the global handler for the same error type.
+      if (!meta.global) {
+        continue
       }
 
-      handlers.set(err, kit.container.wrapBinding(errorHandler))
+      const provider = kit.container.wrapBinding(errorHandler)
+      for (const err of meta.errors) {
+        if (handlers.has(err)) {
+          throw new ErrConfiguration(
+            `Ambiguous error handler: multiple handlers registered for "${err.name}"`
+            + solutions(
+              `Remove the duplicate "@Catch(${err.name})" handler so only one handles this error type`,
+              `Mark one of them "@Catch(${err.name}, { global: false })" and attach it with "@CatchBy" on the controller or route that needs it`,
+            ),
+          )
+        }
+
+        handlers.set(err, provider)
+      }
     }
 
     kit.container.bind(ErrorHandlerProvider)

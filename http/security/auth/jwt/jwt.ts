@@ -10,17 +10,18 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
   readonly #name: string
   readonly #jwt: JWTService
 
-  constructor(name: string, options: JWTAuthenticationOptions) {
+  constructor(name: string, options: JWTAuthenticationOptions, jwt?: JWTService) {
     super(options)
 
     this.#name = name
+    // The builder injects a shared, DI-bound service (verify + sign); fall back to building one from
+    // the options for direct construction.
+    this.#jwt = jwt ?? buildService(options)
+  }
 
-    // A string/Uint8Array secret is symmetric; a KeyLike is an asymmetric public (verify) key.
-    const secret = options.secret
-    const algorithm = options.jwtOptions?.algorithms?.[0]
-    this.#jwt = typeof secret === 'string' || secret instanceof Uint8Array
-      ? new JWTService({ secret, algorithm })
-      : new JWTService({ publicKey: secret, algorithm })
+  /** The JWTService this scheme verifies (and signs) with. Shared via DI, see `jwtServiceKey`. */
+  get service(): JWTService {
+    return this.#jwt
   }
 
   async authenticate(ctx: Context): Promise<AuthenticateResult> {
@@ -62,6 +63,19 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
 
     ctx.status(403)
   }
+}
+
+function buildService(options: JWTAuthenticationOptions): JWTService {
+  if (options.serviceOptions) {
+    return new JWTService(options.serviceOptions)
+  }
+
+  // A string/Uint8Array secret is symmetric; a KeyLike is an asymmetric public (verify) key.
+  const secret = options.secret
+  const algorithm = options.jwtOptions?.algorithms?.[0]
+  return typeof secret === 'string' || secret instanceof Uint8Array
+    ? new JWTService({ secret, algorithm })
+    : new JWTService({ publicKey: secret, algorithm })
 }
 
 function mapClaims(payload: JWTPayload): Claim[] {

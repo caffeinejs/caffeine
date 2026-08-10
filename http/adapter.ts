@@ -3,7 +3,7 @@ import qs from 'fast-querystring'
 import { Container, Scopes } from '@caffeinejs/di'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions, type FastifyError } from 'fastify'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
-import type { Router } from './route.js'
+import type { CatchByMap, Router } from './route.js'
 import type { AuthenticationOptions } from './security/auth/builder.js'
 import { newAnonymousUser, type Principal } from './security/index.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
@@ -27,6 +27,18 @@ declare module 'fastify' {
     responseCached: boolean
     controller: Record<string | symbol, unknown> | null
     user: Principal
+  }
+
+  interface FastifyContextConfig {
+    caffeine?: {
+      hasStatus: boolean
+      status: number
+      hasContentType: boolean
+      contentType: string
+      hasHeader: boolean
+      header: Array<[string, string | string[]]>
+      catchBy?: CatchByMap
+    }
   }
 }
 
@@ -197,26 +209,52 @@ export class FastifyAdapter<
 
         server.decorateRequest('responseCached', false)
 
-        // Error Handling (per-controller @Catch methods)
+        // Error Handling (per-controller and per-route)
         // --
-        // When the controller declares @Catch methods, resolve its instance once per request in an
-        // onRequest hook (inside the live request scope) and install an encapsulated setErrorHandler.
-        // The handler runs the matching @Catch method on that same instance — correct for transient
-        // scope (no second get()) — and covers every phase in the plugin (validation, hooks, handler).
-        // Unmatched errors delegate to the app-wide globalErrorHandler.
-        if (router.errorHandlers?.size) {
-          const ref = isSingleton ? controller.get() : null
-          const errorHandlers = router.errorHandlers
+        // A single encapsulated setErrorHandler covers every phase in the plugin (validation, hooks,
+        // handler) and resolves, most specific first: the route's @CatchBy, the controller's @CatchBy,
+        // a @Catch method on the controller, then the app-wide globalErrorHandler.
+        //
+        // The @Catch method form needs the controller instance that threw, so when it is in play the
+        // instance is resolved once per request in an onRequest hook (inside the live request scope)
+        // and reused by the route dispatch — correct for transient scope (no second get()).
+        const hasControllerMethodHandlers = !!router.errorHandlers?.size
+        const hasScopedHandlers = hasControllerMethodHandlers
+          || !!router.catchBy?.size
+          || routes.some(route => route.catchBy?.size)
 
-          server.addHook('onRequest', (req, _res, done) => {
-            req.controller = (ref ?? controller.get()) as Record<string | symbol, unknown>
-            done()
-          })
+        if (hasScopedHandlers) {
+          const errorHandlers = router.errorHandlers
+          const routerCatchBy = router.catchBy
+
+          if (hasControllerMethodHandlers) {
+            const ref = isSingleton ? controller.get() : null
+
+            server.addHook('onRequest', (req, _res, done) => {
+              req.controller = (ref ?? controller.get()) as Record<string | symbol, unknown>
+              done()
+            })
+          }
 
           server.setErrorHandler(async (error: FastifyError, req: FastifyRequest, reply: FastifyReply) => {
             const err = error instanceof Error ? error : new Error(String(error))
+
+            // routeOptions is populated before validation, so route-level handlers also see schema errors.
+            const routeCatchBy = req.routeOptions.config?.caffeine?.catchBy
+            const handler = (routeCatchBy ? resolveByErrorChain(routeCatchBy, err) : undefined)
+              ?? (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)
+
+            if (handler) {
+              await handler.get().handle(req.httpContext, err)
+              if (!reply.sent) {
+                await reply.send()
+              }
+
+              return
+            }
+
             const instance = req.controller
-            const methodKey = instance ? resolveByErrorChain(errorHandlers, err) : undefined
+            const methodKey = instance && errorHandlers ? resolveByErrorChain(errorHandlers, err) : undefined
 
             if (instance && methodKey) {
               const handle = instance[methodKey] as (...args: unknown[]) => unknown
@@ -322,6 +360,7 @@ export class FastifyAdapter<
             contentType,
             hasHeader,
             header,
+            catchBy: route.catchBy,
           }
 
           const routeDef: RouteOptions<

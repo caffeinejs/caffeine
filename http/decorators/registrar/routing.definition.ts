@@ -1,5 +1,6 @@
 import type { Ctor } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '../../route_picker.js'
+import type { ErrorHandlerRef } from '../../error/error.js'
 import { RouteValidationSchema } from '../../route.js'
 
 export interface RouterSpec<R> {
@@ -16,6 +17,7 @@ export interface RouterSpec<R> {
   options?: Map<string, unknown>
   extras?: Map<symbol, unknown>
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
+  catchBy?: ErrorHandlerRef[]
 }
 
 export interface RouteSpec<R> {
@@ -34,6 +36,7 @@ export interface RouteSpec<R> {
   config?: Map<string, unknown>
   options?: Map<string, unknown>
   extras?: Map<symbol, unknown>
+  catchBy?: ErrorHandlerRef[]
 }
 
 export interface RouteAuthzOptions {

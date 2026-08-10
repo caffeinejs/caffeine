@@ -5,17 +5,19 @@ const RouterRegistry = new WeakMap<Function, RouterBuilder>()
 const RouteRegistry = new WeakMap<object, Map<string | symbol, RouteBuilder>>()
 const ControllerErrorHandlerRegistry = new WeakMap<object, Array<[Ctor<Error>, string | symbol]>>()
 
-// Registers a controller method as the handler for a given error type. Duplicate detection is
+// Registers a controller method as the handler for the given error types. Duplicate detection is
 // deferred to build (buildRouting) — throwing here would run at class-decoration time and break
 // module import.
-export function configureControllerErrorHandler(ctx: ClassMethodDecoratorContext, error: Ctor<Error>) {
+export function configureControllerErrorHandler(ctx: ClassMethodDecoratorContext, errors: Ctor<Error>[]) {
   let list = ControllerErrorHandlerRegistry.get(ctx.metadata)
   if (!list) {
     list = []
     ControllerErrorHandlerRegistry.set(ctx.metadata, list)
   }
 
-  list.push([error, ctx.name])
+  for (const error of errors) {
+    list.push([error, ctx.name])
+  }
 }
 
 export function configureRoute(ctx: ClassMemberDecoratorContext, mut: (spec: RouteBuilder) => void) {

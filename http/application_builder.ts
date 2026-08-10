@@ -59,7 +59,8 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   build(): WebApplication<I, REQ, A> {
-    return new WebApplication(this.#container, this.#adapterFactory({ container: this.#container }), this.#services)
+    const adapter = this.#adapterFactory({ container: this.#container })
+    return new WebApplication<I, REQ, A>(this.#container, adapter, this.#services)
   }
 }
 
