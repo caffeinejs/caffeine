@@ -1,5 +1,4 @@
-import { Configuration } from '../../../decorators/configuration.js'
-import { Provides } from '../../../decorators/provides.js'
+import { Configuration, Provides } from '@caffeinejs/di'
 
 export const kAppMessage = Symbol('kAppMessage')
 

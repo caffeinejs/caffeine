@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import fastify, { FastifyRequest } from 'fastify'
-import { CaffeineIoC, scan } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
+import { scan } from '@caffeinejs/scan'
 import { RouteParam } from './util/decorators/params.js'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))

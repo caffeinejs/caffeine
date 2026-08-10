@@ -1,4 +1,4 @@
-import { Injectable } from '../../../decorators/injectable.js'
+import { Injectable } from '@caffeinejs/di'
 import { kAppMessage } from './config.js'
 
 @Injectable([kAppMessage])

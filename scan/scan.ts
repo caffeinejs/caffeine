@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, extname, join, relative, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { ErrCannotLoadTypeScriptModule } from '../errors.js'
+import { ErrCannotLoadTypeScriptModule } from './errors.js'
 import { Runtime } from './_runtime.js'
 
 export type SinglePathFilter = string | RegExp | ((path: string) => boolean)

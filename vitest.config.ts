@@ -5,6 +5,7 @@ export default defineConfig({
     projects: [
       './di/vitest.config.ts',
       './di/vitest.leak.config.ts',
+      './scan/vitest.config.ts',
       './std/vitest.config.ts',
       './http/vitest.config.ts',
       './openapi/vitest.config.ts',
