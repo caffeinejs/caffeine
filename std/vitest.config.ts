@@ -6,7 +6,7 @@ export default defineConfig({
     swc.vite({
       jsc: {
         parser: { syntax: 'typescript', decorators: true },
-        transform: { decoratorVersion: '2022-03' },
+        transform: { decoratorVersion: '2023-11' },
         target: 'es2022',
       },
     }),

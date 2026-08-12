@@ -74,6 +74,17 @@ example\:devtools:
 	@npm run build
 	@npx tsx examples/02-devtools-basic/index.ts
 
+.PHONY: example\:petstore
+example\:petstore: ## run the petstore example (Postgres in Docker, app on host at http://localhost:9999)
+	@docker compose -f examples/03-petstore/docker-compose.yml up -d postgres
+	@echo "waiting for postgres ..."
+	@until docker compose -f examples/03-petstore/docker-compose.yml exec -T postgres pg_isready -U petstore -d petstore >/dev/null 2>&1; do sleep 1; done
+	@export DATABASE_URL=postgresql://petstore:petstore@localhost:5432/petstore?schema=public
+	@npm run build -w @caffeinejs/example-petstore
+	@npm run db:migrate -w @caffeinejs/example-petstore
+	@npm run db:seed -w @caffeinejs/example-petstore
+	@npm start -w @caffeinejs/example-petstore
+
 # Config Server (test infrastructure)
 # --
 
@@ -113,3 +124,4 @@ help: ## show help
 	@printf "\033[36m%-20s\033[0m %s\n" "fmt:<package>" "format a single package (e.g. fmt:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "fmt-check:<package>" "check formatting of a single package (e.g. fmt-check:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "bench:<type>" "build and run a benchmark (e.g. bench:helloworld)"
+	@printf "\033[36m%-20s\033[0m %s\n" "example:petstore" "run the petstore example (Postgres in Docker, app on host at http://localhost:9999)"

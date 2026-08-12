@@ -43,8 +43,5 @@
     {
       "path": "./plugins/eslint/tsconfig.build.json"
     },
-    {
-      "path": "./config/tsconfig.build.json"
-    }
   ]
 }

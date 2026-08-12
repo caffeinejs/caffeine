@@ -13,7 +13,6 @@
     "http",
     "openapi",
     "fetchy/*",
-    "config",
     "cli",
     "devtools",
     "devtools/ui",
