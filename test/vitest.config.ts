@@ -1,5 +1,6 @@
-import swc from 'unplugin-swc'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import swc from 'unplugin-swc'
 
 export default defineConfig({
   oxc: false,
@@ -12,17 +13,15 @@ export default defineConfig({
       },
     }),
   ],
+  resolve: {
+    alias: {
+      '@caffeinejs/di': fileURLToPath(new URL('../di/index.ts', import.meta.url)),
+    },
+  },
   test: {
-    setupFiles: ['./_polyfill.ts'],
-    name: 'core',
+    setupFiles: ['../di/_polyfill.ts'],
+    name: 'test',
     include: ['**/*.test.ts'],
-    exclude: [
-      'node_modules/**',
-      'dist/**',
-      '_tests/memory/**',
-      '_tests/deno/**',
-      'examples/**',
-    ],
     environment: 'node',
     passWithNoTests: true,
     pool: 'forks',

@@ -9,6 +9,8 @@ import { Order } from '../decorators/order.js'
 import { Tag } from '../decorators/tag.js'
 import { $aop } from '../aop.js'
 import type { JoinPoint, MethodAspect } from '../aop.js'
+import { createAnnotation } from '../annotations.js'
+import { reflect } from '../reflect.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { ErrInvalidAspect, ErrInvalidContainerState, ErrInvalidDecorator } from '../errors.js'
 import { $i } from '../injection.js'
@@ -24,7 +26,7 @@ describe('AOP', function () {
   describe('before hook', function () {
     const beforeSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(Calculator, 'add'))
+    @Aspect([$aop.forClass(Calculator, 'add')])
     @Profile('aop-before')
     class BeforeAspect implements MethodAspect<Calculator> {
       before(jp: JoinPoint<Calculator>) {
@@ -50,7 +52,7 @@ describe('AOP', function () {
   })
 
   describe('afterReturn hook', function () {
-    @Aspect([], $aop.forClass(Calculator, 'add'))
+    @Aspect([$aop.forClass(Calculator, 'add')])
     @Profile('aop-after-return')
     class AfterReturnAspect implements MethodAspect<Calculator> {
       afterReturn(_jp: JoinPoint<Calculator>, result: unknown) {
@@ -69,14 +71,14 @@ describe('AOP', function () {
   })
 
   describe('afterThrow hook', function () {
-    @Aspect([], $aop.forClass(Calculator, 'fail'))
+    @Aspect([$aop.forClass(Calculator, 'fail')])
     @Profile('aop-swallow')
     class SwallowAspect implements MethodAspect<Calculator> {
       afterThrow() { /* swallow */ }
     }
     void SwallowAspect
 
-    @Aspect([], $aop.forClass(Calculator, 'fail'))
+    @Aspect([$aop.forClass(Calculator, 'fail')])
     @Profile('aop-propagate')
     class NoopBeforeAspect implements MethodAspect<Calculator> {
       before() { /* noop */ }
@@ -103,7 +105,7 @@ describe('AOP', function () {
   describe('after hook', function () {
     const afterSuccessSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(Calculator, 'add'))
+    @Aspect([$aop.forClass(Calculator, 'add')])
     @Profile('aop-after-success')
     class AfterSuccessAspect implements MethodAspect<Calculator> {
       after(_jp: JoinPoint<Calculator>, result: unknown, error: Error | undefined) {
@@ -114,7 +116,7 @@ describe('AOP', function () {
 
     const afterFailureSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(Calculator, 'fail'))
+    @Aspect([$aop.forClass(Calculator, 'fail')])
     @Profile('aop-after-failure')
     class AfterFailureAspect implements MethodAspect<Calculator> {
       afterThrow() { /* swallow so after() still runs */ }
@@ -160,14 +162,14 @@ describe('AOP', function () {
       greet(): string { return greetSpy() }
     }
 
-    @Aspect([], $aop.forClass(Greeter, 'greet'))
+    @Aspect([$aop.forClass(Greeter, 'greet')])
     @Profile('aop-short-circuit')
     class ShortCircuitAspect implements MethodAspect<Greeter> {
       around() { return 'intercepted' }
     }
     void ShortCircuitAspect
 
-    @Aspect([], $aop.forClass(Calculator, 'add'))
+    @Aspect([$aop.forClass(Calculator, 'add')])
     @Profile('aop-around-proceed')
     class AroundProceedAspect implements MethodAspect<Calculator> {
       around(jp: JoinPoint<Calculator>) {
@@ -206,7 +208,7 @@ describe('AOP', function () {
     const priorityOrder: string[] = []
 
     @Order(1)
-    @Aspect([], $aop.forClass(Svc, 'run'))
+    @Aspect([$aop.forClass(Svc, 'run')])
     @Profile('aop-priority')
     class OuterAspect implements MethodAspect<Svc> {
       before() { priorityOrder.push('outer-before') }
@@ -215,7 +217,7 @@ describe('AOP', function () {
     void OuterAspect
 
     @Order(10)
-    @Aspect([], $aop.forClass(Svc, 'run'))
+    @Aspect([$aop.forClass(Svc, 'run')])
     @Profile('aop-priority')
     class InnerAspect implements MethodAspect<Svc> {
       before() { priorityOrder.push('inner-before') }
@@ -254,7 +256,7 @@ describe('AOP', function () {
 
     const methodListSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(MultiMethod, 'foo'))
+    @Aspect([$aop.forClass(MultiMethod, 'foo')])
     @Profile('aop-method-list')
     class FooOnlyAspect implements MethodAspect<MultiMethod> {
       before(jp: JoinPoint<MultiMethod>) { methodListSpy(jp.methodName) }
@@ -263,7 +265,7 @@ describe('AOP', function () {
 
     const allMethodsSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(AllMethods))
+    @Aspect([$aop.forClass(AllMethods)])
     @Profile('aop-all-methods')
     class AllMethodsAspect implements MethodAspect<AllMethods> {
       before(jp: JoinPoint<AllMethods>) { allMethodsSpy(jp.methodName) }
@@ -309,7 +311,7 @@ describe('AOP', function () {
     const kLogPrefix = Symbol('log-prefix')
     const logged: string[] = []
 
-    @Aspect([], $aop.forClass(Target, 'work'))
+    @Aspect([$aop.forClass(Target, 'work')])
     @Profile('aop-inject')
     class LoggingAspect implements MethodAspect<Target> {
       @Inject(kLogPrefix)
@@ -342,7 +344,7 @@ describe('AOP', function () {
 
     const asyncBeforeSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(AsyncTarget, 'fetch'))
+    @Aspect([$aop.forClass(AsyncTarget, 'fetch')])
     @Profile('aop-async')
     class AsyncAspect implements MethodAspect<AsyncTarget> {
       async before(jp: JoinPoint<AsyncTarget>) {
@@ -384,7 +386,7 @@ describe('AOP', function () {
     const ctorInjSpy = vi.fn()
     const injFirstSpy = vi.fn()
 
-    @Aspect([kGreetSvc], $aop.forClass(InjTarget, 'work'))
+    @Aspect([$aop.forClass(InjTarget, 'work')], [kGreetSvc])
     @Profile('aop-ctor-inject')
     class CtorInjAspect implements MethodAspect<InjTarget> {
       constructor(private svc: GreetSvc) {}
@@ -392,7 +394,7 @@ describe('AOP', function () {
     }
     void CtorInjAspect
 
-    @Aspect([kGreetSvc], $aop.forClass(InjTarget, 'work'))
+    @Aspect([$aop.forClass(InjTarget, 'work')], [kGreetSvc])
     @Profile('aop-injectable-first')
     class InjFirstAspect implements MethodAspect<InjTarget> {
       constructor(private svc: GreetSvc) {}
@@ -430,11 +432,11 @@ describe('AOP', function () {
   })
 
   describe('method predicate', function () {
-    const kTx = Symbol('tx')
+    const Transactional = createAnnotation<true>()
 
     @Injectable()
     class TxTarget {
-      @Tag(kTx, true)
+      @Transactional(true)
       save() { return 'saved' }
 
       query() { return 'queried' }
@@ -442,7 +444,7 @@ describe('AOP', function () {
 
     const txPredSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(TxTarget, $aop.withMethodTag(kTx)))
+    @Aspect([$aop.forClass(TxTarget, (name, _desc, cls) => reflect.get(cls, Transactional, name) !== undefined)])
     @Profile('aop-method-pred')
     class TxAspect implements MethodAspect<TxTarget> {
       before(jp: JoinPoint<TxTarget>) { txPredSpy(jp.methodName) }
@@ -451,10 +453,10 @@ describe('AOP', function () {
 
     @Injectable()
     class MultiTagTarget {
-      @Tag(kTx, true)
+      @Transactional(true)
       alpha() { return 'a' }
 
-      @Tag(kTx, true)
+      @Transactional(true)
       beta() { return 'b' }
 
       gamma() { return 'c' }
@@ -462,22 +464,20 @@ describe('AOP', function () {
 
     const multiTagSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(MultiTagTarget, $aop.withMethodTag(kTx)))
+    const multiTagPred = (name: string | symbol, _d: any, cls: any) =>
+      reflect.get(cls, Transactional, name) !== undefined
+    @Aspect([$aop.forClass(MultiTagTarget, multiTagPred)])
     @Profile('aop-multi-tag')
     class MultiTagAspect implements MethodAspect<MultiTagTarget> {
       before(jp: JoinPoint<MultiTagTarget>) { multiTagSpy(jp.methodName) }
     }
     void MultiTagAspect
 
-    const kCache = Symbol('cache')
-
-    function Cache(opts: { ttl: number }) {
-      return $aop.createMethodDecorator(kCache, opts)
-    }
+    const CacheAnnotation = createAnnotation<{ ttl: number }>()
 
     @Injectable()
     class CacheTarget {
-      @Cache({ ttl: 60 })
+      @CacheAnnotation({ ttl: 60 })
       fetch() { return 'data' }
 
       noop() { return 'noop' }
@@ -485,43 +485,39 @@ describe('AOP', function () {
 
     const cacheSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(CacheTarget, $aop.withMethodTag(kCache)))
+    @Aspect([$aop.forClass(CacheTarget, (name, _desc, cls) => reflect.get(cls, CacheAnnotation, name) !== undefined)])
     @Profile('aop-method-cache')
     class MethodCacheAspect implements MethodAspect<CacheTarget> {
       around(jp: JoinPoint<CacheTarget>) {
-        const opts = jp.meta!.tags.get(kCache) as { ttl: number }
+        const opts = reflect.get(jp.cls, CacheAnnotation, jp.methodName)!
         cacheSpy(opts.ttl)
         return jp.proceed(...jp.args)
       }
     }
     void MethodCacheAspect
 
-    const kSvcLog = Symbol('svc-log')
+    const SvcLogAnnotation = createAnnotation<{ prefix: string }>()
 
-    function SvcLog(opts: { prefix: string }) {
-      return Tag(kSvcLog, opts)
-    }
-
-    @SvcLog({ prefix: 'REPORT' })
+    @SvcLogAnnotation({ prefix: 'REPORT' })
     @Injectable()
     class ReportSvc {
       generate() { return 'report' }
     }
 
-    const classMetaSpy = vi.fn()
+    const classAnnSpy = vi.fn()
 
-    @Aspect([], $aop.pointcut($aop.matchTag(kSvcLog)))
-    @Profile('aop-class-meta')
-    class ClassMetaAspect implements MethodAspect {
+    @Aspect([$aop.pointcut((_desc, cls) => reflect.get(cls, SvcLogAnnotation) !== undefined)])
+    @Profile('aop-class-ann')
+    class ClassAnnAspect implements MethodAspect {
       around(jp: JoinPoint) {
-        const opts = jp.classMeta!.tags.get(kSvcLog) as { prefix: string }
-        classMetaSpy(opts.prefix)
+        const opts = reflect.get(jp.cls, SvcLogAnnotation)!
+        classAnnSpy(opts.prefix)
         return jp.proceed(...jp.args)
       }
     }
-    void ClassMetaAspect
+    void ClassAnnAspect
 
-    it('should intercept only methods matching the predicate', async function () {
+    it('should intercept only methods matching the annotation predicate', async function () {
       txPredSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-method-pred'] })
@@ -536,7 +532,7 @@ describe('AOP', function () {
       expect(txPredSpy).toHaveBeenCalledWith('save')
     })
 
-    it('should intercept all tagged methods when multiple methods are tagged', async function () {
+    it('should intercept all annotated methods when multiple methods carry the annotation', async function () {
       multiTagSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-multi-tag'] })
@@ -552,7 +548,7 @@ describe('AOP', function () {
       expect(multiTagSpy.mock.calls.map(([m]) => m).sort()).toEqual(['alpha', 'beta'])
     })
 
-    it('should expose method-level decorator config via joinPoint.meta', async function () {
+    it('should expose method-level annotation via jp.annotations inside around hook', async function () {
       cacheSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-method-cache'] })
@@ -567,17 +563,17 @@ describe('AOP', function () {
       expect(cacheSpy).toHaveBeenCalledWith(60)
     })
 
-    it('should expose class-level decorator config via joinPoint.classMeta', async function () {
-      classMetaSpy.mockClear()
+    it('should expose class-level annotation via jp.annotations inside around hook', async function () {
+      classAnnSpy.mockClear()
 
-      const di = new CaffeineIoC({ profiles: ['aop-class-meta'] })
+      const di = new CaffeineIoC({ profiles: ['aop-class-ann'] })
       di.bind(ReportSvc).toSelf()
       await di.init()
 
       di.get(ReportSvc).generate()
 
-      expect(classMetaSpy).toHaveBeenCalledOnce()
-      expect(classMetaSpy).toHaveBeenCalledWith('REPORT')
+      expect(classAnnSpy).toHaveBeenCalledOnce()
+      expect(classAnnSpy).toHaveBeenCalledWith('REPORT')
     })
   })
 
@@ -592,7 +588,7 @@ describe('AOP', function () {
     const patternSpy = vi.fn()
 
     @Profile('aop-pattern-regex')
-    @Aspect([], $aop.forClass(PatternTarget, $aop.matchMethodPattern(/^find/)))
+    @Aspect([$aop.forClass(PatternTarget, $aop.matchMethodPattern(/^find/))])
     class RegexAspect implements MethodAspect<PatternTarget> {
       before(jp: JoinPoint<PatternTarget>) { patternSpy('regex', jp.methodName) }
     }
@@ -601,7 +597,7 @@ describe('AOP', function () {
     const startsSpy = vi.fn()
 
     @Profile('aop-pattern-starts')
-    @Aspect([], $aop.forClass(PatternTarget, $aop.matchMethodStartsWith('save')))
+    @Aspect([$aop.forClass(PatternTarget, $aop.methodHasPrefix('save'))])
     class StartsWithAspect implements MethodAspect<PatternTarget> {
       before(jp: JoinPoint<PatternTarget>) { startsSpy(jp.methodName) }
     }
@@ -610,7 +606,7 @@ describe('AOP', function () {
     const endsSpy = vi.fn()
 
     @Profile('aop-pattern-ends')
-    @Aspect([], $aop.forClass(PatternTarget, $aop.matchMethodEndsWith('Order')))
+    @Aspect([$aop.forClass(PatternTarget, $aop.methodHasSuffix('Order'))])
     class EndsWithAspect implements MethodAspect<PatternTarget> {
       before(jp: JoinPoint<PatternTarget>) { endsSpy(jp.methodName) }
     }
@@ -678,7 +674,7 @@ describe('AOP', function () {
 
     const matchClassSpy = vi.fn()
 
-    @Aspect([], $aop.pointcut($aop.matchClass(SvcA, SvcB), 'run'))
+    @Aspect([$aop.pointcut($aop.matchClass(SvcA, SvcB), 'run')])
     @Profile('aop-match-class')
     class MatchClassAspect implements MethodAspect {
       before(jp: JoinPoint) { matchClassSpy((jp.target as any).constructor.name) }
@@ -701,7 +697,7 @@ describe('AOP', function () {
 
     const matchLabelSpy = vi.fn()
 
-    @Aspect([], $aop.pointcut($aop.matchLabel(kSvcLabel), 'run'))
+    @Aspect([$aop.pointcut($aop.matchLabel(kSvcLabel), 'run')])
     @Profile('aop-match-label')
     class LabelAspect implements MethodAspect {
       before(jp: JoinPoint) { matchLabelSpy((jp.target as any).constructor.name) }
@@ -709,12 +705,12 @@ describe('AOP', function () {
     void LabelAspect
 
     const kTagSvc = Symbol('tag-svc')
-    const kTagMethod = Symbol('tag-method')
+    const TaggedMethodAnn = createAnnotation<true>()
 
     @Tag(kTagSvc, true)
     @Injectable()
     class TaggedSvc {
-      @Tag(kTagMethod, true)
+      @TaggedMethodAnn(true)
       tagged() { return 'tagged' }
 
       untagged() { return 'untagged' }
@@ -722,7 +718,9 @@ describe('AOP', function () {
 
     const combinedSpy = vi.fn()
 
-    @Aspect([], $aop.pointcut($aop.matchTag(kTagSvc), $aop.withMethodTag(kTagMethod)))
+    const combinedMethodPred = (name: string | symbol, _d: any, cls: any) =>
+      reflect.get(cls, TaggedMethodAnn, name) !== undefined
+    @Aspect([$aop.pointcut($aop.matchTag(kTagSvc), combinedMethodPred)])
     @Profile('aop-combined')
     class CombinedAspect implements MethodAspect {
       before(jp: JoinPoint) { combinedSpy(jp.methodName) }
@@ -786,7 +784,7 @@ describe('AOP', function () {
 
     const arraySpy = vi.fn()
 
-    @Aspect([], $aop.forClass(ArrayTargetA, 'run'), $aop.forClass(ArrayTargetB, 'run'))
+    @Aspect([$aop.forClass(ArrayTargetA, 'run'), $aop.forClass(ArrayTargetB, 'run')])
     @Profile('aop-array-target')
     class ArrayTargetAspect implements MethodAspect {
       before(jp: JoinPoint) { arraySpy((jp.target as any).constructor.name) }
@@ -810,15 +808,15 @@ describe('AOP', function () {
   })
 
   describe('logging use case', function () {
-    const kLogKey = Symbol('log')
-    const kLogClass = Symbol('log-class')
+    const LogAnnotation = createAnnotation<{ level: string }>()
+    const LogClassAnnotation = createAnnotation<{ prefix: string }>()
 
     function Log(opts: { level: string }) {
-      return $aop.createMethodDecorator(kLogKey, opts)
+      return LogAnnotation(opts)
     }
 
     function LogClass(opts: { prefix: string }) {
-      return Tag(kLogClass, opts)
+      return LogClassAnnotation(opts)
     }
 
     @Injectable()
@@ -837,7 +835,7 @@ describe('AOP', function () {
     const logTimingSpy = vi.fn()
     const logLevelSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(LogTarget, 'process'))
+    @Aspect([$aop.forClass(LogTarget, 'process')])
     @Profile('aop-log-entry-exit')
     class LogEntryExitAspect implements MethodAspect<LogTarget> {
       before(jp: JoinPoint<LogTarget>) { logEntrySpy(jp.methodName, jp.args) }
@@ -849,7 +847,7 @@ describe('AOP', function () {
     }
     void LogEntryExitAspect
 
-    @Aspect([], $aop.forClass(LogTarget, 'fail'))
+    @Aspect([$aop.forClass(LogTarget, 'fail')])
     @Profile('aop-log-error')
     class LogErrorAspect implements MethodAspect<LogTarget> {
       afterThrow(jp: JoinPoint<LogTarget>, error: Error) {
@@ -859,7 +857,7 @@ describe('AOP', function () {
     }
     void LogErrorAspect
 
-    @Aspect([], $aop.forClass(LogTarget, 'process'))
+    @Aspect([$aop.forClass(LogTarget, 'process')])
     @Profile('aop-log-timing')
     class LogTimingAspect implements MethodAspect<LogTarget> {
       around(jp: JoinPoint<LogTarget>) {
@@ -871,11 +869,11 @@ describe('AOP', function () {
     }
     void LogTimingAspect
 
-    @Aspect([], $aop.forClass(LogTarget, $aop.withMethodTag(kLogKey)))
+    @Aspect([$aop.forClass(LogTarget, (name, _desc, cls) => reflect.get(cls, LogAnnotation, name) !== undefined)])
     @Profile('aop-log-level')
     class LogLevelAspect implements MethodAspect<LogTarget> {
       before(jp: JoinPoint<LogTarget>) {
-        const opts = jp.meta!.tags.get(kLogKey) as { level: string }
+        const opts = reflect.get(jp.cls, LogAnnotation, jp.methodName)!
         logLevelSpy(jp.methodName, opts.level)
       }
     }
@@ -889,11 +887,11 @@ describe('AOP', function () {
 
     const classLogSpy = vi.fn()
 
-    @Aspect([], $aop.pointcut($aop.matchTag(kLogClass)))
+    @Aspect([$aop.pointcut((_desc, cls) => reflect.get(cls, LogClassAnnotation) !== undefined)])
     @Profile('aop-log-class')
     class ClassLogAspect implements MethodAspect {
       before(jp: JoinPoint) {
-        const opts = jp.classMeta!.tags.get(kLogClass) as { prefix: string }
+        const opts = reflect.get(jp.cls, LogClassAnnotation)!
         classLogSpy(opts.prefix, jp.methodName)
       }
     }
@@ -938,7 +936,7 @@ describe('AOP', function () {
       expect(logTimingSpy).toHaveBeenCalledWith('process', true)
     })
 
-    it('should read log level from method decorator config via joinPoint.meta', async function () {
+    it('should read log level from method annotation via jp.annotations', async function () {
       logLevelSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-level'] })
@@ -953,7 +951,7 @@ describe('AOP', function () {
       expect(logLevelSpy).toHaveBeenCalledWith('process', 'info')
     })
 
-    it('should read log prefix from class decorator config via joinPoint.classMeta', async function () {
+    it('should read log prefix from class annotation via jp.annotations', async function () {
       classLogSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-class'] })
@@ -979,7 +977,7 @@ describe('AOP', function () {
     const asyncAfterSpy = vi.fn()
     const asyncAfterFailSpy = vi.fn()
 
-    @Aspect([], $aop.forClass(AsyncHookTarget, 'compute'))
+    @Aspect([$aop.forClass(AsyncHookTarget, 'compute')])
     @Profile('aop-async-after-return')
     class AsyncAfterReturnAspect implements MethodAspect<AsyncHookTarget> {
       afterReturn(_jp: JoinPoint<AsyncHookTarget>, result: unknown) {
@@ -989,7 +987,7 @@ describe('AOP', function () {
     }
     void AsyncAfterReturnAspect
 
-    @Aspect([], $aop.forClass(AsyncHookTarget, 'reject'))
+    @Aspect([$aop.forClass(AsyncHookTarget, 'reject')])
     @Profile('aop-async-after-throw')
     class AsyncAfterThrowAspect implements MethodAspect<AsyncHookTarget> {
       afterThrow(_jp: JoinPoint<AsyncHookTarget>, error: Error) {
@@ -998,7 +996,7 @@ describe('AOP', function () {
     }
     void AsyncAfterThrowAspect
 
-    @Aspect([], $aop.forClass(AsyncHookTarget, 'compute'))
+    @Aspect([$aop.forClass(AsyncHookTarget, 'compute')])
     @Profile('aop-async-after')
     class AsyncAfterAspect implements MethodAspect<AsyncHookTarget> {
       after(_jp: JoinPoint<AsyncHookTarget>, result: unknown, error: Error | undefined) {
@@ -1007,7 +1005,7 @@ describe('AOP', function () {
     }
     void AsyncAfterAspect
 
-    @Aspect([], $aop.forClass(AsyncHookTarget, 'reject'))
+    @Aspect([$aop.forClass(AsyncHookTarget, 'reject')])
     @Profile('aop-async-after-fail')
     class AsyncAfterFailAspect implements MethodAspect<AsyncHookTarget> {
       afterThrow() { /* swallow */ }
@@ -1081,7 +1079,7 @@ describe('AOP', function () {
 
     @Profile('aop-non-singleton')
     @Lifetime(Scopes.TRANSIENT)
-    @Aspect([], $aop.forClass(NonSingletonTarget, 'run'))
+    @Aspect([$aop.forClass(NonSingletonTarget, 'run')])
     class NonSingletonAspect implements MethodAspect {}
     void NonSingletonAspect
 
@@ -1115,7 +1113,7 @@ describe('AOP', function () {
     }
 
     @Profile('aop-provider')
-    @Aspect([$i.provide(InvocationToken)], $aop.forClass(ProviderTarget, 'run'))
+    @Aspect([$aop.forClass(ProviderTarget, 'run')], [$i.provide(InvocationToken)])
     class ProviderAspect implements MethodAspect {
       constructor(private readonly token: Provider<InvocationToken>) {}
       before(): void {
@@ -1304,5 +1302,304 @@ describe('AOP', function () {
       di.get(AsyncFactoryTarget).run()
       expect(asyncFactorySpy).toHaveBeenCalledOnce()
     })
+  })
+})
+
+// ─── multiple aspects on the same method ─────────────────────────────────────
+
+describe('multiple aspects on the same method', function () {
+  class MultiAspectTarget {
+    add(a: number, b: number): number { return a + b }
+    fail(): never { throw new Error('multi-fail') }
+    async asyncFail(): Promise<never> { throw new Error('async-multi-fail') }
+  }
+
+  // 1. no explicit order — both fire
+  const noOrderLog: string[] = []
+
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-no-order')
+  class NoOrderAspectA implements MethodAspect<MultiAspectTarget> {
+    before() { noOrderLog.push('A-before') }
+    after() { noOrderLog.push('A-after') }
+  }
+  void NoOrderAspectA
+
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-no-order')
+  class NoOrderAspectB implements MethodAspect<MultiAspectTarget> {
+    before() { noOrderLog.push('B-before') }
+    after() { noOrderLog.push('B-after') }
+  }
+  void NoOrderAspectB
+
+  it('both aspects run when no @Order is specified', async function () {
+    noOrderLog.length = 0
+
+    const di = new CaffeineIoC({ profiles: ['aop-multi-no-order'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    di.get(MultiAspectTarget).add(1, 2)
+
+    expect(noOrderLog).toContain('A-before')
+    expect(noOrderLog).toContain('B-before')
+    expect(noOrderLog).toContain('A-after')
+    expect(noOrderLog).toContain('B-after')
+  })
+
+  // 2. two around hooks both calling proceed
+  @Order(1)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-around')
+  class OuterAroundAspect implements MethodAspect<MultiAspectTarget> {
+    around(jp: JoinPoint<MultiAspectTarget>) {
+      return (jp.proceed(...jp.args) as number) + 100
+    }
+  }
+  void OuterAroundAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-around')
+  class InnerAroundAspect implements MethodAspect<MultiAspectTarget> {
+    around(jp: JoinPoint<MultiAspectTarget>) {
+      return (jp.proceed(...jp.args) as number) * 2
+    }
+  }
+  void InnerAroundAspect
+
+  it('two around hooks both calling proceed compose in onion order', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-multi-around'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    // target: 1+2=3, inner*2=6, outer+100=106
+    expect(di.get(MultiAspectTarget).add(1, 2)).toBe(106)
+  })
+
+  // 3. afterReturn chain — inner transforms first, outer sees transformed value
+  @Order(1)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-after-return')
+  class OuterAfterReturnAspect implements MethodAspect<MultiAspectTarget> {
+    afterReturn(_jp: JoinPoint<MultiAspectTarget>, result: unknown) {
+      return (result as number) * 2
+    }
+  }
+  void OuterAfterReturnAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-after-return')
+  class InnerAfterReturnAspect implements MethodAspect<MultiAspectTarget> {
+    afterReturn(_jp: JoinPoint<MultiAspectTarget>, result: unknown) {
+      return (result as number) + 1
+    }
+  }
+  void InnerAfterReturnAspect
+
+  it('afterReturn values chain: inner runs first, outer sees inner-transformed result', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-multi-after-return'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    // target: 1+2=3, inner+1=4, outer*2=8
+    expect(di.get(MultiAspectTarget).add(1, 2)).toBe(8)
+  })
+
+  // 4. before arg mutation is visible to inner aspect
+  const argMutationLog: number[][] = []
+
+  @Order(1)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-arg-mutation')
+  class ArgMutatorAspect implements MethodAspect<MultiAspectTarget> {
+    before(jp: JoinPoint<MultiAspectTarget>) {
+      jp.args = [99, 1]
+    }
+  }
+  void ArgMutatorAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-arg-mutation')
+  class ArgObserverAspect implements MethodAspect<MultiAspectTarget> {
+    before(jp: JoinPoint<MultiAspectTarget>) {
+      argMutationLog.push([...jp.args] as number[])
+    }
+  }
+  void ArgObserverAspect
+
+  it('outer before arg mutation is visible to inner before', async function () {
+    argMutationLog.length = 0
+
+    const di = new CaffeineIoC({ profiles: ['aop-multi-arg-mutation'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    const result = di.get(MultiAspectTarget).add(1, 2)
+
+    expect(argMutationLog).toHaveLength(1)
+    expect(argMutationLog[0]).toEqual([99, 1])
+    expect(result).toBe(100)
+  })
+
+  // 5. outer around short-circuits — inner never runs
+  const shortCircuitLog: string[] = []
+
+  @Order(1)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-short-circuit')
+  class ShortCircuitOuterAspect implements MethodAspect<MultiAspectTarget> {
+    around() { return -1 }
+  }
+  void ShortCircuitOuterAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-multi-short-circuit')
+  class ShortCircuitInnerAspect implements MethodAspect<MultiAspectTarget> {
+    before() { shortCircuitLog.push('inner-before') }
+    after() { shortCircuitLog.push('inner-after') }
+  }
+  void ShortCircuitInnerAspect
+
+  it('outer around without proceed short-circuits: inner hooks never fire', async function () {
+    shortCircuitLog.length = 0
+
+    const di = new CaffeineIoC({ profiles: ['aop-multi-short-circuit'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    expect(di.get(MultiAspectTarget).add(1, 2)).toBe(-1)
+    expect(shortCircuitLog).toEqual([])
+  })
+
+  // 6. inner swallows error — outer after sees undefined result, no error
+  const swallowOuterAfterLog: [unknown, Error | undefined][] = []
+
+  @Order(1)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'fail')])
+  @Profile('aop-multi-swallow-inner')
+  class SwallowOuterAspect implements MethodAspect<MultiAspectTarget> {
+    after(_jp: JoinPoint<MultiAspectTarget>, result: unknown, error: Error | undefined) {
+      swallowOuterAfterLog.push([result, error])
+    }
+  }
+  void SwallowOuterAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'fail')])
+  @Profile('aop-multi-swallow-inner')
+  class SwallowInnerAspect implements MethodAspect<MultiAspectTarget> {
+    afterThrow() { /* swallow */ }
+  }
+  void SwallowInnerAspect
+
+  it('when inner swallows error, outer after sees result=undefined and no error', async function () {
+    swallowOuterAfterLog.length = 0
+
+    const di = new CaffeineIoC({ profiles: ['aop-multi-swallow-inner'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    expect(() => di.get(MultiAspectTarget).fail()).not.toThrow()
+    expect(swallowOuterAfterLog).toHaveLength(1)
+    const [result, error] = swallowOuterAfterLog[0]
+    expect(result).toBeUndefined()
+    expect(error).toBeUndefined()
+  })
+
+  // 7. inner has no afterThrow, error propagates to outer which swallows it
+  @Order(1)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'fail')])
+  @Profile('aop-multi-outer-swallow')
+  class OuterSwallowAspect implements MethodAspect<MultiAspectTarget> {
+    afterThrow() { /* swallow */ }
+  }
+  void OuterSwallowAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'fail')])
+  @Profile('aop-multi-outer-swallow')
+  class InnerNoHandlerAspect implements MethodAspect<MultiAspectTarget> {
+    before() { /* noop */ }
+  }
+  void InnerNoHandlerAspect
+
+  it('error not caught by inner propagates to outer which can swallow it', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-multi-outer-swallow'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    expect(() => di.get(MultiAspectTarget).fail()).not.toThrow()
+  })
+
+  // 8. async afterThrow that rejects must propagate (regression for bug fix)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'asyncFail')])
+  @Profile('aop-async-after-throw-rethrow')
+  class AsyncRethrowAspect implements MethodAspect<MultiAspectTarget> {
+    async afterThrow(_jp: JoinPoint<MultiAspectTarget>, err: Error) {
+      throw err
+    }
+  }
+  void AsyncRethrowAspect
+
+  it('async afterThrow that rejects must propagate the rejection to the caller', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-async-after-throw-rethrow'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    await expect(di.get(MultiAspectTarget).asyncFail()).rejects.toThrow('async-multi-fail')
+  })
+
+  // 9. 3 aspects — full onion order
+  const threeAspectLog: string[] = []
+
+  @Order(1)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-three-aspects')
+  class ThreeOuterAspect implements MethodAspect<MultiAspectTarget> {
+    before() { threeAspectLog.push('outer-before') }
+    after() { threeAspectLog.push('outer-after') }
+  }
+  void ThreeOuterAspect
+
+  @Order(5)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-three-aspects')
+  class ThreeMidAspect implements MethodAspect<MultiAspectTarget> {
+    before() { threeAspectLog.push('mid-before') }
+    after() { threeAspectLog.push('mid-after') }
+  }
+  void ThreeMidAspect
+
+  @Order(10)
+  @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
+  @Profile('aop-three-aspects')
+  class ThreeInnerAspect implements MethodAspect<MultiAspectTarget> {
+    before() { threeAspectLog.push('inner-before') }
+    after() { threeAspectLog.push('inner-after') }
+  }
+  void ThreeInnerAspect
+
+  it('3 aspects execute in full onion order: outer-mid-inner before, inner-mid-outer after', async function () {
+    threeAspectLog.length = 0
+
+    const di = new CaffeineIoC({ profiles: ['aop-three-aspects'] })
+    di.bind(MultiAspectTarget).toSelf()
+    await di.init()
+
+    di.get(MultiAspectTarget).add(1, 2)
+
+    expect(threeAspectLog).toEqual([
+      'outer-before',
+      'mid-before',
+      'inner-before',
+      'inner-after',
+      'mid-after',
+      'outer-after',
+    ])
   })
 })

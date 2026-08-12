@@ -22,6 +22,7 @@ export function Tag(key: symbol, value: unknown) {
   notNil(value, `@${Tag.name}(): parameter value is required.`)
 
   const tags = new Map([[key, value]])
+
   return defineClassOrMemberDecorator(
     (target, ctx) => extendInjectableAttributes(ctx.metadata, target, config => config.tags(tags)),
     ctx => extendMemberInjectableAttributes(ctx.metadata, ctx.name!, config => config.tags(tags)),

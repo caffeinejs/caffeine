@@ -1,4 +1,4 @@
-import { Binding, newBinding, type MethodMeta } from '../../binding.js'
+import { Binding, newBinding } from '../../binding.js'
 import { Conditional } from '../../conditional.js'
 import { ErrInvalidDecorator, ErrRepeatedInjectableConfiguration } from '../../errors.js'
 import { Factory, AsyncFactory } from '../../factory.js'
@@ -37,7 +37,6 @@ export class DecoratedBindingConfig {
   #order?: number
   #async?: boolean
   #metadataMerged?: boolean
-  #methodsMeta?: Map<Identifier, MethodMeta>
 
   constructor(key?: Key) {
     this.#key = key
@@ -69,11 +68,6 @@ export class DecoratedBindingConfig {
 
   get getTags(): Map<symbol, unknown> | undefined {
     return this.#tags
-  }
-
-  methodsMeta(meta: Map<Identifier, MethodMeta>): this {
-    this.#methodsMeta = meta
-    return this
   }
 
   profiles(profiles: Identifier | Identifier[]): this {
@@ -320,7 +314,6 @@ export class DecoratedBindingConfig {
       order: this.#order,
       async: this.#async,
       ctx: undefined,
-      memberMeta: this.#methodsMeta,
     })
   }
 }
@@ -401,20 +394,6 @@ export class MemberMetadata {
 
     if (this.#preDestroy) {
       config.preDestroy(this.#preDestroy)
-    }
-
-    if (this.#members) {
-      const meta = new Map<Identifier, MethodMeta>()
-      for (const [name, memberConfig] of this.#members) {
-        const labels = memberConfig.getLabels
-        const tags = memberConfig.getTags
-        if ((labels && labels.length > 0) || (tags && tags.size > 0)) {
-          meta.set(name, { labels: labels ?? [], tags: tags ?? new Map() })
-        }
-      }
-      if (meta.size > 0) {
-        config.methodsMeta(meta)
-      }
     }
   }
 }

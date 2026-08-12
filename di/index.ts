@@ -4,13 +4,16 @@
  * @packageDocumentation
  */
 
-export type { ClassPredicate, JoinPoint, MethodAspect, MethodKeys, MethodPredicate, Pointcut } from './aop.js'
+import './_polyfill.js'
+
+export { createAnnotation } from './annotations.js'
+export type { JoinPoint, MethodAspect, Pointcut, PointcutClassPredicate, PointcutMethodPredicate } from './aop.js'
 export { $aop } from './aop.js'
 export type { AOPBinder } from './aop_binder.js'
 export type { AOPBinderOptions } from './aop_binder_options.js'
 export type { Binder } from './binder.js'
 export type { BinderOptions } from './binder_options.js'
-export type { Binding, MethodMeta } from './binding.js'
+export type { Binding } from './binding.js'
 export type { Conditional, ConditionContext } from './conditional.js'
 export { CaffeineIoC } from './container.js'
 export type * from './container_interface.js'
@@ -37,6 +40,7 @@ export { kModule, mod, type Module } from './module.js'
 export type { PostProcessor } from './post_processor.js'
 export type { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 export type { Provider } from './provider.js'
+export { reflect } from './reflect.js'
 export type { Refresher, SelfRefreshable } from './refresher.js'
 export { kSelfRefresh } from './refresher.js'
 export type { ResolutionContext } from './resolution_context.js'

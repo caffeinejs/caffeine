@@ -15,6 +15,7 @@ export default defineConfig({
       './testing/vitest.config.ts',
       './plugins/eslint/vitest.config.ts',
       './examples/03-petstore/vitest.config.ts',
+      './test/vitest.config.ts',
     ],
   },
 })

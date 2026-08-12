@@ -1,4 +1,4 @@
-import { kAspectLabel, kAspectPointcuts, incrementAspectCount, type Pointcut } from '../aop.js'
+import { kAspectLabel, kAspectPointcuts, type Pointcut } from '../aop.js'
 import { ErrInvalidDecorator } from '../errors.js'
 import type { Injection } from '../injection.js'
 import { Scopes } from '../scope.js'
@@ -19,29 +19,26 @@ import { defineInjectable } from './registrar/index.js'
  *
  * @example
  * ```ts
- * @Aspect([], $aop.forClass(UserService, 'findUser'))
+ * @Aspect([$aop.forClass(UserService, 'findUser')])
  * class LoggingAspect implements MethodAspect<UserService> { ... }
  *
  * @Order(1)
  * @Aspect(
+ *   [$aop.forClass(OrderService), $aop.pointcut($aop.matchLabel(kService), $aop.matchMethod('save'))],
  *   [Logger],
- *   $aop.forClass(OrderService),
- *   $aop.pointcut($aop.matchLabel(kService), $aop.matchMethod('save')),
  * )
  * class TimingAspect implements MethodAspect {
  *   constructor(private log: Logger) {}
  * }
  * ```
  */
-export function Aspect(deps: Injection[], ...pointcuts: Pointcut[]) {
+export function Aspect(pointcuts: Pointcut[], deps: Injection[] = []) {
   return (aspectClass: Ctor, context: ClassDecoratorContext): void => {
     if (pointcuts.length === 0) {
       throw new ErrInvalidDecorator(
         `Cannot configure @Aspect on "${String(context.name)}": at least one pointcut is required`,
       )
     }
-
-    incrementAspectCount()
 
     defineInjectable(context.metadata, aspectClass, config => {
       config

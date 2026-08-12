@@ -1,47 +1,40 @@
 import type { BindingDescriptor } from './container_interface.js'
-import type { MethodMeta, Binding } from './binding.js'
 import type { PostProcessor } from './post_processor.js'
 import type { ResolutionContext } from './resolution_context.js'
 import type { Key } from './key.js'
-import { keyStr } from './key.js'
-import { ErrInvalidAspect } from './errors.js'
-import { Scopes } from './scope.js'
-import { Tag } from './decorators/tag.js'
+import { type AnyClass } from './types.js'
 
-// ── Public types ──────────────────────────────────────────────────────────────
-
-/**
- * Utility type that extracts only method keys from `T`.
- * Used to provide type-safe method name hints for `@Aspect`.
- */
-export type MethodKeys<T> = {
-  [K in keyof T]: T[K] extends (...args: any[]) => any ? K : never
-}[keyof T]
+export const kAspectLabel = Symbol('@caffeinejs/di:aspect')
+export const kAspectPointcuts = Symbol('@caffeinejs/di:aspect-pointcuts')
 
 /**
  * Predicate that decides whether a method should be intercepted.
- * Receives the method name and its decorator metadata (undefined when no `@Tag`/`@Label` is present).
+ * Receives the method name, the class binding descriptor, and the class constructor.
+ * Evaluated once per method at weave time — not on every call.
  *
  * @example
  * ```ts
- * const kTx = Symbol('tx')
- * // intercept only methods tagged with kTx
- * const onlyTx: MethodPredicate = (_name, meta) => meta?.tags.has(kTx) ?? false
+ * const Transactional = createClassMemberAnnotation<true>()
+ * // intercept only methods annotated with @Transactional
+ * const onlyTx: MethodPredicate = (name, _desc, cls) =>
+ *   reflect.get(cls, Transactional, name) !== undefined
  * ```
  */
-export type MethodPredicate = (methodName: string | symbol, meta: MethodMeta | undefined) => boolean
+export type PointcutMethodPredicate = (member: string | symbol, descriptor: BindingDescriptor, cls: AnyClass) => boolean
 
 /**
  * Predicate that decides whether a class binding should be intercepted.
- * Used with `@AspectOn` for dynamic class discovery at weave time.
+ * Receives the binding descriptor and the class constructor.
  *
  * @example
  * ```ts
- * // intercept all classes labelled with kService
- * const onlyServices: ClassPredicate = d => d.binding.labels.includes(kService)
+ * const Service = createClassAnnotation<{ name: string }>()
+ * // intercept all classes annotated with @Service
+ * const onlyServices: ClassPredicate = (_d, cls) =>
+ *   reflect.get(cls, Service) !== undefined
  * ```
  */
-export type ClassPredicate = (descriptor: BindingDescriptor) => boolean
+export type PointcutClassPredicate = (descriptor: BindingDescriptor, cls: AnyClass) => boolean
 
 /**
  * Describes the execution context for a single intercepted method invocation.
@@ -52,10 +45,12 @@ export interface JoinPoint<T = unknown> {
   readonly methodName: string | symbol
   /** The target instance on which the method is being invoked. */
   readonly target: T
-  /** Method-level decorator metadata (`@Tag`/`@Label` on this specific method). Undefined when none present. */
-  readonly meta: MethodMeta | undefined
-  /** Class-level decorator metadata (`@Tag`/`@Label` on the target class). Undefined when none present. */
-  readonly classMeta: MethodMeta | undefined
+  /**
+   * The class constructor for the intercepted instance.
+   * Use with `reflect.get(jp.cls, annotation)` or `reflect.get(jp.cls, annotation, jp.methodName)`
+   * to read annotation values from within a hook.
+   */
+  readonly cls: abstract new (...args: any[]) => T
   /** Current argument list — the `before` hook may mutate this array to change args. */
   args: unknown[]
   /** Calls the next interceptor in the chain, or the original method if last. Available in `before` and `around`. */
@@ -84,44 +79,20 @@ export interface MethodAspect<T = unknown> {
   after?(joinPoint: JoinPoint<T>, result: unknown, error: Error | undefined): void | Promise<void>
 }
 
-// ── Internal symbols (exported for aspect.ts and container.ts) ──────────────
-
-/** Label applied to every aspect binding — used to discover aspects at weave time. */
-export const kAspectLabel = Symbol('caffeine:aspect')
-
-/** Tag key on an aspect binding — holds the list of target/method registrations. */
-export const kAspectPointcuts = Symbol('caffeine:aspect-pointcuts')
-
-// ── Aspect presence flag (gate in container.compile) ─────────────────────────
-
-let _aspectCount = 0
-
-export function incrementAspectCount(): void {
-  _aspectCount++
-}
-
-export function hasAnyAspects(): boolean {
-  return _aspectCount > 0
-}
-
-// ── Pointcut ──────────────────────────────────────────────────────────────
-
 /**
  * Describes which class(es) and methods an aspect should intercept.
  * Created via `$aop.forClass` or `$aop.pointcut`.
  */
 export interface Pointcut {
-  target: Function | ClassPredicate
-  methods: Set<string | symbol> | MethodPredicate | null
+  target: Function | PointcutClassPredicate
+  methods: Set<string | symbol> | PointcutMethodPredicate | null
 }
 
 interface WeavingEntry {
   aspectKey: Key
-  methods: Set<string | symbol> | MethodPredicate | null
+  methods: Set<string | symbol> | PointcutMethodPredicate | null
   order: number | undefined
 }
-
-// ── AOPPostProcessor ──────────────────────────────────────────────────────────
 
 /**
  * PostProcessor that weaves registered aspects onto resolved instances via ES6 Proxy.
@@ -159,9 +130,7 @@ export class AOPPostProcessor implements PostProcessor {
   }
 }
 
-// ── Weaving map ───────────────────────────────────────────────────────────────
-
-function isClassPredicate(f: Function): f is ClassPredicate {
+function isClassPredicate(f: Function): f is PointcutClassPredicate {
   return f.prototype === undefined
 }
 
@@ -191,7 +160,14 @@ function buildWeavingMap(ctx: ResolutionContext): Map<Function, WeavingEntry[]> 
       const weavingEntry: WeavingEntry = { aspectKey: key, methods: entry.methods, order: binding.order }
 
       if (isClassPredicate(entry.target as Function)) {
-        for (const desc of ctx.container.getBindingsBy(entry.target as ClassPredicate)) {
+        const predicate = entry.target as PointcutClassPredicate
+        for (const desc of ctx.container.getBindingsBy(d => {
+          const cls = d.binding.type
+          if (!cls) {
+            return false
+          }
+          return predicate(d, cls as AnyClass)
+        })) {
           const ctor = desc.binding.type ?? (typeof desc.key === 'function' ? desc.key as Function : null)
           if (!ctor) {
             continue
@@ -211,11 +187,9 @@ function buildWeavingMap(ctx: ResolutionContext): Map<Function, WeavingEntry[]> 
   return map
 }
 
-// ── Proxy weaving ─────────────────────────────────────────────────────────────
-
 interface ResolvedEntry {
   aspect: MethodAspect
-  methods: Set<string | symbol> | MethodPredicate | null
+  methods: Set<string | symbol> | PointcutMethodPredicate | null
 }
 
 function weave(ctx: ResolutionContext, instance: unknown, entries: WeavingEntry[]): unknown {
@@ -224,13 +198,9 @@ function weave(ctx: ResolutionContext, instance: unknown, entries: WeavingEntry[
     methods: e.methods,
   }))
 
-  const memberMeta = ctx.binding.memberMeta
-  const classMeta: MethodMeta | undefined
-    = (ctx.binding.labels.length > 0 || ctx.binding.tags.size > 0)
-      ? { labels: ctx.binding.labels, tags: ctx.binding.tags }
-      : undefined
-
-  const methodMap = buildMethodMap(instance, resolved, memberMeta)
+  const descriptor: BindingDescriptor = { key: ctx.key, binding: ctx.binding }
+  const cls = ctx.binding.type as AnyClass
+  const methodMap = buildMethodMap(instance, resolved, descriptor, cls)
 
   return new Proxy(instance as object, {
     get(target: any, prop: string | symbol, receiver: unknown): unknown {
@@ -242,7 +212,7 @@ function weave(ctx: ResolutionContext, instance: unknown, entries: WeavingEntry[
         return Reflect.get(target, prop, receiver)
       }
       return function (...args: unknown[]) {
-        return executeChain(target, prop, args, aspects, memberMeta?.get(prop), classMeta)
+        return executeChain(target, prop, args, aspects, cls)
       }
     },
   })
@@ -251,7 +221,8 @@ function weave(ctx: ResolutionContext, instance: unknown, entries: WeavingEntry[
 function buildMethodMap(
   instance: unknown,
   entries: ResolvedEntry[],
-  memberMeta?: Map<string | symbol, MethodMeta>,
+  descriptor: BindingDescriptor,
+  cls: AnyClass,
 ): Map<string | symbol, MethodAspect[]> {
   const map = new Map<string | symbol, MethodAspect[]>()
   const hasPredicates = entries.some(e => typeof e.methods === 'function')
@@ -269,11 +240,6 @@ function buildMethodMap(
       }
       proto = Object.getPrototypeOf(proto)
     }
-    if (memberMeta) {
-      for (const name of memberMeta.keys()) {
-        candidates.add(name)
-      }
-    }
   }
 
   for (const e of entries) {
@@ -290,7 +256,7 @@ function buildMethodMap(
       if (e.methods === null) {
         aspects.push(e.aspect)
       } else if (typeof e.methods === 'function') {
-        if (e.methods(method, memberMeta?.get(method))) {
+        if (e.methods(method, descriptor, cls)) {
           aspects.push(e.aspect)
         }
       } else if (e.methods.has(method)) {
@@ -305,23 +271,19 @@ function buildMethodMap(
   return map
 }
 
-// ── Chain execution ───────────────────────────────────────────────────────────
-
 function executeChain(
   target: any,
   methodName: string | symbol,
   args: unknown[],
   aspects: MethodAspect[],
-  meta: MethodMeta | undefined,
-  classMeta: MethodMeta | undefined,
+  cls: AnyClass,
 ): unknown {
   let nextI = 0
 
   const jp: JoinPoint<any> = {
     methodName,
     target,
-    meta,
-    classMeta,
+    cls,
     args,
     proceed(...n: unknown[]) {
       return runStep(nextI, n.length ? n : jp.args)
@@ -373,10 +335,14 @@ function handleError(aspect: MethodAspect, joinPoint: JoinPoint, err: Error): un
   if (aspect.afterThrow) {
     const maybeThrowAsync = aspect.afterThrow(joinPoint, err)
     if (maybeThrowAsync instanceof Promise) {
-      // Call after regardless of whether afterThrow resolved or rejected
+      // Call after regardless of whether afterThrow resolved or rejected;
+      // if afterThrow rejects, propagate that rejection so the caller sees it.
       return maybeThrowAsync.then(
         () => { aspect.after?.(joinPoint, undefined, err) },
-        () => { aspect.after?.(joinPoint, undefined, err) },
+        e => {
+          aspect.after?.(joinPoint, undefined, e as Error)
+          throw e
+        },
       )
     }
     aspect.after?.(joinPoint, undefined, err)
@@ -427,16 +393,17 @@ function runAspect(aspect: MethodAspect, joinPoint: JoinPoint): unknown {
   return run()
 }
 
-// ── $aop helpers ──────────────────────────────────────────────────────────────
+// Pointcut helper functions
+// ---
 
-type MethodSelector = string | symbol | (string | symbol)[] | MethodPredicate
+type MethodSelector = string | symbol | (string | symbol)[] | PointcutMethodPredicate
 
-function normalizeMethods(methods?: MethodSelector): Set<string | symbol> | MethodPredicate | null {
+function normalizeMethods(methods?: MethodSelector): Set<string | symbol> | PointcutMethodPredicate | null {
   if (methods === undefined) {
     return null
   }
   if (typeof methods === 'function') {
-    return methods as MethodPredicate
+    return methods as PointcutMethodPredicate
   }
   return new Set(Array.isArray(methods) ? methods : [methods as string | symbol])
 }
@@ -449,62 +416,38 @@ function forClass(
 }
 
 function pointcut(
-  predicate: ClassPredicate,
+  predicate: PointcutClassPredicate,
   methods?: MethodSelector,
 ): Pointcut {
   return { target: predicate, methods: normalizeMethods(methods) }
 }
 
-function matchMethod(...names: (string | symbol)[]): MethodPredicate {
+function matchMethod(...names: (string | symbol)[]): PointcutMethodPredicate {
   return methodName => names.includes(methodName)
 }
 
-function matchClass(...ctors: Function[]): ClassPredicate {
-  return d => ctors.some(c => d.binding.type === c || d.key === c)
+function matchClass(...ctors: Function[]): PointcutClassPredicate {
+  return (d, _cls) => ctors.some(c => d.binding.type === c || d.key === c)
 }
 
-function matchLabel(label: symbol): ClassPredicate {
-  return d => d.binding.labels.includes(label)
+function matchLabel(label: symbol): PointcutClassPredicate {
+  return (d, _cls) => d.binding.labels.includes(label)
 }
 
-function matchTag(key: symbol, value?: unknown): ClassPredicate {
-  return d => d.binding.tags.has(key) && (value === undefined || d.binding.tags.get(key) === value)
+function matchTag(key: symbol, value?: unknown): PointcutClassPredicate {
+  return (d, _cls) => d.binding.tags.has(key) && (value === undefined || d.binding.tags.get(key) === value)
 }
 
-function withMethodTag(key: symbol, value?: unknown): MethodPredicate {
-  return (_name, meta) => meta?.tags.has(key) === true && (value === undefined || meta.tags.get(key) === value)
-}
-
-function withMethodLabel(label: symbol): MethodPredicate {
-  return (_name, meta) => meta?.labels.includes(label) === true
-}
-
-function matchMethodPattern(regex: RegExp): MethodPredicate {
+function matchMethodPattern(regex: RegExp): PointcutMethodPredicate {
   return methodName => typeof methodName === 'string' && regex.test(methodName)
 }
 
-function matchMethodStartsWith(prefix: string): MethodPredicate {
+function methodHasPrefix(prefix: string): PointcutMethodPredicate {
   return methodName => typeof methodName === 'string' && methodName.startsWith(prefix)
 }
 
-function matchMethodEndsWith(suffix: string): MethodPredicate {
+function methodHasSuffix(suffix: string): PointcutMethodPredicate {
   return methodName => typeof methodName === 'string' && methodName.endsWith(suffix)
-}
-
-/**
- * Returns a method decorator that tags the decorated method with `key` and `metadata`,
- * making it discoverable by `MethodPredicate` helpers and accessible via `JoinPoint.meta` at runtime.
- *
- * @example
- * ```ts
- * const kCache = Symbol('cache')
- * function Cache(opts: { ttl: number }) {
- *   return $aop.createMethodDecorator(kCache, opts)
- * }
- * ```
- */
-function createMethodDecorator<T>(key: symbol, metadata: T) {
-  return Tag(key, metadata)
 }
 
 export const $aop = {
@@ -512,34 +455,9 @@ export const $aop = {
   pointcut,
   matchMethod,
   matchMethodPattern,
-  matchMethodStartsWith,
-  matchMethodEndsWith,
+  methodHasPrefix,
+  methodHasSuffix,
   matchClass,
   matchLabel,
   matchTag,
-  withMethodTag,
-  withMethodLabel,
-  createMethodDecorator,
-}
-
-// ── Compile-time aspect validation ────────────────────────────────────────────
-
-export function checkAspects(bindings: Iterable<[Key, Binding]>): void {
-  for (const [key, binding] of bindings) {
-    if (!binding.labels.includes(kAspectLabel)) {
-      continue
-    }
-    const pointcuts = binding.tags.get(kAspectPointcuts) as Pointcut[] | undefined
-    if (!pointcuts || pointcuts.length === 0) {
-      throw new ErrInvalidAspect(
-        `Cannot compile aspect "${keyStr(key)}": at least one pointcut is required`,
-      )
-    }
-    const scope = binding.scopeID
-    if (scope !== undefined && scope !== Scopes.SINGLETON) {
-      throw new ErrInvalidAspect(
-        `Cannot compile aspect "${keyStr(key)}": aspects must be singleton scoped`,
-      )
-    }
-  }
 }

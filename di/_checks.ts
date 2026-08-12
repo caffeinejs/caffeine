@@ -1,9 +1,11 @@
+import { kAspectLabel, kAspectPointcuts, Pointcut } from './aop.js'
 import { Binding } from './binding.js'
 import { DeferredCtor } from './deferred_ctor.js'
-import { ErrCircularDependency, ErrUnresolvableDependencies } from './errors.js'
+import { ErrCircularDependency, ErrInvalidAspect, ErrUnresolvableDependencies } from './errors.js'
 import { InjectionDescriptor, ObjectInjections } from './injection.js'
 import { BuiltInResolvers } from './injection_resolver.js'
 import { keyStr, Key, TypedKey } from './key.js'
+import { Scopes } from './scope.js'
 
 /**
  * Check if the container's dependency graph contains any wrongly
@@ -166,6 +168,26 @@ function checkObjectInjections(
       checkObjectInjections(child as ObjectInjections, childLocation, issues, getBindings)
     } else {
       checkInjection(child as InjectionDescriptor, childLocation, issues, getBindings)
+    }
+  }
+}
+
+export function checkAspects(bindings: Iterable<[Key, Binding]>): void {
+  for (const [key, binding] of bindings) {
+    if (!binding.labels.includes(kAspectLabel)) {
+      continue
+    }
+    const pointcuts = binding.tags.get(kAspectPointcuts) as Pointcut[] | undefined
+    if (!pointcuts || pointcuts.length === 0) {
+      throw new ErrInvalidAspect(
+        `Cannot compile aspect "${keyStr(key)}": at least one pointcut is required`,
+      )
+    }
+    const scope = binding.scopeID
+    if (scope !== undefined && scope !== Scopes.SINGLETON) {
+      throw new ErrInvalidAspect(
+        `Cannot compile aspect "${keyStr(key)}": aspects must be singleton scoped`,
+      )
     }
   }
 }

@@ -37,9 +37,9 @@ import { Conditional, ConditionContext } from './conditional.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
-import { checkCircularReferences, checkIfContainerIsResolvable } from './_checks.js'
+import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } from './_checks.js'
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
-import { AOPPostProcessor, checkAspects, hasAnyAspects, kAspectLabel, type MethodAspect } from './aop.js'
+import { AOPPostProcessor, kAspectLabel, type MethodAspect } from './aop.js'
 import { Provider } from './provider.js'
 import { Keys } from './symbols.js'
 
@@ -1442,7 +1442,8 @@ export class CaffeineIoC implements Container {
 
     checkAspects(this.registry.entries())
 
-    if (hasAnyAspects()) {
+    const hasAspects = this.bindingsByLabel.has(kAspectLabel)
+    if (hasAspects) {
       this.postProcessors.add(new AOPPostProcessor())
     }
 

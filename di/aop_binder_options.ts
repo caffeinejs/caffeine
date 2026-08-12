@@ -1,4 +1,4 @@
-import { incrementAspectCount, kAspectPointcuts, type Pointcut } from './aop.js'
+import { kAspectPointcuts, type Pointcut } from './aop.js'
 import { BinderOptions } from './binder_options.js'
 
 /**
@@ -16,23 +16,16 @@ import { BinderOptions } from './binder_options.js'
  * ```
  */
 export class AOPBinderOptions<T> extends BinderOptions<T> {
-  private _incrementCalled = false
-
   /**
    * Sets the pointcuts this aspect intercepts.
-   * At least one pointcut is required — enforced by the required `first` parameter.
-   * Registers the aspect count on first call, activating the AOP post-processor.
    *
    * @param first - The first (required) pointcut, built via `$aop.forClass` or `$aop.pointcut`.
    * @param rest - Additional pointcuts.
    */
   pointcuts(first: Pointcut, ...rest: Pointcut[]): this {
     this.binding.tags.set(kAspectPointcuts, [first, ...rest])
-    if (!this._incrementCalled) {
-      this._incrementCalled = true
-      incrementAspectCount()
-    }
     this.sync()
+
     return this
   }
 }
