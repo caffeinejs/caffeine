@@ -6,7 +6,7 @@ info:
   title: Modern Petstore API
   summary: A modern, realistic pet store API demonstrating current best practices
   description: |-
-    This is a modern Pet Store API based on the OpenAPI 3.2 specification. It demonstrates contemporary API design patterns and best practices including RESTful compliance, proper HTTP methods, structured error responses (RFC 9457), and modern authentication flows.
+    This is a modern Pet Store API based on the OpenAPI 3.2 specification. It demonstrates contemporary API design patterns and best practices including RESTful compliance, proper HTTP methods, structured JSON error responses, and modern authentication flows.
 
     Key features include pet catalog browsing, adoption workflow, order management, user accounts, AI-powered chat advisor, and real-time event notifications via webhooks. The API showcases OpenAPI 3.2 capabilities like hierarchical tags, QUERY HTTP method, OAuth device flow, and server-sent events.
 
@@ -2446,46 +2446,25 @@ components:
       unevaluatedProperties: false
     Error:
       type: object
-      description: RFC 9457 Problem Details for HTTP APIs
+      description: Standard error response.
       required:
-        - type
-        - title
-        - status
+        - code
+        - message
       properties:
-        type:
+        code:
           type: string
-          format: uri
-          description: A URI reference that identifies the problem type
+          description: A short, machine-readable error code
           examples:
-            - https://petstoreapi.com/errors/not-found
-            - https://petstoreapi.com/errors/validation-error
-        title:
+            - NOT_FOUND
+            - VALIDATION_ERROR
+        message:
           type: string
-          description: A short, human-readable summary of the problem
-          examples:
-            - Resource Not Found
-            - Validation Error
-        status:
-          type: integer
-          description: The HTTP status code
-          examples:
-            - 404
-            - 400
-            - 422
-        detail:
-          type: string
-          description: A human-readable explanation specific to this occurrence
+          description: A human-readable explanation of the error
           examples:
             - The requested pet with ID '123' was not found
-        instance:
-          type: string
-          format: uri
-          description: A URI reference that identifies the specific occurrence
-          examples:
-            - /v1/pets/123
         errors:
           type: array
-          description: Detailed validation errors (for 422 responses)
+          description: Field-level validation errors (present on 422 responses)
           items:
             type: object
             required:
@@ -2498,9 +2477,6 @@ components:
               message:
                 type: string
                 description: Description of the validation error
-              code:
-                type: string
-                description: Machine-readable error code
             unevaluatedProperties: false
       unevaluatedProperties: false
   responses:
@@ -2514,61 +2490,51 @@ components:
         RateLimit-Reset:
           $ref: '#/components/headers/RateLimit-Reset'
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             invalid-parameter:
               summary: Invalid query parameter
               value:
-                type: https://petstoreapi.com/errors/bad-request
-                title: Bad Request
-                status: 400
-                detail: "Invalid value for parameter 'status'. Must be one of: available, pending, sold."
-                instance: /pets
+                code: BAD_REQUEST
+                message: "Invalid value for parameter 'status'. Must be one of: available, pending, sold."
     Unauthorized:
       description: Unauthorized - Authentication required
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             missing-token:
               summary: Missing authentication token
               value:
-                type: https://petstoreapi.com/errors/unauthorized
-                title: Unauthorized
-                status: 401
-                detail: Authentication is required to access this resource. Please provide a valid OAuth 2.0 token.
+                code: UNAUTHORIZED
+                message: Authentication is required to access this resource. Please provide a valid OAuth 2.0 token.
     Forbidden:
       description: Forbidden - Insufficient permissions
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             insufficient-permissions:
               summary: Insufficient permissions
               value:
-                type: https://petstoreapi.com/errors/forbidden
-                title: Forbidden
-                status: 403
-                detail: You do not have permission to access this resource.
+                code: FORBIDDEN
+                message: You do not have permission to access this resource.
     NotFound:
       description: Resource not found
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             pet-not-found:
               summary: Pet not found
               value:
-                type: https://petstoreapi.com/errors/not-found
-                title: Not Found
-                status: 404
-                detail: The requested pet with ID '123' was not found.
-                instance: /pets/123
+                code: NOT_FOUND
+                message: The requested pet with ID '123' was not found.
     TooManyRequests:
       description: Too many requests - Rate limit exceeded
       headers:
@@ -2586,53 +2552,44 @@ components:
             type: integer
           example: 60
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             rate-limit-exceeded:
               summary: Rate limit exceeded
               value:
-                type: https://petstoreapi.com/errors/rate-limit-exceeded
-                title: Too Many Requests
-                status: 429
-                detail: Rate limit exceeded. Please wait 60 seconds before making another request.
+                code: RATE_LIMITED
+                message: Rate limit exceeded. Please wait 60 seconds before making another request.
     InternalServerError:
       description: Internal server error
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             server-error:
               summary: Internal server error
               value:
-                type: https://petstoreapi.com/errors/internal-server-error
-                title: Internal Server Error
-                status: 500
-                detail: An unexpected error occurred. Please try again later.
+                code: INTERNAL_ERROR
+                message: An unexpected error occurred. Please try again later.
     UnprocessableEntity:
       description: Unprocessable entity - Validation errors
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             validation-errors:
               summary: Validation errors
               value:
-                type: https://petstoreapi.com/errors/validation-error
-                title: Validation Error
-                status: 422
-                detail: The request body contains validation errors.
-                instance: /pets
+                code: VALIDATION_ERROR
+                message: The request body is invalid.
                 errors:
                   - field: name
                     message: Pet name is required
-                    code: required_field
                   - field: status
                     message: Invalid status value
-                    code: invalid_format
     MethodNotAllowed:
       description: Method not allowed - HTTP method not supported for this endpoint
       headers:
@@ -2642,18 +2599,15 @@ components:
             type: string
           example: GET, POST, PUT, DELETE
       content:
-        application/problem+json:
+        application/json:
           schema:
             $ref: '#/components/schemas/Error'
           examples:
             method-not-allowed:
               summary: HTTP method not allowed
               value:
-                type: https://petstoreapi.com/errors/method-not-allowed
-                title: Method Not Allowed
-                status: 405
-                detail: The TRACE method is not allowed for this resource
-                instance: /pets/019b4132-70aa-764f-b315-e2803d882a24
+                code: METHOD_NOT_ALLOWED
+                message: The TRACE method is not allowed for this resource.
   securitySchemes:
     oauth2:
       type: oauth2
@@ -2885,18 +2839,15 @@ components:
 
             data: [DONE]
 
-    problem-json:
+    error-json:
       schema:
-        $ref: '#/components/schemas/ProblemDetails'
+        $ref: '#/components/schemas/Error'
       examples:
         not-found:
           summary: Resource not found
           value:
-            type: https://petstoreapi.com/errors/not-found
-            title: Not Found
-            status: 404
-            detail: The requested pet with ID '00000000-0000-0000-0000-invalid00000' was not found
-            instance: /v1/pets/00000000-0000-0000-0000-invalid00000
+            code: NOT_FOUND
+            message: The requested pet with ID '00000000-0000-0000-0000-invalid00000' was not found
 servers:
   - url: https://api.petstoreapi.com/v1
     description: Production server

@@ -1,6 +1,11 @@
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { FeatureConfigurer, type RoutePhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
-import { CacheInvalidateOptions, CacheStore } from './types.js'
+import { CacheStore } from './store.js'
+
+export interface CacheInvalidateOptions {
+  paths?: string[]
+  segment?: string
+}
 
 /**
  * Evicts cached entries after a successful mutating request, targeting the container-resolved

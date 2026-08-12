@@ -1,12 +1,15 @@
 import { CaffeineIoC, type Container, type Module, type Options } from '@caffeinejs/di'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
+import { FastifyAdapter } from './adapter.js'
+import { fastifyAdapterFactory } from './adapter_factory.js'
 import { Augment, BuilderPlugin, BuilderPluginContext } from './plugin.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { CacheBuilder } from './cache/cache_builder.js'
 import { Service } from './service.js'
 
-export type WebApplicationOptions = {
+export type WebApplicationBuilderOptions = {
   container?: Container | Options
 }
 
@@ -19,7 +22,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   #cacheBuilder: CacheBuilder | undefined
   readonly #authzBuilder: AuthorizationBuilder
 
-  constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationOptions = {}) {
+  constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
     const c = options.container
     this.#container = c != null && typeof (c as Container).get === 'function'
       ? c as Container
@@ -77,6 +80,13 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 }
 
+// Default Fastify — no adapter factory or Fastify instance required.
+export function createWebApplication<const S extends readonly BuilderPlugin[] = readonly []>(
+  options?: WebApplicationBuilderOptions,
+  ...plugins: S
+): WebApplicationBuilder<FastifyInstance, FastifyRequest, FastifyAdapter<FastifyInstance, FastifyRequest>> & Augment<S>
+// Explicit adapter factory — a customized Fastify instance (`fastifyAdapterFactory(myFastify)`) or a
+// custom adapter altogether.
 export function createWebApplication<
   I,
   REQ,
@@ -84,9 +94,27 @@ export function createWebApplication<
   const S extends readonly BuilderPlugin[] = readonly [],
 >(
   adapterFactory: AdapterFactory<I, REQ, A>,
-  options: WebApplicationOptions = {},
+  options?: WebApplicationBuilderOptions,
   ...plugins: S
-): WebApplicationBuilder<I, REQ, A> & Augment<S> {
+): WebApplicationBuilder<I, REQ, A> & Augment<S>
+export function createWebApplication(
+  first?: AdapterFactory<any, any> | WebApplicationBuilderOptions,
+  ...rest: unknown[]
+): WebApplicationBuilder<any, any> {
+  let adapterFactory: AdapterFactory<any, any>
+  let options: WebApplicationBuilderOptions
+  let plugins: BuilderPlugin[]
+
+  if (typeof first === 'function') {
+    adapterFactory = first
+    options = (rest[0] as WebApplicationBuilderOptions | undefined) ?? {}
+    plugins = rest.slice(1) as BuilderPlugin[]
+  } else {
+    adapterFactory = fastifyAdapterFactory()
+    options = first ?? {}
+    plugins = rest as BuilderPlugin[]
+  }
+
   const builder = new WebApplicationBuilder(adapterFactory, options)
   const ctx: BuilderPluginContext = {
     addService: service => { builder.addService(service) },
@@ -97,5 +125,5 @@ export function createWebApplication<
     Object.assign(builder, plugin.install(ctx))
   }
 
-  return builder as WebApplicationBuilder<I, REQ, A> & Augment<S>
+  return builder
 }

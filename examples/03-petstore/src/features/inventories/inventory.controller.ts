@@ -1,5 +1,5 @@
 import { Authorize, Controller, Get } from '@caffeinejs/http'
-import { PetsRepository } from '../pets/pets.repository.js'
+import { PetsRepository } from '../pets/index.js'
 
 // GET /inventories — a status → count map, derived from the pet table (prisma.pet.groupBy).
 @Controller('/inventories', [PetsRepository])

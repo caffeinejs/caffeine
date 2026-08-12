@@ -13,7 +13,7 @@ export class OrdersController {
   @Schema({ body: createOrderSchema })
   @Params([$p.body()])
   create(dto: CreateOrderDTO) {
-    // A missing pet throws ErrPetNotFound (an ErrHTTPNotFound) → 404 problem+json via the global handler.
+    // A missing pet throws ErrPetNotFound (an ErrHTTPNotFound) → 404 { code, message } via the global handler.
     return this.orders.create(dto)
   }
 

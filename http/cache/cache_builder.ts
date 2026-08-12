@@ -1,5 +1,6 @@
 import { kServiceConfigure, Service, ServiceKit } from '../service.js'
-import { CacheStore, ETagGenerator } from './types.js'
+import { ETagGenerator } from './cache.js'
+import { CacheStore } from './store.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 
 /**

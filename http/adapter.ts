@@ -55,6 +55,10 @@ export class FastifyAdapter<
     this.#container = kit.container
   }
 
+  run(): Promise<void> {
+    throw new Error('Method not implemented.')
+  }
+
   async setup(input: AdapterIn<REQ>): Promise<void> {
     const routers = input.routers as Router<REQ>[]
     const fastify = this.#fastify

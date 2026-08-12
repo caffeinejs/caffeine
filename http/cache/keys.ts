@@ -5,10 +5,10 @@
  * generator with `container.bind(kETagGenerator).toValue(myGenerator)`; a per-route
  * `@Cache({ etagGenerator })` still takes precedence over the container-bound one.
  */
-export const kETagGenerator = Symbol.for('caffeinejs.http.cache.etag_generator')
+export const kETagGenerator = Symbol.for('@caffeinejs/http:cache.etag_generator')
 
 /**
  * DI key for the cache-status response header name (default `X-Cache`). Bound by
  * `app.cache(c => c.statusHeader(name))`; the value carries HIT/MISS/BYPASS on every cached route.
  */
-export const kCacheStatusHeader = Symbol.for('caffeinejs.http.cache.status_header')
+export const kCacheStatusHeader = Symbol.for('@caffeinejs/http:cache.status_header')

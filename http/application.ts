@@ -21,6 +21,7 @@ export interface Adapter<I, R> {
 
   setup(input: AdapterIn<R>): Promise<void>
   teardown(): Promise<void>
+  run(): Promise<void>
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 }
 
@@ -97,6 +98,10 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     }
 
     this.#ready = true
+  }
+
+  async run(): Promise<void> {
+    await this.#adapter.run()
   }
 
   async close(): Promise<void> {

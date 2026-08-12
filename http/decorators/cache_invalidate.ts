@@ -1,4 +1,4 @@
-import { CacheInvalidateOptions } from '../cache/types.js'
+import { CacheInvalidateOptions } from '../cache/cache_invalidate.js'
 import { configureRoute } from './registrar/registrar.js'
 
 export type { CacheInvalidateOptions }

@@ -1,3 +1,3 @@
 export const Keys = {
-  CONTROLLER: Symbol.for('caffeine:controller'),
+  CONTROLLER: Symbol.for('@caffeinejs/http:controller'),
 }

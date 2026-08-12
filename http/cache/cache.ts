@@ -1,10 +1,10 @@
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
-import { parseDuration } from '@caffeinejs/std'
+import { Duration, parseDuration } from '@caffeinejs/std'
 import { FastifyContextRequest } from '../context.js'
 import { FeatureConfigurer, type RoutePhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
-import { CacheOptions, CacheStore, ETagGenerator } from './types.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
+import { CacheStore } from './store.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -15,14 +15,36 @@ const CACHE_HIT = 'HIT'
 const CACHE_MISS = 'MISS'
 const CACHE_BYPASS = 'BYPASS'
 
-// Parses the numeric `max-age=N` from a request Cache-Control header. Returns undefined when absent.
-function requestMaxAge(cacheControl: string | undefined): number | undefined {
-  if (cacheControl == null) {
-    return undefined
-  }
-  const match = /(?:^|,)\s*max-age\s*=\s*(\d+)/.exec(cacheControl)
+export type ETagGenerator = (payload: Buffer) => string | Promise<string>
 
-  return match ? Number(match[1]) : undefined
+export interface CacheEntry {
+  payload: string | Buffer
+  etag?: string
+  lastModified?: string
+  /** Epoch milliseconds when the entry was stored; used to compute the `Age` header and honor request `max-age`. */
+  storedAt?: number
+  headers: Record<string, string>
+}
+
+export interface CacheOptions {
+  ttl?: Duration
+  sharedMaxAge?: Duration
+  staleWhileRevalidate?: Duration
+  staleIfError?: Duration
+  noStore?: boolean
+  noCache?: boolean
+  mustRevalidate?: boolean
+  proxyRevalidate?: boolean
+  noTransform?: boolean
+  privacy?: 'private' | 'public'
+  immutable?: boolean
+  vary?: string[]
+  etag?: boolean
+  methods?: string[]
+  statusCodes?: number[]
+  segment?: string
+  key?: (req: FastifyContextRequest) => string
+  etagGenerator?: ETagGenerator
 }
 
 /**
@@ -46,6 +68,7 @@ export class CacheConfigurer extends FeatureConfigurer {
     const store = this.#store
     const etagGenerator = this.#etagGenerator
     const statusHeader = this.#statusHeader
+
     // OnRequest phase: check if the request is cacheable and return the cached response if it is
     async function onRequest(request: FastifyRequest, reply: FastifyReply) {
       const config = request.routeOptions.config as unknown as Record<string, unknown>
@@ -266,9 +289,12 @@ function canonicalizeUrl(url: string): string {
   const path = url.slice(0, queryStart)
   const params = new URLSearchParams(url.slice(queryStart + 1))
   params.sort()
+
   const query = params.toString()
 
-  return query ? `${path}?${query}` : path
+  return query
+    ? `${path}?${query}`
+    : path
 }
 
 // GET and HEAD have equivalent representations — they share the same cache entry.
@@ -287,4 +313,14 @@ function defaultCacheKey(request: FastifyRequest, vary?: string[]): string {
   const parts = vary.map(h => `${h.toLowerCase()}=${request.headers[h.toLowerCase()] ?? ''}`)
 
   return encodeURIComponent(`${base}#${parts.join('&')}`)
+}
+
+// Parses the numeric `max-age=N` from a request Cache-Control header. Returns undefined when absent.
+function requestMaxAge(cacheControl: string | undefined): number | undefined {
+  if (cacheControl == null) {
+    return undefined
+  }
+  const match = /(?:^|,)\s*max-age\s*=\s*(\d+)/.exec(cacheControl)
+
+  return match ? Number(match[1]) : undefined
 }

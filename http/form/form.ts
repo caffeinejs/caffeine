@@ -1,7 +1,7 @@
 import type { FastifyRequest } from 'fastify'
 import qs from 'fast-querystring'
 import { FeatureConfigurer, type ServerPhaseContext } from '../feature_configurer.js'
-import { MediaTypes } from '../media_types.js'
+import { MediaType } from '../media.js'
 
 const FORM_BODY_LIMIT = 1_048_576
 
@@ -11,7 +11,7 @@ export class FormBodyConfigurer extends FeatureConfigurer {
 
   configureServer = (ctx: ServerPhaseContext): void => {
     ctx.server.addContentTypeParser(
-      MediaTypes.APPLICATION_FORM_URLENCODED,
+      MediaType.APPLICATION_FORM_URLENCODED,
       { parseAs: 'string', bodyLimit: FORM_BODY_LIMIT },
       formBodyParser,
     )

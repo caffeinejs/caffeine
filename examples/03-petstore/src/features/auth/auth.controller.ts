@@ -1,5 +1,5 @@
 import { Controller, ErrHTTPUnauthorized, Params, Post, Schema, $p } from '@caffeinejs/http'
-import { UsersRepository } from '../users/users.repository.js'
+import { UsersRepository } from '../users/index.js'
 import { signToken } from './tokens.js'
 
 interface LoginDTO {

@@ -15,8 +15,10 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*",
+    "@fastify/cookie": "^11.0.0",
     "@fastify/multipart": "^10.0.0",
     "@prisma/client": "^6.19.3",
+    "dotenv": "^17.0.0",
     "fastify": "^5.8.5",
     "jose": "^5.0.0"
   },

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Get, Header, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, Header, MediaType, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Header', () => {
   it('applies class-level header to all routes', async () => {
@@ -103,5 +103,62 @@ describe('Header', () => {
 
     expect(res.headers['x-tier']).toBe('method')
     expect(res.headers['x-tier']).not.toBe(['class', 'method'])
+  })
+
+  it('appends "; charset=<charset>" when a charset argument is given', async () => {
+    @Controller('/charset')
+    class CharsetController {
+      @Header('x-media', MediaType.APPLICATION_JSON, 'utf-8')
+      @Get('/route')
+      route() { return {} }
+    }
+
+    void [CharsetController]
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    await app.ready()
+
+    const res = await app.instance.inject({ method: 'GET', url: '/charset/route' })
+
+    expect(res.headers['x-media']).toBe('application/json; charset=utf-8')
+  })
+
+  it('leaves the value unchanged when no charset argument is given', async () => {
+    @Controller('/no-charset')
+    class NoCharsetController {
+      @Header('x-media', MediaType.APPLICATION_JSON)
+      @Get('/route')
+      route() { return {} }
+    }
+
+    void [NoCharsetController]
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    await app.ready()
+
+    const res = await app.instance.inject({ method: 'GET', url: '/no-charset/route' })
+
+    expect(res.headers['x-media']).toBe('application/json')
+  })
+
+  it('appends the charset to each value of an array header', async () => {
+    @Controller('/charset-array')
+    class CharsetArrayController {
+      @Header('x-media-list', ['application/json', 'application/xml'], 'utf-8')
+      @Get('/route')
+      route() { return {} }
+    }
+
+    void [CharsetArrayController]
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    await app.ready()
+
+    const res = await app.instance.inject({ method: 'GET', url: '/charset-array/route' })
+
+    expect(res.headers['x-media-list']).toEqual([
+      'application/json; charset=utf-8',
+      'application/xml; charset=utf-8',
+    ])
   })
 })

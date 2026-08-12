@@ -1,7 +1,10 @@
-export const MediaTypes = {
+export const MediaType = {
   APPLICATION_JSON: 'application/json',
+  APPLICATION_JSON_CHARSET_UTF8: 'application/json; charset=utf-8',
   APPLICATION_XML: 'application/xml',
+  APPLICATION_XML_CHARSET_UTF8: 'application/xml; charset=utf-8',
   APPLICATION_XHTML_XML: 'application/xhtml+xml',
+  APPLICATION_XHTML_XML_CHARSET_UTF8: 'application/xhtml+xml; charset=utf-8',
   APPLICATION_FORM_URLENCODED: 'application/x-www-form-urlencoded',
   APPLICATION_OCTET_STREAM: 'application/octet-stream',
   APPLICATION_PDF: 'application/pdf',

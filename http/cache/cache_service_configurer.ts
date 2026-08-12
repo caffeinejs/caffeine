@@ -1,7 +1,6 @@
 import { Scopes } from '@caffeinejs/di'
 import { kServiceConfigure, Service, ServiceKit } from '../service.js'
-import { CacheStore } from './types.js'
-import { MemoryCacheStore } from './memory_store.js'
+import { CacheStore, MemoryCacheStore } from './store.js'
 
 /**
  * Binds the default in-process {@link MemoryCacheStore} when no other {@link CacheStore} is configured,

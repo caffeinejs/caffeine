@@ -1,5 +1,5 @@
 import { parseDuration } from '@caffeinejs/std'
-import { CacheOptions, ETagGenerator } from './types.js'
+import { CacheOptions, ETagGenerator } from './cache.js'
 
 // RFC 7232 §3.2 — weak comparison: strip W/ prefix, handle comma-separated list and wildcard
 export function matchesETag(ifNoneMatch: string, storedETag: string): boolean {

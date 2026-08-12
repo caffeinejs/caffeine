@@ -1,6 +1,7 @@
+import 'dotenv/config'
 import { createContainer } from './app.container.js'
 import { buildApp } from './app.js'
-import { prisma } from './util/db/prisma.js'
+import { prisma } from './util/db/index.js'
 
 const app = buildApp(createContainer())
 
@@ -10,4 +11,4 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 }
 
 await app.ready()
-await app.instance.listen({ port: 3000, host: '0.0.0.0' })
+await app.instance.listen({ port: Number(process.env.PORT) || 9999, host: '0.0.0.0' })
