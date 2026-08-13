@@ -1,10 +1,33 @@
 import { Scopes } from '@caffeinejs/di'
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify'
 import { FeatureConfigurer, type RouterPhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
+import { ViewResult, renderView } from '../view/index.js'
 import { resolveByErrorChain } from './error.js'
 import { ErrHTTP } from './http.js'
 
 type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
+
+/**
+ * Finalizes an error handler's result the same way a controller handler's is: a handler that already
+ * responded via `ctx` (so `reply.sent`) is left alone; a returned {@link ViewResult} is rendered as HTML;
+ * any other returned value is handed back for Fastify to serialize; a void return with nothing sent yet is
+ * flushed with an empty body (the historical behavior).
+ */
+function finalize(reply: FastifyReply, result: unknown): unknown {
+  if (reply.sent) {
+    return
+  }
+
+  if (result instanceof ViewResult) {
+    return renderView(result, reply)
+  }
+
+  if (result !== undefined) {
+    return result
+  }
+
+  return reply.send()
+}
 
 /**
  * Wires error handling. `configureServer` installs the application-wide handler on the root instance;
@@ -30,13 +53,8 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
       const handler = errorManager.handlerFor(err)
 
       if (handler) {
-        await handler.get().handle(request.httpContext, err)
-        // The handler renders via ctx; finalize defensively so the request never hangs if it did not.
-        if (!reply.sent) {
-          return reply.send()
-        }
-
-        return
+        // The handler may respond via ctx or return a value (JSON payload or a View to render).
+        return finalize(reply, await handler.get().handle(request.httpContext, err))
       }
 
       if (err instanceof ErrHTTP) {
@@ -107,12 +125,7 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
         ?? (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)
 
       if (handler) {
-        await handler.get().handle(req.httpContext, err)
-        if (!reply.sent) {
-          await reply.send()
-        }
-
-        return
+        return finalize(reply, await handler.get().handle(req.httpContext, err))
       }
 
       const instance = req.controller
@@ -120,12 +133,7 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
 
       if (instance && methodKey) {
         const handle = instance[methodKey] as (...args: unknown[]) => unknown
-        await handle.apply(instance, [req.httpContext, err])
-        if (!reply.sent) {
-          await reply.send()
-        }
-
-        return
+        return finalize(reply, await handle.apply(instance, [req.httpContext, err]))
       }
 
       return globalErrorHandler(error, req, reply)

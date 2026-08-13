@@ -1,11 +1,15 @@
+import { fileURLToPath } from 'node:url'
 import fastify, { type FastifyServerOptions } from 'fastify'
 import FastifyMultipart from '@fastify/multipart'
 import FastifyCookie from '@fastify/cookie'
+import handlebars from 'handlebars'
 import type { Container } from '@caffeinejs/di'
 import { Claim, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { GITHUB_SESSION_COOKIE, JWT_SECRET, githubConfig } from './features/auth/index.js'
 
 const GITHUB_ISSUER = 'https://github.com'
+const viewsRoot = fileURLToPath(new URL('./views', import.meta.url))
+const publicRoot = fileURLToPath(new URL('./public', import.meta.url))
 
 // Builds the web application from a given container — it never creates one, so tests can pass a
 // TestContainer with overridden dependencies. DB-agnostic: no prisma import here.
@@ -17,6 +21,8 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   server.register(FastifyCookie)
 
   return createWebApplication(fastifyAdapterFactory(server), { container })
+    .view(v => v.engine({ handlebars }).root(viewsRoot).viewExt('hbs').layout('layout'))
+    .static(s => s.static(publicRoot, { prefix: '/static' }))
     .authentication(auth => auth
       // JWT bearer for API clients.
       .addJWTBearer(o => o.secret(JWT_SECRET))

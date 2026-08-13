@@ -1,4 +1,4 @@
-import { Catch, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { Catch, type Context, ErrHTTP, ErrorHandler, View } from '@caffeinejs/http'
 
 // A simple, conventional error body: a machine-readable `code`, a human-readable `message`, and —
 // for validation failures — a list of the offending fields. Rendered as plain application/json.
@@ -30,6 +30,21 @@ function codeFor(status: number): string {
   return CODES[status] ?? 'ERROR'
 }
 
+// Browser requests (Accept: text/html) get an HTML error page; API clients get JSON. Content negotiation
+// lives here in the app, not the framework — the framework just renders whatever the handler returns.
+function wantsHTML(ctx: Context): boolean {
+  return ctx.req.header('accept')?.includes('text/html') ?? false
+}
+
+// Returns the JSON body, or a rendered error view when the client asked for HTML. `ctx.status(...)` sets
+// the response code either way; the returned value is finalized by the framework (JSON or HTML).
+function respond(ctx: Context, status: number, body: ErrorBody): ErrorBody | ReturnType<typeof View> {
+  ctx.status(status)
+  return wantsHTML(ctx)
+    ? View('error', { ...body, status, title: `Error ${status}` })
+    : body
+}
+
 // Shape of a Fastify schema-validation failure. Fastify attaches `validation` (the Ajv errors) and
 // `validationContext` (which part of the request failed) to the thrown error.
 interface ValidationError extends Error {
@@ -54,11 +69,12 @@ function fieldErrors(err: ValidationError): FieldError[] {
   }))
 }
 
-// Renders any thrown ErrHTTP (e.g. ErrHTTPNotFound → 404) as { code, message }.
+// Renders any thrown ErrHTTP (e.g. ErrHTTPNotFound → 404) as { code, message } — JSON, or an HTML error
+// page for browser requests.
 @Catch(ErrHTTP)
 export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
-  async handle(ctx: Context, err: ErrHTTP): Promise<void> {
-    ctx.status(err.statusCode).body({ code: codeFor(err.statusCode), message: err.message })
+  async handle(ctx: Context, err: ErrHTTP): Promise<unknown> {
+    return respond(ctx, err.statusCode, { code: codeFor(err.statusCode), message: err.message })
   }
 }
 
@@ -66,22 +82,20 @@ export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
 // anything else is an unexpected 500.
 @Catch(Error)
 export class FallbackErrorHandler extends ErrorHandler<Error> {
-  async handle(ctx: Context, err: Error): Promise<void> {
+  async handle(ctx: Context, err: Error): Promise<unknown> {
     if (isValidationError(err)) {
       if (err.validationContext === 'body') {
-        ctx.status(422).body({
+        return respond(ctx, 422, {
           code: 'VALIDATION_ERROR',
           message: 'The request body is invalid',
           errors: fieldErrors(err),
         })
-        return
       }
 
-      ctx.status(400).body({ code: 'BAD_REQUEST', message: 'The request contains invalid parameters' })
-      return
+      return respond(ctx, 400, { code: 'BAD_REQUEST', message: 'The request contains invalid parameters' })
     }
 
     console.error('Unhandled error while processing request:', err)
-    ctx.status(500).body({ code: 'INTERNAL_ERROR', message: 'An unexpected error occurred. Please try again later' })
+    return respond(ctx, 500, { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred. Please try again later' })
   }
 }

@@ -17,6 +17,8 @@ import { CacheConfigurer } from './cache/cache.js'
 import { CacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
+import { ViewConfigurer, ViewResult, renderView } from './view/index.js'
+import { StaticConfigurer } from './static/index.js'
 import { joinPaths } from './internal/paths/index.js'
 
 // Augmenting Fastify with Caffeine-specific types.
@@ -108,6 +110,8 @@ export class FastifyAdapter<
       new OIDCConfigurer(),
       new CacheConfigurer(),
       new CacheInvalidateConfigurer(),
+      new ViewConfigurer(),
+      new StaticConfigurer(),
       ...this.#container.getManyOptional<FeatureConfigurer>(FeatureConfigurer),
     ])
 
@@ -228,7 +232,17 @@ export class FastifyAdapter<
                 res.code(config.status)
               }
 
-              return dispatch(req as REQ, res as RES)
+              const result = dispatch(req as REQ, res as RES)
+
+              if (result instanceof ViewResult) {
+                return renderView(result, res)
+              }
+
+              if (result instanceof Promise) {
+                return result.then(r => (r instanceof ViewResult ? renderView(r, res) : r))
+              }
+
+              return result
             },
           }
 

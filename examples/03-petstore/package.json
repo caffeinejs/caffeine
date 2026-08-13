@@ -17,9 +17,12 @@
     "@caffeinejs/std": "*",
     "@fastify/cookie": "^11.0.0",
     "@fastify/multipart": "^10.0.0",
+    "@fastify/static": "^10.1.3",
+    "@fastify/view": "^12.0.0",
     "@prisma/client": "^6.19.3",
     "dotenv": "^17.0.0",
     "fastify": "^5.8.5",
+    "handlebars": "^4.7.9",
     "jose": "^5.0.0"
   },
   "devDependencies": {

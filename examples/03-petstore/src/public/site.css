@@ -1,0 +1,33 @@
+:root { color-scheme: light dark; }
+body { font: 16px/1.5 system-ui, sans-serif; max-width: 34rem; margin: 4rem auto; padding: 0 1.25rem; }
+h1 { margin-bottom: .25rem; }
+p.lead { color: #6b7280; margin-top: 0; }
+code { background: rgba(127,127,127,.18); padding: .1rem .35rem; border-radius: .25rem; }
+
+/* Landing page */
+section { margin-top: 2rem; }
+h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+p.warn { color: #b45309; }
+footer { margin-top: 3rem; color: #9ca3af; font-size: .85rem; }
+
+/* Buttons (shared by landing + dashboard) */
+a.btn {
+  display: inline-flex; align-items: center; gap: .5rem; text-decoration: none;
+  padding: .6rem 1rem; border-radius: .5rem; font-weight: 600;
+}
+a.btn.github { background: #24292f; color: #fff; }
+a.btn.github:hover { background: #1b1f24; }
+
+/* Dashboard */
+table { border-collapse: collapse; width: 100%; margin: 1.5rem 0; }
+th, td { text-align: left; padding: .5rem .75rem; border-bottom: 1px solid rgba(127,127,127,.25); }
+th { width: 10rem; color: #6b7280; font-weight: 600; }
+.avatar { border-radius: 50%; vertical-align: middle; margin-bottom: 1rem; }
+.actions { display: flex; gap: .75rem; margin-top: 1.5rem; flex-wrap: wrap; }
+.actions a.btn { border: 1px solid rgba(127,127,127,.35); }
+.actions a.btn.primary { background: #24292f; color: #fff; border-color: #24292f; }
+.actions a.btn.primary:hover { background: #1b1f24; }
+
+/* Error page */
+p.err-message { font-size: 1.1rem; }
+ul.err-fields { color: #b45309; }

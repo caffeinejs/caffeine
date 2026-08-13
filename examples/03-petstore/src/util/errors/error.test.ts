@@ -1,5 +1,7 @@
+import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import handlebars from 'handlebars'
 import { Catch, CatchBy, type Context, Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, ErrorHandler, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
 // Side-effect import: registers HTTPErrorHandler / FallbackErrorHandler as global @Catch handlers.
 import './error.handlers.js'
@@ -67,8 +69,12 @@ class GadgetsController {
 }
 void [GadgetsController]
 
+const viewsRoot = fileURLToPath(new URL('../../views', import.meta.url))
+
 async function buildApp() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+  const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    .view(v => v.engine({ handlebars }).root(viewsRoot).viewExt('hbs').layout('layout'))
+    .build()
   await app.ready()
   return app
 }
@@ -133,6 +139,19 @@ describe('error handling', () => {
     expect(res.status).toBe(500)
     expect(res.headers.get('content-type')).toContain('application/json')
     expect((await res.json() as ErrorBody).code).toBe('INTERNAL_ERROR')
+  })
+
+  it('renders an HTML error page when the client accepts text/html', async () => {
+    const app = await buildApp()
+
+    const res = await app.fetch('/things/abc', { headers: { accept: 'text/html' } })
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    const html = await res.text()
+    expect(html).toContain('Error 404')
+    // Handlebars escapes the double-quotes in the message ("abc" → &quot;abc&quot;).
+    expect(html).toContain('The requested thing with ID &quot;abc&quot; was not found')
   })
 
   it('lets a controller override the global 404 rendering with @CatchBy', async () => {

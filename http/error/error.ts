@@ -37,14 +37,18 @@ export function resolveByErrorChain<T>(map: Map<Ctor<Error>, T>, error: Error): 
 
 /**
  * Base class for error handlers. Extend it and decorate with `@Catch(ErrType)` to render a
- * response for a given error type. The handler sends the response via `ctx` (e.g. `ctx.status(404)`
- * then `ctx.body(...)`, or `ctx.notFound(...)`) and resolves; it does not return a value.
+ * response for a given error type.
+ *
+ * Like a controller handler (and Fastify's own `setErrorHandler`), it may either send the response via
+ * `ctx` (e.g. `ctx.status(404)` then `ctx.body(...)`, or `ctx.notFound(...)`) and return nothing, or
+ * **return** a value the framework finalizes — a plain object serialized as JSON, or a `View(...)` result
+ * rendered as HTML.
  *
  * A handler registered for a base error type also serves its subclasses; register `@Catch(Error)`
  * for a catch-all.
  */
 export abstract class ErrorHandler<E extends Error> {
-  abstract handle(ctx: Context, error: E): Promise<void>
+  abstract handle(ctx: Context, error: E): Promise<unknown> | unknown
 }
 
 /**
