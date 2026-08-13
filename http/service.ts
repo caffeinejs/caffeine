@@ -4,6 +4,7 @@ import { AuthenticationOptions } from './security/auth/builder.js'
 import { AuthenticationService } from './security/auth/service.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 import type { ErrorHandlerProvider } from './error/error.js'
+import type { ServerOptions } from './server/server_builder.js'
 
 export interface ServiceKit {
   container: Container
@@ -24,4 +25,5 @@ export interface Services {
   }
   oidc?: OIDCMeta
   errorHandling: ErrorHandlerProvider
+  server: ServerOptions
 }

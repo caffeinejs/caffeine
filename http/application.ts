@@ -9,6 +9,7 @@ import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
+import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions } from './server/index.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]
@@ -89,6 +90,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
       },
       oidc: this.#container.getOptional<OIDCMeta>(kOIDCMeta),
       errorHandling: this.#container.get(ErrorHandlerProvider),
+      server: this.#container.getOptional<ServerOptions>(kServerOptions) ?? DEFAULT_SERVER_OPTIONS,
     }
 
     await this.#adapter.setup({ routers: this.#routers, feats: this.#feats, services })
@@ -101,6 +103,10 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   }
 
   async run(): Promise<void> {
+    if (!this.#ready) {
+      await this.ready()
+    }
+
     await this.#adapter.run()
   }
 

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/di'
 import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
@@ -15,6 +16,7 @@ import { ErrorHandlingConfigurer } from './error/error_handling_configurer.js'
 import { CacheConfigurer } from './cache/cache.js'
 import { CacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { FastifyContext } from './context.js'
+import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { joinPaths } from './internal/paths/index.js'
 
 // Augmenting Fastify with Caffeine-specific types.
@@ -46,6 +48,8 @@ export class FastifyAdapter<
 > implements Adapter<SERVER, REQ> {
   #fastify: SERVER
   #container: Container
+  #serverOptions: ServerOptions = DEFAULT_SERVER_OPTIONS
+  readonly #fastifyCtxAls = new AsyncLocalStorage<FastifyContext>()
 
   constructor(
     kit: AdapterFactoryIn,
@@ -53,10 +57,15 @@ export class FastifyAdapter<
   ) {
     this.#fastify = fastify
     this.#container = kit.container
+    this.#container.bind(FastifyContext)
+      .toFactory(() => this.#fastifyCtxAls.getStore()!)
+      .lifetime(Scopes.REQUEST)
+      .byPassPostProcessors()
+      .internal()
   }
 
-  run(): Promise<void> {
-    throw new Error('Method not implemented.')
+  async run(): Promise<void> {
+    await this.#fastify.listen(this.#serverOptions)
   }
 
   async setup(input: AdapterIn<REQ>): Promise<void> {
@@ -64,15 +73,12 @@ export class FastifyAdapter<
     const fastify = this.#fastify
     const services = input.services
 
+    this.#serverOptions = services.server
+
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
     fastify.decorateRequest('controller', null)
     fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
-
-    fastify.addHook('onRequest', (req, reply, done) => {
-      req.httpContext = new FastifyContext(req, reply)
-      done()
-    })
 
     const needsRequestScope = routers.some(
       router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
@@ -80,8 +86,15 @@ export class FastifyAdapter<
 
     if (needsRequestScope) {
       const man = this.#container.requestScopeManager
-      fastify.addHook('onRequest', (_req, _res, done) => {
-        man.run(() => done())
+      fastify.addHook('onRequest', (req, reply, done) => {
+        const ctx = new FastifyContext(req, reply)
+        req.httpContext = ctx
+        this.#fastifyCtxAls.run(ctx, () => man.run(() => done()))
+      })
+    } else {
+      fastify.addHook('onRequest', (req, reply, done) => {
+        req.httpContext = new FastifyContext(req, reply)
+        done()
       })
     }
 
