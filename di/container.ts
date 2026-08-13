@@ -86,6 +86,7 @@ export class CaffeineIoC implements Container {
   private _pendingConfigKeys: Map<Key, Key[]> = new Map()
   private _pendingConditionalKeys = new Set<Key>()
   private _sortedAsyncEntries: [Key, Binding][] = []
+  private _aspectScopeCache: Set<Identifier> | null = null
 
   /**
    * Creates a new container instance.
@@ -490,39 +491,11 @@ export class CaffeineIoC implements Container {
       return false
     }
 
-    const visited = new Set<number>()
-    const queue: Binding[] = this.getBindings(key)
-
-    while (queue.length > 0) {
-      const binding = queue.shift()!
-      if (visited.has(binding.id)) {
-        continue
-      }
-
-      visited.add(binding.id)
-
-      if (binding.scopeID === scopeID) {
-        return true
-      }
-
-      const injKeys: (Key | undefined)[] = [
-        ...binding.injections.map(i => i.key),
-        ...[...binding.injectableProperties.values()].map(i => i.key),
-        ...[...binding.injectableMethods.values()].flatMap(list => list.map(i => i.key)),
-      ]
-
-      for (const injKey of injKeys) {
-        if (injKey != null && this.has(injKey)) {
-          for (const dep of this.getBindings(injKey)) {
-            if (!visited.has(dep.id)) {
-              queue.push(dep)
-            }
-          }
-        }
-      }
+    if (this._aspectScopeCache !== null && this._aspectScopeCache.has(scopeID)) {
+      return true
     }
 
-    return false
+    return this.walkScopeGraph(new Set(), this.getBindings(key), scopeID)
   }
 
   /**
@@ -1447,6 +1420,8 @@ export class CaffeineIoC implements Container {
       this.postProcessors.add(new AOPPostProcessor())
     }
 
+    this._aspectScopeCache = this.computeAspectScopeCache()
+
     for (const [key, binding] of this.registry.entries()) {
       compileInjectionResolvers(this, key, binding)
       compileFactory(this, this.scopes, key, binding)
@@ -1670,6 +1645,80 @@ export class CaffeineIoC implements Container {
     this._pendingConditionals = []
     this._pendingConfigKeys.clear()
     this._pendingConditionalKeys.clear()
+  }
+
+  private walkScopeGraph(visited: Set<number>, queue: Binding[], scopeID: Identifier): boolean {
+    while (queue.length > 0) {
+      const binding = queue.shift()!
+      if (visited.has(binding.id)) {
+        continue
+      }
+
+      visited.add(binding.id)
+
+      if (binding.scopeID === scopeID) {
+        return true
+      }
+
+      const injKeys: (Key | undefined)[] = [
+        ...binding.injections.map(i => i.key),
+        ...[...binding.injectableProperties.values()].map(i => i.key),
+        ...[...binding.injectableMethods.values()].flatMap(list => list.map(i => i.key)),
+      ]
+
+      for (const injKey of injKeys) {
+        if (injKey != null && this.has(injKey)) {
+          for (const dep of this.getBindings(injKey)) {
+            if (!visited.has(dep.id)) {
+              queue.push(dep)
+            }
+          }
+        }
+      }
+    }
+
+    return false
+  }
+
+  private computeAspectScopeCache(): Set<Identifier> {
+    const scopes = new Set<Identifier>()
+    const aspects = this.bindingsByLabel.get(kAspectLabel) ?? []
+    if (aspects.length === 0) {
+      return scopes
+    }
+
+    const queue: Binding[] = aspects.map(([, b]) => b)
+    const collect = (visited: Set<number>, q: Binding[]): void => {
+      while (q.length > 0) {
+        const binding = q.shift()!
+        if (visited.has(binding.id)) {
+          continue
+        }
+
+        visited.add(binding.id)
+        scopes.add(binding.scopeID)
+
+        const injKeys: (Key | undefined)[] = [
+          ...binding.injections.map(i => i.key),
+          ...[...binding.injectableProperties.values()].map(i => i.key),
+          ...[...binding.injectableMethods.values()].flatMap(list => list.map(i => i.key)),
+        ]
+
+        for (const injKey of injKeys) {
+          if (injKey != null && this.has(injKey)) {
+            for (const dep of this.getBindings(injKey)) {
+              if (!visited.has(dep.id)) {
+                q.push(dep)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    collect(new Set(), queue)
+
+    return scopes
   }
 }
 

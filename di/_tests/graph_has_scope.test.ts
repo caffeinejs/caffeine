@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import type { MethodAspect } from '../aop.js'
+import { $aop } from '../aop.js'
 import { CaffeineIoC } from '../container.js'
 import { Scopes } from '../scope.js'
 
@@ -76,5 +78,62 @@ describe('hasScopeWithinGraph', function () {
       .lifetime(Scopes.TRANSIENT)
     await di.init()
     expect(di.hasScopeInGraph(kOwner, Scopes.SINGLETON)).toBe(true)
+  })
+})
+
+describe('hasScopeWithinGraph — aspect scope detection', function () {
+  // Aspects must be SINGLETON. To isolate the "scope found via aspect" path we look
+  // for TRANSIENT in a controller that has no TRANSIENT deps of its own, but whose
+  // aspect injects a TRANSIENT binding. Scope checks are disabled because a SINGLETON
+  // aspect injecting a TRANSIENT dep would ordinarily be a captive-dependency violation.
+
+  class AspectWithDep implements MethodAspect {
+    constructor(private readonly _dep: unknown) {}
+    before(): void {}
+  }
+
+  class AspectNoDep implements MethodAspect {
+    before(): void {}
+  }
+
+  it('returns true when aspect dep graph contains the target scope', async function () {
+    const kController = Symbol('ghs-aspect-ctrl')
+    const kDep = Symbol('ghs-aspect-dep')
+    const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
+
+    di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
+    di.bind(kDep).toValue('dep').lifetime(Scopes.TRANSIENT)
+    di.aspect(AspectWithDep).toSelf([kDep]).pointcuts($aop.forClass(Object))
+
+    await di.init()
+
+    // Controller's own graph has no TRANSIENT binding; aspect dep graph does.
+    expect(di.hasScopeInGraph(kController, Scopes.TRANSIENT)).toBe(true)
+  })
+
+  it('returns false when no aspect dep or controller dep has the target scope', async function () {
+    const kController = Symbol('ghs-aspect-no-scope-ctrl')
+    const di = new CaffeineIoC({ decorators: false })
+
+    di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
+    di.aspect(AspectNoDep).toSelf().pointcuts($aop.forClass(Object))
+
+    await di.init()
+
+    // Aspect has no deps; controller has no TRANSIENT dep.
+    expect(di.hasScopeInGraph(kController, Scopes.TRANSIENT)).toBe(false)
+  })
+
+  it('returns false pre-compile because aspect scope cache is not yet built', function () {
+    const kController = Symbol('ghs-aspect-precompile-ctrl')
+    const kDep = Symbol('ghs-aspect-precompile-dep')
+    const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
+
+    di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
+    di.bind(kDep).toValue('dep').lifetime(Scopes.TRANSIENT)
+    di.aspect(AspectWithDep).toSelf([kDep]).pointcuts($aop.forClass(Object))
+
+    // init() not called — _aspectScopeCache is null; aspect deps are not consulted.
+    expect(di.hasScopeInGraph(kController, Scopes.TRANSIENT)).toBe(false)
   })
 })
