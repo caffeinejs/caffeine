@@ -3,7 +3,7 @@
 import { Readable } from 'node:stream'
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { ParameterPickOptions } from './route_picker.js'
-import type { WebMultipartFile, MultipartFileNode, MultipartField } from './multipart.js'
+import type { WebMultipartFile, MultipartFileNode, MultipartField } from './multipart/index.js'
 
 type Picker<
   REQ extends FastifyRequest = FastifyRequest,

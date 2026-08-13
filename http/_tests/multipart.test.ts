@@ -4,7 +4,7 @@ import fastify from 'fastify'
 import multipartPlugin from '@fastify/multipart'
 import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { $p } from '../route_picker.js'
-import { WebMultipartFile, MultipartFileNode, MultipartField } from '../multipart.js'
+import { WebMultipartFile, MultipartFileNode, MultipartField } from '../multipart/index.js'
 
 const BOUNDARY = '----TestBoundary123'
 

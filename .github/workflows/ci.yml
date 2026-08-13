@@ -68,7 +68,6 @@ jobs:
             std/dist \
             http/dist \
             openapi/dist \
-            config/dist \
             testing/dist \
             cli/dist \
             fetchy/fetchy/dist \
@@ -97,7 +96,6 @@ jobs:
             std/dist/
             http/dist/
             openapi/dist/
-            config/dist/
             testing/dist/
             cli/dist/
             fetchy/*/dist/
