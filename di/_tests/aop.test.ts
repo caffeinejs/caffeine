@@ -489,7 +489,7 @@ describe('AOP', function () {
     @Profile('aop-method-cache')
     class MethodCacheAspect implements MethodAspect<CacheTarget> {
       around(jp: JoinPoint<CacheTarget>) {
-        const opts = reflect.get(jp.cls, CacheAnnotation, jp.methodName)!
+        const opts = reflect.get(jp.ctor, CacheAnnotation, jp.methodName)!
         cacheSpy(opts.ttl)
         return jp.proceed(...jp.args)
       }
@@ -510,7 +510,7 @@ describe('AOP', function () {
     @Profile('aop-class-ann')
     class ClassAnnAspect implements MethodAspect {
       around(jp: JoinPoint) {
-        const opts = reflect.get(jp.cls, SvcLogAnnotation)!
+        const opts = reflect.get(jp.ctor, SvcLogAnnotation)!
         classAnnSpy(opts.prefix)
         return jp.proceed(...jp.args)
       }
@@ -873,7 +873,7 @@ describe('AOP', function () {
     @Profile('aop-log-level')
     class LogLevelAspect implements MethodAspect<LogTarget> {
       before(jp: JoinPoint<LogTarget>) {
-        const opts = reflect.get(jp.cls, LogAnnotation, jp.methodName)!
+        const opts = reflect.get(jp.ctor, LogAnnotation, jp.methodName)!
         logLevelSpy(jp.methodName, opts.level)
       }
     }
@@ -891,7 +891,7 @@ describe('AOP', function () {
     @Profile('aop-log-class')
     class ClassLogAspect implements MethodAspect {
       before(jp: JoinPoint) {
-        const opts = reflect.get(jp.cls, LogClassAnnotation)!
+        const opts = reflect.get(jp.ctor, LogClassAnnotation)!
         classLogSpy(opts.prefix, jp.methodName)
       }
     }
@@ -1302,6 +1302,94 @@ describe('AOP', function () {
       di.get(AsyncFactoryTarget).run()
       expect(asyncFactorySpy).toHaveBeenCalledOnce()
     })
+  })
+})
+
+// ─── this binding and instanceof ─────────────────────────────────────────────
+
+describe('this binding and instanceof', function () {
+  // (a) self-call: this.methodB() inside intercepted methodA goes through the proxy
+  class SelfCallTarget {
+    methodA(): string { return 'a:' + this.methodB() }
+    methodB(): string { return 'b' }
+  }
+
+  const selfCallSpy = vi.fn()
+
+  @Aspect([$aop.forClass(SelfCallTarget)])
+  @Profile('aop-self-call')
+  class SelfCallAspect implements MethodAspect<SelfCallTarget> {
+    before(jp: JoinPoint<SelfCallTarget>) { selfCallSpy(jp.methodName) }
+  }
+  void SelfCallAspect
+
+  it('this.method() inside intercepted method is intercepted via the proxy', async function () {
+    selfCallSpy.mockClear()
+
+    const di = new CaffeineIoC({ profiles: ['aop-self-call'] })
+    di.bind(SelfCallTarget).toSelf()
+    await di.init()
+
+    const result = di.get(SelfCallTarget).methodA()
+
+    expect(result).toBe('a:b')
+    expect(selfCallSpy).toHaveBeenCalledTimes(2)
+    expect(selfCallSpy.mock.calls.map(([m]) => m).sort()).toEqual(['methodA', 'methodB'])
+  })
+
+  // (b) return this: builder chaining routes returned value through the proxy
+  class BuilderTarget {
+    private _name = ''
+    setName(name: string): this {
+      this._name = name
+      return this
+    }
+
+    getName(): string { return this._name }
+  }
+
+  const builderSpy = vi.fn()
+
+  @Aspect([$aop.forClass(BuilderTarget)])
+  @Profile('aop-builder-chain')
+  class BuilderAspect implements MethodAspect<BuilderTarget> {
+    before(jp: JoinPoint<BuilderTarget>) { builderSpy(jp.methodName) }
+  }
+  void BuilderAspect
+
+  it('return this chaining works and chained call is still intercepted', async function () {
+    builderSpy.mockClear()
+
+    const di = new CaffeineIoC({ profiles: ['aop-builder-chain'] })
+    di.bind(BuilderTarget).toSelf()
+    await di.init()
+
+    const result = di.get(BuilderTarget).setName('test').getName()
+
+    expect(result).toBe('test')
+    expect(builderSpy).toHaveBeenCalledTimes(2)
+    expect(builderSpy.mock.calls.map(([m]) => m)).toEqual(['setName', 'getName'])
+  })
+
+  // (c) instanceof: Proxy has no getPrototypeOf trap; prototype chain is preserved
+  class InstanceofTarget {
+    run(): string { return 'ok' }
+  }
+
+  @Aspect([$aop.forClass(InstanceofTarget, 'run')])
+  @Profile('aop-instanceof')
+  class InstanceofAspect implements MethodAspect<InstanceofTarget> {
+    before() { /* noop */ }
+  }
+  void InstanceofAspect
+
+  it('instanceof check returns true for proxied instances', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-instanceof'] })
+    di.bind(InstanceofTarget).toSelf()
+    await di.init()
+
+    const instance = di.get(InstanceofTarget)
+    expect(instance instanceof InstanceofTarget).toBe(true)
   })
 })
 

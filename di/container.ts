@@ -39,7 +39,7 @@ import { RequestScopeManager } from './request_scope_manager.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
 import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } from './_checks.js'
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
-import { AOPPostProcessor, kAspectLabel, type MethodAspect } from './aop.js'
+import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { Provider } from './provider.js'
 import { Keys } from './symbols.js'
 
@@ -312,8 +312,6 @@ export class CaffeineIoC implements Container {
    * @param key - The key to wrap in a {@link Provider}.
    *
    * @returns A {@link Provider} of {@link T}.
-   *
-   * @framework
    */
   wrap<T = unknown>(key: Key<T>): Provider<T> {
     const binding = this.getBinding(key)
@@ -333,8 +331,6 @@ export class CaffeineIoC implements Container {
    * @param key - The key to wrap in a {@link Provider}.
    *
    * @returns A {@link Provider} of {@link T}[].
-   *
-   * @framework
    */
   wrapMany<T = unknown>(key: Key<T>): Provider<T[]> {
     const bindings = this.getBindings<T>(key)
@@ -632,8 +628,6 @@ export class CaffeineIoC implements Container {
    * @param key - The key to rebind.
    *
    * @returns A {@link Binder} to configure the binding.
-   *
-   * @testing
    */
   rebind<T>(key: TypedKey<T>): Binder<T>
   rebind<T = unknown>(key: NamedKey): Binder<T>
@@ -728,8 +722,6 @@ export class CaffeineIoC implements Container {
    * Captures a snapshot of all non-internal bindings in their current state.
    * Works at any point — pre-init or post-init.
    * For testing purposes.
-   *
-   * @testing
    */
   snapshot(): Snapshot {
     const entries: [Key, Binding][] = []
@@ -762,8 +754,6 @@ export class CaffeineIoC implements Container {
   /**
    * Restores bindings from the given snapshot into the container.
    * Must be called before {@link init}.
-   *
-   * @testing
    */
   restore(snap: Snapshot): void {
     if (this._ready) {
@@ -1417,7 +1407,16 @@ export class CaffeineIoC implements Container {
 
     const hasAspects = this.bindingsByLabel.has(kAspectLabel)
     if (hasAspects) {
-      this.postProcessors.add(new AOPPostProcessor())
+      const aopInterceptors = buildAOPInterceptors(this)
+      for (const [key, binding] of this.registry.entries()) {
+        const ctor = binding.type ?? (typeof key === 'function' ? key as Function : null)
+        if (ctor) {
+          const interceptor = aopInterceptors.get(ctor)
+          if (interceptor) {
+            binding.interceptors.unshift(interceptor)
+          }
+        }
+      }
     }
 
     this._aspectScopeCache = this.computeAspectScopeCache()

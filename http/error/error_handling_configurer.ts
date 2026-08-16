@@ -8,28 +8,6 @@ import { ErrHTTP } from './http.js'
 type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
 /**
- * Finalizes an error handler's result the same way a controller handler's is: a handler that already
- * responded via `ctx` (so `reply.sent`) is left alone; a returned {@link ViewResult} is rendered as HTML;
- * any other returned value is handed back for Fastify to serialize; a void return with nothing sent yet is
- * flushed with an empty body (the historical behavior).
- */
-function finalize(reply: FastifyReply, result: unknown): unknown {
-  if (reply.sent) {
-    return
-  }
-
-  if (result instanceof ViewResult) {
-    return renderView(result, reply)
-  }
-
-  if (result !== undefined) {
-    return result
-  }
-
-  return reply.send()
-}
-
-/**
  * Wires error handling. `configureServer` installs the application-wide handler on the root instance;
  * `configureRouter` installs the encapsulated per-controller/route handler that resolves the most
  * specific `@CatchBy`/`@Catch` first and falls back to the global handler. Runs before authentication so
@@ -139,4 +117,26 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
       return globalErrorHandler(error, req, reply)
     })
   }
+}
+
+/**
+ * Finalizes an error handler's result the same way a controller handler's is: a handler that already
+ * responded via `ctx` (so `reply.sent`) is left alone; a returned {@link ViewResult} is rendered as HTML;
+ * any other returned value is handed back for Fastify to serialize; a void return with nothing sent yet is
+ * flushed with an empty body (the historical behavior).
+ */
+function finalize(reply: FastifyReply, result: unknown): unknown {
+  if (reply.sent) {
+    return
+  }
+
+  if (result instanceof ViewResult) {
+    return renderView(result, reply)
+  }
+
+  if (result !== undefined) {
+    return result
+  }
+
+  return reply.send()
 }

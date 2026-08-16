@@ -1,20 +1,4 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/tsdoc/v0/tsdoc.schema.json",
-  "tagDefinitions": [
-    {
-      "tagName": "@framework",
-      "syntaxKind": "modifier",
-      "allowMultiple": false
-    },
-    {
-      "tagName": "@legacyDecorators",
-      "syntaxKind": "modifier",
-      "allowMultiple": false
-    },
-    {
-      "tagName": "@testing",
-      "syntaxKind": "modifier",
-      "allowMultiple": false
-    }
-  ]
+  "tagDefinitions": []
 }

@@ -1,8 +1,9 @@
 /// <reference types="@fastify/multipart" />
 /// <reference types="@fastify/cookie" />
+
 import { Readable } from 'node:stream'
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { ParameterPickOptions } from './route_picker.js'
+import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { WebMultipartFile, MultipartFileNode, MultipartField } from './multipart/index.js'
 
 type Picker<

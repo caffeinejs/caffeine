@@ -1,5 +1,5 @@
 import { Binding, Ctor, Key, Provider } from '@caffeinejs/di'
-import type { ParameterPickOptions } from './route_picker.js'
+import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { ErrorHandler } from './error/error.js'
 import { AuthzRouteService } from './security/authz/index.js'
 import { RouteAuthzOptions } from './decorators/registrar/routing.definition.js'

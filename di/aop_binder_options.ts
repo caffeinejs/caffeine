@@ -11,7 +11,7 @@ import { BinderOptions } from './binder_options.js'
  *   .aspect(LoggingAspect)
  *   .toSelf()
  *   .pointcuts($aop.forClass(UserService, 'findUser'))
- *   .conditional(ctx => ctx.env === 'production')
+ *   .conditional(ctx => process.env.NODE_ENV === 'production')
  *   .order(1)
  * ```
  */

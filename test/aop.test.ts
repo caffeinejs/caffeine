@@ -42,7 +42,7 @@ class GuardAspect implements MethodAspect {
   constructor(private readonly container: CaffeineIoC) {}
 
   before(jp: JoinPoint): void | Promise<void> {
-    const key = reflect.getOverride(jp.cls, UseGuard, jp.methodName)
+    const key = reflect.getOverride(jp.ctor, UseGuard, jp.methodName)
     if (key === undefined) {
       return
     }
@@ -303,7 +303,7 @@ describe('AOP guard — JoinPoint fields inside guard', function () {
 
     class InspectGuard implements Guard {
       guard(jp: JoinPoint): boolean {
-        captured.push({ methodName: jp.methodName, args: [...jp.args], cls: jp.cls })
+        captured.push({ methodName: jp.methodName, args: [...jp.args], cls: jp.ctor })
         return true
       }
     }

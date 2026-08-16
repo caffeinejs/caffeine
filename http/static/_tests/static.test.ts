@@ -21,7 +21,7 @@ describe('static feature', () => {
 
   it('serves a file under the configured prefix', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .static(s => s.static(fixtures, { prefix: '/static' }))
+      .static(s => s.serve(fixtures, { prefix: '/static' }))
       .build()
     await app.ready()
 
@@ -34,7 +34,7 @@ describe('static feature', () => {
 
   it('sets the css content-type from the extension', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .static(s => s.static(fixtures, { prefix: '/assets' }))
+      .static(s => s.serve(fixtures, { prefix: '/assets' }))
       .build()
     await app.ready()
 
@@ -46,7 +46,7 @@ describe('static feature', () => {
 
   it('404s for a missing file', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .static(s => s.static(fixtures, { prefix: '/static' }))
+      .static(s => s.serve(fixtures, { prefix: '/static' }))
       .build()
     await app.ready()
 
@@ -58,8 +58,8 @@ describe('static feature', () => {
   it('serves from multiple mounts (only the first decorates reply)', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .static(s => s
-        .static(fixtures, { prefix: '/one' })
-        .static(fixtures2, { prefix: '/two' }))
+        .serve(fixtures, { prefix: '/one' })
+        .serve(fixtures2, { prefix: '/two' }))
       .build()
     await app.ready()
 
@@ -77,7 +77,7 @@ describe('StaticBuilder', () => {
   it('binds the mounts array to kStaticMounts', async () => {
     const container = new CaffeineIoC()
     const builder = new StaticBuilder()
-    builder.static(fixtures, { prefix: '/static' }).static(fixtures2, { prefix: '/two' })
+    builder.serve(fixtures, { prefix: '/static' }).serve(fixtures2, { prefix: '/two' })
 
     await builder[kServiceConfigure]({ container, feats: new Feats() })
     await container.init()

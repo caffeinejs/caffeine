@@ -21,8 +21,8 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   server.register(FastifyCookie)
 
   return createWebApplication(fastifyAdapterFactory(server), { container })
-    .view(v => v.engine({ handlebars }).root(viewsRoot).viewExt('hbs').layout('layout'))
-    .static(s => s.static(publicRoot, { prefix: '/static' }))
+    .view(v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
+    .static(s => s.serve(publicRoot, { prefix: '/static' }))
     .authentication(auth => auth
       // JWT bearer for API clients.
       .addJWTBearer(o => o.secret(JWT_SECRET))
@@ -65,6 +65,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
         }
         return ctx.req.cookie(GITHUB_SESSION_COOKIE) ? 'GitHub' : 'Bearer'
       })
-      .default('scheme'))
+      .default('scheme'),
+    )
     .build()
 }

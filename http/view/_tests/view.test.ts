@@ -20,7 +20,7 @@ const templatesRoot = fileURLToPath(new URL('./templates', import.meta.url))
 
 function viewApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()))
-    .view(v => v.engine({ handlebars }).root(templatesRoot).viewExt('hbs'))
+    .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
 }
 
 describe('view feature', () => {
@@ -80,7 +80,7 @@ describe('view feature', () => {
     void [ContextController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).viewExt('hbs').defaultContext({ site: 'Caffeine' }))
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }))
       .build()
     await app.ready()
 
@@ -99,7 +99,7 @@ describe('view feature', () => {
     void [NamespacedController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).viewExt('hbs'))
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
     await app.ready()
 
@@ -205,7 +205,7 @@ describe('ViewBuilder', () => {
   it('binds the assembled options to kViewOptions', async () => {
     const container = new CaffeineIoC()
     const builder = new ViewBuilder()
-    builder.engine({ handlebars }).root(templatesRoot).viewExt('hbs')
+    builder.engine({ handlebars }).root(templatesRoot).extension('hbs')
 
     await builder[kServiceConfigure]({ container, feats: new Feats() })
     await container.init()
@@ -233,7 +233,7 @@ describe('ViewBuilder', () => {
     const container = new CaffeineIoC()
     const builder = new ViewBuilder()
     // configure overrides the earlier viewExt; a later fluent setter overrides configure.
-    builder.engine({ handlebars }).viewExt('hbs').configure({ charset: 'ascii', viewExt: 'html' }).viewExt('pug')
+    builder.engine({ handlebars }).extension('hbs').configure({ charset: 'ascii', viewExt: 'html' }).extension('pug')
 
     await builder[kServiceConfigure]({ container, feats: new Feats() })
     await container.init()

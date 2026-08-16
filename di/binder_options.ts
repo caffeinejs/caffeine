@@ -214,8 +214,6 @@ export class BinderOptions<TValue> {
   /**
    * Attaches one or more symbol labels to the binding for group-resolution via `getMany`.
    *
-   * @framework
-   *
    * @example
    * ```ts
    * const Plugin = Symbol('Plugin')
@@ -236,8 +234,6 @@ export class BinderOptions<TValue> {
   tags(entries: Map<symbol, unknown>): this
   /**
    * Attaches arbitrary symbol-keyed metadata tags to the binding.
-   *
-   * @framework
    *
    * @example
    * ```ts
@@ -317,7 +313,7 @@ export class BinderOptions<TValue> {
    *
    * @example
    * ```ts
-   * container.bind(key).toClass(ProdService).conditional(ctx => ctx.env === 'production')
+   * container.bind(key).toClass(ProdService).conditional(ctx => process.env.NODE_ENV === 'production')
    * ```
    */
   conditional(fn: Conditional | Conditional[]): this {

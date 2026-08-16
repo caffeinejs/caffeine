@@ -15,6 +15,10 @@
       "types": "./dist/config/index.d.ts",
       "default": "./dist/config/index.js"
     },
+    "./framework": {
+      "types": "./dist/framework/index.d.ts",
+      "default": "./dist/framework/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

@@ -4,8 +4,6 @@ import { Key } from './key.js'
 /**
  * Represents the {@link Container} state at a specific point in time.
  * Designed for testing purposes.
- *
- * @testing
  */
 export class Snapshot {
   readonly #entries: ReadonlyArray<[Key, Binding]>

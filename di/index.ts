@@ -6,7 +6,7 @@
 
 import './_polyfill.js'
 
-export { createAnnotation } from './annotations.js'
+export { annotate, createAnnotation } from './annotations.js'
 export type { JoinPoint, MethodAspect, Pointcut, PointcutClassPredicate, PointcutMethodPredicate } from './aop.js'
 export { $aop } from './aop.js'
 export type { AOPBinder } from './aop_binder.js'

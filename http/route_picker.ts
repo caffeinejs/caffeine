@@ -1,15 +1,33 @@
 import { FastifyRequest } from 'fastify'
+import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
 
-export interface ParameterPickOptions<R> {
-  type: string
-  name?: string
-  picker?: ParameterPicker<R>
-  async?: boolean
+export interface HTTPPickers {
+  fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R>
+  fastifyReply<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R>
+  param<R = unknown>(name?: string): ParameterPickOptions<R>
+  query<R = unknown>(name?: string): ParameterPickOptions<R>
+  body<R = unknown>(): ParameterPickOptions<R>
+  header<R = unknown>(name?: string): ParameterPickOptions<R>
+  context<R = unknown>(): ParameterPickOptions<R>
+  method<R = unknown>(): ParameterPickOptions<R>
+  url<R = unknown>(): ParameterPickOptions<R>
+  path<R = unknown>(): ParameterPickOptions<R>
+  signal<R = unknown>(): ParameterPickOptions<R>
+  port<R = unknown>(): ParameterPickOptions<R>
+  address<R = unknown>(): ParameterPickOptions<R>
+  webStreamParts<R = unknown>(): ParameterPickOptions<R>
+  webStreamFiles<R = unknown>(): ParameterPickOptions<R>
+  webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
+  streamParts<R = unknown>(): ParameterPickOptions<R>
+  streamFiles<R = unknown>(): ParameterPickOptions<R>
+  streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
+  file<R = unknown>(fieldname?: string): ParameterPickOptions<R>
+  files<R = unknown>(): ParameterPickOptions<R>
+  formData<R = unknown>(): ParameterPickOptions<R>
+  cookie<R = unknown>(name?: string): ParameterPickOptions<R>
+  signedCookie<R = unknown>(name?: string): ParameterPickOptions<R>
+  pick<R = unknown>(fn: (req: R) => unknown | Promise<unknown>, opts?: { async?: boolean },): ParameterPickOptions<R>
 }
-
-export type ParameterPicker<R, O = unknown> = (req: R) => O | Promise<O>
-
-export type Picker<R> = (req: R, parameters: Array<ParameterPickOptions<R>>) => ParameterPicker<R, Array<unknown>>
 
 function fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {
   return { type: 'fastify:request' }
@@ -114,7 +132,7 @@ function pick<R = unknown>(
   return { type: 'custom', picker: fn as ParameterPicker<R>, async: opts?.async }
 }
 
-export const $p = {
+export const $p: HTTPPickers = {
   fastifyRequest,
   fastifyReply,
   param,

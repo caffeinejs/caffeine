@@ -1,5 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
-import type { ParameterPickOptions } from '../../route_picker.js'
+import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { ErrorHandlerRef } from '../../error/error.js'
 import { RouteValidationSchema } from '../../route.js'
 

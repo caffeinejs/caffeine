@@ -1,38 +1,20 @@
-import type { BindingDescriptor } from './container_interface.js'
-import type { PostProcessor } from './post_processor.js'
-import type { ResolutionContext } from './resolution_context.js'
-import type { Key } from './key.js'
+import type { BindingDescriptor, Container } from './container_interface.js'
+import type { TypedKey } from './key.js'
 import { type AnyClass } from './types.js'
+import type { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 
 export const kAspectLabel = Symbol('@caffeinejs/di:aspect')
 export const kAspectPointcuts = Symbol('@caffeinejs/di:aspect-pointcuts')
 
 /**
  * Predicate that decides whether a method should be intercepted.
- * Receives the method name, the class binding descriptor, and the class constructor.
  * Evaluated once per method at weave time — not on every call.
- *
- * @example
- * ```ts
- * const Transactional = createClassMemberAnnotation<true>()
- * // intercept only methods annotated with @Transactional
- * const onlyTx: MethodPredicate = (name, _desc, cls) =>
- *   reflect.get(cls, Transactional, name) !== undefined
- * ```
  */
 export type PointcutMethodPredicate = (member: string | symbol, descriptor: BindingDescriptor, cls: AnyClass) => boolean
 
 /**
  * Predicate that decides whether a class binding should be intercepted.
- * Receives the binding descriptor and the class constructor.
- *
- * @example
- * ```ts
- * const Service = createClassAnnotation<{ name: string }>()
- * // intercept all classes annotated with @Service
- * const onlyServices: ClassPredicate = (_d, cls) =>
- *   reflect.get(cls, Service) !== undefined
- * ```
+ * Evaluated once per class at weave time — not on every instance creation.
  */
 export type PointcutClassPredicate = (descriptor: BindingDescriptor, cls: AnyClass) => boolean
 
@@ -41,35 +23,49 @@ export type PointcutClassPredicate = (descriptor: BindingDescriptor, cls: AnyCla
  * Passed to every {@link MethodAspect} hook.
  */
 export interface JoinPoint<T = unknown> {
-  /** Name of the intercepted method. */
+  /**
+   * Name of the intercepted method.
+   */
   readonly methodName: string | symbol
-  /** The target instance on which the method is being invoked. */
+
+  /**
+   * The target instance on which the method is being invoked.
+   */
   readonly target: T
+
   /**
    * The class constructor for the intercepted instance.
-   * Use with `reflect.get(jp.cls, annotation)` or `reflect.get(jp.cls, annotation, jp.methodName)`
+   * Use with `reflect.get(jp.ctor, annotation)` or `reflect.get(jp.ctor, annotation, jp.methodName)`
    * to read annotation values from within a hook.
    */
-  readonly cls: abstract new (...args: any[]) => T
-  /** Current argument list — the `before` hook may mutate this array to change args. */
+  readonly ctor: abstract new (...args: any[]) => T
+
+  /**
+   * Current argument list.
+   * Note that the `before` hook may mutate this array to change args.
+   */
   args: unknown[]
-  /** Calls the next interceptor in the chain, or the original method if last. Available in `before` and `around`. */
+
+  /**
+   * Calls the next interceptor in the chain, or the original method if last.
+   * Available in `before` and `around` {@link MethodAspect} hooks.
+   */
   proceed(...args: unknown[]): unknown
 }
 
 /**
- * Interface for an AOP aspect class.
- * Implement one or more hooks to intercept method invocations on the target class.
+ * MethodAspect represents an AOP aspect.
+ * Implement one or more hooks to intercept method invocations on the target class (or classes).
  *
- * **Aspects are container-managed singletons.** Mutable instance fields are shared across all
- * concurrent invocations — keep hooks stateless and use constructor-injected services for state.
+ * Aspects are container-managed **singletons**.
+ * Use {@link Provider} and $i.provide() to inject dependencies with different scopes.
  *
  * Execution order per invocation:
- * 1. `before`
- * 2. `around` (controls whether `proceed()` is called) — or automatic proceed if absent
- * 3. `afterReturn` on success — always receives the resolved value, never a raw Promise
- * 4. `afterThrow` on error
- * 5. `after` always
+ * 1. `before`.
+ * 2. `around` (controls whether `proceed()` is called) — or automatic proceed if absent.
+ * 3. `afterReturn` on success — always receives the resolved value, never a raw Promise.
+ * 4. `afterThrow` on error.
+ * 5. `after` always. It works as a final catch-all handler.
  */
 export interface MethodAspect<T = unknown> {
   before?(joinPoint: JoinPoint<T>): void | Promise<void>
@@ -81,7 +77,7 @@ export interface MethodAspect<T = unknown> {
 
 /**
  * Describes which class(es) and methods an aspect should intercept.
- * Created via `$aop.forClass` or `$aop.pointcut`.
+ * Created via `$aop.*` helper functions.
  */
 export interface Pointcut {
   target: Function | PointcutClassPredicate
@@ -89,45 +85,89 @@ export interface Pointcut {
 }
 
 interface WeavingEntry {
-  aspectKey: Key
+  aspectKey: TypedKey<MethodAspect<unknown>>
   methods: Set<string | symbol> | PointcutMethodPredicate | null
   order: number | undefined
 }
 
 /**
- * PostProcessor that weaves registered aspects onto resolved instances via ES6 Proxy.
- * Registered by the container during compile() when at least one `@Aspect` is present.
- *
- * @framework
+ * Builds a map from constructor to a PostResolutionInterceptor that weaves aspects onto the
+ * resolved instance. Only targeted bindings receive an interceptor — untargeted bindings have
+ * zero overhead.
  */
-export class AOPPostProcessor implements PostProcessor {
-  private weavingMap: Map<Function, WeavingEntry[]> | null = null
+export function buildAOPInterceptors(container: Container): Map<Function, PostResolutionInterceptor> {
+  const weavingMap = buildWeavingMap(container)
+  const result = new Map<Function, PostResolutionInterceptor>()
 
-  beforeInit(_ctx: ResolutionContext, instance: unknown): unknown {
-    return instance
+  for (const [ctor, entries] of weavingMap) {
+    let resolved: ResolvedEntry[] | undefined
+    const methodMapCache = new WeakMap<object, Map<string | symbol, MethodAspect[]>>()
+
+    result.set(ctor, (ctx, instance) => {
+      resolved ??= entries.map(e => ({
+        aspect: ctx.container.get(e.aspectKey),
+        methods: e.methods,
+      }))
+
+      let methodMap = methodMapCache.get(ctx.binding)
+      if (!methodMap) {
+        methodMap = buildMethodMap(instance, resolved, ctx, ctx.binding.type as AnyClass)
+        methodMapCache.set(ctx.binding, methodMap)
+      }
+
+      return weave(instance, methodMap, ctx.binding.type as AnyClass)
+    })
   }
 
-  afterInit(ctx: ResolutionContext, instance: unknown): unknown {
-    if (this.weavingMap === null) {
-      this.weavingMap = buildWeavingMap(ctx)
-    }
-    if (this.weavingMap.size === 0) {
-      return instance
+  return result
+}
+
+export function buildWeavingMap(container: Container): Map<Function, WeavingEntry[]> {
+  const map = new Map<Function, WeavingEntry[]>()
+
+  for (const aspect of container.getBindingsByLabel(kAspectLabel)) {
+    const { key, binding } = aspect
+    const pointcuts = binding.tags.get(kAspectPointcuts) as Pointcut[] | undefined
+    if (!pointcuts) {
+      continue
     }
 
-    const proto = Object.getPrototypeOf(instance) as { constructor?: Function } | null
-    const ctor = proto?.constructor
-    if (!ctor) {
-      return instance
-    }
+    for (const pointcut of pointcuts) {
+      const weavingEntry: WeavingEntry = {
+        aspectKey: key as TypedKey<MethodAspect<unknown>>,
+        methods: pointcut.methods,
+        order: binding.order,
+      }
 
-    const entries = this.weavingMap.get(ctor)
-    if (!entries || entries.length === 0) {
-      return instance
-    }
+      if (isClassPredicate(pointcut.target)) {
+        const predicate = pointcut.target
 
-    return weave(ctx, instance, entries)
+        for (const desc of container.getBindingsBy(bd => {
+          const cls = bd.binding.type
+          if (!cls) {
+            return false
+          }
+
+          return predicate(bd, cls as AnyClass)
+        })) {
+          const ctor = desc.binding.type ?? (typeof desc.key === 'function' ? desc.key : null)
+          if (!ctor) {
+            continue
+          }
+
+          registerEntry(map, ctor, weavingEntry)
+        }
+      } else {
+        registerEntry(map, pointcut.target, weavingEntry)
+      }
+    }
   }
+
+  for (const list of map.values()) {
+    list.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+  }
+
+  return map
 }
 
 function isClassPredicate(f: Function): f is PointcutClassPredicate {
@@ -144,47 +184,8 @@ function registerEntry(
     list = []
     map.set(ctor, list)
   }
+
   list.push(entry)
-}
-
-function buildWeavingMap(ctx: ResolutionContext): Map<Function, WeavingEntry[]> {
-  const map = new Map<Function, WeavingEntry[]>()
-
-  for (const { key, binding } of ctx.container.getBindingsByLabel(kAspectLabel)) {
-    const entries = binding.tags.get(kAspectPointcuts) as Pointcut[] | undefined
-    if (!entries) {
-      continue
-    }
-
-    for (const entry of entries) {
-      const weavingEntry: WeavingEntry = { aspectKey: key, methods: entry.methods, order: binding.order }
-
-      if (isClassPredicate(entry.target as Function)) {
-        const predicate = entry.target as PointcutClassPredicate
-        for (const desc of ctx.container.getBindingsBy(d => {
-          const cls = d.binding.type
-          if (!cls) {
-            return false
-          }
-          return predicate(d, cls as AnyClass)
-        })) {
-          const ctor = desc.binding.type ?? (typeof desc.key === 'function' ? desc.key as Function : null)
-          if (!ctor) {
-            continue
-          }
-          registerEntry(map, ctor, weavingEntry)
-        }
-      } else {
-        registerEntry(map, entry.target as Function, weavingEntry)
-      }
-    }
-  }
-
-  for (const list of map.values()) {
-    list.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
-  }
-
-  return map
 }
 
 interface ResolvedEntry {
@@ -192,27 +193,20 @@ interface ResolvedEntry {
   methods: Set<string | symbol> | PointcutMethodPredicate | null
 }
 
-function weave(ctx: ResolutionContext, instance: unknown, entries: WeavingEntry[]): unknown {
-  const resolved: ResolvedEntry[] = entries.map(e => ({
-    aspect: ctx.container.get(e.aspectKey as any) as MethodAspect,
-    methods: e.methods,
-  }))
-
-  const descriptor: BindingDescriptor = { key: ctx.key, binding: ctx.binding }
-  const cls = ctx.binding.type as AnyClass
-  const methodMap = buildMethodMap(instance, resolved, descriptor, cls)
-
+function weave(instance: unknown, methodMap: Map<string | symbol, MethodAspect[]>, cls: AnyClass): unknown {
   return new Proxy(instance as object, {
     get(target: any, prop: string | symbol, receiver: unknown): unknown {
       const aspects = methodMap.get(prop)
       if (!aspects || aspects.length === 0) {
         return Reflect.get(target, prop, receiver)
       }
+
       if (typeof target[prop] !== 'function') {
         return Reflect.get(target, prop, receiver)
       }
+
       return function (...args: unknown[]) {
-        return executeChain(target, prop, args, aspects, cls)
+        return executeChain(target, prop, args, aspects, cls, receiver)
       }
     },
   })
@@ -277,13 +271,14 @@ function executeChain(
   args: unknown[],
   aspects: MethodAspect[],
   cls: AnyClass,
+  proxy: unknown,
 ): unknown {
   let nextI = 0
 
   const jp: JoinPoint<any> = {
     methodName,
-    target,
-    cls,
+    target: proxy as any,
+    ctor: cls,
     args,
     proceed(...n: unknown[]) {
       return runStep(nextI, n.length ? n : jp.args)
@@ -292,7 +287,7 @@ function executeChain(
 
   function runStep(i: number, a: unknown[]): unknown {
     if (i >= aspects.length) {
-      return target[methodName](...a) as unknown
+      return (target[methodName] as Function).apply(proxy, a)
     }
     nextI = i + 1
     jp.args = a

@@ -40,8 +40,6 @@ export function defineInjectable<T>(
 /**
  * Extends the binding configuration for an injectable class.
  * Configuration is cumulative for collection fields.
- *
- * @framework
  */
 export function extendInjectableAttributes<T>(
   id: TypeID,
@@ -112,8 +110,6 @@ export function defineMemberInjection<T = unknown>(
 /**
  * Extends the binding configuration for an injectable member.
  * Configuration is cumulative for collection fields.
- *
- * @framework
  */
 export function extendMemberInjectableAttributes(
   metaID: TypeID,
@@ -133,8 +129,6 @@ export function extendMemberInjectableAttributes(
 
 /**
  * Checks if a binding is registered for the given key.
- *
- * @framework
  */
 export function hasInjectable(key: Key): boolean {
   return Injectables.has(key)
@@ -142,8 +136,6 @@ export function hasInjectable(key: Key): boolean {
 
 /**
  * Gets the injection metadata for the given object.
- *
- * @framework
  */
 export function getInjectionMetadata(id: TypeID): MemberMetadata {
   let meta = MetadataWeakMap.get(id)
@@ -160,8 +152,6 @@ export function getInjectionMetadata(id: TypeID): MemberMetadata {
 
 /**
  * Gets the binding configuration for the given key.
- *
- * @framework
  */
 export function getBindingConfiguration(key: Key): DecoratedBindingConfig | undefined {
   return Bindings.get(notNil(key))
@@ -180,8 +170,6 @@ function getOrCreateBindingConfiguration(key: Key): DecoratedBindingConfig {
 /**
  * Gets the binding configurations for the given active profiles.
  * The container uses this function to retrieve all decorated bindings configured for the given profiles.
- *
- * @framework
  */
 export function getBindingConfigurations(
   activeProfiles: ReadonlySet<Identifier>,
@@ -206,8 +194,6 @@ export function getBindingConfigurations(
 
 /**
  * Gets the provided bindings from configuration classes for the given active profiles.
- *
- * @framework
  */
 export function providedBindingConfigurations(
   activeProfiles: ReadonlySet<Identifier>,
@@ -238,8 +224,6 @@ export function providedBindingConfigurations(
 
 /**
  * Configures a provided binding from a configuration class.
- *
- * @framework
  */
 export function addProvidedBindings<T>(key: Key<T>, config: DecoratedBindingConfig): void {
   notNil(key)
@@ -255,8 +239,6 @@ export function addProvidedBindings<T>(key: Key<T>, config: DecoratedBindingConf
 
 /**
  * Converts a binding decorator configuration to a binding configuration.
- *
- * @framework
  */
 export function decoratorConfigToBinding<T>(config: DecoratedBindingConfig): Binding<T> {
   return config.binding()
@@ -275,8 +257,6 @@ function injectablesPerProfile(profile: Identifier): Array<[Key, DecoratedBindin
 
 /**
  * Represents a snapshot of the registry.
- *
- * @testing
  */
 export interface DecoratorRegistrySnapshot {
   readonly bindings: Map<Key, DecoratedBindingConfig>
@@ -287,8 +267,6 @@ export interface DecoratorRegistrySnapshot {
 
 /**
  * Creates a snapshot of the registry.
- *
- * @testing
  */
 export function snapshotDecoratorRegistry(): DecoratorRegistrySnapshot {
   return {
@@ -301,8 +279,6 @@ export function snapshotDecoratorRegistry(): DecoratorRegistrySnapshot {
 
 /**
  * Restores the registry from a snapshot.
- *
- * @testing
  */
 export function restoreDecoratorRegistry(snapshot: DecoratorRegistrySnapshot): void {
   Bindings.clear()

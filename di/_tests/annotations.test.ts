@@ -5,7 +5,7 @@ import { Aspect } from '../decorators/aspect.js'
 import { Profile } from '../decorators/profile.js'
 import { $aop } from '../aop.js'
 import type { JoinPoint, MethodAspect } from '../aop.js'
-import { createAnnotation } from '../annotations.js'
+import { annotate, createAnnotation } from '../annotations.js'
 import { reflect } from '../reflect.js'
 
 // ─── fixtures ───────────────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ describe('AOP integration', function () {
     @Profile('aop-ann-class-pred')
     class ClassPredAspect implements MethodAspect {
       before(_jp: JoinPoint) {
-        classAnnSpy.push({ prefix: reflect.get(_jp.cls, RoutAnn)?.prefix })
+        classAnnSpy.push({ prefix: reflect.get(_jp.ctor, RoutAnn)?.prefix })
       }
     }
     void ClassPredAspect
@@ -252,7 +252,7 @@ describe('AOP integration', function () {
     @Profile('aop-ann-method-pred')
     class MethodPredAspect implements MethodAspect {
       before(jp: JoinPoint) {
-        methodAnnSpy.push({ method: reflect.get(jp.cls, HandlerAnn, jp.methodName)?.method, name: jp.methodName })
+        methodAnnSpy.push({ method: reflect.get(jp.ctor, HandlerAnn, jp.methodName)?.method, name: jp.methodName })
       }
     }
     void MethodPredAspect
@@ -304,8 +304,8 @@ describe('AOP integration', function () {
     class JpAspect implements MethodAspect {
       before(jp: JoinPoint) {
         jpAnnSpy.push({
-          classAnn: reflect.get(jp.cls, SvcAnn),
-          memberAnn: reflect.get(jp.cls, OpAnn, jp.methodName),
+          classAnn: reflect.get(jp.ctor, SvcAnn),
+          memberAnn: reflect.get(jp.ctor, OpAnn, jp.methodName),
         })
       }
     }
@@ -342,7 +342,7 @@ describe('AOP integration', function () {
       @Aspect([$aop.forClass(ClsRefSvc, 'run')])
       @Profile('aop-ann-cls-ref')
       class ClsRefAspect implements MethodAspect {
-        before(jp: JoinPoint) { clsRefs.push(jp.cls) }
+        before(jp: JoinPoint) { clsRefs.push(jp.ctor) }
       }
       void ClsRefAspect
 
@@ -410,6 +410,83 @@ describe('reflect.getOverride', function () {
     }
 
     expect(reflect.getOverride(T, MemberOnly, 'go')).toBe(42)
+  })
+})
+
+// ─── createAnnotation with transform ─────────────────────────────────────────
+
+describe('createAnnotation with transform', function () {
+  const Roles = createAnnotation((...roles: string[]) => roles)
+  const Weight = createAnnotation((n: number) => n * 2)
+
+  @Roles('admin', 'user')
+  class AdminCtrl {
+    @Roles('superadmin')
+    delete() {}
+
+    unannotated() {}
+  }
+
+  @Weight(5)
+  class Heavy {}
+
+  it('stores transform result on a decorated class', function () {
+    expect(reflect.get(AdminCtrl, Roles)).toEqual(['admin', 'user'])
+  })
+
+  it('stores transform result on a decorated method', function () {
+    expect(reflect.get(AdminCtrl, Roles, 'delete')).toEqual(['superadmin'])
+  })
+
+  it('returns undefined for unannotated member', function () {
+    expect(reflect.get(AdminCtrl, Roles, 'unannotated')).toBeUndefined()
+  })
+
+  it('transform is applied before storing — result is not the raw args array', function () {
+    expect(reflect.get(Heavy, Weight)).toBe(10)
+  })
+})
+
+// ─── annotate() primitive ─────────────────────────────────────────────────────
+
+describe('annotate()', function () {
+  it('can be used inside a decorator factory to write class-level annotations', function () {
+    const Key = createAnnotation<string>()
+    function Tag(value: string) {
+      return (_: unknown, ctx: ClassDecoratorContext) => {
+        annotate(ctx, Key, value)
+      }
+    }
+    @Tag('service')
+    class T {}
+    expect(reflect.get(T, Key)).toBe('service')
+  })
+
+  it('can be used inside a decorator factory to write member-level annotations', function () {
+    const Key = createAnnotation<number>()
+    function Weight(n: number) {
+      return (_: unknown, ctx: ClassMemberDecoratorContext) => {
+        annotate(ctx, Key, n)
+      }
+    }
+    class T {
+      @Weight(42)
+      run() {}
+    }
+    expect(reflect.get(T, Key, 'run')).toBe(42)
+  })
+
+  it('memberName parameter writes to a specific member slot regardless of decorator kind', function () {
+    const Key = createAnnotation<string>()
+    function TagWithSlot(value: string, member: string) {
+      return (_: unknown, ctx: ClassDecoratorContext) => {
+        annotate(ctx, Key, value, member)
+      }
+    }
+    @TagWithSlot('hello', 'synthetic')
+    class T {}
+    expect(reflect.get(T, Key, 'synthetic')).toBe('hello')
+    expect(reflect.get(T, Key)).toBeUndefined()
   })
 })
 

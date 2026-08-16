@@ -1,21 +1,29 @@
+import { ErrConfiguration } from '../error/common.js'
 import { kServiceConfigure, Service, ServiceKit } from '../service.js'
 import { kViewOptions } from './keys.js'
 import type { ViewOptions } from './view.js'
 
 /**
- * Configures the view feature: the `@fastify/view` options that back server-side rendering. Bound via
- * `app.view(v => v.engine({ handlebars }).root(dir).viewExt('hbs'))`.
+ * ViewBuilder configures SSR (Server-Side Rendering), powered by `@fastify/view` plugin.
+ * The same options used to configure the `@fastify/view` plugin can be used to configure the Caffeine's SSR.
+ * In case the builder does not provide a specific option, use the `configure` method to set any option supported by the `@fastify/view` plugin.
  *
- * A {@link Service}, like `CacheBuilder`/`ServerBuilder` — its {@link kServiceConfigure} binds the
- * assembled {@link ViewOptions} into the container under {@link kViewOptions}. The template engine is
- * user-supplied; Caffeine never depends on one directly.
+ * @see https://github.com/fastify/point-of-view
  */
 export class ViewBuilder implements Service {
   #options: Partial<ViewOptions> = {}
 
-  /** The template engine, user-supplied — e.g. `.engine({ handlebars })`. Required by `@fastify/view`. */
-  engine(engine: ViewOptions['engine']): this {
+  /**
+   * Configures the template engine.
+   * Accepted engines are: ejs, eta, nunjucks, pug, handlebars, mustache, twig, liquid, dot, edge, squirrelly.
+   *
+   * @param engine - The template engine.
+   * @param options - The engine-specific options.
+   */
+  engine(engine: ViewOptions['engine'], options?: object): this {
     this.#options.engine = engine
+    this.#options.options = options
+
     return this
   }
 
@@ -34,31 +42,41 @@ export class ViewBuilder implements Service {
     return this
   }
 
-  /** Default template extension (e.g. `'hbs'`), so handlers can return `View('home')` without it. */
-  viewExt(ext: string): this {
+  /**
+   * Default template extension (e.g. `'hbs'`), so handlers can return `View('home')` without it.
+   */
+  extension(ext: string): this {
     this.#options.viewExt = ext
     return this
   }
 
-  /** Default layout template wrapped around every rendered view. */
+  /**
+   * Default layout template wrapped around every rendered view.
+   */
   layout(path: string): this {
     this.#options.layout = path
     return this
   }
 
-  /** Data merged into every template's model. */
+  /**
+   * Data merged into every template's model.
+   */
   defaultContext(context: object): this {
     this.#options.defaultContext = context
     return this
   }
 
-  /** Engine-specific options forwarded to the engine. */
+  /**
+   * Engine-specific options forwarded to the underlying engine.
+   */
   options(engineOptions: object): this {
     this.#options.options = engineOptions
     return this
   }
 
-  /** Toggles `@fastify/view`'s production template cache. */
+  /**
+   * Toggles `@fastify/view`'s production template cache.
+   */
   production(production: boolean): this {
     this.#options.production = production
     return this
@@ -75,7 +93,12 @@ export class ViewBuilder implements Service {
   }
 
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
+    if (!this.#options.engine) {
+      throw new ErrConfiguration('Engine is required to configure SSR')
+    }
+
     kit.container.bind(kViewOptions).toValue(this.#options as ViewOptions).internal()
+
     return Promise.resolve()
   }
 }

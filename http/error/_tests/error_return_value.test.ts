@@ -54,7 +54,7 @@ void [ReturnViewHandler, ReturnJsonHandler, ReturnVoidHandler, ErrReturnControll
 describe('error handler return values', () => {
   it('renders a returned View() as HTML', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).viewExt('hbs'))
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
     await app.ready()
 
@@ -67,7 +67,7 @@ describe('error handler return values', () => {
 
   it('serializes a returned object as JSON', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).viewExt('hbs'))
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
     await app.ready()
 
@@ -80,7 +80,7 @@ describe('error handler return values', () => {
 
   it('leaves a ctx-based (void-returning) handler unchanged', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).viewExt('hbs'))
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
     await app.ready()
 

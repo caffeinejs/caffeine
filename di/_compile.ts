@@ -28,7 +28,9 @@ export function compileDescriptorResolver(
 ): InjectionResolver {
   const resolverName
     = injection.resolver
-      ?? (injection.key instanceof DeferredCtor ? BuiltInResolvers.DEFER : BuiltInResolvers.DEFAULT)
+      ?? (injection.key instanceof DeferredCtor
+        ? BuiltInResolvers.DEFER
+        : BuiltInResolvers.DEFAULT)
 
   return resolverFor(resolverName)({ container, key, descriptor: injection, kind, member, index })
 }

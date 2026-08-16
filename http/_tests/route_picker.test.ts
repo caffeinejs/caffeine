@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ParameterPicker, ParameterPickOptions } from '../route_picker.js'
+import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/std/framework'
 
 function compose<R>(req: R, ...fns: Array<(req: R) => Array<unknown>>): Array<unknown> {
   return fns.reduce((acc, fn) => [...acc, ...fn(req)], [] as Array<unknown>)
