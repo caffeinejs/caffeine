@@ -74,11 +74,13 @@ const dist = resolve(__dirname, 'dist')
 console.log(`Warming up (${WARMUP} iterations each)...`)
 
 const nestSamples = await measureN(resolve(dist, 'nestjs/app.js'), WARMUP, ITERATIONS)
+const caffeineSamples = await measureN(resolve(dist, 'caffeine/app.js'), WARMUP, ITERATIONS)
 const fastifySamples = await measureN(resolve(dist, 'fastify/app.js'), WARMUP, ITERATIONS)
 const honoSamples = await measureN(resolve(dist, 'hono/app.js'), WARMUP, ITERATIONS)
 
 const results = [
   { name: 'nestjs', s: stats(nestSamples) },
+  { name: 'caffeine', s: stats(caffeineSamples) },
   { name: 'fastify', s: stats(fastifySamples) },
   { name: 'hono', s: stats(honoSamples) },
 ].sort((a, b) => a.s.mean - b.s.mean)

@@ -41,14 +41,6 @@ bench: ## run benchmarks
 bench-compare: ## run benchmarks comparison
 	@npm run bench:compare
 
-.PHONY: bench-startup
-bench-startup: ## run startup benchmarks
-	@npm run bench:startup
-
-.PHONY: bench-memory
-bench-memory: ## run memory benchmarks
-	@npm run bench:memory
-
 .PHONY: perf-compare
 perf-compare: ## run performance comparison
 	@npm run bench:perf-compare

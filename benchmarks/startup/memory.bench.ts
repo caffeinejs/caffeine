@@ -1,5 +1,12 @@
 import { spawnSync } from 'node:child_process'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { printMachineInfo } from '../machine-info.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const DIST = resolve(__dirname, 'dist')
+const NODE = process.execPath
+const N = 10
 
 interface MemUsage {
   rss: number
@@ -8,10 +15,6 @@ interface MemUsage {
   external: number
   arrayBuffers: number
 }
-
-const DIST = fileURLToPath(new URL('./startup/dist', import.meta.url))
-const NODE = process.execPath
-const N = 10
 
 function sample(script: string): MemUsage {
   const result = spawnSync(NODE, ['--expose-gc', script], { encoding: 'utf8' })
@@ -59,18 +62,15 @@ const baselineSample = spawnSync(
 const baseline = JSON.parse(baselineSample.stdout) as MemUsage
 
 console.log(`Collecting ${N} samples each (subprocess per sample)...`)
-const vanillaSamples = collect(`${DIST}/vanilla_memory.js`, N)
-const diSamples = collect(`${DIST}/di_memory.js`, N)
-const nestSamples = collect(`${DIST}/nest_memory.js`, N)
+const caffeineSamples = collect(`${DIST}/caffeine/memory.js`, N)
+const nestSamples = collect(`${DIST}/nestjs/memory.js`, N)
 
-const vanilla = summarize(vanillaSamples)
-const di = summarize(diSamples)
+const caffeine = summarize(caffeineSamples)
 const nest = summarize(nestSamples)
 
-const vanillaOverhead = vanilla.heapUsed - baseline.heapUsed
-const diOverhead = di.heapUsed - baseline.heapUsed
+const caffeineOverhead = caffeine.heapUsed - baseline.heapUsed
 const nestOverhead = nest.heapUsed - baseline.heapUsed
-const smallerOverhead = Math.min(vanillaOverhead, diOverhead, nestOverhead)
+const smallerOverhead = Math.min(caffeineOverhead, nestOverhead)
 
 const COL = 12
 
@@ -88,7 +88,8 @@ function row(label: string, m: Record<keyof MemUsage, number>, overhead: number)
   )
 }
 
-console.log(`\n--- Memory Usage (median of ${N} subprocess runs, same 7-class graph) ---\n`)
+printMachineInfo()
+console.log(`\n--- Memory Usage (median of ${N} subprocess runs, same 6-module app) ---\n`)
 console.log(`Node.js baseline heapUsed: ${kb(baseline.heapUsed)}\n`)
 console.log(
   ''.padEnd(10)
@@ -99,8 +100,7 @@ console.log(
   + 'overhead'.padStart(COL),
 )
 const rows = [
-  { name: 'vanilla', m: vanilla, overhead: vanillaOverhead },
-  { name: 'di', m: di, overhead: diOverhead },
+  { name: 'caffeine', m: caffeine, overhead: caffeineOverhead },
   { name: 'nestjs', m: nest, overhead: nestOverhead },
 ].sort((a, b) => a.overhead - b.overhead)
 

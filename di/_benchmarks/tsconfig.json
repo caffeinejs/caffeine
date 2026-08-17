@@ -15,5 +15,5 @@
     }
   },
   "include": ["./**/*.ts"],
-  "exclude": ["**/dist/**", "**/node_modules/**", "./_testdata/startup_legacy/**", "./_testdata/third_party_legacy/**"]
+  "exclude": ["**/dist/**", "**/node_modules/**", "./_testdata/third_party_legacy/**"]
 }
