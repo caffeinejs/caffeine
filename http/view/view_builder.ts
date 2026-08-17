@@ -1,17 +1,29 @@
 import { ErrConfiguration } from '../error/common.js'
-import { kServiceConfigure, Service, ServiceKit } from '../service.js'
-import { kViewOptions } from './keys.js'
 import type { ViewOptions } from './view.js'
 
 /**
- * ViewBuilder configures SSR (Server-Side Rendering), powered by `@fastify/view` plugin.
- * The same options used to configure the `@fastify/view` plugin can be used to configure the Caffeine's SSR.
- * In case the builder does not provide a specific option, use the `configure` method to set any option supported by the `@fastify/view` plugin.
+ * ViewBuilder configures a single SSR (Server-Side Rendering) engine, powered by the `@fastify/view`
+ * plugin. The same options used to configure the `@fastify/view` plugin can be used to configure the
+ * Caffeine's SSR. In case the builder does not provide a specific option, use the `configure` method to
+ * set any option supported by the `@fastify/view` plugin.
+ *
+ * One builder assembles one engine registration. Multiple engines are declared by calling
+ * `app.view(name, ...)` once per engine; the {@link ViewOptionsProvider} owns them and reads each via
+ * {@link build}.
  *
  * @see https://github.com/fastify/point-of-view
  */
-export class ViewBuilder implements Service {
+export class ViewBuilder {
+  readonly #name: string | undefined
   #options: Partial<ViewOptions> = {}
+
+  /**
+   * @param name - The engine registration name (`@fastify/view`'s `propertyName`), decorating
+   *   `reply.<name>`. `undefined` is the default engine, decorating `reply.view`.
+   */
+  constructor(name?: string) {
+    this.#name = name
+  }
 
   /**
    * Configures the template engine.
@@ -92,13 +104,19 @@ export class ViewBuilder implements Service {
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  /**
+   * Assembles the `@fastify/view` options for this engine registration, stamping `propertyName` when the
+   * builder is named. Throws when no engine was configured.
+   */
+  build(): ViewOptions {
     if (!this.#options.engine) {
       throw new ErrConfiguration('Engine is required to configure SSR')
     }
 
-    kit.container.bind(kViewOptions).toValue(this.#options as ViewOptions).internal()
+    if (this.#name !== undefined) {
+      this.#options.propertyName = this.#name
+    }
 
-    return Promise.resolve()
+    return this.#options as ViewOptions
   }
 }

@@ -1,6 +1,7 @@
 /**
- * DI key for the assembled `@fastify/view` options ({@link ViewOptions}). Bound by
- * `app.view(v => v.engine(...).root(...))`. When unbound, the view feature is inert — the plugin is not
- * registered and returning a {@link ViewResult} raises {@link ErrConfiguration}.
+ * DI key for the {@link ViewOptionsProvider} that groups every configured `@fastify/view` engine
+ * registration (the default engine plus any named ones). Bound by `app.view(...)`. When unbound, the
+ * view feature is inert — no engine is registered and returning a {@link ViewResult} raises
+ * {@link ErrConfiguration}.
  */
-export const kViewOptions = Symbol.for('@caffeinejs/http:view.options')
+export const kViewOptionsProvider = Symbol.for('@caffeinejs/http:view.options-provider')

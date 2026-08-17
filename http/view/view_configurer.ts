@@ -1,23 +1,27 @@
 import fastifyView from '@fastify/view'
 import { FeatureConfigurer, type ServerPhaseContext } from '../feature_configurer.js'
-import { kViewOptions } from './keys.js'
-import type { ViewOptions } from './view.js'
+import { kViewOptionsProvider } from './keys.js'
+import type { ViewOptionsProvider } from './view_options_provider.js'
 
 /**
- * Registers `@fastify/view` on the root server when the view feature was configured; inert otherwise.
+ * Registers `@fastify/view` on the root server once per configured engine; inert when the view feature
+ * was never configured.
  *
- * `@fastify/view` is `fastify-plugin`-wrapped, so registering on the root decorates `reply.view` globally —
- * it reaches the encapsulated controller `register()` contexts where routes are declared.
+ * `@fastify/view` is `fastify-plugin`-wrapped, so registering on the root decorates `reply.<engine>`
+ * globally — it reaches the encapsulated controller `register()` contexts where routes are declared. Each
+ * registration carries a distinct `propertyName` (the default engine has none, decorating `reply.view`).
  */
 export class ViewConfigurer extends FeatureConfigurer {
   readonly name = 'view'
 
   configureServer = async (ctx: ServerPhaseContext): Promise<void> => {
-    const options = ctx.container.getOptional<ViewOptions>(kViewOptions)
-    if (options === undefined) {
+    const provider = ctx.container.getOptional<ViewOptionsProvider>(kViewOptionsProvider)
+    if (provider === undefined) {
       return
     }
 
-    await ctx.server.register(fastifyView, options)
+    for (const options of provider.all()) {
+      await ctx.server.register(fastifyView, options)
+    }
   }
 }

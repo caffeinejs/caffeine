@@ -2,21 +2,20 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
-import { CaffeineIoC } from '@caffeinejs/di'
+import * as ejs from 'ejs'
 import {
   Controller,
   Get,
   View,
   ViewBuilder,
+  ViewOptionsProvider,
   WebApplication,
   createWebApplication,
   fastifyAdapterFactory,
-  kViewOptions,
 } from '../../index.js'
-import { Feats } from '../../feats.js'
-import { kServiceConfigure } from '../../service.js'
 
 const templatesRoot = fileURLToPath(new URL('./templates', import.meta.url))
+const ejsRoot = fileURLToPath(new URL('./templates-ejs', import.meta.url))
 
 function viewApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()))
@@ -199,47 +198,161 @@ describe('view feature', () => {
 
     expect(res.status).toBe(500)
   })
+
+  it('renders each response with its own engine when multiple engines are registered', async () => {
+    @Controller('/multi')
+    class MultiController {
+      // Default engine (handlebars → reply.view).
+      @Get('/hbs')
+      hbs() { return View('hello', { name: 'Ada' }) }
+
+      // Named engine (ejs → reply.ejs), selected via View options.engine.
+      @Get('/ejs')
+      ejs() { return View('page', { text: 'hi' }, { engine: 'ejs' }) }
+    }
+
+    void [MultiController]
+
+    app = createWebApplication(fastifyAdapterFactory(fastify()))
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .view('ejs', v => v.engine({ ejs }).root(ejsRoot).extension('ejs'))
+      .build()
+    await app.ready()
+
+    const hbs = await app.fetch('/multi/hbs')
+    const ejsRes = await app.fetch('/multi/ejs')
+
+    expect(hbs.status).toBe(200)
+    expect(await hbs.text()).toContain('Hello Ada')
+
+    expect(ejsRes.status).toBe(200)
+    expect(await ejsRes.text()).toContain('EJS says hi')
+  })
+
+  it('selects a named registration of the same engine (distinct layout) via View options.engine', async () => {
+    @Controller('/same-engine')
+    class SameEngineController {
+      // Default handlebars — no layout.
+      @Get('/plain')
+      plain() { return View('plain') }
+
+      // Named handlebars registration wrapping the alt layout.
+      @Get('/alt')
+      alt() { return View('plain', {}, { engine: 'alt' }) }
+    }
+
+    void [SameEngineController]
+
+    app = createWebApplication(fastifyAdapterFactory(fastify()))
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .view('alt', v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
+      .build()
+    await app.ready()
+
+    const plain = await app.fetch('/same-engine/plain')
+    const alt = await app.fetch('/same-engine/alt')
+
+    const plainBody = await plain.text()
+    const altBody = await alt.text()
+
+    expect(plainBody).toContain('Static page, no model')
+    expect(plainBody).not.toContain('[ALT]')
+
+    expect(altBody).toContain('[ALT]')
+    expect(altBody).toContain('[/ALT]')
+    expect(altBody).toContain('Static page, no model')
+  })
+
+  it('errors when a handler selects an engine that was never registered', async () => {
+    @Controller('/multi-missing')
+    class MissingEngineController {
+      @Get('/show')
+      show() { return View('hello', { name: 'Ada' }, { engine: 'nope' }) }
+    }
+
+    void [MissingEngineController]
+
+    app = viewApp().build()
+    await app.ready()
+
+    const res = await app.fetch('/multi-missing/show')
+
+    expect(res.status).toBe(500)
+  })
+
+  it('rejects registering an engine named "view" (reserved for the default engine)', () => {
+    expect(() =>
+      createWebApplication(fastifyAdapterFactory(fastify()))
+        .view('view', v => v.engine({ handlebars }).root(templatesRoot).extension('hbs')),
+    ).toThrow(/reserved for the default engine/)
+  })
 })
 
 describe('ViewBuilder', () => {
-  it('binds the assembled options to kViewOptions', async () => {
-    const container = new CaffeineIoC()
-    const builder = new ViewBuilder()
-    builder.engine({ handlebars }).root(templatesRoot).extension('hbs')
+  it('build() assembles the configured options', () => {
+    const options = new ViewBuilder()
+      .engine({ handlebars }).root(templatesRoot).extension('hbs')
+      .build() as { root: string, viewExt: string, engine: unknown, propertyName?: string }
 
-    await builder[kServiceConfigure]({ container, feats: new Feats() })
-    await container.init()
-
-    const options = container.get<{ root: string, viewExt: string, engine: unknown }>(kViewOptions)
     expect(options.root).toBe(templatesRoot)
     expect(options.viewExt).toBe('hbs')
     expect(options.engine).toEqual({ handlebars })
+    // The default (unnamed) engine carries no propertyName — it decorates reply.view.
+    expect(options.propertyName).toBeUndefined()
   })
 
-  it('binds an array root (for engines that support multiple roots, e.g. Nunjucks)', async () => {
-    const container = new CaffeineIoC()
+  it('build() stamps propertyName for a named engine', () => {
+    const options = new ViewBuilder('mobile')
+      .engine({ handlebars }).root(templatesRoot).extension('hbs')
+      .build() as { propertyName?: string }
+
+    expect(options.propertyName).toBe('mobile')
+  })
+
+  it('build() throws when no engine was configured', () => {
+    expect(() => new ViewBuilder().root(templatesRoot).build()).toThrow(/Engine is required/)
+  })
+
+  it('build() accepts an array root (for engines that support multiple roots, e.g. Nunjucks)', () => {
     const roots = [templatesRoot, `${templatesRoot}/nested`]
-    const builder = new ViewBuilder()
-    builder.engine({ handlebars }).root(roots)
+    const options = new ViewBuilder().engine({ handlebars }).root(roots).build() as unknown as { root: string[] }
 
-    await builder[kServiceConfigure]({ container, feats: new Feats() })
-    await container.init()
-
-    const options = container.get<{ root: string[] }>(kViewOptions)
     expect(options.root).toEqual(roots)
   })
 
-  it('configure() merges a full options object over prior settings (last write wins)', async () => {
-    const container = new CaffeineIoC()
-    const builder = new ViewBuilder()
+  it('configure() merges a full options object over prior settings (last write wins)', () => {
     // configure overrides the earlier viewExt; a later fluent setter overrides configure.
-    builder.engine({ handlebars }).extension('hbs').configure({ charset: 'ascii', viewExt: 'html' }).extension('pug')
+    const options = new ViewBuilder()
+      .engine({ handlebars }).extension('hbs').configure({ charset: 'ascii', viewExt: 'html' }).extension('pug')
+      .build() as { charset: string, viewExt: string }
 
-    await builder[kServiceConfigure]({ container, feats: new Feats() })
-    await container.init()
-
-    const options = container.get<{ charset: string, viewExt: string }>(kViewOptions)
     expect(options.charset).toBe('ascii')
     expect(options.viewExt).toBe('pug')
+  })
+})
+
+describe('ViewOptionsProvider', () => {
+  it('groups the default and named engines, default first, stamping propertyName', () => {
+    const provider = new ViewOptionsProvider()
+    provider.builder(undefined).engine({ handlebars }).root(templatesRoot).extension('hbs')
+    provider.builder('ejs').engine({ ejs }).root(ejsRoot).extension('ejs')
+
+    const all = provider.all() as Array<{ propertyName?: string }>
+
+    expect(all).toHaveLength(2)
+    expect(all[0].propertyName).toBeUndefined()
+    expect(all[1].propertyName).toBe('ejs')
+  })
+
+  it('returns the same builder for repeated calls with the same name (config merges)', () => {
+    const provider = new ViewOptionsProvider()
+    const first = provider.builder('mobile')
+    const second = provider.builder('mobile')
+
+    expect(first).toBe(second)
+  })
+
+  it('rejects the reserved "view" name', () => {
+    expect(() => new ViewOptionsProvider().builder('view')).toThrow(/reserved for the default engine/)
   })
 })
