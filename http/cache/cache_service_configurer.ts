@@ -1,5 +1,6 @@
 import { Scopes } from '@caffeinejs/di'
-import { kServiceConfigure, Service, ServiceKit } from '../service.js'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import type { ServiceKit } from '../service.js'
 import { CacheStore, MemoryCacheStore } from './store.js'
 
 /**

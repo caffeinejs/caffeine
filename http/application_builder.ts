@@ -1,25 +1,26 @@
-import { CaffeineIoC, type Container, type Module, type Options } from '@caffeinejs/di'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
+import {
+  BaseApplicationBuilder,
+  type ApplicationBuilderOptions,
+  type Augment,
+  type Plugin,
+  installPlugins,
+} from '@caffeinejs/std'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
-import { Augment, BuilderPlugin, BuilderPluginContext } from './plugin.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { CacheBuilder } from './cache/cache_builder.js'
 import { ServerBuilder } from './server/index.js'
 import { ViewBuilder, ViewOptionsProvider } from './view/index.js'
 import { StaticBuilder } from './static/index.js'
-import { Service } from './service.js'
 
-export type WebApplicationBuilderOptions = {
-  container?: Container | Options
-}
+export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
-export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> {
+export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
+  extends BaseApplicationBuilder<WebApplication<I, REQ, A>> {
   readonly #adapterFactory: AdapterFactory<I, REQ, A>
-  readonly #container: Container
-  readonly #services: Service[] = []
 
   #authBuilder: AuthenticationBuilder | undefined
   #cacheBuilder: CacheBuilder | undefined
@@ -29,24 +30,17 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   readonly #authzBuilder: AuthorizationBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
-    const c = options.container
-    this.#container = c != null && typeof (c as Container).get === 'function'
-      ? c as Container
-      : new CaffeineIoC(c != null ? c as Partial<Options> : {})
+    super(options)
     this.#adapterFactory = adapterFactory
 
     this.#authzBuilder = new AuthorizationBuilder()
-    this.#services.push(this.#authzBuilder)
-  }
-
-  get container(): Container {
-    return this.#container
+    this.addService(this.#authzBuilder)
   }
 
   authentication(configure: (auth: AuthenticationBuilder) => void): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
-      this.#services.push(this.#authBuilder)
+      this.addService(this.#authBuilder)
     }
 
     configure(this.#authBuilder)
@@ -62,7 +56,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   cache(configure: (cache: CacheBuilder) => void): this {
     if (this.#cacheBuilder == null) {
       this.#cacheBuilder = new CacheBuilder()
-      this.#services.push(this.#cacheBuilder)
+      this.addService(this.#cacheBuilder)
     }
 
     configure(this.#cacheBuilder)
@@ -73,7 +67,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   server(configure: (server: ServerBuilder) => void): this {
     if (this.#serverBuilder == null) {
       this.#serverBuilder = new ServerBuilder()
-      this.#services.push(this.#serverBuilder)
+      this.addService(this.#serverBuilder)
     }
 
     configure(this.#serverBuilder)
@@ -89,7 +83,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 
     if (this.#viewProvider == null) {
       this.#viewProvider = new ViewOptionsProvider()
-      this.#services.push(this.#viewProvider)
+      this.addService(this.#viewProvider)
     }
 
     configure(this.#viewProvider.builder(name))
@@ -100,7 +94,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   static(configure: (staticFiles: StaticBuilder) => void): this {
     if (this.#staticBuilder == null) {
       this.#staticBuilder = new StaticBuilder()
-      this.#services.push(this.#staticBuilder)
+      this.addService(this.#staticBuilder)
     }
 
     configure(this.#staticBuilder)
@@ -108,24 +102,14 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  addService(service: Service): this {
-    this.#services.push(service)
-    return this
-  }
-
-  addModules(module: Module, ...modules: Module[]): this {
-    this.#container.addModules(module, ...modules)
-    return this
-  }
-
   build(): WebApplication<I, REQ, A> {
-    const adapter = this.#adapterFactory({ container: this.#container })
-    return new WebApplication<I, REQ, A>(this.#container, adapter, this.#services)
+    const adapter = this.#adapterFactory({ container: this.container })
+    return new WebApplication<I, REQ, A>(this.applicationInit(), adapter)
   }
 }
 
 // Default Fastify — no adapter factory or Fastify instance required.
-export function createWebApplication<const S extends readonly BuilderPlugin[] = readonly []>(
+export function createWebApplication<const S extends readonly Plugin[] = readonly []>(
   options?: WebApplicationBuilderOptions,
   ...plugins: S
 ): WebApplicationBuilder<FastifyInstance, FastifyRequest, FastifyAdapter<FastifyInstance, FastifyRequest>> & Augment<S>
@@ -135,7 +119,7 @@ export function createWebApplication<
   I,
   REQ,
   A extends Adapter<I, REQ> = Adapter<I, REQ>,
-  const S extends readonly BuilderPlugin[] = readonly [],
+  const S extends readonly Plugin[] = readonly [],
 >(
   adapterFactory: AdapterFactory<I, REQ, A>,
   options?: WebApplicationBuilderOptions,
@@ -147,27 +131,20 @@ export function createWebApplication(
 ): WebApplicationBuilder<any, any> {
   let adapterFactory: AdapterFactory<any, any>
   let options: WebApplicationBuilderOptions
-  let plugins: BuilderPlugin[]
+  let plugins: Plugin[]
 
   if (typeof first === 'function') {
     adapterFactory = first
     options = (rest[0] as WebApplicationBuilderOptions | undefined) ?? {}
-    plugins = rest.slice(1) as BuilderPlugin[]
+    plugins = rest.slice(1) as Plugin[]
   } else {
     adapterFactory = fastifyAdapterFactory()
     options = first ?? {}
-    plugins = rest as BuilderPlugin[]
+    plugins = rest as Plugin[]
   }
 
   const builder = new WebApplicationBuilder(adapterFactory, options)
-  const ctx: BuilderPluginContext = {
-    addService: service => { builder.addService(service) },
-    container: builder.container,
-  }
-
-  for (const plugin of plugins) {
-    Object.assign(builder, plugin.install(ctx))
-  }
+  installPlugins(builder, plugins)
 
   return builder
 }

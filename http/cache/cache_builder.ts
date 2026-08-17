@@ -1,4 +1,5 @@
-import { kServiceConfigure, Service, ServiceKit } from '../service.js'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import type { ServiceKit } from '../service.js'
 import { ETagGenerator } from './cache.js'
 import { CacheStore } from './store.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'

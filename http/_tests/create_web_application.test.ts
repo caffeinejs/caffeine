@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
-import type { BuilderPlugin } from '../plugin.js'
-import { kServiceConfigure, type Service } from '../service.js'
+import { kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
 import { Controller, Get, createWebApplication } from '../index.js'
 
 describe('createWebApplication default Fastify form', () => {
@@ -49,7 +48,7 @@ describe('createWebApplication default Fastify form', () => {
   it('accepts plugins after the options argument', async () => {
     const kProbe = Symbol('probe-sentinel')
 
-    function probe(): BuilderPlugin<{ probe: (value: string) => void }> {
+    function probe(): Plugin<{ probe: (value: string) => void }> {
       const state: { value: string | undefined } = { value: undefined }
       const service: Service = {
         [kServiceConfigure](kit) {

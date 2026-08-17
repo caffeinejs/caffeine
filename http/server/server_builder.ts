@@ -1,4 +1,5 @@
-import { kServiceConfigure, Service, ServiceKit } from '../service.js'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import type { ServiceKit } from '../service.js'
 import { kServerOptions } from './keys.js'
 
 export interface ServerOptions {

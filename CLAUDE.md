@@ -104,6 +104,24 @@ import { CaffeineIoC } from './container'
 import { Binding } from './Binding'
 ```
 
+## Re-exports
+
+Do not re-export a symbol (type **or** value) from another module or package just to "keep a surface stable" or give it a shorter import path. This includes a standalone passthrough file and a single re-export line buried in an otherwise-legitimate module. Import the symbol from its source directly at every use site, even if that means two import statements (one per source module).
+
+```ts
+// wrong — a line that forwards std's symbols so local files can import them from here
+export { kServiceConfigure, type Service } from '@caffeinejs/std'
+
+// wrong — a whole module that exists only to forward types
+export type { Augment, Plugin, PluginContext } from '@caffeinejs/std'
+
+// correct — import from the source at the use site; keep local imports on their own line
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import type { ServiceKit } from './service.js'
+```
+
+A package's `index.ts` barrel aggregating that package's **own** modules is not a passthrough and is fine.
+
 ## Monorepo structure
 
 Packages: `di` (`@caffeinejs/di`), `http` (`@caffeinejs/http`), `http-fastify-adapter` (`@caffeinejs/http-fastify-adapter`). Examples live under `di/examples/`. Shared build tooling lives in `tools/`.

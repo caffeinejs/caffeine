@@ -2,9 +2,9 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { kServiceConfigure } from '@caffeinejs/std'
 import { StaticBuilder, WebApplication, createWebApplication, fastifyAdapterFactory, kStaticMounts } from '../../index.js'
 import { Feats } from '../../feats.js'
-import { kServiceConfigure } from '../../service.js'
 
 const fixtures = fileURLToPath(new URL('./fixtures', import.meta.url))
 const fixtures2 = fileURLToPath(new URL('./fixtures2', import.meta.url))

@@ -1,4 +1,4 @@
-import { Container } from '@caffeinejs/di'
+import type { ServiceKit as BaseServiceKit } from '@caffeinejs/std'
 import { Feats } from './feats.js'
 import { AuthenticationOptions } from './security/auth/builder.js'
 import { AuthenticationService } from './security/auth/service.js'
@@ -6,15 +6,9 @@ import type { OIDCMeta } from './security/auth/oidc/index.js'
 import type { ErrorHandlerProvider } from './error/error.js'
 import type { ServerOptions } from './server/server_builder.js'
 
-export interface ServiceKit {
-  container: Container
+/** The HTTP application's service kit — the base container kit plus the request feature flags. */
+export interface ServiceKit extends BaseServiceKit {
   feats: Feats
-}
-
-export const kServiceConfigure = Symbol('configure')
-
-export interface Service {
-  [kServiceConfigure](kit: ServiceKit): Promise<void>
 }
 
 export interface Services {

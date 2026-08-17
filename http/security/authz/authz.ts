@@ -1,5 +1,6 @@
 import { Scopes } from '@caffeinejs/di'
-import { kServiceConfigure, Service, ServiceKit } from '../../service.js'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import type { ServiceKit } from '../../service.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'

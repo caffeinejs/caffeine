@@ -1,4 +1,5 @@
-import { kServiceConfigure, Service, ServiceKit } from '../service.js'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import type { ServiceKit } from '../service.js'
 import { kStaticMounts } from './keys.js'
 import type { StaticMount } from './static.js'
 

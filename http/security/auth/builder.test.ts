@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
+import { kServiceConfigure } from '@caffeinejs/std'
 import type { ServiceKit } from '../../service.js'
 import type { Feats } from '../../feats.js'
-import { kServiceConfigure } from '../../service.js'
 import { AuthenticationBuilder } from './builder.js'
 
 function makeKit(): ServiceKit {

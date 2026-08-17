@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
 import { CaffeineIoC } from '@caffeinejs/di'
-import type { BuilderPlugin } from './plugin.js'
-import { kServiceConfigure, type Service } from './service.js'
+import { kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
 import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
 // A sentinel the plugin's configurer binds into the container so a test can prove the plugin rode
@@ -18,7 +17,7 @@ interface KafkaState {
 // registers a Service that binds the captured config at ready() time.
 function kafka<const Name extends string = 'kafka'>(
   name: Name = 'kafka' as Name,
-): BuilderPlugin<Record<Name, (broker: string) => void>> {
+): Plugin<Record<Name, (broker: string) => void>> {
   const state: KafkaState = { broker: undefined }
   const service: Service = {
     [kServiceConfigure](kit) {

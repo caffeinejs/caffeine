@@ -1,8 +1,9 @@
-import { Container } from '@caffeinejs/di'
+import type { Container } from '@caffeinejs/di'
+import { BaseApplication, type ApplicationInit, type Service } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Router } from './route.js'
 import { Feats } from './feats.js'
-import { kServiceConfigure, Service, ServiceKit, Services } from './service.js'
+import type { ServiceKit, Services } from './service.js'
 import { buildRouting } from './routing/routing.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
@@ -33,25 +34,19 @@ export interface AdapterFactoryIn {
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
   = (input: AdapterFactoryIn) => A
 
-export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> {
-  #container: Container
-  #feats: Feats
+/**
+ * The HTTP application: a {@link BaseApplication} whose lifecycle steps drive a Fastify {@link Adapter}.
+ * `setup()` builds routing + the resolved {@link Services} and sets the adapter up; `start()` runs it;
+ * `stop()` tears it down. Base handles the container, services, and lifecycle hooks.
+ */
+export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> extends BaseApplication {
+  readonly #adapter: A
+  readonly #feats = new Feats()
   #routers: Router<R>[] = []
-  #services: Service[]
-  #adapter: A
-  #ready: boolean = false
-  #readyHooks: Array<() => Promise<void>> = []
-  #closeHooks: Array<() => Promise<void>> = []
 
-  constructor(container: Container, adapter: A, services: Service[]) {
-    this.#container = container
+  constructor(init: ApplicationInit, adapter: A) {
+    super(init)
     this.#adapter = adapter
-    this.#feats = new Feats()
-    this.#services = services
-  }
-
-  get container(): Container {
-    return this.#container
   }
 
   get instance(): I {
@@ -59,7 +54,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   }
 
   get routers(): Router<R>[] {
-    if (!this.#ready) {
+    if (!this.started) {
       throw new Error('Application is not ready')
     }
 
@@ -70,63 +65,37 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     return this.#adapter.fetch(request, options)
   }
 
-  async ready(): Promise<void> {
-    const kit: ServiceKit = { container: this.#container, feats: this.#feats }
-    const configurers = [...this.#services, new ErrorHandlingServiceConfigurer(), new CacheServiceConfigurer()]
+  protected override serviceKit(): ServiceKit {
+    return { container: this.container, feats: this.#feats }
+  }
 
-    await Promise
-      .all(configurers
-        .map(service => service[kServiceConfigure](kit)))
+  protected override configurers(): Service[] {
+    return [...this.services, new ErrorHandlingServiceConfigurer(), new CacheServiceConfigurer()]
+  }
 
-    await this.#container.init()
-
-    this.#routers = buildRouting<R>(this.#container)
+  protected override async setup(): Promise<void> {
+    this.#routers = buildRouting<R>(this.container)
 
     const services: Services = {
       auth: {
         enabled: this.#feats.authentication,
-        coordinator: this.#container.getOptional(AuthenticationService),
-        options: this.#container.getOptional(kAuthOpts),
+        coordinator: this.container.getOptional(AuthenticationService),
+        options: this.container.getOptional(kAuthOpts),
       },
-      oidc: this.#container.getOptional<OIDCMeta>(kOIDCMeta),
-      errorHandling: this.#container.get(ErrorHandlerProvider),
-      server: this.#container.getOptional<ServerOptions>(kServerOptions) ?? DEFAULT_SERVER_OPTIONS,
+      oidc: this.container.getOptional<OIDCMeta>(kOIDCMeta),
+      errorHandling: this.container.get(ErrorHandlerProvider),
+      server: this.container.getOptional<ServerOptions>(kServerOptions) ?? DEFAULT_SERVER_OPTIONS,
     }
 
     await this.#adapter.setup({ routers: this.#routers, feats: this.#feats, services })
-
-    for (const hook of this.#readyHooks) {
-      await hook()
-    }
-
-    this.#ready = true
   }
 
-  async run(): Promise<void> {
-    if (!this.#ready) {
-      await this.ready()
-    }
-
-    await this.#adapter.run()
+  protected override start(): Promise<void> {
+    return this.#adapter.run()
   }
 
-  async close(): Promise<void> {
-    for (const hook of this.#closeHooks) {
-      await hook()
-    }
-
-    await this.#adapter.teardown()
-    await this.#container.dispose()
-  }
-
-  onReady(hook: () => Promise<void>): this {
-    this.#readyHooks.push(hook)
-    return this
-  }
-
-  onClose(hook: () => Promise<void>): this {
-    this.#closeHooks.push(hook)
-    return this
+  protected override stop(): Promise<void> {
+    return this.#adapter.teardown()
   }
 }
 

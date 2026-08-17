@@ -1,6 +1,7 @@
 import { Ctor, Identifier, Provider, Scopes } from '@caffeinejs/di'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
 import { Context } from '../context.js'
-import { kServiceConfigure, Service, ServiceKit } from '../service.js'
+import type { ServiceKit } from '../service.js'
 import { ErrConfiguration } from './common.js'
 import { solutions } from './util.js'
 
