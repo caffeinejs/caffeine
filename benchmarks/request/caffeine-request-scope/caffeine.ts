@@ -2,7 +2,7 @@ import { $i, Injectable, Lifetime, Scopes, type Provider } from '@caffeinejs/di'
 import { Controller, Get, createWebApplication, Params, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
 import fastify from 'fastify'
 
-const PORT = parseInt(process.env.PORT ?? '3030', 10)
+const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
 interface DataSchema {
   text: string
@@ -27,36 +27,22 @@ const responseSchema = {
       params: schema,
       query: schema,
       body: schema,
-      header: schema,
-
     },
   },
 }
 
-@Injectable()
-class AppConfig {
-  readonly name = 'benchmark'
-}
-
+// The single difference from the plain caffeine request benchmark: one request-scoped dependency.
+// Injecting it activates the container's per-request scope, so this variant measures the cost of
+// creating and disposing a request scope on every request.
 @Lifetime(Scopes.REQUEST)
-@Injectable([AppConfig])
-class AppLogger {
-  constructor(readonly config: AppConfig) {}
-  log(_msg: string): void { /* no-op */ }
+@Injectable()
+class RequestScopedService {
+  touch(): void { /* no-op: exists only to activate the request scope */ }
 }
 
-@Injectable([AppConfig])
-class TestRepository {
-  constructor(readonly config: AppConfig) {}
-  find(): unknown[] { return [] }
-}
-
-@Controller('', [TestRepository, $i.provide(AppLogger)])
+@Controller('', [$i.provide(RequestScopedService)])
 class AppController {
-  constructor(
-    readonly repo: TestRepository,
-    readonly logger: Provider<AppLogger>,
-  ) {}
+  constructor(private readonly requestScoped: Provider<RequestScopedService>) {}
 
   @Get('/health')
   health() {
@@ -64,26 +50,26 @@ class AppController {
   }
 
   @Post('/api/test/:text/:num/:bool')
-  @Params([$p.param(), $p.query(), $p.body(), $p.header(), $p.context()])
-  @Schema({ params: schema, querystring: schema, body: schema, headers: schema, response: responseSchema })
-  test(
-    params: DataSchema,
-    q: DataSchema,
-    b: DataSchema,
-    h: DataSchema,
+  @Params([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
+  @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
+  helloWorld(
     ctx: FastifyContext,
+    params: DataSchema,
+    query: DataSchema,
+    body: DataSchema,
+    header: Record<string, string>,
   ) {
-    this.logger.get().log('request')
+    // Resolve the request-scoped instance so the per-request scope is actually created.
+    this.requestScoped.get().touch()
 
-    ctx.header('text', h.text)
-    ctx.header('num', h.num.toString())
-    ctx.header('bool', h.bool.toString())
+    ctx.header('text', header.text)
+    ctx.header('num', header.num)
+    ctx.header('bool', header.bool)
 
     return {
       params: { text: params.text, num: params.num, bool: params.bool },
-      query: { text: q.text, num: q.num, bool: q.bool },
-      body: { text: b.text, num: b.num, bool: b.bool },
-      header: { text: h.text, num: h.num, bool: h.bool },
+      query: { text: query.text, num: query.num, bool: query.bool },
+      body: { text: body.text, num: body.num, bool: body.bool },
     }
   }
 }
@@ -92,9 +78,12 @@ void [AppController]
 
 const server = fastify({ logger: false })
 
-server.addHook('onRequest', (_req, reply, done) => {
-  reply.header('x-request-id', Math.random().toString(36)
-    .slice(2))
+server.addHook('onRequest', (req, reply, done) => {
+  reply.header('x-request-id',
+    Math
+      .random()
+      .toString(36)
+      .slice(2))
   done()
 })
 

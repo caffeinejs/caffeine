@@ -53,6 +53,13 @@ const servers: ServerConfig[] = [
     builtPath: resolve(__dirname, '..', 'dist', 'request', 'caffeine', 'caffeine.js'),
   },
   {
+    name: 'caffeine-request-scope',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'caffeine-request-scope', 'caffeine.js')],
+    port: 3025,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'caffeine-request-scope', 'caffeine.js'),
+  },
+  {
     name: 'elysia',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'elysia', 'elysia.js')],
@@ -180,7 +187,9 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
 }
 
 function printTable(results: BenchResult[]): void {
-  const c1 = 14, c2 = 14, c3 = 19, c4 = 23
+  // Framework column widens to the longest name so entries like "caffeine-request-scope" fit.
+  const c1 = Math.max('Framework'.length, ...results.map(r => r.name.length)) + 1
+  const c2 = 14, c3 = 19, c4 = 23
   const line = `${'-'.repeat(c1)}+-${'-'.repeat(c2)}+-${'-'.repeat(c3)}+-${'-'.repeat(c4 - 2)}`
   const header
     = 'Framework'.padEnd(c1)

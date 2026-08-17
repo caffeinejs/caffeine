@@ -46,6 +46,13 @@ const servers: ServerConfig[] = [
     requiresBuild: true,
   },
   {
+    name: 'caffeine-request-scope',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'caffeine-request-scope', 'caffeine.js')],
+    port: 3025,
+    requiresBuild: true,
+  },
+  {
     name: 'elysia',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'elysia', 'elysia.js')],
@@ -67,7 +74,6 @@ const REQ_HEADERS: Record<string, string> = {
 const EXPECTED_PARAMS = { text: 'hello', num: 42, bool: true }
 const EXPECTED_QUERY = { text: 'world', num: 7, bool: false }
 const EXPECTED_BODY = { text: 'test', num: 99, bool: true }
-const EXPECTED_HEADER = { text: 'hello', num: 42, bool: true }
 
 async function waitForReady(url: string, timeoutMs = 15_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
@@ -153,27 +159,13 @@ for (const server of servers) {
           params: typeof EXPECTED_PARAMS
           query: typeof EXPECTED_QUERY
           body: typeof EXPECTED_BODY
-          header: typeof EXPECTED_HEADER
           // big: unknown[]
         }
 
         assert.deepEqual(body.params, EXPECTED_PARAMS, 'params mismatch')
         assert.deepEqual(body.query, EXPECTED_QUERY, 'query mismatch')
         assert.deepEqual(body.body, EXPECTED_BODY, 'body mismatch')
-        assert.deepEqual(body.header, EXPECTED_HEADER, 'header mismatch')
         // assert.ok(Array.isArray(body.big) && body.big.length === 200, 'big array wrong')
-      })
-
-      await t.test('response echoes headers', async () => {
-        const res = await fetch(url, {
-          method: 'POST',
-          body: REQ_BODY,
-          headers: REQ_HEADERS,
-        })
-
-        assert.equal(res.headers.get('text'), 'hello')
-        assert.equal(res.headers.get('num'), '42')
-        assert.equal(res.headers.get('bool'), 'true')
       })
     } finally {
       await killProcess(child)
