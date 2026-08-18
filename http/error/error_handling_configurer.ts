@@ -1,7 +1,8 @@
 import { Scopes } from '@caffeinejs/di'
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify'
+import { FastifyContext } from '../context.js'
 import { FeatureConfigurer, type RouterPhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
-import { ViewResult, renderView } from '../view/index.js'
+import { ResponseResult } from '../response_result.js'
 import { resolveByErrorChain } from './error.js'
 import { ErrHTTP } from './http.js'
 
@@ -32,7 +33,7 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
 
       if (handler) {
         // The handler may respond via ctx or return a value (JSON payload or a View to render).
-        return finalize(reply, await handler.get().handle(request.httpContext, err))
+        return finalize(request.httpContext, await handler.get().handle(request.httpContext, err))
       }
 
       if (err instanceof ErrHTTP) {
@@ -103,7 +104,7 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
         ?? (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)
 
       if (handler) {
-        return finalize(reply, await handler.get().handle(req.httpContext, err))
+        return finalize(req.httpContext, await handler.get().handle(req.httpContext, err))
       }
 
       const instance = req.controller
@@ -111,7 +112,7 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
 
       if (instance && methodKey) {
         const handle = instance[methodKey] as (...args: unknown[]) => unknown
-        return finalize(reply, await handle.apply(instance, [req.httpContext, err]))
+        return finalize(req.httpContext, await handle.apply(instance, [req.httpContext, err]))
       }
 
       return globalErrorHandler(error, req, reply)
@@ -121,17 +122,19 @@ export class ErrorHandlingConfigurer extends FeatureConfigurer {
 
 /**
  * Finalizes an error handler's result the same way a controller handler's is: a handler that already
- * responded via `ctx` (so `reply.sent`) is left alone; a returned {@link ViewResult} is rendered as HTML;
- * any other returned value is handed back for Fastify to serialize; a void return with nothing sent yet is
- * flushed with an empty body (the historical behavior).
+ * responded via `ctx` (so `reply.sent`) is left alone; a returned {@link ResponseResult} renders itself
+ * (e.g. a view rendered as HTML); any other returned value is handed back for Fastify to serialize; a void
+ * return with nothing sent yet is flushed with an empty body (the historical behavior).
  */
-function finalize(reply: FastifyReply, result: unknown): unknown {
+function finalize(ctx: FastifyContext, result: unknown): unknown {
+  const reply = ctx.reply
+
   if (reply.sent) {
     return
   }
 
-  if (result instanceof ViewResult) {
-    return renderView(result, reply)
+  if (result instanceof ResponseResult) {
+    return result.render(ctx)
   }
 
   if (result !== undefined) {

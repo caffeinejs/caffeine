@@ -1,4 +1,7 @@
 import type { FastifyViewOptions } from '@fastify/view'
+import { FastifyContext, type Context } from '../context.js'
+import { ResponseResult } from '../response_result.js'
+import { renderView, type ViewCapableReply } from './render_view.js'
 
 /** Options the {@link ViewBuilder} assembles and binds; passed verbatim to `fastify.register(view, opts)`. */
 export type ViewOptions = FastifyViewOptions
@@ -18,12 +21,18 @@ export interface ViewRenderOptions {
  * Marker returned by {@link View} from a controller handler (or error handler). The Fastify adapter detects
  * it and renders through `reply.view(name, model, options)`. Not constructed directly — use {@link View}.
  */
-export class ViewResult {
+export class ViewResult extends ResponseResult {
   constructor(
     readonly name: string,
     readonly model?: unknown,
     readonly options?: ViewRenderOptions,
-  ) {}
+  ) {
+    super()
+  }
+
+  render(ctx: Context): unknown {
+    return renderView(this, (ctx as FastifyContext).reply as ViewCapableReply)
+  }
 }
 
 /**

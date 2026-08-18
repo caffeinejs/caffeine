@@ -102,6 +102,11 @@ export class FastifyContext<
     return this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest)
   }
 
+  /** The underlying Fastify reply. The escape hatch for platform-specific consumers (e.g. view rendering). */
+  get reply(): REPLY {
+    return this.#reply
+  }
+
   get user(): Principal {
     return this.#fastifyRequest.user
   }
