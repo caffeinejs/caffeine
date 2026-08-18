@@ -76,6 +76,11 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   protected override async setup(): Promise<void> {
     this.#routers = buildRouting<R>(this.container)
 
+    // Copy into a fresh object: the adapter's `listen()` mutates what it receives, which would otherwise
+    // corrupt the shared DEFAULT_SERVER_OPTIONS when the server builder was never used.
+    const serverOptions = this.container.getOptional<ServerOptions>(kServerOptions) ?? DEFAULT_SERVER_OPTIONS
+    const server: ServerOptions = { ...serverOptions }
+
     const services: Services = {
       auth: {
         enabled: this.#feats.authentication,
@@ -84,7 +89,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
       },
       oidc: this.container.getOptional<OIDCMeta>(kOIDCMeta),
       errorHandling: this.container.get(ErrorHandlerProvider),
-      server: this.container.getOptional<ServerOptions>(kServerOptions) ?? DEFAULT_SERVER_OPTIONS,
+      server,
     }
 
     await this.#adapter.setup({ routers: this.#routers, feats: this.#feats, services })

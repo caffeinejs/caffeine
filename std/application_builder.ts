@@ -1,5 +1,7 @@
 import { CaffeineIoC, type Container, type Module, type Options } from '@caffeinejs/di'
 import { Application, type ApplicationInit, type BaseApplication, type HookBinding } from './application.js'
+import { AppConfigBuilder } from './app_config.js'
+import { ConfigModule, type ConfigSchema, type InferConfig } from './config/index.js'
 import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import type { Augment, Plugin, PluginContext } from './plugin.js'
@@ -78,6 +80,20 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     return this
   }
 
+  /**
+   * Registers the application configuration. The callback returns an {@link AppConfigBuilder} whose type flows
+   * to features (e.g. `.server(s => s.config(c => c.server))`); concrete builders expose this as `config()` and
+   * re-type themselves to carry the resulting config type. Declare it first so features see the typed config.
+   */
+  protected applyConfigDefinition<T>(
+    schema: ConfigSchema<T>,
+    configure?: (c: AppConfigBuilder<T>) => void,
+  ): void {
+    const definition = new AppConfigBuilder<T>(schema)
+    configure?.(definition)
+    this.addModules(ConfigModule(definition.toOptions()))
+  }
+
   /** The construction input shared by every application kind. Subclasses pass it to their app constructor. */
   protected applicationInit(): ApplicationInit {
     return {
@@ -110,6 +126,20 @@ export function installPlugins(
 export class ApplicationBuilder extends BaseApplicationBuilder<Application> {
   build(): Application {
     return new Application(this.applicationInit())
+  }
+
+  /**
+   * Declares the application configuration, bound under `kAppConfig`. The `schema` argument determines the
+   * config type; the optional `configure` callback (any shape) adds sources and context. A headless
+   * application has no features that select config slices, so the builder is not re-typed; read the config via
+   * `container.get<ConfigHandle<T>>(kAppConfig)` with the type at the use site.
+   */
+  config<S extends ConfigSchema>(
+    schema: S,
+    configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
+  ): this {
+    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, configure)
+    return this
   }
 }
 

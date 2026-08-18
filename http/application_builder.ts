@@ -1,11 +1,13 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import {
+  AppConfigBuilder,
   BaseApplicationBuilder,
   type ApplicationBuilderOptions,
   type Augment,
   type Plugin,
   installPlugins,
 } from '@caffeinejs/std'
+import type { ConfigSchema, InferConfig } from '@caffeinejs/std/config'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
@@ -17,13 +19,13 @@ import { StaticBuilder } from './static/index.js'
 
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
-export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
+export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>, TConfig = unknown>
   extends BaseApplicationBuilder<WebApplication<I, REQ, A>> {
   readonly #adapterFactory: AdapterFactory<I, REQ, A>
 
   #authBuilder: AuthenticationBuilder | undefined
   #cacheBuilder: CacheBuilder | undefined
-  #serverBuilder: ServerBuilder | undefined
+  #serverBuilder: ServerBuilder<unknown> | undefined
   #staticBuilder: StaticBuilder | undefined
   readonly #authzBuilder: AuthorizationBuilder
 
@@ -62,13 +64,27 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  server(configure: (server: ServerBuilder) => void): this {
+  /**
+   * Declares the application configuration and re-types the builder to carry the config type `T` (inferred from
+   * `schema`), so features configured afterwards (e.g. `server(s => s.config(c => c.server))`) see a
+   * strongly-typed `ConfigHandle<T>`. The optional `configure` callback — any shape — adds sources and context.
+   * Declare it first. Runtime returns the same instance; only the declared type changes.
+   */
+  config<S extends ConfigSchema>(
+    schema: S,
+    configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
+  ): WebApplicationBuilder<I, REQ, A, InferConfig<S>> {
+    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, configure)
+    return this as unknown as WebApplicationBuilder<I, REQ, A, InferConfig<S>>
+  }
+
+  server(configure: (server: ServerBuilder<TConfig>) => void): this {
     if (this.#serverBuilder == null) {
-      this.#serverBuilder = new ServerBuilder()
+      this.#serverBuilder = new ServerBuilder<unknown>()
       this.addService(this.#serverBuilder)
     }
 
-    configure(this.#serverBuilder)
+    configure(this.#serverBuilder as ServerBuilder<TConfig>)
 
     return this
   }

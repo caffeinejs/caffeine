@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { ErrConfigValidation } from '../errors.js'
 import type { ConfigSchema } from '../schema.js'
 import { validateConfig } from '../schema.js'
@@ -8,75 +9,45 @@ interface TestConfig {
   port: number
 }
 
-const strictSchema: ConfigSchema<TestConfig> = {
-  id: 'test',
-  parse(input: unknown): TestConfig {
-    const obj = input as Record<string, unknown>
-    if (typeof obj.host !== 'string') {
-      throw new Error('host must be a string')
-    }
-    if (typeof obj.port !== 'number') {
-      throw new Error('port must be a number')
-    }
-    return { host: obj.host, port: obj.port }
-  },
-}
-
-const zodLikeSchema: ConfigSchema<TestConfig> = {
-  id: 'zod-like',
-  parse(input: unknown): TestConfig {
-    const obj = input as Record<string, unknown>
-    const issues = []
-    if (typeof obj.host !== 'string') {
-      issues.push({ path: 'host', message: 'Required', code: 'invalid_type' })
-    }
-    if (typeof obj.port !== 'number') {
-      issues.push({ path: 'port', message: 'Required', code: 'invalid_type' })
-    }
-    if (issues.length > 0) {
-      throw Object.assign(new Error('Validation failed'), { issues })
-    }
-    return { host: obj.host as string, port: obj.port as number }
-  },
-}
+const schema = z.object({ host: z.string(), port: z.number() })
 
 describe('validateConfig', () => {
-  it('returns typed value on valid input', () => {
-    const result = validateConfig(strictSchema, { host: 'localhost', port: 5432 })
+  it('returns the typed value on valid input', () => {
+    const result = validateConfig(schema, { host: 'localhost', port: 5432 })
     expect(result).toEqual({ host: 'localhost', port: 5432 })
   })
 
-  it('wraps plain Error into ErrConfigValidation', () => {
-    expect(() => validateConfig(strictSchema, { host: 123, port: 5432 })).toThrowError(ErrConfigValidation)
-  })
-
-  it('wraps Zod-like issues array into ErrConfigValidation', () => {
+  it('throws ErrConfigValidation with mapped issues on invalid input', () => {
     try {
-      validateConfig(zodLikeSchema, { host: 123, port: 'bad' })
+      validateConfig(schema, { host: 123, port: 'bad' })
+      expect.unreachable()
     } catch (err) {
       expect(err).toBeInstanceOf(ErrConfigValidation)
       const e = err as ErrConfigValidation
-      expect(e.issues).toHaveLength(2)
-      expect(e.issues[0].path).toBe('host')
-      expect(e.issues[1].path).toBe('port')
+      const paths = e.issues.map(i => i.path).sort()
+      expect(paths).toEqual(['host', 'port'])
+      expect(e.code).toBe('ERR_CONFIG_VALIDATION')
     }
   })
 
-  it('preserves ErrConfigValidation thrown directly by schema', () => {
-    const schema: ConfigSchema<TestConfig> = {
-      id: 'direct',
-      parse() {
-        throw new ErrConfigValidation([{ path: 'x', message: 'nope' }])
+  it('joins nested Standard Schema path segments with dots', () => {
+    const nested = z.object({ server: z.object({ port: z.number() }) })
+    try {
+      validateConfig(nested, { server: { port: 'nope' } })
+      expect.unreachable()
+    } catch (err) {
+      expect((err as ErrConfigValidation).issues[0].path).toBe('server.port')
+    }
+  })
+
+  it('rejects an async validator (config is materialized synchronously)', () => {
+    const asyncSchema: ConfigSchema<TestConfig> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: () => Promise.resolve({ value: { host: 'a', port: 1 } }),
       },
     }
-    expect(() => validateConfig(schema, {})).toThrowError(ErrConfigValidation)
-  })
-
-  it('sets code ERR_CONFIG_VALIDATION', () => {
-    try {
-      validateConfig(strictSchema, {})
-    } catch (err) {
-      expect((err as ErrConfigValidation).code).toBe('ERR_CONFIG_VALIDATION')
-    }
+    expect(() => validateConfig(asyncSchema, {})).toThrowError(/Async schema validation is not supported/)
   })
 })

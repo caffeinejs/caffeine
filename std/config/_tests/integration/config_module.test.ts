@@ -1,27 +1,17 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import type { ConfigHandle } from '../../config_accessor.js'
-import type { ConfigSchema } from '../../schema.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/config_module.js'
 import { InlineProvider } from '../../providers/inline_provider.js'
 
-interface AppConfig {
-  http: { host: string, port: number }
-  db: { url: string }
-}
+const schema = z.object({
+  http: z.object({ host: z.string(), port: z.coerce.number() }),
+  db: z.object({ url: z.string() }),
+})
+type AppConfig = z.infer<typeof schema>
 
 const APP_CONFIG = Symbol('app.config')
-
-const schema: ConfigSchema<AppConfig> = {
-  id: 'app-config',
-  parse(input: unknown): AppConfig {
-    const obj = input as Record<string, Record<string, unknown>>
-    return {
-      http: { host: String(obj.http.host), port: Number(obj.http.port) },
-      db: { url: String(obj.db.url) },
-    }
-  },
-}
 
 function makeModule(data: Record<string, unknown>) {
   return ConfigModule<AppConfig>({
@@ -54,15 +44,9 @@ describe('ConfigModule', () => {
   })
 
   it('two ConfigModule registrations refresh independently', async () => {
-    interface DBConfig { db: { url: string } }
     const DB_TOKEN = Symbol('db.config')
-    const dbSchema: ConfigSchema<DBConfig> = {
-      id: 'db',
-      parse(input: unknown): DBConfig {
-        const obj = input as Record<string, Record<string, unknown>>
-        return { db: { url: String(obj.db.url) } }
-      },
-    }
+    const dbSchema = z.object({ db: z.object({ url: z.string() }) })
+    type DBConfig = z.infer<typeof dbSchema>
 
     let appData = { http: { host: 'app', port: 80 }, db: { url: 'u' } }
     let dbData = { db: { url: 'postgres://a' } }

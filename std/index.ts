@@ -1,3 +1,4 @@
+export * from './app_config.js'
 export * from './application.js'
 export * from './application_builder.js'
 export * from './decorators/index.js'

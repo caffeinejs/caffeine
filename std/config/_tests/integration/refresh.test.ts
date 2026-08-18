@@ -1,36 +1,13 @@
 import { kSelfRefresh } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import { ErrConfigValidation } from '../../errors.js'
-import type { ConfigSchema } from '../../schema.js'
 import { ConfigShard } from '../../integration/config_shard.js'
 import { InlineProvider } from '../../providers/inline_provider.js'
+import type { ConfigProvider } from '../../types.js'
 
-interface TestConfig {
-  value: string
-  count: number
-}
-
-let callCount = 0
-
-function makeSchema(valid = true): ConfigSchema<TestConfig> {
-  return {
-    id: `schema-${callCount++}`,
-    parse(input: unknown): TestConfig {
-      const obj = input as Record<string, unknown>
-      if (!valid) {
-        throw new Error('Schema says invalid')
-      }
-      return { value: String(obj.value ?? ''), count: Number(obj.count ?? 0) }
-    },
-  }
-}
-
-function makeOptions(data: Record<string, unknown>, schema?: ConfigSchema<TestConfig>) {
-  return {
-    providers: [new InlineProvider(data as never)],
-    schema: schema ?? makeSchema(),
-  }
-}
+const schema = z.object({ value: z.string(), count: z.number() })
+type TestConfig = z.infer<typeof schema>
 
 describe('ConfigShard refresh', () => {
   it('live proxy reflects value after [kSelfRefresh]', async () => {
@@ -39,7 +16,6 @@ describe('ConfigShard refresh', () => {
       id: 'mutable',
       load: async () => new InlineProvider(data as never).load({ app: 'test', profiles: ['default'] }),
     }
-    const schema = makeSchema()
     const shard = await ConfigShard.bootstrap<TestConfig>({ providers: [mutableProvider], schema })
     const handle = shard.handle
 
@@ -54,27 +30,16 @@ describe('ConfigShard refresh', () => {
   })
 
   it('invalid refresh payload does not replace active config', async () => {
-    let shouldFail = false
-    const schema: ConfigSchema<TestConfig> = {
-      id: 'failing',
-      parse(input: unknown): TestConfig {
-        if (shouldFail) {
-          throw new ErrConfigValidation([{ path: '', message: 'boom' }])
-        }
-        const obj = input as Record<string, unknown>
-        return { value: String(obj.value ?? ''), count: Number(obj.count ?? 0) }
-      },
-    }
+    // count starts as a valid number, then becomes a non-numeric string that fails `z.number()` on refresh.
+    let payload: Record<string, unknown> = { value: 'safe', count: 1 }
+    const provider: ConfigProvider = { id: 'mutable', load: ctx => new InlineProvider(payload as never).load(ctx) }
 
-    const shard = await ConfigShard.bootstrap<TestConfig>({
-      providers: [new InlineProvider({ value: 'safe', count: 1 } as never)],
-      schema,
-    })
+    const shard = await ConfigShard.bootstrap<TestConfig>({ providers: [provider], schema })
 
     const handle = shard.handle
     expect(handle.value).toBe('safe')
 
-    shouldFail = true
+    payload = { value: 'x', count: 'not-a-number' }
     await expect(shard[kSelfRefresh]()).rejects.toBeInstanceOf(ErrConfigValidation)
 
     expect(handle.value).toBe('safe')
@@ -82,7 +47,6 @@ describe('ConfigShard refresh', () => {
 
   it('concurrent refresh calls produce consistent final state', async () => {
     let seq = 0
-    const schema = makeSchema()
     const shard = await ConfigShard.bootstrap<TestConfig>({
       providers: [new InlineProvider({ value: 'v0', count: 0 } as never)],
       schema,

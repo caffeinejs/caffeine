@@ -5,8 +5,10 @@ import FastifyCookie from '@fastify/cookie'
 import handlebars from 'handlebars'
 import type { Container } from '@caffeinejs/di'
 import { Claim, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { EnvProvider } from '@caffeinejs/std/config'
 import { viewPlugin } from '@caffeinejs/view'
 import { GITHUB_SESSION_COOKIE, JWT_SECRET, githubConfig } from './features/auth/index.js'
+import { appConfigSchema } from './config.js'
 
 const GITHUB_ISSUER = 'https://github.com'
 const viewsRoot = fileURLToPath(new URL('./views', import.meta.url))
@@ -68,5 +70,10 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
       })
       .default('scheme'),
     )
+    // Config + server come after the plugin methods (.view) because .config() re-types the builder and drops the
+    // view-plugin augment. Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in
+    // the schema).
+    .config(appConfigSchema, c => c.source(new EnvProvider({ prefix: 'PETSTORE_' })))
+    .server(s => s.config(c => c.server))
     .build()
 }

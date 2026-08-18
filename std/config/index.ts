@@ -19,7 +19,8 @@ export { FileProvider, registerParser } from './providers/file_provider.js'
 export { InlineProvider } from './providers/inline_provider.js'
 export type { SpringCloudConfigProviderOptions } from './providers/scc_provider.js'
 export { SpringCloudConfigProvider } from './providers/scc_provider.js'
-export type { ConfigSchema } from './schema.js'
+export type { ConfigSchema, InferConfig } from './schema.js'
+export { validateConfig } from './schema.js'
 export type {
   ConfigEntry,
   ConfigPrimitive,

@@ -10,5 +10,6 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => void app.close().then(() => process.exit(0)))
 }
 
-await app.ready()
-await app.instance.listen({ port: Number(process.env.PORT) || 9999, host: '0.0.0.0' })
+// Starts the framework: readies the container, then listens on the address the server feature resolved from
+// config (PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT).
+await app.run()

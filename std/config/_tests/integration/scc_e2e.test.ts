@@ -24,10 +24,12 @@ interface CaffeineConfig {
   }
 }
 
+// Passthrough: the config server returns dynamic, loosely-typed data, so this Standard Schema accepts it as-is.
 const schema: ConfigSchema<CaffeineConfig> = {
-  id: 'caffeine-config',
-  parse(input: unknown): CaffeineConfig {
-    return input as CaffeineConfig
+  '~standard': {
+    version: 1,
+    vendor: 'caffeine-test',
+    validate: (input: unknown) => ({ value: input as CaffeineConfig }),
   },
 }
 
