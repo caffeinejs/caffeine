@@ -1,0 +1,41 @@
+{
+  "name": "@caffeinejs/view",
+  "version": "0.0.0",
+  "description": "Caffeine server-side rendering (view) plugin",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*"
+  },
+  "peerDependencies": {
+    "@fastify/view": "^12.0.0",
+    "fastify": "^5.0.0",
+    "fastify-plugin": "^6.0.0"
+  },
+  "devDependencies": {
+    "@fastify/view": "^12.0.0",
+    "@types/ejs": "^3.1.5",
+    "ejs": "^3.1.10",
+    "fastify": "^5.8.5",
+    "handlebars": "^4.7.9"
+  }
+}

@@ -18,7 +18,6 @@ import { CacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { ResponseResult } from './response_result.js'
-import { ViewConfigurer } from './view/index.js'
 import { StaticConfigurer } from './static/index.js'
 import { joinPaths } from './internal/paths/index.js'
 
@@ -111,7 +110,6 @@ export class FastifyAdapter<
       new OIDCConfigurer(),
       new CacheConfigurer(),
       new CacheInvalidateConfigurer(),
-      new ViewConfigurer(),
       new StaticConfigurer(),
       ...this.#container.getManyOptional<FeatureConfigurer>(FeatureConfigurer),
     ])

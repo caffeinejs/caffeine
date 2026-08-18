@@ -1,4 +1,4 @@
-import { ErrConfiguration } from '../error/common.js'
+import { ErrConfiguration } from '@caffeinejs/http'
 import type { ViewOptions } from './view.js'
 
 /**

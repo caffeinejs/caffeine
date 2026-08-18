@@ -5,6 +5,7 @@ import FastifyCookie from '@fastify/cookie'
 import handlebars from 'handlebars'
 import type { Container } from '@caffeinejs/di'
 import { Claim, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { viewPlugin } from '@caffeinejs/view'
 import { GITHUB_SESSION_COOKIE, JWT_SECRET, githubConfig } from './features/auth/index.js'
 
 const GITHUB_ISSUER = 'https://github.com'
@@ -20,7 +21,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie)
 
-  return createWebApplication(fastifyAdapterFactory(server), { container })
+  return createWebApplication(fastifyAdapterFactory(server), { container }, viewPlugin())
     .view(v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
     .static(s => s.serve(publicRoot, { prefix: '/static' }))
     .authentication(auth => auth

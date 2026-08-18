@@ -1,4 +1,5 @@
-import { AllowAnonymous, Controller, Get, View } from '@caffeinejs/http'
+import { AllowAnonymous, Controller, Get } from '@caffeinejs/http'
+import { View } from '@caffeinejs/view'
 import { githubConfigured } from '../auth/index.js'
 
 // Landing page for the Petstore API. Public, HTML — a human-facing index of the API's authentication

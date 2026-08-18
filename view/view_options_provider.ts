@@ -1,8 +1,8 @@
 import { kServiceConfigure, type Service } from '@caffeinejs/std'
-import { ErrConfiguration } from '../error/common.js'
-import type { ServiceKit } from '../service.js'
+import { ErrConfiguration, type ServiceKit } from '@caffeinejs/http'
 import { kViewOptionsProvider } from './keys.js'
 import { ViewBuilder } from './view_builder.js'
+import { ViewConfigurer } from './view_configurer.js'
 import type { ViewOptions } from './view.js'
 
 /**
@@ -62,6 +62,9 @@ export class ViewOptionsProvider implements Service {
     void this.all()
 
     kit.container.bind(kViewOptionsProvider).toValue(this).internal()
+    // Self-register the server-phase configurer so the adapter discovers it via
+    // getManyOptional(FeatureConfigurer) — http no longer hardcodes it.
+    kit.container.bind(ViewConfigurer).toClass(ViewConfigurer).extends()
 
     return Promise.resolve()
   }

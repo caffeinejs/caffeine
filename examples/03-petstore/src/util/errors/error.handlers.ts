@@ -1,4 +1,5 @@
-import { Catch, type Context, ErrHTTP, ErrorHandler, View } from '@caffeinejs/http'
+import { Catch, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { View } from '@caffeinejs/view'
 
 // A simple, conventional error body: a machine-readable `code`, a human-readable `message`, and —
 // for validation failures — a list of the offending fields. Rendered as plain application/json.

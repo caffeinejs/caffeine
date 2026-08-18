@@ -1,4 +1,4 @@
-import { ErrConfiguration } from '../error/common.js'
+import { ErrConfiguration } from '@caffeinejs/http'
 import type { ViewResult, ViewRenderOptions } from './view.js'
 
 type ViewRenderFn = (page: string, data: object, opts?: ViewRenderOptions) => unknown

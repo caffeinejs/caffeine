@@ -1,4 +1,5 @@
-import { AllowAnonymous, AuthenticationService, Authorize, type Context, Controller, Get, Params, View, $p } from '@caffeinejs/http'
+import { AllowAnonymous, AuthenticationService, Authorize, type Context, Controller, Get, Params, $p } from '@caffeinejs/http'
+import { View } from '@caffeinejs/view'
 
 // GitHub OAuth sign-in. The callback route (/login/github/callback) is registered automatically by
 // the framework's OIDCConfigurer from the configured callbackURL — only the initiation route lives

@@ -1,26 +1,12 @@
-import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import handlebars from 'handlebars'
-import { Catch, type Context, Controller, ErrorHandler, Get, View, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { Catch, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
-// Error handlers, like controller handlers, may RETURN a value the framework finalizes: a View() renders
-// as HTML, a plain object serializes as JSON, and a handler that responds via ctx (returning void) is
-// unchanged.
+// Error handlers, like controller handlers, may RETURN a value the framework finalizes: a plain object
+// serializes as JSON, and a handler that responds via ctx (returning void) is unchanged.
 
-const templatesRoot = fileURLToPath(new URL('./templates', import.meta.url))
-
-class ErrReturnView extends Error {}
 class ErrReturnJson extends Error {}
 class ErrReturnVoid extends Error {}
-
-@Catch(ErrReturnView)
-class ReturnViewHandler extends ErrorHandler<ErrReturnView> {
-  handle(ctx: Context, error: ErrReturnView): unknown {
-    ctx.status(404)
-    return View('message', { message: error.message })
-  }
-}
 
 @Catch(ErrReturnJson)
 class ReturnJsonHandler extends ErrorHandler<ErrReturnJson> {
@@ -39,9 +25,6 @@ class ReturnVoidHandler extends ErrorHandler<ErrReturnVoid> {
 
 @Controller('/err-return')
 class ErrReturnController {
-  @Get('/view')
-  view(): unknown { throw new ErrReturnView('as html') }
-
   @Get('/json')
   json(): unknown { throw new ErrReturnJson('as json') }
 
@@ -49,26 +32,11 @@ class ErrReturnController {
   void(): unknown { throw new ErrReturnVoid('via ctx') }
 }
 
-void [ReturnViewHandler, ReturnJsonHandler, ReturnVoidHandler, ErrReturnController]
+void [ReturnJsonHandler, ReturnVoidHandler, ErrReturnController]
 
 describe('error handler return values', () => {
-  it('renders a returned View() as HTML', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .build()
-    await app.ready()
-
-    const res = await app.fetch('/err-return/view')
-
-    expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toMatch(/^text\/html/)
-    expect(await res.text()).toContain('as html')
-  })
-
   it('serializes a returned object as JSON', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.fetch('/err-return/json')
@@ -79,9 +47,7 @@ describe('error handler return values', () => {
   })
 
   it('leaves a ctx-based (void-returning) handler unchanged', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
     const res = await app.fetch('/err-return/void')

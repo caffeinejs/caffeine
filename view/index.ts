@@ -1,4 +1,5 @@
 export * from './keys.js'
+export * from './plugin.js'
 export * from './render_view.js'
 export * from './view.js'
 export * from './view_builder.js'

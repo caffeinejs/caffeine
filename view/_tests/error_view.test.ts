@@ -1,0 +1,44 @@
+import { fileURLToPath } from 'node:url'
+import { describe, it, expect } from 'vitest'
+import fastify from 'fastify'
+import handlebars from 'handlebars'
+import { Catch, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { View, viewPlugin } from '../index.js'
+
+// An error handler, like a controller handler, may RETURN a View() which the framework renders as HTML.
+// This exercises the view plugin on the error-handling path.
+
+const templatesRoot = fileURLToPath(new URL('./templates', import.meta.url))
+
+class ErrReturnView extends Error {}
+
+@Catch(ErrReturnView)
+class ReturnViewHandler extends ErrorHandler<ErrReturnView> {
+  handle(ctx: Context, error: ErrReturnView): unknown {
+    ctx.status(404)
+    return View('message', { message: error.message })
+  }
+}
+
+@Controller('/err-return-view')
+class ErrReturnController {
+  @Get('/view')
+  view(): unknown { throw new ErrReturnView('as html') }
+}
+
+void [ReturnViewHandler, ErrReturnController]
+
+describe('error handler returning a View()', () => {
+  it('renders a returned View() as HTML', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {}, viewPlugin())
+      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .build()
+    await app.ready()
+
+    const res = await app.fetch('/err-return-view/view')
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toMatch(/^text\/html/)
+    expect(await res.text()).toContain('as html')
+  })
+})

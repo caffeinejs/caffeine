@@ -11,6 +11,7 @@
     "scan",
     "std",
     "http",
+    "view",
     "openapi",
     "fetchy/*",
     "cli",

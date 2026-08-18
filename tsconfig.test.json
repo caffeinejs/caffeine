@@ -9,7 +9,8 @@
     "declarationMap": false,
     "paths": {
       "@caffeinejs/di": ["./di/index.ts"],
-      "@caffeinejs/http": ["./http/index.ts"]
+      "@caffeinejs/http": ["./http/index.ts"],
+      "@caffeinejs/view": ["./view/index.ts"]
     }
   },
   "include": [

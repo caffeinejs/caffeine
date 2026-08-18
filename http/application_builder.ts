@@ -13,7 +13,6 @@ import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { CacheBuilder } from './cache/cache_builder.js'
 import { ServerBuilder } from './server/index.js'
-import { ViewBuilder, ViewOptionsProvider } from './view/index.js'
 import { StaticBuilder } from './static/index.js'
 
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
@@ -25,7 +24,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   #authBuilder: AuthenticationBuilder | undefined
   #cacheBuilder: CacheBuilder | undefined
   #serverBuilder: ServerBuilder | undefined
-  #viewProvider: ViewOptionsProvider | undefined
   #staticBuilder: StaticBuilder | undefined
   readonly #authzBuilder: AuthorizationBuilder
 
@@ -71,22 +69,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     }
 
     configure(this.#serverBuilder)
-
-    return this
-  }
-
-  view(configure: (view: ViewBuilder) => void): this
-  view(name: string, configure: (view: ViewBuilder) => void): this
-  view(a: string | ((view: ViewBuilder) => void), b?: (view: ViewBuilder) => void): this {
-    const name = typeof a === 'string' ? a : undefined
-    const configure = (typeof a === 'string' ? b : a)!
-
-    if (this.#viewProvider == null) {
-      this.#viewProvider = new ViewOptionsProvider()
-      this.addService(this.#viewProvider)
-    }
-
-    configure(this.#viewProvider.builder(name))
 
     return this
   }

@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { Catch, CatchBy, type Context, Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, ErrorHandler, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
+import { viewPlugin } from '@caffeinejs/view'
 // Side-effect import: registers HTTPErrorHandler / FallbackErrorHandler as global @Catch handlers.
 import './error.handlers.js'
 import type { ErrorBody } from './error.handlers.js'
@@ -72,7 +73,7 @@ void [GadgetsController]
 const viewsRoot = fileURLToPath(new URL('../../views', import.meta.url))
 
 async function buildApp() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()))
+  const app = createWebApplication(fastifyAdapterFactory(fastify()), {}, viewPlugin())
     .view(v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
     .build()
   await app.ready()

@@ -43,7 +43,6 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
     "@fastify/static": "^10.1.3",
-    "@fastify/view": "^12.0.0",
     "fastify": "^5.0.0",
     "fastify-plugin": "^6.0.0"
   },
@@ -52,9 +51,6 @@
       "optional": true
     },
     "@fastify/static": {
-      "optional": true
-    },
-    "@fastify/view": {
       "optional": true
     },
     "@fastify/cookie": {
@@ -76,13 +72,9 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
     "@fastify/static": "^10.1.3",
-    "@fastify/view": "^12.0.0",
-    "@types/ejs": "^3.1.5",
     "@types/supertest": "^7.2.0",
-    "ejs": "^3.1.10",
     "fastify": "^5.8.5",
     "fastify-plugin": "^6.0.0",
-    "handlebars": "^4.7.9",
     "supertest": "^7.2.2"
   }
 }

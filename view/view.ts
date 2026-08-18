@@ -1,6 +1,5 @@
 import type { FastifyViewOptions } from '@fastify/view'
-import { FastifyContext, type Context } from '../context.js'
-import { ResponseResult } from '../response_result.js'
+import { FastifyContext, ResponseResult, type Context } from '@caffeinejs/http'
 import { renderView, type ViewCapableReply } from './render_view.js'
 
 /** Options the {@link ViewBuilder} assembles and binds; passed verbatim to `fastify.register(view, opts)`. */

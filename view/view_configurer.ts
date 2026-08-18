@@ -1,5 +1,5 @@
 import fastifyView from '@fastify/view'
-import { FeatureConfigurer, type ServerPhaseContext } from '../feature_configurer.js'
+import { FeatureConfigurer, type ServerPhaseContext } from '@caffeinejs/http'
 import { kViewOptionsProvider } from './keys.js'
 import type { ViewOptionsProvider } from './view_options_provider.js'
 

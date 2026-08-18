@@ -15,6 +15,7 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*",
+    "@caffeinejs/view": "*",
     "@fastify/cookie": "^11.0.0",
     "@fastify/multipart": "^10.0.0",
     "@fastify/static": "^10.1.3",
