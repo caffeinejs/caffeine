@@ -153,6 +153,19 @@ skills-lock.json
 .agents/
 .claude/skills/*
 
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
 # Project
 
 .vscode/
