@@ -51,6 +51,9 @@
       "path": "./openapi"
     },
     {
+      "path": "./kafka"
+    },
+    {
       "path": "./fetchy/fetchy"
     },
     {

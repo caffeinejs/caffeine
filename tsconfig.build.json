@@ -17,6 +17,9 @@
       "path": "./openapi/tsconfig.build.json"
     },
     {
+      "path": "./kafka/tsconfig.build.json"
+    },
+    {
       "path": "./fetchy/fetchy/tsconfig.build.json"
     },
     {

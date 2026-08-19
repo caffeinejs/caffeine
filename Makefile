@@ -111,6 +111,21 @@ oauthserver-down: ## stop the Spring Authorization Server
 test-e2e: oauthserver-up ## run the OIDC/OAuth2 e2e against a real Spring Authorization Server
 	@npm run test:e2e; status=$$?; docker compose -f test/services/oauthserver/docker-compose.yml down; exit $$status
 
+.PHONY: kafka-up
+kafka-up: ## spin up a single-node Kafka broker locally (Docker)
+	@docker compose -f kafka/docker-compose.yml up -d
+	@echo "waiting for kafka on localhost:9092 ..."
+	@until docker compose -f kafka/docker-compose.yml exec -T kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; do sleep 2; done
+	@echo "kafka is up"
+
+.PHONY: kafka-down
+kafka-down: ## stop the local Kafka broker
+	@docker compose -f kafka/docker-compose.yml down
+
+.PHONY: test-kafka
+test-kafka: kafka-up ## run the kafka integration tests against a real broker
+	@npx vitest run --project kafka; status=$$?; docker compose -f kafka/docker-compose.yml down; exit $$status
+
 # Misc
 # --
 
