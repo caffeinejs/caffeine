@@ -29,5 +29,4 @@ export type {
   ConfigValue,
   PropertySource,
   ResolutionContext,
-  SchemaIssue,
 } from './types.js'

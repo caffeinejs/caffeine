@@ -1,4 +1,5 @@
 import { Controller, Get, createWebApplication, Params, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
@@ -9,25 +10,18 @@ interface DataSchema {
   bool: boolean
 }
 
-const schema = {
-  type: 'object',
-  required: ['text', 'num', 'bool'],
-  properties: {
-    text: { type: 'string' },
-    num: { type: 'number' },
-    bool: { type: 'boolean' },
-  },
-}
+const schema = $t.Object({
+  text: $t.String(),
+  num: $t.Number(),
+  bool: $t.Boolean(),
+})
 
 const responseSchema = {
-  200: {
-    type: 'object',
-    properties: {
-      params: schema,
-      query: schema,
-      body: schema,
-    },
-  },
+  200: $t.Object({
+    params: schema,
+    query: schema,
+    body: schema,
+  }),
 }
 
 @Controller('')

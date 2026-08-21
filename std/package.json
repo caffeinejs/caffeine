@@ -15,13 +15,13 @@
       "types": "./dist/config/index.d.ts",
       "default": "./dist/config/index.js"
     },
-    "./config/typebox": {
-      "types": "./dist/config/adapters/typebox.d.ts",
-      "default": "./dist/config/adapters/typebox.js"
-    },
     "./framework": {
       "types": "./dist/framework/index.d.ts",
       "default": "./dist/framework/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "default": "./dist/schema/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -36,18 +36,10 @@
   },
   "dependencies": {
     "@caffeinejs/di": "*",
+    "@sinclair/typebox": "^0.34.49",
     "@standard-schema/spec": "^1.1.0"
   },
-  "peerDependencies": {
-    "@sinclair/typebox": ">=0.34.0 <1"
-  },
-  "peerDependenciesMeta": {
-    "@sinclair/typebox": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@sinclair/typebox": "^0.34.49",
     "@types/js-yaml": "^4.0.9",
     "js-yaml": "^4.1.0",
     "zod": "^4.4.3"

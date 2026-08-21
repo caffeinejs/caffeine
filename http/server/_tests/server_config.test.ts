@@ -1,18 +1,17 @@
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
-import { z } from 'zod'
-import { ErrConfigSourceConflict, kAppConfig } from '@caffeinejs/std'
+import { ErrConfigSourceConflict, type InferSchema, kAppConfig, $t } from '@caffeinejs/std'
 import { CONFIG_REFRESH_LABEL, InlineProvider, type ConfigHandle, type ConfigProvider } from '@caffeinejs/std/config'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 import { kServerOptions, type ServerOptions } from '../index.js'
 
-const schema = z.object({
-  server: z.object({ host: z.string(), port: z.coerce.number() }),
-  db: z.object({ url: z.string() }),
+const schema = $t.Object({
+  server: $t.Object({ host: $t.String(), port: $t.Number() }),
+  db: $t.Object({ url: $t.String() }),
 })
 
-type AppConfig = z.infer<typeof schema>
+type AppConfig = InferSchema<typeof schema>
 
 describe('server builder + config', () => {
   let app: WebApplication | undefined

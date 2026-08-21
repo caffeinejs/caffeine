@@ -59,6 +59,7 @@ export class ServerBuilder<C = unknown> implements Service {
     if (this.#selector !== undefined) {
       const container = kit.container
       const selector = this.#selector
+
       kit.container
         .bind<ServerOptions>(kServerOptions)
         // Lazy so `kAppConfig` (bound during init) is available; runs once, then the singleton caches it.

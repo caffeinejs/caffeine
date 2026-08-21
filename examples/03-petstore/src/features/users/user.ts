@@ -1,3 +1,4 @@
+import { $t } from '@caffeinejs/std'
 import type { User as UserRow } from '@prisma/client'
 
 export interface UserDTO {
@@ -36,34 +37,20 @@ export function toUserDTO(row: UserRow): UserDTO {
   }
 }
 
-const phonePattern = '^\\+?[1-9]\\d{1,14}$'
+const phone = $t.String({ pattern: '^\\+?[1-9]\\d{1,14}$' })
 
-export const createUserSchema = {
-  type: 'object',
-  required: ['username', 'email', 'password'],
-  properties: {
-    username: { type: 'string', minLength: 3, maxLength: 50 },
-    firstName: { type: 'string' },
-    lastName: { type: 'string' },
-    email: { type: 'string', format: 'email' },
-    phone: { type: 'string', pattern: phonePattern },
-    password: { type: 'string', minLength: 8 },
-  },
-}
+export const createUserSchema = $t.Object({
+  username: $t.String({ minLength: 3, maxLength: 50 }),
+  firstName: $t.Optional($t.String()),
+  lastName: $t.Optional($t.String()),
+  email: $t.String({ format: 'email' }),
+  phone: $t.Optional(phone),
+  password: $t.String({ minLength: 8 }),
+})
 
-export const updateUserSchema = {
-  type: 'object',
-  properties: {
-    firstName: { type: 'string' },
-    lastName: { type: 'string' },
-    email: { type: 'string', format: 'email' },
-    phone: { type: 'string', pattern: phonePattern },
-    password: { type: 'string', minLength: 8 },
-  },
-}
+/** Everything but the username, which is immutable once the account exists. */
+export const updateUserSchema = $t.Partial($t.Omit(createUserSchema, ['username']))
 
-export const userIdParamSchema = {
-  type: 'object',
-  required: ['id'],
-  properties: { id: { type: 'string' } },
-}
+export const userIdParamSchema = $t.Object({
+  id: $t.String(),
+})

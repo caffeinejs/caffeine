@@ -1,15 +1,17 @@
-import { z } from 'zod'
+import { type InferSchema, $t } from '@caffeinejs/std'
 
-// The application config schema. Any Standard Schema library works; this example uses zod v4. Values come from
-// the environment (see app.ts): `z.coerce.number()` turns PETSTORE_SERVER__PORT into a number. Field defaults
-// fill a partial server (e.g. docker sets only the port), and the object default covers a wholly-absent server.
-// The values appear twice because zod's `.default(v)` short-circuits (returns `v` as-is without re-parsing), so
-// a field default cannot fill an object that is missing entirely.
-export const appConfigSchema = z.object({
-  server: z.object({
-    host: z.string().default('0.0.0.0'),
-    port: z.coerce.number().default(9999),
-  }).default({ host: '0.0.0.0', port: 9999 }),
+// The application config schema, in Caffeine's `$t` dialect. Values come from the environment (see app.ts) as
+// strings, and are coerced to the declared types: PETSTORE_SERVER__PORT becomes a number because the schema says
+// `$t.Number`, with no coercion wrapper at the call site.
+//
+// Defaults are declared once. `{ default: {} }` on `server` materializes the object when the environment sets
+// nothing at all, and the field defaults then fill it in — so a partially configured server (docker setting only
+// the port) and a wholly absent one are both covered by the same two values.
+export const appConfigSchema = $t.Object({
+  server: $t.Object({
+    host: $t.String({ default: '0.0.0.0' }),
+    port: $t.Number({ default: 9999 }),
+  }, { default: {} }),
 })
 
-export type AppConfig = z.infer<typeof appConfigSchema>
+export type AppConfig = InferSchema<typeof appConfigSchema>

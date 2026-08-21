@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/di'
-import { FastifyInstance, FastifyReply, FastifyRequest, FastifySchema, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
+import { FastifyInstance, FastifyReply, FastifyRequest, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import type { CatchByMap, Router } from './route.js'
 import type { Principal } from './security/index.js'
@@ -18,6 +18,7 @@ import { CacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { ResponseResult } from './response_result.js'
+import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { StaticConfigurer } from './static/index.js'
 import { joinPaths } from './internal/paths/index.js'
 
@@ -199,6 +200,8 @@ export class FastifyAdapter<
             catchBy: route.catchBy,
           }
 
+          const url = joinPaths(basePath, route.path)
+
           const routeDef: RouteOptions<
             RawServerBase,
             RawRequestDefaultExpression<RawServerBase>,
@@ -207,8 +210,9 @@ export class FastifyAdapter<
             any
           > = {
             method: [...new Set(route.method.map(m => m.toUpperCase()))],
-            url: joinPaths(basePath, route.path),
-            schema: route.schema as FastifySchema,
+            url,
+            // Compiled here, once, so Fastify's Ajv owns request validation with zero schema work per request.
+            schema: compileRouteSchema(route.schema, `${route.method.join('|')} ${url}`),
             bodyLimit: route.bodyLimit,
             handlerTimeout: route.timeout,
             config,

@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { Catch, CatchBy, type Context, Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, ErrorHandler, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std'
 import { viewPlugin } from '@caffeinejs/view'
 // Side-effect import: registers HTTPErrorHandler / FallbackErrorHandler as global @Catch handlers.
 import './error.handlers.js'
@@ -12,14 +13,14 @@ import type { ErrorBody } from './error.handlers.js'
 @Controller('/things')
 class ThingsController {
   @Get('/')
-  @Schema({ querystring: { type: 'object', properties: { n: { type: 'integer' } } } })
+  @Schema({ querystring: $t.Object({ n: $t.Optional($t.Integer()) }) })
   @Params([$p.query()])
   list(query: unknown): unknown {
     return query
   }
 
   @Post('/')
-  @Schema({ body: { type: 'object', required: ['name'], properties: { name: { type: 'string' } }, additionalProperties: false } })
+  @Schema({ body: $t.Object({ name: $t.String() }) })
   @Params([$p.body()])
   create(body: unknown): unknown {
     return body

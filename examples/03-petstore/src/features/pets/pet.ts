@@ -1,3 +1,4 @@
+import { $t } from '@caffeinejs/std'
 import type { Pet as PetRow } from '@prisma/client'
 
 // --- API shapes (mirror spec/openapi.petstore.yaml #/components/schemas/Pet) ---
@@ -104,66 +105,61 @@ export function toPetDTO(row: PetRow): PetDTO {
   }
 }
 
-// --- JSON Schemas for @Schema (Fastify/Ajv dialect) ---
+// --- Request schemas, in Caffeine's `$t` dialect ---
+//
+// A `$t` schema is a JSON Schema, so each of these is compiled straight into a Fastify Ajv validator when the route
+// is registered. The same declaration also carries the TypeScript type, reachable with `InferSchema<typeof X>`.
 
-const SPECIES = ['DOG', 'CAT', 'RABBIT', 'BIRD', 'REPTILE', 'OTHER']
-const SIZE = ['SMALL', 'MEDIUM', 'LARGE']
-const GENDER = ['MALE', 'FEMALE', 'UNKNOWN']
-const PET_STATUS = ['AVAILABLE', 'PENDING', 'ADOPTED', 'NOT_AVAILABLE']
+// `satisfies` ties each list to the DTO union above, so adding a species to one without the other fails to compile.
+const SPECIES = ['DOG', 'CAT', 'RABBIT', 'BIRD', 'REPTILE', 'OTHER'] as const satisfies readonly Species[]
+const SIZE = ['SMALL', 'MEDIUM', 'LARGE'] as const satisfies readonly Size[]
+const GENDER = ['MALE', 'FEMALE', 'UNKNOWN'] as const satisfies readonly Gender[]
+const PET_STATUS = ['AVAILABLE', 'PENDING', 'ADOPTED', 'NOT_AVAILABLE'] as const satisfies readonly PetStatus[]
 
-const medicalInfoSchema = {
-  type: 'object',
-  properties: {
-    spayedNeutered: { type: 'boolean' },
-    vaccinated: { type: 'boolean' },
-    microchipped: { type: 'boolean' },
-    specialNeeds: { type: 'boolean' },
-    healthNotes: { type: 'string' },
-  },
-}
+const species = $t.UnionEnum(SPECIES)
+const size = $t.UnionEnum(SIZE)
+const gender = $t.UnionEnum(GENDER)
+const petStatus = $t.UnionEnum(PET_STATUS)
 
-export const createPetSchema = {
-  type: 'object',
-  required: ['species', 'name', 'ageMonths', 'price'],
-  properties: {
-    species: { type: 'string', enum: SPECIES },
-    name: { type: 'string', minLength: 1, maxLength: 50 },
-    breed: { type: 'string' },
-    ageMonths: { type: 'integer', minimum: 0 },
-    size: { type: 'string', enum: SIZE },
-    color: { type: 'string' },
-    gender: { type: 'string', enum: GENDER },
-    goodWithKids: { type: 'boolean' },
-    price: { type: 'string' },
-    currency: { type: 'string', pattern: '^[A-Z]{3}$' },
-    description: { type: 'string' },
-    status: { type: 'string', enum: PET_STATUS },
-    photos: { type: 'array', items: { type: 'string', format: 'uri' } },
-    medicalInfo: medicalInfoSchema,
-  },
-}
+const medicalInfoSchema = $t.Object({
+  spayedNeutered: $t.Optional($t.Boolean()),
+  vaccinated: $t.Optional($t.Boolean()),
+  microchipped: $t.Optional($t.Boolean()),
+  specialNeeds: $t.Optional($t.Boolean()),
+  healthNotes: $t.Optional($t.String()),
+})
 
-export const updatePetSchema = {
-  type: 'object',
-  properties: createPetSchema.properties,
-}
+export const createPetSchema = $t.Object({
+  species,
+  name: $t.String({ minLength: 1, maxLength: 50 }),
+  breed: $t.Optional($t.String()),
+  ageMonths: $t.Integer({ minimum: 0 }),
+  size: $t.Optional(size),
+  color: $t.Optional($t.String()),
+  gender: $t.Optional(gender),
+  goodWithKids: $t.Optional($t.Boolean()),
+  price: $t.String(),
+  currency: $t.Optional($t.String({ pattern: '^[A-Z]{3}$' })),
+  description: $t.Optional($t.String()),
+  status: $t.Optional(petStatus),
+  photos: $t.Optional($t.Array($t.String({ format: 'uri' }))),
+  medicalInfo: $t.Optional(medicalInfoSchema),
+})
 
-export const listPetsQuerySchema = {
-  type: 'object',
-  properties: {
-    species: { type: 'string', enum: SPECIES },
-    status: { type: 'string', enum: PET_STATUS },
-    size: { type: 'string', enum: SIZE },
-    ageMin: { type: 'integer', minimum: 0 },
-    ageMax: { type: 'integer', minimum: 0 },
-    goodWithKids: { type: 'boolean' },
-    page: { type: 'integer', minimum: 1, default: 1 },
-    limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
-  },
-}
+/** Every field of the create schema, all optional — no second declaration to keep in step. */
+export const updatePetSchema = $t.Partial(createPetSchema)
 
-export const petIdParamSchema = {
-  type: 'object',
-  required: ['id'],
-  properties: { id: { type: 'string', format: 'uuid' } },
-}
+export const listPetsQuerySchema = $t.Object({
+  species: $t.Optional(species),
+  status: $t.Optional(petStatus),
+  size: $t.Optional(size),
+  ageMin: $t.Optional($t.Integer({ minimum: 0 })),
+  ageMax: $t.Optional($t.Integer({ minimum: 0 })),
+  goodWithKids: $t.Optional($t.Boolean()),
+  page: $t.Integer({ minimum: 1, default: 1 }),
+  limit: $t.Integer({ minimum: 1, maximum: 100, default: 20 }),
+})
+
+export const petIdParamSchema = $t.Object({
+  id: $t.String({ format: 'uuid' }),
+})

@@ -20,9 +20,68 @@ describe('materialize', () => {
     expect(result).toEqual({ a: { b: { c: { d: 'deep' } } } })
   })
 
-  it('handles arrays as leaf values', () => {
+  it('reassembles indexed keys into a real Array', () => {
+    const result = materialize(makeSnapshot({ 'tags.0': 'a', 'tags.1': 'b', 'tags.2': 'c' }))
+    expect(Array.isArray(result.tags)).toBe(true)
+    expect(result.tags).toEqual(['a', 'b', 'c'])
+  })
+
+  it('preserves empty-array leaf sentinels', () => {
+    const result = materialize(makeSnapshot({ tags: [] }))
+    expect(Array.isArray(result.tags)).toBe(true)
+    expect(result.tags).toEqual([])
+  })
+
+  it('reassembles nested object array elements', () => {
+    const result = materialize(makeSnapshot({ 'items.0.host': 'h', 'items.0.port': 1, 'items.1.host': 'i' }))
+    expect(Array.isArray(result.items)).toBe(true)
+    expect(result.items).toEqual([{ host: 'h', port: 1 }, { host: 'i' }])
+  })
+
+  it('builds a dense array for sparse indices', () => {
+    const result = materialize(makeSnapshot({ 'tags.0': 'a', 'tags.2': 'c' }))
+    expect(Array.isArray(result.tags)).toBe(true)
+    expect(result.tags).toHaveLength(3)
+    expect((result.tags as unknown[])[0]).toBe('a')
+    expect((result.tags as unknown[])[1]).toBeUndefined()
+    expect((result.tags as unknown[])[2]).toBe('c')
+  })
+
+  it('keeps a whole-array leaf when no indexed children exist', () => {
     const result = materialize(makeSnapshot({ tags: ['a', 'b', 'c'] }))
-    expect(result).toEqual({ tags: ['a', 'b', 'c'] })
+    expect(Array.isArray(result.tags)).toBe(true)
+    expect(result.tags).toEqual(['a', 'b', 'c'])
+  })
+
+  it('lets indexed children win over a whole-array leaf at the same path', () => {
+    const leafFirst = materialize(makeSnapshot({
+      tags: ['old'],
+      'tags.0': 'a',
+      'tags.1': 'b',
+    }))
+    expect(Array.isArray(leafFirst.tags)).toBe(true)
+    expect(leafFirst.tags).toEqual(['a', 'b'])
+
+    // Whole-array leaf arriving after indexed keys must not overwrite them.
+    const indexFirst = materialize(makeSnapshot({
+      'tags.0': 'a',
+      'tags.1': 'b',
+      tags: ['old'],
+    }))
+    expect(Array.isArray(indexFirst.tags)).toBe(true)
+    expect(indexFirst.tags).toEqual(['a', 'b'])
+  })
+
+  it('promotes objects whose keys are all unsigned integers', () => {
+    const result = materialize(makeSnapshot({ 'map.0': 'x', 'map.1': 'y' }))
+    expect(Array.isArray(result.map)).toBe(true)
+    expect(result.map).toEqual(['x', 'y'])
+  })
+
+  it('does not promote objects with mixed keys', () => {
+    const result = materialize(makeSnapshot({ 'map.0': 'x', 'map.name': 'y' }))
+    expect(Array.isArray(result.map)).toBe(false)
+    expect(result.map).toEqual({ 0: 'x', name: 'y' })
   })
 
   it('handles null values', () => {
@@ -66,5 +125,10 @@ describe('readByPath', () => {
   it('handles escaped dots', () => {
     const obj = { map: { 'key.with.dots': 'val' } }
     expect(readByPath(obj, 'map.key\\.with\\.dots')).toBe('val')
+  })
+
+  it('indexes into materialized arrays', () => {
+    expect(readByPath({ tags: ['a', 'b'] }, 'tags.0')).toBe('a')
+    expect(readByPath({ tags: ['a', 'b'] }, 'tags.1')).toBe('b')
   })
 })

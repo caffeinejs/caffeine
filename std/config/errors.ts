@@ -1,4 +1,4 @@
-import type { SchemaIssue } from './types.js'
+import type { SchemaIssue } from '../schema/schema.js'
 
 export class ErrConfig extends Error {
   readonly code: string

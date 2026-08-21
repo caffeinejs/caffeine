@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import type { Ctor, Provider } from '@caffeinejs/di'
+import { $t } from '@caffeinejs/std'
 import { Injectable, Lifetime, Named, Primary, Scopes } from '@caffeinejs/di'
 import { Catch, CatchBy, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
@@ -230,7 +231,7 @@ class TxController {
 @Controller('/validated')
 class ValidatedController {
   @Post('/')
-  @Schema({ body: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } } })
+  @Schema({ body: $t.Object({ name: $t.String() }) })
   @Params([$p.body()])
   create(body: unknown): unknown {
     return { created: body }
@@ -458,7 +459,7 @@ class CatchByNamedController {
 class CatchByValidatedController {
   @Post('/')
   @CatchBy(ValidationHandler)
-  @Schema({ body: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } } })
+  @Schema({ body: $t.Object({ name: $t.String() }) })
   @Params([$p.body()])
   create(body: unknown): unknown {
     return { created: body }

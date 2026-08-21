@@ -7,7 +7,7 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** spec
 - **Persistence** via **Prisma Client** over **PostgreSQL** (no in-memory store).
 - **Two layers only**: `controller → repository`. Repositories own every query and the
   row → API-DTO mapping; controllers own routing, validation, and status codes.
-- **Request/response validation** with `@Schema` (Fastify/Ajv JSON Schema mirroring the spec).
+- **Request/response validation** with `@Schema`, declared in the `$t` dialect from `@caffeinejs/std` and mirroring the spec. A `$t` schema is JSON Schema, so it compiles straight into a Fastify Ajv validator and carries the TypeScript type with it.
 - **Auth**: JWT bearer (`@caffeinejs/http` `addJWTBearer`) with `@Authorize({ roles })` gating writes.
 - **Multipart upload** (`$p.file()`), and the OpenAPI 3.2 **QUERY** search verb.
 - **Dockerised**: `docker-compose` brings up Postgres + the app, runs migrations, seeds demo data.

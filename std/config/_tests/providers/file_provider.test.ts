@@ -31,6 +31,17 @@ describe('FileProvider', () => {
     expect(source.entries.get('db.port')?.value).toBe(5432)
   })
 
+  it('indexes array fields when flattening JSON', async () => {
+    const path = await writeTmp('array-config.json', JSON.stringify({ tags: ['a', 'b'], items: [{ id: 1 }] }))
+    const provider = new FileProvider(path)
+    const [source] = await provider.load(ctx)
+
+    expect(source.entries.get('tags.0')?.value).toBe('a')
+    expect(source.entries.get('tags.1')?.value).toBe('b')
+    expect(source.entries.get('items.0.id')?.value).toBe(1)
+    expect(source.entries.has('tags')).toBe(false)
+  })
+
   it('sets origin with file: prefix', async () => {
     const path = await writeTmp('origin-test.json', JSON.stringify({ key: 'val' }))
     const provider = new FileProvider(path)

@@ -35,9 +35,3 @@ export interface ConfigProvider {
   load(ctx: ResolutionContext): Promise<PropertySource[]>
   dispose?(): void | Promise<void>
 }
-
-export interface SchemaIssue {
-  path: string
-  message: string
-  code?: string
-}

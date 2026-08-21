@@ -104,3 +104,54 @@ describe('config multi-source precedence & provenance', () => {
     expect(diagnostics.originOf('server.host')).toMatch(/^file:/)
   })
 })
+
+describe('config array flatten + typed handle', () => {
+  const arraySchema = z.object({
+    tags: z.array(z.string()),
+    items: z.array(z.object({ id: z.number() })).default([]),
+  })
+
+  it('materializes arrays as Array fields and preserves ConfigHandle typing', async () => {
+    const { config, validated } = await bootstrapConfig({
+      providers: [new InlineProvider({ tags: ['a', 'b'], items: [{ id: 1 }] })],
+      schema: arraySchema,
+    })
+
+    expect(Array.isArray(validated.tags)).toBe(true)
+    expect(validated.tags).toEqual(['a', 'b'])
+    expect(Array.isArray(validated.items)).toBe(true)
+    expect(validated.items).toEqual([{ id: 1 }])
+
+    // Live proxy: arrays are frozen snapshots (ReadonlyArray), not nested object accessors.
+    expect(Array.isArray(config.tags)).toBe(true)
+    expect([...config.tags]).toEqual(['a', 'b'])
+    expect(Object.isFrozen(config.tags)).toBe(true)
+
+    // Compile-time: ConfigHandle maps array fields to ReadonlyArray.
+    const tags: ReadonlyArray<string> = config.tags
+    expect(tags[0]).toBe('a')
+  })
+
+  it('lets an env indexed key override a single array element (env first)', async () => {
+    const filePath = await writeTmp(
+      'array-override.json',
+      JSON.stringify({ tags: ['a', 'b'], items: [] }),
+    )
+    const ctx: ResolutionContext = {
+      app: 'test',
+      profiles: ['default'],
+      env: { APP_TAGS__0: 'override' },
+    }
+
+    const { config, diagnostics } = await bootstrapConfig({
+      providers: [new EnvProvider({ prefix: 'APP_' }), new FileProvider(filePath)],
+      schema: arraySchema,
+      context: ctx,
+    })
+
+    expect(Array.isArray(config.tags)).toBe(true)
+    expect([...config.tags]).toEqual(['override', 'b'])
+    expect(diagnostics.originOf('tags.0')).toMatch(/^env:/)
+    expect(diagnostics.originOf('tags.1')).toMatch(/^file:/)
+  })
+})

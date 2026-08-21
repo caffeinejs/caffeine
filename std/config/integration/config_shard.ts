@@ -14,7 +14,9 @@ export class ConfigShard<T> implements SelfRefreshable {
   readonly handle: ConfigHandle<T>
 
   static async bootstrap<T>(options: BootstrapOptions<T>): Promise<ConfigShard<T>> {
-    const result = await bootstrapConfig(options)
+    // Explicit type argument: the config type is already known here, so this must not go through the
+    // schema-inferring overload, which cannot recover `T` from a TypeBox schema.
+    const result = await bootstrapConfig<T>(options)
     return new ConfigShard(result, options)
   }
 
@@ -30,7 +32,7 @@ export class ConfigShard<T> implements SelfRefreshable {
   }
 
   async [kSelfRefresh](): Promise<void> {
-    const result = await bootstrapConfig(this.#options)
+    const result = await bootstrapConfig<T>(this.#options)
     this.#validated = result.validated
     this.#snapshot = result.snapshot
   }

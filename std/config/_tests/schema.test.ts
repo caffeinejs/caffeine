@@ -40,6 +40,11 @@ describe('validateConfig', () => {
     }
   })
 
+  it('drops keys the schema does not declare instead of rejecting them', () => {
+    const result = validateConfig(schema, { host: 'localhost', port: 5432, unrelated: 'other tool' })
+    expect(result).toEqual({ host: 'localhost', port: 5432 })
+  })
+
   it('rejects an async validator (config is materialized synchronously)', () => {
     const asyncSchema: ConfigSchema<TestConfig> = {
       '~standard': {

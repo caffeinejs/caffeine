@@ -1,4 +1,5 @@
 import { IncomingMessage } from 'http'
+import type { AnySchema, InferSchema } from '@caffeinejs/std'
 import { FastifyRequest, RawServerDefault, RawRequestDefaultExpression, FastifyReply } from 'fastify'
 import { CookieSerializeOptions } from '@fastify/cookie'
 import type { RouteValidationSchema } from './route.js'
@@ -37,8 +38,15 @@ export interface Req<
   signedCookie(name: string): TAsync extends true ? Promise<UnsignedCookie> : UnsignedCookie
 }
 
-export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = false> {
-  get req(): Req<REQ, Record<string, string>, Record<string, string>, Record<string, string>, TAsync>
+export interface Context<
+  REQ = unknown,
+  CO = unknown,
+  TAsync extends boolean = false,
+  TParams = Record<string, string>,
+  TQuery = Record<string, string>,
+  THeaders = Record<string, string>,
+> {
+  get req(): Req<REQ, TParams, TQuery, THeaders, TAsync>
 
   get statusCode(): number
 
@@ -68,23 +76,38 @@ export interface Context<REQ = unknown, CO = unknown, TAsync extends boolean = f
   redirect(url: string, status?: number): this
 }
 
-export interface FastifyRouteSchema<
-  _TParams = Record<string, string>,
-  _TQuery = Record<string, string>,
-  _THeaders = Record<string, string>,
-  _TBody = unknown,
-> extends RouteValidationSchema {}
+/**
+ * Derives the type of a request slot from the schema declared for it, falling back to `Fallback` when the route
+ * declares nothing for that slot.
+ *
+ * ```ts
+ * const PetRoute = { params: $t.Object({ id: $t.Integer() }) }
+ *
+ * // ctx.req.param() is { id: number }
+ * handler(ctx: FastifyContext<typeof PetRoute>) { ... }
+ * ```
+ *
+ * Inference reads the *authored* schema, so it reflects what the author wrote — not the per-slot strictness
+ * the route compilation adds on top.
+ */
+export type InferSlot<S, Slot extends keyof RouteValidationSchema, Fallback>
+  = S extends Record<Slot, infer Schema extends AnySchema> ? InferSchema<Schema> : Fallback
 
-export type InferParams<S> = S extends FastifyRouteSchema<infer P, any, any, any> ? P : Record<string, string>
-export type InferQuery<S> = S extends FastifyRouteSchema<any, infer Q, any, any> ? Q : Record<string, string>
-export type InferHeaders<S> = S extends FastifyRouteSchema<any, any, infer H, any> ? H : Record<string, string>
+export type InferParams<S> = InferSlot<S, 'params', Record<string, string>>
+export type InferQuery<S> = InferSlot<S, 'querystring', Record<string, string>>
+export type InferHeaders<S> = InferSlot<S, 'headers', Record<string, string>>
+export type InferBody<S> = InferSlot<S, 'body', unknown>
 
 export class FastifyContext<
-  SCHEMA extends FastifyRouteSchema = FastifyRouteSchema,
+  SCHEMA extends RouteValidationSchema = RouteValidationSchema,
   REPLY extends FastifyReply = FastifyReply,
 > implements Context<
   RawRequestDefaultExpression<RawServerDefault>,
-  CookieSerializeOptions
+  CookieSerializeOptions,
+  false,
+  InferParams<SCHEMA>,
+  InferQuery<SCHEMA>,
+  InferHeaders<SCHEMA>
 > {
   #req!: FastifyContextRequest<SCHEMA>
   #fastifyRequest: FastifyRequest
@@ -134,6 +157,11 @@ export class FastifyContext<
     return this
   }
 
+  removeHeader(key: string): this {
+    this.#reply.removeHeader(key)
+    return this
+  }
+
   body(body?: unknown): this {
     this.#reply.send(body)
     return this
@@ -175,7 +203,7 @@ export class FastifyContext<
   }
 }
 
-export class FastifyContextRequest<SCHEMA extends FastifyRouteSchema = FastifyRouteSchema> implements Req<
+export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteValidationSchema> implements Req<
   RawRequestDefaultExpression<RawServerDefault>, InferParams<SCHEMA>, InferQuery<SCHEMA>, InferHeaders<SCHEMA>
 > {
   constructor(private readonly request: FastifyRequest) { }

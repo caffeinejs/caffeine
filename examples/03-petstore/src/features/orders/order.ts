@@ -1,3 +1,4 @@
+import { $t } from '@caffeinejs/std'
 import type { Order as OrderRow } from '@prisma/client'
 
 export type OrderStatus = 'PLACED' | 'APPROVED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED'
@@ -34,20 +35,16 @@ export function toOrderDTO(row: OrderRow): OrderDTO {
   }
 }
 
-export const createOrderSchema = {
-  type: 'object',
-  required: ['petId'],
-  properties: {
-    petId: { type: 'string', format: 'uuid' },
-    userId: { type: 'string', format: 'uuid' },
-    totalAmount: { type: 'string' },
-    currency: { type: 'string', pattern: '^[A-Z]{3}$' },
-    status: { type: 'string', enum: ['PLACED', 'APPROVED', 'SHIPPED', 'DELIVERED', 'CANCELLED'] },
-  },
-}
+const ORDER_STATUS = ['PLACED', 'APPROVED', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const satisfies readonly OrderStatus[]
 
-export const orderIdParamSchema = {
-  type: 'object',
-  required: ['id'],
-  properties: { id: { type: 'string', format: 'uuid' } },
-}
+export const createOrderSchema = $t.Object({
+  petId: $t.String({ format: 'uuid' }),
+  userId: $t.Optional($t.String({ format: 'uuid' })),
+  totalAmount: $t.Optional($t.String()),
+  currency: $t.Optional($t.String({ pattern: '^[A-Z]{3}$' })),
+  status: $t.Optional($t.UnionEnum(ORDER_STATUS)),
+})
+
+export const orderIdParamSchema = $t.Object({
+  id: $t.String({ format: 'uuid' }),
+})
