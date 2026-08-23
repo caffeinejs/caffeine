@@ -122,7 +122,7 @@ function refName(ref: unknown): string {
   return typeof ref === 'function' ? ref.name : String(ref)
 }
 
-// Resolves the "@CatchBy" references of a controller or route into a map of error type to handler
+// Resolves the "@CatchWith" references of a controller or route into a map of error type to handler
 // provider. Resolution goes through the container, so a reference by class or by "@Named" identifier
 // honours @Primary, @ConditionalOn and @Profile like any other injection point.
 function buildCatchByMap(
@@ -163,7 +163,7 @@ function buildCatchByMap(
       const previous = owners.get(errorType)
       if (previous !== undefined) {
         throw new ErrConfiguration(
-          `Ambiguous "@CatchBy" in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"`
+          `Ambiguous "@CatchWith" in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"`
           + solutions(`Keep a single handler for "${errorType.name}" at this level`),
         )
       }

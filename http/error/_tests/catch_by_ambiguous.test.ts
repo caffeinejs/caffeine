@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Catch, CatchBy, type Context, Controller, ErrConfiguration, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { Catch, CatchWith, type Context, Controller, ErrConfiguration, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
 // Isolated: the ambiguity poisons every app build in its module, so it must be the only
 // error-handler concern in this file.
@@ -17,7 +17,7 @@ class SecondHandler extends ErrorHandler<ErrAmbiguous> {
 }
 void [FirstHandler, SecondHandler]
 
-@CatchBy(FirstHandler, SecondHandler)
+@CatchWith(FirstHandler, SecondHandler)
 @Controller('/ambiguous')
 class AmbiguousController {
   @Get('/')
@@ -27,7 +27,7 @@ class AmbiguousController {
 }
 void [AmbiguousController]
 
-describe('ambiguous @CatchBy', () => {
+describe('ambiguous @CatchWith', () => {
   it('rejects when two referenced handlers cover the same error type', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
 

@@ -4,4 +4,4 @@
  * view feature is inert — no engine is registered and returning a {@link ViewResult} raises
  * {@link ErrConfiguration}.
  */
-export const kViewOptionsProvider = Symbol.for('@caffeinejs/view:view.options-provider')
+export const kViewOptionsProvider = Symbol.for('@caffeinejs/view:options-provider')

@@ -1,4 +1,4 @@
-import { Catch, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { Catch, type ActionResult, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
 import { View } from '@caffeinejs/view'
 
 // A simple, conventional error body: a machine-readable `code`, a human-readable `message`, and —
@@ -74,7 +74,7 @@ function fieldErrors(err: ValidationError): FieldError[] {
 // page for browser requests.
 @Catch(ErrHTTP)
 export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
-  async handle(ctx: Context, err: ErrHTTP): Promise<unknown> {
+  async handle(ctx: Context, err: ErrHTTP): Promise<ActionResult> {
     return respond(ctx, err.statusCode, { code: codeFor(err.statusCode), message: err.message })
   }
 }
@@ -83,7 +83,7 @@ export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
 // anything else is an unexpected 500.
 @Catch(Error)
 export class FallbackErrorHandler extends ErrorHandler<Error> {
-  async handle(ctx: Context, err: Error): Promise<unknown> {
+  async handle(ctx: Context, err: Error): Promise<ActionResult> {
     if (isValidationError(err)) {
       if (err.validationContext === 'body') {
         return respond(ctx, 422, {
@@ -97,6 +97,7 @@ export class FallbackErrorHandler extends ErrorHandler<Error> {
     }
 
     console.error('Unhandled error while processing request:', err)
+
     return respond(ctx, 500, { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred. Please try again later' })
   }
 }

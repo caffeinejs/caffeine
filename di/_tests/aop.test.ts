@@ -746,8 +746,6 @@ describe('AOP', function () {
       matchLabelSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-match-label'] })
-      di.bind(LabelSvcA).toSelf()
-      di.bind(LabelSvcB).toSelf()
       await di.init()
 
       di.get(LabelSvcA).run()
@@ -761,7 +759,6 @@ describe('AOP', function () {
       combinedSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-combined'] })
-      di.bind(TaggedSvc).toSelf()
       await di.init()
 
       const svc = di.get(TaggedSvc)

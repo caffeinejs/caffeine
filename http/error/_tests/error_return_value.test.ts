@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Catch, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { Catch, type ActionResult, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
 // Error handlers, like controller handlers, may RETURN a value the framework finalizes: a plain object
 // serializes as JSON, and a handler that responds via ctx (returning void) is unchanged.
@@ -10,7 +10,7 @@ class ErrReturnVoid extends Error {}
 
 @Catch(ErrReturnJson)
 class ReturnJsonHandler extends ErrorHandler<ErrReturnJson> {
-  handle(ctx: Context, error: ErrReturnJson): unknown {
+  handle(ctx: Context, error: ErrReturnJson): ActionResult {
     ctx.status(418)
     return { code: 'TEAPOT', message: error.message }
   }

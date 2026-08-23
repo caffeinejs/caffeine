@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
-import { Catch, CatchBy, type Context, Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, ErrorHandler, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
+import { Catch, CatchWith, type Context, Controller, ErrHTTPNotFound, ErrHTTPUnauthorized, ErrorHandler, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import { viewPlugin } from '@caffeinejs/view'
 // Side-effect import: registers HTTPErrorHandler / FallbackErrorHandler as global @Catch handlers.
@@ -45,7 +45,7 @@ class ThingsController {
 void [ThingsController]
 
 // A controller that opts out of the global rendering for 404s only. The handler is declared
-// { global: false } so it does not compete with HTTPErrorHandler, and is attached with @CatchBy —
+// { global: false } so it does not compete with HTTPErrorHandler, and is attached with @CatchWith —
 // which takes precedence over the global handler for this controller alone.
 @Catch(ErrHTTPNotFound, { global: false })
 class SilentNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
@@ -55,7 +55,7 @@ class SilentNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
 }
 void [SilentNotFoundHandler]
 
-@CatchBy(SilentNotFoundHandler)
+@CatchWith(SilentNotFoundHandler)
 @Controller('/gadgets')
 class GadgetsController {
   @Get('/:id')
@@ -156,7 +156,7 @@ describe('error handling', () => {
     expect(html).toContain('The requested thing with ID &quot;abc&quot; was not found')
   })
 
-  it('lets a controller override the global 404 rendering with @CatchBy', async () => {
+  it('lets a controller override the global 404 rendering with @CatchWith', async () => {
     const app = await buildApp()
 
     const res = await app.fetch('/gadgets/abc')
@@ -165,7 +165,7 @@ describe('error handling', () => {
     expect(await res.json()).toEqual({ found: false })
   })
 
-  it('still falls back to the global handler for types the @CatchBy handler does not cover', async () => {
+  it('still falls back to the global handler for types the @CatchWith handler does not cover', async () => {
     const app = await buildApp()
 
     const res = await app.fetch('/gadgets/boom')

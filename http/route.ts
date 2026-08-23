@@ -1,14 +1,15 @@
 import { Binding, Ctor, Key, Provider } from '@caffeinejs/di'
 import type { AnySchema } from '@caffeinejs/std'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import { FastifyRequest } from 'fastify'
 import type { ErrorHandler } from './error/error.js'
 import { AuthzRouteService } from './security/authz/index.js'
-import { RouteAuthzOptions } from './decorators/registrar/routing.definition.js'
+import { RouteAuthzOptions } from './decorators/registrar/routing.js'
 
-/** Error types mapped to the handler class that renders them, as declared by `@CatchBy`. */
+/** Error types mapped to the handler class that renders them, as declared by `@CatchWith`. */
 export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
 
-export interface Router<R> {
+export interface Router<R = FastifyRequest> {
   path: string
   prefix?: string
   routes: Route<R>[]
@@ -19,7 +20,7 @@ export interface Router<R> {
   catchBy?: CatchByMap
 }
 
-export interface Route<R> {
+export interface Route<R = FastifyRequest> {
   path: string
   method: string[]
   accept: string[]

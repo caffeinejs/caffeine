@@ -1,9 +1,11 @@
 import type { FastifyViewOptions } from '@fastify/view'
-import { FastifyContext, ResponseResult, type Context } from '@caffeinejs/http'
+import { FastifyContext, Responder, ActionResult, type Context } from '@caffeinejs/http'
 import { renderView, type ViewCapableReply } from './render_view.js'
 
-/** Options the {@link ViewBuilder} assembles and binds; passed verbatim to `fastify.register(view, opts)`. */
-export type ViewOptions = FastifyViewOptions
+/**
+ * Describes the view engine options.
+ */
+export type ViewOptions = Exclude<FastifyViewOptions, 'propertyName' | 'asyncPropertyName'>
 
 /**
  * Per-render options forwarded to `reply.<engine>(name, model, options)`. `layout` overrides the global
@@ -20,7 +22,7 @@ export interface ViewRenderOptions {
  * Marker returned by {@link View} from a controller handler (or error handler). The Fastify adapter detects
  * it and renders through `reply.view(name, model, options)`. Not constructed directly — use {@link View}.
  */
-export class ViewResult extends ResponseResult {
+export class ViewResult extends Responder {
   constructor(
     readonly name: string,
     readonly model?: unknown,
@@ -29,7 +31,7 @@ export class ViewResult extends ResponseResult {
     super()
   }
 
-  render(ctx: Context): unknown {
+  respond(ctx: Context): ActionResult {
     return renderView(this, (ctx as FastifyContext).reply as ViewCapableReply)
   }
 }

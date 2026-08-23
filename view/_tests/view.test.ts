@@ -6,8 +6,8 @@ import * as ejs from 'ejs'
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { View, ViewBuilder, ViewOptionsProvider, viewPlugin } from '../index.js'
 
-const templatesRoot = fileURLToPath(new URL('./templates', import.meta.url))
-const ejsRoot = fileURLToPath(new URL('./templates-ejs', import.meta.url))
+const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
+const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
 
 function viewApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {}, viewPlugin())

@@ -6,7 +6,8 @@ import {
   Controller,
   ErrorHandler,
   Get,
-  ResponseResult,
+  Responder,
+  ActionResult,
   createWebApplication,
   fastifyAdapterFactory,
 } from './index.js'
@@ -14,13 +15,13 @@ import {
 // A custom response kind with NO view/Fastify involvement: it renders itself through the platform-neutral
 // Context API alone. Proves the adapter dispatches any ResponseResult subclass, not just ViewResult, and
 // that a result can render without touching Fastify reply specifics.
-class TextResult extends ResponseResult {
+class TextResult extends Responder {
   constructor(readonly body: string) {
     super()
   }
 
-  render(ctx: Context): unknown {
-    return ctx.header('x-render', 'custom').header('content-type', 'text/plain').body(this.body)
+  respond(ctx: Context): ActionResult {
+    ctx.header('x-render', 'custom').header('content-type', 'text/plain').body(this.body)
   }
 }
 
@@ -28,7 +29,7 @@ class ErrCustom extends Error {}
 
 @Catch(ErrCustom)
 class CustomErrorHandler extends ErrorHandler<ErrCustom> {
-  handle(ctx: Context, error: ErrCustom): unknown {
+  handle(ctx: Context, error: ErrCustom): ActionResult {
     ctx.status(422)
     return new TextResult(`caught: ${error.message}`)
   }

@@ -1,7 +1,7 @@
 import fastifyView from '@fastify/view'
 import { FeatureConfigurer, type ServerPhaseContext } from '@caffeinejs/http'
 import { kViewOptionsProvider } from './keys.js'
-import type { ViewOptionsProvider } from './view_options_provider.js'
+import type { ViewOptionsProvider } from './options_provider.js'
 
 /**
  * Registers `@fastify/view` on the root server once per configured engine; inert when the view feature
@@ -20,8 +20,11 @@ export class ViewConfigurer extends FeatureConfigurer {
       return
     }
 
-    for (const options of provider.all()) {
-      await ctx.server.register(fastifyView, options)
-    }
+    await Promise.all(provider
+      .all()
+      .map(options =>
+        ctx.server.register(fastifyView, options),
+      ),
+    )
   }
 }

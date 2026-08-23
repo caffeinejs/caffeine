@@ -8,7 +8,7 @@ import { configureRoute, configureRouter } from './registrar/registrar.js'
  * the container — `@Primary`, `@ConditionalOn` and `@Profile` apply as usual. The error types a handler
  * serves come from its own `@Catch` declaration.
  *
- * Precedence, most specific first: the route's `@CatchBy`, the controller's `@CatchBy`, a `@Catch`
+ * Precedence, most specific first: the route's `@CatchWith`, the controller's `@CatchWith`, a `@Catch`
  * method on the controller, then the global handler. A handler declared `@Catch(E, { global: false })`
  * is reachable only this way.
  *
@@ -16,16 +16,16 @@ import { configureRoute, configureRouter } from './registrar/registrar.js'
  *
  * @example
  * ```ts
- * @CatchBy(PetsNotFoundHandler)
+ * @CatchWith(PetsNotFoundHandler)
  * @Controller('/pets')
  * class PetsController {
- *   @CatchBy('strictValidation')
+ *   @CatchWith('strictValidation')
  *   @Post('/')
  *   create() { ... }
  * }
  * ```
  */
-export function CatchBy(...handlers: ErrorHandlerRef[]) {
+export function CatchWith(...handlers: ErrorHandlerRef[]) {
   return (fn: Function, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {
     if (context.kind === 'class') {
       configureRouter(context, fn, spec => spec.catchBy(handlers))

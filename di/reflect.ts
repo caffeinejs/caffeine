@@ -50,11 +50,8 @@ interface Reflect {
     annotation: { readonly _c?: T[], readonly _m?: T[] },
     member: ClassMember<TClass>,
   ): T[]
-}
 
-function entry(cls: unknown, annotation: unknown): AnnotationEntry | undefined {
-  const map = (cls as any)[Symbol.metadata]?.[Keys.kAnnotations] as Map<Function, AnnotationEntry> | undefined
-  return map?.get(annotation as Function)
+  annotate(metadata: DecoratorMetadata, key: symbol, value: unknown): void
 }
 
 export const reflect: Reflect = {
@@ -63,6 +60,7 @@ export const reflect: Reflect = {
     if (member === undefined) {
       return e?.class
     }
+
     return e?.members?.get(member as string | symbol)
   },
 
@@ -75,6 +73,16 @@ export const reflect: Reflect = {
     const e = entry(cls, annotation)
     const classVal = e?.class as unknown[] | undefined
     const memberVal = e?.members?.get(member as string | symbol) as unknown[] | undefined
+
     return [...(classVal ?? []), ...(memberVal ?? [])]
   },
+
+  annotate(metadata: DecoratorMetadata, key: symbol, value: unknown): void {
+    metadata[key] = value
+  },
+}
+
+function entry(cls: unknown, annotation: unknown): AnnotationEntry | undefined {
+  const map = (cls as any)[Symbol.metadata]?.[Keys.kAnnotations] as Map<Function, AnnotationEntry> | undefined
+  return map?.get(annotation as Function)
 }

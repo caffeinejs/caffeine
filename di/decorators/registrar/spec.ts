@@ -6,8 +6,7 @@ import { Injection, InjectionDescriptor } from '../../injection.js'
 import { Identifier, Key, keyStr } from '../../key.js'
 import { PostResolutionInterceptor } from '../../post_resolution_interceptor.js'
 import { Ctor } from '../../types.js'
-import { normalizeInjections } from '../util/index.js'
-import { normalizeInjection } from '../util/util.js'
+import { normalizeInjections, normalizeInjection } from '../util/index.js'
 
 export class DecoratedBindingConfig {
   #profiles?: Set<Identifier>

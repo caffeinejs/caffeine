@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import { Injectable, Named } from '@caffeinejs/di'
-import { CatchBy, Controller, ErrConfiguration, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { CatchWith, Controller, ErrConfiguration, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
 // Isolated: the invalid reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file. Referencing by name is the only way to reach this check —
@@ -11,7 +11,7 @@ import { CatchBy, Controller, ErrConfiguration, Get, createWebApplication, fasti
 class NotAHandler {}
 void [NotAHandler]
 
-@CatchBy('notAHandler')
+@CatchWith('notAHandler')
 @Controller('/undeclared')
 class UndeclaredController {
   @Get('/')
@@ -21,7 +21,7 @@ class UndeclaredController {
 }
 void [UndeclaredController]
 
-describe('@CatchBy with a binding that is not an error handler', () => {
+describe('@CatchWith with a binding that is not an error handler', () => {
   it('rejects when the referenced binding is not decorated with @Catch', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
 

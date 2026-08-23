@@ -54,8 +54,7 @@ export class ErrFetchyMissingAPIDecorator extends FetchyError {
 }
 
 /**
- * Thrown when a parameter descriptor has no matching handling logic. Defensive: unreachable with
- * the fixed set of parameter kinds shipped in v1.
+ * Thrown when a parameter descriptor has no matching handling logic.
  */
 export class ErrFetchyNoParameterHandler extends FetchyError {
   constructor(kind: string, method: string, index: number) {

@@ -10,7 +10,9 @@ import type {
 import type { Route, Router } from './route.js'
 import type { Services } from './service.js'
 
-/** The mutable route definition a configurer may adjust before it is registered. */
+/**
+ * The mutable route definition a configurer may adjust before it is registered.
+ */
 export type ConfigurableRouteDef = RouteOptions<
   RawServerBase,
   RawRequestDefaultExpression<RawServerBase>,
@@ -19,7 +21,9 @@ export type ConfigurableRouteDef = RouteOptions<
   any
 >
 
-/** Once, on the root server, before any controller is registered. */
+/**
+ * Once, on the root server, before any controller is registered.
+ */
 export interface ServerPhaseContext {
   server: FastifyInstance
   container: Container
@@ -27,7 +31,9 @@ export interface ServerPhaseContext {
   routers: Router<any>[]
 }
 
-/** Inside a controller's encapsulated `register()`. */
+/**
+ * Inside a controller's encapsulated `register()`.
+ */
 export interface RouterPhaseContext {
   server: FastifyInstance
   container: Container
@@ -35,7 +41,9 @@ export interface RouterPhaseContext {
   router: Router<any>
 }
 
-/** Per route, before it is registered. Mutate `routeDef` to add hooks, schema, config, etc. */
+/**
+ * Per route, before it is registered. Mutate `routeDef` to add hooks, schema, config, etc.
+ */
 export interface RoutePhaseContext {
   server: FastifyInstance
   container: Container
@@ -57,14 +65,13 @@ export interface RoutePhaseContext {
  */
 export abstract class FeatureConfigurer {
   abstract readonly name: string
-  /** Run before these named configurers. */
+
   readonly before?: readonly string[]
-  /** Run after these named configurers. */
   readonly after?: readonly string[]
 
-  configureServer?: (ctx: ServerPhaseContext) => void | Promise<void>
-  configureRouter?: (ctx: RouterPhaseContext) => void | Promise<void>
-  configureRoute?: (ctx: RoutePhaseContext) => void | Promise<void>
+  configureServer?(ctx: ServerPhaseContext): void | Promise<void>
+  configureRouter?(ctx: RouterPhaseContext): void | Promise<void>
+  configureRoute?(ctx: RoutePhaseContext): void | Promise<void>
 }
 
 /**

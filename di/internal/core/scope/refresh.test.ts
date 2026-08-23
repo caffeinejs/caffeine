@@ -53,8 +53,7 @@ describe('Refresh Scope', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(WithCustomDestroy)
-        .toSelf()
+      di.bind(WithCustomDestroy).toSelf()
       await di.init()
 
       di.get(WithCustomDestroy)
@@ -62,8 +61,7 @@ describe('Refresh Scope', function () {
       const scope = di.refresher
       await scope.refresh()
 
-      expect(spy)
-        .toHaveBeenCalledTimes(1)
+      expect(spy).toHaveBeenCalledTimes(1)
     })
   })
 

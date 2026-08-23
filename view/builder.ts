@@ -110,7 +110,7 @@ export class ViewBuilder {
    */
   build(): ViewOptions {
     if (!this.#options.engine) {
-      throw new ErrConfiguration('Engine is required to configure SSR')
+      throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
     }
 
     if (this.#name !== undefined) {

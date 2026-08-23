@@ -2,6 +2,7 @@ import { Ctor, Identifier, Provider, Scopes } from '@caffeinejs/di'
 import { kServiceConfigure, type Service } from '@caffeinejs/std'
 import { Context } from '../context.js'
 import type { ServiceKit } from '../service.js'
+import { ActionResult } from '../response.js'
 import { ErrConfiguration } from './common.js'
 import { solutions } from './util.js'
 
@@ -9,7 +10,7 @@ export const kErrorHandler = Symbol('caffeine:http:error_handler')
 
 /**
  * The value attached to a handler class binding under the {@link kErrorHandler} tag by `@Catch`.
- * Read by the global handler scan and by the `@CatchBy` resolution in `buildRouting`.
+ * Read by the global handler scan and by the `@CatchWith` resolution in `buildRouting`.
  */
 export interface CatchMetadata {
   errors: Ctor<Error>[]
@@ -49,11 +50,11 @@ export function resolveByErrorChain<T>(map: Map<Ctor<Error>, T>, error: Error): 
  * for a catch-all.
  */
 export abstract class ErrorHandler<E extends Error> {
-  abstract handle(ctx: Context, error: E): Promise<unknown> | unknown
+  abstract handle(ctx: Context, error: E): Promise<ActionResult> | ActionResult
 }
 
 /**
- * A reference to an error handler class, as accepted by `@CatchBy`: either the class itself or a name
+ * A reference to an error handler class, as accepted by `@CatchWith`: either the class itself or a name
  * assigned to it with `@Named`. Both are resolved through the container, so `@Primary`, `@ConditionalOn`
  * and `@Profile` apply as they do anywhere else.
  */
@@ -70,7 +71,7 @@ export class ErrorHandlerProvider {
    * Resolves the most specific handler for an error by walking its prototype chain: the error's own
    * class first, then each base class, up to and including `Error` (a `@Catch(Error)` catch-all).
    */
-  handlerFor(error: Error): Provider<ErrorHandler<Error>> | undefined {
+  provide(error: Error): Provider<ErrorHandler<Error>> | undefined {
     return resolveByErrorChain(this.handlers, error)
   }
 }
@@ -93,7 +94,7 @@ export class ErrorHandlingServiceConfigurer implements Service {
         )
       }
 
-      // Non-global handlers stay bound in the container — reachable only through "@CatchBy" on a
+      // Non-global handlers stay bound in the container, reachable only through "@CatchWith" on a
       // controller or route — so they never compete with the global handler for the same error type.
       if (!meta.global) {
         continue
@@ -106,7 +107,7 @@ export class ErrorHandlingServiceConfigurer implements Service {
             `Ambiguous error handler: multiple handlers registered for "${err.name}"`
             + solutions(
               `Remove the duplicate "@Catch(${err.name})" handler so only one handles this error type`,
-              `Mark one of them "@Catch(${err.name}, { global: false })" and attach it with "@CatchBy" on the controller or route that needs it`,
+              `Mark one of them "@Catch(${err.name}, { global: false })" and attach it with "@CatchWith" on the controller or route that needs it`,
             ),
           )
         }

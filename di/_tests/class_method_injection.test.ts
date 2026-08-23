@@ -128,30 +128,20 @@ describe('Method Injections', function () {
 
     it('should resolve and inject all parameters', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(TransientDep)
-        .toSelf()
-      di.bind(B1)
-        .toSelf()
-        .names(kBs)
-      di.bind(B2)
-        .toSelf()
-        .names(kBs, kBase)
-      di.bind(kVal)
-        .toValue('test')
-      di.bind(Comp)
-        .toSelf()
+      di.bind(TransientDep).toSelf()
+      di.bind(B1).toSelf().names(kBs)
+      di.bind(B2).toSelf().names(kBs, kBase)
+      di.bind(kVal).toValue('test')
+      di.bind(Comp).toSelf().injectMethod('setDiff', $i.provide(TransientDep), kVal, $i.allOf(kBs))
+
       await di.init()
 
       const instance = di.get(Comp)
 
-      expect(instance)
-        .toBeInstanceOf(Comp)
-      expect(instance.transient.get())
-        .toBeInstanceOf(TransientDep)
-      expect(instance.val)
-        .toEqual('test')
-      expect(instance.bases)
-        .toHaveLength(2)
+      expect(instance).toBeInstanceOf(Comp)
+      expect(instance.transient.get()).toBeInstanceOf(TransientDep)
+      expect(instance.val).toEqual('test')
+      expect(instance.bases).toHaveLength(2)
     })
   })
 
@@ -184,18 +174,15 @@ describe('Method Injections', function () {
 
     it('should inject dependencies in all setter methods', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(TransientDep)
-        .toSelf()
-      di.bind(B1)
-        .toSelf()
-        .names(kBs)
-      di.bind(B2)
-        .toSelf()
-        .names(kBs, kBase)
-      di.bind(kVal)
-        .toValue('test')
-      di.bind(Test)
-        .toSelf()
+      di.bind(TransientDep).toSelf().lifetime(Scopes.TRANSIENT)
+      di.bind(B1).toSelf().names(kBs)
+      di.bind(B2).toSelf().names(kBs, kBase)
+      di.bind(kVal).toValue('test')
+      di.bind(Test).toSelf()
+        .injectMethod('setTransient', $i.provide(TransientDep))
+        .injectMethod('setValue', kVal)
+        .injectMethod('setBase', $i.allOf(kBs), kBase)
+
       await di.init()
 
       const r1 = di.get(Test)
@@ -203,22 +190,15 @@ describe('Method Injections', function () {
       const r2 = di.get(Test)
       const id2 = r2.transient.get()?.id
 
-      expect(r1)
-        .toBeInstanceOf(Test)
-      expect(r1.id)
-        .toEqual(r2.id)
-      expect(r1.transient.get())
-        .toBeInstanceOf(TransientDep)
-      expect(r2.transient.get())
-        .toBeInstanceOf(TransientDep)
+      expect(r1).toBeInstanceOf(Test)
+      expect(r1.id).toEqual(r2.id)
+      expect(r1.transient.get()).toBeInstanceOf(TransientDep)
+      expect(r2.transient.get()).toBeInstanceOf(TransientDep)
       expect(r1.transient.get()?.id).not.toEqual(r2.transient.get()?.id)
       expect(id1).not.toEqual(id2)
-      expect(r1.val)
-        .toEqual('test')
-      expect(r1.bases)
-        .toHaveLength(2)
-      expect(r1.base)
-        .toBeInstanceOf(B2)
+      expect(r1.val).toEqual('test')
+      expect(r1.bases).toHaveLength(2)
+      expect(r1.base).toBeInstanceOf(B2)
     })
   })
 
@@ -244,20 +224,18 @@ describe('Method Injections', function () {
 
     it('should inject dependencies on setter methods after property injections', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kValue)
-        .toValue('test')
-      di.bind(kMethodValue)
-        .toValue('method_test')
-      di.bind(Dep)
-        .toSelf()
+      di.bind(kValue).toValue('test')
+      di.bind(kMethodValue).toValue('method_test')
+      di.bind(Dep).toSelf()
+        .injectProperty('value', kValue)
+        .injectMethod('setMethodValue', kMethodValue)
+
       await di.init()
 
       const res = di.get(Dep)
 
-      expect(res.value)
-        .toEqual('test')
-      expect(res.methodValue)
-        .toEqual('method_test')
+      expect(res.value).toEqual('test')
+      expect(res.methodValue).toEqual('method_test')
     })
   })
 
@@ -273,15 +251,12 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kVal)
-        .toValue('hello')
-      di.bind(Svc)
-        .toSelf()
-        .injectMethod('setVal', kVal)
+      di.bind(kVal).toValue('hello')
+      di.bind(Svc).toSelf().injectMethod('setVal', kVal)
+
       await di.init()
 
-      expect(di.get(Svc).val)
-        .toEqual('hello')
+      expect(di.get(Svc).val).toEqual('hello')
     })
 
     it('should inject multiple deps into a method in correct order', async function () {

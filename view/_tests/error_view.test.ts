@@ -2,19 +2,19 @@ import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
-import { Catch, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { Catch, type ActionResult, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { View, viewPlugin } from '../index.js'
 
 // An error handler, like a controller handler, may RETURN a View() which the framework renders as HTML.
 // This exercises the view plugin on the error-handling path.
 
-const templatesRoot = fileURLToPath(new URL('./templates', import.meta.url))
+const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
 
 class ErrReturnView extends Error {}
 
 @Catch(ErrReturnView)
 class ReturnViewHandler extends ErrorHandler<ErrReturnView> {
-  handle(ctx: Context, error: ErrReturnView): unknown {
+  handle(ctx: Context, error: ErrReturnView): ActionResult {
     ctx.status(404)
     return View('message', { message: error.message })
   }

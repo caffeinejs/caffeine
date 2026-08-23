@@ -3,7 +3,7 @@ import fastify from 'fastify'
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
 import { Injectable, Lifetime, Named, Primary, Scopes } from '@caffeinejs/di'
-import { Catch, CatchBy, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
+import { Catch, CatchWith, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ describe('ErrorHandlerProvider', () => {
     const p = providerOf('notFound')
     const provider = new ErrorHandlerProvider(mapOf([ErrHTTPNotFound, p]))
 
-    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(p)
+    expect(provider.provide(new ErrHTTPNotFound())).toBe(p)
   })
 
   it('walks the prototype chain to a base-class handler', () => {
@@ -40,7 +40,7 @@ describe('ErrorHandlerProvider', () => {
     const provider = new ErrorHandlerProvider(mapOf([ErrHTTP, p]))
 
     // ErrHTTPNotFound extends ErrHTTP — the base handler serves the subclass.
-    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(p)
+    expect(provider.provide(new ErrHTTPNotFound())).toBe(p)
   })
 
   it('prefers the most specific handler over a base handler', () => {
@@ -48,23 +48,23 @@ describe('ErrorHandlerProvider', () => {
     const base = providerOf('http')
     const provider = new ErrorHandlerProvider(mapOf([ErrHTTP, base], [ErrHTTPNotFound, specific]))
 
-    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(specific)
-    expect(provider.handlerFor(new ErrHTTPBadRequest())).toBe(base)
+    expect(provider.provide(new ErrHTTPNotFound())).toBe(specific)
+    expect(provider.provide(new ErrHTTPBadRequest())).toBe(base)
   })
 
   it('treats a handler registered for Error as a catch-all', () => {
     const p = providerOf('all')
     const provider = new ErrorHandlerProvider(mapOf([Error as Ctor<Error>, p]))
 
-    expect(provider.handlerFor(new ErrHTTPNotFound())).toBe(p)
-    expect(provider.handlerFor(new Error('x'))).toBe(p)
-    expect(provider.handlerFor(new TypeError('x'))).toBe(p)
+    expect(provider.provide(new ErrHTTPNotFound())).toBe(p)
+    expect(provider.provide(new Error('x'))).toBe(p)
+    expect(provider.provide(new TypeError('x'))).toBe(p)
   })
 
   it('returns undefined when nothing matches', () => {
     const provider = new ErrorHandlerProvider(mapOf())
 
-    expect(provider.handlerFor(new ErrHTTPNotFound())).toBeUndefined()
+    expect(provider.provide(new ErrHTTPNotFound())).toBeUndefined()
   })
 })
 
@@ -311,7 +311,7 @@ describe('per-controller error handler', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Integration — multi-type @Catch and @CatchBy. Uses its own error hierarchy so
+// Integration — multi-type @Catch and @CatchWith. Uses its own error hierarchy so
 // these handlers never overlap the ErrHTTP ones above; the @Catch(Error)
 // CatchAllHandler stays the last resort for everything declared here.
 // ---------------------------------------------------------------------------
@@ -337,7 +337,7 @@ class AlphaGammaHandler extends ErrorHandler<ErrAlpha | ErrGamma> {
 }
 
 // Same error type as the global handler above, but excluded from the global map — reachable only
-// through @CatchBy. Without { global: false } this would fail the app build as an ambiguous handler.
+// through @CatchWith. Without { global: false } this would fail the app build as an ambiguous handler.
 @Catch(ErrAlpha, [Marker], { global: false })
 class ControllerAlphaHandler extends ErrorHandler<ErrAlpha> {
   constructor(private readonly marker: Marker) {
@@ -363,7 +363,7 @@ class ValidationHandler extends ErrorHandler<Error> {
   }
 }
 
-// Two handlers share a name; @Primary decides which one @CatchBy('deltaHandler') resolves.
+// Two handlers share a name; @Primary decides which one @CatchWith('deltaHandler') resolves.
 @Named('deltaHandler')
 @Catch(ErrDelta, { global: false })
 class DeltaFallbackHandler extends ErrorHandler<ErrDelta> {
@@ -402,9 +402,9 @@ class MultiTypeController {
   }
 }
 
-// The controller-level @CatchBy overrides the global handler; the route-level one overrides both.
-// The @Catch method covers a type neither @CatchBy declares.
-@CatchBy(ControllerAlphaHandler)
+// The controller-level @CatchWith overrides the global handler; the route-level one overrides both.
+// The @Catch method covers a type neither @CatchWith declares.
+@CatchWith(ControllerAlphaHandler)
 @Controller('/cb-shop')
 class CatchByShopController {
   @Get('/alpha')
@@ -413,7 +413,7 @@ class CatchByShopController {
   }
 
   @Get('/override')
-  @CatchBy(RouteAlphaHandler)
+  @CatchWith(RouteAlphaHandler)
   override(): unknown {
     throw new ErrAlpha('shop override')
   }
@@ -429,8 +429,8 @@ class CatchByShopController {
   }
 }
 
-// @CatchBy wins over a @Catch method for the same error type.
-@CatchBy(ControllerAlphaHandler)
+// @CatchWith wins over a @Catch method for the same error type.
+@CatchWith(ControllerAlphaHandler)
 @Controller('/cb-priority')
 class CatchByPriorityController {
   @Get('/alpha')
@@ -444,7 +444,7 @@ class CatchByPriorityController {
   }
 }
 
-@CatchBy('deltaHandler')
+@CatchWith('deltaHandler')
 @Controller('/cb-named')
 class CatchByNamedController {
   @Get('/delta')
@@ -453,12 +453,12 @@ class CatchByNamedController {
   }
 }
 
-// A schema-validation failure fires before the route handler runs. A route-level @CatchBy must still
+// A schema-validation failure fires before the route handler runs. A route-level @CatchWith must still
 // render it — routeOptions is resolved before validation, so the route's handler map is reachable.
 @Controller('/cb-validated')
 class CatchByValidatedController {
   @Post('/')
-  @CatchBy(ValidationHandler)
+  @CatchWith(ValidationHandler)
   @Schema({ body: $t.Object({ name: $t.String() }) })
   @Params([$p.body()])
   create(body: unknown): unknown {
@@ -466,7 +466,7 @@ class CatchByValidatedController {
   }
 }
 
-// Same error type, no @CatchBy: the non-global ErrDelta handlers must not be reachable from here.
+// Same error type, no @CatchWith: the non-global ErrDelta handlers must not be reachable from here.
 @Controller('/cb-orphan')
 class CatchByOrphanController {
   @Get('/delta')
@@ -503,7 +503,7 @@ describe('@Catch with multiple error types', () => {
   })
 })
 
-describe('@CatchBy', () => {
+describe('@CatchWith', () => {
   it('overrides the global handler for the controller, with dependencies injected', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()

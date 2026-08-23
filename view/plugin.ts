@@ -1,6 +1,6 @@
 import type { Plugin } from '@caffeinejs/std'
-import { ViewBuilder } from './view_builder.js'
-import { ViewOptionsProvider } from './view_options_provider.js'
+import { ViewBuilder } from './builder.js'
+import { ViewOptionsProvider } from './options_provider.js'
 
 /**
  * Builder methods contributed by {@link viewPlugin}. Mirrors the fluent `app.view(...)` surface the http

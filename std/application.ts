@@ -83,10 +83,9 @@ export abstract class BaseApplication {
     }
 
     const kit = this.serviceKit()
+
     await Promise.all(this.configurers().map(service => service[kServiceConfigure](kit)))
-
     await this.#container.init()
-
     await this.setup()
 
     this.#dispatch = this.buildDispatch()

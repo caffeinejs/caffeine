@@ -1,4 +1,4 @@
-import { ErrConfiguration } from '@caffeinejs/http'
+import { ErrConfiguration, ActionResult } from '@caffeinejs/http'
 import type { ViewResult, ViewRenderOptions } from './view.js'
 
 type ViewRenderFn = (page: string, data: object, opts?: ViewRenderOptions) => unknown
@@ -19,7 +19,7 @@ export type ViewCapableReply = {
  * and the error-handler path. When the selected engine was never configured the decorator is absent —
  * guarded here rather than crashing with a cryptic "not a function".
  */
-export function renderView(view: ViewResult, res: ViewCapableReply): unknown {
+export function renderView(view: ViewResult, res: ViewCapableReply): ActionResult {
   const engine = view.options?.engine ?? 'view'
   const render = (res as Record<string, ViewRenderFn | undefined>)[engine]
 
@@ -29,7 +29,6 @@ export function renderView(view: ViewResult, res: ViewCapableReply): unknown {
     )
   }
 
-  // Invoke as a method so `this` stays bound to the reply — `@fastify/view`'s decorator calls
-  // `this.send(...)` internally; a detached call would crash with "reading 'send' of undefined".
-  return render.call(res, view.name, (view.model ?? {}) as object, { layout: view.options?.layout })
+  return render
+    .call(res, view.name, (view.model ?? {}) as object, { layout: view.options?.layout }) as ActionResult
 }

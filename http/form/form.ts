@@ -5,11 +5,14 @@ import { MediaType } from '../media.js'
 
 const FORM_BODY_LIMIT = 1_048_576
 
-/** Registers the `application/x-www-form-urlencoded` body parser. */
+/**
+ * Registers the `application/x-www-form-urlencoded` body parser.
+ * Parses the body into a plain object.
+ */
 export class FormBodyConfigurer extends FeatureConfigurer {
   readonly name = 'form-body'
 
-  configureServer = (ctx: ServerPhaseContext): void => {
+  configureServer(ctx: ServerPhaseContext): void {
     ctx.server.addContentTypeParser(
       MediaType.APPLICATION_FORM_URLENCODED,
       { parseAs: 'string', bodyLimit: FORM_BODY_LIMIT },

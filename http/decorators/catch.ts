@@ -10,7 +10,7 @@ export interface CatchOptions {
    * Whether the handler is registered in the application-wide handler map. Defaults to `true`.
    *
    * Set it to `false` when the handler is meant to serve a single controller or route: the class stays
-   * bound in the container and remains reachable through `@CatchBy`, but no longer competes with the
+   * bound in the container and remains reachable through `@CatchWith`, but no longer competes with the
    * global handler for the same error type.
    */
   global?: boolean
@@ -20,8 +20,8 @@ export interface CatchOptions {
  * Registers an error handler for one or more error types. Usable in two forms:
  *
  * - **On a class** extending `ErrorHandler<E>` → a handler bound as an injectable. Global by default;
- *   pass `{ global: false }` to restrict it to the controllers and routes that name it with `@CatchBy`.
- *   To resolve it by name from `@CatchBy`, decorate the class with `@Named`.
+ *   pass `{ global: false }` to restrict it to the controllers and routes that name it with `@CatchWith`.
+ *   To resolve it by name from `@CatchWith`, decorate the class with `@Named`.
  * - **On a controller method** → a per-controller handler for those error types, invoked with the same
  *   `(ctx, error)` contract as `ErrorHandler.handle`. Takes only the error types; the method runs on the
  *   controller instance, so its deps come from the controller's constructor.
@@ -39,7 +39,7 @@ export interface CatchOptions {
  * @Catch([ErrHTTPNotFound, ErrHTTPGone], [PetRepository])
  * class MissingPetHandler extends ErrorHandler<ErrHTTPNotFound | ErrHTTPGone> { ... }
  *
- * // handler class reserved for whoever names it with @CatchBy
+ * // handler class reserved for whoever names it with @CatchWith
  * @Catch(ErrHTTPNotFound, { global: false })
  * class PetsNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> { ... }
  *
@@ -85,6 +85,7 @@ export function Catch(
       }
 
       configureControllerErrorHandler(context, errorTypes)
+
       return
     }
 

@@ -1,9 +1,10 @@
+import './_fastify.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/di'
-import { FastifyInstance, FastifyReply, FastifyRequest, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
+import { type FastifyInstance, type FastifyReply, type FastifyRequest, type RawReplyDefaultExpression, type RawRequestDefaultExpression, type RawServerBase, type RouteGenericInterface, type RouteOptions } from 'fastify'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
-import type { CatchByMap, Router } from './route.js'
+import type { Router } from './route.js'
 import type { Principal } from './security/index.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
@@ -17,32 +18,10 @@ import { CacheConfigurer } from './cache/cache.js'
 import { CacheInvalidateConfigurer } from './cache/cache_invalidate.js'
 import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
-import { ResponseResult } from './response_result.js'
+import { Responder } from './response.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { StaticConfigurer } from './static/index.js'
 import { joinPaths } from './internal/paths/index.js'
-
-// Augmenting Fastify with Caffeine-specific types.
-declare module 'fastify' {
-  interface FastifyRequest {
-    httpContext: FastifyContext
-    responseCached: boolean
-    controller: Record<string | symbol, unknown> | null
-    user: Principal
-  }
-
-  interface FastifyContextConfig {
-    caffeine?: {
-      hasStatus: boolean
-      status: number
-      hasContentType: boolean
-      contentType: string
-      hasHeader: boolean
-      header: Array<[string, string | string[]]>
-      catchBy?: CatchByMap
-    }
-  }
-}
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -237,12 +216,12 @@ export class FastifyAdapter<
 
               const result = dispatch(req as REQ, res as RES)
 
-              if (result instanceof ResponseResult) {
-                return result.render(req.httpContext)
+              if (result instanceof Responder) {
+                return result.respond(req.httpContext)
               }
 
               if (result instanceof Promise) {
-                return result.then(r => (r instanceof ResponseResult ? r.render(req.httpContext) : r))
+                return result.then(r => (r instanceof Responder ? r.respond(req.httpContext) : r))
               }
 
               return result

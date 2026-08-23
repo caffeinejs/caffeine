@@ -10,7 +10,6 @@ import { SignalParam } from '../decorators/params/signal_param.js'
 import { Params } from '../decorators/params.js'
 import { getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { GET, POST } from '../decorators/verbs.js'
-import { noop } from '../noop.js'
 import { captureMetadata } from './capture_metadata.js'
 
 describe('@Params', () => {
@@ -21,15 +20,13 @@ describe('@Params', () => {
     class API {
       @GET('/users/{id}')
       @Params([Param('id'), Query('active'), QueryName(), Header('x-trace'), SignalParam()])
-      get(
+      get!: (
         _id: string,
         _active: boolean,
         _flag: unknown,
         _trace: string,
         _signal: AbortSignal,
-      ): Promise<unknown> {
-        return noop()
-      }
+      ) => Promise<unknown>
     }
 
     const spec = getMethodBuilders(metadata()).get('get')?.toMethodSpec()
@@ -50,9 +47,7 @@ describe('@Params', () => {
     class API {
       @POST('/users')
       @Params([Body()])
-      create(_body: unknown): Promise<unknown> {
-        return noop()
-      }
+      create!: (_body: unknown) => Promise<unknown>
     }
 
     const spec = getMethodBuilders(metadata()).get('create')?.toMethodSpec()
@@ -67,9 +62,7 @@ describe('@Params', () => {
     class API {
       @POST('/form')
       @Params([Field('name'), Field('age')])
-      submit(_name: string, _age: number): Promise<unknown> {
-        return noop()
-      }
+      submit!: (_name: string, _age: number) => Promise<unknown>
     }
 
     const spec = getMethodBuilders(metadata()).get('submit')?.toMethodSpec()
@@ -89,9 +82,7 @@ describe('@Params', () => {
     class Below {
       @GET('/x')
       @Params([Param('id')])
-      get(_id: string): Promise<unknown> {
-        return noop()
-      }
+      get!: (_id: string) => Promise<unknown>
     }
 
     const spec = getMethodBuilders(metadata()).get('get')?.toMethodSpec()

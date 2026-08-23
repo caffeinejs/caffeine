@@ -1,8 +1,8 @@
 import { kServiceConfigure, type Service } from '@caffeinejs/std'
 import { ErrConfiguration, type ServiceKit } from '@caffeinejs/http'
 import { kViewOptionsProvider } from './keys.js'
-import { ViewBuilder } from './view_builder.js'
-import { ViewConfigurer } from './view_configurer.js'
+import { ViewBuilder } from './builder.js'
+import { ViewConfigurer } from './configurer.js'
 import type { ViewOptions } from './view.js'
 
 /**

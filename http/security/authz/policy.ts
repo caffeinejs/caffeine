@@ -1,5 +1,5 @@
 import { Context } from '../../context.js'
-import { RouteAuthzOptions } from '../../decorators/registrar/routing.definition.js'
+import { RouteAuthzOptions } from '../../decorators/registrar/routing.js'
 import { Principal } from '../index.js'
 import { AuthzRouteService } from './route_service.js'
 import { AuthorizationOptions } from './authz.js'

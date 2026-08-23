@@ -58,26 +58,6 @@ export function extendInjectableAttributes<T>(
   binding.mergeMetadata(getInjectionMetadata(id))
 
   configure(binding)
-
-  // const info = mergeObject<BindingDecoratorConfig<T>>(
-  //   existing ?? ({} as BindingDecoratorConfig<T>),
-  //   opts as BindingDecoratorConfig<T>,
-  // )
-
-  // if (existing && existing.profiles.size === 0 && info.profiles.size > 0) {
-  //   ByProfile.get('')
-  //     ?.delete(tk)
-  // }
-
-  // if (info.profiles.size === 0) {
-  //   profileKeys('')
-  //     .add(tk)
-  // } else {
-  //   for (const profile of info.profiles) {
-  //     profileKeys(profile)
-  //       .add(tk)
-  //   }
-  // }
 }
 
 export function defineMemberInjection<T = unknown>(
