@@ -17,6 +17,7 @@ export {
 export * from './errors.js'
 export { KafkaBuilder } from './kafka_builder.js'
 export { type KafkaContainerStatus, KafkaListenerContainer } from './listener_container.js'
+export { kafkaBinder, type KafkaBinderOptions } from './messaging_binder.js'
 export { $k, type KafkaPickers } from './pickers.js'
 export { kafka, type KafkaConfigure, type KafkaMethod, type KafkaPluginOptions } from './plugin.js'
 export {
