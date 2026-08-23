@@ -1,13 +1,15 @@
 import { type Provider, Scopes } from '@caffeinejs/di'
-import type { ConsumerClient, ConsumerStream, DeserializationErrorRecord, KafkaAckMode, KafkaConsumerEvent, KafkaConsumerEventPayload, KafkaDeserializers, KafkaMessage } from './config.js'
+import type { ConsumerClient, ConsumerStream, DeserializationErrorRecord, KafkaAckMode, KafkaConsumerEvent, KafkaConsumerEventPayload, KafkaDeserializers, KafkaMessage, TopicSpec } from './config.js'
 import { KafkaContext } from './context.js'
 import { type DeserError, extractDeserError, wrapDeserializers } from './deser.js'
 import { getHandlerListeners, type ListenerSpec } from './decorators/registrar.js'
-import { type BackOff, buildClassifier, deadLetterRecoverer, delayFor, type ErrorClassifier, type KafkaRecoverer, sleep } from './error_handling.js'
-import { ErrKafkaMissingGroupID, ErrKafkaMissingTopic, ErrKafkaNackExhausted } from './errors.js'
+import { buildClassifier, deadLetterRecoverer, type ErrorClassifier, type KafkaRecoverer, sleep } from './error_handling.js'
+import { ErrKafkaMissingGroupID, ErrKafkaMissingTopic } from './errors.js'
 import { compileArgs } from './pick_compiler.js'
+import { type DeadLetterManager, deadLetterManager } from './retry/dead_letter_manager.js'
+import { blockingRetry, type RetryDelivery, type RetryStrategy, type RetryTopic } from './retry/strategy.js'
 import type { KafkaRuntime } from './runtime.js'
-import { DEFAULT_INSTANCE, Keys, kSignals } from './symbols.js'
+import { DEFAULT_INSTANCE, Keys, kSignals, RetryHeaders } from './symbols.js'
 import type { KafkaTemplate } from './template.js'
 
 type HandlerInstance = Record<string | symbol, (...args: unknown[]) => unknown>
@@ -19,8 +21,7 @@ type EventListener = (payload: KafkaConsumerEventPayload) => void
 
 /** The resolved error-handling policy for one route (per-listener overrides folded over instance defaults). */
 interface RouteErrorHandling {
-  attempts: number
-  backoff?: BackOff
+  strategy: RetryStrategy
   classify: ErrorClassifier
   recover?: KafkaRecoverer
   onError?: (error: unknown, message: KafkaMessage) => void
@@ -43,15 +44,19 @@ interface Group {
   topics: Set<string>
   autocommit?: boolean | number
   routes: Map<string, Route[]>
+  /** Retry topics (delay tiers) this group's strategies declare, keyed by retry-topic name, with their source. */
+  retryTopics: Map<string, { spec: RetryTopic, source: string }>
+  /** Dead-letter topics this group's strategies target, keyed by DLT name → its source topic (for provisioning). */
+  deadLetterTopics: Map<string, string>
 }
 
 /**
  * The per-instance runtime engine. One is bound (labelled {@link Keys.KAFKA_CONTAINER}) by each
  * {@link KafkaBuilder}; the plugin drives every engine's {@link start}/{@link stop} from `application:run` /
  * `application:pre-shutdown`. {@link start} enumerates the `@KafkaHandler` classes tagged for this instance,
- * groups their `@KafkaListener` methods by group id, creates one consumer per group, and dispatches each
- * message to the matching handler method (extracting arguments via `@KafkaParams`, or the whole message by
- * default). {@link stop} closes every consumer and this instance's producer.
+ * groups their `@KafkaListener` methods by group id, creates one consumer per group (plus an isolated retry
+ * consumer when a non-blocking retry strategy declares retry topics), and dispatches each message through the
+ * route's {@link RetryStrategy}. {@link stop} closes every consumer and this instance's producer.
  */
 export class KafkaListenerContainer {
   readonly #runtime: KafkaRuntime
@@ -61,6 +66,7 @@ export class KafkaListenerContainer {
   readonly #listeners = new Map<KafkaConsumerEvent, Set<EventListener>>()
   #status: KafkaContainerStatus = 'idle'
   #running = false
+  #dlq?: DeadLetterManager
 
   constructor(runtime: KafkaRuntime, template: KafkaTemplate) {
     this.#runtime = runtime
@@ -75,6 +81,12 @@ export class KafkaListenerContainer {
   /** The current lifecycle state, for health checks. */
   status(): KafkaContainerStatus {
     return this.#status
+  }
+
+  /** The dead-letter manager (inspect/purge/re-inject) for this instance — the builtin, or a configured override. */
+  deadLetters(): DeadLetterManager {
+    this.#dlq ??= this.#runtime.config.deadLetterManager ?? deadLetterManager(this.#runtime, this.#template)
+    return this.#dlq
   }
 
   /** Subscribes to a consumer lifecycle event across every consumer this engine owns. */
@@ -100,7 +112,7 @@ export class KafkaListenerContainer {
     }
   }
 
-  /** Wires and starts one consumer per group. Idempotent. */
+  /** Wires and starts one consumer per group (plus a retry consumer when needed). Idempotent. */
   async start(): Promise<void> {
     if (this.#running) {
       return
@@ -108,21 +120,88 @@ export class KafkaListenerContainer {
     this.#running = true
     this.#status = 'starting'
 
-    for (const group of this.#plan().values()) {
-      const consumer = this.#runtime.clients.createConsumer(this.#runtime.config, group.groupId)
-      this.#consumers.push(consumer)
-      this.#forwardEvents(consumer)
+    const plan = this.#plan()
+    await this.#provision(plan)
 
+    for (const group of plan.values()) {
       // In record/manual ack modes the engine owns commits, so platformatic autocommit is disabled.
       const autocommit = this.#runtime.config.ackMode === 'auto' ? group.autocommit : false
       const deserializers = wrapDeserializers(group.deserializers ?? this.#runtime.config.deserializers)
-      const stream = await consumer.consume({ topics: [...group.topics], autocommit, deserializers })
-      this.#streams.push(stream)
+      await this.#openConsumer(group, group.groupId, [...group.topics], autocommit, deserializers)
 
-      this.#pump(stream, group, consumer)
+      // Retry topics get their own consumer + group so their block-and-sleep delay never stalls the main topic.
+      // They carry the instance's wire format (the template re-serialized the record), so use its deserializers.
+      if (group.retryTopics.size > 0) {
+        const retryAutocommit = this.#runtime.config.ackMode === 'auto'
+        const retryDeser = wrapDeserializers(this.#runtime.config.deserializers)
+        await this.#openConsumer(group, `${group.groupId}-retry`, [...group.retryTopics.keys()], retryAutocommit, retryDeser)
+      }
     }
 
     this.#status = 'running'
+  }
+
+  async #openConsumer(
+    group: Group,
+    groupId: string,
+    topics: string[],
+    autocommit: boolean | number | undefined,
+    deserializers: KafkaDeserializers,
+  ): Promise<void> {
+    const consumer = this.#runtime.clients.createConsumer(this.#runtime.config, groupId)
+    this.#consumers.push(consumer)
+    this.#forwardEvents(consumer)
+
+    const stream = await consumer.consume({ topics, autocommit, deserializers })
+    this.#streams.push(stream)
+
+    this.#pump(stream, group, consumer)
+  }
+
+  // Auto-creates the retry/dead-letter topics the plan's strategies declared, unless provisioning is disabled or
+  // the client factory exposes no admin. Each topic's partition count is resolved by precedence:
+  // strategy-explicit → instance-config-explicit → inherited from the source topic → 1. NOTE: createTopics is
+  // idempotent-ignore, so this will NOT grow the partitions of a retry topic a prior run created at a lower count.
+  async #provision(plan: Map<string, Group>): Promise<void> {
+    const provisioning = this.#runtime.config.topicProvisioning
+    if (!provisioning.autoCreate) {
+      return
+    }
+
+    // Each topic to create with its source (for inheritance) and any strategy-explicit partition override.
+    const wanted = new Map<string, { source: string, explicit?: number }>()
+    const sources = new Set<string>()
+    for (const group of plan.values()) {
+      for (const { spec, source } of group.retryTopics.values()) {
+        wanted.set(spec.topic, { source, explicit: spec.partitions })
+        sources.add(source)
+      }
+      for (const [dltTopic, source] of group.deadLetterTopics) {
+        if (!wanted.has(dltTopic)) {
+          wanted.set(dltTopic, { source })
+          sources.add(source)
+        }
+      }
+    }
+
+    if (wanted.size === 0) {
+      return
+    }
+    const admin = this.#runtime.clients.createAdmin?.(this.#runtime.config)
+    if (admin === undefined) {
+      return
+    }
+    try {
+      const counts = await admin.partitionCounts?.([...sources]) ?? new Map<string, number>()
+      const specs: TopicSpec[] = [...wanted].map(([topic, { source, explicit }]) => ({
+        topic,
+        partitions: explicit ?? provisioning.partitions ?? counts.get(source) ?? 1,
+        replicas: provisioning.replicas,
+      }))
+      await admin.createTopics(specs)
+    } finally {
+      await admin.close()
+    }
   }
 
   // Bridges a consumer's normalized lifecycle events to this engine's listeners + status.
@@ -162,6 +241,8 @@ export class KafkaListenerContainer {
 
   // Builds the consumer plan from the labelled handler classes: one consumer per (groupId, deserializers), each
   // holding a topic -> routes map so a single consumer can fan a message out to every listener on that topic.
+  // Retry/dead-letter topics each route's strategy declares are collected onto the group for provisioning and
+  // for the isolated retry consumer.
   #plan(): Map<string, Group> {
     const container = this.#runtime.container
     const groups = new Map<string, Group>()
@@ -198,7 +279,15 @@ export class KafkaListenerContainer {
 
         let group = groups.get(groupKey)
         if (group === undefined) {
-          group = { groupId, deserializers, topics: new Set(), autocommit: spec.autocommit, routes: new Map() }
+          group = {
+            groupId,
+            deserializers,
+            topics: new Set(),
+            autocommit: spec.autocommit,
+            routes: new Map(),
+            retryTopics: new Map(),
+            deadLetterTopics: new Map(),
+          }
           groups.set(groupKey, group)
         }
 
@@ -218,6 +307,16 @@ export class KafkaListenerContainer {
             group.routes.set(topic, routes)
           }
           routes.push(route)
+
+          // Collect the strategy's retry + dead-letter topics, remembering the source topic each derives from
+          // (provisioning inherits its partition count).
+          for (const retryTopic of route.errorHandling.strategy.topics(topic)) {
+            group.retryTopics.set(retryTopic.topic, { spec: retryTopic, source: topic })
+          }
+          const dlt = route.errorHandling.strategy.deadLetterTopic?.(topic)
+          if (dlt !== undefined && !group.deadLetterTopics.has(dlt)) {
+            group.deadLetterTopics.set(dlt, topic)
+          }
         }
       }
     }
@@ -226,7 +325,8 @@ export class KafkaListenerContainer {
   }
 
   // Consumes the stream and dispatches each message to its topic's routes. Runs detached; iteration ends
-  // cleanly when the stream is closed during shutdown.
+  // cleanly when the stream is closed during shutdown. Retry-topic records carry the origin topic + attempt in
+  // headers, so routing is by the source topic, not the (possibly retry) topic the record arrived on.
   #pump(stream: ConsumerStream, group: Group, consumer: ConsumerClient): void {
     void (async () => {
       for await (const message of stream) {
@@ -236,7 +336,15 @@ export class KafkaListenerContainer {
           continue
         }
 
-        const routes = group.routes.get(message.topic)
+        // The `x-original-topic` header only redirects routing on the engine's own retry topics. Elsewhere the
+        // header is provenance metadata (a dead-letter listener must route by its actual topic, not the origin),
+        // so a record on any non-retry topic dispatches by `message.topic` at attempt 1.
+        const onRetryTopic = group.retryTopics.has(message.topic)
+        const origin = message.headers.get(RetryHeaders.ORIGINAL_TOPIC) ?? message.topic
+        const sourceTopic = onRetryTopic ? origin : message.topic
+        const attempt = onRetryTopic ? Number(message.headers.get(RetryHeaders.ATTEMPT) ?? '1') : 1
+
+        const routes = group.routes.get(sourceTopic)
         if (routes === undefined) {
           continue
         }
@@ -249,17 +357,19 @@ export class KafkaListenerContainer {
             consumer,
             stream,
             template: this.#template,
+            sourceTopic,
+            attempt,
           })
-          await this.#dispatch(route, message, context)
+          await this.#dispatch(route, message, context, sourceTopic, attempt)
         }
       }
     })()
   }
 
-  // Folds the per-listener overrides over the instance-default error handling into one resolved policy.
+  // Folds the per-listener overrides over the instance-default error handling into one resolved policy. The
+  // retry mechanism is a pluggable strategy; a plain `retry` policy becomes blocking retry (v3 behaviour).
   #errorHandling(spec: ListenerSpec): RouteErrorHandling {
     const config = this.#runtime.config
-    const retry = spec.retry ?? config.retry
     const deadLetter = spec.deadLetter ?? config.deadLetter
 
     let recover = config.recoverer
@@ -267,9 +377,14 @@ export class KafkaListenerContainer {
       recover = deadLetterRecoverer(this.#template, typeof deadLetter === 'object' ? deadLetter : {})
     }
 
+    const strategy
+      = spec.retryStrategy
+        ?? (spec.retry !== undefined ? blockingRetry(spec.retry) : undefined)
+        ?? config.retryStrategy
+        ?? blockingRetry(config.retry ?? { attempts: 1 })
+
     return {
-      attempts: Math.max(1, retry?.attempts ?? 1),
-      backoff: retry?.backoff,
+      strategy,
       classify: buildClassifier({
         notRetryable: config.notRetryable,
         retryable: config.retryable,
@@ -281,41 +396,83 @@ export class KafkaListenerContainer {
     }
   }
 
-  // The dispatch pipeline: retry with backoff, classification, then recovery. Re-uses one KafkaContext across
-  // attempts (its `attempt` advances). `ctx.nack()` re-runs in-process; `ctx.ack()` drives manual commit.
-  async #dispatch(route: Route, message: KafkaMessage, context: KafkaContext): Promise<void> {
+  // Hands one delivery to the route's retry strategy, exposing the invoke/classify/forward/recover/commit
+  // primitives as closures over this route, message, and context.
+  #dispatch(
+    route: Route,
+    message: KafkaMessage,
+    context: KafkaContext,
+    sourceTopic: string,
+    attempt: number,
+  ): Promise<void> {
     const eh = route.errorHandling
     const signals = context[kSignals]
 
-    for (let attempt = 1; ; attempt++) {
-      signals.attempt = attempt
-      signals.acked = false
-      signals.nacked = false
-      signals.nackDelay = undefined
-
-      try {
-        await this.#invoke(route, message, context)
-      } catch (error) {
-        if (eh.classify(error, attempt) && attempt < eh.attempts) {
-          await sleep(delayFor(eh.backoff, attempt))
-          continue
+    const delivery: RetryDelivery = {
+      message,
+      sourceTopic,
+      initialAttempt: attempt,
+      get acked(): boolean {
+        return signals.acked
+      },
+      get nacked(): boolean {
+        return signals.nacked
+      },
+      get nackDelay(): number | undefined {
+        return signals.nackDelay
+      },
+      reset: (n: number): void => {
+        signals.attempt = n
+        signals.acked = false
+        signals.nacked = false
+        signals.nackDelay = undefined
+      },
+      invoke: (): Promise<void> => this.#invoke(route, message, context),
+      classify: (error: unknown, n: number): boolean => eh.classify(error, n),
+      sleepUntilReady: async (): Promise<void> => {
+        const notBefore = message.headers.get(RetryHeaders.NOT_BEFORE)
+        if (notBefore === undefined) {
+          return
         }
-        await this.#recover(eh, message, error, context)
-        return
-      }
-
-      if (signals.nacked) {
-        if (attempt < eh.attempts) {
-          await sleep(signals.nackDelay ?? delayFor(eh.backoff, attempt))
-          continue
+        await sleep(Number(notBefore) - Date.now())
+      },
+      forward: async (topic: string, extra?: Record<string, string>): Promise<void> => {
+        const headers: Record<string, string> = {}
+        for (const [headerKey, value] of message.headers) {
+          headers[headerKey] = value
         }
-        await this.#recover(eh, message, new ErrKafkaNackExhausted(message.topic, attempt), context)
-        return
-      }
-
-      await this.#commitAfterSuccess(eh.ackMode, message, signals.acked)
-      return
+        headers[RetryHeaders.ORIGINAL_TOPIC] = sourceTopic
+        Object.assign(headers, extra)
+        await this.#template.sendMessage({ topic, key: message.key, value: message.value, headers })
+      },
+      recover: async (error: unknown): Promise<void> => {
+        eh.onError?.(error, message)
+        if (eh.recover !== undefined) {
+          try {
+            await eh.recover(message, error, {
+              attempt: context.attempt,
+              groupId: context.groupId,
+              instance: context.instance,
+            })
+          } catch (recoverError) {
+            eh.onError?.(recoverError, message)
+          }
+        }
+      },
+      commitSuccess: async (): Promise<void> => {
+        // `auto` leaves commits to platformatic autocommit; `manual` relies on the handler's ctx.ack().
+        if (eh.ackMode === 'record' && !signals.acked) {
+          await message.commit()
+        }
+      },
+      commitAdvance: async (): Promise<void> => {
+        if (eh.ackMode !== 'auto') {
+          await message.commit()
+        }
+      },
     }
+
+    return eh.strategy.dispatch(delivery)
   }
 
   #invoke(route: Route, message: KafkaMessage, context: KafkaContext): Promise<void> {
@@ -325,39 +482,6 @@ export class KafkaListenerContainer {
       await instance[route.handlerName](...args)
     }
     return route.requestScoped ? this.#runtime.container.requestScopeManager.run(run) : run()
-  }
-
-  // Terminal path: notify the observation hook, run the recoverer (best-effort), advance past the record.
-  async #recover(
-    eh: RouteErrorHandling,
-    message: KafkaMessage,
-    error: unknown,
-    context: KafkaContext,
-  ): Promise<void> {
-    eh.onError?.(error, message)
-
-    if (eh.recover !== undefined) {
-      try {
-        await eh.recover(message, error, {
-          attempt: context.attempt,
-          groupId: context.groupId,
-          instance: context.instance,
-        })
-      } catch (recoverError) {
-        eh.onError?.(recoverError, message)
-      }
-    }
-
-    if (eh.ackMode !== 'auto') {
-      await message.commit()
-    }
-  }
-
-  async #commitAfterSuccess(ackMode: KafkaAckMode, message: KafkaMessage, acked: boolean): Promise<void> {
-    // `auto` leaves commits to platformatic autocommit; `manual` relies on the handler's ctx.ack().
-    if (ackMode === 'record' && !acked) {
-      await message.commit()
-    }
   }
 
   // A record whose key/value failed to deserialize never reaches the listener — it goes to the dedicated

@@ -18,6 +18,10 @@ export interface KafkaContextInit {
   consumer: ConsumerClient
   stream: ConsumerStream
   template: KafkaTemplate
+  /** The topic this record originated on (differs from `message.topic` on retry topics). */
+  sourceTopic?: string
+  /** The 1-based attempt this delivery starts at (from the retry headers, or 1 on the main topic). */
+  attempt?: number
 }
 
 /**
@@ -32,6 +36,7 @@ export class KafkaContext<Value = unknown> {
   readonly #consumer: ConsumerClient
   readonly #stream: ConsumerStream
   readonly #template: KafkaTemplate
+  readonly #sourceTopic: string
 
   /** Engine-facing signal bag; not part of the documented surface (symbol-keyed). */
   readonly [kSignals]: ContextSignals = { acked: false, nacked: false, attempt: 1 }
@@ -43,6 +48,8 @@ export class KafkaContext<Value = unknown> {
     this.#consumer = init.consumer
     this.#stream = init.stream
     this.#template = init.template
+    this.#sourceTopic = init.sourceTopic ?? init.message.topic
+    this[kSignals].attempt = init.attempt ?? 1
   }
 
   /** The whole consumed record (headers, topic, key, value, partition, offset, commit). */
@@ -52,6 +59,11 @@ export class KafkaContext<Value = unknown> {
 
   get topic(): string {
     return this.#message.topic
+  }
+
+  /** The topic this record originated on. Equals {@link topic} on the main topic; the source on retry topics. */
+  get sourceTopic(): string {
+    return this.#sourceTopic
   }
 
   get partition(): number {

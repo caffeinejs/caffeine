@@ -40,6 +40,7 @@ function fakeRuntime(): { runtime: KafkaRuntime, sent: Sent[], created: () => nu
     ackMode: 'auto',
     serializers: {},
     deserializers: {},
+    topicProvisioning: { autoCreate: true, partitions: 1, replicas: 1 },
   }
 
   return {

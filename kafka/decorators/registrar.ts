@@ -1,6 +1,7 @@
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { KafkaDeserializers, KafkaMessage } from '../config.js'
 import type { DeadLetterOptions, RetryPolicy } from '../error_handling.js'
+import type { RetryStrategy } from '../retry/strategy.js'
 
 /**
  * The frozen, read-only output of a {@link ListenerBuilder} — the shape the runtime container consumes when
@@ -17,8 +18,10 @@ export interface ListenerSpec {
   autocommit?: boolean | number
   /** Ordered parameter pickers (from `@KafkaParams`); when absent the handler receives the raw message. */
   parameters?: ParameterPickOptions<KafkaMessage>[]
-  /** Per-listener retry policy (from `@KafkaRetry`); overrides the instance default. */
+  /** Per-listener retry policy (from `@KafkaRetry` with a policy); becomes blocking retry. */
   retry?: RetryPolicy
+  /** Per-listener retry strategy (from `@KafkaRetry` with a strategy); overrides `retry` and the instance default. */
+  retryStrategy?: RetryStrategy
   /** Per-listener dead-letter config (from `@KafkaDeadLetter`); overrides the instance default. */
   deadLetter?: DeadLetterOptions | boolean
   /** Per-listener deserializers; groups this listener into its own consumer. */
@@ -37,6 +40,7 @@ export class ListenerBuilder {
   #autocommit?: boolean | number
   #parameters?: ParameterPickOptions<KafkaMessage>[]
   #retry?: RetryPolicy
+  #retryStrategy?: RetryStrategy
   #deadLetter?: DeadLetterOptions | boolean
   #deserializers?: KafkaDeserializers
 
@@ -72,6 +76,11 @@ export class ListenerBuilder {
     return this
   }
 
+  retryStrategy(strategy: RetryStrategy): this {
+    this.#retryStrategy = strategy
+    return this
+  }
+
   deadLetter(deadLetter: DeadLetterOptions | boolean): this {
     this.#deadLetter = deadLetter
     return this
@@ -90,6 +99,7 @@ export class ListenerBuilder {
       autocommit: this.#autocommit,
       parameters: this.#parameters === undefined ? undefined : [...this.#parameters],
       retry: this.#retry,
+      retryStrategy: this.#retryStrategy,
       deadLetter: this.#deadLetter,
       deserializers: this.#deserializers,
     }

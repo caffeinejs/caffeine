@@ -1,10 +1,12 @@
 import type { Ctor } from '@caffeinejs/di'
 import { kServiceConfigure, type Service, type ServiceKit } from '@caffeinejs/std'
 import { defaultDeserializers, defaultSerializers } from './clients.js'
-import { type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaDeserializers, type KafkaMessage, type KafkaSerializers, resolveConfig } from './config.js'
+import { type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaDeserializers, type KafkaMessage, type KafkaSerializers, resolveConfig, type TopicProvisioning } from './config.js'
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
 import { KafkaListenerContainer } from './listener_container.js'
+import type { DeadLetterManager } from './retry/dead_letter_manager.js'
+import { retryTopics, type RetryStrategy, type RetryTopicOptions, sharedRetryTopic } from './retry/strategy.js'
 import type { KafkaRuntime } from './runtime.js'
 import { containerKey, DEFAULT_INSTANCE, kafkaTemplate, Keys, runtimeKey } from './symbols.js'
 import { KafkaTemplate } from './template.js'
@@ -25,6 +27,9 @@ export class KafkaBuilder implements Service {
   #deserializers?: KafkaDeserializers
   #ackMode?: KafkaAckMode
   #retry?: RetryPolicy
+  #retryStrategy?: RetryStrategy
+  #topicProvisioning?: TopicProvisioning
+  #deadLetterManager?: DeadLetterManager
   #deadLetter?: DeadLetterOptions | boolean
   #notRetryable?: Ctor<Error>[]
   #retryable?: Ctor<Error>[]
@@ -74,9 +79,39 @@ export class KafkaBuilder implements Service {
     return this
   }
 
-  /** Instance-default retry policy for failing handlers. */
+  /** Instance-default retry policy for failing handlers (blocking, in-process retry). */
   retry(policy: RetryPolicy): this {
     this.#retry = policy
+    return this
+  }
+
+  /** Sets an explicit instance-default retry strategy (blocking, retry-topics, or custom); overrides `retry`. */
+  retryStrategy(strategy: RetryStrategy): this {
+    this.#retryStrategy = strategy
+    return this
+  }
+
+  /** Non-blocking retry via per-level topics (`${topic}-retry-N`), then dead-letter. Uber/Spring style. */
+  retryTopics(policy: RetryPolicy, options?: RetryTopicOptions): this {
+    this.#retryStrategy = retryTopics(policy, options)
+    return this
+  }
+
+  /** Non-blocking retry via a single shared `${topic}-retry` topic (attempt/delay carried in headers). */
+  sharedRetryTopic(policy: RetryPolicy, options?: RetryTopicOptions): this {
+    this.#retryStrategy = sharedRetryTopic(policy, options)
+    return this
+  }
+
+  /** Configures auto-creation of the retry/dead-letter topics (partitions/replicas, or opt-out). */
+  topicProvisioning(options: TopicProvisioning): this {
+    this.#topicProvisioning = options
+    return this
+  }
+
+  /** Overrides the built-in dead-letter manager (inspect/purge/re-inject) for this instance. */
+  deadLetterManager(manager: DeadLetterManager): this {
+    this.#deadLetterManager = manager
     return this
   }
 
@@ -136,6 +171,9 @@ export class KafkaBuilder implements Service {
         deserializers: this.#deserializers,
         ackMode: this.#ackMode,
         retry: this.#retry,
+        retryStrategy: this.#retryStrategy,
+        topicProvisioning: this.#topicProvisioning,
+        deadLetterManager: this.#deadLetterManager,
         deadLetter: this.#deadLetter,
         notRetryable: this.#notRetryable,
         retryable: this.#retryable,

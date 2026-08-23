@@ -1,9 +1,11 @@
-import type { ConsumerClient, ConsumerStream, KafkaClients, KafkaConsumerEvent, KafkaDeserializers, KafkaMessage, KafkaOutboundMessage } from './config.js'
+import type { AdminClient, ConsumerClient, ConsumerStream, KafkaClients, KafkaConsumerEvent, KafkaDeserializers, KafkaMessage, KafkaOutboundMessage, TopicSpec } from './config.js'
 
 /** Options controlling the in-memory broker's behaviour. */
 export interface FakeBrokerOptions {
   /** When true, consumers run the (wrapped) value deserializer over delivered values — used for deser-error tests. */
   applyDeserializers?: boolean
+  /** Existing topics' partition counts, returned by the fake admin's `partitionCounts` (retry-topic inheritance). */
+  partitions?: Record<string, number>
 }
 
 type RawDeserializer = (data?: unknown, headers?: unknown, message?: unknown) => unknown
@@ -95,11 +97,18 @@ export class FakeBroker {
   readonly streams: FakeStream[] = []
   readonly committed: KafkaMessage[] = []
   readonly sent: KafkaOutboundMessage[] = []
+  readonly createdTopics: TopicSpec[] = []
+  readonly deletedTopics: string[] = []
+  // A retained per-topic log so a consumer created after a message was produced (e.g. the dead-letter manager)
+  // still reads it — the real broker's persistence, approximated.
+  readonly #log = new Map<string, KafkaOutboundMessage[]>()
   readonly #eventListeners: Array<[KafkaConsumerEvent, (payload: { groupId: string }) => void]> = []
   readonly #applyDeserializers: boolean
+  readonly #partitions: Record<string, number>
 
   constructor(options: FakeBrokerOptions = {}) {
     this.#applyDeserializers = options.applyDeserializers ?? false
+    this.#partitions = options.partitions ?? {}
   }
 
   /** Fires a normalized lifecycle event to every consumer listener (drives lifecycle/status tests). */
@@ -117,6 +126,9 @@ export class FakeBroker {
         send: (options: { messages: KafkaOutboundMessage[] }) => {
           for (const message of options.messages) {
             this.sent.push(message)
+            const log = this.#log.get(message.topic) ?? []
+            log.push(message)
+            this.#log.set(message.topic, log)
             for (const stream of this.streams) {
               if (stream.topics.has(message.topic)) {
                 stream.deliver(message)
@@ -135,12 +147,41 @@ export class FakeBroker {
             this.#applyDeserializers ? options.deserializers : undefined,
           )
           this.streams.push(stream)
+          // Replay any retained records for the subscribed topics, so late consumers still see them.
+          for (const topic of options.topics) {
+            for (const message of this.#log.get(topic) ?? []) {
+              stream.deliver(message)
+            }
+          }
           return Promise.resolve(stream)
         },
         close: () => Promise.resolve(),
         on: (event, listener) => {
           this.#eventListeners.push([event, listener as (payload: { groupId: string }) => void])
         },
+      }),
+      createAdmin: (): AdminClient => ({
+        createTopics: (topics: TopicSpec[]) => {
+          this.createdTopics.push(...topics)
+          return Promise.resolve()
+        },
+        partitionCounts: (topics: string[]) => {
+          const counts = new Map<string, number>()
+          for (const topic of topics) {
+            if (this.#partitions[topic] !== undefined) {
+              counts.set(topic, this.#partitions[topic])
+            }
+          }
+          return Promise.resolve(counts)
+        },
+        deleteTopics: (topics: string[]) => {
+          this.deletedTopics.push(...topics)
+          for (const topic of topics) {
+            this.#log.delete(topic)
+          }
+          return Promise.resolve()
+        },
+        close: () => Promise.resolve(),
       }),
     }
   }

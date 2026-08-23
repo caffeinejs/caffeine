@@ -27,6 +27,21 @@ export const kSignals = Symbol('@caffeinejs/kafka:context-signals')
 export const kDeserError = Symbol('@caffeinejs/kafka:deser-error')
 
 /**
+ * Wire header names stamped on a record as it travels through the non-blocking retry topics. These are data on
+ * the message (RFC-style `x-` tokens), read by the retry consumers to resume the retry journey — kept literal
+ * (not acronym-cased identifiers) because they are the on-the-wire contract.
+ *
+ * - `ORIGINAL_TOPIC` — the source topic a retry record originated from (routing key on retry topics).
+ * - `ATTEMPT` — the 1-based delivery attempt the retry consumer should treat this record as.
+ * - `NOT_BEFORE` — epoch-ms floor; the retry consumer blocks until this time before invoking (the delay tier).
+ */
+export const RetryHeaders = {
+  ORIGINAL_TOPIC: 'x-original-topic',
+  ATTEMPT: 'x-retry-attempt',
+  NOT_BEFORE: 'x-retry-not-before',
+} as const
+
+/**
  * The DI key of the `KafkaTemplate` for a named instance. The default instance's template is also bound under
  * the `KafkaTemplate` class itself (this symbol is a name alias on it), so default users may inject either.
  * Named-instance users inject via this key: `@Inject(kafkaTemplate('orders'))`.

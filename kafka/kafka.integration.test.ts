@@ -8,6 +8,7 @@ import { KafkaListener } from './decorators/kafka_listener.js'
 import { KafkaParams } from './decorators/kafka_params.js'
 import { KafkaRetry } from './decorators/kafka_retry.js'
 import { kafka } from './plugin.js'
+import { retryTopics } from './retry/strategy.js'
 import { KafkaTemplate } from './template.js'
 
 interface Delivered {
@@ -43,6 +44,32 @@ class RetryingConsumer {
       throw new ErrBoom(`attempt ${retryState.attempts}`)
     }
     retryState.done.resolve(retryState.attempts)
+  }
+}
+
+const RETRY_TOPICS_TOPIC = 'caffeine-kafka-it-rt'
+
+// Fails twice then succeeds, but through non-blocking retry TOPICS (the record traverses -retry-0/-retry-1).
+let rtState!: { attempts: number, done: { promise: Promise<number>, resolve: (n: number) => void } }
+function resetRt(): void {
+  let resolve!: (n: number) => void
+  const promise = new Promise<number>(res => {
+    resolve = res
+  })
+  rtState = { attempts: 0, done: { promise, resolve } }
+}
+resetRt()
+
+@KafkaHandler()
+class RetryTopicsConsumer {
+  @KafkaListener({ topic: RETRY_TOPICS_TOPIC })
+  @KafkaRetry(retryTopics({ attempts: 3, backoff: { type: 'fixed', delay: 200 } }))
+  onEvent(): void {
+    rtState.attempts++
+    if (rtState.attempts < 3) {
+      throw new ErrBoom(`rt attempt ${rtState.attempts}`)
+    }
+    rtState.done.resolve(rtState.attempts)
   }
 }
 
@@ -106,6 +133,12 @@ describe.skipIf(!up)('kafka integration (real broker)', () => {
       await admin.createTopics({ topics: [TOPIC, RETRY_TOPIC], partitions: 1, replicas: 1 })
     } catch {
       // Topic already exists — fine.
+    }
+    try {
+      // The retry-topics source has 3 partitions; its retry topics should inherit that count.
+      await admin.createTopics({ topics: [RETRY_TOPICS_TOPIC], partitions: 3, replicas: 1 })
+    } catch {
+      // Topic already exists — fine.
     } finally {
       await admin.close()
     }
@@ -157,5 +190,32 @@ describe.skipIf(!up)('kafka integration (real broker)', () => {
 
     // The same delivery is re-invoked in-process; the 3rd attempt succeeds.
     expect(attempts).toBe(3)
+  })
+
+  it('retries through non-blocking retry topics until success over a real broker', async () => {
+    resetRt()
+    await built.run()
+
+    const template = built.container.get<KafkaTemplate>(KafkaTemplate)
+
+    // Send once; the consumer group has already joined from the earlier specs, so no duplicate triggers. The
+    // record walks flow's main topic → -retry-0 → -retry-1 (each with its own delay) and succeeds on attempt 3.
+    await template.send(RETRY_TOPICS_TOPIC, { will: 'retry-topics' }, { key: 'rt1' })
+
+    const attempts = await Promise.race([
+      rtState.done.promise,
+      new Promise<undefined>(res => setTimeout(() => res(undefined), 25_000)),
+    ])
+
+    expect(attempts).toBe(3)
+
+    // The retry topics were auto-created inheriting the 3-partition source count.
+    const admin = new Admin({ clientId: 'caffeine-kafka-it-meta', bootstrapBrokers: [BROKER] })
+    try {
+      const metadata = await admin.metadata({ topics: [`${RETRY_TOPICS_TOPIC}-retry-0`] })
+      expect(metadata.topics.get(`${RETRY_TOPICS_TOPIC}-retry-0`)?.partitionsCount).toBe(3)
+    } finally {
+      await admin.close()
+    }
   })
 })

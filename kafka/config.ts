@@ -1,6 +1,8 @@
 import type { Ctor } from '@caffeinejs/di'
 import type { Deserializers, Message, MessageToProduce, Serializers } from '@platformatic/kafka'
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
+import type { DeadLetterManager } from './retry/dead_letter_manager.js'
+import type { RetryStrategy } from './retry/strategy.js'
 
 /** A consumed record handed to a `@KafkaListener` method. Alias of the platformatic `Message`. */
 export type KafkaMessage<Value = unknown> = Message<string, Value, string, string>
@@ -19,6 +21,16 @@ export interface DeserializationErrorRecord {
 
 /** Handles a record whose key/value could not be deserialized. Runs instead of the listener. */
 export type DeserializationErrorHandler = (error: unknown, record: DeserializationErrorRecord) => void | Promise<void>
+
+/** Controls auto-creation of the retry/dead-letter topics a non-blocking retry strategy declares. */
+export interface TopicProvisioning {
+  /** Create declared retry/DLT topics via the `Admin` client at startup. Default `true`. */
+  autoCreate?: boolean
+  /** Partition count for auto-created topics (a strategy's per-topic value wins). Default `1`. */
+  partitions?: number
+  /** Replication factor for auto-created topics. Default `1`. */
+  replicas?: number
+}
 
 /** A record accepted by the producer/template. */
 export type KafkaOutboundMessage<Value = unknown> = MessageToProduce<string, Value, string, string>
@@ -46,8 +58,14 @@ export interface KafkaConfig {
   deserializers?: KafkaDeserializers
   /** Commit strategy; defaults to `auto` (platformatic autocommit). */
   ackMode?: KafkaAckMode
-  /** Instance-default retry policy for failing handlers. Overridable per listener with `@KafkaRetry`. */
+  /** Instance-default retry policy for failing handlers (blocking retry). Overridable per listener. */
   retry?: RetryPolicy
+  /** Instance-default retry strategy; overrides `retry`. Use `retryTopics`/`sharedRetryTopic` for non-blocking. */
+  retryStrategy?: RetryStrategy
+  /** Auto-creation of the retry/dead-letter topics a non-blocking strategy declares. */
+  topicProvisioning?: TopicProvisioning
+  /** Overrides the built-in dead-letter manager (inspect/purge/re-inject) for this instance. */
+  deadLetterManager?: DeadLetterManager
   /** Enables dead-letter recovery (default `${topic}.DLT`). `true` uses defaults; an object customizes it. */
   deadLetter?: DeadLetterOptions | boolean
   /** Exceptions that must never be retried (go straight to the recoverer). */
@@ -77,6 +95,10 @@ export interface ResolvedKafkaConfig {
   deserializers: KafkaDeserializers
   ackMode: KafkaAckMode
   retry?: RetryPolicy
+  retryStrategy?: RetryStrategy
+  // `partitions` stays optional: unset means "inherit the source topic's partition count" at provisioning time.
+  topicProvisioning: { autoCreate: boolean, partitions?: number, replicas: number }
+  deadLetterManager?: DeadLetterManager
   deadLetter?: DeadLetterOptions | boolean
   notRetryable?: Ctor<Error>[]
   retryable?: Ctor<Error>[]
@@ -118,6 +140,24 @@ export interface KafkaConsumerEventPayload {
   [key: string]: unknown
 }
 
+/** A topic to create, for {@link AdminClient.createTopics}. */
+export interface TopicSpec {
+  topic: string
+  partitions: number
+  replicas: number
+}
+
+/** The admin surface the integration depends on (a narrow view of the platformatic `Admin`). */
+export interface AdminClient {
+  /** Creates topics, ignoring any that already exist. */
+  createTopics(topics: TopicSpec[]): Promise<void>
+  /** Returns the partition count of each named topic that exists (absent when the topic is unknown). Optional. */
+  partitionCounts?(topics: string[]): Promise<Map<string, number>>
+  /** Deletes topics (used by the dead-letter manager's `purge`). */
+  deleteTopics(topics: string[]): Promise<void>
+  close(): Promise<void>
+}
+
 /**
  * The client factory seam. The default implementation builds real platformatic clients; tests pass a fake
  * to drive the integration without a broker.
@@ -125,6 +165,8 @@ export interface KafkaConsumerEventPayload {
 export interface KafkaClients {
   createProducer(config: ResolvedKafkaConfig): ProducerClient
   createConsumer(config: ResolvedKafkaConfig, groupId: string): ConsumerClient
+  /** Creates an admin client for topic provisioning. Optional — fakes/minimal setups may omit it. */
+  createAdmin?(config: ResolvedKafkaConfig): AdminClient
 }
 
 /** Normalizes user config: brokers to an array, a default client id, and default (string/JSON) serializers. */
@@ -142,6 +184,14 @@ export function resolveConfig(config: KafkaConfig, defaults: {
     deserializers: { ...defaults.deserializers, ...config.deserializers },
     ackMode: config.ackMode ?? 'auto',
     retry: config.retry,
+    retryStrategy: config.retryStrategy,
+    topicProvisioning: {
+      autoCreate: config.topicProvisioning?.autoCreate ?? true,
+      // Left undefined when the user did not set it, so provisioning inherits the source topic's partition count.
+      partitions: config.topicProvisioning?.partitions,
+      replicas: config.topicProvisioning?.replicas ?? 1,
+    },
+    deadLetterManager: config.deadLetterManager,
     deadLetter: config.deadLetter,
     notRetryable: config.notRetryable,
     retryable: config.retryable,

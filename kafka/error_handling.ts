@@ -88,13 +88,16 @@ export interface DeadLetterOptions {
  */
 export function deadLetterRecoverer(template: KafkaTemplate, options: DeadLetterOptions = {}): KafkaRecoverer {
   return async (record, error, ctx) => {
-    const topic = options.topic?.(record) ?? `${record.topic}.DLT`
+    // On a retry topic the record's own topic is `${source}-retry-N`; the origin travels in the header, so the
+    // dead-letter topic and provenance track the source topic — not the last retry tier.
+    const origin = record.headers?.get('x-original-topic') ?? record.topic
+    const topic = options.topic?.(record) ?? `${origin}.DLT`
     const err = error instanceof Error ? error : new Error(String(error))
 
     const headers: Record<string, string> = {
       'x-exception-class': err.name,
       'x-exception-message': err.message,
-      'x-original-topic': record.topic,
+      'x-original-topic': origin,
       'x-original-partition': String(record.partition),
       'x-original-offset': String(record.offset),
       'x-attempts': String(ctx.attempt),
