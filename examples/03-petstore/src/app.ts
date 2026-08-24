@@ -5,6 +5,7 @@ import FastifyCookie from '@fastify/cookie'
 import handlebars from 'handlebars'
 import type { Container } from '@caffeinejs/di'
 import { Claim, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import type { HealthIndicator } from '@caffeinejs/std'
 import { EnvProvider } from '@caffeinejs/std/config'
 import { staticPlugin } from '@caffeinejs/static'
 import { viewPlugin } from '@caffeinejs/view'
@@ -16,8 +17,14 @@ const viewsRoot = fileURLToPath(new URL('./views', import.meta.url))
 const publicRoot = fileURLToPath(new URL('./public', import.meta.url))
 
 // Builds the web application from a given container — it never creates one, so tests can pass a
-// TestContainer with overridden dependencies. DB-agnostic: no prisma import here.
-export function buildApp(container: Container, serverOpts: FastifyServerOptions = {}): WebApplication {
+// TestContainer with overridden dependencies. DB-agnostic: no prisma import here, which is also why the health
+// indicators are passed in rather than constructed — main.ts supplies the Prisma-backed one, tests supply fakes
+// or none at all.
+export function buildApp(
+  container: Container,
+  serverOpts: FastifyServerOptions = {},
+  indicators: readonly HealthIndicator[] = [],
+): WebApplication {
   const server = fastify({ logger: true, routerOptions: { ignoreTrailingSlash: true }, ...serverOpts })
     .addHttpMethod('QUERY', { hasBody: true })
   server.register(FastifyMultipart)
@@ -76,5 +83,13 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
     // (defaults in the schema).
     .config(appConfigSchema, c => c.source(new EnvProvider({ prefix: 'PETSTORE_' })))
     .server(s => s.config(c => c.server))
+    // Kubernetes probes (/livez, /readyz, /startupz) plus the graceful shutdown that drives them: SIGTERM makes
+    // /readyz answer 503 immediately, the drain delay covers the routing-table lag while requests keep being
+    // served normally, and only then does the server close. No preStop sleep in the manifest.
+    .health(h => {
+      for (const indicator of indicators) {
+        h.indicator(indicator)
+      }
+    })
     .build()
 }

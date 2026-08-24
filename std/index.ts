@@ -3,6 +3,7 @@ export * from './application.js'
 export * from './application_builder.js'
 export * from './decorators/index.js'
 export * from './duration/index.js'
+export * from './health/index.js'
 export * from './hooks.js'
 export type * from './plugin.js'
 // The schema dialect is first-class DX, so `$t` and its inference helper live on the root barrel. The rest of the

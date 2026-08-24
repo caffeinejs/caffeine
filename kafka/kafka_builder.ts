@@ -1,9 +1,10 @@
 import type { Ctor } from '@caffeinejs/di'
-import { kServiceConfigure, type Service, type ServiceKit } from '@caffeinejs/std'
+import { HealthIndicator, kServiceConfigure, type Service, type ServiceKit } from '@caffeinejs/std'
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import { type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaDeserializers, type KafkaMessage, type KafkaSerializers, resolveConfig, type TopicProvisioning } from './config.js'
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
+import { KafkaHealthIndicator } from './health.js'
 import { KafkaListenerContainer } from './listener_container.js'
 import type { DeadLetterManager } from './retry/dead_letter_manager.js'
 import { retryTopics, type RetryStrategy, type RetryTopicOptions, sharedRetryTopic } from './retry/strategy.js'
@@ -206,6 +207,16 @@ export class KafkaBuilder implements Service {
       .bind(containerKey(this.#name))
       .toClass(KafkaListenerContainer, [rKey, tKey])
       .labels(Keys.KAFKA_CONTAINER)
+
+    // Registered once, covering every configured instance. Inert unless the application exposes the probes, and
+    // then it is what makes readiness mean "serving HTTP *and* consuming" rather than "the port is open".
+    if (!kit.container.has(KafkaHealthIndicator)) {
+      const container = kit.container
+      kit.container
+        .bind(KafkaHealthIndicator)
+        .toFactory(() => new KafkaHealthIndicator(container))
+        .extends(HealthIndicator)
+    }
 
     return Promise.resolve()
   }

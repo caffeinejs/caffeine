@@ -2,6 +2,9 @@ import { type Container, type Key, Scopes } from '@caffeinejs/di'
 import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { kServiceConfigure, type Service, type ServiceKit } from './service.js'
+import { ApplicationAvailability } from './health/availability.js'
+import { GracefulShutdown } from './health/shutdown.js'
+import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
 export interface HookBinding {
@@ -17,6 +20,8 @@ export interface ApplicationInit {
   // one-time singleton scan (used when the container was supplied pre-wired).
   hookBindings: HookBinding[] | 'scan'
   hooks: ApplicationHooks<BaseApplication>
+  /** The resolved drain policy. Defaults apply when the builder was given none. */
+  shutdown?: ShutdownOptions
 }
 
 interface Dispatch {
@@ -35,18 +40,31 @@ export abstract class BaseApplication {
   readonly #services: Service[]
   readonly #hooks: ApplicationHooks<BaseApplication>
   readonly #hookBindings: HookBinding[] | 'scan'
+  readonly #availability = new ApplicationAvailability()
+  readonly #shutdownInit: ShutdownOptions | undefined
   #dispatch?: Map<ApplicationEvent, Dispatch[]>
   #ready = false
+  #shutdown?: GracefulShutdown
+  #closing?: Promise<void>
 
   constructor(init: ApplicationInit) {
     this.#container = init.container
     this.#services = init.services
     this.#hookBindings = init.hookBindings
     this.#hooks = init.hooks
+    this.#shutdownInit = init.shutdown
   }
 
   get container(): Container {
     return this.#container
+  }
+
+  /**
+   * The application's availability: whether it has started, whether it is accepting work, and whether it is
+   * draining. Owned here so every application kind has one, and read — never written — by the HTTP probes.
+   */
+  get availability(): ApplicationAvailability {
+    return this.#availability
   }
 
   /** Registers a lifecycle listener. Throws if the same listener is already registered for the event. */
@@ -100,11 +118,45 @@ export abstract class BaseApplication {
       await this.ready()
     }
 
+    const options = this.shutdownOptions()
+
+    this.#shutdown = new GracefulShutdown(() => this.close(), options.dispatcher)
+    this.#shutdown.install(options.signals)
+
     await this.emit('application:run')
     await this.start()
+
+    this.#availability.markStarted().acceptTraffic()
   }
 
-  async close(): Promise<void> {
+  /**
+   * Shuts down in the order an orchestrator needs, which is not the order the lifecycle hooks alone would give.
+   *
+   * 1. availability starts refusing, so a readiness probe reports 503 on its very next poll — liveness stays
+   *    correct, because a draining process must be left to finish, not restarted;
+   * 2. the drain delay elapses while the application keeps working **normally**. The routing table has not caught
+   *    up yet and real traffic is still arriving; rejecting it here is the bug this window exists to avoid;
+   * 3. only then the hooks run — pre-shutdown, {@link stop}, shutdown, container dispose.
+   *
+   * Step 2 has to precede every user hook, which is why it cannot be one: `application:pre-shutdown` listeners are
+   * dispatched in parallel and best-effort, so a drain hung off that event would race arbitrary user code.
+   */
+  close(): Promise<void> {
+    // An orchestrator re-sends SIGTERM, and a second close must join the first rather than start another one.
+    this.#closing ??= this.#drainAndClose()
+    return this.#closing
+  }
+
+  async #drainAndClose(): Promise<void> {
+    const options = this.shutdownOptions()
+
+    this.#availability.beginDrain()
+    await this.beforeDrain()
+
+    if (options.drainDelayMs > 0) {
+      await delay(options.drainDelayMs)
+    }
+
     const errors: unknown[] = []
 
     await this.emitBestEffort('application:pre-shutdown', errors)
@@ -120,9 +172,29 @@ export abstract class BaseApplication {
       errors.push(error)
     }
 
+    this.#availability.markBroken('closed')
+    // Removed last, not first: until the shutdown actually finishes, a second signal must still reach the handler
+    // that turns it into an immediate exit. Uninstalling up front hands that job back to the runtime's default
+    // disposition, which kills the process mid-drain.
+    this.#shutdown?.uninstall()
+
     if (errors.length > 0) {
       throw new AggregateError(errors, 'Errors during application shutdown')
     }
+  }
+
+  /**
+   * The drain policy. Defaults to what the builder was given, or to {@link defaultShutdownOptions}. Subclasses
+   * override it to source the policy from their own feature configuration — the HTTP application derives it from
+   * the resolved health options.
+   */
+  protected shutdownOptions(): ShutdownOptions {
+    return this.#shutdownInit ?? defaultShutdownOptions()
+  }
+
+  /** Ran once availability has started refusing, before the drain delay. Subclasses invalidate caches here. */
+  protected beforeDrain(): void | Promise<void> {
+    // Nothing to invalidate in a bare application.
   }
 
   /** Whether `ready()` has completed. */
@@ -137,7 +209,7 @@ export abstract class BaseApplication {
 
   /** The kit passed to each {@link Service}. Subclasses may widen it (e.g. add platform handles). */
   protected serviceKit(): ServiceKit {
-    return { container: this.#container }
+    return { container: this.#container, availability: this.#availability }
   }
 
   /** The services configured before `container.init()`. Subclasses may prepend framework configurers. */
@@ -239,6 +311,14 @@ export abstract class BaseApplication {
       }
     }
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    // Unreferenced where the runtime supports it, so the wait cannot be the only thing keeping alive a process
+    // that is trying to exit.
+    setTimeout(resolve, ms).unref?.()
+  })
 }
 
 /** A headless application: DI container + lifecycle, no serving platform. */

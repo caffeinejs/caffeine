@@ -16,6 +16,9 @@ services:
       - petstore-pgdata:/var/lib/postgresql/data
 
   petstore:
+    # Docker's built-in init (tini) becomes PID 1: it forwards SIGTERM to the entrypoint and reaps zombies. Without
+    # it node runs as PID 1, where the default signal dispositions do not apply and nothing reaps orphans.
+    init: true
     build:
       context: ../..
       dockerfile: examples/03-petstore/Dockerfile

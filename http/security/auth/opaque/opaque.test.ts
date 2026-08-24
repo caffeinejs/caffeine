@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
-import { kServiceConfigure } from '@caffeinejs/std'
+import { ApplicationAvailability, kServiceConfigure } from '@caffeinejs/std'
 import type { Context } from '../../../context.js'
 import type { Feats } from '../../../feats.js'
 import type { ServiceKit } from '../../../service.js'
@@ -176,6 +176,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       const bind = vi.fn().mockReturnValue({ toValue })
       return {
         container: { bind, wrap } as unknown as Container,
+        availability: new ApplicationAvailability(),
         feats: { toggleAuthentication: vi.fn().mockReturnThis() } as unknown as Feats,
       }
     }

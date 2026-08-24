@@ -10,12 +10,15 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** spec
 - **Request/response validation** with `@Schema`, declared in the `$t` dialect from `@caffeinejs/std` and mirroring the spec. A `$t` schema is JSON Schema, so it compiles straight into a Fastify Ajv validator and carries the TypeScript type with it.
 - **Auth**: JWT bearer (`@caffeinejs/http` `addJWTBearer`) with `@Authorize({ roles })` gating writes.
 - **Multipart upload** (`$p.file()`), and the OpenAPI 3.2 **QUERY** search verb.
+- **Kubernetes probes + graceful shutdown** via `.health()`: `/livez`, `/readyz`, `/startupz`, a database readiness indicator, and a drain that refuses readiness before it stops listening.
 - **Dockerised**: `docker-compose` brings up Postgres + the app, runs migrations, seeds demo data.
 
 ## Architecture
 
 ```
-src/main.ts                  bootstrap: QUERY verb, @fastify/multipart, JWT bearer, graceful shutdown
+src/main.ts                  bootstrap: builds the app, supplies the database health indicator
+src/app.ts                   features: QUERY verb, @fastify/multipart, JWT bearer, GitHub OAuth, health probes
+src/features/health/db.health.ts  HealthIndicator — readiness only, never liveness
 src/internal/db/prisma.ts    single PrismaClient handle
 src/internal/db/prisma.config.ts  @Configuration + @Provides(PrismaClient) — DI registration
 src/<domain>/<name>.ts       API DTOs + JSON schemas + row→DTO mapper

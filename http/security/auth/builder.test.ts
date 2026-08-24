@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
-import { kServiceConfigure } from '@caffeinejs/std'
+import { ApplicationAvailability, kServiceConfigure } from '@caffeinejs/std'
 import type { ServiceKit } from '../../service.js'
 import type { Feats } from '../../feats.js'
 import { AuthenticationBuilder } from './builder.js'
@@ -12,6 +12,7 @@ function makeKit(): ServiceKit {
   const wrap = vi.fn().mockReturnValue({ get: vi.fn() })
   return {
     container: { bind, wrap } as unknown as Container,
+    availability: new ApplicationAvailability(),
     feats: { toggleAuthentication: vi.fn().mockReturnThis() } as unknown as Feats,
   }
 }

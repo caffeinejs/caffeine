@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import { BaseApplication, type ApplicationInit, type Service } from '@caffeinejs/std'
+import { BaseApplication, HealthIndicator, type ApplicationInit, type Service, type ShutdownOptions } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Router } from './route.js'
 import { Feats } from './feats.js'
@@ -11,6 +11,8 @@ import type { OIDCMeta } from './security/auth/oidc/index.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions } from './server/index.js'
+import { ErrShutdownTimeout, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, type HealthOptions } from './health/index.js'
+import type { HealthServices } from './health/services.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]
@@ -25,6 +27,13 @@ export interface Adapter<I, R> {
   teardown(): Promise<void>
   run(): Promise<void>
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
+
+  /**
+   * Abandons whatever is still in flight so a pending {@link teardown} can finish. Called only when the graceful
+   * shutdown budget is exhausted, at which point the orchestrator's `SIGKILL` is the alternative. Adapters that
+   * cannot force connections shut may leave it undefined.
+   */
+  forceTeardown?(): Promise<void>
 }
 
 export interface AdapterFactoryIn {
@@ -43,6 +52,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   readonly #adapter: A
   readonly #feats = new Feats()
   #routers: Router<R>[] = []
+  #health: HealthServices | undefined
 
   constructor(init: ApplicationInit, adapter: A) {
     super(init)
@@ -66,11 +76,16 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   }
 
   protected override serviceKit(): ServiceKit {
-    return { container: this.container, feats: this.#feats }
+    return { container: this.container, availability: this.availability, feats: this.#feats }
   }
 
   protected override configurers(): Service[] {
-    return [...this.services, new ErrorHandlingServiceConfigurer(), new CacheServiceConfigurer()]
+    return [
+      ...this.services,
+      new ErrorHandlingServiceConfigurer(),
+      new CacheServiceConfigurer(),
+      new HealthServiceConfigurer(),
+    ]
   }
 
   protected override async setup(): Promise<void> {
@@ -81,6 +96,9 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     const serverOptions = this.container.getOptional<ServerOptions>(kServerOptions) ?? DEFAULT_SERVER_OPTIONS
     const server: ServerOptions = { ...serverOptions }
 
+    const health = this.#buildHealth()
+    this.#health = health
+
     const services: Services = {
       auth: {
         enabled: this.#feats.authentication,
@@ -90,6 +108,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
       oidc: this.container.getOptional<OIDCMeta>(kOIDCMeta),
       errorHandling: this.container.get(ErrorHandlerProvider),
       server,
+      health,
     }
 
     await this.#adapter.setup({ routers: this.#routers, feats: this.#feats, services })
@@ -99,8 +118,71 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     return this.#adapter.run()
   }
 
-  protected override stop(): Promise<void> {
-    return this.#adapter.teardown()
+  /**
+   * The drain policy, taken from the resolved health options rather than the builder options — `.health(...)` is
+   * the HTTP application's way of configuring it, and wins.
+   */
+  protected override shutdownOptions(): ShutdownOptions {
+    const health = this.#health
+    if (health === undefined) {
+      return super.shutdownOptions()
+    }
+
+    return {
+      drainDelayMs: health.options.drainDelayMs,
+      shutdownTimeoutMs: health.options.shutdownTimeoutMs,
+      signals: health.options.signals,
+      dispatcher: health.options.dispatcher,
+    }
+  }
+
+  /** Drops cached probe evaluations so the first poll after the flip reflects the drain, not the last good run. */
+  protected override beforeDrain(): void {
+    this.#health?.registry.invalidate()
+  }
+
+  /**
+   * Tears the adapter down under the shutdown budget. When it expires, connections are forced shut rather than
+   * left for the orchestrator's `SIGKILL` — which would arrive moments later and take the rest of the process
+   * with it, logs included.
+   */
+  protected override async stop(): Promise<void> {
+    const timeoutMs = this.#health?.options.shutdownTimeoutMs ?? 0
+    const teardown = this.#adapter.teardown()
+
+    if (timeoutMs <= 0) {
+      return teardown
+    }
+
+    // The race subscribes to the teardown, so a rejection arriving after the timeout is still observed.
+    const completed = teardown.then(() => 'done' as const)
+
+    let timer: NodeJS.Timeout | undefined
+    const expired = new Promise<'timeout'>(resolve => {
+      timer = setTimeout(() => resolve('timeout'), timeoutMs)
+      timer.unref?.()
+    })
+
+    try {
+      if (await Promise.race([completed, expired]) === 'done') {
+        return
+      }
+
+      await this.#adapter.forceTeardown?.()
+      await teardown.catch(() => undefined)
+
+      throw new ErrShutdownTimeout(timeoutMs)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  #buildHealth(): HealthServices {
+    const options = this.container.get<HealthOptions>(kHealthOptions)
+    const availability = this.availability
+    const registry = new HealthRegistry(this.container.getManyOptional(HealthIndicator), options)
+
+    return { options, availability, registry, probes: new ProbeEndpoint(availability, registry, options) }
   }
 }
 

@@ -16,6 +16,7 @@ import { FormBodyConfigurer } from './form/index.js'
 import { ErrorHandlingConfigurer } from './error/error_handling_configurer.js'
 import { CacheConfigurer } from './cache/cache.js'
 import { CacheInvalidateConfigurer } from './cache/cache_invalidate.js'
+import { HealthConfigurer, kHealthRoute } from './health/index.js'
 import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { Responder } from './response.js'
@@ -65,15 +66,31 @@ export class FastifyAdapter<
       router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
 
+    // The hook is server-level, so it also sees the probe routes. Those have no controller, no parameters and no
+    // request scope, so building a context for them would be pure overhead on the most frequently called routes in
+    // the process.
+    const isProbe = (req: FastifyRequest): boolean =>
+      (req.routeOptions.config as unknown as Record<symbol, unknown> | undefined)?.[kHealthRoute] === true
+
     if (needsRequestScope) {
       const man = this.#container.requestScopeManager
       fastify.addHook('onRequest', (req, reply, done) => {
+        if (isProbe(req)) {
+          done()
+          return
+        }
+
         const ctx = new FastifyContext(req, reply)
         req.httpContext = ctx
         this.#fastifyCtxAls.run(ctx, () => man.run(() => done()))
       })
     } else {
       fastify.addHook('onRequest', (req, reply, done) => {
+        if (isProbe(req)) {
+          done()
+          return
+        }
+
         req.httpContext = new FastifyContext(req, reply)
         done()
       })
@@ -83,6 +100,7 @@ export class FastifyAdapter<
     // dependency order. Each hooks into the phases below via optional configureServer/Router/Route.
     const configurers = orderConfigurers([
       new ErrorHandlingConfigurer(),
+      new HealthConfigurer(),
       new FormBodyConfigurer(),
       new AuthenticationConfigurer(),
       new AuthorizationConfigurer(),
@@ -275,6 +293,16 @@ export class FastifyAdapter<
 
   async teardown(): Promise<void> {
     await this.#fastify.close()
+  }
+
+  /**
+   * Cuts the sockets `close()` is still waiting on, including keep-alive connections that are idle but not yet
+   * expired. Called only once the shutdown budget is spent, so the pending `close()` can settle instead of being
+   * interrupted mid-request by the orchestrator.
+   */
+  forceTeardown(): Promise<void> {
+    this.#fastify.server.closeAllConnections()
+    return Promise.resolve()
   }
 
   get instance(): SERVER {

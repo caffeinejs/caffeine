@@ -6,9 +6,16 @@ import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import type { Augment, Plugin, PluginContext } from './plugin.js'
 import type { Service } from './service.js'
+import { type ShutdownConfig, resolveShutdownOptions } from './health/shutdown_options.js'
 
 export interface ApplicationBuilderOptions {
   container?: Container | Options
+  /**
+   * The graceful-shutdown policy: drain delay, teardown budget, which signals to install, and the dispatcher that
+   * delivers them. Omitted, the defaults apply — signals installed outside a test runner, and a drain delay only
+   * under an orchestrator. The HTTP application takes this from `.health(...)` instead.
+   */
+  shutdown?: ShutdownConfig
 }
 
 /**
@@ -25,8 +32,10 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #services: Service[] = []
   readonly #hooks = new ApplicationHooks<BaseApplication>()
   readonly #hookBindings: HookBinding[] | 'scan'
+  readonly #shutdown: ShutdownConfig | undefined
 
   constructor(options: ApplicationBuilderOptions = {}) {
+    this.#shutdown = options.shutdown
     const c = options.container
 
     if (c != null && typeof (c as Container).get === 'function') {
@@ -101,6 +110,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
       services: this.#services,
       hookBindings: this.#hookBindings,
       hooks: this.#hooks,
+      shutdown: resolveShutdownOptions(this.#shutdown),
     }
   }
 

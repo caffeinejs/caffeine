@@ -5,6 +5,7 @@ import { AuthenticationService } from './security/auth/service.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 import type { ErrorHandlerProvider } from './error/error.js'
 import type { ServerOptions } from './server/server_builder.js'
+import type { HealthServices } from './health/services.js'
 
 /** The HTTP application's service kit — the base container kit plus the request feature flags. */
 export interface ServiceKit extends BaseServiceKit {
@@ -20,4 +21,5 @@ export interface Services {
   oidc?: OIDCMeta
   errorHandling: ErrorHandlerProvider
   server: ServerOptions
+  health: HealthServices
 }

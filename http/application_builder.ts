@@ -15,6 +15,7 @@ import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { CacheBuilder } from './cache/cache_builder.js'
 import { ServerBuilder } from './server/index.js'
+import { HealthBuilder } from './health/health_builder.js'
 
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
@@ -25,6 +26,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   #authBuilder: AuthenticationBuilder | undefined
   #cacheBuilder: CacheBuilder | undefined
   #serverBuilder: ServerBuilder<unknown> | undefined
+  #healthBuilder: HealthBuilder<unknown> | undefined
   readonly #authzBuilder: AuthorizationBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
@@ -74,6 +76,25 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   ): WebApplicationBuilder<I, REQ, A, InferConfig<S>> {
     this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, configure)
     return this as unknown as WebApplicationBuilder<I, REQ, A, InferConfig<S>>
+  }
+
+  /**
+   * Enables the Kubernetes probes (`/livez`, `/readyz`, `/startupz`) and the graceful shutdown that drives them.
+   * Calling it with no configuration is a complete setup; see {@link HealthBuilder} for what the defaults are.
+   *
+   * Left uncalled, the probes are exposed only when `KUBERNETES_SERVICE_HOST` is present — but the drain sequence
+   * and the signal handlers are installed either way, because dropping in-flight requests on shutdown is not a
+   * behaviour anyone opts into deliberately.
+   */
+  health(configure?: (health: HealthBuilder<TConfig>) => void): this {
+    if (this.#healthBuilder == null) {
+      this.#healthBuilder = new HealthBuilder<unknown>()
+      this.addService(this.#healthBuilder)
+    }
+
+    configure?.(this.#healthBuilder as HealthBuilder<TConfig>)
+
+    return this
   }
 
   server(configure: (server: ServerBuilder<TConfig>) => void): this {

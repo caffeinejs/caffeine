@@ -1,15 +1,16 @@
 import 'dotenv/config'
 import { createContainer } from './app.container.js'
 import { buildApp } from './app.js'
+import { DatabaseHealth } from './features/health/index.js'
 import { prisma } from './util/db/index.js'
 
-const app = buildApp(createContainer())
+const app = buildApp(createContainer(), {}, [new DatabaseHealth(prisma)])
 
-app.onClose(() => prisma.$disconnect())
-for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(sig, () => void app.close().then(() => process.exit(0)))
-}
+// Closing the pool belongs after the drain, not before it: `application:pre-shutdown` runs once readiness has
+// already been refusing for the drain delay, so no in-flight request loses its connection mid-query.
+app.on('application:pre-shutdown', () => prisma.$disconnect())
 
-// Starts the framework: readies the container, then listens on the address the server feature resolved from
-// config (PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT).
+// No signal handling here. `.health()` installs SIGTERM/SIGINT, refuses readiness, waits out the routing-table
+// lag while still serving, closes the server, and lets the process exit on its own — calling process.exit()
+// straight after close() would truncate the very logs describing the shutdown.
 await app.run()

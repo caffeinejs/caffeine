@@ -15,6 +15,7 @@ export {
   type RetryPolicy,
 } from './error_handling.js'
 export * from './errors.js'
+export { KafkaHealthIndicator } from './health.js'
 export { KafkaBuilder } from './kafka_builder.js'
 export { type KafkaContainerStatus, KafkaListenerContainer } from './listener_container.js'
 export { kafkaBinder, type KafkaBinderOptions } from './messaging_binder.js'
