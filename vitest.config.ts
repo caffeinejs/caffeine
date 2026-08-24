@@ -11,6 +11,7 @@ export default defineConfig({
       './view/vitest.config.ts',
       './static/vitest.config.ts',
       './openapi/vitest.config.ts',
+      './messaging/vitest.config.ts',
       './kafka/vitest.config.ts',
       './fetchy/fetchy/vitest.config.ts',
       './fetchy/fetchy-logging-interceptor/vitest.config.ts',

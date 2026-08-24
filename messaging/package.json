@@ -1,7 +1,7 @@
 {
-  "name": "@caffeinejs/kafka",
+  "name": "@caffeinejs/messaging",
   "version": "0.0.0",
-  "description": "Spring-Kafka-style messaging integration for CaffeineJS",
+  "description": "Portable multi-binder messaging layer for CaffeineJS",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -24,8 +24,6 @@
   },
   "dependencies": {
     "@caffeinejs/di": "*",
-    "@caffeinejs/messaging": "*",
-    "@caffeinejs/std": "*",
-    "@platformatic/kafka": "^2.9.0"
+    "@caffeinejs/std": "*"
   }
 }

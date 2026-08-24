@@ -20,6 +20,9 @@
       "path": "./openapi/tsconfig.build.json"
     },
     {
+      "path": "./messaging/tsconfig.build.json"
+    },
+    {
       "path": "./kafka/tsconfig.build.json"
     },
     {
