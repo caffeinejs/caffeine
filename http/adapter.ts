@@ -20,7 +20,6 @@ import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { Responder } from './response.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
-import { StaticConfigurer } from './static/index.js'
 import { joinPaths } from './internal/paths/index.js'
 
 export class FastifyAdapter<
@@ -90,7 +89,6 @@ export class FastifyAdapter<
       new OIDCConfigurer(),
       new CacheConfigurer(),
       new CacheInvalidateConfigurer(),
-      new StaticConfigurer(),
       ...this.#container.getManyOptional<FeatureConfigurer>(FeatureConfigurer),
     ])
 

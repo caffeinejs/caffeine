@@ -14,6 +14,7 @@
   "dependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
+    "@caffeinejs/static": "*",
     "@caffeinejs/std": "*",
     "@caffeinejs/view": "*",
     "@fastify/cookie": "^11.0.0",

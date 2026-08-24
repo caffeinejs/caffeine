@@ -9,6 +9,7 @@ export default defineConfig({
       './std/vitest.config.ts',
       './http/vitest.config.ts',
       './view/vitest.config.ts',
+      './static/vitest.config.ts',
       './openapi/vitest.config.ts',
       './kafka/vitest.config.ts',
       './fetchy/fetchy/vitest.config.ts',

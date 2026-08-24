@@ -48,6 +48,9 @@
       "path": "./view"
     },
     {
+      "path": "./static"
+    },
+    {
       "path": "./openapi"
     },
     {

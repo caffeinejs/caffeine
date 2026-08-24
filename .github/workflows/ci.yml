@@ -68,6 +68,7 @@ jobs:
             std/dist \
             http/dist \
             view/dist \
+            static/dist \
             openapi/dist \
             testing/dist \
             cli/dist \
@@ -97,6 +98,7 @@ jobs:
             std/dist/
             http/dist/
             view/dist/
+            static/dist/
             openapi/dist/
             testing/dist/
             cli/dist/

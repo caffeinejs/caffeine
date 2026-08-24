@@ -12,6 +12,7 @@
     "std",
     "http",
     "view",
+    "static",
     "openapi",
     "kafka",
     "fetchy/*",

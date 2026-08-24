@@ -10,6 +10,7 @@
     "paths": {
       "@caffeinejs/di": ["./di/index.ts"],
       "@caffeinejs/http": ["./http/index.ts"],
+      "@caffeinejs/static": ["./static/index.ts"],
       "@caffeinejs/view": ["./view/index.ts"]
     }
   },

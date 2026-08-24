@@ -6,6 +6,7 @@ import handlebars from 'handlebars'
 import type { Container } from '@caffeinejs/di'
 import { Claim, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { EnvProvider } from '@caffeinejs/std/config'
+import { staticPlugin } from '@caffeinejs/static'
 import { viewPlugin } from '@caffeinejs/view'
 import { GITHUB_SESSION_COOKIE, JWT_SECRET, githubConfig } from './features/auth/index.js'
 import { appConfigSchema } from './config.js'
@@ -23,7 +24,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie)
 
-  return createWebApplication(fastifyAdapterFactory(server), { container }, viewPlugin())
+  return createWebApplication(fastifyAdapterFactory(server), { container }, viewPlugin(), staticPlugin())
     .view(v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
     .static(s => s.serve(publicRoot, { prefix: '/static' }))
     .authentication(auth => auth
@@ -70,9 +71,9 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
       })
       .default('scheme'),
     )
-    // Config + server come after the plugin methods (.view) because .config() re-types the builder and drops the
-    // view-plugin augment. Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in
-    // the schema).
+    // Config + server come after the plugin methods (.view, .static) because .config() re-types the builder and
+    // drops the plugin augments. Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT
+    // (defaults in the schema).
     .config(appConfigSchema, c => c.source(new EnvProvider({ prefix: 'PETSTORE_' })))
     .server(s => s.config(c => c.server))
     .build()

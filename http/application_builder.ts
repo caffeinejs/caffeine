@@ -15,7 +15,6 @@ import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { CacheBuilder } from './cache/cache_builder.js'
 import { ServerBuilder } from './server/index.js'
-import { StaticBuilder } from './static/index.js'
 
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
@@ -26,7 +25,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   #authBuilder: AuthenticationBuilder | undefined
   #cacheBuilder: CacheBuilder | undefined
   #serverBuilder: ServerBuilder<unknown> | undefined
-  #staticBuilder: StaticBuilder | undefined
   readonly #authzBuilder: AuthorizationBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
@@ -85,17 +83,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     }
 
     configure(this.#serverBuilder as ServerBuilder<TConfig>)
-
-    return this
-  }
-
-  static(configure: (staticFiles: StaticBuilder) => void): this {
-    if (this.#staticBuilder == null) {
-      this.#staticBuilder = new StaticBuilder()
-      this.addService(this.#staticBuilder)
-    }
-
-    configure(this.#staticBuilder)
 
     return this
   }

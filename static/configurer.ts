@@ -1,5 +1,5 @@
 import fastifyStatic from '@fastify/static'
-import { FeatureConfigurer, type ServerPhaseContext } from '../feature_configurer.js'
+import { FeatureConfigurer, type ServerPhaseContext } from '@caffeinejs/http'
 import { kStaticMounts } from './keys.js'
 import type { StaticMount } from './static.js'
 

@@ -1,5 +1,6 @@
 import { kServiceConfigure, type Service } from '@caffeinejs/std'
-import type { ServiceKit } from '../service.js'
+import type { ServiceKit } from '@caffeinejs/http'
+import { StaticConfigurer } from './configurer.js'
 import { kStaticMounts } from './keys.js'
 import type { StaticMount } from './static.js'
 
@@ -26,6 +27,10 @@ export class StaticBuilder implements Service {
 
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
     kit.container.bind(kStaticMounts).toValue(this.#mounts).internal()
+    // Self-register the server-phase configurer so the adapter discovers it via
+    // getManyOptional(FeatureConfigurer) — http no longer hardcodes it.
+    kit.container.bind(StaticConfigurer).toClass(StaticConfigurer).extends()
+
     return Promise.resolve()
   }
 }
