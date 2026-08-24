@@ -1,4 +1,4 @@
-import { kAspectLabel, kAspectPointcuts, type Pointcut } from '../aop.js'
+import { $aop, kAspectLabel, kAspectPointcuts, type Pointcut, type PointcutBuilders } from '../aop.js'
 import { ErrInvalidDecorator } from '../errors.js'
 import type { Injection } from '../injection.js'
 import { Scopes } from '../scope.js'
@@ -14,13 +14,18 @@ import { defineInjectable } from './registrar/index.js'
  * Use `@Order(n)` on the aspect class to control weaving order when multiple aspects target the
  * same method. Lower value = outermost wrapper (executed first in onion model).
  *
+ * @param pointcuts - Either an array of pointcut descriptors built via `$aop.forClass` or
+ * `$aop.pointcut`, or a builder function that receives the builtin pointcut builders so no
+ * `$aop` import is needed.
  * @param deps - Constructor injections for this aspect class. Pass `[]` for no dependencies.
- * @param pointcuts - One or more pointcut descriptors built via `$aop.forClass` or `$aop.pointcut`.
  *
  * @example
  * ```ts
  * @Aspect([$aop.forClass(UserService, 'findUser')])
  * class LoggingAspect implements MethodAspect<UserService> { ... }
+ *
+ * @Aspect(p => [p.forClass(UserService, 'findUser')])
+ * class LoggingAspect2 implements MethodAspect<UserService> { ... }
  *
  * @Order(1)
  * @Aspect(
@@ -32,7 +37,17 @@ import { defineInjectable } from './registrar/index.js'
  * }
  * ```
  */
-export function Aspect(pointcuts: Pointcut[], deps: Injection[] = []) {
+export function Aspect(
+  pointcuts: Pointcut[],
+  deps?: Injection[],
+): (aspectClass: Ctor, context: ClassDecoratorContext) => void
+export function Aspect(
+  build: (p: PointcutBuilders) => Pointcut[],
+  deps?: Injection[],
+): (aspectClass: Ctor, context: ClassDecoratorContext) => void
+export function Aspect(arg: Pointcut[] | ((p: PointcutBuilders) => Pointcut[]), deps: Injection[] = []) {
+  const pointcuts = typeof arg === 'function' ? arg($aop) : arg
+
   return (aspectClass: Ctor, context: ClassDecoratorContext): void => {
     if (pointcuts.length === 0) {
       throw new ErrInvalidDecorator(

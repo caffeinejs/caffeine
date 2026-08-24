@@ -456,3 +456,5 @@ export const $aop = {
   matchLabel,
   matchTag,
 }
+
+export type PointcutBuilders = typeof $aop

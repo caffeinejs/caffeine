@@ -51,6 +51,33 @@ describe('AOP', function () {
     })
   })
 
+  describe('pointcut builder function', function () {
+    const beforeSpy = vi.fn()
+
+    @Aspect(p => [p.forClass(Calculator, 'add')])
+    @Profile('aop-builder-fn')
+    class BuilderFnAspect implements MethodAspect<Calculator> {
+      before(jp: JoinPoint<Calculator>) {
+        beforeSpy([...jp.args])
+      }
+    }
+    void BuilderFnAspect
+
+    it('should resolve pointcuts from a builder function receiving $aop', async function () {
+      beforeSpy.mockClear()
+
+      const di = new CaffeineIoC({ profiles: ['aop-builder-fn'] })
+      di.bind(Calculator).toSelf()
+      await di.init()
+
+      const result = di.get(Calculator).add(1, 2)
+
+      expect(beforeSpy).toHaveBeenCalledOnce()
+      expect(beforeSpy).toHaveBeenCalledWith([1, 2])
+      expect(result).toBe(3)
+    })
+  })
+
   describe('afterReturn hook', function () {
     @Aspect([$aop.forClass(Calculator, 'add')])
     @Profile('aop-after-return')
