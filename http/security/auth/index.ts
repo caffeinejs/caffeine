@@ -18,6 +18,7 @@ export {
   ScryptPasswordHasher,
   UserProvider,
 } from './credentials/index.js'
+export type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { JWTAuthenticationHandler, type JWTAuthenticationOptions, jwtServiceKey } from './jwt/index.js'
 export {
@@ -28,7 +29,7 @@ export {
   type JWTServiceOptions,
   type JWTSignOptions,
 } from './jwt/index.js'
-export { kOIDCMeta } from './keys.js'
+export { kAuthSchemeDescriptors, kOIDCMeta } from './keys.js'
 export {
   googleOIDCPreset,
   OIDCAuthenticationHandler,
@@ -54,5 +55,6 @@ export {
   RefreshTokenService,
   RefreshTokenStore,
 } from './refresh/index.js'
+export { AuthenticationSchemeProvider } from './scheme_provider.js'
 export { AuthenticationService } from './service.js'
 export { AuthenticateResult, AuthenticationTicket } from './ticket.js'

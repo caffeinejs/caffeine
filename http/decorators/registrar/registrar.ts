@@ -36,11 +36,17 @@ export function configureRoute(ctx: ClassMemberDecoratorContext, mut: (spec: Rou
   mut(route)
 }
 
-export function configureRouter(
-  _ctx: ClassDecoratorContext,
-  key: Function,
-  mut: (spec: RouterBuilder) => void,
-): void {
+/**
+ * Registers (or amends) the router of `key` without a decorator context.
+ *
+ * The registry is a module-level WeakMap that only decorators reach, which leaves a package building routes
+ * programmatically — `@caffeinejs/openapi` mounting its own document endpoints — with nowhere to put them. Going
+ * through here means those routes are indistinguishable from decorated ones by the time `buildRouting` reads them,
+ * so they inherit authentication, authorization, and error handling instead of reimplementing each.
+ *
+ * Must run before `buildRouting`, i.e. no later than a service's `[kServiceConfigure]`.
+ */
+export function registerRouter(key: Function, mut: (spec: RouterBuilder) => void): void {
   let cur = RouterRegistry.get(key)
   if (!cur) {
     cur = new RouterBuilder()
@@ -50,25 +56,29 @@ export function configureRouter(
   mut(cur)
 }
 
+export function configureRouter(
+  _ctx: ClassDecoratorContext,
+  key: Function,
+  mut: (spec: RouterBuilder) => void,
+): void {
+  registerRouter(key, mut)
+}
+
 export function configureRouterAndRegisterRoutes(
   ctx: ClassDecoratorContext,
   key: Function,
   mut: (spec: RouterBuilder) => void,
 ): void {
-  let cur = RouterRegistry.get(key)
-  if (!cur) {
-    cur = new RouterBuilder()
-    RouterRegistry.set(key, cur)
-  }
+  registerRouter(key, cur => {
+    cur.routes(Array.from(RouteRegistry.get(ctx.metadata)?.values() ?? []) as RouteBuilder[])
 
-  cur.routes(Array.from(RouteRegistry.get(ctx.metadata)?.values() ?? []) as RouteBuilder[])
+    const errorHandlers = ControllerErrorHandlerRegistry.get(ctx.metadata)
+    if (errorHandlers?.length) {
+      cur.errorHandlers(errorHandlers)
+    }
 
-  const errorHandlers = ControllerErrorHandlerRegistry.get(ctx.metadata)
-  if (errorHandlers?.length) {
-    cur.errorHandlers(errorHandlers)
-  }
-
-  mut(cur)
+    mut(cur)
+  })
 }
 
 export function getRouter(key: Function): RouterBuilder | undefined {

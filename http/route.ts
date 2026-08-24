@@ -18,6 +18,11 @@ export interface Router<R = FastifyRequest> {
   controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>
   errorHandlers?: Map<Ctor<Error>, string | symbol>
   catchBy?: CatchByMap
+  /**
+   * Class-level metadata a decorator attached to the controller, keyed by symbol. The runtime reads none of it;
+   * it is the extension slot a package outside http uses to carry its own annotations through routing.
+   */
+  extras?: Map<symbol, unknown>
 }
 
 export interface Route<R = FastifyRequest> {

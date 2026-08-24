@@ -3,6 +3,7 @@ import { kServiceConfigure, type Service } from '@caffeinejs/std'
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
 import type { ServiceKit } from '../../service.js'
+import type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
 import type { AuthenticationHandler } from './handler.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
@@ -12,7 +13,7 @@ import { ForwardAuthenticationHandler } from './forward/forward.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { JWTService } from './jwt/jwt_service.js'
 import { jwtServiceKey } from './jwt/keys.js'
-import { kAuthOpts, kOIDCMeta } from './keys.js'
+import { kAuthOpts, kAuthSchemeDescriptors, kOIDCMeta } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
 import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
@@ -45,6 +46,9 @@ export class AuthenticationBuilder implements Service {
   readonly #schemes: Map<string, Key<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
   readonly #oidcHandlers: OAuthCallbackHandler[] = []
+  // How each scheme expects credentials, recorded here because this is the one place that knows: `addStrategy`
+  // receives a handler it cannot interrogate, and by configure time everything is a Provider wrapper.
+  readonly #descriptors: Map<string, AuthSchemeDescriptor> = new Map()
 
   #mapper: PrincipalMapper | string | symbol | undefined
   #credentials: CredentialsServiceOptions | undefined
@@ -59,6 +63,14 @@ export class AuthenticationBuilder implements Service {
   addStrategy(name: string, keyOrHandler: Key<AuthenticationHandler> | AuthenticationHandler): this {
     this.#schemes.set(name, keyOrHandler)
     return this
+  }
+
+  /**
+   * Records how `name` expects credentials. Called by the `addX` methods, which are the only ones that know;
+   * a scheme registered through a bare `addStrategy` stays undescribed.
+   */
+  #describe(name: string, descriptor: AuthSchemeDescriptor): void {
+    this.#descriptors.set(name, descriptor)
   }
 
   addJWTBearer(opts: (opts: JWTAuthenticationOptionsBuilder) => void): this
@@ -79,6 +91,8 @@ export class AuthenticationBuilder implements Service {
 
     const builder = new JWTAuthenticationOptionsBuilder()
     optsFn(builder)
+
+    this.#describe(name, { kind: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
 
     return this.addStrategy(name, new JWTAuthenticationHandler(name, builder.build()))
   }
@@ -102,6 +116,8 @@ export class AuthenticationBuilder implements Service {
     const builder = new BasicAuthenticationOptionsBuilder()
     optsFn(builder)
 
+    this.#describe(name, { kind: 'http', scheme: 'basic' })
+
     return this.addStrategy(name, new BasicAuthenticationHandler(name, builder.build()))
   }
 
@@ -123,8 +139,11 @@ export class AuthenticationBuilder implements Service {
 
     const builder = new CookieAuthenticationOptionsBuilder()
     optsFn(builder)
+    const resolved = builder.build()
 
-    return this.addStrategy(name, new CookieAuthenticationHandler(name, builder.build()))
+    this.#describe(name, { kind: 'apiKey', in: 'cookie', name: resolved.cookieName })
+
+    return this.addStrategy(name, new CookieAuthenticationHandler(name, resolved))
   }
 
   /**
@@ -155,15 +174,33 @@ export class AuthenticationBuilder implements Service {
     // zero-arg form works once the user has bound their store to the container.
     const builder = new OpaqueTokenAuthenticationOptionsBuilder()
     optsFn?.(builder)
+    const resolved = builder.build()
 
-    return this.addStrategy(name, new OpaqueTokenAuthenticationHandler(name, builder.build()))
+    this.#describe(name, {
+      kind: 'http',
+      scheme: (resolved.scheme ?? 'Bearer').toLowerCase(),
+      description: 'Opaque token, verified against a server-side store',
+    })
+
+    return this.addStrategy(name, new OpaqueTokenAuthenticationHandler(name, resolved))
   }
 
   addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
     const builder = new OIDCAuthenticationOptionsBuilder()
     configure(builder)
-    const handler = new OIDCAuthenticationHandler(name, builder.build(name))
+    const options = builder.build(name)
+    const handler = new OIDCAuthenticationHandler(name, options)
     this.#oidcHandlers.push(handler)
+
+    // Only a discovery URL yields a usable `openIdConnect` scheme; a provider configured with explicit
+    // endpoints is an OAuth 2.0 authorization-code flow as far as any consumer can tell.
+    this.#describe(name, options.discoveryURL !== undefined
+      ? { kind: 'openIdConnect', openIdConnectURL: options.discoveryURL }
+      : {
+          kind: 'oauth2',
+          flows: authorizationCodeFlow(options.authorizationEndpoint, options.tokenEndpoint, options.scopes),
+        })
+
     return this.addStrategy(name, handler)
   }
 
@@ -187,6 +224,17 @@ export class AuthenticationBuilder implements Service {
     // so resolving here as well would validate and default the options twice.
     const handler = new OAuth2AuthenticationHandler(name, builder.toOptions())
     this.#oidcHandlers.push(handler)
+
+    // Read back off the handler: it resolved the raw options, so this is what the flow actually uses.
+    this.#describe(name, {
+      kind: 'oauth2',
+      flows: authorizationCodeFlow(
+        handler.options.authorizationEndpoint,
+        handler.options.tokenEndpoint,
+        handler.options.scopes,
+      ),
+    })
+
     return this.addStrategy(name, handler)
   }
 
@@ -205,6 +253,16 @@ export class AuthenticationBuilder implements Service {
       githubOAuth2Preset({ ...builder.toOptions(), ...preset }),
     )
     this.#oidcHandlers.push(handler)
+
+    this.#describe(name, {
+      kind: 'oauth2',
+      flows: authorizationCodeFlow(
+        handler.options.authorizationEndpoint,
+        handler.options.tokenEndpoint,
+        handler.options.scopes,
+      ),
+    })
+
     return this.addStrategy(name, handler)
   }
 
@@ -315,7 +373,9 @@ export class AuthenticationBuilder implements Service {
     }
 
     kit.container.bind(AuthenticationService).toValue(service).internal()
+    kit.container.bind(AuthenticationSchemeProvider).toValue(schemeProvider).internal()
     kit.container.bind(kAuthOpts).toValue(options).internal()
+    kit.container.bind(kAuthSchemeDescriptors).toValue(this.#descriptors).internal()
 
     // Share each JWT scheme's service (verify + sign) for injection into token-issuing controllers.
     // Every JWT scheme is reachable via its keyed token; the default JWT scheme (or the first, if the
@@ -461,4 +521,27 @@ function isConstructable<T>(value: unknown): value is Ctor<T> {
 
 function isKey<T>(value: Key<T> | T): value is Key<T> {
   return typeof value === 'string' || typeof value === 'symbol' || isConstructable(value)
+}
+
+/**
+ * Builds the authorization-code flow of an {@link AuthSchemeDescriptor}, or nothing when the endpoints are not
+ * both known — a half-described flow is worse than an absent one, because a consumer would render a broken
+ * "Authorize" button rather than omit it.
+ */
+function authorizationCodeFlow(
+  authorizationEndpoint: string | undefined,
+  tokenEndpoint: string | undefined,
+  scopes: readonly string[] | undefined,
+): AuthSchemeFlows | undefined {
+  if (authorizationEndpoint === undefined || tokenEndpoint === undefined) {
+    return undefined
+  }
+
+  return {
+    authorizationCode: {
+      authorizationURL: authorizationEndpoint,
+      tokenURL: tokenEndpoint,
+      scopes: scopes ?? [],
+    },
+  }
 }

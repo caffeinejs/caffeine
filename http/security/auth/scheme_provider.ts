@@ -15,6 +15,14 @@ export class AuthenticationSchemeProvider {
     return this.#schemes.get(name)
   }
 
+  /**
+   * Every registered scheme name, in registration order. Lets a caller reject a reference to a scheme that was
+   * never registered — a typo that would otherwise authorize nothing and say nothing.
+   */
+  get schemeNames(): readonly string[] {
+    return [...this.#schemes.keys()]
+  }
+
   get defaultAuthenticateScheme(): string {
     return this.#options.defaultAuthenticateScheme
   }

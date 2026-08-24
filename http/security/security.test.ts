@@ -412,6 +412,55 @@ describe('auth configurer (fake handler)', () => {
 // ---------------------------------------------------------------------------
 
 describe('authorization policies', () => {
+  // Regression: `schemes` used to count toward the "no requirements were declared" test, so naming one skipped
+  // the default authenticated-user policy and compiled to an empty policy that admitted everyone. Adding a
+  // scheme must never be the thing that removes the requirement to be authenticated.
+  it('@Authorize({ schemes }) still requires an authenticated user', async () => {
+    @Authorize({ schemes: ['default'] })
+    @Controller('/authz-schemes-only')
+    class SchemesOnlyController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [SchemesOnlyController]
+
+    const handler = new FakeAuthHandler()
+    handler.result = AuthenticateResult.none()
+
+    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    const app = builder.build()
+    await app.ready()
+
+    const res = await app.fetch('/authz-schemes-only')
+    expect(res.status).toBe(401)
+  })
+
+  it('@Authorize({ schemes }) admits an authenticated user', async () => {
+    @Authorize({ schemes: ['default'] })
+    @Controller('/authz-schemes-only-ok')
+    class SchemesOnlyOKController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [SchemesOnlyOKController]
+
+    const handler = new FakeAuthHandler()
+    handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
+
+    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    const app = builder.build()
+    await app.ready()
+
+    const res = await app.fetch('/authz-schemes-only-ok')
+    expect(res.status).toBe(200)
+  })
+
   it('named policy via @Authorize({ policy }) enforces requirements', async () => {
     @Authorize({ policy: 'AdminOnly' })
     @Controller('/authz-named-policy')

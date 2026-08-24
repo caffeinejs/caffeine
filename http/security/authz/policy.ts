@@ -86,12 +86,12 @@ export function compileRoutePolicy(
   const routerPolicies = normalizePolicy(routerOptions.policy)
   const routePolicies = normalizePolicy(routeOptions.policy)
 
-  const routerEmpty = !routerPolicies.length
-    && !routerOptions.roles?.length
-    && !routerOptions.schemes?.length
-  const routeEmpty = !routePolicies.length
-    && !routeOptions.roles?.length
-    && !routeOptions.schemes?.length
+  // `schemes` is deliberately not part of this test. It selects *which* scheme authenticates and issues the
+  // challenge; it states no requirement of its own, and nothing below turns it into one. Counting it here made
+  // `@Authorize({ schemes: [...] })` skip the default policy and then compile to an empty one — so naming a
+  // scheme, which reads as tightening the rule, silently let every anonymous request through.
+  const routerEmpty = !routerPolicies.length && !routerOptions.roles?.length
+  const routeEmpty = !routePolicies.length && !routeOptions.roles?.length
 
   if (routerEmpty && routeEmpty) {
     return new AuthzRouteService([newPolicyEvaluator(options.authorizeDecoratorDefaultPolicy, handlers)])

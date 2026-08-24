@@ -35,6 +35,9 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
       controller: container.wrap(key),
       errorHandlers: buildErrorHandlerMap(router.errorHandlers, key, new Set(router.routes.map(r => r.handler))),
       catchBy: buildCatchByMap(container, router.catchBy, refName(key)),
+      // Kept on the router rather than merged down: class-level metadata describes the controller, and
+      // `mergeValue`'s array-concat/Map-union semantics would mangle arbitrary symbol payloads on the way.
+      extras: router.extras,
       routes: router.routes.map(route => {
         const config = new Map<string, unknown>()
         if (router.config) {
@@ -78,8 +81,10 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
         return {
           path: route.path,
           method: route.method,
-          accept: route.accept ?? router.accept,
-          contentType: route.contentType ?? router.contentType,
+          // `??` cannot express this: `toRoute()` defaults these to `[]` and `''`, never nullish, so a
+          // controller-level @Consumes/@Produces would never reach a route that declares none of its own.
+          accept: route.accept.length > 0 ? route.accept : router.accept,
+          contentType: route.contentType !== '' ? route.contentType : router.contentType,
           parameters: route.parameters,
           handler: route.handler,
           schema: route.schema,
