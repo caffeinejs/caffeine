@@ -1,7 +1,8 @@
 import { Context } from '../../../context.js'
 import type { AuthenticationHandler } from '../handler.js'
+import { ErrAuthConfiguration, ErrAuthSchemeNotFound } from '../errors.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
-import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
+import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
 
 export type AuthenticationHandlerSelector
   = (ctx: Context, scheme: string) => Promise<string> | string
@@ -22,11 +23,11 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
     return this.#selectScheme(ctx).then(handler => handler.authenticate(ctx))
   }
 
-  challenge(ctx: Context, properties?: object): Promise<void> {
+  challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
     return this.#selectScheme(ctx).then(handler => handler.challenge(ctx, properties))
   }
 
-  forbid(ctx: Context, properties?: object): Promise<void> {
+  forbid(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
     return this.#selectScheme(ctx).then(handler => handler.forbid(ctx, properties))
   }
 
@@ -34,19 +35,19 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
     return this.#selectScheme(ctx).then(handler => handler.persist(ctx, ticket))
   }
 
-  revoke(ctx: Context, properties?: object): Promise<void> {
+  revoke(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
     return this.#selectScheme(ctx).then(handler => handler.revoke(ctx, properties))
   }
 
   async #selectScheme(ctx: Context): Promise<AuthenticationHandler> {
     const scheme = await Promise.resolve(this.#selector(ctx, this.#schemeProvider.defaultAuthenticateScheme))
     if (!scheme) {
-      throw new Error('No scheme selected.')
+      throw new ErrAuthConfiguration('Cannot forward authentication: the selector returned no scheme')
     }
 
     const handler = this.#schemeProvider.schemeFor(scheme)
     if (!handler) {
-      throw new Error('No handler found for scheme.')
+      throw new ErrAuthSchemeNotFound(scheme, this.#schemeProvider.schemeNames)
     }
 
     return handler.get()

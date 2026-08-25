@@ -14,6 +14,61 @@ export const MIN_SESSION_SECRET_LENGTH = 32
 export const DEFAULT_HTTP_TIMEOUT_MS = 5000
 
 /**
+ * How an unauthenticated request is challenged by a scheme whose challenge is a redirect.
+ *
+ * A redirect to a login page or an identity provider is only followable by a browser navigation: `fetch`
+ * and `XMLHttpRequest` follow it themselves, land somewhere that sends no CORS headers, and the caller
+ * sees an opaque network error instead of "you are not signed in". So the default picks per request.
+ *
+ * - `auto` — redirect a navigation, answer 401 to anything else.
+ * - `redirect` — always redirect, whatever the caller is.
+ * - `status` — always 401. For an API with no browser surface at all.
+ */
+export type ChallengeMode = 'auto' | 'redirect' | 'status'
+
+/** The request headers `shouldRedirectChallenge` reads. Keeps it independent of any particular Context. */
+export interface ChallengeRequestHeaders {
+  secFetchMode: string | undefined
+  secFetchDest: string | undefined
+  accept: string | undefined
+}
+
+/** Reads the headers {@link shouldRedirectChallenge} needs off a request context. */
+export function challengeHeaders(ctx: {
+  req: { header(key: string): string | undefined }
+}): ChallengeRequestHeaders {
+  return {
+    secFetchMode: ctx.req.header('sec-fetch-mode'),
+    secFetchDest: ctx.req.header('sec-fetch-dest'),
+    accept: ctx.req.header('accept'),
+  }
+}
+
+/**
+ * Whether a challenge should redirect rather than answer a status.
+ *
+ * Fetch Metadata (`Sec-Fetch-Mode` / `Sec-Fetch-Dest`) is the direct answer and every current browser
+ * sends it, so when present it decides — including when it says *no*. `Accept` is consulted only in its
+ * absence, which is real: browsers omit Fetch Metadata outside secure contexts, so plain-http development
+ * depends on the fallback. Consulting `Accept` unconditionally instead would redirect htmx and any `fetch`
+ * asking for an HTML fragment, both of which send `Sec-Fetch-Mode: cors` alongside `Accept: text/html`.
+ *
+ * ASP.NET negotiates the same way in `CookieAuthenticationEvents.OnRedirectToLogin`, though it sniffs the
+ * legacy `X-Requested-With` header, which `fetch` never sends.
+ */
+export function shouldRedirectChallenge(mode: ChallengeMode, headers: ChallengeRequestHeaders): boolean {
+  if (mode !== 'auto') {
+    return mode === 'redirect'
+  }
+
+  if (headers.secFetchMode !== undefined || headers.secFetchDest !== undefined) {
+    return headers.secFetchMode === 'navigate' || headers.secFetchDest === 'document'
+  }
+
+  return headers.accept?.includes('text/html') ?? false
+}
+
+/**
  * Resolves the default for `secureCookie` from the callback URL.
  *
  * Production is secure by default while local `http://localhost` development still works.

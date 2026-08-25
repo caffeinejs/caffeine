@@ -5,6 +5,7 @@ import type { Router } from './route.js'
 import { Feats } from './feats.js'
 import type { ServiceKit, Services } from './service.js'
 import { buildRouting } from './routing/index.js'
+import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
@@ -104,6 +105,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
         enabled: this.#feats.authentication,
         coordinator: this.container.getOptional(AuthenticationService),
         options: this.container.getOptional(kAuthOpts),
+        schemes: this.container.getOptional(AuthenticationSchemeProvider),
       },
       oidc: this.container.getOptional<OIDCMeta>(kOIDCMeta),
       errorHandling: this.container.get(ErrorHandlerProvider),

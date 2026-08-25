@@ -8,6 +8,15 @@ export interface JWTAuthenticationOptions {
   secret: string | Uint8Array | KeyLike
   jwtOptions?: JWTVerifyOptions
   roleClaimType?: string
+  /**
+   * Includes the validation failure's description in the `WWW-Authenticate` challenge.
+   *
+   * RFC 6750 §3 `error_description`. On by default, matching ASP.NET's `IncludeErrorDetails`: the text
+   * describes the *token* the caller presented ("exp claim timestamp check failed"), which they are
+   * already in a position to know, and without it a client cannot tell a expired token from a malformed
+   * one. Turn it off where even that is more than an unauthenticated caller should learn.
+   */
+  includeErrorDetails?: boolean
   claimMapper?: (payload: JWTPayload) => Claim[]
   onTokenValidated?: (ctx: Context, payload: Record<string, unknown>) => Promise<void> | void
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
@@ -19,15 +28,20 @@ export interface JWTAuthenticationOptions {
 }
 
 export class JWTAuthenticationOptionsBuilder {
+  // `issuer` and `audience` are absent rather than explicitly `undefined`: `JWTService.verify` spreads
+  // these over the service defaults, and a key present with an `undefined` value *erases* the default
+  // instead of deferring to it.
   readonly #options: JWTAuthenticationOptions = {
     secret: '',
     jwtOptions: {
       algorithms: ['HS256'],
-      issuer: undefined,
-      audience: undefined,
     },
     roleClaimType: 'roles',
+    includeErrorDetails: true,
   }
+
+  #anyIssuer = false
+  #anyAudience = false
 
   // Source of truth for the shared JWTService: keys, algorithm and the issue-time claims. `secret` /
   // `keyPair` also mirror onto the verify path (`#options.secret` / `jwtOptions`).
@@ -100,6 +114,12 @@ export class JWTAuthenticationOptionsBuilder {
     return this
   }
 
+  /** Whether the 401 challenge names why the token was rejected (RFC 6750 `error_description`). Default on. */
+  includeErrorDetails(include: boolean): this {
+    this.#options.includeErrorDetails = include
+    return this
+  }
+
   claimMapper(claimMapper: (payload: JWTPayload) => Claim[]): this {
     this.#options.claimMapper = claimMapper
     return this
@@ -125,7 +145,47 @@ export class JWTAuthenticationOptionsBuilder {
     return this
   }
 
+  /**
+   * Accepts a token from any issuer.
+   *
+   * The waiver exists so that turning the check off is a decision on the record rather than the
+   * consequence of not having configured one. Reach for it only where the signing key is genuinely
+   * single-purpose and single-tenant.
+   */
+  allowAnyIssuer(): this {
+    this.#anyIssuer = true
+    return this
+  }
+
+  /** Accepts a token minted for any audience. See {@link allowAnyIssuer} for when that is defensible. */
+  allowAnyAudience(): this {
+    this.#anyAudience = true
+    return this
+  }
+
   build(): JWTAuthenticationOptions {
+    // `jose` skips a check whose expected value is undefined, so leaving these unset means the scheme
+    // verifies the signature and nothing about who the token was minted by or for. With a symmetric
+    // secret — the default — that admits every token signed by anything else holding the same key: a
+    // sibling service, a different tenant, a token issued for an unrelated audience.
+    //
+    // ASP.NET refuses the same configuration: `TokenValidationParameters` defaults `ValidateIssuer` and
+    // `ValidateAudience` to true and throws (IDX10204 / IDX10206) when the expected value is missing, so
+    // opting out has to be written down. This is that, at build time instead of first request.
+    const jwt = this.#options.jwtOptions
+    if (!this.#anyIssuer && jwt?.issuer === undefined) {
+      throw new Error(
+        'Cannot build JWTAuthenticationOptions: an "issuer" is required — call issuer(...) to pin the '
+        + 'token issuer, or allowAnyIssuer() to accept tokens from any issuer',
+      )
+    }
+    if (!this.#anyAudience && jwt?.audience === undefined) {
+      throw new Error(
+        'Cannot build JWTAuthenticationOptions: an "audience" is required — call audience(...) to pin the '
+        + 'token audience, or allowAnyAudience() to accept tokens minted for any audience',
+      )
+    }
+
     this.#options.serviceOptions = this.#service
     return this.#options
   }

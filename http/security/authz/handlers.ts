@@ -17,17 +17,26 @@ export class AuthenticatedUserHandler extends AuthzRequirementHandler<Authentica
   }
 }
 
+/**
+ * Satisfied when the user holds **any** of the listed roles.
+ *
+ * `RequireRole("Admin", "Manager")` reads as "an admin or a manager", which is both the natural reading
+ * and what ASP.NET's `RolesAuthorizationRequirement` does — it returns on the first match. Requiring all
+ * of them is still expressible, and more legibly: separate `role()` calls become separate requirements,
+ * and a policy's requirements are ANDed. That is also how a controller-level `@Authorize` combines with a
+ * method-level one, so the two levels keep tightening rather than widening each other.
+ */
 export class RoleHandler extends AuthzRequirementHandler<RoleRequirement> {
   get kind(): string {
     return 'role'
   }
 
   async handle(ctx: Context, user: Principal, requirement: RoleRequirement): Promise<AuthzPolicyResult> {
-    if (requirement.roles.every(role => user.isInRole(role))) {
+    if (requirement.roles.some(role => user.isInRole(role))) {
       return { ok: true }
     }
 
-    return { ok: false, reason: 'User is not in all of the required roles' }
+    return { ok: false, reason: 'User is in none of the required roles' }
   }
 }
 

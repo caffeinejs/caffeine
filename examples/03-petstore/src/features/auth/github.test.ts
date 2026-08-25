@@ -44,23 +44,27 @@ describe('authentication wiring', () => {
     expect(location).toContain('https://github.com/login/oauth/authorize')
     expect(location).toContain('client_id=')
     expect(location).toContain('state=')
-    expect(setCookie(res, 'petstore_gh_state')).toBeTruthy()
+    // Named per flow, so concurrent sign-ins do not overwrite one another's state.
+    const state = new URL(location).searchParams.get('state')!
+    expect(setCookie(res, `petstore_gh_state.${state}`)).toBeTruthy()
   })
 
   it('completes the flow: login → callback → session cookie → authenticated /me', async () => {
     stubGithub()
 
-    // 1. Initiate: capture the state parameter and its sealed cookie from the real challenge.
+    // 1. Initiate: capture the state parameter and its sealed cookie from the real challenge. The cookie
+    // is named after this flow's own state, so two sign-ins in flight cannot clobber each other.
     const login = await app.fetch('/login/github', { headers: NAVIGATION })
     const state = new URL(login.headers.get('location')!).searchParams.get('state')!
-    const stateCookie = setCookie(login, GITHUB_STATE_COOKIE)
+    const stateCookieName = `${GITHUB_STATE_COOKIE}.${state}`
+    const stateCookie = setCookie(login, stateCookieName)
     expect(state).toBeTruthy()
     expect(stateCookie).toBeTruthy()
 
     // 2. Callback: GitHub redirects back with the code + matching state; the handler exchanges the
     // code (stubbed), reads the user, and writes the session cookie.
     const callback = await app.fetch(`/login/github/callback?code=fake-code&state=${state}`, {
-      headers: { cookie: `${GITHUB_STATE_COOKIE}=${stateCookie}` },
+      headers: { cookie: `${stateCookieName}=${stateCookie}` },
     })
     expect(callback.status).toBe(302)
     const sessionCookie = setCookie(callback, 'petstore_gh_session')

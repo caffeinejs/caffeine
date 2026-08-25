@@ -1,5 +1,6 @@
 import type { Provider } from '@caffeinejs/di'
 import type { Context } from '../../../context.js'
+import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import type { OpaqueTokenAuthenticationOptions } from './opaque_options.js'
@@ -26,14 +27,8 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
   }
 
   async authenticate(ctx: Context): Promise<AuthenticateResult> {
-    const authHeader = ctx.req.header('authorization')
-    const prefix = `${this.#scheme} `
-    if (!authHeader?.startsWith(prefix)) {
-      return AuthenticateResult.none()
-    }
-
-    const token = authHeader.slice(prefix.length).trim()
-    if (token === '') {
+    const token = parseAuthorizationHeader(ctx.req.header('authorization'), this.#scheme)
+    if (token === undefined) {
       return AuthenticateResult.none()
     }
 

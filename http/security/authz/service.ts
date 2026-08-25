@@ -1,6 +1,7 @@
 import { Context } from '../../context.js'
 import { ErrHTTPForbidden } from '../../error/http.js'
 import type { Principal } from '../index.js'
+import { ErrAuthzPolicyNotFound } from './errors.js'
 import { AuthzResult, PolicyEvaluator } from './policy.js'
 
 export class AuthorizationService {
@@ -22,7 +23,7 @@ export class AuthorizationService {
   ): Promise<AuthzResult> {
     const evaluator = this.#evaluators.get(policyName)
     if (!evaluator) {
-      throw new Error(`Cannot evaluate policy: "${policyName}" not found`)
+      throw new ErrAuthzPolicyNotFound(policyName, [...this.#evaluators.keys()])
     }
 
     return evaluator(ctx, user, resource)

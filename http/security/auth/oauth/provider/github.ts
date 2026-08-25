@@ -54,9 +54,23 @@ export function githubOAuth2Preset(
     subjectClaim: 'id',
     claimActions: {
       ...rest.claimActions,
-      // Authorization policies look for `sub`; without this the subject exists on the ticket
-      // but never as a claim, so `@Authorize` cannot see who signed in.
-      map: { sub: 'id', ...rest.claimActions?.map },
+      // The claim mapping is an allowlist, so this is the whole claim set a GitHub sign-in produces
+      // unless the caller adds to it. Chosen to match what ASP.NET's `AddGitHub` maps, minus the
+      // `urn:github:*` names: identity plus the handful of display fields an application actually
+      // renders. Everything else GitHub returns from `/user` — roughly thirty fields, mostly long
+      // `*_url` strings — stays out, which is both the security boundary and what keeps the sealed
+      // session cookie under the browser's ~4 KB per-cookie limit.
+      //
+      // `sub` in particular: authorization policies look for it, and without it the subject exists on
+      // the ticket but never as a claim, so `@Authorize` cannot see who signed in.
+      map: {
+        sub: 'id',
+        login: 'login',
+        name: 'name',
+        email: 'email',
+        avatar_url: 'avatar_url',
+        ...rest.claimActions?.map,
+      },
     },
     // `?? ` alone is not enough: a resolved option bag arrives with `scopes: []`, which is not
     // nullish, and an empty scope means GitHub grants nothing — no `user:email`, so the email

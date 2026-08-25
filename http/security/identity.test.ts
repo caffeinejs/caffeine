@@ -123,14 +123,16 @@ describe('the anonymous user', () => {
     expect(anon.isInRole('anything')).toBe(false)
   })
 
-  // `newAnonymousUser()` hands out one shared instance to every anonymous request. That is safe only while
-  // it stays immutable, and `addIdentity` throwing is the entire guard — so both facts are pinned here. If
-  // the throw were ever relaxed, one request could add an identity that every other anonymous request sees.
-  it('is a single shared instance', () => {
-    expect(newAnonymousUser()).toBe(newAnonymousUser())
+  // A fresh instance per call. It used to hand out one shared object to every anonymous request in the
+  // process, which was safe only because `addIdentity` throws — one relaxed override away from a request
+  // being able to add an identity that every other anonymous request could see.
+  it('is a fresh instance each call', () => {
+    expect(newAnonymousUser()).not.toBe(newAnonymousUser())
   })
 
-  it('refuses to accept an identity, which is what keeps sharing it safe', () => {
+  // Kept as defence in depth: nothing shares the instance now, but an anonymous principal that could
+  // acquire an identity would still be a contradiction.
+  it('refuses to accept an identity', () => {
     expect(() => newAnonymousUser().addIdentity(new Identity('x', true, [])))
       .toThrow('Anonymous user cannot add identities')
   })

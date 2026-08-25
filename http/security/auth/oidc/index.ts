@@ -57,4 +57,12 @@ export interface OIDCHandlerEntry {
 
 export interface OIDCMeta {
   handlers: OIDCHandlerEntry[]
+  /**
+   * OAuth strategies that no request can reach unless a route names them.
+   *
+   * The builder can tell which strategies are neither the default nor selectable through a Forward
+   * default, but not which routes name schemes — only the router phase sees those. So it reports the
+   * candidates and the configurer, which does see the routes, decides whether any are genuinely dead.
+   */
+  unreachableCandidates: string[]
 }

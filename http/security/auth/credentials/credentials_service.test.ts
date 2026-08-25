@@ -58,4 +58,35 @@ describe('CredentialsService', () => {
     expect(await svc.verifyCredentials('alice', 'secret')).not.toBeNull()
     expect(await svc.verifyCredentials('alice', 'bad')).toBeNull()
   })
+
+  // Login is the only moment the plaintext is in hand, so it is the only moment a stored hash can be
+  // upgraded. Without this, raising the scrypt cost left every existing user on the old parameters.
+  describe('attemptWithRehash', () => {
+    it('flags a hash produced with weaker parameters than the current hasher', async () => {
+      const weak = new ScryptPasswordHasher({ N: 1024 })
+      const strong = new ScryptPasswordHasher({ N: 4096 })
+      const passwordHash = await weak.hash('secret')
+      const svc = new CredentialsService(providerFor({ id: 'u1', passwordHash }), strong)
+
+      const result = await svc.attemptWithRehash('alice', 'secret')
+
+      expect(result).not.toBeNull()
+      expect(result!.needsRehash).toBe(true)
+      expect(result!.userID).toBe('u1')
+    })
+
+    it('does not flag a hash already at the current parameters', async () => {
+      const passwordHash = await hasher.hash('secret')
+      const svc = new CredentialsService(providerFor({ id: 'u1', passwordHash }), hasher)
+
+      expect((await svc.attemptWithRehash('alice', 'secret'))!.needsRehash).toBe(false)
+    })
+
+    it('returns null for a bad password, with nothing to rehash', async () => {
+      const passwordHash = await hasher.hash('secret')
+      const svc = new CredentialsService(providerFor({ id: 'u1', passwordHash }), hasher)
+
+      expect(await svc.attemptWithRehash('alice', 'wrong')).toBeNull()
+    })
+  })
 })

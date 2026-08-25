@@ -136,9 +136,11 @@ describe('compileRoutePolicy — the default policy', () => {
 })
 
 describe('compileRoutePolicy — roles', () => {
-  it('requires every role named on a single decorator', async () => {
+  // One decorator naming several roles is an "any of these" gate, like `[Authorize(Roles = "a,b")]`.
+  it('admits any of the roles named on a single decorator', async () => {
     expect((await authorize(undefined, { roles: ['a', 'b'] }, withRoles('a', 'b'))).result?.ok).toBe(true)
-    expect((await authorize(undefined, { roles: ['a', 'b'] }, withRoles('a'))).result?.ok).toBe(false)
+    expect((await authorize(undefined, { roles: ['a', 'b'] }, withRoles('a'))).result?.ok).toBe(true)
+    expect((await authorize(undefined, { roles: ['a', 'b'] }, withRoles('c'))).result?.ok).toBe(false)
   })
 
   // Controller roles and method roles become two separate requirements, so they are ANDed. Nothing pinned
@@ -155,7 +157,7 @@ describe('compileRoutePolicy — roles', () => {
     const { result } = await authorize(undefined, { roles: ['admin'] }, withRoles('viewer'))
 
     expect(result?.ok).toBe(false)
-    expect(result?.reason).toBe('User is not in all of the required roles')
+    expect(result?.reason).toBe('User is in none of the required roles')
     expect(result?.failedRequirement).toMatchObject({ kind: 'role' })
   })
 })
@@ -217,7 +219,7 @@ describe('compileRoutePolicy — named policies', () => {
 
   it('throws at compile time for an unknown policy name', () => {
     expect(() => compileRoutePolicy(options(), new Map(), handlers(), undefined, { policy: 'ghost' }))
-      .toThrow(/evaluator for "ghost" not found/)
+      .toThrow(/no policy is registered under that name/)
   })
 
   it('throws at compile time for a requirement no handler covers', () => {
@@ -229,6 +231,6 @@ describe('compileRoutePolicy — named policies', () => {
     })
 
     expect(() => compileRoutePolicy(authorization, new Map(), handlers(), undefined, {}))
-      .toThrow(/handler for requirement "no-such-kind" not found/)
+      .toThrow(/no handler is registered for requirement kind/)
   })
 })

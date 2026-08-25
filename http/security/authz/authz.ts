@@ -8,7 +8,13 @@ import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 import { AuthorizationService } from './service.js'
 
 export interface AuthorizationOptions {
+  /** What a bare `@Authorize` means. ASP.NET's `AuthorizationOptions.DefaultPolicy`. */
   authorizeDecoratorDefaultPolicy: AuthzPolicy
+  /**
+   * Applied to routes that carry no `@Authorize` / `@Roles` at all. Unset by default, so such routes are
+   * open. ASP.NET's `AuthorizationOptions.FallbackPolicy`.
+   */
+  fallbackPolicy?: AuthzPolicy
 }
 
 export class AuthorizationBuilder implements Service {
@@ -17,6 +23,8 @@ export class AuthorizationBuilder implements Service {
   #authzDecoratorPolicy: AuthzPolicy = new PolicyBuilder()
     .requireAuthenticated()
     .build()
+
+  #fallbackPolicy: AuthzPolicy | undefined
 
   addPolicy(policy: AuthzPolicy): this
   addPolicy(name: string, configure: (builder: PolicyBuilder) => void): this
@@ -57,6 +65,40 @@ export class AuthorizationBuilder implements Service {
     return this
   }
 
+  /**
+   * Gates every route that carries no `@Authorize` / `@Roles` of its own.
+   *
+   * Off by default, because turning it on changes what an *undecorated* route means and that has to be a
+   * deliberate posture rather than something a dependency bump introduces. Turning it on is the difference
+   * between "a route is public unless someone remembered to protect it" and "a route is protected unless
+   * someone declared it public" — the second is the only one where forgetting is safe. `@AllowAnonymous`
+   * is the opt-out, exactly as `[AllowAnonymous]` is for ASP.NET's `FallbackPolicy`.
+   *
+   * It does not affect decorated routes: those already state their own rule, and a bare `@Authorize`
+   * continues to mean {@link authorizeDecoratorDefaultPolicy}.
+   */
+  fallbackPolicy(policy: AuthzPolicy): this
+  fallbackPolicy(configure: (builder: PolicyBuilder) => void): this
+  fallbackPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
+    if (typeof policyOrConfigure === 'function') {
+      const builder = new PolicyBuilder()
+      policyOrConfigure(builder)
+
+      this.#fallbackPolicy = builder.build()
+
+      return this
+    }
+
+    this.#fallbackPolicy = policyOrConfigure
+
+    return this
+  }
+
+  /** Shorthand for the common posture: every undecorated route requires an authenticated user. */
+  requireAuthenticatedByDefault(): this {
+    return this.fallbackPolicy(p => p.requireAuthenticated())
+  }
+
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
     kit.container.bind(AuthenticatedUserHandler)
       .toSelf()
@@ -94,6 +136,7 @@ export class AuthorizationBuilder implements Service {
       .bind(kAuthzOpts)
       .toValue({
         authorizeDecoratorDefaultPolicy: this.#authzDecoratorPolicy,
+        fallbackPolicy: this.#fallbackPolicy,
       })
       .lifetime(Scopes.SINGLETON)
       .internal()

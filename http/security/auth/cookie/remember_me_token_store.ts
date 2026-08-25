@@ -14,6 +14,33 @@ export interface RememberMeRecord {
   tokenHash: string
   /** Absolute expiry, epoch seconds. */
   expiresAt: number
+  /**
+   * `sha256` of the token this series held before the most recent rotation, base64url.
+   *
+   * Rotation is single-use, so presenting a superseded token normally means the token was stolen and the
+   * whole series is revoked. But a browser issues requests in parallel — a document and the assets it
+   * references — and every one of them carries the cookie as it was when the batch started. Without this,
+   * the first response to rotate turns each of its siblings into an apparent theft and signs the user out.
+   *
+   * So a superseded token is accepted, without rotating again, while it is still within the grace window
+   * (see {@link RememberMeRecord.rotatedAt}). Anything older than the window is theft and is treated as
+   * such. Absent on a freshly created series, which has nothing to supersede.
+   */
+  previousTokenHash?: string
+  /** When {@link RememberMeRecord.previousTokenHash} was superseded, epoch seconds. */
+  rotatedAt?: number
+}
+
+/** The state a rotation writes. Grouped rather than positional: four bare arguments invite transposition. */
+export interface RememberMeRotation {
+  /** `sha256` of the newly minted token. */
+  tokenHash: string
+  /** `sha256` of the token being superseded — the record's `tokenHash` before this call. */
+  previousTokenHash: string
+  /** When this rotation happened, epoch seconds. */
+  rotatedAt: number
+  /** The extended absolute expiry, epoch seconds. */
+  expiresAt: number
 }
 
 /**
@@ -35,8 +62,14 @@ export abstract class RememberMeTokenStore {
   /** Look a series up. Return null for unknown, expired, or revoked series. */
   abstract findBySeries(series: string): Promise<RememberMeRecord | null> | RememberMeRecord | null
 
-  /** Rotate the token hash (and extend expiry) for an existing series. */
-  abstract updateToken(series: string, tokenHash: string, expiresAt: number): Promise<void> | void
+  /**
+   * Rotate the token hash for an existing series, extending its expiry.
+   *
+   * Persist every field of {@link RememberMeRotation}: `previousTokenHash` and `rotatedAt` are what let
+   * the guard tell a parallel in-flight request apart from a replayed stolen token, and dropping them
+   * turns ordinary concurrent traffic into forced sign-outs.
+   */
+  abstract updateToken(series: string, rotation: RememberMeRotation): Promise<void> | void
 
   /** Revoke a single remember credential (sign-out, or a detected token theft). */
   abstract remove(series: string): Promise<void> | void

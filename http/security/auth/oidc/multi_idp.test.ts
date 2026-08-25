@@ -4,11 +4,13 @@ import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
+import { kOIDCMeta } from '../keys.js'
 import type { ServiceKit } from '../../../service.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import { OIDCAuthenticationHandler } from './handler.js'
 import { resolveOIDCOptions, sanitizeSchemeName } from './options.js'
+import type { OIDCMeta } from './index.js'
 
 const SESSION_SECRET = 'multi-idp-test-secret-at-least-32ch!!'
 const GOOGLE = 'https://accounts.google.example.com'
@@ -42,7 +44,7 @@ function makeCtx(cookies: Record<string, string> = {}) {
 }
 
 /** Minimal ServiceKit double — configure only touches the container and the feature flags. */
-function makeKit(): ServiceKit {
+function makeKit(): { kit: ServiceKit, bindings: Map<unknown, unknown> } {
   const bindings = new Map<unknown, unknown>()
   const binding = (key: unknown) => ({
     toValue: (v: unknown) => {
@@ -50,19 +52,29 @@ function makeKit(): ServiceKit {
       return { internal: () => undefined }
     },
   })
-  return {
+  const kit = {
     container: {
       bind: binding,
       wrap: (v: unknown) => ({ get: () => v }),
     },
     feats: { toggleAuthentication: () => undefined },
   } as unknown as ServiceKit
+
+  return { kit, bindings }
 }
 
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  await builder[kServiceConfigure](makeKit())
+  await builder[kServiceConfigure](makeKit().kit)
+}
+
+async function configureAndReadOIDCMeta(build: (b: AuthenticationBuilder) => void): Promise<OIDCMeta> {
+  const builder = new AuthenticationBuilder()
+  build(builder)
+  const { kit, bindings } = makeKit()
+  await builder[kServiceConfigure](kit)
+  return bindings.get(kOIDCMeta) as OIDCMeta
 }
 
 /**
@@ -196,12 +208,37 @@ describe('startup validation', () => {
     })).rejects.toThrow(/"Google" and "Okta"/)
   })
 
-  it('T-MULTI-07: rejects several OIDC strategies without a Forward default', async () => {
+  // Previously rejected outright, on the grounds that only the default scheme is authenticated. That
+  // stopped being true once a route could name its own schemes — `/login/google` and `/login/okta`, each
+  // naming one, is a working configuration and ASP.NET has no such rule. A strategy nothing reaches is
+  // still reported, but as a start-up warning from the configurer that can actually see the routes.
+  it('T-MULTI-07: accepts several OIDC strategies without a Forward default', async () => {
     await expect(configure(b => {
       addOIDC(b, 'Google', GOOGLE)
       addOIDC(b, 'Okta', OKTA)
       b.default('Google')
-    })).rejects.toThrow(/require a Forward default authenticate scheme/)
+    })).resolves.toBeUndefined()
+  })
+
+  it('T-MULTI-07b: reports the strategies that no request could reach', async () => {
+    const meta = await configureAndReadOIDCMeta(b => {
+      addOIDC(b, 'Google', GOOGLE)
+      addOIDC(b, 'Okta', OKTA)
+      b.default('Google')
+    })
+
+    // Google is the default; Okta depends on a route naming it, which the builder cannot see.
+    expect(meta.unreachableCandidates).toEqual(['Okta'])
+  })
+
+  it('T-MULTI-07c: reports nothing when a Forward default can select any of them', async () => {
+    const meta = await configureAndReadOIDCMeta(b => {
+      addOIDC(b, 'Google', GOOGLE)
+      addOIDC(b, 'Okta', OKTA)
+      b.forward('auth', () => 'Google').default('auth')
+    })
+
+    expect(meta.unreachableCandidates).toEqual([])
   })
 
   it('T-MULTI-08: accepts several OIDC strategies behind a Forward default', async () => {
@@ -285,7 +322,7 @@ describe('Forward wiring through configure', () => {
     builder.addStrategy('Target', target as never)
     builder.addStrategy('auth', forward)
     builder.default('auth')
-    await builder[kServiceConfigure](makeKit())
+    await builder[kServiceConfigure](makeKit().kit)
 
     // Before the fix this threw reading `defaultAuthenticateScheme` of undefined.
     await expect(forward.authenticate(makeCtx())).resolves.toMatchObject({ succeeded: true })

@@ -101,7 +101,7 @@ async function buildApp() {
   container.bind(RefreshTokenStore).toValue(store)
   const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
   builder.authentication(a => a
-    .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m'))
+    .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())
     .addRefreshTokens(o => o
       .refreshTTL('30d')
       .resolve(sub => (sub === 'alice' ? alicePrincipal() : null))))

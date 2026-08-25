@@ -1,4 +1,5 @@
 import type { Context } from '../../../context.js'
+import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import type { BasicAuthenticationOptions } from './basic_options.js'
@@ -12,12 +13,10 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
   }
 
   async authenticate(ctx: Context): Promise<AuthenticateResult> {
-    const authHeader = ctx.req.header('authorization')
-    if (!authHeader?.startsWith('Basic ')) {
+    const encoded = parseAuthorizationHeader(ctx.req.header('authorization'), 'Basic')
+    if (encoded === undefined) {
       return AuthenticateResult.none()
     }
-
-    const encoded = authHeader.slice(6).trim()
 
     let decoded: string
     try {

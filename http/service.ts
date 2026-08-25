@@ -1,6 +1,7 @@
 import type { ServiceKit as BaseServiceKit } from '@caffeinejs/std'
 import { Feats } from './feats.js'
 import { AuthenticationOptions } from './security/auth/builder.js'
+import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
 import { AuthenticationService } from './security/auth/service.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 import type { ErrorHandlerProvider } from './error/error.js'
@@ -17,6 +18,8 @@ export interface Services {
     enabled: boolean
     coordinator: AuthenticationService | undefined
     options: AuthenticationOptions | undefined
+    /** The registered schemes, so start-up can reject a route naming one that does not exist. */
+    schemes: AuthenticationSchemeProvider | undefined
   }
   oidc?: OIDCMeta
   errorHandling: ErrorHandlerProvider

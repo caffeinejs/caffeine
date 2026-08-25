@@ -6,7 +6,7 @@ import { UserProvider } from '../credentials/index.js'
 import { AuthenticationTicket } from '../ticket.js'
 import { CookieAuthenticationHandler } from './cookie.js'
 import { CookieAuthenticationOptionsBuilder } from './cookie_options.js'
-import { RememberMeTokenStore, type RememberMeRecord } from './remember_me_token_store.js'
+import { RememberMeTokenStore, type RememberMeRecord, type RememberMeRotation } from './remember_me_token_store.js'
 import { parseRemember } from './_remember.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
@@ -15,11 +15,13 @@ class FakeStore extends RememberMeTokenStore {
   readonly map = new Map<string, RememberMeRecord>()
   create = vi.fn((r: RememberMeRecord) => { this.map.set(r.series, { ...r }) })
   findBySeries = vi.fn((s: string) => this.map.get(s) ?? null)
-  updateToken = vi.fn((s: string, tokenHash: string, expiresAt: number) => {
+  updateToken = vi.fn((s: string, rotation: RememberMeRotation) => {
     const r = this.map.get(s)
     if (r) {
-      r.tokenHash = tokenHash
-      r.expiresAt = expiresAt
+      r.tokenHash = rotation.tokenHash
+      r.previousTokenHash = rotation.previousTokenHash
+      r.rotatedAt = rotation.rotatedAt
+      r.expiresAt = rotation.expiresAt
     }
   })
 
@@ -80,7 +82,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     const { handler, store } = makeHandler()
     const { ctx, jar } = makeCtx()
 
-    await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe: true }))
+    await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
 
     expect(store.create).toHaveBeenCalledOnce()
     expect(store.create.mock.calls[0][0].subject).toBe('u1')
@@ -94,7 +96,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     const { handler, store } = makeHandler()
     const { ctx, jar } = makeCtx()
 
-    await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe: false }))
+    await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: false }))
 
     expect(store.create).not.toHaveBeenCalled()
     expect(jar[REMEMBER]).toBeUndefined()
@@ -104,7 +106,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
   it('a valid session cookie short-circuits: the remember store is never touched', async () => {
     const { handler, store } = makeHandler()
     const { ctx, jar } = makeCtx()
-    await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe: false }))
+    await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: false }))
 
     const result = await handler.authenticate(makeCtx({ [SESSION]: jar[SESSION] }).ctx)
     expect(result.succeeded).toBe(true)
@@ -116,7 +118,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
 
     // Sign in with remember-me, then drop the session cookie to force the remember path.
     const signIn = makeCtx()
-    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe: true }))
+    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
     const rememberBefore = signIn.jar[REMEMBER]
     const seriesBefore = parseRemember(rememberBefore)!
 
@@ -140,7 +142,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
   it('detects token theft: known series with a wrong token removes the series and fails', async () => {
     const { handler, store } = makeHandler()
     const signIn = makeCtx()
-    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe: true }))
+    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
     const series = parseRemember(signIn.jar[REMEMBER])!.series
 
     const { ctx, jar } = makeCtx({ [REMEMBER]: `${series}:forged-token` })
@@ -155,7 +157,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
   it('rejects an expired remember record and removes it', async () => {
     const { handler, store } = makeHandler()
     const signIn = makeCtx()
-    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe: true }))
+    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
     const remember = signIn.jar[REMEMBER]
     const series = parseRemember(remember)!.series
     store.map.get(series)!.expiresAt = Math.floor(Date.now() / 1000) - 10 // expire it
@@ -174,7 +176,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
   it('revoke removes the series server-side and clears both cookies', async () => {
     const { handler, store } = makeHandler()
     const signIn = makeCtx()
-    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe: true }))
+    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
     const series = parseRemember(signIn.jar[REMEMBER])!.series
 
     const { ctx, deleteCookie } = makeCtx({ [SESSION]: signIn.jar[SESSION], [REMEMBER]: signIn.jar[REMEMBER] })

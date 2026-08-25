@@ -155,7 +155,7 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
     const { ctx, cookie } = makeCtx({
       url: CALLBACK_PATH,
       cookies: {
-        __oidc_state: stateCookie,
+        '__oidc_state.st': stateCookie,
         ...(existingSessionCookie ? { __oidc_session: existingSessionCookie } : {}),
       },
       query: { code: 'auth-code', state: 'st' },
@@ -432,7 +432,7 @@ describe('ticket key generation', () => {
       )
       const { ctx } = makeCtx({
         url: CALLBACK_PATH,
-        cookies: { __oidc_state: stateCookie },
+        cookies: { '__oidc_state.st': stateCookie },
         query: { code: 'c', state: 'st' },
       })
       await handler.processCallback(ctx)
@@ -490,7 +490,7 @@ describe('RemoteAuthenticationTicket shape', () => {
     )
     const { ctx } = makeCtx({
       url: CALLBACK_PATH,
-      cookies: { __oidc_state: stateCookie },
+      cookies: { '__oidc_state.st': stateCookie },
       query: { code: 'c', state: 'st' },
     })
     await handler.processCallback(ctx)
@@ -548,7 +548,7 @@ describe('RP-initiated logout', () => {
     )
     const { ctx, cookie } = makeCtx({
       url: CALLBACK_PATH,
-      cookies: { __oidc_state: stateCookie },
+      cookies: { '__oidc_state.st': stateCookie },
       query: { code: 'c', state: 'st' },
     })
     await handler.processCallback(ctx)

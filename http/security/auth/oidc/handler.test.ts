@@ -48,6 +48,7 @@ function makeCtx(overrides: Partial<{
   redirect: ReturnType<typeof vi.fn>
   status: ReturnType<typeof vi.fn>
   header: ReturnType<typeof vi.fn>
+  body: ReturnType<typeof vi.fn>
 } {
   const cookies = overrides.cookies ?? {}
   const query = overrides.query ?? {}
@@ -59,6 +60,7 @@ function makeCtx(overrides: Partial<{
   const redirect = vi.fn().mockReturnThis()
   const header = vi.fn().mockReturnThis()
   const status = vi.fn(() => ctx)
+  const body = vi.fn().mockReturnThis()
 
   const ctx = {
     req: {
@@ -72,9 +74,10 @@ function makeCtx(overrides: Partial<{
     redirect,
     status,
     header,
+    body,
   } as unknown as Context
 
-  return { ctx, cookie, deleteCookie, redirect, status, header }
+  return { ctx, cookie, deleteCookie, redirect, status, header, body }
 }
 
 const DISCOVERY_DOCUMENT = {
@@ -204,7 +207,8 @@ describe('OIDCAuthenticationHandler', () => {
 
       expect(cookie).toHaveBeenCalledOnce()
       const [name, , opts] = cookie.mock.calls[0] as [string, string, Record<string, unknown>]
-      expect(name).toBe('__oidc_state')
+      // Named per flow: the suffix is this challenge's own `state`, so concurrent sign-ins do not collide.
+      expect(name).toMatch(/^__oidc_state\.[A-Za-z0-9_-]+$/)
       expect(opts.httpOnly).toBe(true)
       expect(opts.sameSite).toBe('lax')
     })
@@ -266,7 +270,7 @@ describe('OIDCAuthenticationHandler', () => {
       // The state cookie must still be set — the hook shapes the response, it does not
       // replace the flow.
       expect(cookie).toHaveBeenCalledOnce()
-      expect((cookie.mock.calls[0] as [string])[0]).toBe('__oidc_state')
+      expect((cookie.mock.calls[0] as [string])[0]).toMatch(/^__oidc_state\./)
     })
 
     /**
@@ -297,7 +301,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         await handler.challenge(ctx)
 
-        expect((cookie.mock.calls[0] as [string])[0]).toBe('__oidc_state')
+        expect((cookie.mock.calls[0] as [string])[0]).toMatch(/^__oidc_state\./)
       })
 
       it('redirects a caller that asks for HTML, for browsers that send no sec-fetch headers', async () => {
@@ -326,6 +330,67 @@ describe('OIDCAuthenticationHandler', () => {
 
         expect(redirect).not.toHaveBeenCalled()
         expect(status).toHaveBeenCalledWith(401)
+      })
+
+      // Fetch Metadata says "not a navigation", and that must win over Accept. htmx sends exactly this
+      // pair; redirecting it lands a cross-origin provider response the caller can only see as an opaque
+      // network error, which is the failure `auto` exists to prevent.
+      it('does not redirect a cors request that also accepts HTML', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, redirect, status } = makeCtx({
+          headers: { 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', accept: 'text/html' },
+        })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).not.toHaveBeenCalled()
+        expect(status).toHaveBeenCalledWith(401)
+      })
+
+      // Browsers omit Fetch Metadata outside secure contexts, so plain-http development relies on Accept.
+      it('falls back to Accept when Fetch Metadata is absent', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, redirect } = makeCtx({ headers: { accept: 'text/html,application/xhtml+xml' } })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).toHaveBeenCalledOnce()
+      })
+
+      // `Location` is not CORS-safelisted, so a SPA on another origin than its API — the deployment
+      // `status` exists for — could not read the URL out of the header it was returned in.
+      it('puts the authorization URL in the body, not only the Location header', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ challengeMode: 'status' }))
+        const { ctx, body, header } = makeCtx({ headers: {} })
+
+        await handler.challenge(ctx)
+
+        const [payload] = body.mock.calls[0] as [{ error: string, loginURL: string }]
+        expect(payload.error).toBe('authentication_required')
+        expect(payload.loginURL).toContain(`${ISSUER}/auth`)
+        expect(header).toHaveBeenCalledWith('access-control-expose-headers', 'location')
+      })
+
+      // Two tabs starting a sign-in against the same provider used to share one fixed cookie name, so the
+      // second challenge overwrote the first's state and the first callback died with "state mismatch" —
+      // a flow the user started, killed by an unrelated one.
+      it('gives concurrent sign-ins their own state cookie', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+
+        const first = makeCtx({ headers: { 'sec-fetch-mode': 'navigate' } })
+        const second = makeCtx({ headers: { 'sec-fetch-mode': 'navigate' } })
+        await handler.challenge(first.ctx)
+        await handler.challenge(second.ctx)
+
+        const nameOf = (c: typeof first) => (c.cookie.mock.calls[0] as [string])[0]
+        expect(nameOf(first)).not.toBe(nameOf(second))
+
+        // Each name carries the state its own authorization URL sent, which is what lets the callback pick
+        // the right one out of a jar holding both.
+        const stateOf = (c: typeof first) =>
+          new URL((c.redirect.mock.calls[0] as [string])[0]).searchParams.get('state')
+        expect(nameOf(first)).toBe(`__oidc_state.${stateOf(first)}`)
+        expect(nameOf(second)).toBe(`__oidc_state.${stateOf(second)}`)
       })
 
       it('challengeMode "redirect" redirects a caller that would otherwise get a 401', async () => {
@@ -586,7 +651,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st', iss: 'https://attacker.example.com' },
         })
 
@@ -600,7 +665,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st', iss: ISSUER },
         })
 
@@ -614,7 +679,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -633,7 +698,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -647,7 +712,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st', iss: ISSUER },
         })
 
@@ -664,7 +729,7 @@ describe('OIDCAuthenticationHandler', () => {
 
           const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
           const { ctx } = makeCtx({
-            cookies: { __oidc_state: stateCookieJWT },
+            cookies: { '__oidc_state.st': stateCookieJWT },
             query: { code: 'c', state: 'st', iss: 'https://attacker.example.com' },
           })
 
@@ -762,7 +827,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const callback = async () => {
           const { ctx } = makeCtx({
-            cookies: { __oidc_state: await makeStateCookie('n') },
+            cookies: { '__oidc_state.st': await makeStateCookie('n') },
             query: { code: 'c', state: 'st' },
           })
           await handler.processCallback(ctx)
@@ -810,7 +875,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const callback = async () => {
           const { ctx } = makeCtx({
-            cookies: { __oidc_state: await makeStateCookie('n') },
+            cookies: { '__oidc_state.st': await makeStateCookie('n') },
             query: { code: 'c', state: 'st' },
           })
           await handler.processCallback(ctx)
@@ -885,7 +950,7 @@ describe('OIDCAuthenticationHandler', () => {
           jwksResolver: resolver ? () => resolver : jwksResolver,
         }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: await makeStateCookie(nonce) },
+          cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
           query: { code: 'c', state: 'st' },
         })
         return handler.processCallback(ctx)
@@ -1061,7 +1126,7 @@ describe('OIDCAuthenticationHandler', () => {
           ...options,
         }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: await makeStateCookie(nonce) },
+          cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
           query: { code: 'c', state: 'st' },
         })
         return handler.processCallback(ctx)
@@ -1122,7 +1187,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       async function runCallback(handler: OIDCAuthenticationHandler, nonce: string) {
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: await makeStateCookie(nonce) },
+          cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
           query: { code: 'c', state: 'st' },
         })
         await handler.processCallback(ctx)
@@ -1181,7 +1246,7 @@ describe('OIDCAuthenticationHandler', () => {
           getClaimsFromUserInfoEndpoint: true,
         }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: await makeStateCookie('n') },
+          cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1195,7 +1260,7 @@ describe('OIDCAuthenticationHandler', () => {
           getClaimsFromUserInfoEndpoint: true,
         }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: await makeStateCookie('n') },
+          cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1210,7 +1275,7 @@ describe('OIDCAuthenticationHandler', () => {
           getClaimsFromUserInfoEndpoint: true,
         }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: await makeStateCookie('n') },
+          cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1224,7 +1289,7 @@ describe('OIDCAuthenticationHandler', () => {
           getClaimsFromUserInfoEndpoint: true,
         }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: await makeStateCookie('n') },
+          cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1247,7 +1312,7 @@ describe('OIDCAuthenticationHandler', () => {
           claimActions: { remove: ['birthdate'] },
         }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1270,7 +1335,7 @@ describe('OIDCAuthenticationHandler', () => {
           claimMapper: () => [new Claim('sub', 'u1', ISSUER), new Claim('sid', 'session-1', ISSUER)],
         }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1299,7 +1364,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1320,7 +1385,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1336,7 +1401,7 @@ describe('OIDCAuthenticationHandler', () => {
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx, cookie, redirect } = makeCtx({
         url: CALLBACK_PATH + '?code=auth-code&state=st',
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'auth-code', state: 'st' },
       })
 
@@ -1358,12 +1423,31 @@ describe('OIDCAuthenticationHandler', () => {
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx, deleteCookie } = makeCtx({
         url: CALLBACK_PATH,
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'code', state: 'st' },
       })
 
       await handler.processCallback(ctx)
-      expect(deleteCookie).toHaveBeenCalledWith('__oidc_state', expect.any(Object))
+      expect(deleteCookie).toHaveBeenCalledWith('__oidc_state.st', expect.any(Object))
+    })
+
+    // A failed callback used to leave a live state cookie for the rest of its 600s TTL, so the flow it
+    // belonged to stayed replayable after it had already been rejected.
+    it('clears the state cookie even when the callback fails', async () => {
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const stateCookieJWT = await encodeState(
+        { state: 'st', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: 'https://other.example' },
+        SESSION_SECRET,
+        SCHEME,
+      )
+      const { ctx, deleteCookie } = makeCtx({
+        url: CALLBACK_PATH,
+        cookies: { '__oidc_state.st': stateCookieJWT },
+        query: { code: 'c', state: 'st' },
+      })
+
+      await expect(handler.processCallback(ctx)).rejects.toThrow()
+      expect(deleteCookie).toHaveBeenCalledWith('__oidc_state.st', expect.any(Object))
     })
 
     it('throws when code query param is missing', async () => {
@@ -1386,7 +1470,9 @@ describe('OIDCAuthenticationHandler', () => {
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
         url: CALLBACK_PATH,
-        cookies: { __oidc_state: stateCookieJWT },
+        // Planted under the name the *query* state derives, so the lookup succeeds and the sealed-vs-parameter
+        // comparison is what rejects it — the per-flow cookie name would otherwise fail this earlier.
+        cookies: { '__oidc_state.wrong': stateCookieJWT },
         query: { code: 'c', state: 'wrong' },
       })
       await expect(handler.processCallback(ctx)).rejects.toThrow('state mismatch')
@@ -1399,7 +1485,7 @@ describe('OIDCAuthenticationHandler', () => {
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
         url: CALLBACK_PATH,
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1413,7 +1499,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onFail }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1432,7 +1518,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onFail }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1473,7 +1559,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onTokenValidated }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1495,7 +1581,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1528,7 +1614,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1551,7 +1637,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1580,7 +1666,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ...options }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
         await handler.processCallback(ctx)
@@ -1670,7 +1756,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, showPii }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1720,7 +1806,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1742,7 +1828,7 @@ describe('OIDCAuthenticationHandler', () => {
           claimActions: { remove: ['picture', 'birthdate'] },
         }))
         const { ctx, cookie } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1782,7 +1868,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1814,7 +1900,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
         return handler.processCallback(ctx)
@@ -1849,7 +1935,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1872,7 +1958,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('Okta', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
-        cookies: { [handler.stateCookieName]: stateCookieJWT },
+        cookies: { [`${handler.stateCookieName}.st`]: stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1895,7 +1981,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1910,7 +1996,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, onTokenValidated }))
       const { ctx } = makeCtx({
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1928,7 +2014,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx, cookie } = makeCtx({
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 
@@ -1962,7 +2048,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx, redirect } = makeCtx({
-          cookies: { __oidc_state: stateCookieJWT },
+          cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
         })
 
@@ -1995,7 +2081,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, claimMapper }))
       const { ctx, cookie } = makeCtx({
-        cookies: { __oidc_state: stateCookieJWT },
+        cookies: { '__oidc_state.st': stateCookieJWT },
         query: { code: 'c', state: 'st' },
       })
 

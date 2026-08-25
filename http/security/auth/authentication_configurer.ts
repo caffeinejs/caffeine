@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { FeatureConfigurer, type RoutePhaseContext, type RouterPhaseContext } from '../../feature_configurer.js'
-import { newAnonymousUser, type Principal } from '../index.js'
+import { mergePrincipals, newAnonymousUser, type Principal } from '../index.js'
+import { ErrAuthSchemeNotFound } from './errors.js'
 
 /**
  * Authenticates each request, populating `req.user`.
@@ -56,17 +57,33 @@ export class AuthenticationConfigurer extends FeatureConfigurer {
       return
     }
 
+    // A name that resolves to nothing authenticates nobody, and the failure is invisible: the route would
+    // reject every caller with no indication of why. Rejecting here means a typo is a start-up error next
+    // to the decorator that caused it, not a support ticket. Validated even though `authenticate()` now
+    // throws on the same condition — start-up is where a fixed, known-ahead-of-time reference belongs.
+    const registered = auth.schemes
+    if (registered !== undefined) {
+      for (const scheme of schemes) {
+        if (!registered.schemeNames.includes(scheme)) {
+          throw new ErrAuthSchemeNotFound(scheme, registered.schemeNames)
+        }
+      }
+    }
+
     const coordinator = auth.coordinator
     const onRequest = ctx.routeDef.onRequest as Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
 
     onRequest.push(async req => {
       let user: Principal | undefined
 
+      // Every named scheme runs, and every one that succeeds contributes its identities — not the first
+      // that succeeds. A route naming two schemes is describing what it accepts, so which of them the
+      // caller satisfied should not decide which claims the policy gets to see, and a caller presenting
+      // both credentials should not have one silently discarded because of decorator ordering.
       for (const scheme of schemes) {
         const result = await coordinator.authenticate(req.httpContext, scheme)
         if (result.succeeded) {
-          user = result.ticket!.principal
-          break
+          user = mergePrincipals(user, result.ticket!.principal)
         }
       }
 

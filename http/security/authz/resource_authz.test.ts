@@ -64,6 +64,6 @@ describe('resource-based authorization', () => {
   })
 
   it('throws when the policy is unknown', async () => {
-    await expect(authz.authorize(ctxFor(makeUser('u1')), 'Nope', order)).rejects.toThrow('Cannot evaluate policy: "Nope" not found')
+    await expect(authz.authorize(ctxFor(makeUser('u1')), 'Nope', order)).rejects.toThrow(/no policy is registered under that name/)
   })
 })

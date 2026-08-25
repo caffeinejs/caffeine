@@ -82,7 +82,7 @@ function buildApp(configure: (app: ReturnType<typeof newBuilder>) => void = () =
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {}, openapiPlugin())
-    .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET)))
+    .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }
 
 function operationAt(document: OpenAPIDocument, path: string, method = 'get'): OperationObject | undefined {
@@ -272,7 +272,7 @@ describe('openapi endpoint protection', () => {
 
   it('requires authentication once secured, even naming only a scheme', async () => {
     app = buildApp(b => b
-      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET)))
+      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
       .openapi(o => o.docs(false).secure(s => s.schemes('Bearer'))))
     await app.ready()
 
@@ -287,7 +287,7 @@ describe('openapi endpoint protection', () => {
 
   it('enforces roles on the document endpoints', async () => {
     app = buildApp(b => b
-      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET)))
+      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
       .openapi(o => o.docs(false).secure(s => s.schemes('Bearer').roles('ops'))))
     await app.ready()
 
@@ -341,7 +341,7 @@ describe('openapi endpoint protection', () => {
 
   it('rejects a scheme name that was never registered', async () => {
     app = buildApp(b => b
-      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET)))
+      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
       .openapi(o => o.docs(false).secure(s => s.schemes('Nope'))))
 
     await expect(app.ready()).rejects.toThrow(ErrOpenAPIConfiguration)

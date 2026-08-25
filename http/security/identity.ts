@@ -15,7 +15,10 @@ export class Identity {
   ) {
     this.#authenticationType = authenticationType
     this.#authenticated = authenticated
-    this.#claims = claims
+    // Copied, not aliased: `claims` advertises `readonly Claim[]`, and holding the caller's array would
+    // make that a lie — whoever passed it in could keep appending to a principal already handed to
+    // authorization. The reverse leaks too: `addClaim` would mutate an array the caller still holds.
+    this.#claims = [...claims]
     this.#roleClaimType = roleClaimType
   }
 
@@ -100,6 +103,33 @@ export class Principal {
   }
 }
 
+/**
+ * Folds a newly authenticated principal into whatever a route has accumulated so far.
+ *
+ * A route naming several schemes authenticates against every one of them, and each that succeeds
+ * contributes its identities to a single principal — so a policy can require a claim asserted by one
+ * scheme and a role asserted by another. Taking only the first success instead would make the outcome
+ * depend on declaration order and put the two identities permanently out of reach of each other.
+ *
+ * ASP.NET does the same fold in `SecurityHelper.MergeUserPrincipal`, which the authorization middleware
+ * runs over `policy.AuthenticationSchemes`.
+ *
+ * The first principal is the one that survives as the container, and identities are appended in the order
+ * their schemes were named, so `findFirst` resolves ties towards the earlier scheme.
+ */
+export function mergePrincipals(into: Principal | undefined, from: Principal): Principal {
+  if (into === undefined) {
+    return from
+  }
+
+  const merged = new Principal(true, [...into.identities])
+  for (const identity of from.identities) {
+    merged.addIdentity(identity)
+  }
+
+  return merged
+}
+
 class AnonymousUser extends Principal {
   constructor() {
     super(false, [])
@@ -110,8 +140,15 @@ class AnonymousUser extends Principal {
   }
 }
 
-const ANONYMOUS_USER = new AnonymousUser()
-
+/**
+ * A fresh unauthenticated principal.
+ *
+ * A new instance per call rather than a shared singleton. `AnonymousUser.addIdentity` throws, so one
+ * instance is safe today, but it would be a single mutable object standing in for every unauthenticated
+ * request in the process — and the safety rests entirely on that one override staying in place. ASP.NET
+ * constructs `new ClaimsPrincipal(new ClaimsIdentity())` per request for the same reason. Allocating an
+ * empty object on a path that is already doing I/O is not a cost worth that coupling.
+ */
 export function newAnonymousUser(): Principal {
-  return ANONYMOUS_USER
+  return new AnonymousUser()
 }

@@ -155,9 +155,34 @@ export function resolveOAuth2Options(
   }
 
   const secureCookie = input.secureCookie ?? defaultSecureCookie(input.callbackURL!)
+  const roleClaimType = input.roleClaimType ?? 'roles'
+  const subjectClaim = input.subjectClaim ?? 'id'
+
+  // The claim mapping is an allowlist (see `defaultMapClaims`), so an unconfigured strategy would produce
+  // a principal with no claims at all — authenticated, but invisible to every policy that looks for `sub`.
+  // Seeding the subject keeps the zero-config path working without reopening the door: the mapping is
+  // chosen here from `subjectClaim`, never named by the provider.
+  const claimActions = input.claimMapper === undefined
+    ? { ...input.claimActions, map: { sub: subjectClaim, ...input.claimActions?.map } }
+    : input.claimActions
+
+  // Mapping the provider's own field into the role claim is how a user-controlled profile value becomes a
+  // role. It may still be done deliberately — an `enrichUserInfo` that resolves org membership server-side
+  // is the legitimate case — but it must be written down as a claimMapper rather than fall out of a rename.
+  const mappedRole = claimActions?.map?.[roleClaimType]
+  if (mappedRole !== undefined && input.claimMapper === undefined) {
+    throw new ErrOAuthConfiguration(
+      `Cannot configure OAuth2: claimActions.map sends the user info field "${mappedRole}" into the role `
+      + `claim "${roleClaimType}", which lets the provider choose the caller's roles — use a claimMapper `
+      + 'if that is intended',
+    )
+  }
 
   return {
     ...input,
+    roleClaimType,
+    subjectClaim,
+    claimActions,
     clientID: input.clientID!,
     clientSecret: input.clientSecret!,
     sessionSecret: input.sessionSecret!,
@@ -171,12 +196,10 @@ export function resolveOAuth2Options(
     sessionCookieName: input.sessionCookieName ?? cookieName('session', scheme, secureCookie, 'oauth2'),
     stateCookieName: input.stateCookieName ?? cookieName('state', scheme, secureCookie, 'oauth2'),
     sessionCookieTtlSeconds: input.sessionCookieTtlSeconds ?? 3600,
-    roleClaimType: input.roleClaimType ?? 'roles',
     httpTimeoutMs: input.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
     showPii: input.showPii ?? false,
     challengeMode: input.challengeMode ?? 'auto',
     usePKCE: input.usePKCE ?? true,
-    subjectClaim: input.subjectClaim ?? 'id',
   }
 }
 

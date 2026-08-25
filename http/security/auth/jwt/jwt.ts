@@ -2,13 +2,25 @@ import type { JWTPayload } from 'jose'
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
+import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
+import { REGISTERED_CLAIMS } from '../registered_claims.js'
 import type { JWTAuthenticationOptions } from './jwt_options.js'
 import { JWTService } from './jwt_service.js'
 
 export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthenticationOptions> {
   readonly #name: string
   readonly #jwt: JWTService
+
+  /**
+   * Why this request's token was rejected, so `challenge()` can name it.
+   *
+   * The handler is a singleton and the challenge runs later in the same request than the authenticate
+   * that failed, so the reason has to be parked somewhere keyed by the request. ASP.NET keeps the
+   * equivalent on the handler too — its handlers are request-scoped, so a field suffices; here the
+   * `Context` is the request identity and a `WeakMap` lets the entry die with it.
+   */
+  readonly #failures: WeakMap<Context, Error> = new WeakMap()
 
   constructor(name: string, options: JWTAuthenticationOptions, jwt?: JWTService) {
     super(options)
@@ -25,12 +37,10 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
   }
 
   async authenticate(ctx: Context): Promise<AuthenticateResult> {
-    const authHeader = ctx.req.header('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    const token = parseAuthorizationHeader(ctx.req.header('authorization'), 'Bearer')
+    if (token === undefined) {
       return AuthenticateResult.none()
     }
-
-    const token = authHeader.slice(7).trim()
 
     try {
       const payload = await this.#jwt.verify(token, this.options.jwtOptions)
@@ -43,17 +53,48 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
 
       return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
     } catch (e) {
+      this.#failures.set(ctx, e as Error)
       await this.options.onFail?.(ctx, e as Error)
       return AuthenticateResult.fail(e as Error)
     }
   }
 
+  /**
+   * Answers 401 with the RFC 6750 §3 challenge.
+   *
+   * A bare `Bearer` says only "credentials required", which is indistinguishable from "your token was
+   * fine but something else went wrong" — the client cannot tell whether to refresh, re-authenticate, or
+   * give up. When this request already tried and failed to validate a token, that reason is named:
+   * `error="invalid_token"` plus, if `includeErrorDetails` is on, the underlying description. ASP.NET's
+   * `JwtBearerHandler.HandleChallengeAsync` builds the same header from the same state.
+   *
+   * Nothing is invented: the parameters appear only when this scheme actually failed in this request. A
+   * caller who presented no credential at all gets the bare challenge, since there is no token to fault.
+   */
   override async challenge(ctx: Context): Promise<void> {
     if (this.options.onChallenge) {
       return this.options.onChallenge(ctx)
     }
 
-    ctx.status(401).header('WWW-Authenticate', 'Bearer')
+    ctx.status(401).header('WWW-Authenticate', this.#challengeHeader(ctx))
+  }
+
+  #challengeHeader(ctx: Context): string {
+    const error = this.#failures.get(ctx)
+    if (error === undefined) {
+      return 'Bearer'
+    }
+
+    const parameters = [`error="invalid_token"`]
+    // `!== false`, not `=== true`: the builder defaults this on, but a handler constructed directly leaves
+    // it undefined, and the two paths must not disagree about what the default is.
+    if (this.options.includeErrorDetails !== false) {
+      // Quoted-string per RFC 9110 §5.6.4: a message may carry quotes or backslashes, and an unescaped
+      // one would terminate the parameter early and produce a header the client parses as something else.
+      parameters.push(`error_description="${error.message.replace(/[\\"]/g, '\\$&')}"`)
+    }
+
+    return `Bearer ${parameters.join(', ')}`
   }
 
   override async forbid(ctx: Context): Promise<void> {
@@ -78,18 +119,21 @@ function buildService(options: JWTAuthenticationOptions): JWTService {
     : new JWTService({ publicKey: secret, algorithm })
 }
 
+/**
+ * Maps a verified payload to claims, dropping the registered ones.
+ *
+ * The OIDC handler has always excluded these; this scheme did not, so `iss`/`exp`/`aud` and friends
+ * landed on the principal where an application claim type could collide with them.
+ */
 function mapClaims(payload: JWTPayload): Claim[] {
-  const entries = Object.entries(payload)
-  if (entries.length === 0) {
-    return []
-  }
-
-  const claims: Claim[] = new Array(entries.length)
   const issuer = payload.iss ?? ''
+  const claims: Claim[] = []
 
-  for (let i = 0; i < entries.length; i++) {
-    const [type, value] = entries[i]
-    claims[i] = new Claim(type, value, issuer)
+  for (const [type, value] of Object.entries(payload)) {
+    if (REGISTERED_CLAIMS.has(type)) {
+      continue
+    }
+    claims.push(new Claim(type, value, issuer))
   }
 
   return claims

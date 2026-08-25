@@ -15,19 +15,30 @@ function makeHandler(configure: (o: CookieAuthenticationOptionsBuilder) => void 
   return new CookieAuthenticationHandler('Cookie', b.build())
 }
 
-function makeCtx(cookieValue?: string) {
+/** A context whose headers say "browser navigation" — the case a `loginPath` redirect is meant for. */
+function makeNavCtx(url?: string) {
+  return makeCtx(undefined, url, { 'sec-fetch-mode': 'navigate' })
+}
+
+function makeCtx(cookieValue?: string, url?: string, headers: Record<string, string> = {}) {
   const setCookie = vi.fn().mockReturnThis()
   const deleteCookie = vi.fn().mockReturnThis()
   const header = vi.fn().mockReturnThis()
   const status = vi.fn().mockReturnThis()
+  const body = vi.fn().mockReturnThis()
   const ctx = {
-    req: { cookie: (name: string) => (name === 'caf.session' ? cookieValue : undefined) },
+    req: {
+      url,
+      cookie: (name: string) => (name === 'caf.session' ? cookieValue : undefined),
+      header: (name: string) => headers[name],
+    },
     cookie: setCookie,
     deleteCookie,
     status,
     header,
+    body,
   } as unknown as Context
-  return { ctx, setCookie, deleteCookie, status, header }
+  return { ctx, setCookie, deleteCookie, status, header, body }
 }
 
 function principal(): Principal {
@@ -40,7 +51,7 @@ function principal(): Principal {
 async function sealedFor(rememberMe: boolean): Promise<{ value: string, opts: Record<string, unknown> }> {
   const handler = makeHandler()
   const { ctx, setCookie } = makeCtx()
-  await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { rememberMe }))
+  await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: rememberMe }))
   const [, value, opts] = setCookie.mock.calls[0] as [string, string, Record<string, unknown>]
   return { value, opts }
 }
@@ -103,11 +114,85 @@ describe('CookieAuthenticationHandler', () => {
   })
 
   describe('challenge()', () => {
-    it('redirects to loginPath when configured', async () => {
-      const { ctx, status, header } = makeCtx()
+    it('redirects a navigation to loginPath when configured', async () => {
+      const { ctx, status, header } = makeNavCtx()
       await makeHandler(o => o.loginPath('/login')).challenge(ctx)
       expect(status).toHaveBeenCalledWith(302)
       expect(header).toHaveBeenCalledWith('location', '/login')
+    })
+
+    it('carries the interrupted URL back as returnUrl', async () => {
+      const { ctx, header } = makeNavCtx('/reports?year=2026')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+      expect(header).toHaveBeenCalledWith('location', '/login?returnUrl=%2Freports%3Fyear%3D2026')
+    })
+
+    it('prefers an explicit redirectURI from the properties', async () => {
+      const { ctx, header } = makeNavCtx('/reports')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx, { redirectURI: '/dashboard' })
+      expect(header).toHaveBeenCalledWith('location', '/login?returnUrl=%2Fdashboard')
+    })
+
+    it('drops an off-origin redirectURI rather than echoing it', async () => {
+      // This value lands in a Location header after sign-in, so an unvalidated one is an open redirect.
+      const { ctx, header } = makeNavCtx()
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx, { redirectURI: '//evil.example/pwn' })
+      expect(header).toHaveBeenCalledWith('location', '/login')
+    })
+
+    it('honours a custom returnURLParameter and an existing query string', async () => {
+      const { ctx, header } = makeNavCtx('/reports')
+      await makeHandler(o => o.loginPath('/login?mode=sso').returnURLParameter('next')).challenge(ctx)
+      expect(header).toHaveBeenCalledWith('location', '/login?mode=sso&next=%2Freports')
+    })
+
+    // A `fetch` follows a 302 itself and resolves with the login page's HTML and a 200, so the caller
+    // cannot tell it was unauthenticated. It gets a status it can act on, and the URL in the body.
+    it('answers 401 with the login URL to a non-navigation caller', async () => {
+      const { ctx, status, header, body } = makeCtx(undefined, '/reports', { 'sec-fetch-mode': 'cors' })
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+
+      expect(status).toHaveBeenCalledWith(401)
+      expect(body).toHaveBeenCalledWith(
+        { error: 'authentication_required', loginURL: '/login?returnUrl=%2Freports' },
+      )
+      expect(header).toHaveBeenCalledWith('access-control-expose-headers', 'location')
+    })
+
+    // Fetch Metadata says "not a navigation" and must win over the Accept header. htmx sends exactly this
+    // pair, and redirecting it produced the opaque failure the negotiation exists to avoid.
+    it('does not redirect an htmx-style fragment request that also accepts HTML', async () => {
+      const { ctx, status } = makeCtx(undefined, '/reports', {
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+        accept: 'text/html',
+      })
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+
+      expect(status).toHaveBeenCalledWith(401)
+      expect(status).not.toHaveBeenCalledWith(302)
+    })
+
+    // Browsers omit Fetch Metadata outside secure contexts, so plain-http development relies on Accept.
+    it('falls back to Accept when Fetch Metadata is absent', async () => {
+      const { ctx, status } = makeCtx(undefined, '/reports', { accept: 'text/html,application/xhtml+xml' })
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+
+      expect(status).toHaveBeenCalledWith(302)
+    })
+
+    it('challengeMode "redirect" redirects a caller that would otherwise get a 401', async () => {
+      const { ctx, status } = makeCtx(undefined, '/reports', { 'sec-fetch-mode': 'cors' })
+      await makeHandler(o => o.loginPath('/login').challengeMode('redirect')).challenge(ctx)
+
+      expect(status).toHaveBeenCalledWith(302)
+    })
+
+    it('challengeMode "status" answers 401 even to a navigation', async () => {
+      const { ctx, status } = makeNavCtx('/reports')
+      await makeHandler(o => o.loginPath('/login').challengeMode('status')).challenge(ctx)
+
+      expect(status).toHaveBeenCalledWith(401)
     })
 
     it('returns 401 when no loginPath is set', async () => {
@@ -122,6 +207,61 @@ describe('CookieAuthenticationHandler', () => {
       await makeHandler(o => o.loginPath('/login').onChallenge(onChallenge)).challenge(ctx)
       expect(onChallenge).toHaveBeenCalledWith(ctx)
       expect(status).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('forbid()', () => {
+    it('answers 403 by default', async () => {
+      const { ctx, status } = makeCtx()
+      await makeHandler().forbid(ctx)
+      expect(status).toHaveBeenCalledWith(403)
+    })
+
+    // Not loginPath: the caller is already signed in, so sending them to log in again is a loop.
+    it('redirects to accessDeniedPath when configured', async () => {
+      const { ctx, status, header } = makeCtx()
+      await makeHandler(o => o.loginPath('/login').accessDeniedPath('/denied')).forbid(ctx)
+      expect(status).toHaveBeenCalledWith(302)
+      expect(header).toHaveBeenCalledWith('location', '/denied')
+    })
+  })
+
+  describe('validatePrincipal()', () => {
+    async function sealedSession(): Promise<string> {
+      const { ctx, setCookie } = makeCtx()
+      await makeHandler().persist(ctx, new AuthenticationTicket(principal(), 'Cookie'))
+      return (setCookie.mock.calls[0] as [string, string])[1]
+    }
+
+    it('accepts the session when the hook returns a principal', async () => {
+      const sealed = await sealedSession()
+      const { ctx } = makeCtx(sealed)
+      const handler = makeHandler(o => o.validatePrincipal((_c, p) => p))
+
+      const result = await handler.authenticate(ctx)
+      expect(result.succeeded).toBe(true)
+    })
+
+    // The sealed cookie is self-contained, so this is the only thing standing between a revoked account
+    // and a session that stays valid for its full eight hours.
+    it('rejects the session and clears the cookie when the hook returns null', async () => {
+      const sealed = await sealedSession()
+      const { ctx, deleteCookie } = makeCtx(sealed)
+      const handler = makeHandler(o => o.validatePrincipal(() => null))
+
+      const result = await handler.authenticate(ctx)
+      expect(result.succeeded).toBe(false)
+      expect(deleteCookie).toHaveBeenCalledWith('caf.session', { path: '/' })
+    })
+
+    it('lets the hook swap in a refreshed principal', async () => {
+      const sealed = await sealedSession()
+      const { ctx } = makeCtx(sealed)
+      const refreshed = new Principal(true, new Identity('Cookie', true, [new Claim('sub', 'u2', '')]))
+      const handler = makeHandler(o => o.validatePrincipal(() => refreshed))
+
+      const result = await handler.authenticate(ctx)
+      expect(result.ticket!.principal.findFirst('sub')?.value).toBe('u2')
     })
   })
 })

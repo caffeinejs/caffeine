@@ -230,7 +230,7 @@ describe('health probes', () => {
     void [SecuredController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .authentication(auth => auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value')))
+      .authentication(auth => auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()))
       .health()
       .build()
 

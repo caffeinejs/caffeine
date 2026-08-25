@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import type { Context } from '../../../../context.js'
 import { Claim, Identity, Principal } from '../../../index.js'
-import { AuthenticateResult, AuthenticationTicket } from '../../ticket.js'
+import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
 import { BaseAuthenticationHandler } from '../../handler.js'
-import { isSafeReturnPath } from './config.js'
+import { challengeHeaders, type ChallengeMode, isSafeReturnPath, shouldRedirectChallenge } from './config.js'
 import { redactPii } from './pii.js'
 import { generateCodeChallenge, generateCodeVerifier } from './pkce.js'
 import { decodeState, encodeState, STATE_TTL_SECONDS } from './state_store.js'
@@ -57,7 +57,7 @@ export interface RemoteAuthenticationIdentity {
  * - `redirect` — always redirect, whatever the caller is.
  * - `status` — always 401. For an API with no browser surface at all.
  */
-export type RemoteChallengeMode = 'auto' | 'redirect' | 'status'
+export type RemoteChallengeMode = ChallengeMode
 
 /** The options every OAuth-family strategy shares. */
 export interface RemoteAuthenticationOptions {
@@ -233,7 +233,7 @@ export abstract class RemoteAuthenticationHandler<
     return ticket.session
   }
 
-  override async challenge(ctx: Context): Promise<void> {
+  override async challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
     const [issuer, endpoint, pkceMethod] = await Promise.all([
       this.resolveIssuer(),
       this.resolveAuthorizationEndpoint(),
@@ -252,7 +252,10 @@ export abstract class RemoteAuthenticationHandler<
         nonce,
         codeVerifier,
         pkceMethod: pkceMethod === 'none' ? 'S256' : pkceMethod,
-        returnTo: ctx.req.url,
+        // An explicit destination from the caller wins over the URL the challenge interrupted — that is
+        // what `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent.
+        // Both are re-validated by `isSafeReturnPath` on the callback before anything is redirected to.
+        returnTo: properties?.redirectURI ?? ctx.req.url,
         scheme: this.name,
         issuer,
       },
@@ -260,7 +263,7 @@ export abstract class RemoteAuthenticationHandler<
       this.name,
     )
 
-    ctx.cookie(this.options.stateCookieName, stateCookie, this.cookieOpts(STATE_TTL_SECONDS))
+    ctx.cookie(this.#stateCookieNameFor(state), stateCookie, this.cookieOpts(STATE_TTL_SECONDS))
 
     const authURL = new URL(endpoint)
     authURL.searchParams.set('client_id', this.options.clientID)
@@ -304,25 +307,36 @@ export abstract class RemoteAuthenticationHandler<
     // No `WWW-Authenticate`: the credential is a cookie, not an HTTP authentication scheme, so there is no
     // registered token to name and inventing one would mislead a client that parses it. `location` on a 401
     // is a hint — browsers follow it only on a 3xx — which is exactly the intent.
-    ctx.status(401).header('location', authorizationURL)
+    //
+    // The URL also goes in the body, and the header is exposed to cross-origin readers. `Location` is not
+    // CORS-safelisted, so a SPA served from a different origin than its API — the exact deployment this
+    // mode exists for — received a 401 it could not read the URL out of. The body is the reliable channel
+    // and the header stays for callers already reading it.
+    ctx.status(401)
+      .header('location', authorizationURL)
+      .header('access-control-expose-headers', 'location')
+      .body({ error: 'authentication_required', loginURL: authorizationURL })
   }
 
   /**
-   * Whether this request should be redirected into the provider rather than answered 401.
+   * The state cookie name for one authorization round-trip.
    *
-   * `sec-fetch-mode`/`sec-fetch-dest` are the direct answer and every current browser sends them; the `accept`
-   * fallback covers the ones that do not, and anything that asks for HTML wants a page. A caller sending
-   * neither — `fetch` with no options, `curl`, a client library — gets the 401.
+   * Suffixed with the flow's own `state` so concurrent sign-ins do not collide. With a single fixed name,
+   * opening the provider in two tabs meant the second challenge overwrote the first's cookie, and the
+   * first callback then died with "state mismatch" — a flow the user started, killed by an unrelated one.
+   * ASP.NET names its correlation cookie `.AspNetCore.Correlation.{scheme}.{correlationId}` for exactly
+   * this, and the `state` value is already the per-flow random this handler mints.
+   *
+   * `state` is base64url, which is within the cookie-name charset, so the composed name stays valid —
+   * including under the `__Host-` prefix, which constrains attributes rather than the name.
    */
-  #redirects(ctx: Context): boolean {
-    const mode = this.options.challengeMode
-    if (mode !== 'auto') {
-      return mode === 'redirect'
-    }
+  #stateCookieNameFor(state: string): string {
+    return `${this.options.stateCookieName}.${state}`
+  }
 
-    return ctx.req.header('sec-fetch-mode') === 'navigate'
-      || ctx.req.header('sec-fetch-dest') === 'document'
-      || (ctx.req.header('accept')?.includes('text/html') ?? false)
+  /** Whether this request should be redirected into the provider rather than answered 401. */
+  #redirects(ctx: Context): boolean {
+    return shouldRedirectChallenge(this.options.challengeMode, challengeHeaders(ctx))
   }
 
   /**
@@ -391,7 +405,7 @@ export abstract class RemoteAuthenticationHandler<
     url.search = merged.toString()
   }
 
-  override async forbid(ctx: Context): Promise<void> {
+  override async forbid(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     if (this.options.onForbid) {
       return this.options.onForbid(ctx)
     }
@@ -413,7 +427,7 @@ export abstract class RemoteAuthenticationHandler<
    * holding something that still looks like a session. The store failure is propagated, since
    * a sign-out that did not actually revoke must not report success.
    */
-  override async revoke(ctx: Context): Promise<void> {
+  override async revoke(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     try {
       const key = await this.ticketKey(ctx)
       if (key) {
@@ -494,32 +508,48 @@ export abstract class RemoteAuthenticationHandler<
       throw this.callbackFailure('missing code parameter')
     }
 
-    const stateCookieName = this.options.stateCookieName
+    // The cookie is named after the flow's own state, so the parameter is what says which of possibly
+    // several concurrent flows this callback belongs to. Validated as base64url first: it is
+    // attacker-controlled and composes a cookie name, and nothing outside the set this handler mints can
+    // identify a real flow anyway.
+    if (stateParam === undefined || !/^[A-Za-z0-9_-]+$/.test(stateParam)) {
+      throw this.callbackFailure('missing or malformed state parameter')
+    }
+
+    const stateCookieName = this.#stateCookieNameFor(stateParam)
     const stateCookie = ctx.req.cookie(stateCookieName)
     if (!stateCookie) {
       throw this.callbackFailure('missing state cookie')
     }
 
-    let stored: RemoteAuthenticationState
+    // Cleared on every path out of here, not just the successful one. A failed callback used to leave a
+    // live state cookie for the rest of its 600s TTL, so a flow that already failed stayed replayable.
     try {
-      stored = await decodeState(stateCookie, this.options.sessionSecret, this.name)
-    } catch {
-      throw this.callbackFailure('invalid or expired state cookie')
+      let stored: RemoteAuthenticationState
+      try {
+        stored = await decodeState(stateCookie, this.options.sessionSecret, this.name)
+      } catch {
+        throw this.callbackFailure('invalid or expired state cookie')
+      }
+
+      if (stateParam !== stored.state) {
+        throw this.callbackFailure('state mismatch')
+      }
+
+      // The state is sealed under this strategy's key, so a mismatch here means the payload was
+      // minted for a different handler. Checked in the payload as well as the key so the binding
+      // survives any future change to key derivation.
+      if (stored.scheme !== this.name) {
+        throw this.callbackFailure('state was issued for another strategy')
+      }
+
+      await this.#completeCallback(ctx, code, stored)
+    } finally {
+      ctx.deleteCookie(stateCookieName, this.cookieOpts())
     }
+  }
 
-    if (stateParam !== stored.state) {
-      throw this.callbackFailure('state mismatch')
-    }
-
-    // The state is sealed under this strategy's key, so a mismatch here means the payload was
-    // minted for a different handler. Checked in the payload as well as the key so the binding
-    // survives any future change to key derivation.
-    if (stored.scheme !== this.name) {
-      throw this.callbackFailure('state was issued for another strategy')
-    }
-
-    ctx.deleteCookie(stateCookieName, this.cookieOpts())
-
+  async #completeCallback(ctx: Context, code: string, stored: RemoteAuthenticationState): Promise<void> {
     // The provider the state was minted against must still be the one we would use now. A
     // mismatch means the strategy was reconfigured — or two configurations are running — between
     // the challenge and this callback, and the authorization code must not be exchanged against

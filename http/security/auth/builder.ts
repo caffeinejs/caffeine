@@ -13,6 +13,7 @@ import { ForwardAuthenticationHandler } from './forward/forward.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { JWTService } from './jwt/jwt_service.js'
 import { jwtServiceKey } from './jwt/keys.js'
+import { ErrAuthConfiguration } from './errors.js'
 import { kAuthOpts, kAuthSchemeDescriptors, kOIDCMeta } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
@@ -86,7 +87,7 @@ export class AuthenticationBuilder implements Service {
       ? options
       : optsOrName
     if (!optsFn) {
-      throw new Error('Options are required')
+      throw new ErrAuthConfiguration('Options are required')
     }
 
     const builder = new JWTAuthenticationOptionsBuilder()
@@ -110,7 +111,7 @@ export class AuthenticationBuilder implements Service {
       ? options
       : optsOrName
     if (!optsFn) {
-      throw new Error('Options are required')
+      throw new ErrAuthConfiguration('Options are required')
     }
 
     const builder = new BasicAuthenticationOptionsBuilder()
@@ -134,7 +135,7 @@ export class AuthenticationBuilder implements Service {
       ? options
       : optsOrName
     if (!optsFn) {
-      throw new Error('Options are required')
+      throw new ErrAuthConfiguration('Options are required')
     }
 
     const builder = new CookieAuthenticationOptionsBuilder()
@@ -308,7 +309,7 @@ export class AuthenticationBuilder implements Service {
     const schemeCount = this.#schemes.size
     const defaultScheme = opts.defaultAuthenticateScheme ?? (schemeCount === 1 ? firstScheme : undefined)
     if (!defaultScheme) {
-      throw new Error(
+      throw new ErrAuthConfiguration(
         schemeCount === 0
           ? 'Cannot configure authentication: no strategies are registered'
           : 'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
@@ -402,7 +403,7 @@ export class AuthenticationBuilder implements Service {
 
     if (this.#refresh !== undefined) {
       if (jwtSchemes.length === 0) {
-        throw new Error(
+        throw new ErrAuthConfiguration(
           'Cannot configure refresh tokens: no JWT scheme is registered (add a JWT bearer scheme via addJWTBearer)',
         )
       }
@@ -421,6 +422,7 @@ export class AuthenticationBuilder implements Service {
 
       const meta: OIDCMeta = {
         handlers: this.#oidcHandlers.map(h => ({ callbackPath: h.callbackPath, handler: h })),
+        unreachableCandidates: this.#unreachableCandidates(defaultScheme),
       }
       kit.container.bind(kOIDCMeta).toValue(meta).internal()
     }
@@ -458,7 +460,7 @@ export class AuthenticationBuilder implements Service {
 
     for (const handler of this.#oidcHandlers) {
       if (names.has(handler.schemeName)) {
-        throw new Error(
+        throw new ErrAuthConfiguration(
           `Cannot configure authentication: two OAuth strategies share the name "${handler.schemeName}"`,
         )
       }
@@ -474,7 +476,7 @@ export class AuthenticationBuilder implements Service {
         const owners = seen.get(label)!
         const owner = owners.get(value)
         if (owner !== undefined) {
-          throw new Error(
+          throw new ErrAuthConfiguration(
             `Cannot configure authentication: OIDC strategies "${owner}" and "${handler.schemeName}" `
             + `share the ${label} "${value}"`,
           )
@@ -483,32 +485,40 @@ export class AuthenticationBuilder implements Service {
       }
     }
 
-    if (this.#oidcHandlers.length < 2) {
-      return
-    }
-
-    // The request pipeline authenticates the default scheme only, so with several OIDC
-    // strategies every one but the default would be dead weight. Forward is what lets the
-    // application pick per request.
-    const registered = this.#schemes.get(defaultScheme)
-
-    // A default that names nothing must not pass silently: an undefined lookup used to make the
-    // guard below a no-op, so a typo'd default sailed through startup and failed only at request
-    // time when the scheme could not be resolved. The Forward default must be registered as a
-    // handler instance (which `forward()` does) rather than a bare container Key, so that the
-    // check below can see it without eagerly instantiating every container-bound handler.
-    if (registered === undefined) {
-      throw new Error(
+    // A default that names nothing must not pass silently: an undefined lookup used to make the guard
+    // below a no-op, so a typo'd default sailed through startup and failed only at request time when the
+    // scheme could not be resolved.
+    if (!this.#schemes.has(defaultScheme)) {
+      throw new ErrAuthConfiguration(
         `Cannot configure authentication: the default authenticate scheme "${defaultScheme}" is not a registered strategy`,
       )
     }
 
-    if (!(registered instanceof ForwardAuthenticationHandler)) {
-      throw new Error(
-        'Cannot configure authentication: multiple OAuth strategies require a Forward default '
-        + `authenticate scheme, but "${defaultScheme}" is not one`,
-      )
+    // Registering several OAuth strategies without a Forward default used to be rejected outright, on the
+    // grounds that the pipeline authenticates the default scheme only and every other strategy would be
+    // dead weight. That stopped being true once a route could name its own schemes: `/login/google` and
+    // `/login/github`, each naming one, is a perfectly good configuration and ASP.NET has no such rule.
+    //
+    // The underlying hazard is still real, so it is still reported — just as what it actually is, a
+    // strategy nothing can reach, rather than as a demand for a particular default. Forward remains the
+    // way to choose per request when routes do not name schemes themselves.
+  }
+
+  /**
+   * OAuth strategies that no request can reach unless a route names them.
+   *
+   * A Forward default can select any scheme per request, so it makes all of them reachable. Otherwise the
+   * pipeline authenticates the default only, and everything else depends on a route naming it — which the
+   * builder cannot see. See {@link OIDCMeta.unreachableCandidates}.
+   */
+  #unreachableCandidates(defaultScheme: string): string[] {
+    if (this.#schemes.get(defaultScheme) instanceof ForwardAuthenticationHandler) {
+      return []
     }
+
+    return this.#oidcHandlers
+      .map(handler => handler.schemeName)
+      .filter(name => name !== defaultScheme)
   }
 }
 

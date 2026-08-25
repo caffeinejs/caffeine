@@ -26,10 +26,14 @@ export class AuthorizationConfigurer extends FeatureConfigurer {
     const coordinator = ctx.services.auth.coordinator!
     const onRequest = ctx.routeDef.onRequest as Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
 
-    // A route that names schemes must be challenged by one of them, not by the application default. Otherwise
-    // a Basic-protected route in a browser-first application answers with the default scheme's redirect,
-    // which an API client can neither follow nor satisfy.
-    const scheme = ctx.route.authorization.options?.schemes?.[0]
+    // A route that names schemes must be challenged by those, not by the application default. Otherwise a
+    // Basic-protected route in a browser-first application answers with the default scheme's redirect,
+    // which an API client can neither follow nor satisfy. Every named scheme gets to contribute, as
+    // ASP.NET's authorization middleware does over `policy.AuthenticationSchemes`: each writes its own
+    // `WWW-Authenticate`, so a route accepting Basic or Bearer advertises both instead of whichever the
+    // decorator happened to list first. An unnamed route passes `undefined` and gets the default.
+    const schemes = ctx.route.authorization.options?.schemes
+    const challenged: Array<string | undefined> = schemes?.length ? schemes : [undefined]
 
     onRequest.push(async (req, reply) => {
       const c = req.httpContext
@@ -39,9 +43,13 @@ export class AuthorizationConfigurer extends FeatureConfigurer {
       }
 
       if (!c.user.authenticated) {
-        await coordinator.challenge(c, scheme)
+        for (const scheme of challenged) {
+          await coordinator.challenge(c, scheme)
+        }
       } else {
-        await coordinator.forbid(c, scheme)
+        // Forbid is a single decision, not an advertisement: the caller is authenticated and simply not
+        // permitted, so repeating it per scheme would just overwrite one 403 with another.
+        await coordinator.forbid(c, challenged[0])
       }
 
       // challenge()/forbid() only set status/headers (or a redirect); they do not end the request.

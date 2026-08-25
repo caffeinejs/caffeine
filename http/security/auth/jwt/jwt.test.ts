@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { SignJWT } from 'jose'
 import type { Context } from '../../../context.js'
 import { JWTAuthenticationHandler } from './jwt.js'
+import { JWTAuthenticationOptionsBuilder } from './jwt_options.js'
 
 const SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 const secretBytes = new TextEncoder().encode(SECRET)
@@ -62,6 +63,27 @@ describe('JWTAuthenticationHandler', () => {
 
       expect(result.succeeded).toBe(false)
       expect(result.error).toBeUndefined()
+    })
+
+    it('accepts a lowercase "bearer" scheme token', async () => {
+      // RFC 7235 §2.1: the scheme is case-insensitive, and clients send it every way.
+      const token = await sign({ sub: 'alice' })
+      const { ctx } = makeCtx(`bearer ${token}`)
+
+      expect((await makeHandler().authenticate(ctx)).succeeded).toBe(true)
+    })
+
+    it('does not map registered claims onto the principal', async () => {
+      // They describe the token, not the user, and would collide with application claim types. The OIDC
+      // handler has always stripped them; this scheme used to emit them.
+      const token = await sign({ sub: 'alice', dept: 'eng' }, { issuer: 'https://iss.example' })
+      const { ctx } = makeCtx(`Bearer ${token}`)
+      const result = await makeHandler().authenticate(ctx)
+
+      const types = result.ticket!.principal.claims().map(c => c.type).sort()
+      expect(types).toEqual(['dept', 'sub'])
+      // `iss` is still the issuer stamped on every claim, just not a claim of its own.
+      expect(result.ticket!.principal.findFirst('sub')?.issuer).toBe('https://iss.example')
     })
 
     it('returns success and populates principal claims for a valid token', async () => {
@@ -245,6 +267,94 @@ describe('JWTAuthenticationHandler', () => {
 
       expect(onForbid).toHaveBeenCalledWith(ctx)
       expect(status).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('RFC 6750 challenge parameters', () => {
+    it('names the reason when this request failed to validate a token', async () => {
+      const handler = makeHandler()
+      const { ctx, header } = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
+
+      await handler.authenticate(ctx)
+      await handler.challenge(ctx)
+
+      const [, value] = header.mock.calls.at(-1) as [string, string]
+      expect(value).toMatch(/^Bearer error="invalid_token"/)
+      expect(value).toMatch(/error_description=".+"/)
+    })
+
+    it('stays a bare challenge when no credential was presented', async () => {
+      // Nothing was offered, so there is no token to fault — inventing `invalid_token` would tell the
+      // client to refresh something it never sent.
+      const handler = makeHandler()
+      const { ctx, header } = makeCtx()
+
+      await handler.authenticate(ctx)
+      await handler.challenge(ctx)
+
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+    })
+
+    it('omits the description when includeErrorDetails is off', async () => {
+      const handler = new JWTAuthenticationHandler('Bearer', { secret: SECRET, includeErrorDetails: false })
+      const { ctx, header } = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
+
+      await handler.authenticate(ctx)
+      await handler.challenge(ctx)
+
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"')
+    })
+
+    it('keeps one request\'s failure out of another request\'s challenge', async () => {
+      // The handler is a singleton, so the failure has to be keyed by request rather than held in a field.
+      const handler = makeHandler()
+      const failing = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
+      await handler.authenticate(failing.ctx)
+
+      const clean = makeCtx()
+      await handler.authenticate(clean.ctx)
+      await handler.challenge(clean.ctx)
+
+      expect(clean.header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+    })
+  })
+
+  describe('issuer and audience are required', () => {
+    // `jose` skips a check whose expected value is undefined, so an unconfigured scheme verifies the
+    // signature and nothing else — with a shared symmetric secret that admits every sibling service's
+    // tokens. ASP.NET refuses the same configuration rather than defaulting it open.
+    it('refuses to build without an issuer', () => {
+      expect(() => new JWTAuthenticationOptionsBuilder().secret(SECRET).audience('api').build())
+        .toThrow(/issuer/)
+    })
+
+    it('refuses to build without an audience', () => {
+      expect(() => new JWTAuthenticationOptionsBuilder().secret(SECRET).issuer('https://issuer.example').build())
+        .toThrow(/audience/)
+    })
+
+    it('builds once both are pinned', () => {
+      const opts = new JWTAuthenticationOptionsBuilder()
+        .secret(SECRET)
+        .issuer('https://issuer.example')
+        .audience('api')
+        .build()
+
+      expect(opts.jwtOptions?.issuer).toBe('https://issuer.example')
+      expect(opts.jwtOptions?.audience).toBe('api')
+    })
+
+    it('builds when the checks are waived explicitly', () => {
+      const opts = new JWTAuthenticationOptionsBuilder()
+        .secret(SECRET)
+        .allowAnyIssuer()
+        .allowAnyAudience()
+        .build()
+
+      // Waived means absent, not `undefined`-valued: an explicit undefined would spread over and erase a
+      // service-level default in JWTService.verify.
+      expect(opts.jwtOptions).not.toHaveProperty('issuer')
+      expect(opts.jwtOptions).not.toHaveProperty('audience')
     })
   })
 })

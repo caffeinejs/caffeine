@@ -183,10 +183,21 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
 }
 
 /**
- * Maps a user info body to claims, applying the configured renames.
+ * Maps a user info body to claims — and *only* the fields `claimActions.map` names.
  *
- * Nested objects and arrays are skipped: a claim value has to survive the JSON round-trip
- * through the session cookie and be comparable by an authorization policy, and neither holds
+ * An allowlist, deliberately, because in plain OAuth 2.0 the user info body is an unsigned JSON document
+ * whose field names the provider chooses and whose field *values* are frequently whatever the user typed
+ * into their provider profile. Copying it wholesale hands both to the authorization layer: a body
+ * carrying `roles` lands under the default `roleClaimType` and `Principal.isInRole` reads it, so the
+ * account being authenticated gets to name its own roles. Nothing about the transport prevents that —
+ * unlike OIDC, there is no signature over these fields to appeal to.
+ *
+ * It is also what ASP.NET's `OAuthHandler` does: claims come from `ClaimActions` (`MapJsonKey`) and from
+ * nowhere else. Wholesale copying additionally used to overflow the sealed session cookie past the
+ * browser's ~4 KB limit on providers with large bodies, which the browser drops silently.
+ *
+ * Nested objects and arrays are skipped even when mapped: a claim value has to survive the JSON
+ * round-trip through the session cookie and be comparable by an authorization policy, and neither holds
  * for an arbitrary object graph.
  */
 function defaultMapClaims(
@@ -198,19 +209,12 @@ function defaultMapClaims(
 
   for (const [claimType, field] of Object.entries(map)) {
     const value = userInfo[field]
-    if (value !== undefined && value !== null) {
-      claims.push(new Claim(claimType, value, issuer))
-    }
-  }
-
-  const mapped = new Set(Object.values(map))
-  for (const [field, value] of Object.entries(userInfo)) {
-    // `undefined` reaches here from an enrichment that found nothing; a claim whose value
-    // is undefined is worse than an absent one, because `findFirst` then returns a hit.
-    if (mapped.has(field) || value === null || value === undefined || typeof value === 'object') {
+    // `undefined` reaches here from an enrichment that found nothing; a claim whose value is undefined is
+    // worse than an absent one, because `findFirst` then returns a hit.
+    if (value === undefined || value === null || typeof value === 'object') {
       continue
     }
-    claims.push(new Claim(field, value, issuer))
+    claims.push(new Claim(claimType, value, issuer))
   }
 
   return claims

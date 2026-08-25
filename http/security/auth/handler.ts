@@ -1,12 +1,12 @@
 import type { Context } from '../../context.js'
-import type { AuthenticateResult, AuthenticationTicket } from './ticket.js'
+import type { AuthenticateResult, AuthenticationProperties, AuthenticationTicket } from './ticket.js'
 
 export interface AuthenticationHandler {
   authenticate(ctx: Context): Promise<AuthenticateResult>
-  challenge(ctx: Context, properties?: object): Promise<void>
-  forbid(ctx: Context, properties?: object): Promise<void>
+  challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void>
+  forbid(ctx: Context, properties?: AuthenticationProperties): Promise<void>
   persist(ctx: Context, ticket: AuthenticationTicket): Promise<void>
-  revoke(ctx: Context, properties?: object): Promise<void>
+  revoke(ctx: Context, properties?: AuthenticationProperties): Promise<void>
 }
 
 export abstract class BaseAuthenticationHandler<TOptions> implements AuthenticationHandler {
@@ -22,11 +22,11 @@ export abstract class BaseAuthenticationHandler<TOptions> implements Authenticat
 
   abstract authenticate(ctx: Context): Promise<AuthenticateResult>
 
-  async challenge(ctx: Context): Promise<void> {
+  async challenge(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     ctx.status(401)
   }
 
-  async forbid(ctx: Context): Promise<void> {
+  async forbid(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     ctx.status(403)
   }
 
@@ -34,7 +34,7 @@ export abstract class BaseAuthenticationHandler<TOptions> implements Authenticat
     return Promise.resolve()
   }
 
-  revoke(_ctx: Context): Promise<void> {
+  revoke(_ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     return Promise.resolve()
   }
 }

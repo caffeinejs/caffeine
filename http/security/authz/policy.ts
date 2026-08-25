@@ -1,6 +1,7 @@
 import { Context } from '../../context.js'
 import { RouteAuthzOptions } from '../../decorators/registrar/routing.js'
 import { Principal } from '../index.js'
+import { ErrAuthzPolicyNotFound, ErrAuthzRequirementHandlerNotFound } from './errors.js'
 import { AuthzRouteService } from './route_service.js'
 import { AuthorizationOptions } from './authz.js'
 import { PolicyBuilder } from './policy_builder.js'
@@ -47,7 +48,7 @@ export function newPolicyEvaluator(
     const requirement = policy.requirements[i]
     const handler = handlers.get(requirement.kind)
     if (!handler) {
-      throw new Error(`Cannot compile policy: handler for requirement "${requirement.kind}" not found`)
+      throw new ErrAuthzRequirementHandlerNotFound(requirement.kind)
     }
 
     compiled[i] = [requirement, handler]
@@ -67,30 +68,47 @@ export function newPolicyEvaluator(
   }
 }
 
+/**
+ * Compiles the authorization a route actually runs, or `undefined` when it runs none.
+ *
+ * `routerOptions` / `routeOptions` are `undefined` when that level carried no decorator at all, which is
+ * distinct from a decorator that named nothing: the first is a route nobody said anything about, and is
+ * what {@link AuthorizationOptions.fallbackPolicy} exists to cover.
+ */
 export function compileRoutePolicy(
   options: AuthorizationOptions,
   evaluators: Map<string, PolicyEvaluator>,
   handlers: Map<string, AuthzRequirementHandler<AuthzRequirement>>,
-  routerOptions: RouteAuthzOptions = {},
-  routeOptions: RouteAuthzOptions = {},
+  routerOptions?: RouteAuthzOptions,
+  routeOptions?: RouteAuthzOptions,
 ): AuthzRouteService | undefined {
   const anonymous
-    = (routerOptions.allowAnonymous !== undefined && routerOptions.allowAnonymous)
-      || (routeOptions.allowAnonymous !== undefined && routeOptions.allowAnonymous)
+    = routerOptions?.allowAnonymous === true
+      || routeOptions?.allowAnonymous === true
 
   if (anonymous) {
     return undefined
   }
 
-  const routerPolicies = normalizePolicy(routerOptions.policy)
-  const routePolicies = normalizePolicy(routeOptions.policy)
+  // Nothing anywhere declared an opinion about this route. Without a fallback that means "open", which is
+  // the default and matches ASP.NET when `FallbackPolicy` is unset. With one, the route is gated exactly
+  // as if it carried a bare `@Authorize` — the point being that forgetting the decorator can no longer be
+  // the difference between a protected endpoint and a public one.
+  if (routerOptions === undefined && routeOptions === undefined) {
+    return options.fallbackPolicy === undefined
+      ? undefined
+      : new AuthzRouteService([newPolicyEvaluator(options.fallbackPolicy, handlers)])
+  }
+
+  const routerPolicies = normalizePolicy(routerOptions?.policy)
+  const routePolicies = normalizePolicy(routeOptions?.policy)
 
   // `schemes` is deliberately not part of this test. It selects *which* scheme authenticates and issues the
   // challenge; it states no requirement of its own, and nothing below turns it into one. Counting it here made
   // `@Authorize({ schemes: [...] })` skip the default policy and then compile to an empty one — so naming a
   // scheme, which reads as tightening the rule, silently let every anonymous request through.
-  const routerEmpty = !routerPolicies.length && !routerOptions.roles?.length
-  const routeEmpty = !routePolicies.length && !routeOptions.roles?.length
+  const routerEmpty = !routerPolicies.length && !routerOptions?.roles?.length
+  const routeEmpty = !routePolicies.length && !routeOptions?.roles?.length
 
   if (routerEmpty && routeEmpty) {
     return new AuthzRouteService([newPolicyEvaluator(options.authorizeDecoratorDefaultPolicy, handlers)])
@@ -108,7 +126,7 @@ export function compileRoutePolicy(
   for (const name of policyNames) {
     const e = evaluators.get(name)
     if (!e) {
-      throw new Error(`Cannot compile route policy: evaluator for "${name}" not found`)
+      throw new ErrAuthzPolicyNotFound(name, [...evaluators.keys()])
     }
 
     evals.push(e)
@@ -116,10 +134,10 @@ export function compileRoutePolicy(
 
   const builder = new PolicyBuilder()
 
-  if (routerOptions.roles && routerOptions.roles.length > 0) {
+  if (routerOptions?.roles && routerOptions.roles.length > 0) {
     builder.role(...routerOptions.roles)
   }
-  if (routeOptions.roles && routeOptions.roles.length > 0) {
+  if (routeOptions?.roles && routeOptions.roles.length > 0) {
     builder.role(...routeOptions.roles)
   }
 

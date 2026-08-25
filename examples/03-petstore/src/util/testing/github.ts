@@ -107,10 +107,14 @@ export async function signInWithGithub(app: WebApplication): Promise<string> {
   // 302 this helper follows — so say what this is.
   const login = await app.fetch('/login/github', { headers: NAVIGATION })
   const state = new URL(login.headers.get('location')!).searchParams.get('state')!
-  const stateCookie = setCookie(login, GITHUB_STATE_COOKIE)
+
+  // The state cookie is named per flow — `<base>.<state>` — so two sign-ins in flight at once get a
+  // cookie each instead of overwriting one another.
+  const stateCookieName = `${GITHUB_STATE_COOKIE}.${state}`
+  const stateCookie = setCookie(login, stateCookieName)
 
   const callback = await app.fetch(`/login/github/callback?code=fake-code&state=${state}`, {
-    headers: { cookie: `${GITHUB_STATE_COOKIE}=${stateCookie}` },
+    headers: { cookie: `${stateCookieName}=${stateCookie}` },
   })
 
   return setCookie(callback, GITHUB_SESSION_COOKIE_NAME)

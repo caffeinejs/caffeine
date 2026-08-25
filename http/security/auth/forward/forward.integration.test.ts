@@ -35,7 +35,7 @@ describe('scheme negotiation (Forward, application)', () => {
         user === 'alice' && pass === 'secret'
           ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
           : null))
-      .addJWTBearer('Bearer', b => b.secret(TEST_SECRET))
+      .addJWTBearer('Bearer', b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())
       .forward('Forward', ctx =>
         ctx.req.header('authorization')?.startsWith('Basic ') ? 'Basic' : 'Bearer')
       .default('Forward'))

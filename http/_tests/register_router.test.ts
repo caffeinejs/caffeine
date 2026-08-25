@@ -91,7 +91,7 @@ describe('registerRouter', () => {
 
   it('applies authentication and authorization to the registered route', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET)))
+    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addService(new ProgrammaticService({ schemes: ['Bearer'] }))
     app = builder.build()
     await app.ready()
@@ -109,7 +109,7 @@ describe('registerRouter', () => {
 
   it('enforces role requirements on the registered route', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET)))
+    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addService(new ProgrammaticService({ roles: ['ops'] }))
     app = builder.build()
     await app.ready()

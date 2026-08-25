@@ -107,7 +107,7 @@ async function stateCookie(issuer = 'https://github.com') {
 
 async function signIn(handler: OAuth2AuthenticationHandler) {
   const { ctx, cookie, redirect } = makeCtx({
-    cookies: { [handler.stateCookieName]: await stateCookie() },
+    cookies: { [`${handler.stateCookieName}.st`]: await stateCookie() },
     query: { code: 'auth-code', state: 'st' },
   })
   await handler.processCallback(ctx)
@@ -134,6 +134,36 @@ describe('GitHub OAuth2 sign-in', () => {
     expect(result.ticket!.principal.findFirst('login')?.value).toBe('octocat')
   })
 
+  it('does not let the provider name the caller\'s roles', async () => {
+    // The user info body is unsigned JSON whose fields the provider chooses and whose values are often
+    // whatever the user typed into their profile. Copying it wholesale — which is what the default mapper
+    // used to do — puts a field called `roles` under the default roleClaimType, and `isInRole` reads it.
+    stubGithub({ user: { id: 4242, login: 'octocat', roles: 'admin' } })
+    const handler = new OAuth2AuthenticationHandler(SCHEME, baseOptions())
+
+    const { cookieValue } = await signIn(handler)
+    const result = await handler.authenticate(
+      makeCtx({ cookies: { [handler.sessionCookieName]: cookieValue } }).ctx,
+    )
+
+    expect(result.succeeded).toBe(true)
+    expect(result.ticket!.principal.isInRole('admin')).toBe(false)
+    expect(result.ticket!.principal.hasClaim('roles')).toBe(false)
+  })
+
+  it('maps only the allowlisted user info fields', async () => {
+    stubGithub({ user: { id: 4242, login: 'octocat', name: 'Mona', gravatar_id: 'abc', company: '@github' } })
+    const handler = new OAuth2AuthenticationHandler(SCHEME, baseOptions())
+
+    const { cookieValue } = await signIn(handler)
+    const result = await handler.authenticate(
+      makeCtx({ cookies: { [handler.sessionCookieName]: cookieValue } }).ctx,
+    )
+
+    const types = result.ticket!.principal.claims().map(c => c.type).sort()
+    expect(types).toEqual(['login', 'name', 'sub'])
+  })
+
   // The single most likely way a GitHub integration fails: without an explicit Accept header
   // the token endpoint answers form-encoded and every downstream error is misleading.
   it('asks the token endpoint for JSON', async () => {
@@ -154,7 +184,7 @@ describe('GitHub OAuth2 sign-in', () => {
 
     const handler = new OAuth2AuthenticationHandler(SCHEME, baseOptions())
     const { ctx } = makeCtx({
-      cookies: { [handler.stateCookieName]: await stateCookie() },
+      cookies: { [`${handler.stateCookieName}.st`]: await stateCookie() },
       query: { code: 'c', state: 'st' },
     })
 
@@ -190,7 +220,7 @@ describe('GitHub OAuth2 sign-in', () => {
     stubGithub({ user: { login: 'octocat' } })
     const handler = new OAuth2AuthenticationHandler(SCHEME, baseOptions())
     const { ctx } = makeCtx({
-      cookies: { [handler.stateCookieName]: await stateCookie() },
+      cookies: { [`${handler.stateCookieName}.st`]: await stateCookie() },
       query: { code: 'c', state: 'st' },
     })
 
@@ -204,7 +234,7 @@ describe('GitHub OAuth2 sign-in', () => {
     stubGithub()
     const handler = new OAuth2AuthenticationHandler(SCHEME, baseOptions())
     const { ctx } = makeCtx({
-      cookies: { [handler.stateCookieName]: await stateCookie('https://evil.example.com') },
+      cookies: { [`${handler.stateCookieName}.st`]: await stateCookie('https://evil.example.com') },
       query: { code: 'auth-code', state: 'st' },
     })
 

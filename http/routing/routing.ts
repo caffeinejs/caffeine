@@ -98,21 +98,23 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
           extras: route.extras,
           catchBy: buildCatchByMap(container, route.catchBy, `${refName(key)}.${String(route.handler)}`),
           authorization: (() => {
-            const hasDecoratorProtection = router.authz !== undefined || route.authz !== undefined
-            const isAnonymous = !!(router.authz?.allowAnonymous || route.authz?.allowAnonymous)
+            // Always compiled, never gated on a decorator being present: an undecorated route is exactly
+            // the one a configured fallback policy has to reach, and compileRoutePolicy is what knows
+            // whether there is one. It returns undefined when the route really is ungated.
+            const authorizer = compileRoutePolicy(
+              authzOptions,
+              authzEvaluators,
+              authzHandlers,
+              router.authz,
+              route.authz,
+            )
 
             return {
-              hasProtection: hasDecoratorProtection && !isAnonymous,
+              // Drives the "authorization configured but authentication is not" start-up check, so it has
+              // to follow what actually gates the route rather than what was written on it.
+              hasProtection: authorizer !== undefined,
               options: mergeAuthz(router.authz, route.authz),
-              authorizer: hasDecoratorProtection
-                ? compileRoutePolicy(
-                    authzOptions,
-                    authzEvaluators,
-                    authzHandlers,
-                    router.authz,
-                    route.authz,
-                  )
-                : undefined,
+              authorizer,
             }
           })(),
         }

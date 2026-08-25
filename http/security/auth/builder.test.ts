@@ -29,7 +29,7 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
     const validate = vi.fn()
     const builder = new AuthenticationBuilder()
       .addBasic(o => o.validate(validate))
-      .addJWTBearer(o => o.secret('secret'))
+      .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
 
     expect(() => builder[kServiceConfigure](null as unknown as ServiceKit)).toThrow(
       'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
@@ -54,7 +54,7 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
   it('does not throw when an explicit default is set with multiple strategies', async () => {
     const builder = new AuthenticationBuilder()
       .addBasic(o => o.validate(vi.fn()))
-      .addJWTBearer(o => o.secret('secret'))
+      .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
       .default('Basic')
 
     await expect(builder[kServiceConfigure](makeKit())).resolves.toBeUndefined()

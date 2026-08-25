@@ -58,6 +58,30 @@ export class CredentialsService {
    * time does not reveal whether the identifier exists.
    */
   async attempt(identifier: string, password: string): Promise<Principal | null> {
+    return (await this.attemptWithRehash(identifier, password))?.principal ?? null
+  }
+
+  /**
+   * {@link attempt}, plus whether the stored hash was produced with weaker parameters than the current
+   * hasher's — the moment a password can be transparently upgraded, because it is the only point at which
+   * the plaintext is in hand.
+   *
+   * ASP.NET's `PasswordVerificationResult.SuccessRehashNeeded` exists for this, and `PasswordHasher`
+   * already implements `needsRehash`; nothing called it, so raising the scrypt cost meant either leaving
+   * every existing user on the old parameters forever or forcing a reset. A login endpoint acting on this
+   * re-hashes and persists:
+   *
+   * ```ts
+   * const result = await creds.attemptWithRehash(email, password)
+   * if (result?.needsRehash) {
+   *   await users.updatePasswordHash(result.userID, await hasher.hash(password))
+   * }
+   * ```
+   */
+  async attemptWithRehash(
+    identifier: string,
+    password: string,
+  ): Promise<{ principal: Principal, userID: string, needsRehash: boolean } | null> {
     const user = await this.#provider.findByIdentifier(identifier)
 
     if (!user) {
@@ -71,7 +95,11 @@ export class CredentialsService {
       return null
     }
 
-    return buildCredentialPrincipal(user, { scheme: this.#scheme, roleClaimType: this.#roleClaimType })
+    return {
+      principal: buildCredentialPrincipal(user, { scheme: this.#scheme, roleClaimType: this.#roleClaimType }),
+      userID: user.id,
+      needsRehash: this.#hasher.needsRehash(user.passwordHash),
+    }
   }
 
   /** Alias of {@link attempt}, mirroring ASP.NET's `CheckPasswordSignInAsync` naming. */

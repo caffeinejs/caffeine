@@ -239,4 +239,71 @@ describe('per-route authentication schemes', () => {
     const viaDefault = await app.fetch('/class-scheme', { headers: { 'x-default-user': 'mallory' } })
     expect(viaDefault.status).toBe(401)
   })
+
+  it('merges the identities of every scheme the caller satisfied', async () => {
+    // First-wins made this unreachable: whichever scheme the decorator listed first won and the other
+    // identity was discarded, so a policy could never see claims asserted by both. ASP.NET folds them with
+    // SecurityHelper.MergeUserPrincipal for exactly this reason.
+    @Authorize({ schemes: ['Default', 'Basic'] })
+    @Controller('/both-schemes')
+    class BothSchemesController {
+      @Get('/')
+      @Params([$p.context()])
+      read(ctx: Context) {
+        return { types: ctx.user.identities.map(i => i.authenticationType) }
+      }
+    }
+    void [BothSchemesController]
+
+    app = buildApp()
+    await app.ready()
+
+    const res = await app.fetch('/both-schemes', {
+      headers: {
+        'x-default-user': 'mallory',
+        authorization: basicHeader('admin', 'admin123'),
+      },
+    })
+
+    expect(res.status).toBe(200)
+    // Both, in the order the decorator named them.
+    expect((await res.json() as { types: string[] }).types).toEqual(['Default', 'Basic'])
+  })
+
+  it('still authenticates when only one of the named schemes is satisfied', async () => {
+    @Authorize({ schemes: ['Default', 'Basic'] })
+    @Controller('/either-scheme')
+    class EitherSchemeController {
+      @Get('/')
+      @Params([$p.context()])
+      read(ctx: Context) {
+        return { types: ctx.user.identities.map(i => i.authenticationType) }
+      }
+    }
+    void [EitherSchemeController]
+
+    app = buildApp()
+    await app.ready()
+
+    const res = await app.fetch('/either-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
+    expect(res.status).toBe(200)
+    expect((await res.json() as { types: string[] }).types).toEqual(['Basic'])
+  })
+
+  it('refuses to start when a route names a scheme that was never registered', async () => {
+    // Silently, this produced a route that rejected every caller: the unknown name authenticated nobody, so
+    // the principal was reset to anonymous and authorization denied — with nothing anywhere naming the typo.
+    @Authorize({ schemes: ['Beaerer'] })
+    @Controller('/typo')
+    class TypoSchemeController {
+      @Get('/')
+      read() {
+        return { ok: true }
+      }
+    }
+    void [TypoSchemeController]
+
+    app = buildApp()
+    await expect(app.ready()).rejects.toThrow(/Beaerer/)
+  })
 })

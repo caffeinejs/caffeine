@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Context } from '../../context.js'
 import { Claim, Identity, Principal } from '../index.js'
+import { ErrAuthSchemeNotFound } from './errors.js'
 import { AuthenticateResult, AuthenticationTicket } from './ticket.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
@@ -40,12 +41,13 @@ function makeHandler(result: AuthenticateResult): AuthenticationHandler {
 
 describe('AuthenticationCoordinator', () => {
   describe('authenticate()', () => {
-    it('returns none when scheme is not registered', async () => {
-      const coordinator = new AuthenticationService(makeProvider({}))
-      const result = await coordinator.authenticate(ctx, 'Bearer')
+    it('throws when the scheme is not registered, naming what is', async () => {
+      // Not `none()`: that is the answer for "no credential was presented", and reusing it here made a
+      // typo'd scheme name indistinguishable from an anonymous caller.
+      const coordinator = new AuthenticationService(makeProvider({ Cookie: makeHandler(AuthenticateResult.none()) }))
 
-      expect(result.succeeded).toBe(false)
-      expect(result.error).toBeUndefined()
+      await expect(coordinator.authenticate(ctx, 'Beaerer')).rejects.toThrow(ErrAuthSchemeNotFound)
+      await expect(coordinator.authenticate(ctx, 'Beaerer')).rejects.toThrow(/"Cookie"/)
     })
 
     it('passes ctx to the handler', async () => {

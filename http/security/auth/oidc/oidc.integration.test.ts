@@ -144,7 +144,7 @@ describe('OIDC integration', () => {
 
       const res = await app.fetch(
         `${CALLBACK_PATH}?code=code&state=oidc-st`,
-        { headers: { cookie: `__Host-oidc_Google_state=${stateCookie}` } },
+        { headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` } },
       )
 
       expect(res.status).toBe(302)
@@ -159,9 +159,11 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(f, jwksResolver).build()
       await app.ready()
 
+      // Planted under the name the *query* state derives, so the lookup succeeds and the sealed-vs-parameter
+      // comparison is what rejects it rather than the cookie simply being absent.
       const res = await app.fetch(
         `${CALLBACK_PATH}?code=c&state=wrong-state`,
-        { headers: { cookie: `__Host-oidc_Google_state=${stateCookie}` } },
+        { headers: { cookie: `__Host-oidc_Google_state.wrong-state=${stateCookie}` } },
       )
 
       expect(res.status).toBe(400)
@@ -177,7 +179,7 @@ describe('OIDC integration', () => {
 
       const res = await app.fetch(
         `${CALLBACK_PATH}?code=c&state=oidc-st`,
-        { headers: { cookie: `__Host-oidc_Google_state=${stateCookie}` } },
+        { headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` } },
       )
 
       expect(res.status).toBe(400)
@@ -193,7 +195,7 @@ describe('OIDC integration', () => {
 
       const res = await app.fetch(
         `${CALLBACK_PATH}?code=c&state=oidc-st`,
-        { headers: { cookie: `__Host-oidc_Google_state=${stateCookie}` } },
+        { headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` } },
       )
       const body = await res.text()
 
@@ -294,8 +296,9 @@ describe('OIDC integration', () => {
 
     expect(res.status).toBe(401)
     expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
-    // The state cookie rides on the 401, so sending the browser to that URL completes the same flow.
-    expect(res.headers.get('set-cookie')).toContain('oidc_Google_state=')
+    // The state cookie rides on the 401, so sending the browser to that URL completes the same flow. It is
+    // named per flow — `<base>.<state>` — so concurrent sign-ins get a cookie each instead of overwriting.
+    expect(res.headers.get('set-cookie')).toMatch(/oidc_Google_state\.[A-Za-z0-9_-]+=/)
   })
 
   it('@Authorize({ roles }) + matching role → 200', async () => {

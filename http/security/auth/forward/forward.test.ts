@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Context } from '../../../context.js'
 import { AuthenticateResult, type AuthenticationTicket } from '../ticket.js'
+import { ErrAuthSchemeNotFound } from '../errors.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
 import { ForwardAuthenticationHandler } from './forward.js'
 
@@ -20,6 +21,7 @@ function makeProvider(defaultScheme: string, handler?: ReturnType<typeof makeDel
   return {
     defaultAuthenticateScheme: defaultScheme,
     schemeFor: vi.fn().mockReturnValue(handler != null ? { get: () => handler } : undefined),
+    schemeNames: [defaultScheme],
   } as unknown as AuthenticationSchemeProvider
 }
 
@@ -51,7 +53,7 @@ describe('ForwardAuthenticationHandler', () => {
   describe('challenge()', () => {
     it('delegates to the resolved handler, passing properties', async () => {
       const { forward, handler } = setup((_ctx, s) => s)
-      const props = { realm: 'test' }
+      const props = { items: { realm: 'test' } }
 
       await forward.challenge(ctx, props)
 
@@ -62,7 +64,7 @@ describe('ForwardAuthenticationHandler', () => {
   describe('forbid()', () => {
     it('delegates to the resolved handler, passing properties', async () => {
       const { forward, handler } = setup((_ctx, s) => s)
-      const props = { reason: 'access denied' }
+      const props = { items: { reason: 'access denied' } }
 
       await forward.forbid(ctx, props)
 
@@ -84,7 +86,7 @@ describe('ForwardAuthenticationHandler', () => {
   describe('revoke()', () => {
     it('delegates to the resolved handler, passing properties', async () => {
       const { forward, handler } = setup((_ctx, s) => s)
-      const props = { token: 'abc' }
+      const props = { items: { token: 'abc' } }
 
       await forward.revoke(ctx, props)
 
@@ -117,7 +119,7 @@ describe('ForwardAuthenticationHandler', () => {
     it('throws when selector returns an empty string', async () => {
       const { forward } = setup(() => '')
 
-      await expect(forward.authenticate(ctx)).rejects.toThrow('No scheme selected.')
+      await expect(forward.authenticate(ctx)).rejects.toThrow(/selector returned no scheme/)
     })
 
     it('throws when no handler is registered for the selected scheme', async () => {
@@ -126,7 +128,7 @@ describe('ForwardAuthenticationHandler', () => {
 
       forward.setSchemeProvider(provider)
 
-      await expect(forward.authenticate(ctx)).rejects.toThrow('No handler found for scheme.')
+      await expect(forward.authenticate(ctx)).rejects.toThrow(ErrAuthSchemeNotFound)
     })
   })
 })

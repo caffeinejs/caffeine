@@ -53,12 +53,17 @@ describe('RoleHandler', () => {
 
   // `.every`, not `.some` — every named role is required. The distinction is the difference between an
   // authorization rule and a much weaker one, and it was never exercised with more than one role.
-  it('requires ALL roles, not any of them', async () => {
+  // ASP.NET's RolesAuthorizationRequirement returns on the first role that matches, and
+  // `[Authorize(Roles = "Admin,Manager")]` reads as "admin or manager". Requiring both is expressed as
+  // two requirements, which the policy evaluator ANDs — see the PolicyBuilder test below.
+  it('requires ANY of the roles named on one requirement', async () => {
     const both = user([['roles', ['admin', 'staff']]])
     const one = user([['roles', ['admin']]])
+    const neither = user([['roles', ['viewer']]])
 
     expect((await handler.handle(ctx, both, requirement('admin', 'staff'))).ok).toBe(true)
-    expect((await handler.handle(ctx, one, requirement('admin', 'staff'))).ok).toBe(false)
+    expect((await handler.handle(ctx, one, requirement('admin', 'staff'))).ok).toBe(true)
+    expect((await handler.handle(ctx, neither, requirement('admin', 'staff'))).ok).toBe(false)
   })
 
   it('reads a role claim whose value is an array', async () => {
@@ -73,7 +78,7 @@ describe('RoleHandler', () => {
 
   it('fails with a reason', async () => {
     expect(await handler.handle(ctx, user([['roles', 'viewer']]), requirement('admin')))
-      .toEqual({ ok: false, reason: 'User is not in all of the required roles' })
+      .toEqual({ ok: false, reason: 'User is in none of the required roles' })
   })
 })
 

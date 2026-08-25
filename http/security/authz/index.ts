@@ -1,5 +1,6 @@
 export type { AuthorizationOptions } from './authz.js'
 export { AuthorizationBuilder } from './authz.js'
+export { ErrAuthzPolicyNotFound, ErrAuthzRequirementHandlerNotFound } from './errors.js'
 export {
   AssertionHandler,
   AuthenticatedUserHandler,

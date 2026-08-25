@@ -50,7 +50,7 @@ async function buildApp(recorder: RecorderConfigurer) {
   const container = new CaffeineIoC()
   container.bind(RecorderConfigurer).toValue(recorder).extends()
   const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
-  builder.authentication(a => a.addJWTBearer(o => o.secret(SECRET)))
+  builder.authentication(a => a.addJWTBearer(o => o.secret(SECRET).allowAnyIssuer().allowAnyAudience()))
   const app = builder.build()
   await app.ready()
   return app

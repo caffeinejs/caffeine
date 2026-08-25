@@ -3,6 +3,7 @@ import type { JWTVerifyGetKey } from 'jose'
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
+import { REGISTERED_CLAIMS } from '../registered_claims.js'
 import type { RemoteAuthenticationIdentity } from '../internal/remote/handler.js'
 import { redactPii, redactPiiList } from '../internal/remote/pii.js'
 import { selectPKCEMethod } from '../internal/remote/pkce.js'
@@ -19,26 +20,6 @@ import type {
   TokenEndpointAuthMethod,
 } from './options.js'
 import { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession } from './errors.js'
-
-/**
- * Registered JWT/OIDC claims excluded from the default identity mapping.
- *
- * They describe the token itself rather than the user, and leaking them into the
- * principal risks colliding with application claim types used by policies and roles.
- */
-const REGISTERED_CLAIMS = new Set([
-  'iss',
-  'aud',
-  'exp',
-  'iat',
-  'nbf',
-  'jti',
-  'nonce',
-  'azp',
-  'at_hash',
-  'c_hash',
-  'sid',
-])
 
 /**
  * id_tokens are signed with the provider's asymmetric key — never accept a symmetric alg.

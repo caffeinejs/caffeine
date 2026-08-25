@@ -6,6 +6,7 @@ export {
   CookieAuthenticationOptionsBuilder,
   type CookieSameSite,
   type RememberMeRecord,
+  type RememberMeRotation,
   RememberMeTokenStore,
 } from './cookie/index.js'
 export {
@@ -19,6 +20,7 @@ export {
   UserProvider,
 } from './credentials/index.js'
 export type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
+export { ErrAuthConfiguration, ErrAuthSchemeNotFound } from './errors.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { JWTAuthenticationHandler, type JWTAuthenticationOptions, jwtServiceKey } from './jwt/index.js'
 export {

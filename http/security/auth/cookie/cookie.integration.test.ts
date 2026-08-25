@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
 import fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
@@ -16,6 +16,7 @@ import {
   Post,
   Params,
   type RememberMeRecord,
+  type RememberMeRotation,
   RememberMeTokenStore,
   ScryptPasswordHasher,
   UserProvider,
@@ -43,13 +44,17 @@ class TestUserProvider extends UserProvider {
 
 class InMemoryRememberStore extends RememberMeTokenStore {
   readonly records = new Map<string, RememberMeRecord>()
+  rotations = 0
   create(record: RememberMeRecord): void { this.records.set(record.series, { ...record }) }
   findBySeries(series: string): RememberMeRecord | null { return this.records.get(series) ?? null }
-  updateToken(series: string, tokenHash: string, expiresAt: number): void {
+  updateToken(series: string, rotation: RememberMeRotation): void {
+    this.rotations++
     const r = this.records.get(series)
     if (r) {
-      r.tokenHash = tokenHash
-      r.expiresAt = expiresAt
+      r.tokenHash = rotation.tokenHash
+      r.previousTokenHash = rotation.previousTokenHash
+      r.rotatedAt = rotation.rotatedAt
+      r.expiresAt = rotation.expiresAt
     }
   }
 
@@ -77,7 +82,7 @@ class SessionController {
       ctx.status(401)
       return { ok: false }
     }
-    await this.auth.persist(ctx, 'Cookie', new AuthenticationTicket(user, 'Cookie', { rememberMe: dto.rememberMe }))
+    await this.auth.persist(ctx, 'Cookie', new AuthenticationTicket(user, 'Cookie', { isPersistent: dto.rememberMe }))
     return { ok: true }
   }
 
@@ -98,7 +103,20 @@ class MeController {
     return { sub: ctx.user.findFirst('sub')?.value, admin: ctx.user.isInRole('admin') }
   }
 }
-void [SessionController, MeController]
+/**
+ * Names the scheme it is already protected by, which is what makes a request authenticate twice: the
+ * controller-scope hook runs the default scheme, then the per-route hook runs the schemes named here.
+ */
+@Authorize({ schemes: ['Cookie'] })
+@Controller('/scoped-me')
+class SchemeScopedMeController {
+  @Params([$p.context()])
+  @Get('/')
+  me(ctx: Context) {
+    return { sub: ctx.user.findFirst('sub')?.value }
+  }
+}
+void [SessionController, MeController, SchemeScopedMeController]
 
 async function buildApp() {
   const f = fastify()
@@ -198,7 +216,7 @@ describe('cookie session login (application)', () => {
 // Durable, server-side-revocable remember-me (series + token)
 // ---------------------------------------------------------------------------
 
-async function buildDurableApp() {
+async function buildDurableApp(graceSeconds?: number) {
   const f = fastify()
   f.register(FastifyCookie)
   const container = new CaffeineIoC()
@@ -208,7 +226,12 @@ async function buildDurableApp() {
   container.bind(PasswordHasher).toValue(new ScryptPasswordHasher({ N: 1024 }))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
   builder.authentication(auth => auth
-    .addCookie(o => o.sessionSecret(SECRET).secure(false).rememberMe())
+    .addCookie(o => {
+      o.sessionSecret(SECRET).secure(false).rememberMe()
+      if (graceSeconds !== undefined) {
+        o.rememberMeRotationGraceSeconds(graceSeconds)
+      }
+    })
     .addCredentials())
   const app = builder.build()
   await app.ready()
@@ -256,7 +279,9 @@ describe('durable remember-me (server-side revocable)', () => {
   })
 
   it('detects theft: replaying a pre-rotation token invalidates the series', async () => {
-    const { app } = await buildDurableApp()
+    // Grace disabled — strict single-use, which is what a deployment that would rather sign a user out
+    // than tolerate any replay window configures.
+    const { app } = await buildDurableApp(0)
     const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
 
     // First use rotates the token.
@@ -271,5 +296,75 @@ describe('durable remember-me (server-side revocable)', () => {
     // Even the rotated token no longer works once the series is invalidated.
     const after = await app.fetch('/me', { headers: { cookie: `caf.remember=${rotated}` } })
     expect(after.status).toBe(401)
+  })
+
+  it('survives a route that authenticates twice in one request', async () => {
+    // `/scoped-me` names the scheme it is already protected by, so the request authenticates twice: once
+    // at the controller scope for the default scheme, once more at the route for the named one. Each
+    // authenticate rotates the remember token, and cookie reads come from the *request*, so the second
+    // call used to replay the token the first had just spent — self-inflicted theft detection that signed
+    // the user out. The per-request memo in AuthenticationService is what collapses this to one call.
+    const { app, store } = await buildDurableApp(0)
+    const remember = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
+
+    const res = await app.fetch('/scoped-me', { headers: { cookie: `caf.remember=${remember}` } })
+    expect(res.status).toBe(200)
+    expect((await res.json() as Record<string, unknown>).sub).toBe('alice')
+
+    // One rotation, not two — and the series is still alive.
+    expect(store.rotations).toBe(1)
+    expect(store.records.size).toBe(1)
+
+    const rotated = cookiesFrom(res)['caf.remember']
+    expect(rotated).toBeDefined()
+    const after = await app.fetch('/scoped-me', { headers: { cookie: `caf.remember=${rotated}` } })
+    expect(after.status).toBe(200)
+  })
+
+  it('tolerates a just-rotated token inside the grace window without rotating again', async () => {
+    // The parallel-request case: a browser fires several requests carrying the same remember cookie, one
+    // of them rotates, and the rest arrive holding a token that is already superseded. Treating those as
+    // theft would sign the user out every time a session expired mid-page-load.
+    const { app, store } = await buildDurableApp()
+    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
+
+    const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    expect(first.status).toBe(200)
+    const rotated = cookiesFrom(first)['caf.remember']
+
+    const raced = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    expect(raced.status).toBe(200)
+
+    // The racer must not spend a second token on the winner's behalf: no new remember cookie, and the
+    // record still holds exactly what the winner rotated to.
+    expect(cookiesFrom(raced)['caf.remember']).toBeUndefined()
+    expect(store.records.size).toBe(1)
+
+    // The winner's token is still the live one.
+    const after = await app.fetch('/me', { headers: { cookie: `caf.remember=${rotated}` } })
+    expect(after.status).toBe(200)
+  })
+
+  it('treats a superseded token as theft once the grace window has passed', async () => {
+    const { app } = await buildDurableApp()
+    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
+
+    const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    expect(first.status).toBe(200)
+    const rotated = cookiesFrom(first)['caf.remember']
+
+    // Only Date is faked: timers stay real so the server's own async work is unaffected.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(Date.now() + 61_000)
+
+      const replay = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+      expect(replay.status).toBe(401)
+
+      const after = await app.fetch('/me', { headers: { cookie: `caf.remember=${rotated}` } })
+      expect(after.status).toBe(401)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
