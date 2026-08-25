@@ -25,27 +25,33 @@ function makeCtx(overrides: Partial<{
   cookies: Record<string, string>
   query: Record<string, string>
   url: string
+  headers: Record<string, string>
 }> = {}) {
   const cookies = overrides.cookies ?? {}
   const query = overrides.query ?? {}
+  // A browser navigation by default: a GitHub sign-in is one, and it is the branch of `challenge()` these
+  // tests are about. The 401 branch has its own coverage in oidc/handler.test.ts.
+  const headers = overrides.headers ?? { 'sec-fetch-mode': 'navigate' }
   const cookie = vi.fn().mockReturnThis()
   const deleteCookie = vi.fn().mockReturnThis()
   const redirect = vi.fn().mockReturnThis()
+  const header = vi.fn().mockReturnThis()
 
   const ctx = {
     req: {
       url: overrides.url ?? '/dashboard',
       cookie: (name?: string) => name === undefined ? cookies : cookies[name],
       query: (key?: string) => key === undefined ? query : query[key],
-      header: () => undefined,
+      header: (name?: string) => name === undefined ? headers : headers[name],
     },
     cookie,
     deleteCookie,
     redirect,
-    status: vi.fn().mockReturnThis(),
+    header,
+    status: vi.fn(() => ctx),
   } as unknown as Context
 
-  return { ctx, cookie, deleteCookie, redirect }
+  return { ctx, cookie, deleteCookie, redirect, header }
 }
 
 const USER = { id: 4242, login: 'octocat', name: 'The Octocat', email: null }

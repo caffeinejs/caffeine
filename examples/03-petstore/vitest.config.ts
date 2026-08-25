@@ -27,9 +27,18 @@ export default defineConfig({
   oxc: false,
   resolve: {
     alias: {
-      // Test the working-tree source, not a built dist. Both must be source so the client, the
-      // controller, and getRouter share one @caffeinejs/http instance (single router registry).
+      // Test the working-tree source, not a built dist. Everything that touches the router registry must be
+      // source, so the client, the controllers, @APIGroup/@Operation and getRouter all share one instance of
+      // it — the registry is a module-level WeakMap, and a second copy silently loses every registration made
+      // against the first.
+      //
+      // Order matters: a string alias matches by prefix, so the subpath entry has to precede the bare package
+      // or '@caffeinejs/http/decorators/registrar' rewrites to '<...>/http/index.ts/decorators/registrar'.
+      '@caffeinejs/http/decorators/registrar': fileURLToPath(
+        new URL('../../http/decorators/registrar/index.ts', import.meta.url),
+      ),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
+      '@caffeinejs/openapi': fileURLToPath(new URL('../../openapi/index.ts', import.meta.url)),
       '@caffeinejs/testing': fileURLToPath(new URL('../../testing/index.ts', import.meta.url)),
     },
   },

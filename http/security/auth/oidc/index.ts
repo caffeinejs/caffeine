@@ -1,3 +1,4 @@
+export { type RemoteChallengeMode } from '../internal/remote/handler.js'
 export { generateCodeChallenge, generateCodeVerifier, selectPKCEMethod } from '../internal/remote/pkce.js'
 export {
   claimsToSession,

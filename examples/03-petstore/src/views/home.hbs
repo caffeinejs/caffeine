@@ -14,10 +14,10 @@
 </section>
 
 <section>
-  <h2>JWT bearer (API)</h2>
-  <p>Programmatic access. Exchange credentials for a token, then send it as a bearer header.</p>
-  <p><code>POST /auth/tokens</code> with <code>{ "username", "password" }</code> &rarr; <code>{ "token" }</code></p>
-  <p><code>GET /me</code> with <code>Authorization: Bearer &lt;token&gt;</code> returns the current principal.</p>
+  <h2>API documentation</h2>
+  <p>Generated from the routes themselves, and the only part of this app behind HTTP Basic.</p>
+  <p><a href="/docs">/docs</a> &mdash; the reference UI. Also <code>/openapi.json</code> and <code>/openapi.yaml</code>.</p>
+  <p>Demo credentials: <code>admin</code> / <code>admin123</code>. A GitHub session does <em>not</em> open these &mdash; the routes name the Basic scheme, and a route accepts only the schemes it names.</p>
 </section>
 
-<footer>Public endpoints: <code>GET /pets</code>, <code>GET /pets/:id</code>.</footer>
+<footer>Public endpoints: <code>GET /pets</code>, <code>GET /pets/:id</code>. Everything else signs in with GitHub.</footer>

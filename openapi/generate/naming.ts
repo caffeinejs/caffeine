@@ -1,0 +1,31 @@
+import type { Key } from '@caffeinejs/di'
+import type { Route, Router } from '@caffeinejs/http'
+
+/**
+ * The controller's base name: its class name with a trailing `Controller` removed.
+ *
+ * `PetsController` becomes `Pets`, which is both the default tag and the first half of the default
+ * operationId. The suffix carries no information a reader of the document needs.
+ */
+export function controllerBaseName(key: Key): string {
+  const name = typeof key === 'function' ? key.name : String(key)
+  return name.replace(/Controller$/, '') || name
+}
+
+/**
+ * The default `operationId` for a route: `Pets_list`.
+ *
+ * Derived rather than authored so every operation has one without ceremony, and prefixed with the controller
+ * so two controllers may each have a `list`. It is deliberately stable and boring: an operationId is part of
+ * the published contract once a client has been generated from it, so `@Operation({ operationId })` is how a
+ * route pins a name that outlives a class rename.
+ */
+export function defaultOperationId(router: Router<unknown>, route: Route<unknown>): string {
+  return `${controllerBaseName(router.key)}_${String(route.handler)}`
+}
+
+/** Where an operation is defined, for error messages: `PetsController.list`. */
+export function operationSite(router: Router<unknown>, route: Route<unknown>): string {
+  const name = typeof router.key === 'function' ? router.key.name : String(router.key)
+  return `${name}.${String(route.handler)}`
+}

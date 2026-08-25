@@ -40,34 +40,41 @@ function makeCtx(overrides: Partial<{
   url: string
   cookies: Record<string, string>
   query: Record<string, string>
+  headers: Record<string, string>
 }> = {}): {
   ctx: Context
   cookie: ReturnType<typeof vi.fn>
   deleteCookie: ReturnType<typeof vi.fn>
   redirect: ReturnType<typeof vi.fn>
   status: ReturnType<typeof vi.fn>
+  header: ReturnType<typeof vi.fn>
 } {
   const cookies = overrides.cookies ?? {}
   const query = overrides.query ?? {}
+  // A browser navigation by default, because that is what a sign-in is: it keeps every test whose subject is
+  // the authorization URL on the redirect branch, so only the tests about the challenge switch itself opt out.
+  const headers = overrides.headers ?? { 'sec-fetch-mode': 'navigate' }
   const cookie = vi.fn().mockReturnThis()
   const deleteCookie = vi.fn().mockReturnThis()
   const redirect = vi.fn().mockReturnThis()
-  const status = vi.fn().mockReturnThis()
+  const header = vi.fn().mockReturnThis()
+  const status = vi.fn(() => ctx)
 
   const ctx = {
     req: {
       url: overrides.url ?? '/dashboard',
       cookie: (name?: string) => name === undefined ? cookies : cookies[name],
       query: (key?: string) => key === undefined ? query : query[key],
-      header: () => undefined,
+      header: (name?: string) => name === undefined ? headers : headers[name],
     },
     cookie,
     deleteCookie,
     redirect,
     status,
+    header,
   } as unknown as Context
 
-  return { ctx, cookie, deleteCookie, redirect, status }
+  return { ctx, cookie, deleteCookie, redirect, status, header }
 }
 
 const DISCOVERY_DOCUMENT = {
@@ -260,6 +267,101 @@ describe('OIDCAuthenticationHandler', () => {
       // replace the flow.
       expect(cookie).toHaveBeenCalledOnce()
       expect((cookie.mock.calls[0] as [string])[0]).toBe('__oidc_state')
+    })
+
+    /**
+     * A redirect to the provider is something only a browser navigation can follow: `fetch` follows it itself,
+     * lands cross-origin on a provider that sends no CORS headers, and the caller sees a network error rather
+     * than "you are not signed in". So the challenge picks its response from what the caller looks like.
+     */
+    describe('challenge mode', () => {
+      const authorizationURL = (header: ReturnType<typeof vi.fn>) =>
+        (header.mock.calls.find(([name]) => name === 'location') as [string, string] | undefined)?.[1]
+
+      it('answers 401 with the authorization URL when the caller is not a navigation', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, redirect, status, header } = makeCtx({ headers: { accept: 'application/json' } })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).not.toHaveBeenCalled()
+        expect(status).toHaveBeenCalledWith(401)
+        expect(authorizationURL(header)).toContain(`${ISSUER}/auth`)
+      })
+
+      // The 401 carries the state cookie too, so a caller that sends the browser to the returned URL
+      // completes the same flow. Nothing about the round trip is discarded by not redirecting.
+      it('still sets the state cookie on the 401', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, cookie } = makeCtx({ headers: {} })
+
+        await handler.challenge(ctx)
+
+        expect((cookie.mock.calls[0] as [string])[0]).toBe('__oidc_state')
+      })
+
+      it('redirects a caller that asks for HTML, for browsers that send no sec-fetch headers', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, redirect } = makeCtx({ headers: { accept: 'text/html,application/xhtml+xml' } })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).toHaveBeenCalledOnce()
+      })
+
+      it('redirects on sec-fetch-dest: document as well as sec-fetch-mode: navigate', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, redirect } = makeCtx({ headers: { 'sec-fetch-dest': 'document' } })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).toHaveBeenCalledOnce()
+      })
+
+      it('answers 401 to a caller that sends no hint at all', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, redirect, status } = makeCtx({ headers: {} })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).not.toHaveBeenCalled()
+        expect(status).toHaveBeenCalledWith(401)
+      })
+
+      it('challengeMode "redirect" redirects a caller that would otherwise get a 401', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ challengeMode: 'redirect' }))
+        const { ctx, redirect } = makeCtx({ headers: { accept: 'application/json' } })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).toHaveBeenCalledOnce()
+      })
+
+      it('challengeMode "status" answers 401 even to a browser navigation', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ challengeMode: 'status' }))
+        const { ctx, redirect, status } = makeCtx({ headers: { 'sec-fetch-mode': 'navigate' } })
+
+        await handler.challenge(ctx)
+
+        expect(redirect).not.toHaveBeenCalled()
+        expect(status).toHaveBeenCalledWith(401)
+      })
+
+      // The hook is the last word on the response, so it must run whichever branch the mode would have taken.
+      it('onChallenge still wins over the mode', async () => {
+        const onChallenge = vi.fn()
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({ onChallenge, challengeMode: 'status' }),
+        )
+        const { ctx, redirect, status } = makeCtx({ headers: {} })
+
+        await handler.challenge(ctx)
+
+        expect(onChallenge).toHaveBeenCalledOnce()
+        expect(redirect).not.toHaveBeenCalled()
+        expect(status).not.toHaveBeenCalled()
+      })
     })
 
     it('stores returnTo (current URL) in state cookie', async () => {

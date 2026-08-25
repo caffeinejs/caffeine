@@ -46,6 +46,19 @@ export interface RemoteAuthenticationIdentity {
   tokens?: RemoteAuthenticationTokens
 }
 
+/**
+ * How an unauthenticated request is challenged.
+ *
+ * The flow starts with a redirect to the provider, which only a browser navigation can follow: `fetch` and
+ * `XMLHttpRequest` follow it themselves, land on a cross-origin provider that sends no CORS headers, and the
+ * caller sees an opaque network error instead of "you are not signed in". So the default picks per request.
+ *
+ * - `auto` — redirect a navigation, answer 401 to anything else.
+ * - `redirect` — always redirect, whatever the caller is.
+ * - `status` — always 401. For an API with no browser surface at all.
+ */
+export type RemoteChallengeMode = 'auto' | 'redirect' | 'status'
+
 /** The options every OAuth-family strategy shares. */
 export interface RemoteAuthenticationOptions {
   clientID: string
@@ -63,6 +76,7 @@ export interface RemoteAuthenticationOptions {
   roleClaimType: string
   httpTimeoutMs: number
   showPii: boolean
+  challengeMode: RemoteChallengeMode
 
   ticketStore?: RemoteAuthenticationTicketStore
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
@@ -279,7 +293,36 @@ export abstract class RemoteAuthenticationHandler<
       return this.options.onChallenge(ctx, authorizationURL)
     }
 
-    ctx.redirect(authorizationURL, 302)
+    if (this.#redirects(ctx)) {
+      ctx.redirect(authorizationURL, 302)
+      return
+    }
+
+    // The state cookie was set above and is on this response too, so a caller that sends the browser to the
+    // URL completes the same flow — nothing is discarded by answering with a status instead of a redirect.
+    //
+    // No `WWW-Authenticate`: the credential is a cookie, not an HTTP authentication scheme, so there is no
+    // registered token to name and inventing one would mislead a client that parses it. `location` on a 401
+    // is a hint — browsers follow it only on a 3xx — which is exactly the intent.
+    ctx.status(401).header('location', authorizationURL)
+  }
+
+  /**
+   * Whether this request should be redirected into the provider rather than answered 401.
+   *
+   * `sec-fetch-mode`/`sec-fetch-dest` are the direct answer and every current browser sends them; the `accept`
+   * fallback covers the ones that do not, and anything that asks for HTML wants a page. A caller sending
+   * neither — `fetch` with no options, `curl`, a client library — gets the 401.
+   */
+  #redirects(ctx: Context): boolean {
+    const mode = this.options.challengeMode
+    if (mode !== 'auto') {
+      return mode === 'redirect'
+    }
+
+    return ctx.req.header('sec-fetch-mode') === 'navigate'
+      || ctx.req.header('sec-fetch-dest') === 'document'
+      || (ctx.req.header('accept')?.includes('text/html') ?? false)
   }
 
   /**

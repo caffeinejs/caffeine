@@ -10,7 +10,14 @@
  * Recorded at builder time, while the handler is constructed, so nothing has to resolve a `Provider` to read one.
  */
 export interface AuthSchemeDescriptor {
-  /** How the credential travels: an HTTP authentication scheme, an API key, OpenID Connect, or OAuth 2.0. */
+  /**
+   * How the credential **travels** on a request the handler will accept.
+   *
+   * Transport only, and independent of how the credential was obtained. An OAuth 2.0 or OpenID Connect
+   * sign-in that ends in a session cookie is `apiKey` here, not `oauth2`: the handler reads a cookie and
+   * would reject the bearer token an `oauth2` scheme promises. `flows` and `openIdConnectURL` are what
+   * record the sign-in, and they are set alongside whichever `kind` the transport really is.
+   */
   kind: 'http' | 'apiKey' | 'openIdConnect' | 'oauth2'
   /** For `http`: the `Authorization` scheme keyword, lowercased — `bearer`, `basic`. */
   scheme?: string
@@ -20,9 +27,9 @@ export interface AuthSchemeDescriptor {
   in?: 'header' | 'query' | 'cookie'
   /** For `apiKey`: the header, query parameter, or cookie name carrying the credential. */
   name?: string
-  /** For `openIdConnect`: the discovery document URL, when the scheme was configured with one. */
+  /** The OpenID Connect discovery document the credential is obtained through, when there is one. */
   openIdConnectURL?: string
-  /** For `oauth2`: the authorization-code endpoints and the scopes the scheme requests. */
+  /** The OAuth 2.0 flow the credential is obtained through, when there is one. */
   flows?: AuthSchemeFlows
   /** Human-readable note about the scheme, when the registration implies something worth saying. */
   description?: string

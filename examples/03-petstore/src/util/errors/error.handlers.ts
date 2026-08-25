@@ -1,4 +1,5 @@
 import { Catch, type ActionResult, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std'
 import { View } from '@caffeinejs/view'
 
 // A simple, conventional error body: a machine-readable `code`, a human-readable `message`, and —
@@ -13,6 +14,19 @@ export interface FieldError {
   field: string
   message: string
 }
+
+// The same body as a schema, so the OpenAPI document describes what these handlers actually return. The `$id`
+// is what lands it in components.schemas as `ApiError` and turns every use into a $ref.
+export const fieldErrorSchema = $t.Object({
+  field: $t.String(),
+  message: $t.String(),
+}, { $id: 'FieldError' })
+
+export const apiErrorSchema = $t.Object({
+  code: $t.String(),
+  message: $t.String(),
+  errors: $t.Optional($t.Array(fieldErrorSchema)),
+}, { $id: 'ApiError' })
 
 // HTTP status → short, stable error code. Anything not listed falls back to a generic 'ERROR'.
 const CODES: Record<number, string> = {

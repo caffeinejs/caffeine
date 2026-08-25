@@ -5,7 +5,6 @@ import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequireme
 
 export class PolicyBuilder {
   readonly #requirements: AuthzRequirement[] = []
-  readonly #authSchemes: string[] = []
 
   requireAuthenticated(): this {
     this.#requirements.push({ kind: 'authenticated' } as AuthenticatedUserRequirement)
@@ -32,11 +31,6 @@ export class PolicyBuilder {
     return this
   }
 
-  authenticationStrategies(...schemes: string[]): this {
-    this.#authSchemes.push(...schemes)
-    return this
-  }
-
   requirement(requirement: AuthzRequirement): this {
     this.#requirements.push(requirement)
     return this
@@ -46,7 +40,6 @@ export class PolicyBuilder {
     return {
       name: name ?? '',
       requirements: [...this.#requirements],
-      authenticationStrategies: this.#authSchemes.length > 0 ? [...this.#authSchemes] : undefined,
     }
   }
 }

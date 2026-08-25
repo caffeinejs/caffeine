@@ -9,7 +9,6 @@ import { AuthorizationService } from './service.js'
 
 export interface AuthorizationOptions {
   authorizeDecoratorDefaultPolicy: AuthzPolicy
-  fallbackPolicy?: AuthzPolicy
 }
 
 export class AuthorizationBuilder implements Service {
@@ -18,8 +17,6 @@ export class AuthorizationBuilder implements Service {
   #authzDecoratorPolicy: AuthzPolicy = new PolicyBuilder()
     .requireAuthenticated()
     .build()
-
-  #fallbackPolicy: AuthzPolicy | undefined
 
   addPolicy(policy: AuthzPolicy): this
   addPolicy(name: string, configure: (builder: PolicyBuilder) => void): this
@@ -56,25 +53,6 @@ export class AuthorizationBuilder implements Service {
     }
 
     this.#authzDecoratorPolicy = policyOrConfigure
-
-    return this
-  }
-
-  fallbackPolicy(policy: AuthzPolicy): this
-  fallbackPolicy(configure: (builder: PolicyBuilder) => void): this
-  fallbackPolicy(
-    policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void),
-  ): this {
-    if (typeof policyOrConfigure === 'function') {
-      const builder = new PolicyBuilder()
-      policyOrConfigure(builder)
-
-      this.#fallbackPolicy = builder.build()
-
-      return this
-    }
-
-    this.#fallbackPolicy = policyOrConfigure
 
     return this
   }
@@ -116,7 +94,6 @@ export class AuthorizationBuilder implements Service {
       .bind(kAuthzOpts)
       .toValue({
         authorizeDecoratorDefaultPolicy: this.#authzDecoratorPolicy,
-        fallbackPolicy: this.#fallbackPolicy,
       })
       .lifetime(Scopes.SINGLETON)
       .internal()

@@ -10,7 +10,7 @@ import {
 } from '../internal/remote/config.js'
 import { ErrOAuthConfiguration } from '../internal/remote/errors.js'
 import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
-import type { RemoteAuthenticationTokens } from '../internal/remote/handler.js'
+import type { RemoteAuthenticationTokens, RemoteChallengeMode } from '../internal/remote/handler.js'
 
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
@@ -24,6 +24,7 @@ type DefaultedKey
     | 'roleClaimType'
     | 'httpTimeoutMs'
     | 'showPii'
+    | 'challengeMode'
     | 'usePKCE'
     | 'subjectClaim'
 
@@ -57,6 +58,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
   roleClaimType: string
   httpTimeoutMs: number
   showPii: boolean
+  challengeMode: RemoteChallengeMode
 
   /**
    * Sends PKCE on the authorization request. On by default, S256 only.
@@ -172,6 +174,7 @@ export function resolveOAuth2Options(
     roleClaimType: input.roleClaimType ?? 'roles',
     httpTimeoutMs: input.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
     showPii: input.showPii ?? false,
+    challengeMode: input.challengeMode ?? 'auto',
     usePKCE: input.usePKCE ?? true,
     subjectClaim: input.subjectClaim ?? 'id',
   }
@@ -257,6 +260,12 @@ export class OAuth2AuthenticationOptionsBuilder {
 
   showPii(show: boolean): this {
     this.#options.showPii = show
+    return this
+  }
+
+  /** How an unauthenticated request is challenged. See {@link RemoteChallengeMode}. */
+  challengeMode(mode: RemoteChallengeMode): this {
+    this.#options.challengeMode = mode
     return this
   }
 

@@ -1,4 +1,4 @@
-// GitHub OAuth settings, read straight from the environment (same style as JWT_SECRET in
+// GitHub OAuth settings, read straight from the environment (same style as the docs credentials in
 // tokens.ts). The values live in the repo-root .env under the PETSTOREDEMO_AUTH_GITHUB_* prefix;
 // main.ts loads that file via `dotenv/config`.
 const clientID = process.env.PETSTOREDEMO_AUTH_GITHUB_CLIENT_ID ?? ''

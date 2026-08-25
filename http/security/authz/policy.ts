@@ -8,7 +8,6 @@ import { PolicyBuilder } from './policy_builder.js'
 export interface AuthzPolicy {
   readonly name: string
   readonly requirements: readonly AuthzRequirement[]
-  readonly authenticationStrategies?: readonly string[]
 }
 
 export interface AuthzRequirement {

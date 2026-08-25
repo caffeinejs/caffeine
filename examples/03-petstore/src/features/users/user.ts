@@ -54,3 +54,14 @@ export const updateUserSchema = $t.Partial($t.Omit(createUserSchema, ['username'
 export const userIdParamSchema = $t.Object({
   id: $t.String(),
 })
+
+/**
+ * Mirrors {@link UserDTO}. Built by omitting `password` from the create schema, the same field `toUserDTO`
+ * drops — so the document cannot come to advertise a write-only field as part of the response.
+ */
+export const userSchema = $t.Object({
+  ...$t.Omit(createUserSchema, ['password']).properties,
+  id: $t.String(),
+  createdAt: $t.String({ format: 'date-time' }),
+  updatedAt: $t.String({ format: 'date-time' }),
+}, { $id: 'User' })

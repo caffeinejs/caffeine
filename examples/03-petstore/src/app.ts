@@ -4,17 +4,24 @@ import FastifyMultipart from '@fastify/multipart'
 import FastifyCookie from '@fastify/cookie'
 import handlebars from 'handlebars'
 import type { Container } from '@caffeinejs/di'
-import { Claim, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { Claim, Identity, Principal, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import type { HealthIndicator } from '@caffeinejs/std'
 import { EnvProvider } from '@caffeinejs/std/config'
+import { openapiPlugin } from '@caffeinejs/openapi'
 import { staticPlugin } from '@caffeinejs/static'
 import { viewPlugin } from '@caffeinejs/view'
-import { GITHUB_SESSION_COOKIE, JWT_SECRET, githubConfig } from './features/auth/index.js'
+import { apiErrorSchema } from './util/errors/index.js'
+import { GITHUB_SESSION_COOKIE, githubConfig } from './features/auth/index.js'
 import { appConfigSchema } from './config.js'
 
 const GITHUB_ISSUER = 'https://github.com'
 const viewsRoot = fileURLToPath(new URL('./views', import.meta.url))
 const publicRoot = fileURLToPath(new URL('./public', import.meta.url))
+
+// Credentials for the API documentation. Demo defaults so the example runs with no setup; override them
+// through the environment for anything that is not a laptop.
+const docsUser = process.env.PETSTORE_DOCS_USER ?? 'admin'
+const docsPassword = process.env.PETSTORE_DOCS_PASSWORD ?? 'admin123'
 
 // Builds the web application from a given container — it never creates one, so tests can pass a
 // TestContainer with overridden dependencies. DB-agnostic: no prisma import here, which is also why the health
@@ -31,14 +38,49 @@ export function buildApp(
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie)
 
-  return createWebApplication(fastifyAdapterFactory(server), { container }, viewPlugin(), staticPlugin())
+  return createWebApplication(
+    fastifyAdapterFactory(server),
+    { container },
+    viewPlugin(),
+    staticPlugin(),
+    openapiPlugin(),
+  )
     .view(v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
     .static(s => s.serve(publicRoot, { prefix: '/static' }))
+    // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
+    // $p pickers are the source, and @APIGroup/@Operation add only what those cannot say. 3.2.0 because
+    // QUERY /pets needs it: a 3.1 path item has no field for a non-standard method.
+    .openapi(o => o
+      .version('3.2.0')
+      .info({
+        title: 'Modern Petstore',
+        version: '1.0.0',
+        description: 'A pet adoption API, modelled on the OpenAPI 3.2 Modern Petstore specification.',
+      })
+      // Relative on purpose. A consumer resolves it against wherever it fetched the document, so it is right
+      // at any host or port — an absolute URL here was stale the moment the port changed. It also keeps the
+      // documentation UI's "Try it" on this origin, which is what lets the browser attach the GitHub session
+      // cookie: a cross-origin request would send none.
+      .server('/', 'This server')
+      // The one place in this application that names an authentication scheme. Everything else runs on the
+      // default (GitHub), so only the documentation asks for something different — and because a route's
+      // named schemes are the only ones it accepts, a live GitHub session does not open the docs.
+      //
+      // The reverse also holds, and the UI cannot paper over it: GitHub sign-in is a browser round trip that
+      // ends in a cookie, so it happens at /login/github, not in the documentation's authentication panel.
+      .secure(s => s.schemes('Basic'))
+      // The fallback error handler answers 422 for a body that fails validation, not Fastify's default 400.
+      .errors({ validation: 422 })
+      .errorSchema(apiErrorSchema))
     .authentication(auth => auth
-      // JWT bearer for API clients.
-      .addJWTBearer(o => o.secret(JWT_SECRET))
-      // GitHub OAuth 2.0 browser login. The callback route is auto-registered from callbackURL. Fixed
-      // cookie names so the scheme selector below can detect a live GitHub session. includeEmail
+      // Basic, for the API documentation only. Demo credentials, overridable from the environment.
+      .addBasic('Basic', o => o
+        .realm('Petstore docs')
+        .validate((_ctx, username, password) => username === docsUser && password === docsPassword
+          ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', username, 'petstore')])])
+          : null))
+      // GitHub OAuth 2.0 browser login, and the application default: every route that does not name a
+      // scheme authenticates with it. The callback route is auto-registered from callbackURL. includeEmail
       // fetches the verified primary email (adds the user:email scope).
       .addGithub('GitHub', o => o
         .clientID(githubConfig.clientID)
@@ -64,19 +106,17 @@ export function buildApp(
           if (u.avatar_url) {
             claims.push(new Claim('avatar_url', u.avatar_url, GITHUB_ISSUER))
           }
+          // Grants every signed-in GitHub user the scope the pet write routes gate on. A real deployment
+          // would map this from an org/team membership; stated plainly here because "any GitHub account can
+          // write" is a demo decision, not an accident.
+          claims.push(new Claim('roles', 'write:pets', GITHUB_ISSUER))
+
           return claims
         }), { includeEmail: true })
-      // The request pipeline authenticates one scheme per request; this Forward picks it. A bearer
-      // token → JWT; a GitHub session cookie → GitHub; otherwise JWT, so a credential-less request to
-      // a protected API route still challenges as Bearer (401) rather than redirecting to GitHub.
-      .forward('scheme', ctx => {
-        const authorization = ctx.req.header('authorization')
-        if (authorization && authorization.toLowerCase().startsWith('bearer ')) {
-          return 'Bearer'
-        }
-        return ctx.req.cookie(GITHUB_SESSION_COOKIE) ? 'GitHub' : 'Bearer'
-      })
-      .default('scheme'),
+      // GitHub is the default, so no controller in this application has to name a scheme. Anonymous
+      // requests to a guarded route are redirected into the OAuth flow rather than answered 401 — this is
+      // a browser-first demo, and the documentation (Basic) is the one place that differs.
+      .default('GitHub'),
     )
     // Config + server come after the plugin methods (.view, .static) because .config() re-types the builder and
     // drops the plugin augments. Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT

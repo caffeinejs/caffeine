@@ -78,7 +78,9 @@ describe('OIDC integration', () => {
     const app = makeOIDCApp(f).build()
     await app.ready()
 
-    const res = await app.fetch('/oidc-int-challenge')
+    // A navigation, so the challenge redirects. Without the header this is a 401 carrying the same URL —
+    // see "answers 401 rather than redirecting a caller that is not a browser navigation" below.
+    const res = await app.fetch('/oidc-int-challenge', { headers: { 'sec-fetch-mode': 'navigate' } })
     expect(res.status).toBe(302)
     const location = res.headers.get('location')!
     expect(location).toContain(`${ISSUER}/auth`)
@@ -261,7 +263,39 @@ describe('OIDC integration', () => {
     ])
 
     expect(pub.status).toBe(200)
-    expect(prot.status).toBe(302)
+    // 401 rather than 302: neither request claims to be a browser navigation, and the point here is that the
+    // protected route was challenged at all, not which shape the challenge took.
+    expect(prot.status).toBe(401)
+  })
+
+  /**
+   * The redirect into the provider is a browser mechanism: `fetch` follows it itself, lands on a cross-origin
+   * provider that sends no CORS headers, and the caller sees a network error instead of "you are not signed
+   * in". So a caller that does not look like a navigation gets a 401 it can actually read, with the same
+   * authorization URL — and the same state cookie — it would have been redirected to.
+   */
+  it('answers 401 rather than redirecting a caller that is not a browser navigation', async () => {
+    @Authorize()
+    @Controller('/oidc-int-xhr')
+    class OIDCIntXHRController {
+      @Get('/')
+      index() {
+        return { ok: true }
+      }
+    }
+    void [OIDCIntXHRController]
+
+    const f = fastify()
+    f.register(FastifyCookie)
+    const app = makeOIDCApp(f).build()
+    await app.ready()
+
+    const res = await app.fetch('/oidc-int-xhr', { headers: { accept: 'application/json' } })
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
+    // The state cookie rides on the 401, so sending the browser to that URL completes the same flow.
+    expect(res.headers.get('set-cookie')).toContain('oidc_Google_state=')
   })
 
   it('@Authorize({ roles }) + matching role → 200', async () => {

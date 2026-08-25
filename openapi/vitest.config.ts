@@ -11,11 +11,11 @@ export default defineConfig({
       },
     }),
   ],
+  // @ts-expect-error — oxc is an experimental Vitest option not yet in Vite's types
   oxc: false,
   test: {
     name: 'openapi',
     include: ['**/*.test.ts'],
     environment: 'node',
-    passWithNoTests: true,
   },
 })

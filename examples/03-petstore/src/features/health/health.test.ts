@@ -81,7 +81,7 @@ describe('health probes', () => {
   it('leaves the probes reachable without authentication', async () => {
     app = await start([])
 
-    // Every other route in this application sits behind the JWT/GitHub scheme selector.
+    // Every other route in this application sits behind an authentication scheme.
     expect((await probe(app, '/readyz')).statusCode).toBe(200)
     expect((await probe(app, '/api/v1/pets')).statusCode).not.toBe(200)
   })

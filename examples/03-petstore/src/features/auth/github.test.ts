@@ -3,82 +3,13 @@ import type { WebApplication } from '@caffeinejs/http'
 import { newTestContainer } from '@caffeinejs/testing'
 import { createContainer } from '../../app.container.js'
 import { buildApp } from '../../app.js'
-import { signToken } from './tokens.js'
+import { GITHUB_STATE_COOKIE, NAVIGATION, sessionHeader, setCookie, signInWithGithub, stubGithub } from '../../util/testing/github.js'
 
-// GitHub's OAuth endpoints. Hardcoded because GITHUB_ENDPOINTS is not re-exported from the
-// package's public surface; these URLs are the ones the OAuth2 handler calls.
-const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'
-const GITHUB_USER_URL = 'https://api.github.com/user'
-const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails'
+const DOCS_AUTH = `Basic ${Buffer.from('admin:admin123').toString('base64')}`
 
-// Stubs GitHub's token/user/emails endpoints. app.fetch drives the app through light-my-request, so
-// only the handler's own outbound fetch is replaced here — the request pipeline is untouched.
-function stubGithub(): void {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-    if (url === GITHUB_TOKEN_URL) {
-      return { ok: true, status: 200, json: async () => ({ access_token: 'gho_test', token_type: 'bearer' }) }
-    }
-    if (url === GITHUB_USER_URL) {
-      // A realistic GitHub /user body: ~30 fields, many long *_url strings. The default claim mapper
-      // would seal all of these and overflow the browser's 4096-byte cookie limit — the size
-      // assertion in the flow test guards against regressing the claimMapper whitelist.
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          login: 'octocat',
-          id: 4242,
-          node_id: 'MDQ6VXNlcjQyNDI=',
-          avatar_url: 'https://avatars.githubusercontent.com/u/4242?v=4',
-          gravatar_id: '',
-          url: 'https://api.github.com/users/octocat',
-          html_url: 'https://github.com/octocat',
-          followers_url: 'https://api.github.com/users/octocat/followers',
-          following_url: 'https://api.github.com/users/octocat/following{/other_user}',
-          gists_url: 'https://api.github.com/users/octocat/gists{/gist_id}',
-          starred_url: 'https://api.github.com/users/octocat/starred{/owner}{/repo}',
-          subscriptions_url: 'https://api.github.com/users/octocat/subscriptions',
-          organizations_url: 'https://api.github.com/users/octocat/orgs',
-          repos_url: 'https://api.github.com/users/octocat/repos',
-          events_url: 'https://api.github.com/users/octocat/events{/privacy}',
-          received_events_url: 'https://api.github.com/users/octocat/received_events',
-          type: 'User',
-          site_admin: false,
-          name: 'The Octocat',
-          company: '@github',
-          blog: 'https://github.blog',
-          location: 'San Francisco',
-          email: null,
-          hireable: null,
-          bio: 'A mysterious cat that lives in the GitHub logo and enjoys long walks on the keyboard.',
-          twitter_username: 'octocat',
-          public_repos: 8,
-          public_gists: 8,
-          followers: 9001,
-          following: 9,
-          created_at: '2011-01-25T18:44:36Z',
-          updated_at: '2024-01-25T18:44:36Z',
-        }),
-      }
-    }
-    if (url === GITHUB_EMAILS_URL) {
-      return { ok: true, status: 200, json: async () => [{ email: 'octocat@github.com', primary: true, verified: true }] }
-    }
-    return { ok: false, status: 404, json: async () => ({}) }
-  }))
-}
-
-// Extracts a Set-Cookie value by name from a Response, without following redirects.
-function setCookie(res: Response, name: string): string {
-  const headers = res.headers as Headers & { getSetCookie?: () => string[] }
-  const all = headers.getSetCookie?.() ?? (res.headers.get('set-cookie') ? [res.headers.get('set-cookie')!] : [])
-  const found = all.find(c => c.startsWith(`${name}=`))
-  return found ? found.slice(name.length + 1).split(';')[0] : ''
-}
-
-// Exercises the two authentication schemes wired in app.ts: the JWT bearer API auth and the GitHub
-// OAuth browser login. No network and no database — GitHub is stubbed, and /me only reads the
-// principal. GitHub credentials fall back to dev placeholders when the env vars are unset.
+// Exercises the two authentication schemes wired in app.ts: Basic for the API documentation, and the GitHub
+// OAuth browser login that is the application default. No network and no database — GitHub is stubbed, and
+// /me only reads the principal. GitHub credentials fall back to dev placeholders when the env vars are unset.
 describe('authentication wiring', () => {
   let app: WebApplication
 
@@ -106,7 +37,7 @@ describe('authentication wiring', () => {
   })
 
   it('starts the GitHub OAuth flow: /login/github redirects to GitHub with a state cookie', async () => {
-    const res = await app.fetch('/login/github')
+    const res = await app.fetch('/login/github', { headers: NAVIGATION })
 
     expect(res.status).toBe(302)
     const location = res.headers.get('location') ?? ''
@@ -120,16 +51,16 @@ describe('authentication wiring', () => {
     stubGithub()
 
     // 1. Initiate: capture the state parameter and its sealed cookie from the real challenge.
-    const login = await app.fetch('/login/github')
+    const login = await app.fetch('/login/github', { headers: NAVIGATION })
     const state = new URL(login.headers.get('location')!).searchParams.get('state')!
-    const stateCookie = setCookie(login, 'petstore_gh_state')
+    const stateCookie = setCookie(login, GITHUB_STATE_COOKIE)
     expect(state).toBeTruthy()
     expect(stateCookie).toBeTruthy()
 
     // 2. Callback: GitHub redirects back with the code + matching state; the handler exchanges the
     // code (stubbed), reads the user, and writes the session cookie.
     const callback = await app.fetch(`/login/github/callback?code=fake-code&state=${state}`, {
-      headers: { cookie: `petstore_gh_state=${stateCookie}` },
+      headers: { cookie: `${GITHUB_STATE_COOKIE}=${stateCookie}` },
     })
     expect(callback.status).toBe(302)
     const sessionCookie = setCookie(callback, 'petstore_gh_session')
@@ -168,28 +99,98 @@ describe('authentication wiring', () => {
     expect(setCookie(logout, 'petstore_gh_session')).toBe('')
   })
 
-  it('redirects an anonymous /dashboard to GitHub (protected)', async () => {
-    const res = await app.fetch('/dashboard')
+  // GitHub is the default scheme now, so an unauthenticated request to a guarded route is challenged into
+  // the OAuth flow rather than answered a bare 401. That is the browser-first behaviour this example wants;
+  // the documentation routes below are the deliberate exception.
+  it('redirects an anonymous /dashboard into the GitHub flow', async () => {
+    const res = await app.fetch('/dashboard', { headers: NAVIGATION })
 
-    // No bearer, no session → Forward picks Bearer → 401 challenge (the API default), not a redirect.
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize')
   })
 
-  it('authenticates /me with a JWT bearer token', async () => {
-    const token = await signToken('tester', ['reader'])
+  it('redirects an anonymous /me into the GitHub flow', async () => {
+    const res = await app.fetch('/me', { headers: NAVIGATION })
 
-    const res = await app.fetch('/me', { headers: { authorization: `Bearer ${token}` } })
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize')
+  })
+
+  // A redirect to github.com is something only a browser navigation can follow: `fetch` follows it itself,
+  // lands cross-origin on a host that sends no CORS headers, and the caller sees a network error instead of
+  // "you are not signed in". So an API caller gets a 401 naming the same URL — which is also what makes the
+  // documentation UI's "Try it" show a readable failure rather than a CORS wall.
+  it('answers an API caller 401, with the authorization URL in location', async () => {
+    const res = await app.fetch('/me', { headers: { accept: 'application/json' } })
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize')
+  })
+
+  it('authenticates /me with a GitHub session', async () => {
+    stubGithub()
+    const session = await signInWithGithub(app)
+
+    const res = await app.fetch('/me', { headers: sessionHeader(session) })
 
     expect(res.status).toBe(200)
-    const body = await res.json() as { authenticated: boolean, sub: unknown, roles: unknown[] }
+    const body = await res.json() as { authenticated: boolean, sub: unknown, name: unknown }
     expect(body.authenticated).toBe(true)
-    expect(body.sub).toBe('tester')
-    expect(body.roles).toContain('reader')
+    expect(body.sub).toBe(4242)
+    expect(body.name).toBe('The Octocat')
+  })
+})
+
+// The documentation is the one part of the application that names a scheme. These assertions are what make
+// that meaningful: Basic is demanded, and — critically — a valid GitHub session does not substitute for it.
+describe('documentation is protected by Basic, independently of the default scheme', () => {
+  let app: WebApplication
+
+  beforeAll(async () => {
+    app = buildApp(newTestContainer(createContainer()).build(), { logger: false })
+    await app.ready()
   })
 
-  it('challenges /me as Bearer (401) when no credentials are present', async () => {
-    const res = await app.fetch('/me')
+  afterAll(async () => {
+    await app.close()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('challenges as Basic, not by redirecting to GitHub', async () => {
+    const res = await app.fetch('/openapi.json')
 
     expect(res.status).toBe(401)
+    expect(res.headers.get('www-authenticate')).toContain('Basic')
+    expect(res.headers.get('location')).toBeNull()
+  })
+
+  it('serves the document to a valid Basic credential', async () => {
+    const res = await app.fetch('/openapi.json', { headers: { authorization: DOCS_AUTH } })
+
+    expect(res.status).toBe(200)
+  })
+
+  it('rejects wrong Basic credentials', async () => {
+    const wrong = `Basic ${Buffer.from('admin:nope').toString('base64')}`
+
+    expect((await app.fetch('/openapi.json', { headers: { authorization: wrong } })).status).toBe(401)
+  })
+
+  // The downgrade case. A signed-in GitHub user is authenticated as far as the default scheme is concerned,
+  // but the documentation accepts Basic and only Basic — so this must still be refused.
+  it('does not accept a GitHub session in place of Basic', async () => {
+    stubGithub()
+    const session = await signInWithGithub(app)
+
+    // The same session does authenticate a route that runs on the default scheme.
+    expect((await app.fetch('/me', { headers: sessionHeader(session) })).status).toBe(200)
+
+    const docs = await app.fetch('/openapi.json', { headers: sessionHeader(session) })
+
+    expect(docs.status).toBe(401)
+    expect(docs.headers.get('www-authenticate')).toContain('Basic')
   })
 })

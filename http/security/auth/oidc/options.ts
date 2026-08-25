@@ -9,6 +9,7 @@ import {
   DEFAULT_HTTP_TIMEOUT_MS,
   MIN_SESSION_SECRET_LENGTH,
 } from '../internal/remote/config.js'
+import type { RemoteChallengeMode } from '../internal/remote/handler.js'
 import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
 import { ErrOIDCConfiguration } from './errors.js'
 
@@ -64,6 +65,7 @@ type DefaultedKey
     | 'discoveryCacheTtlSeconds'
     | 'tokenEndpointAuthMethod'
     | 'showPii'
+    | 'challengeMode'
     | 'getClaimsFromUserInfoEndpoint'
     | 'saveTokens'
 
@@ -118,6 +120,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    * never carries user data either way.
    */
   showPii: boolean
+  challengeMode: RemoteChallengeMode
 
   /**
    * Post-mapping claim surgery.
@@ -379,6 +382,7 @@ export function resolveOIDCOptions(
     discoveryCacheTtlSeconds: input.discoveryCacheTtlSeconds ?? 3600,
     tokenEndpointAuthMethod: input.tokenEndpointAuthMethod ?? 'auto',
     showPii: input.showPii ?? false,
+    challengeMode: input.challengeMode ?? 'auto',
     getClaimsFromUserInfoEndpoint: input.getClaimsFromUserInfoEndpoint ?? false,
     saveTokens: input.saveTokens ?? false,
   }
@@ -558,6 +562,12 @@ export class OIDCAuthenticationOptionsBuilder {
    */
   showPii(show: boolean): this {
     this.#options.showPii = show
+    return this
+  }
+
+  /** How an unauthenticated request is challenged. See {@link RemoteChallengeMode}. */
+  challengeMode(mode: RemoteChallengeMode): this {
+    this.#options.challengeMode = mode
     return this
   }
 

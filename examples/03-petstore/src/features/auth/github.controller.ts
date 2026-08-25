@@ -1,15 +1,20 @@
 import { AllowAnonymous, AuthenticationService, Authorize, type Context, Controller, Get, Params, $p } from '@caffeinejs/http'
+import { APIGroup } from '@caffeinejs/openapi'
 import { View } from '@caffeinejs/view'
 
 // GitHub OAuth sign-in. The callback route (/login/github/callback) is registered automatically by
 // the framework's OIDCConfigurer from the configured callbackURL — only the initiation route lives
 // here.
+//
+// Hidden from the OpenAPI document: these are browser redirects and rendered pages, not API operations. The
+// GitHub scheme itself still appears under components.securitySchemes, derived from .authentication(...).
+@APIGroup({ hidden: true })
 @Controller('/', [AuthenticationService])
 export class GithubAuthController {
   constructor(private readonly auth: AuthenticationService) {}
 
   // Starts the flow explicitly: the challenge builds GitHub's authorize URL, sets the sealed state
-  // cookie, and 302-redirects. Anonymous so the authz guard does not challenge as Bearer first — the
+  // cookie, and 302-redirects. Anonymous so the authz guard does not challenge first — the
   // default scheme only redirects to GitHub once a session cookie exists.
   //
   // Already-signed-in requests must NOT re-challenge: the callback redirects back to the URL that
@@ -26,7 +31,7 @@ export class GithubAuthController {
     await this.auth.challenge(ctx, 'GitHub')
   }
 
-  // Post-login landing page: a small HTML profile of whoever is signed in (GitHub session or JWT).
+  // Post-login landing page: a small HTML profile of whoever is signed in.
   // Rendered from src/views/dashboard.hbs; Handlebars auto-escapes the model, so no manual escaping.
   @Get('/dashboard')
   @Authorize()

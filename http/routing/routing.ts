@@ -4,7 +4,7 @@ import { solutions } from '../error/util.js'
 import { Keys } from '../symbols.js'
 import { CatchByMap, Router } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
-import { getRouter } from '../decorators/registrar/index.js'
+import { getRouter, type RouteAuthzOptions } from '../decorators/registrar/index.js'
 
 export function buildRouting<REQ>(container: Container): Router<REQ>[] {
   // Authorization is always configured, so its evaluators/handlers/options are always bound.
@@ -103,7 +103,7 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
 
             return {
               hasProtection: hasDecoratorProtection && !isAnonymous,
-              options: route.authz,
+              options: mergeAuthz(router.authz, route.authz),
               authorizer: hasDecoratorProtection
                 ? compileRoutePolicy(
                     authzOptions,
@@ -121,6 +121,47 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
   }
 
   return routers
+}
+
+/**
+ * The authorization options actually in force on a route, combining what the controller declared with what
+ * the method declared.
+ *
+ * Previously only the route's own options were surfaced, so `@Authorize({ schemes })` or `@Roles` on a
+ * *controller* was invisible to everything reading `Route.authorization.options` — per-route scheme selection
+ * and the OpenAPI generator's security block among them — even though `compileRoutePolicy` was enforcing it
+ * all along from the raw router/route pair.
+ *
+ * Merge follows what `compileRoutePolicy` does with the same inputs: single-valued fields take the route's
+ * value when it has one, and `roles`/`policy` are unioned, because the compiled policy requires *both* sets.
+ */
+function mergeAuthz(
+  router: RouteAuthzOptions | undefined,
+  route: RouteAuthzOptions | undefined,
+): RouteAuthzOptions | undefined {
+  if (router === undefined) {
+    return route
+  }
+  if (route === undefined) {
+    return router
+  }
+
+  const roles = [...new Set([...(router.roles ?? []), ...(route.roles ?? [])])]
+  const policy = [...new Set([...normalizeList(router.policy), ...normalizeList(route.policy)])]
+
+  return {
+    allowAnonymous: route.allowAnonymous ?? router.allowAnonymous,
+    schemes: route.schemes ?? router.schemes,
+    ...(roles.length > 0 ? { roles } : {}),
+    ...(policy.length > 0 ? { policy } : {}),
+  }
+}
+
+function normalizeList(value: string | string[] | undefined): string[] {
+  if (value == null) {
+    return []
+  }
+  return Array.isArray(value) ? value : [value]
 }
 
 function refName(ref: unknown): string {

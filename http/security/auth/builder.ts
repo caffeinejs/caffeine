@@ -192,14 +192,13 @@ export class AuthenticationBuilder implements Service {
     const handler = new OIDCAuthenticationHandler(name, options)
     this.#oidcHandlers.push(handler)
 
-    // Only a discovery URL yields a usable `openIdConnect` scheme; a provider configured with explicit
+    // Only a discovery URL describes the sign-in as OpenID Connect; a provider configured with explicit
     // endpoints is an OAuth 2.0 authorization-code flow as far as any consumer can tell.
-    this.#describe(name, options.discoveryURL !== undefined
-      ? { kind: 'openIdConnect', openIdConnectURL: options.discoveryURL }
+    this.#describe(name, sessionCookieScheme(handler, options.discoveryURL !== undefined
+      ? { openIdConnectURL: options.discoveryURL }
       : {
-          kind: 'oauth2',
           flows: authorizationCodeFlow(options.authorizationEndpoint, options.tokenEndpoint, options.scopes),
-        })
+        }))
 
     return this.addStrategy(name, handler)
   }
@@ -226,14 +225,13 @@ export class AuthenticationBuilder implements Service {
     this.#oidcHandlers.push(handler)
 
     // Read back off the handler: it resolved the raw options, so this is what the flow actually uses.
-    this.#describe(name, {
-      kind: 'oauth2',
+    this.#describe(name, sessionCookieScheme(handler, {
       flows: authorizationCodeFlow(
         handler.options.authorizationEndpoint,
         handler.options.tokenEndpoint,
         handler.options.scopes,
       ),
-    })
+    }))
 
     return this.addStrategy(name, handler)
   }
@@ -254,14 +252,13 @@ export class AuthenticationBuilder implements Service {
     )
     this.#oidcHandlers.push(handler)
 
-    this.#describe(name, {
-      kind: 'oauth2',
+    this.#describe(name, sessionCookieScheme(handler, {
       flows: authorizationCodeFlow(
         handler.options.authorizationEndpoint,
         handler.options.tokenEndpoint,
         handler.options.scopes,
       ),
-    })
+    }))
 
     return this.addStrategy(name, handler)
   }
@@ -544,4 +541,24 @@ function authorizationCodeFlow(
       scopes: scopes ?? [],
     },
   }
+}
+
+/**
+ * Describes an OAuth-family strategy by the transport it actually accepts.
+ *
+ * Every strategy in this family ends its sign-in by sealing a session into a cookie, and `authenticate()`
+ * reads that cookie and nothing else — never an `Authorization` header. So the transport is an API key in a
+ * cookie. Describing it as `oauth2` instead promises consumers a bearer token the handler would reject, and
+ * a documentation UI acting on that promise runs the browser-side token exchange, which providers refuse
+ * cross-origin anyway: the visible failure is a CORS error, and the invisible one is that the token it was
+ * trying to obtain would not have authenticated anything.
+ *
+ * The sign-in is not lost. It rides along in `flows` or `openIdConnectURL`, which say how the credential is
+ * obtained rather than how it travels.
+ */
+function sessionCookieScheme(
+  handler: { readonly sessionCookieName: string },
+  obtainedBy: Pick<AuthSchemeDescriptor, 'flows' | 'openIdConnectURL'>,
+): AuthSchemeDescriptor {
+  return { kind: 'apiKey', in: 'cookie', name: handler.sessionCookieName, ...obtainedBy }
 }

@@ -39,8 +39,9 @@ export class Identity {
     this.#claims.push(claim)
   }
 
+  /** Drops every claim the predicate matches. */
   removeClaimBy(predicate: (claim: Claim) => boolean): void {
-    this.#claims = this.#claims.filter(predicate)
+    this.#claims = this.#claims.filter(claim => !predicate(claim))
   }
 }
 

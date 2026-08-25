@@ -48,3 +48,14 @@ export const createOrderSchema = $t.Object({
 export const orderIdParamSchema = $t.Object({
   id: $t.String({ format: 'uuid' }),
 })
+
+/** Mirrors {@link OrderDTO}. The `$id` puts it in components.schemas as `Order`. */
+export const orderSchema = $t.Object({
+  ...createOrderSchema.properties,
+  id: $t.String({ format: 'uuid' }),
+  status: $t.UnionEnum(ORDER_STATUS),
+  totalAmount: $t.String(),
+  currency: $t.String({ pattern: '^[A-Z]{3}$' }),
+  createdAt: $t.String({ format: 'date-time' }),
+  updatedAt: $t.String({ format: 'date-time' }),
+}, { $id: 'Order' })

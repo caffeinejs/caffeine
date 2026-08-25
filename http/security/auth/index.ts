@@ -38,6 +38,7 @@ export {
   type RemoteAuthenticationSession,
   type RemoteAuthenticationTicket,
   type RemoteAuthenticationTicketStore,
+  type RemoteChallengeMode,
 } from './oidc/index.js'
 export {
   OpaqueTokenAuthenticationHandler,

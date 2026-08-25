@@ -26,6 +26,11 @@ export class AuthorizationConfigurer extends FeatureConfigurer {
     const coordinator = ctx.services.auth.coordinator!
     const onRequest = ctx.routeDef.onRequest as Array<(req: FastifyRequest, reply: FastifyReply) => Promise<void>>
 
+    // A route that names schemes must be challenged by one of them, not by the application default. Otherwise
+    // a Basic-protected route in a browser-first application answers with the default scheme's redirect,
+    // which an API client can neither follow nor satisfy.
+    const scheme = ctx.route.authorization.options?.schemes?.[0]
+
     onRequest.push(async (req, reply) => {
       const c = req.httpContext
       const result = await authorizer.authorize(c, req.user)
@@ -34,9 +39,9 @@ export class AuthorizationConfigurer extends FeatureConfigurer {
       }
 
       if (!c.user.authenticated) {
-        await coordinator.challenge(c)
+        await coordinator.challenge(c, scheme)
       } else {
-        await coordinator.forbid(c)
+        await coordinator.forbid(c, scheme)
       }
 
       // challenge()/forbid() only set status/headers (or a redirect); they do not end the request.

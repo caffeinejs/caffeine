@@ -4,7 +4,7 @@ import type { WebApplication } from '@caffeinejs/http'
 import { ErrFetchFailed, newRequest, newTestContainer, newURL, typedClient } from '@caffeinejs/testing'
 import { createContainer } from '../../app.container.js'
 import { buildApp } from '../../app.js'
-import { signToken } from '../auth/index.js'
+import { sessionHeader, signInWithGithub, stubGithub } from '../../util/testing/github.js'
 import type { CreatePetDTO, PetCollection, PetDTO, PetFilters, UpdatePetDTO } from './pet.js'
 import { PetsController } from './pets.controller.js'
 import { PetsRepository } from './pets.repository.js'
@@ -92,7 +92,9 @@ describe('pets feature (via @caffeinejs/testing)', () => {
   const fake = new FakePetsRepository()
   let app: WebApplication<any, any, any>
   let client: ReturnType<typeof typedClient<typeof PetsController>>
-  let token: string
+  // A GitHub session cookie. GitHub is the application's default authentication scheme, so this is what a
+  // write now needs — the claim mapper grants every signed-in user the write:pets role.
+  let session: string
 
   beforeAll(async () => {
     // Base the test container on the real application container, override just the pets repository.
@@ -103,7 +105,8 @@ describe('pets feature (via @caffeinejs/testing)', () => {
     app = buildApp(container, { logger: false })
     await app.ready()
 
-    token = await signToken('tester', ['write:pets'])
+    stubGithub()
+    session = await signInWithGithub(app)
 
     client = typedClient(PetsController, app)
   })
@@ -117,7 +120,7 @@ describe('pets feature (via @caffeinejs/testing)', () => {
   })
 
   async function createPet(dto: CreatePetDTO = validPet): Promise<PetDTO> {
-    return client.create(newRequest().bearer(token).json(dto).build())
+    return client.create(newRequest().headers(sessionHeader(session)).json(dto).build())
   }
 
   it('lists an empty collection, then reflects a created pet', async () => {
@@ -136,7 +139,9 @@ describe('pets feature (via @caffeinejs/testing)', () => {
     expect(pet.id).toMatch(/[0-9a-f-]{36}/)
   })
 
-  it('rejects create without a token (write:pets) with 401', async () => {
+  // GitHub is the default scheme, so an anonymous write is redirected into the OAuth flow rather than
+  // answered 401. The refusal is what matters; the shape of it follows from the scheme.
+  it('refuses create without a session (write:pets)', async () => {
     await expect(
       client.create(newRequest().json(validPet).build()),
     ).rejects.toMatchObject({ status: 401 })
@@ -164,7 +169,7 @@ describe('pets feature (via @caffeinejs/testing)', () => {
     const updated = await client.update(newRequest()
       .path(newURL('/pets/:id').param('id', created.id).build())
       .method('PUT')
-      .bearer(token)
+      .headers(sessionHeader(session))
       .json({ name: 'Rex II' })
       .toRequest())
     expect(updated).toMatchObject({ id: created.id, name: 'Rex II' })
@@ -175,7 +180,7 @@ describe('pets feature (via @caffeinejs/testing)', () => {
 
     const removed = await client.remove(new Request(
       newURL('/pets/:id').param('id', created.id).build(),
-      newRequest().method('DELETE').bearer(token).build(),
+      newRequest().method('DELETE').headers(sessionHeader(session)).build(),
     ))
     expect(removed).toBeUndefined()
 

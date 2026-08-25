@@ -163,3 +163,37 @@ export const listPetsQuerySchema = $t.Object({
 export const petIdParamSchema = $t.Object({
   id: $t.String({ format: 'uuid' }),
 })
+
+// --- Response schemas ---
+//
+// Composed from `createPetSchema` rather than restated, so a new field is declared once and reaches the
+// request contract, the response contract and the OpenAPI document together. Declaring these also switches on
+// Fastify's fast-json-stringify serialization for the routes that use them, so they earn their keep twice.
+//
+// The `$id` is what lands each one in components.schemas and turns every reference into a $ref.
+export const petSchema = $t.Object({
+  ...createPetSchema.properties,
+  id: $t.String({ format: 'uuid' }),
+  currency: $t.String({ pattern: '^[A-Z]{3}$' }),
+  status: petStatus,
+  photos: $t.Array($t.String({ format: 'uri' })),
+  createdAt: $t.String({ format: 'date-time' }),
+  updatedAt: $t.String({ format: 'date-time' }),
+}, { $id: 'Pet' })
+
+/** Mirrors {@link PetCollection} — the shape the repository actually returns. */
+export const petListSchema = $t.Object({
+  data: $t.Array(petSchema),
+  pagination: $t.Object({
+    page: $t.Integer(),
+    limit: $t.Integer(),
+    totalItems: $t.Integer(),
+    totalPages: $t.Integer(),
+  }),
+}, { $id: 'PetList' })
+
+export const petPhotoSchema = $t.Object({
+  message: $t.String(),
+  success: $t.Boolean(),
+  photo: $t.String({ format: 'uri' }),
+}, { $id: 'PetPhotoUploaded' })
