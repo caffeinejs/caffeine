@@ -76,7 +76,7 @@ group('method calls', () => {
   bench('aspect: stacked x2', () => withStacked.add(n++, n))
 })
 
-const { benchmarks } = await run()
+const { benchmarks } = await run({ colors: process.stdout.isTTY === true })
 
 const fmtNs = (ns: number): string => {
   if (ns < 1_000) {
