@@ -10,6 +10,7 @@ on:
         default: 'helloworld'
         type: choice
         options:
+          - aspect
           - helloworld
           - startup
           - request
