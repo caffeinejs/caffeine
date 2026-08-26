@@ -72,6 +72,8 @@ jobs:
             openapi/dist \
             testing/dist \
             cli/dist \
+            messaging/dist \
+            kafka/dist \
             fetchy/fetchy/dist \
             fetchy/fetchy-undici/dist \
             fetchy/fetchy-logging-interceptor/dist \
@@ -102,6 +104,8 @@ jobs:
             openapi/dist/
             testing/dist/
             cli/dist/
+            messaging/dist/
+            kafka/dist/
             fetchy/*/dist/
             plugins/*/dist/
             devtools/dist/

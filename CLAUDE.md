@@ -155,6 +155,15 @@ Never revert, discard, or `git checkout --` a file outside the current task's sc
 - `npm run build` at the root compiles all packages via `tsc --build` (project references).
 - Do not edit `dist/` by hand.
 
+## CI build outputs
+
+`.github/workflows/ci.yml` has one `build` job producing `dist/` for each package, then a separate `test` job that only receives the dists explicitly listed — it does not rebuild. Whenever a **new workspace package** is added that has its own `dist/` (declares `"types": "dist/..."` or `"exports"` pointing into `dist/`) **and** is imported by another package's tests (i.e. it has an entry in the root `vitest.workspace.ts` `projects` list, directly or via a dependent project), add its dist path to **both**:
+
+1. The `for d in ...` list in the `Verify Build Outputs` step
+2. The `path:` list in the `Upload Build Artifacts` step
+
+Missing either one does not fail the `build` job — it only surfaces later as a `vite:import-analysis` "Failed to resolve entry for package" error in the `test` job, since that package's dist never reached the test runner. A package with no cross-package test consumers (e.g. `scan`, only used by `di/examples/*`) does not need this.
+
 ## npm scripts
 
 The root `.npmrc` sets `ignore-scripts=true` (a deliberate supply-chain guard). This suppresses dependency install scripts **and** npm's own `pre*`/`post*` run-hooks and `postinstall` (npm 11). Consequently, any "run X automatically before Y" must be triggered explicitly — never a lifecycle hook, which will silently never fire. An explicit `npm run <name>` still executes under `ignore-scripts`; only auto-hooks are suppressed.

@@ -44,11 +44,11 @@
     "@caffeinejs/fetchy-undici": "*",
     "@hey-api/openapi-ts": "^0.99.0",
     "axios": "^1.7.9",
-    "got": "^14.4.5",
+    "got": "^15.1.0",
     "mitata": "^1.0.34",
     "mlly": "^1.8.2",
     "orval": "^8.23.0",
     "tsx": "^4.22.4",
-    "undici": "^7.2.0"
+    "undici": "^8.10.0"
   }
 }
