@@ -1,16 +1,34 @@
 import {
   type SchemaOptions,
+  type Static,
   type TLiteral,
   type TLiteralValue,
   type TSchema,
+  type TTransform,
   type TUnion,
   Type,
   JavaScriptTypeBuilder,
 } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
+import { DEFAULT_LIST_SEPARATOR, textList } from './text.js'
 
 type LiteralsOf<T extends readonly TLiteralValue[]> = {
   -readonly [K in keyof T]: TLiteral<T[K] & TLiteralValue>
 }
+
+/** Options for {@link caffeineT.List}. */
+export interface ListOptions extends SchemaOptions {
+  /** The delimiter between elements. Default `,`. */
+  separator?: string
+  /** Replaces the delimiter split entirely, for an encoding that is not delimited at all. */
+  parse?: (raw: string) => unknown
+}
+
+/**
+ * A codec accepts either the text encoding or the value already decoded, so the same schema serves a value from
+ * an environment variable and one from a file or the code band.
+ */
+type Codec<T extends TSchema> = TTransform<TUnion<[TSchema, T]>, Static<T>>
 
 const caffeineT = {
   /**
@@ -47,6 +65,98 @@ const caffeineT = {
    */
   MaybeEmpty: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
     Type.Optional(Type.Union([schema, Type.Null()], options)),
+
+  /**
+   * A list that may be written as delimited text — `TAGS=a,b,c` — as well as as an array.
+   *
+   * Declaring the encoding is the whole point. Coercing wherever a schema merely happens to say `array` would
+   * coerce on type rather than on intent, splitting a string from a YAML file that was always meant to be one
+   * string. Here nothing is guessed: a field is a text list because it says so.
+   *
+   * It is also the only way to *shorten* or clear a list from a higher-priority source. The indexed spelling
+   * (`TAGS__0`, `TAGS__1`) still works and is untouched, but it cannot express an empty list, and overriding a
+   * three-element list with a two-element one leaves the third behind.
+   *
+   * ```ts
+   * $t.Object({
+   *   tags:  $t.List($t.String()),                     // TAGS=a,b,c
+   *   hosts: $t.List($t.String(), { separator: ';' }),  // HOSTS=a;b;c
+   *   ports: $t.List($t.Number(), { parse: myParser }), // any other encoding
+   * })
+   * ```
+   *
+   * JSON is deliberately not recognized here — `$t.JSON($t.Array(...))` is that, and a helper that guessed
+   * between the two could not be given an honest name.
+   */
+  List: <T extends TSchema>(items: T, options: ListOptions = {}): Codec<ReturnType<typeof Type.Array<T>>> => {
+    const { separator = DEFAULT_LIST_SEPARATOR, parse, ...schemaOptions } = options
+    const target = Type.Array(items)
+
+    return Type.Transform(Type.Union([Type.String(), target], schemaOptions))
+      .Decode(value => decodeInto(target, value, {
+        // Delimited text carries no types of its own, so the elements are converted the way every other value
+        // from an environment variable is: `$t.List($t.Number())` must yield numbers, not numeric strings.
+        convert: true,
+        parse: raw => (parse === undefined ? textList(raw, separator) : parse(raw)),
+        complaint: 'is not a list of the declared item type',
+      }))
+      .Encode(value => value) as never
+  },
+
+  /**
+   * A value that may be written as JSON text — `DB={"host":"h","port":5432}` — as well as as itself.
+   *
+   * `inner` can be anything: an object, an array of objects, a union, even a scalar. That generality is why
+   * there is no custom parser here; a parser would make the name a lie, and {@link caffeineT.List} already
+   * covers the encoding that is not JSON.
+   *
+   * ```ts
+   * $t.Object({
+   *   db:    $t.JSON($t.Object({ host: $t.String(), port: $t.Number() })),
+   *   rules: $t.JSON($t.Array($t.Object({ id: $t.Number() }))),
+   * })
+   * ```
+   */
+  JSON: <T extends TSchema>(inner: T, options: SchemaOptions = {}): Codec<T> =>
+    Type.Transform(Type.Union([Type.String(), inner], options))
+      .Decode(value => decodeInto(inner, value, {
+        // JSON carries its own types, so nothing is coerced: `{"host":123}` against a string field is a
+        // mistake worth reporting, not something to quietly turn into `"123"`.
+        convert: false,
+        parse: raw => JSON.parse(raw) as unknown,
+        complaint: 'is not the declared shape',
+      }))
+      .Encode(value => JSON.stringify(value)) as never,
+}
+
+/**
+ * Decodes the text form and checks the result against the schema it claims to be.
+ *
+ * The check is not optional. TypeBox validates a transform's *encoded* form and never re-examines what `Decode`
+ * returned, so without this `DB={"host":123}` would sail through as a valid object with a number where a string
+ * was declared. Doing it here rather than in a second pass afterwards also keeps each codec self-contained:
+ * nothing downstream has to go looking for transforms to finish their job.
+ *
+ * A value that did not arrive as text is passed through untouched — it came from a file or the code band and
+ * the surrounding schema already governs it.
+ */
+function decodeInto<T extends TSchema>(
+  target: T,
+  value: unknown,
+  how: { convert: boolean, parse: (raw: string) => unknown, complaint: string },
+): Static<T> {
+  if (typeof value !== 'string') {
+    return value as Static<T>
+  }
+
+  const parsed = how.parse(value)
+  const decoded = how.convert ? Value.Convert(target, parsed) : parsed
+
+  if (!Value.Check(target, decoded)) {
+    throw new Error(`The value ${how.complaint}`)
+  }
+
+  return decoded as Static<T>
 }
 
 const $t = Object.assign({}, Type, caffeineT) as JavaScriptTypeBuilder & typeof caffeineT

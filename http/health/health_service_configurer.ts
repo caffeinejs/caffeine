@@ -1,7 +1,15 @@
 import { ApplicationAvailability, kServiceConfigure, type Service } from '@caffeinejs/std'
+import type { ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kHealthOptions } from './keys.js'
-import { type HealthOptions, defaultHealthOptions, emitHealthWarnings, validateHealthOptions } from './options.js'
+import {
+  HEALTH_CONFIG_NAMESPACE,
+  finalizeHealthOptions,
+  healthConfigSchema,
+  mergeHealthConfig,
+  type HealthConfig,
+  type HealthOptions,
+} from './options.js'
 
 /**
  * Binds what the health feature needs whether or not it was configured.
@@ -10,8 +18,12 @@ import { type HealthOptions, defaultHealthOptions, emitHealthWarnings, validateH
  * probes or not, and an application that never calls `.health()` still benefits from a shutdown that refuses
  * traffic before it stops listening.
  *
- * {@link HealthOptions} falls back to {@link defaultHealthOptions}, which enables the probes only when
- * `KUBERNETES_SERVICE_HOST` is present. Always registered after the `HealthBuilder`, so a configured setup wins.
+ * {@link HealthOptions} still resolves from the configuration tree when `.health()` was never called, so the drain
+ * policy can be set entirely from the environment — `HEALTH__DRAINDELAY=10s` works with no code change at all.
+ * The only difference from the configured path is what `enabled` falls back to: here the Kubernetes
+ * auto-detection decides, because nothing opted in.
+ *
+ * Always registered after the `HealthBuilder`, so a configured setup wins.
  */
 export class HealthServiceConfigurer implements Service {
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
@@ -24,12 +36,12 @@ export class HealthServiceConfigurer implements Service {
     }
 
     if (!kit.container.has(kHealthOptions)) {
-      const validated = validateHealthOptions(defaultHealthOptions())
-      emitHealthWarnings(validated.warnings)
+      const slice: ConfigSlice<HealthConfig> = kit.config.slice(HEALTH_CONFIG_NAMESPACE, healthConfigSchema)
+      const options = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
 
       kit.container
         .bind<HealthOptions>(kHealthOptions)
-        .toValue(validated.options)
+        .toFactory(() => options.config)
         .internal()
     }
 

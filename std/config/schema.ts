@@ -20,15 +20,34 @@ export type ConfigSchema<T = unknown> = TSchema | StandardSchemaV1<unknown, T>
 export type InferConfig<S extends AnySchema> = InferSchema<S>
 
 /**
+ * The schema an application that never declared one gets. Configuration is now unconditional — features read
+ * their own slices from the tree whether or not the application described it — so the root still needs
+ * *something* to validate against, and the honest answer for an undeclared shape is to pass it through
+ * untouched rather than invent constraints.
+ */
+export const passthroughConfigSchema: StandardSchemaV1<unknown, unknown> = {
+  '~standard': {
+    version: 1,
+    vendor: 'caffeine',
+    validate: value => ({ value }),
+  },
+}
+
+/**
  * Validates and returns the typed configuration. Validation is synchronous: a schema whose validator returns a
  * `Promise` (async refinement) is rejected, because configuration is materialized synchronously (the refresh
  * assignment and the server-options factory both read the validated value without awaiting).
  *
  * Keys no schema declares are dropped, not rejected — the raw configuration is the union of every provider, so an
  * environment variable that belongs to some other tool must not fail startup.
+ *
+ * Codecs run here, and only here. Configuration is where values arrive as text — an environment variable, a
+ * command-line argument — so a schema declaring `$t.List` or `$t.JSON` is decoded as part of validating it. The
+ * same function serves the root schema and every feature slice, so a feature gets codecs without asking. A
+ * Standard Schema is unaffected: it runs its own validator, transforms included, exactly as authored.
  */
 export function validateConfig<T>(schema: ConfigSchema<T>, input: unknown): T {
-  const result = validateSchema(schema as AnySchema, input)
+  const result = validateSchema(schema as AnySchema, input, { decode: true })
 
   if (!result.ok) {
     throw new ErrConfigValidation(result.issues)

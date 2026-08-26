@@ -3,6 +3,7 @@ import {
   AppConfigBuilder,
   BaseApplicationBuilder,
   type ApplicationBuilderOptions,
+  type Reconfigured,
 } from '@caffeinejs/std'
 import type { ConfigSchema, InferConfig } from '@caffeinejs/std/config'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
@@ -22,9 +23,9 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 
   #authBuilder: AuthenticationBuilder | undefined
   #cacheBuilder: CacheBuilder | undefined
-  #serverBuilder: ServerBuilder<unknown> | undefined
   #healthBuilder: HealthBuilder<unknown> | undefined
   readonly #authzBuilder: AuthorizationBuilder
+  readonly #serverBuilder: ServerBuilder<unknown>
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
     super(options)
@@ -32,6 +33,11 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 
     this.#authzBuilder = new AuthorizationBuilder()
     this.addService(this.#authzBuilder)
+
+    // Registered unconditionally: the listen address is read from the configuration tree, so `SERVER__PORT`
+    // has to work on an application that never calls `.server()`.
+    this.#serverBuilder = new ServerBuilder<unknown>()
+    this.addService(this.#serverBuilder)
   }
 
   authentication(configure: (auth: AuthenticationBuilder) => void): this {
@@ -67,12 +73,21 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * strongly-typed `ConfigHandle<T>`. The optional `configure` callback — any shape — adds sources and context.
    * Declare it first. Runtime returns the same instance; only the declared type changes.
    */
+  config(configure: (c: AppConfigBuilder<TConfig>) => void): this
   config<S extends ConfigSchema>(
     schema: S,
     configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): WebApplicationBuilder<I, REQ, A, InferConfig<S>> {
-    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, configure)
-    return this as unknown as WebApplicationBuilder<I, REQ, A, InferConfig<S>>
+  ): Reconfigured<
+    this,
+    WebApplicationBuilder<I, REQ, A>,
+    WebApplicationBuilder<I, REQ, A, InferConfig<S>>
+  >
+  config<S extends ConfigSchema>(
+    first: S | ((c: AppConfigBuilder<TConfig>) => void),
+    second?: (c: AppConfigBuilder<InferConfig<S>>) => void,
+  ): unknown {
+    this.applyConfigArgs(first as S, second as never)
+    return this
   }
 
   /**
@@ -95,13 +110,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   server(configure: (server: ServerBuilder<TConfig>) => void): this {
-    if (this.#serverBuilder == null) {
-      this.#serverBuilder = new ServerBuilder<unknown>()
-      this.addService(this.#serverBuilder)
-    }
-
     configure(this.#serverBuilder as ServerBuilder<TConfig>)
-
     return this
   }
 

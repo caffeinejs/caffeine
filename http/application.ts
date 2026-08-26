@@ -13,7 +13,7 @@ import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
-import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions } from './server/index.js'
+import { ServerOptions, kServerOptions } from './server/index.js'
 import { ErrShutdownTimeout, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, type HealthOptions } from './health/index.js'
 import type { HealthServices } from './health/services.js'
 
@@ -118,7 +118,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   }
 
   protected override serviceKit(): ServiceKit {
-    return { container: this.container, availability: this.availability, feats: this.#feats }
+    return { ...super.serviceKit(), feats: this.#feats }
   }
 
   protected override configurers(): Service[] {
@@ -133,10 +133,8 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   protected override async setup(): Promise<void> {
     this.#routers = buildRouting<R>(this.container)
 
-    // Copy into a fresh object: the adapter's `listen()` mutates what it receives, which would otherwise
-    // corrupt the shared DEFAULT_SERVER_OPTIONS when the server builder was never used.
-    const serverOptions = this.container.getOptional<ServerOptions>(kServerOptions) ?? DEFAULT_SERVER_OPTIONS
-    const server: ServerOptions = { ...serverOptions }
+    // Copy into a fresh object: the adapter's `listen()` mutates what it receives.
+    const server: ServerOptions = { ...this.container.get<ServerOptions>(kServerOptions) }
 
     const health = this.#buildHealth()
     this.#health = health

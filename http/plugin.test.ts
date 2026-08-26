@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { $t, kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
-import { EnvProvider } from '@caffeinejs/std/config'
+import { EnvConfigProvider } from '@caffeinejs/std/config'
 import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
 // A sentinel the plugin's configurer binds into the container so a test can prove the plugin rode
@@ -93,20 +93,16 @@ describe('builder.extend()', () => {
     expect(typeof app.build).toBe('function')
   })
 
-  it('can be called at any point, and again after .config() re-types the builder', async () => {
+  it('survives .config(), which re-parameterises the builder', async () => {
     const container = new CaffeineIoC()
 
-    // `.config()` returns a builder re-typed to carry the config type, which drops the plugin augments
-    // from the type. Extending again restores them — the reason `.extend()` is a method and not a
-    // factory argument.
-    const configured = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
-      .config($t.Object({ nothing: $t.Optional($t.String()) }), c => c.source(new EnvProvider()))
+    // `.config()` changes one of the builder's own type arguments so features configured afterwards see a
+    // typed config. Naming its own class as the return type would discard what `.extend()` merged on, and
+    // the plugin's methods would vanish mid-chain — so it re-parameterises only the builder half.
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
+      .extend(kafka())
+      .config($t.Object({ nothing: $t.Optional($t.String()) }), c => c.source(new EnvConfigProvider()))
 
-    // @ts-expect-error the augments did not survive the re-type
-    const gone: unknown = configured.kafka
-    expect(gone).toBeUndefined()
-
-    const app = configured.extend(kafka())
     expect(typeof app.kafka).toBe('function')
     app.kafka('after-config:9092')
 
@@ -114,5 +110,43 @@ describe('builder.extend()', () => {
     await built.ready()
 
     expect(built.container.getOptional(kKafkaSentinel)).toEqual({ broker: 'after-config:9092' })
+  })
+
+  it('works in either order around .config()', () => {
+    const schema = $t.Object({ nothing: $t.Optional($t.String()) })
+
+    const extendFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
+      .extend(kafka())
+      .config(schema, c => c.source(new EnvConfigProvider()))
+
+    const configFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
+      .config(schema, c => c.source(new EnvConfigProvider()))
+      .extend(kafka())
+
+    expect(typeof extendFirst.kafka).toBe('function')
+    expect(typeof configFirst.kafka).toBe('function')
+  })
+
+  it('still refuses a method no plugin contributed, after .config() (type-level)', () => {
+    const configured = createWebApplication(fastifyAdapterFactory(Fastify()))
+      .config($t.Object({ nothing: $t.Optional($t.String()) }), c => c.source(new EnvConfigProvider()))
+
+    // @ts-expect-error no plugin was supplied, so `kafka` is absent
+    const missing: unknown = configured.kafka
+    expect(missing).toBeUndefined()
+    // The re-parameterised builder is still a builder.
+    expect(typeof configured.build).toBe('function')
+  })
+
+  it('keeps the config type flowing to features configured afterwards', () => {
+    const schema = $t.Object({ app: $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) }) })
+
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      .extend(kafka())
+      .config(schema, c => c.source(new EnvConfigProvider()))
+      // Typed against the schema declared above, on a builder that still carries the plugin.
+      .server(s => s.config(c => c.app.server))
+
+    expect(typeof app.build).toBe('function')
   })
 })

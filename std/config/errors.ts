@@ -1,28 +1,15 @@
+import { ErrCaffeine } from '../error.js'
 import type { SchemaIssue } from '../schema/schema.js'
 
-export class ErrConfig extends Error {
-  readonly code: string
-
-  constructor(message: string, code: string, override readonly cause?: unknown) {
-    super(message)
-    this.name = 'ErrConfig'
-    this.code = code
-  }
-}
-
-export class ErrMissingConfigKey extends ErrConfig {
-  constructor(key: string) {
-    super(`Cannot resolve config key: "${key}" is not defined`, 'ERR_MISSING_CONFIG_KEY')
-    this.name = 'ErrMissingConfigKey'
-  }
-}
-
-export class ErrInvalidConfigType extends ErrConfig {
-  constructor(key: string, expected: string, actual: string) {
-    super(`Cannot coerce config key "${key}": expected ${expected}, got ${actual}`, 'ERR_INVALID_CONFIG_TYPE')
-    this.name = 'ErrInvalidConfigType'
-  }
-}
+/**
+ * Every failure in `std/config`.
+ *
+ * One class rather than one per situation: the two things a caller actually does with a configuration error are
+ * telling it apart from an unrelated throw (`instanceof ErrConfig`) and branching on which situation it was
+ * (`error.code`), and a class hierarchy buys neither of those. The subclasses below exist only where a caller
+ * needs to read structured data off the error; everything else is an `ErrConfig` with its own code.
+ */
+export class ErrConfig extends ErrCaffeine {}
 
 export class ErrConfigValidation extends ErrConfig {
   constructor(
@@ -31,20 +18,22 @@ export class ErrConfigValidation extends ErrConfig {
   ) {
     const detail = issues.length > 0 ? `: ${issues.map(i => `${i.path}: ${i.message}`).join('; ')}` : ''
     super(`Config validation failed${detail}`, 'ERR_CONFIG_VALIDATION', cause)
-    this.name = 'ErrConfigValidation'
   }
 }
 
-export class ErrConfigProvider extends ErrConfig {
-  constructor(id: string, cause?: unknown) {
-    super(`Config provider "${id}" failed to load`, 'ERR_CONFIG_PROVIDER', cause)
-    this.name = 'ErrConfigProvider'
+/** One feature's configuration failing, carried with the namespace it belongs to. */
+export interface ConfigSliceFailure {
+  path: string
+  error: unknown
+}
+
+export class ErrConfigSlices extends ErrConfig {
+  constructor(readonly failures: readonly ConfigSliceFailure[]) {
+    const detail = failures.map(f => `${f.path}: ${messageOf(f.error)}`).join('; ')
+    super(`Cannot resolve configuration for ${failures.length} feature(s): ${detail}`, 'ERR_CONFIG_SLICES')
   }
 }
 
-export class ErrConfigRefresh extends ErrConfig {
-  constructor(cause?: unknown) {
-    super('Config refresh failed', 'ERR_CONFIG_REFRESH', cause)
-    this.name = 'ErrConfigRefresh'
-  }
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

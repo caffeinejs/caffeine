@@ -2,8 +2,8 @@ import { kSelfRefresh } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { ErrConfigValidation } from '../../errors.js'
-import { ConfigShard } from '../../integration/config_shard.js'
-import { InlineProvider } from '../../providers/inline_provider.js'
+import { ConfigShard } from '../../integration/shard.js'
+import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import type { ConfigProvider } from '../../types.js'
 
 const schema = z.object({ value: z.string(), count: z.number() })
@@ -12,9 +12,10 @@ type TestConfig = z.infer<typeof schema>
 describe('ConfigShard refresh', () => {
   it('live proxy reflects value after [kSelfRefresh]', async () => {
     let data = { value: 'before', count: 1 }
-    const mutableProvider = {
+    const mutableProvider: ConfigProvider = {
       id: 'mutable',
-      load: async () => new InlineProvider(data as never).load({ app: 'test', profiles: ['default'] }),
+      reloadable: true,
+      load: async () => new InlineConfigProvider(data as never).load({ app: 'test', profiles: ['default'] }),
     }
     const shard = await ConfigShard.bootstrap<TestConfig>({ providers: [mutableProvider], schema })
     const handle = shard.handle
@@ -32,7 +33,11 @@ describe('ConfigShard refresh', () => {
   it('invalid refresh payload does not replace active config', async () => {
     // count starts as a valid number, then becomes a non-numeric string that fails `z.number()` on refresh.
     let payload: Record<string, unknown> = { value: 'safe', count: 1 }
-    const provider: ConfigProvider = { id: 'mutable', load: ctx => new InlineProvider(payload as never).load(ctx) }
+    const provider: ConfigProvider = {
+      id: 'mutable',
+      reloadable: true,
+      load: ctx => new InlineConfigProvider(payload as never).load(ctx),
+    }
 
     const shard = await ConfigShard.bootstrap<TestConfig>({ providers: [provider], schema })
 
@@ -48,7 +53,7 @@ describe('ConfigShard refresh', () => {
   it('concurrent refresh calls produce consistent final state', async () => {
     let seq = 0
     const shard = await ConfigShard.bootstrap<TestConfig>({
-      providers: [new InlineProvider({ value: 'v0', count: 0 } as never)],
+      providers: [new InlineConfigProvider({ value: 'v0', count: 0 } as never)],
       schema,
     })
 

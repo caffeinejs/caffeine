@@ -22,6 +22,11 @@ export interface ResolutionContext {
   profiles: string[]
   label?: string
   env?: Record<string, string | undefined>
+  /**
+   * The command-line arguments, as handed to `app.run(argv)`. A seam exactly like {@link env}: it is what keeps
+   * the args provider from reaching for a host global, so the same code runs on Node, Bun and Deno.
+   */
+  argv?: readonly string[]
   signal?: AbortSignal
 }
 
@@ -32,6 +37,29 @@ export interface ConfigSnapshot {
 
 export interface ConfigProvider {
   readonly id: string
+
+  /**
+   * Whether `load()` can ever return data differing from the last load. **Defaults to `false`.**
+   *
+   * Most sources cannot: the environment a process was started with, the arguments it was given and an inline
+   * object are all fixed for its lifetime. A refresh with no reloadable source at all does nothing — it loads
+   * nothing, re-validates nothing, and replaces no object — so declaring this is what buys a cheap refresh
+   * rather than a pointless full resolve.
+   *
+   * Opt-in rather than opt-out on purpose: one source wrongly claiming it can change defeats the optimization
+   * for the whole application, whereas one wrongly claiming it cannot is a visible bug in that source.
+   */
+  readonly reloadable?: boolean
+
+  /**
+   * A cheap stamp that changes whenever this source's data might have. When every reloadable source reports
+   * the same stamp as last time, the refresh is skipped entirely.
+   *
+   * A source that cannot answer without doing the work — anything remote — should leave this undefined and be
+   * reloaded every time.
+   */
+  revision?(): unknown
+
   load(ctx: ResolutionContext): Promise<PropertySource[]>
   dispose?(): void | Promise<void>
 }

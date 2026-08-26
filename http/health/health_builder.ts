@@ -1,84 +1,63 @@
 import { Scopes, type Ctor } from '@caffeinejs/di'
 import {
-  ErrConfigSourceConflict,
   HealthIndicator,
-  kAppConfig,
   kServiceConfigure,
   type Duration,
   type Service,
   type ShutdownSignal,
-  toMillis,
   type SignalDispatcher,
 } from '@caffeinejs/std'
-import type { ConfigHandle } from '@caffeinejs/std/config'
+import { selectorPath, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
-import { solutions } from '../error/util.js'
-import { ErrHealthConfiguration } from './errors.js'
 import { kHealthOptions } from './keys.js'
 import {
+  HEALTH_CONFIG_NAMESPACE,
+  finalizeHealthOptions,
+  healthConfigSchema,
+  mergeHealthConfig,
+  type HealthConfig,
   type HealthOptions,
   type HealthPaths,
-  defaultHealthOptions,
-  emitHealthWarnings,
-  validateHealthOptions,
 } from './options.js'
-
-/** The application-config slice `.config(...)` selects. Every duration accepts `'5s'`-style strings or milliseconds. */
-export interface HealthConfig {
-  enabled?: boolean
-  paths?: Partial<HealthPaths>
-  drainDelay?: Duration
-  shutdownTimeout?: Duration
-  terminationGracePeriod?: Duration
-  indicatorTimeout?: Duration
-  probeDeadline?: Duration
-  cacheTTL?: Duration
-  verbose?: boolean
-  exclude?: boolean
-}
 
 /**
  * Configures the health feature: the probe endpoints, the drain policy, and the signals that trigger it. Bound via
  * `app.health()` — calling it with no configuration at all is a complete, correct setup.
  *
  * Calling `app.health()` **enables** the probes regardless of environment; leaving it uncalled enables them only
- * when `KUBERNETES_SERVICE_HOST` is present. `.enabled(false)` always wins.
+ * when `KUBERNETES_SERVICE_HOST` is present. An explicit `enabled` in the configuration always wins over both, so
+ * `HEALTH__ENABLED=false` switches them off without a code change.
  *
- * A {@link Service}: its {@link kServiceConfigure} binds a fixed {@link HealthOptions} under {@link kHealthOptions}.
- * Like the server address, this is a one-time snapshot — a config refresh must not move the drain policy while a
- * shutdown is running — so the builder methods and the {@link config} selector are mutually exclusive and both
- * detach from the live config proxy.
+ * There is one read path. A builder method does not hold its value here — it writes into the configuration tree
+ * in the `CODE` band, and the feature reads the merged result. So `h.drainDelay('10s')` is a **default**:
+ * `HEALTH__DRAINDELAY=30s` or `--health.drainDelay=30s` overrides it.
+ *
+ * The exceptions are the members that cannot be configuration at all: {@link dispatcher} is a function and
+ * {@link indicator} takes classes and instances. Those stay on the builder and are merged in afterwards.
+ *
+ * A {@link Service}: its {@link kServiceConfigure} binds {@link HealthOptions} under {@link kHealthOptions}. The
+ * bound object is live, like every other configuration in the framework — the probe budgets and the
+ * response-shaping flags are read per request, so a refresh reaches them. The fields consumed once at boot, the
+ * probe routes and the installed signals, simply stop mattering afterwards: nothing re-registers a route because
+ * a value moved underneath it.
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
 export class HealthBuilder<C = unknown> implements Service {
-  #enabled: boolean | undefined
-  #paths: Partial<HealthPaths> = {}
-  #drainDelay: Duration | undefined
-  #shutdownTimeout: Duration | undefined
-  #terminationGracePeriod: Duration | undefined
-  #indicatorTimeout: Duration | undefined
-  #probeDeadline: Duration | undefined
-  #cacheTTL: Duration | undefined
-  #verbose: boolean | undefined
-  #exclude: boolean | undefined
-  #signals: readonly ShutdownSignal[] | false | undefined
+  readonly #config: HealthConfig = {}
   #dispatcher: SignalDispatcher | undefined
   readonly #indicators: Array<HealthIndicator | Ctor<HealthIndicator>> = []
-  #usedBuilderFn = false
   #selector: ((c: ConfigHandle<C>) => HealthConfig) | undefined
 
   /** Forces the probes on or off, overriding the Kubernetes auto-detection. */
   enabled(enabled: boolean = true): this {
-    this.#enabled = enabled
-    this.#usedBuilderFn = true
+    this.#config.enabled = enabled
     return this
   }
 
   /** Overrides one or more probe paths. Defaults: `/livez`, `/readyz`, `/startupz`. */
   paths(paths: Partial<HealthPaths>): this {
-    this.#paths = { ...this.#paths, ...paths }
-    this.#usedBuilderFn = true
+    this.#config.paths = { ...this.#config.paths, ...paths }
     return this
   }
 
@@ -87,15 +66,13 @@ export class HealthBuilder<C = unknown> implements Service {
    * routing-table propagation lag; traffic still arrives during this window and is answered normally.
    */
   drainDelay(delay: Duration): this {
-    this.#drainDelay = delay
-    this.#usedBuilderFn = true
+    this.#config.drainDelay = delay
     return this
   }
 
   /** The budget for in-flight requests to finish once the server is closing. */
   shutdownTimeout(timeout: Duration): this {
-    this.#shutdownTimeout = timeout
-    this.#usedBuilderFn = true
+    this.#config.shutdownTimeout = timeout
     return this
   }
 
@@ -104,50 +81,43 @@ export class HealthBuilder<C = unknown> implements Service {
    * (or injected through the downward API) for the boot-time budget check to mean anything.
    */
   terminationGracePeriod(period: Duration): this {
-    this.#terminationGracePeriod = period
-    this.#usedBuilderFn = true
+    this.#config.terminationGracePeriod = period
     return this
   }
 
   /** Per-indicator budget. An indicator exceeding it is aborted and reported down. */
   indicatorTimeout(timeout: Duration): this {
-    this.#indicatorTimeout = timeout
-    this.#usedBuilderFn = true
+    this.#config.indicatorTimeout = timeout
     return this
   }
 
   /** Whole-probe budget, regardless of indicator count. */
   probeDeadline(deadline: Duration): this {
-    this.#probeDeadline = deadline
-    this.#usedBuilderFn = true
+    this.#config.probeDeadline = deadline
     return this
   }
 
   /** How long an evaluation is reused. Bounds the load the probes place on the dependencies they check. */
   cacheTTL(ttl: Duration): this {
-    this.#cacheTTL = ttl
-    this.#usedBuilderFn = true
+    this.#config.cacheTTL = ttl
     return this
   }
 
   /** Allows `?verbose` to expand the response body. Off by default: the body names your dependencies. */
   verbose(verbose: boolean = true): this {
-    this.#verbose = verbose
-    this.#usedBuilderFn = true
+    this.#config.verbose = verbose
     return this
   }
 
   /** Allows `?exclude=<name>` to skip an indicator. Off by default: it lets a caller make readiness lie. */
   exclude(exclude: boolean = true): this {
-    this.#exclude = exclude
-    this.#usedBuilderFn = true
+    this.#config.exclude = exclude
     return this
   }
 
   /** The signals that trigger a graceful shutdown, or `false` to install no handlers. */
   signals(signals: readonly ShutdownSignal[] | false): this {
-    this.#signals = signals
-    this.#usedBuilderFn = true
+    this.#config.signals = signals === false ? false : [...signals]
     return this
   }
 
@@ -155,27 +125,35 @@ export class HealthBuilder<C = unknown> implements Service {
    * Replaces the {@link SignalDispatcher} that delivers signals and diagnostics. The host runtime's is detected
    * automatically and covers Node, Bun and Deno; supply one to bridge a runtime with native signal handling of its
    * own, or to observe the shutdown in a test.
+   *
+   * Not configuration — a function cannot live in a configuration tree — so this one is code-only.
    */
   dispatcher(dispatcher: SignalDispatcher): this {
     this.#dispatcher = dispatcher
-    this.#usedBuilderFn = true
     return this
   }
 
   /**
    * Registers a health indicator. Equivalent to binding it yourself with `.extends(HealthIndicator)`; both are
-   * discovered the same way.
+   * discovered the same way. Code-only, like {@link dispatcher}.
    */
   indicator(indicator: HealthIndicator | Ctor<HealthIndicator>): this {
     this.#indicators.push(indicator)
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    if (this.#selector !== undefined && this.#usedBuilderFn) {
-      throw new ErrConfigSourceConflict('health')
-    }
+  /**
+   * Places the health settings elsewhere in the configuration tree, e.g. `h.config(c => c.app.health)`.
+   *
+   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
+   * Both the reads and the defaults written by the builder methods follow it.
+   */
+  config(selector: (c: ConfigHandle<C>) => HealthConfig): this {
+    this.#selector = selector
+    return this
+  }
 
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     for (const indicator of this.#indicators) {
       if (typeof indicator === 'function') {
         kit.container.bind(indicator).toSelf().lifetime(Scopes.SINGLETON).extends(HealthIndicator)
@@ -189,92 +167,31 @@ export class HealthBuilder<C = unknown> implements Service {
 
     kit.feats.toggleHealth()
 
-    if (this.#selector !== undefined) {
-      const container = kit.container
-      const selector = this.#selector
+    const definition = kit.config
+    const parts = this.#selector === undefined
+      ? HEALTH_CONFIG_NAMESPACE
+      : selectorPath(this.#selector as (c: never) => unknown)
 
-      kit.container
-        .bind<HealthOptions>(kHealthOptions)
-        // Lazy so `kAppConfig` (bound during init) is available; runs once, then the singleton caches it.
-        .toFactory(() => {
-          const appConfig = container.getOptional<ConfigHandle<C>>(kAppConfig)
-          if (appConfig === undefined) {
-            throw new ErrHealthConfiguration(
-              'Cannot select health config: no application config is defined'
-              + solutions(
-                'Declare .config(schema, ...) on the application builder before configuring health',
-                'Configure health with the builder methods instead of .config(...)',
-              ),
-            )
-          }
-
-          return finalize(fromConfig(selector(appConfig), this.#dispatcher))
-        })
-        .internal()
-
-      return Promise.resolve()
+    for (const [key, value] of Object.entries(this.#config)) {
+      definition.codeValues.set([...parts, key], value as never)
     }
+
+    const slice: ConfigSlice<HealthConfig> = definition.slice(parts, healthConfigSchema)
+    const dispatcher = this.#dispatcher
+
+    // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
+    const options = slice.derive(config =>
+      finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })))
 
     kit.container
       .bind<HealthOptions>(kHealthOptions)
-      .toValue(finalize(this.#fromBuilder()))
+      // Lazy so the slice is published (configuration resolves during init). The bound object is live: the
+      // probe budgets and the response-shaping flags are read per request, and a refresh must reach them.
+      // The fields consumed once at boot — the probe routes, the installed signals — simply stop mattering
+      // afterwards; nothing re-registers a route because a value changed underneath it.
+      .toFactory(() => options.config)
       .internal()
 
     return Promise.resolve()
   }
-
-  /** Drives the health configuration from the application config, e.g. `h.config(c => c.health)`. */
-  config(selector: (c: ConfigHandle<C>) => HealthConfig): this {
-    this.#selector = selector
-    return this
-  }
-
-  #fromBuilder(): HealthOptions {
-    const defaults = defaultHealthOptions()
-
-    return {
-      // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
-      enabled: this.#enabled ?? true,
-      paths: { ...defaults.paths, ...this.#paths },
-      drainDelayMs: pick(this.#drainDelay, defaults.drainDelayMs),
-      shutdownTimeoutMs: pick(this.#shutdownTimeout, defaults.shutdownTimeoutMs),
-      terminationGracePeriodMs: pick(this.#terminationGracePeriod, defaults.terminationGracePeriodMs),
-      indicatorTimeoutMs: pick(this.#indicatorTimeout, defaults.indicatorTimeoutMs),
-      probeDeadlineMs: pick(this.#probeDeadline, defaults.probeDeadlineMs),
-      cacheTTLMs: pick(this.#cacheTTL, defaults.cacheTTLMs),
-      verbose: this.#verbose ?? defaults.verbose,
-      exclude: this.#exclude ?? defaults.exclude,
-      signals: this.#signals ?? defaults.signals,
-      dispatcher: this.#dispatcher ?? defaults.dispatcher,
-    }
-  }
-}
-
-function fromConfig(config: HealthConfig, dispatcher: SignalDispatcher | undefined): HealthOptions {
-  const defaults = defaultHealthOptions()
-
-  return {
-    enabled: config.enabled ?? true,
-    paths: { ...defaults.paths, ...config.paths },
-    drainDelayMs: pick(config.drainDelay, defaults.drainDelayMs),
-    shutdownTimeoutMs: pick(config.shutdownTimeout, defaults.shutdownTimeoutMs),
-    terminationGracePeriodMs: pick(config.terminationGracePeriod, defaults.terminationGracePeriodMs),
-    indicatorTimeoutMs: pick(config.indicatorTimeout, defaults.indicatorTimeoutMs),
-    probeDeadlineMs: pick(config.probeDeadline, defaults.probeDeadlineMs),
-    cacheTTLMs: pick(config.cacheTTL, defaults.cacheTTLMs),
-    verbose: config.verbose ?? defaults.verbose,
-    exclude: config.exclude ?? defaults.exclude,
-    signals: defaults.signals,
-    dispatcher: dispatcher ?? defaults.dispatcher,
-  }
-}
-
-function finalize(options: HealthOptions): HealthOptions {
-  const validated = validateHealthOptions(options)
-  emitHealthWarnings(validated.warnings, options.dispatcher)
-  return validated.options
-}
-
-function pick(value: Duration | undefined, fallback: number): number {
-  return value === undefined ? fallback : toMillis(value)
 }

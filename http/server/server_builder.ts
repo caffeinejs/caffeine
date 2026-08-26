@@ -1,5 +1,5 @@
-import { ErrConfigSourceConflict, kAppConfig, kServiceConfigure, type Service } from '@caffeinejs/std'
-import type { ConfigHandle } from '@caffeinejs/std/config'
+import { $t, kServiceConfigure, type Service } from '@caffeinejs/std'
+import { selectorPath, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kServerOptions } from './keys.js'
 
@@ -10,79 +10,87 @@ export interface ServerOptions {
 
 export const DEFAULT_SERVER_OPTIONS: ServerOptions = { port: 0, host: '0.0.0.0' }
 
+/** The default location of the server settings in the configuration tree. */
+export const SERVER_CONFIG_NAMESPACE: readonly string[] = ['server']
+
+const serverConfigSchema = $t.Object({
+  port: $t.Number({ default: DEFAULT_SERVER_OPTIONS.port }),
+  host: $t.String({ default: DEFAULT_SERVER_OPTIONS.host }),
+})
+
 /**
- * Configures the server address the adapter listens on when {@link WebApplication.run} is called. Bound via
- * `app.server(s => s.port(3000).host('127.0.0.1'))` or, alternatively, from application config with
- * `app.server(s => s.config(c => c.server))`.
+ * Configures the server address the adapter listens on when {@link WebApplication.run} is called.
+ *
+ * There is one read path. `s.port(3000)` does not hold the value on the builder — it writes it into the
+ * configuration tree in the `CODE` band, and the server then reads the merged result like any other setting.
+ * So a port set in code is a **default**: a `SERVER__PORT` environment variable or a `--server.port` argument
+ * overrides it, which is what lets one image ship with sensible values and still be redirected on deploy.
+ * Anything that must beat the environment is registered as a source of its own at a higher priority.
+ *
+ * By default the settings live at `server.*`. {@link config} re-points them — `s.config(c => c.app.server)`
+ * moves both the reads and the code-set defaults to `app.server.*`, checked against the application schema.
  *
  * A {@link Service}: its {@link kServiceConfigure} binds a fixed {@link ServerOptions} under
- * {@link kServerOptions}. Both paths produce a one-time snapshot — the listen address cannot change while the
- * server runs, so config refresh deliberately does **not** move it:
- * - the **config selector** reads the app-config slice once (already validated by the application schema at
- *   bootstrap, and typed at compile time), detaching from the live proxy;
- * - the **builder methods** capture the values set here.
- *
- * The two paths are mutually exclusive — using both throws {@link ErrConfigSourceConflict}.
+ * {@link kServerOptions}. That snapshot is deliberate — the listen address cannot change while the server runs,
+ * so a config refresh does not move it.
  *
  * `C` is the application config type (flows from the builder once `.config(...)` is declared), so the selector
  * argument `c` is `ConfigHandle<C>`.
  */
 export class ServerBuilder<C = unknown> implements Service {
-  #port = DEFAULT_SERVER_OPTIONS.port
-  #host = DEFAULT_SERVER_OPTIONS.host
-  #usedBuilderFn = false
+  #port: number | undefined
+  #host: string | undefined
   #selector?: (c: ConfigHandle<C>) => ServerOptions
 
   port(port: number): this {
     this.#port = port
-    this.#usedBuilderFn = true
     return this
   }
 
   host(host: string): this {
     this.#host = host
-    this.#usedBuilderFn = true
     return this
   }
 
-  /** Drives the server address from the application config, e.g. `s.config(c => c.server)`. */
+  /**
+   * Places the server settings elsewhere in the configuration tree, e.g. `s.config(c => c.app.server)`.
+   *
+   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
+   * Both the reads and the defaults written by {@link port}/{@link host} follow it.
+   */
   config(selector: (c: ConfigHandle<C>) => ServerOptions): this {
     this.#selector = selector
     return this
   }
 
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    if (this.#selector !== undefined && this.#usedBuilderFn) {
-      throw new ErrConfigSourceConflict('server')
+    const definition = kit.config
+    const parts = this.#selector === undefined
+      ? SERVER_CONFIG_NAMESPACE
+      : selectorPath(this.#selector as (c: never) => unknown)
+
+    definition.frameworkDefaults.set(parts, { ...DEFAULT_SERVER_OPTIONS })
+
+    if (this.#port !== undefined) {
+      definition.codeValues.set([...parts, 'port'], this.#port)
+    }
+    if (this.#host !== undefined) {
+      definition.codeValues.set([...parts, 'host'], this.#host)
     }
 
-    if (this.#selector !== undefined) {
-      const container = kit.container
-      const selector = this.#selector
+    const slice: ConfigSlice<ServerOptions> = definition.slice(parts, serverConfigSchema)
 
-      kit.container
-        .bind<ServerOptions>(kServerOptions)
-        // Lazy so `kAppConfig` (bound during init) is available; runs once, then the singleton caches it.
-        .toFactory(() => {
-          const appConfig = container.getOptional<ConfigHandle<C>>(kAppConfig)
-          if (appConfig === undefined) {
-            throw new Error('Cannot select server config: no application config defined — declare .config(...) before configuring the server')
-          }
-          // Snapshot: the listen address is fixed once the server starts, so a later config refresh must not
-          // move it. A fresh plain object also detaches from the live app-config proxy.
-          const slice = selector(appConfig)
-          return { port: slice.port, host: slice.host }
-        })
-        .internal()
-      return Promise.resolve()
-    }
-
-    // Builder-fn (or default) path: a fixed plain object, same as the snapshot the selector path produces.
-    const options: ServerOptions = { port: this.#port, host: this.#host }
     kit.container
       .bind<ServerOptions>(kServerOptions)
-      .toValue(options)
+      // Lazy so the slice is published (configuration resolves during init); runs once, then the singleton
+      // caches the object — which is live, so its fields keep following refreshes like every other config.
+      //
+      // The listen address still stops moving where it always did: the application spreads these options
+      // immediately before the adapter binds the socket, and that copy is what the server runs on. Freezing
+      // the whole object here instead would only mean nobody could ever see what configuration now says.
+      .toFactory(() => slice.config)
       .internal()
+
     return Promise.resolve()
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createConfigDiagnostics } from '../config_diagnostics.js'
+import { createConfigDiagnostics } from '../diagnostics.js'
 import type { ConfigEntry, ConfigSnapshot } from '../types.js'
 
 function makeSnapshot(data: Record<string, { value: unknown, origin: string }>): ConfigSnapshot {

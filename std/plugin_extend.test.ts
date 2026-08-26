@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { z } from 'zod'
 import { createApplication } from './application_builder.js'
+import { InlineConfigProvider } from './config/index.js'
 import { kServiceConfigure, type Service } from './service.js'
 import type { Plugin } from './plugin.js'
 
@@ -70,6 +72,32 @@ describe('BaseApplicationBuilder.extend', () => {
 
   it('leaves a builder that was never extended unaugmented (type-level)', () => {
     const builder = createApplication()
+
+    // @ts-expect-error no plugin contributed `track`
+    const missing: unknown = builder.track
+    expect(missing).toBeUndefined()
+  })
+
+  it('keeps the plugin methods across .config(), in either order', () => {
+    const schema = z.object({ server: z.object({ port: z.coerce.number() }) })
+
+    const afterConfig = createApplication()
+      .extend(tracker())
+      .config(schema, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
+
+    const beforeConfig = createApplication()
+      .config(schema, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
+      .extend(tracker())
+
+    // Declaring configuration re-parameterises the builder. It must not cost the plugin's methods along the
+    // way, or the order of an otherwise commutative chain would start to matter.
+    expect(typeof afterConfig.track).toBe('function')
+    expect(typeof beforeConfig.track).toBe('function')
+  })
+
+  it('still refuses a plugin method nobody contributed, after .config() (type-level)', () => {
+    const builder = createApplication()
+      .config(z.object({}), c => c.source(new InlineConfigProvider({})))
 
     // @ts-expect-error no plugin contributed `track`
     const missing: unknown = builder.track

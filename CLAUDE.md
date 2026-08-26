@@ -15,12 +15,20 @@ import { BindTo } from './Binder.js'
 
 ## After every edit
 
-After making any code changes, always run the following checks in order and fix any failures before considering the task complete:
+After making any code changes, always run checks in this order and fix any failures before considering the task complete. Scope the checks to what actually changed:
 
-1. `npm run build` — must compile without errors
-2. `npm run test:typecheck` — type-check all test files
-3. `npm test` — all tests must pass
-4. `npm run lint:fix` — zero errors (warnings are pre-existing and acceptable)
+- **Single workspace package touched** (one directory from the root `package.json` `workspaces` list — e.g. only `http/**`): scope every command to that package.
+  1. `npm run build -w <pkg>` — must compile without errors
+  2. `npm run test:typecheck -w <pkg> --if-present` — most packages have no package-level `test:typecheck` script (vitest's own typecheck, visible as `Type Errors` in its output, already covers test files); the flag makes this a no-op instead of a failure when absent
+  3. `npm test -w <pkg>` — all tests in that package must pass
+  4. `npm run lint:fix -- <pkg-path>` — zero errors in that package (warnings are pre-existing and acceptable)
+- **Anything wider** — two or more workspace packages touched, or any file outside every package directory (root `tsconfig*.json`, `eslint.config.js`, root `package.json`, `vitest.workspace.ts`, `.github/**`, this file): run the full, unscoped suite exactly as below, since a cross-cutting change can break a package the diff never touched.
+  1. `npm run build`
+  2. `npm run test:typecheck`
+  3. `npm test`
+  4. `npm run lint:fix`
+
+When in doubt about which bucket a change falls into, run the full suite.
 
 ## Private modules
 

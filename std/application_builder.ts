@@ -1,12 +1,19 @@
 import { CaffeineIoC, type Container, type Module, type Options } from '@caffeinejs/di'
 import { Application, type ApplicationInit, type BaseApplication, type HookBinding } from './application.js'
-import { AppConfigBuilder } from './app_config.js'
-import { ConfigModule, type ConfigSchema, type InferConfig } from './config/index.js'
+import { AppConfigBuilder, kAppConfig } from './app_config.js'
+import {
+  ConfigDefinition,
+  ConfigModule,
+  kConfigDefinition,
+  type ConfigSchema,
+  type InferConfig,
+} from './config/index.js'
 import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import type { Augment, Plugin, PluginContext } from './plugin.js'
 import type { Service } from './service.js'
 import { type ShutdownConfig, resolveShutdownOptions } from './health/shutdown_options.js'
+import { detectSignalDispatcher } from './health/signals.js'
 
 export interface ApplicationBuilderOptions {
   container?: Container | Options
@@ -33,6 +40,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #hooks = new ApplicationHooks<BaseApplication>()
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #shutdown: ShutdownConfig | undefined
+  readonly #config = new ConfigDefinition(kAppConfig)
 
   constructor(options: ApplicationBuilderOptions = {}) {
     this.#shutdown = options.shutdown
@@ -58,10 +66,26 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
       })
       this.#container.autoWire()
     }
+
+    // Configuration is unconditional: features read their own slices from the tree whether or not the
+    // application ever declared one, so the module is installed here rather than by `.config()`. It reads the
+    // definition at `container.init()`, by which point every feature has registered.
+    //
+    // The warning channel is wired here rather than inside `std/config`, which stays free of any host
+    // dependency: a refresh that fails for one feature is contained rather than thrown, so it needs somewhere
+    // to be heard.
+    this.#config.warn = message => detectSignalDispatcher().warn(message)
+    this.#container.bind(kConfigDefinition).toValue(this.#config)
+    this.#container.addModules(ConfigModule(this.#config))
   }
 
   get container(): Container {
     return this.#container
+  }
+
+  /** The live configuration definition: its sources, root schema, resolution context and feature slices. */
+  get configDefinition(): ConfigDefinition {
+    return this.#config
   }
 
   addService(service: Service): this {
@@ -98,18 +122,35 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     schema: ConfigSchema<T>,
     configure?: (c: AppConfigBuilder<T>) => void,
   ): void {
-    const definition = new AppConfigBuilder<T>(schema)
-    configure?.(definition)
-    this.addModules(ConfigModule(definition.toOptions()))
+    this.#config.schema = schema as ConfigSchema<unknown>
+    configure?.(new AppConfigBuilder<T>(this.#config))
+  }
+
+  /**
+   * Dispatches the two shapes of `.config(...)`: with a schema, which also declares the application config
+   * type, and without one, which only registers sources. The second exists because configuration is now
+   * unconditional — an application may well want its sources in place, and its features configured from them,
+   * without describing a root shape of its own.
+   */
+  protected applyConfigArgs<S extends ConfigSchema>(
+    first: S | ((c: AppConfigBuilder<never>) => void),
+    second?: (c: AppConfigBuilder<never>) => void,
+  ): void {
+    if (typeof first === 'function') {
+      first(new AppConfigBuilder(this.#config) as AppConfigBuilder<never>)
+      return
+    }
+
+    this.applyConfigDefinition<never>(first as ConfigSchema<never>, second)
   }
 
   /**
    * Installs plugins, merging each one's contributed methods onto this builder and re-typing it so they are
    * visible with autocomplete.
    *
-   * Callable at any point, and more than once — which is what makes it composable with {@link config}. A
-   * builder that re-types itself (as the HTTP builder's `config()` does) drops the augments from its type;
-   * calling `extend` again restores them.
+   * Callable at any point, and more than once. Order does not matter: a builder that re-parameterises itself
+   * (as the HTTP builder's `config()` does) carries the augments across, so `.extend(...).config(...)` and
+   * `.config(...).extend(...)` are equally valid.
    *
    * ```ts
    * createWebApplication(fastifyAdapterFactory(server))
@@ -130,11 +171,23 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
       hookBindings: this.#hookBindings,
       hooks: this.#hooks,
       shutdown: resolveShutdownOptions(this.#shutdown),
+      config: this.#config,
     }
   }
 
   abstract build(): App
 }
+
+/**
+ * Re-parameterises the builder half of `Self` while keeping whatever a plugin merged onto it.
+ *
+ * A builder that changes one of its own type arguments — `config()` declaring the application config type —
+ * cannot just name its own class as the return type: that discards the `& Augment<S>` an earlier `.extend()`
+ * contributed, and the plugin's methods vanish from the chain. `Omit` strips the class's own keys, leaving
+ * only the plugin-contributed ones, and intersecting with the re-parameterised class puts the full instance
+ * type back — private fields included, so the result stays assignable wherever the builder is expected.
+ */
+export type Reconfigured<Self, Base, Next> = Omit<Self, keyof Base> & Next
 
 /** Merges each plugin's contributed methods onto the builder and registers its configurer. */
 export function installPlugins(
@@ -163,11 +216,16 @@ export class ApplicationBuilder extends BaseApplicationBuilder<Application> {
    * application has no features that select config slices, so the builder is not re-typed; read the config via
    * `container.get<ConfigHandle<T>>(kAppConfig)` with the type at the use site.
    */
+  config(configure: (c: AppConfigBuilder) => void): this
   config<S extends ConfigSchema>(
     schema: S,
     configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
+  ): this
+  config<S extends ConfigSchema>(
+    first: S | ((c: AppConfigBuilder) => void),
+    second?: (c: AppConfigBuilder<InferConfig<S>>) => void,
   ): this {
-    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, configure)
+    this.applyConfigArgs(first, second)
     return this
   }
 }

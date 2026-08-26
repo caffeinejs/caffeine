@@ -6,7 +6,7 @@ import handlebars from 'handlebars'
 import type { Container } from '@caffeinejs/di'
 import { Claim, Identity, Principal, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import type { HealthIndicator } from '@caffeinejs/std'
-import { EnvProvider } from '@caffeinejs/std/config'
+import { EnvConfigProvider } from '@caffeinejs/std/config'
 import { openapiPlugin } from '@caffeinejs/openapi'
 import { staticPlugin } from '@caffeinejs/static'
 import { viewPlugin } from '@caffeinejs/view'
@@ -38,7 +38,7 @@ export function buildApp(
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie)
 
-  return createWebApplication(fastifyAdapterFactory(server), { container })
+  const builder = createWebApplication(fastifyAdapterFactory(server), { container })
     .extend(viewPlugin(), staticPlugin(), openapiPlugin())
     .view(v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
     .static(s => s.serve(publicRoot, { prefix: '/static' }))
@@ -116,7 +116,7 @@ export function buildApp(
     // .config() re-types the builder and drops the plugin augments, so anything using a plugin method comes
     // before it — or after another .extend(), which restores them. Server host/port come from
     // PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
-    .config(appConfigSchema, c => c.source(new EnvProvider({ prefix: 'PETSTORE_' })))
+    .config(appConfigSchema, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
     .server(s => s.config(c => c.server))
     // Kubernetes probes (/livez, /readyz, /startupz) plus the graceful shutdown that drives them: SIGTERM makes
     // /readyz answer 503 immediately, the drain delay covers the routing-table lag while requests keep being
@@ -126,9 +126,12 @@ export function buildApp(
         h.indicator(indicator)
       }
     })
-    .build()
+
+  const app = builder.build()
     // The request pipeline, configured on the built application rather than the builder. Authentication and
     // authorization are one call because ordering them is the mistake worth designing out — and an
     // application with protected routes that omits this line refuses to start.
     .useAuthenticationAndAuthorization()
+
+  return app
 }

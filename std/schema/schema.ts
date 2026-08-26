@@ -1,4 +1,4 @@
-import { Kind, type Static, type TSchema } from '@sinclair/typebox'
+import { Kind, type StaticDecode, type TSchema } from '@sinclair/typebox'
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/spec'
 
 /**
@@ -13,9 +13,15 @@ import type { StandardJSONSchemaV1, StandardSchemaV1 } from '@standard-schema/sp
  */
 export type AnySchema = TSchema | StandardSchemaV1
 
-/** Infers the validated output type carried by an {@link AnySchema}. */
+/**
+ * Infers the validated output type carried by an {@link AnySchema}.
+ *
+ * `StaticDecode` rather than `Static`: a codec such as `$t.List` accepts text and yields a list, and the type a
+ * caller sees must be what validation *produced*, not what it was willing to accept. For a schema declaring no
+ * codec the two are the same type.
+ */
 export type InferSchema<S extends AnySchema>
-  = S extends TSchema ? Static<S>
+  = S extends TSchema ? StaticDecode<S>
     : S extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<S>
       : never
 

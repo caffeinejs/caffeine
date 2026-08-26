@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from '../../schema/t.js'
 import { bootstrapConfig } from '../bootstrap.js'
 import { ErrConfigValidation } from '../errors.js'
-import { InlineProvider } from '../providers/inline_provider.js'
+import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { validateConfig } from '../schema.js'
 
 const schema = $t.Object({
@@ -50,7 +50,7 @@ describe('validateConfig with the $t dialect', () => {
   it('works end to end through bootstrapConfig', async () => {
     const { config } = await bootstrapConfig({
       schema,
-      providers: [new InlineProvider({ server: { host: '127.0.0.1', port: 1234 } })],
+      providers: [new InlineConfigProvider({ server: { host: '127.0.0.1', port: 1234 } })],
     })
     expect(config.server.host).toBe('127.0.0.1')
     expect(config.server.port).toBe(1234)

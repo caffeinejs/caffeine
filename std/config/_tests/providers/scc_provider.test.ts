@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ErrConfigProvider } from '../../errors.js'
 import type { ResolutionContext } from '../../types.js'
 import { SpringCloudConfigProvider } from '../../providers/scc_provider.js'
 
@@ -82,7 +81,7 @@ describe('SpringCloudConfigProvider', () => {
     expect(sources.length).toBeGreaterThan(0)
   })
 
-  it('throws ErrConfigProvider when all URLs fail and optional is false', async () => {
+  it('throws ERR_CONFIG_PROVIDER when all URLs fail and optional is false', async () => {
     vi.stubGlobal('fetch', mockFetch([{ ok: false, status: 503 }]))
     const provider = new SpringCloudConfigProvider({
       baseURLs: ['http://localhost:19999'],
@@ -90,7 +89,7 @@ describe('SpringCloudConfigProvider', () => {
       optional: false,
     })
 
-    await expect(provider.load(ctx)).rejects.toBeInstanceOf(ErrConfigProvider)
+    await expect(provider.load(ctx)).rejects.toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_PROVIDER' })
   })
 
   it('returns empty array when all URLs fail and optional is true', async () => {

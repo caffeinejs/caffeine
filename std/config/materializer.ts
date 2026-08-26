@@ -1,3 +1,4 @@
+import { splitPath } from './path.js'
 import type { ConfigSnapshot } from './types.js'
 
 const INDEX_KEY = /^(0|[1-9]\d*)$/
@@ -6,33 +7,10 @@ export function materialize(snapshot: ConfigSnapshot): Record<string, unknown> {
   const result: Record<string, unknown> = {}
 
   for (const [key, entry] of snapshot.values) {
-    setByPath(result, splitKey(key), entry.value)
+    setByPath(result, splitPath(key), entry.value)
   }
 
   return promoteNumericObjects(result) as Record<string, unknown>
-}
-
-function splitKey(key: string): string[] {
-  const parts: string[] = []
-  let current = ''
-  let i = 0
-
-  while (i < key.length) {
-    if (key[i] === '\\' && i + 1 < key.length && key[i + 1] === '.') {
-      current += '.'
-      i += 2
-    } else if (key[i] === '.') {
-      parts.push(current)
-      current = ''
-      i++
-    } else {
-      current += key[i]
-      i++
-    }
-  }
-
-  parts.push(current)
-  return parts
 }
 
 function setByPath(obj: Record<string, unknown>, parts: string[], value: unknown): void {
@@ -109,7 +87,17 @@ function promoteNumericObjects(value: unknown): unknown {
 }
 
 export function readByPath(obj: unknown, path: string): unknown {
-  return splitKey(path).reduce<unknown>((acc, part) => {
+  return readByParts(obj, splitPath(path))
+}
+
+/**
+ * Reads a value from an already-split path. This is the form the hot paths use: a feature namespace is split
+ * once when the feature is configured, so a lookup never re-scans the key.
+ */
+export function readByParts(obj: unknown, parts: readonly string[]): unknown {
+  let acc: unknown = obj
+
+  for (const part of parts) {
     if (acc === null || acc === undefined || typeof acc !== 'object') {
       return undefined
     }
@@ -117,11 +105,11 @@ export function readByPath(obj: unknown, path: string): unknown {
       if (!INDEX_KEY.test(part)) {
         return undefined
       }
-      return acc[Number(part)]
+      acc = acc[Number(part)]
+      continue
     }
-    if (part in (acc as object)) {
-      return (acc as Record<string, unknown>)[part]
-    }
-    return undefined
-  }, obj)
+    acc = part in (acc as object) ? (acc as Record<string, unknown>)[part] : undefined
+  }
+
+  return acc
 }

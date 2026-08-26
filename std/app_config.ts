@@ -1,4 +1,12 @@
-import type { ConfigModuleOptions, ConfigProvider, ConfigSchema, ResolutionContext } from './config/index.js'
+import {
+  ArgsConfigProvider,
+  ConfigPriority,
+  type ArgsConfigProviderOptions,
+  type ConfigDefinition,
+  type ConfigPriorityValue,
+  type ConfigProvider,
+  type ResolutionContext,
+} from './config/index.js'
 
 /**
  * The well-known token the base `.config()` builder binds the application {@link ConfigHandle} under.
@@ -6,73 +14,66 @@ import type { ConfigModuleOptions, ConfigProvider, ConfigSchema, ResolutionConte
  */
 export const kAppConfig = Symbol.for('@caffeinejs/std:app.config')
 
-/** Thrown when a feature is configured through both builder options and a config selector. */
-export class ErrConfigSourceConflict extends Error {
-  readonly code = 'ERR_CONFIG_SOURCE_CONFLICT'
-
-  constructor(feature: string) {
-    super(`Cannot configure feature "${feature}" via both builder options and config: choose one`)
-    this.name = 'ErrConfigSourceConflict'
-  }
-}
-
-/** Thrown when the application config definition declares no source. */
-export class ErrIncompleteConfigDefinition extends Error {
-  readonly code = 'ERR_INCOMPLETE_CONFIG_DEFINITION'
-
-  constructor(missing: 'source') {
-    super(`Cannot build application config: no ${missing} defined`)
-    this.name = 'ErrIncompleteConfigDefinition'
-  }
-}
-
 /**
  * Fluent definition of the application configuration sources, passed to
  * `.config(schema, c => c.source(...).context(...))`.
  *
  * The schema is supplied to `.config()` directly (not through this builder), so the application config type is
  * inferred from that argument regardless of the callback's shape — it may be a block body, a named function,
- * or omitted entirely. This builder only collects sources and the resolution context, producing the
- * {@link ConfigModuleOptions} the base builder feeds to `ConfigModule`, bound under {@link kAppConfig}.
+ * or omitted entirely. This builder writes straight into the live {@link ConfigDefinition}, so a source added
+ * here sits in the same registry a feature builder contributes to later.
+ *
+ * Sources land in the `USER` band by default, above the framework and code-set defaults and below nothing else;
+ * registration order breaks ties within a band. Pass an explicit {@link ConfigPriority} to place a source
+ * elsewhere in the chain — that is also the supported way to make a source beat the environment.
  */
 export class AppConfigBuilder<T = unknown> {
-  readonly #schema: ConfigSchema<T>
-  readonly #providers: ConfigProvider[] = []
-  #context?: ResolutionContext
+  /**
+   * Phantom — names the application config type so `.config(schema, c => ...)` can flow it to the features
+   * configured afterwards. Never assigned, never read.
+   */
+  declare readonly config?: T
 
-  constructor(schema: ConfigSchema<T>) {
-    this.#schema = schema
+  readonly #definition: ConfigDefinition
+
+  constructor(definition: ConfigDefinition) {
+    this.#definition = definition
   }
 
-  /** Adds a single config source. Sources are consulted in registration order (first wins). */
-  source(provider: ConfigProvider): this {
-    this.#providers.push(provider)
+  /** Adds a single config source. Defaults to the `USER` band; ties broken by registration order. */
+  source(provider: ConfigProvider, priority: ConfigPriorityValue = ConfigPriority.USER): this {
+    this.#definition.sources.add(provider, priority)
     return this
   }
 
-  /** Adds several config sources at once, in the given order (first wins). */
+  /** Adds several config sources at once, in the given order (first wins within the band). */
   sources(...providers: ConfigProvider[]): this {
-    this.#providers.push(...providers)
+    this.#definition.sources.addAll(providers)
+    return this
+  }
+
+  /**
+   * Reads configuration from the command line, above every other source.
+   *
+   * The arguments themselves come from `app.run(argv)` — `run(process.argv)` on Node, `run(Deno.args)` on Deno.
+   * They are opt-in rather than picked up automatically, because a process's flags are not always meant for it:
+   * a test runner's own switches would otherwise silently become configuration.
+   */
+  args(options: ArgsConfigProviderOptions = {}): this {
+    this.#definition.sources.add(new ArgsConfigProvider(options), ConfigPriority.ARGS)
     return this
   }
 
   /** Sets the resolution context (app name, profiles, label, ...). */
   context(context: ResolutionContext): this {
-    this.#context = context
+    // Preserve any argv already recorded — the context a caller writes describes the app, not the invocation.
+    this.#definition.context = { argv: this.#definition.context.argv, ...context }
     return this
   }
 
-  /** Materializes the {@link ConfigModuleOptions} for `ConfigModule`. Throws if no source was added. */
-  toOptions(): ConfigModuleOptions<T> {
-    if (this.#providers.length === 0) {
-      throw new ErrIncompleteConfigDefinition('source')
-    }
-
-    return {
-      token: kAppConfig,
-      schema: this.#schema,
-      providers: [...this.#providers],
-      context: this.#context,
-    }
+  /** Stops a failing provider from aborting start-up; it contributes nothing instead. */
+  failFast(failFast: boolean): this {
+    this.#definition.failFast = failFast
+    return this
   }
 }

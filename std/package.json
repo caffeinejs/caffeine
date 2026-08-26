@@ -40,8 +40,6 @@
     "@standard-schema/spec": "^1.1.0"
   },
   "devDependencies": {
-    "@types/js-yaml": "^4.0.9",
-    "js-yaml": "^4.1.0",
     "zod": "^4.4.3"
   }
 }

@@ -1,4 +1,5 @@
 import { type Container, type Key, Scopes } from '@caffeinejs/di'
+import { ConfigDefinition } from './config/index.js'
 import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { kServiceConfigure, type Service, type ServiceKit } from './service.js'
@@ -22,6 +23,8 @@ export interface ApplicationInit {
   hooks: ApplicationHooks<BaseApplication>
   /** The resolved drain policy. Defaults apply when the builder was given none. */
   shutdown?: ShutdownOptions
+  /** The live configuration definition, so `run(argv)` can record the command line before it is resolved. */
+  config?: ConfigDefinition
 }
 
 interface Dispatch {
@@ -42,6 +45,7 @@ export abstract class BaseApplication {
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #availability = new ApplicationAvailability()
   readonly #shutdownInit: ShutdownOptions | undefined
+  readonly #config: ConfigDefinition
   #dispatch?: Map<ApplicationEvent, Dispatch[]>
   #ready = false
   #shutdown?: GracefulShutdown
@@ -53,6 +57,9 @@ export abstract class BaseApplication {
     this.#hookBindings = init.hookBindings
     this.#hooks = init.hooks
     this.#shutdownInit = init.shutdown
+    // An application constructed without a builder still gets one, so services can register unconditionally.
+    // Nothing bootstraps it in that case, which is what a missing config module means.
+    this.#config = init.config ?? new ConfigDefinition(Symbol.for('@caffeinejs/std:app.config'))
   }
 
   get container(): Container {
@@ -95,7 +102,20 @@ export abstract class BaseApplication {
     return this.on('application:pre-shutdown', () => hook())
   }
 
-  async ready(): Promise<void> {
+  /**
+   * Brings the application up to the point where it can serve: services configure, the container initializes
+   * (which is where configuration resolves), and the platform is set up.
+   *
+   * `argv` is the process's command-line arguments, forwarded to the args config source. Pass the host's own
+   * array — `process.argv` on Node, `Deno.args` on Deno — and nothing here needs to know which host it is on.
+   * It must arrive before configuration resolves, so supplying it to an application that is already ready
+   * throws `ERR_CONFIG_ARGS_TOO_LATE` rather than quietly dropping the operator's flags.
+   */
+  async ready(argv?: readonly string[]): Promise<void> {
+    if (argv !== undefined) {
+      this.#config.setArgv(argv)
+    }
+
     if (this.#ready) {
       return
     }
@@ -113,9 +133,12 @@ export abstract class BaseApplication {
     this.#ready = true
   }
 
-  async run(): Promise<void> {
+  /** Readies the application if needed, then starts it. See {@link ready} for what `argv` is for. */
+  async run(argv?: readonly string[]): Promise<void> {
     if (!this.#ready) {
-      await this.ready()
+      await this.ready(argv)
+    } else if (argv !== undefined) {
+      this.#config.setArgv(argv)
     }
 
     const options = this.shutdownOptions()
@@ -209,7 +232,7 @@ export abstract class BaseApplication {
 
   /** The kit passed to each {@link Service}. Subclasses may widen it (e.g. add platform handles). */
   protected serviceKit(): ServiceKit {
-    return { container: this.#container, availability: this.#availability }
+    return { container: this.#container, availability: this.#availability, config: this.#config }
   }
 
   /** The services configured before `container.init()`. Subclasses may prepend framework configurers. */

@@ -1,9 +1,12 @@
 import {
+  $t,
+  type Duration,
   type SignalDispatcher,
   type ShutdownSignal,
   detectSignalDispatcher,
   isKubernetes,
   isTestEnvironment,
+  toMillis,
 } from '@caffeinejs/std'
 import { solutions } from '../error/util.js'
 import { ErrHealthConfiguration } from './errors.js'
@@ -99,6 +102,99 @@ function gracePeriodOf(env: EnvLike): number {
   const seconds = Number(env[GRACE_PERIOD_ENV_VAR])
 
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1_000 : DEFAULT_GRACE_PERIOD_MS
+}
+
+/** The default location of the health settings in the configuration tree. */
+export const HEALTH_CONFIG_NAMESPACE: readonly string[] = ['health']
+
+/** The health slice of the configuration tree. Every duration accepts `'5s'`-style strings or milliseconds. */
+export interface HealthConfig {
+  enabled?: boolean
+  paths?: Partial<HealthPaths>
+  drainDelay?: Duration
+  shutdownTimeout?: Duration
+  terminationGracePeriod?: Duration
+  indicatorTimeout?: Duration
+  probeDeadline?: Duration
+  cacheTTL?: Duration
+  verbose?: boolean
+  exclude?: boolean
+  signals?: ShutdownSignal[] | false
+}
+
+const duration = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
+
+/**
+ * The schema governing the health slice.
+ *
+ * Every member is optional, and nothing is defaulted here: the resolved defaults are environment-dependent
+ * (`isKubernetes`, the downward-API grace period) and are applied by {@link mergeHealthConfig} afterwards. So
+ * the tree carries only what somebody actually set — in code, in a file, in the environment or on the command
+ * line — and absence keeps its meaning instead of being overwritten by a default written into a low band.
+ */
+export const healthConfigSchema = $t.Object({
+  enabled: $t.Optional($t.Boolean()),
+  paths: $t.Optional($t.Object({
+    live: $t.Optional($t.String()),
+    ready: $t.Optional($t.String()),
+    startup: $t.Optional($t.String()),
+  })),
+  drainDelay: $t.Optional(duration()),
+  shutdownTimeout: $t.Optional(duration()),
+  terminationGracePeriod: $t.Optional(duration()),
+  indicatorTimeout: $t.Optional(duration()),
+  probeDeadline: $t.Optional(duration()),
+  cacheTTL: $t.Optional(duration()),
+  verbose: $t.Optional($t.Boolean()),
+  exclude: $t.Optional($t.Boolean()),
+  // `$t.List` rather than `$t.Array`: the signal names are the one health setting that is naturally a list, and
+  // an operator setting `HEALTH__SIGNALS=SIGTERM,SIGINT` should get two signals rather than one signal with a
+  // comma in its name, which is what a plain array does with a scalar.
+  signals: $t.Optional($t.Union([$t.Literal(false), $t.List($t.String())])),
+})
+
+/**
+ * Folds a resolved health slice onto the defaults, producing the millisecond-normalized options.
+ *
+ * `enabledDefault` is how "was `.health()` called at all" reaches this: reaching the builder is an explicit
+ * opt-in that turns the probes on, while an application that never called it falls back to the Kubernetes
+ * auto-detection. Either way an explicit `enabled` in the configuration wins, so `HEALTH__ENABLED=false`
+ * switches the probes off without touching code.
+ *
+ * The dispatcher is not part of the slice — it is a function, and functions cannot live in a configuration
+ * tree. It arrives on the side, from the builder.
+ */
+export function mergeHealthConfig(
+  config: HealthConfig,
+  options: { dispatcher?: SignalDispatcher, enabledDefault?: boolean } = {},
+): HealthOptions {
+  const defaults = defaultHealthOptions()
+
+  return {
+    enabled: config.enabled ?? options.enabledDefault ?? defaults.enabled,
+    paths: { ...defaults.paths, ...config.paths },
+    drainDelayMs: pick(config.drainDelay, defaults.drainDelayMs),
+    shutdownTimeoutMs: pick(config.shutdownTimeout, defaults.shutdownTimeoutMs),
+    terminationGracePeriodMs: pick(config.terminationGracePeriod, defaults.terminationGracePeriodMs),
+    indicatorTimeoutMs: pick(config.indicatorTimeout, defaults.indicatorTimeoutMs),
+    probeDeadlineMs: pick(config.probeDeadline, defaults.probeDeadlineMs),
+    cacheTTLMs: pick(config.cacheTTL, defaults.cacheTTLMs),
+    verbose: config.verbose ?? defaults.verbose,
+    exclude: config.exclude ?? defaults.exclude,
+    signals: config.signals ?? defaults.signals,
+    dispatcher: options.dispatcher ?? defaults.dispatcher,
+  }
+}
+
+/** Validates a merged configuration and emits whatever the check had to say. */
+export function finalizeHealthOptions(options: HealthOptions): HealthOptions {
+  const validated = validateHealthOptions(options)
+  emitHealthWarnings(validated.warnings, options.dispatcher)
+  return validated.options
+}
+
+function pick(value: Duration | undefined, fallback: number): number {
+  return value === undefined ? fallback : toMillis(value)
 }
 
 /** Margin left between the end of the drain budget and the orchestrator's `SIGKILL`. */

@@ -1,4 +1,4 @@
-import { ErrConfigProvider } from '../errors.js'
+import { ErrConfig } from '../errors.js'
 import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../types.js'
 
 export interface SpringCloudConfigProviderOptions {
@@ -38,6 +38,9 @@ interface SCCResponse {
 
 export class SpringCloudConfigProvider implements ConfigProvider {
   readonly id = 'spring-cloud-config'
+  // A config server is the reason refresh exists. No `revision()`: knowing whether it changed means asking it,
+  // which is the same call as reloading.
+  readonly reloadable = true
   readonly #options: ResolvedOptions
 
   constructor(options: SpringCloudConfigProviderOptions) {
@@ -74,7 +77,7 @@ export class SpringCloudConfigProvider implements ConfigProvider {
     if (this.#options.optional) {
       return []
     }
-    throw new ErrConfigProvider(this.id, lastError)
+    throw new ErrConfig(`Config provider "${this.id}" failed to load`, 'ERR_CONFIG_PROVIDER', lastError)
   }
 
   async #fetch(url: string, signal?: AbortSignal): Promise<SCCResponse> {

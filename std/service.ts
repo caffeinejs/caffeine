@@ -1,4 +1,5 @@
 import type { Container } from '@caffeinejs/di'
+import type { ConfigDefinition } from './config/index.js'
 import type { ApplicationAvailability } from './health/availability.js'
 
 /**
@@ -13,6 +14,13 @@ export interface ServiceKit {
    * lifecycle writes to the application's, and a second instance would report a state nothing ever updates.
    */
   availability: ApplicationAvailability
+  /**
+   * The live configuration definition. Handed over directly rather than resolved from the container, because a
+   * service configures *before* `container.init()` — the container cannot resolve anything yet, and this is
+   * exactly the window in which a feature must register its sources and slices so that the bootstrap running
+   * inside `init()` sees them.
+   */
+  config: ConfigDefinition
 }
 
 /** Symbol-keyed configuration hook a {@link Service} implements. */

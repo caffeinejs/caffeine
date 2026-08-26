@@ -3,11 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
+import { $t } from '../../../schema/t.js'
 import { bootstrapConfig } from '../../bootstrap.js'
-import { EnvProvider } from '../../providers/env_provider.js'
-import { FileProvider } from '../../providers/file_provider.js'
-import { InlineProvider } from '../../providers/inline_provider.js'
-import '../../providers/yaml_parser.js'
+import { ConfigPriority, ConfigSources } from '../../sources.js'
+import { ArgsConfigProvider } from '../../providers/args_provider.js'
+import { EnvConfigProvider } from '../../providers/env_provider.js'
+import { FileConfigProvider } from '../../providers/file_provider.js'
+import { InlineConfigProvider } from '../../providers/inline_provider.js'
+import { JSONConfigProvider } from '../../providers/json_provider.js'
 import type { ConfigProvider, ResolutionContext } from '../../types.js'
 
 // `server` is present in every scenario below. `db` and `app` may be absent from all sources, so they carry an
@@ -38,9 +41,9 @@ describe('config multi-source precedence & provenance', () => {
   async function providers(): Promise<{ env: ConfigProvider, file: ConfigProvider, inline: ConfigProvider }> {
     const filePath = await writeTmp('multi-source.json', JSON.stringify({ server: { port: 8080, host: 'file-host' } }))
     return {
-      env: new EnvProvider({ prefix: 'APP_' }),
-      file: new FileProvider(filePath),
-      inline: new InlineProvider({ server: { port: 3000, host: 'inline-host' }, db: { url: 'inline-url' } }),
+      env: new EnvConfigProvider({ prefix: 'APP_' }),
+      file: new JSONConfigProvider(filePath),
+      inline: new InlineConfigProvider({ server: { port: 3000, host: 'inline-host' }, db: { url: 'inline-url' } }),
     }
   }
 
@@ -89,17 +92,21 @@ describe('config multi-source precedence & provenance', () => {
     expect(diagnostics.originOf('server.port')).toMatch(/^inline/)
   })
 
-  it('loads a YAML source (parser registered via import side effect)', async () => {
-    const yamlPath = await writeTmp('multi-source.yaml', 'server:\n  host: yaml-host\n  port: 9090\n')
+  // std parses JSON and nothing else; every other format is a parse function the application already has.
+  it('loads a source in a format std does not know, from a parser the caller supplies', async () => {
+    const iniPath = await writeTmp('multi-source.ini', 'server.host=ini-host\nserver.port=9090\n')
     const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+    const ini = (text: string): Record<string, unknown> => Object.fromEntries(
+      text.split('\n').filter(line => line !== '').map(line => line.split('=') as [string, string]),
+    )
 
     const { config, diagnostics } = await bootstrapConfig({
-      providers: [new FileProvider(yamlPath)],
+      providers: [new FileConfigProvider(iniPath, ini)],
       schema,
       context: ctx,
     })
 
-    expect(config.server.host).toBe('yaml-host')
+    expect(config.server.host).toBe('ini-host')
     expect(config.server.port).toBe(9090)
     expect(diagnostics.originOf('server.host')).toMatch(/^file:/)
   })
@@ -113,7 +120,7 @@ describe('config array flatten + typed handle', () => {
 
   it('materializes arrays as Array fields and preserves ConfigHandle typing', async () => {
     const { config, validated } = await bootstrapConfig({
-      providers: [new InlineProvider({ tags: ['a', 'b'], items: [{ id: 1 }] })],
+      providers: [new InlineConfigProvider({ tags: ['a', 'b'], items: [{ id: 1 }] })],
       schema: arraySchema,
     })
 
@@ -122,17 +129,18 @@ describe('config array flatten + typed handle', () => {
     expect(Array.isArray(validated.items)).toBe(true)
     expect(validated.items).toEqual([{ id: 1 }])
 
-    // Live proxy: arrays are frozen snapshots (ReadonlyArray), not nested object accessors.
+    // Live handle: an array field is the frozen array itself, handed back as-is rather than copied per read.
     expect(Array.isArray(config.tags)).toBe(true)
     expect([...config.tags]).toEqual(['a', 'b'])
     expect(Object.isFrozen(config.tags)).toBe(true)
+    expect(config.tags).toBe(config.tags)
 
     // Compile-time: ConfigHandle maps array fields to ReadonlyArray.
     const tags: ReadonlyArray<string> = config.tags
     expect(tags[0]).toBe('a')
   })
 
-  it('lets an env indexed key override a single array element (env first)', async () => {
+  it('replaces a whole array from the higher-priority source rather than patching an element', async () => {
     const filePath = await writeTmp(
       'array-override.json',
       JSON.stringify({ tags: ['a', 'b'], items: [] }),
@@ -144,14 +152,91 @@ describe('config array flatten + typed handle', () => {
     }
 
     const { config, diagnostics } = await bootstrapConfig({
-      providers: [new EnvProvider({ prefix: 'APP_' }), new FileProvider(filePath)],
+      providers: [new EnvConfigProvider({ prefix: 'APP_' }), new JSONConfigProvider(filePath)],
       schema: arraySchema,
       context: ctx,
     })
 
+    // An array is replaced, never complemented: the first source that mentions the path owns the whole list.
+    // Merging element by element instead would make it impossible to *shorten* a list from a higher-priority
+    // source — the old tail would always survive whatever was meant to override it.
     expect(Array.isArray(config.tags)).toBe(true)
-    expect([...config.tags]).toEqual(['override', 'b'])
+    expect([...config.tags]).toEqual(['override'])
     expect(diagnostics.originOf('tags.0')).toMatch(/^env:/)
-    expect(diagnostics.originOf('tags.1')).toMatch(/^file:/)
+    expect(diagnostics.originOf('tags.1')).toBeUndefined()
+  })
+})
+
+/**
+ * The whole point of the codecs, end to end: a real provider, a real merge, a real validation.
+ *
+ * The indexed spelling above still works and is untouched. This is the alternative for the cases it handles
+ * badly — shortening a list, clearing one, or writing one without counting.
+ */
+describe('a list set as text', () => {
+  const listSchema = $t.Object({ tags: $t.List($t.String()) })
+
+  const envContext = (env: Record<string, string>): ResolutionContext =>
+    ({ app: 'test', profiles: ['default'], env })
+
+  it('reaches the validated tree as a list, over a lower band', async () => {
+    const { validated, config } = await bootstrapConfig({
+      sources: new ConfigSources()
+        .add(new InlineConfigProvider({ tags: ['from', 'code'] }), ConfigPriority.CODE)
+        .add(new EnvConfigProvider(), ConfigPriority.ENV),
+      schema: listSchema,
+      context: envContext({ TAGS: 'a,b,c' }),
+    })
+
+    expect(validated.tags).toEqual(['a', 'b', 'c'])
+    // And it arrives read-only through the handle, like any other array field.
+    expect(Object.isFrozen(config.tags)).toBe(true)
+  })
+
+  it('shortens a list, which indexed keys cannot do', async () => {
+    const { validated } = await bootstrapConfig({
+      sources: new ConfigSources()
+        .add(new InlineConfigProvider({ tags: ['a', 'b', 'c'] }), ConfigPriority.CODE)
+        .add(new EnvConfigProvider(), ConfigPriority.ENV),
+      schema: listSchema,
+      context: envContext({ TAGS: 'only' }),
+    })
+
+    expect(validated.tags).toEqual(['only'])
+  })
+
+  it('clears a list, which nothing could express before', async () => {
+    const { validated } = await bootstrapConfig({
+      sources: new ConfigSources()
+        .add(new InlineConfigProvider({ tags: ['a', 'b'] }), ConfigPriority.CODE)
+        .add(new EnvConfigProvider(), ConfigPriority.ENV),
+      schema: listSchema,
+      context: envContext({ TAGS: '' }),
+    })
+
+    expect(validated.tags).toEqual([])
+  })
+
+  it('gives the same answer from the command line as from the environment', async () => {
+    // `_coerce` exists so a setting moving between the two cannot change type; the codec must not break that.
+    const { validated } = await bootstrapConfig({
+      providers: [new ArgsConfigProvider({ argv: ['--tags=a,b,c'] })],
+      schema: listSchema,
+      context: { app: 'test', profiles: ['default'] },
+    })
+
+    expect(validated.tags).toEqual(['a', 'b', 'c'])
+  })
+
+  it('carries a JSON object through one variable', async () => {
+    const jsonSchema = $t.Object({ db: $t.JSON($t.Object({ host: $t.String(), port: $t.Number() })) })
+
+    const { validated } = await bootstrapConfig({
+      providers: [new EnvConfigProvider()],
+      schema: jsonSchema,
+      context: envContext({ DB: '{"host":"h","port":5432}' }),
+    })
+
+    expect(validated.db).toEqual({ host: 'h', port: 5432 })
   })
 })

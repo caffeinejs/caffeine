@@ -1,23 +1,47 @@
 import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
+import { coerceText } from './_coerce.js'
 
-export interface EnvProviderOptions {
+export interface EnvConfigProviderOptions {
   prefix?: string
   separator?: string
   transformKey?: (key: string) => string
 }
 
-export class EnvProvider implements ConfigProvider {
+/**
+ * `HEALTH__DRAIN_DELAY` becomes `health.drainDelay`: the separator splits path segments, and underscores
+ * *within* a segment fold into camelCase so that an environment variable can address a key spelled the way
+ * TypeScript spells it. A single-word segment is unaffected, so `SERVER__PORT` is still `server.port`.
+ *
+ * An acronym does not survive the round trip — `CACHE_TTL` yields `cacheTtl`, not `cacheTTL` — because nothing
+ * in an all-uppercase name says where an acronym starts. Reach those keys with a file or command-line source,
+ * or supply {@link EnvConfigProviderOptions.transformKey}.
+ */
+function defaultTransformKey(key: string, separator: string): string {
+  return key
+    .split(separator)
+    .map(segment => camelCase(segment.toLowerCase()))
+    .join('.')
+}
+
+function camelCase(segment: string): string {
+  return segment
+    .split('_')
+    .map((word, i) => (i === 0 || word === '' ? word : word[0].toUpperCase() + word.slice(1)))
+    .join('')
+}
+
+export class EnvConfigProvider implements ConfigProvider {
   readonly id = 'env'
   readonly #prefix: string | undefined
   readonly #separator: string
   readonly #transformKey: (key: string) => string
 
-  constructor(options: EnvProviderOptions = {}) {
+  constructor(options: EnvConfigProviderOptions = {}) {
     this.#prefix = options.prefix
     this.#separator = options.separator ?? '__'
     this.#transformKey
       = options.transformKey
-        ?? (key => key.toLowerCase().split(this.#separator).join('.'))
+        ?? (key => defaultTransformKey(key, this.#separator))
   }
 
   async load(ctx: ResolutionContext): Promise<PropertySource[]> {
@@ -37,34 +61,11 @@ export class EnvProvider implements ConfigProvider {
 
       entries.set(key, {
         key,
-        value: coerceEnv(rawValue),
+        value: coerceText(rawValue),
         origin: `env:${rawKey}`,
       })
     }
 
     return [{ name: 'env', entries }]
   }
-}
-
-function parseBoolean(value: string): boolean | undefined {
-  const n = value.trim().toLowerCase()
-  if (['true', '1', 'yes', 'on'].includes(n)) {
-    return true
-  }
-  if (['false', '0', 'no', 'off'].includes(n)) {
-    return false
-  }
-  return undefined
-}
-
-function coerceEnv(value: string): string | boolean | number {
-  const bool = parseBoolean(value)
-  if (bool !== undefined) {
-    return bool
-  }
-  const n = Number(value)
-  if (!Number.isNaN(n) && value.trim() !== '') {
-    return n
-  }
-  return value
 }

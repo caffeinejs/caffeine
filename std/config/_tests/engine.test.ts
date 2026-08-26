@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ConfigEngine } from '../config_engine.js'
-import { ErrConfigProvider } from '../errors.js'
+import { ConfigEngine } from '../engine.js'
+import { ConfigSources } from '../sources.js'
 import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 
 const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
@@ -27,10 +27,10 @@ function makeSource(name: string, data: Record<string, unknown>): PropertySource
 describe('ConfigEngine', () => {
   it('first provider in array wins over later providers', async () => {
     const engine = new ConfigEngine({
-      providers: [
+      sources: ConfigSources.of(
         makeProvider('p1', [makeSource('first', { 'db.host': 'first-host' })]),
         makeProvider('p2', [makeSource('second', { 'db.host': 'second-host' })]),
-      ],
+      ),
     })
 
     const snapshot = await engine.resolve(ctx)
@@ -39,31 +39,31 @@ describe('ConfigEngine', () => {
 
   it('first-write-wins: higher-priority key is not overwritten', async () => {
     const engine = new ConfigEngine({
-      providers: [
+      sources: ConfigSources.of(
         makeProvider('env', [makeSource('env', { 'app.port': 9000 })]),
         makeProvider('file', [makeSource('file', { 'app.port': 3000 })]),
-      ],
+      ),
     })
 
     const snapshot = await engine.resolve(ctx)
     expect(snapshot.values.get('app.port')?.value).toBe(9000)
   })
 
-  it('throws ErrConfigProvider when failFast (default) and provider fails', async () => {
+  it('throws ERR_CONFIG_PROVIDER when failFast (default) and provider fails', async () => {
     const engine = new ConfigEngine({
-      providers: [makeProvider('bad', [], true)],
+      sources: ConfigSources.of(makeProvider('bad', [], true)),
     })
 
-    await expect(engine.resolve(ctx)).rejects.toBeInstanceOf(ErrConfigProvider)
+    await expect(engine.resolve(ctx)).rejects.toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_PROVIDER' })
   })
 
   it('skips failing provider when failFast is false', async () => {
     const engine = new ConfigEngine({
       failFast: false,
-      providers: [
+      sources: ConfigSources.of(
         makeProvider('bad', [], true),
         makeProvider('ok', [makeSource('ok', { key: 'value' })]),
-      ],
+      ),
     })
 
     const snapshot = await engine.resolve(ctx)
@@ -72,7 +72,7 @@ describe('ConfigEngine', () => {
 
   it('tracks origin metadata', async () => {
     const engine = new ConfigEngine({
-      providers: [makeProvider('env', [makeSource('env:APP_HOST', { 'app.host': 'localhost' })])],
+      sources: ConfigSources.of(makeProvider('env', [makeSource('env:APP_HOST', { 'app.host': 'localhost' })])),
     })
 
     const snapshot = await engine.resolve(ctx)
@@ -81,12 +81,12 @@ describe('ConfigEngine', () => {
 
   it('within a provider, first returned source wins', async () => {
     const engine = new ConfigEngine({
-      providers: [
+      sources: ConfigSources.of(
         makeProvider('p1', [
           makeSource('first', { key: 'from-first' }),
           makeSource('second', { key: 'from-second' }),
         ]),
-      ],
+      ),
     })
 
     const snapshot = await engine.resolve(ctx)

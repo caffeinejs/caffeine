@@ -1,11 +1,11 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { ConfigHandle } from '../../config_accessor.js'
+import type { ConfigHandle } from '../../accessor.js'
 import type { ConfigSchema } from '../../schema.js'
 import { bootstrapConfig } from '../../bootstrap.js'
-import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/config_module.js'
-import { InlineProvider } from '../../providers/inline_provider.js'
-import { ErrConfigProvider, SpringCloudConfigProvider } from '../../index.js'
+import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
+import { InlineConfigProvider } from '../../providers/inline_provider.js'
+import { SpringCloudConfigProvider } from '../../index.js'
 import type { SpringCloudConfigProviderOptions } from '../../providers/scc_provider.js'
 
 const CONFIGSERVER_URL = process.env['CONFIGSERVER_URL'] ?? 'http://localhost:8888'
@@ -120,7 +120,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     expect(result.config.caffeine.version).toBe('1.0.0')
   })
 
-  it('throws ErrConfigProvider immediately on wrong credentials (no retry)', async () => {
+  it('throws ERR_CONFIG_PROVIDER immediately on wrong credentials (no retry)', async () => {
     if (!serverAvailable) {
       return
     }
@@ -137,7 +137,7 @@ describe('SpringCloudConfigProvider e2e', () => {
         schema,
         context: { app: 'caffeine', profiles: ['default'] },
       }),
-    ).rejects.toBeInstanceOf(ErrConfigProvider)
+    ).rejects.toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_PROVIDER' })
   })
 })
 
@@ -152,7 +152,7 @@ describe('Refresh e2e with live proxy', () => {
     const mutableInline = {
       id: 'mutable-inline',
       load: async () =>
-        new InlineProvider(inlineOverride as never).load({ app: 'caffeine', profiles: ['default'] }),
+        new InlineConfigProvider(inlineOverride as never).load({ app: 'caffeine', profiles: ['default'] }),
     }
 
     const APP_TOKEN = Symbol('caffeine.config')

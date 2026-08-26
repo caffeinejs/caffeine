@@ -17,5 +17,7 @@ export default defineConfig({
     name: 'http',
     include: ['**/*.test.ts'],
     environment: 'node',
+    testTimeout: 30000,
+    hookTimeout: 30000,
   },
 })

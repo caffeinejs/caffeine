@@ -1,9 +1,10 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import type { ConfigHandle } from '../../config_accessor.js'
-import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/config_module.js'
-import { InlineProvider } from '../../providers/inline_provider.js'
+import type { ConfigHandle } from '../../accessor.js'
+import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
+import { InlineConfigProvider } from '../../providers/inline_provider.js'
+import type { ConfigProvider } from '../../types.js'
 
 const schema = z.object({
   http: z.object({ host: z.string(), port: z.coerce.number() }),
@@ -17,7 +18,7 @@ function makeModule(data: Record<string, unknown>) {
   return ConfigModule<AppConfig>({
     token: APP_CONFIG,
     schema,
-    providers: [new InlineProvider(data as never)],
+    providers: [new InlineConfigProvider(data as never)],
   })
 }
 
@@ -51,8 +52,8 @@ describe('ConfigModule', () => {
     let appData = { http: { host: 'app', port: 80 }, db: { url: 'u' } }
     let dbData = { db: { url: 'postgres://a' } }
 
-    const appProvider = { id: 'app', load: async () => new InlineProvider(appData as never).load({ app: 'test', profiles: ['default'] }) }
-    const dbProvider = { id: 'db', load: async () => new InlineProvider(dbData as never).load({ app: 'test', profiles: ['default'] }) }
+    const appProvider: ConfigProvider = { id: 'app', reloadable: true, load: async () => new InlineConfigProvider(appData as never).load({ app: 'test', profiles: ['default'] }) }
+    const dbProvider: ConfigProvider = { id: 'db', reloadable: true, load: async () => new InlineConfigProvider(dbData as never).load({ app: 'test', profiles: ['default'] }) }
 
     const container = new CaffeineIoC()
     container.addModules(
@@ -78,11 +79,12 @@ describe('ConfigModule', () => {
   it('live proxy reflects values after manual shard refresh', async () => {
     let data = { http: { host: 'before', port: 80 }, db: { url: 'u' } }
 
-    const mutableProvider = {
+    const mutableProvider: ConfigProvider = {
       id: 'mutable',
+      reloadable: true,
       load: async () => {
-        const { InlineProvider } = await import('../../providers/inline_provider.js')
-        const p = new InlineProvider(data as never)
+        const { InlineConfigProvider } = await import('../../providers/inline_provider.js')
+        const p = new InlineConfigProvider(data as never)
         return p.load({ app: 'test', profiles: ['default'] })
       },
     }
