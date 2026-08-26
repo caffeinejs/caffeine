@@ -1,6 +1,6 @@
 import { kServiceConfigure, type Service, AnySchema } from '@caffeinejs/std'
 import type { Route, Router, ServiceKit } from '@caffeinejs/http'
-import { OpenAPIConfigurer } from './configurer.js'
+import { OpenAPIExtension } from './extension.js'
 import { OpenAPIDocumentStore } from './document_store.js'
 import { registerEndpoints } from './endpoints.js'
 import { kOpenAPIOptions } from './keys.js'
@@ -273,8 +273,8 @@ export class OpenAPIBuilder implements Service {
     // runs, which is exactly what `[kServiceConfigure]` guarantees.
     const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
 
-    kit.container.bind(OpenAPIConfigurer)
-      .toValue(new OpenAPIConfigurer(this.#store, options, paths))
+    kit.container.bind(OpenAPIExtension)
+      .toValue(new OpenAPIExtension(this.#store, options, paths))
       .extends()
 
     return Promise.resolve()

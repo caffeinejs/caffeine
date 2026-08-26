@@ -1,7 +1,8 @@
+import type { Container } from '@caffeinejs/di'
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
 import { Duration, parseDuration } from '@caffeinejs/std'
 import { FastifyContextRequest } from '../context.js'
-import { FeatureConfigurer, type RoutePhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
+import { addRouteHook } from '../internal/route_hooks.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
 import { CacheStore } from './store.js'
@@ -47,53 +48,59 @@ export interface CacheOptions {
   etagGenerator?: ETagGenerator
 }
 
-/**
- * Serves cacheable responses from and stores them into the container-resolved {@link CacheStore}, and
- * emits `Cache-Control`/`ETag`/`Vary` headers per the route's `@Cache` options. The store and optional
- * {@link ETagGenerator} are resolved from DI once, in {@link configureServer}.
- */
-export class CacheConfigurer extends FeatureConfigurer {
-  readonly name = 'cache'
-  #store!: CacheStore
-  #etagGenerator: ETagGenerator | undefined
-  #statusHeader = DEFAULT_STATUS_HEADER
+/** What the cache hooks need from the container, resolved once at start-up. */
+export interface CacheDeps {
+  store: CacheStore
+  etagGenerator: ETagGenerator | undefined
+  statusHeader: string
+}
 
-  configureServer = (ctx: ServerPhaseContext): void => {
-    this.#store = ctx.container.get(CacheStore)
-    this.#etagGenerator = ctx.container.getOptional<ETagGenerator>(kETagGenerator)
-    this.#statusHeader = ctx.container.getOptional<string>(kCacheStatusHeader) ?? DEFAULT_STATUS_HEADER
+/** Resolves the cache's dependencies. Called once during setup, never per route and never per request. */
+export function resolveCacheDeps(container: Container): CacheDeps {
+  return {
+    store: container.get(CacheStore),
+    etagGenerator: container.getOptional<ETagGenerator>(kETagGenerator),
+    statusHeader: container.getOptional<string>(kCacheStatusHeader) ?? DEFAULT_STATUS_HEADER,
   }
+}
 
-  configureRoute = (ctx: RoutePhaseContext): void => {
-    const store = this.#store
-    const etagGenerator = this.#etagGenerator
-    const statusHeader = this.#statusHeader
+/**
+ * Attaches the read and store hooks to one route, per its `@Cache` options.
+ *
+ * Serves cacheable responses from and stores them into the container-resolved {@link CacheStore}, and emits
+ * `Cache-Control`/`ETag`/`Vary` headers.
+ *
+ * `opts` is closed over rather than re-read from `request.routeOptions.config` per request: the hooks are
+ * attached only to routes that declared options, so what they would read back is already known here.
+ *
+ * `@Cache(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
+ * no-cache headers.
+ */
+export function attachCacheHooks(routeDef: RouteOptions, opts: CacheOptions | false, deps: CacheDeps): void {
+  const { store, etagGenerator, statusHeader } = deps
+
+  if (opts !== false) {
+    // A separate binding so the closure below sees `CacheOptions`, not the union: TypeScript does not
+    // carry a parameter's narrowing into a nested function.
+    const read: CacheOptions = opts
 
     // OnRequest phase: check if the request is cacheable and return the cached response if it is
     async function onRequest(request: FastifyRequest, reply: FastifyReply) {
-      const config = request.routeOptions.config as unknown as Record<string, unknown>
-      const opts = config.cache as CacheOptions | false
-
-      // No @Cache decorator, or @Cache(false) — nothing to serve from cache
-      if (opts === false) {
-        return
-      }
-
-      const methods = opts.methods ?? DEFAULT_METHODS
+      const methods = read.methods ?? DEFAULT_METHODS
       if (!methods.includes(request.method)) {
         return
       }
 
       // RFC 7234 §3.2 — Authorization present without explicit public override → never serve from cache
       const hasAuth = !!request.headers.authorization
-      const effectivePrivacy = opts.privacy ?? (hasAuth ? 'private' : undefined)
+      const effectivePrivacy = read.privacy ?? (hasAuth ? 'private' : undefined)
       if (effectivePrivacy === 'private') {
         reply.header(statusHeader, CACHE_BYPASS)
         return
       }
 
       // RFC 7234 §4.1 — Vary: * always fails to match; never serve from cache
-      if (opts.vary?.includes('*')) {
+      if (read.vary?.includes('*')) {
         reply.header(statusHeader, CACHE_BYPASS)
         return
       }
@@ -107,10 +114,10 @@ export class CacheConfigurer extends FeatureConfigurer {
       }
 
       // Vary-aware cache key — must match key used in onSend
-      const key = opts.key
-        ? opts.key(new FastifyContextRequest(request))
-        : defaultCacheKey(request, opts.vary)
-      const segment = opts.segment ?? ''
+      const key = read.key
+        ? read.key(new FastifyContextRequest(request))
+        : defaultCacheKey(request, read.vary)
+      const segment = read.segment ?? ''
       const cached = await store.get(key, segment)
       if (!cached) {
         if (reqCC?.includes('only-if-cached')) {
@@ -165,117 +172,107 @@ export class CacheConfigurer extends FeatureConfigurer {
       return reply.send(cached.payload)
     }
 
-    // Before sending the response,
-    // we need to build the cache control headers and store the response in the cache
-    async function onSend(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
-      if (request.responseCached) {
-        return payload
-      }
+    addRouteHook(routeDef, 'onRequest', onRequest)
+  }
 
-      const config = request.routeOptions.config as unknown as Record<string, unknown>
-      const opts = config.cache as CacheOptions | false
-
-      // @Cache(false): actively disable caching with the full set of no-cache headers
-      if (opts === false) {
-        reply.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
-        reply.header('Expires', '0')
-        reply.header('Pragma', 'no-cache')
-        reply.header('Surrogate-Control', 'no-store')
-        reply.header(statusHeader, CACHE_BYPASS)
-        return payload
-      }
-
-      const methods = opts.methods ?? DEFAULT_METHODS
-      const statusCodes = opts.statusCodes ?? DEFAULT_STATUS_CODES
-      const isCacheableMethod = methods.includes(request.method)
-      const isCacheableStatus = statusCodes.includes(reply.statusCode)
-
-      const hasAuth = !!request.headers.authorization
-      const effectivePrivacy = opts.privacy ?? (hasAuth ? 'private' : undefined)
-
-      const cacheControl = buildCacheControl(opts, effectivePrivacy)
-      if (cacheControl) {
-        reply.header('Cache-Control', cacheControl)
-      }
-
-      if (opts.vary?.length) {
-        reply.header('Vary', opts.vary.join(', '))
-      }
-
-      const isStringOrBuffer = typeof payload === 'string' || Buffer.isBuffer(payload)
-      const shouldETag = opts.etag !== false && isCacheableStatus && !opts.noStore && isStringOrBuffer
-
-      let etag: string | undefined
-      if (shouldETag) {
-        etag = await generateETag(payload as string | Buffer, opts.etagGenerator ?? etagGenerator)
-        reply.header('ETag', etag)
-      }
-
-      // ETag and storage are independent — etag: false must not prevent caching
-      // Private responses must not be stored in the shared server-side cache
-      // RFC 7234 §4.1 — Vary: * means the response must never be cached
-      const shouldCache = opts.ttl !== undefined
-        && !opts.noStore
-        && effectivePrivacy !== 'private'
-        && !opts.vary?.includes('*')
-        && isCacheableMethod
-        && isCacheableStatus
-        && isStringOrBuffer
-
-      if (shouldCache) {
-        const headers: Record<string, string> = {}
-        const contentType = reply.getHeader('content-type')
-
-        if (typeof contentType === 'string') {
-          headers['content-type'] = contentType
-        }
-
-        if (cacheControl) {
-          headers['cache-control'] = cacheControl
-        }
-
-        if (etag) {
-          headers['etag'] = etag
-        }
-
-        if (opts.vary?.length) {
-          headers['vary'] = opts.vary.join(', ')
-        }
-
-        const lastModified = new Date().toUTCString()
-        headers['last-modified'] = lastModified
-        reply.header('Last-Modified', lastModified)
-
-        // Vary-aware cache key — must match key used in onRequest
-        const key = opts.key
-          ? opts.key(new FastifyContextRequest(request))
-          : defaultCacheKey(request, opts.vary)
-
-        const segment = opts.segment ?? ''
-
-        await store.set(key, segment, {
-          payload: payload as string | Buffer,
-          etag,
-          lastModified,
-          storedAt: Date.now(),
-          headers,
-        }, parseDuration(opts.ttl!))
-      }
-
+  // Before sending the response,
+  // we need to build the cache control headers and store the response in the cache
+  async function onSend(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
+    if (request.responseCached) {
       return payload
     }
 
-    // If @Cache is not configured or is disabled with @Cache(false),
-    // we don't need to add the onRequest hook
-    if (ctx.routeDef.config?.cache) {
-      ;(ctx.routeDef.onRequest as Array<RouteOptions['onRequest']>).push(onRequest)
+    // @Cache(false): actively disable caching with the full set of no-cache headers
+    if (opts === false) {
+      reply.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
+      reply.header('Expires', '0')
+      reply.header('Pragma', 'no-cache')
+      reply.header('Surrogate-Control', 'no-store')
+      reply.header(statusHeader, CACHE_BYPASS)
+      return payload
     }
 
-    // A disabled @Cache(false) route still needs to set the no-cache headers in onSend
-    if (ctx.routeDef.config?.cache !== undefined) {
-      ;(ctx.routeDef.onSend as Array<RouteOptions['onSend']>).push(onSend)
+    const methods = opts.methods ?? DEFAULT_METHODS
+    const statusCodes = opts.statusCodes ?? DEFAULT_STATUS_CODES
+    const isCacheableMethod = methods.includes(request.method)
+    const isCacheableStatus = statusCodes.includes(reply.statusCode)
+
+    const hasAuth = !!request.headers.authorization
+    const effectivePrivacy = opts.privacy ?? (hasAuth ? 'private' : undefined)
+
+    const cacheControl = buildCacheControl(opts, effectivePrivacy)
+    if (cacheControl) {
+      reply.header('Cache-Control', cacheControl)
     }
+
+    if (opts.vary?.length) {
+      reply.header('Vary', opts.vary.join(', '))
+    }
+
+    const isStringOrBuffer = typeof payload === 'string' || Buffer.isBuffer(payload)
+    const shouldETag = opts.etag !== false && isCacheableStatus && !opts.noStore && isStringOrBuffer
+
+    let etag: string | undefined
+    if (shouldETag) {
+      etag = await generateETag(payload as string | Buffer, opts.etagGenerator ?? etagGenerator)
+      reply.header('ETag', etag)
+    }
+
+    // ETag and storage are independent — etag: false must not prevent caching
+    // Private responses must not be stored in the shared server-side cache
+    // RFC 7234 §4.1 — Vary: * means the response must never be cached
+    const shouldCache = opts.ttl !== undefined
+      && !opts.noStore
+      && effectivePrivacy !== 'private'
+      && !opts.vary?.includes('*')
+      && isCacheableMethod
+      && isCacheableStatus
+      && isStringOrBuffer
+
+    if (shouldCache) {
+      const headers: Record<string, string> = {}
+      const contentType = reply.getHeader('content-type')
+
+      if (typeof contentType === 'string') {
+        headers['content-type'] = contentType
+      }
+
+      if (cacheControl) {
+        headers['cache-control'] = cacheControl
+      }
+
+      if (etag) {
+        headers['etag'] = etag
+      }
+
+      if (opts.vary?.length) {
+        headers['vary'] = opts.vary.join(', ')
+      }
+
+      const lastModified = new Date().toUTCString()
+      headers['last-modified'] = lastModified
+      reply.header('Last-Modified', lastModified)
+
+      // Vary-aware cache key — must match key used in onRequest
+      const key = opts.key
+        ? opts.key(new FastifyContextRequest(request))
+        : defaultCacheKey(request, opts.vary)
+
+      const segment = opts.segment ?? ''
+
+      await store.set(key, segment, {
+        payload: payload as string | Buffer,
+        etag,
+        lastModified,
+        storedAt: Date.now(),
+        headers,
+      }, parseDuration(opts.ttl!))
+    }
+
+    return payload
   }
+
+  addRouteHook(routeDef, 'onSend', onSend)
 }
 
 // Canonicalizes a request URL so query parameters in a different order share one cache entry

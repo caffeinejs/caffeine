@@ -1,7 +1,9 @@
 export type { CacheEntry, ETagGenerator } from './cache.js'
-export { CacheConfigurer } from './cache.js'
+export { attachCacheHooks, type CacheDeps, type CacheOptions, resolveCacheDeps } from './cache.js'
 export { CacheBuilder } from './cache_builder.js'
-export { CacheInvalidateConfigurer } from './cache_invalidate.js'
+// CacheInvalidateOptions reaches the barrel through decorators/index.js; re-exporting it here too
+// would be a duplicate export.
+export { attachCacheInvalidateHook } from './cache_invalidate.js'
 export { CacheServiceConfigurer } from './cache_service_configurer.js'
 export { kETagGenerator } from './keys.js'
 export { CacheStore } from './store.js'

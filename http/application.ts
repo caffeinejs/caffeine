@@ -4,7 +4,9 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Router } from './route.js'
 import { Feats } from './feats.js'
 import type { ServiceKit, Services } from './service.js'
+import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
 import { buildRouting } from './routing/index.js'
+import { Authentication } from './security/auth/authentication_middleware.js'
 import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
@@ -19,6 +21,7 @@ export interface AdapterIn<R> {
   routers: Router<R>[]
   feats: Feats
   services: Services
+  middlewares: MiddlewarePipeline
 }
 
 export interface Adapter<I, R> {
@@ -52,6 +55,7 @@ export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
 export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> extends BaseApplication {
   readonly #adapter: A
   readonly #feats = new Feats()
+  readonly #middlewares = new MiddlewarePipeline()
   #routers: Router<R>[] = []
   #health: HealthServices | undefined
 
@@ -74,6 +78,43 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
 
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
     return this.#adapter.fetch(request, options)
+  }
+
+  /**
+   * Adds a middleware to the request pipeline. Order matters, and it is the order these calls are written
+   * in — within a group.
+   *
+   * `middleware` may be a function, an instance, a middleware class, or a container key; the last two are
+   * resolved from the container, so a middleware with dependencies is written as a class and injected like
+   * anything else.
+   *
+   * `hook` defaults to `handler`, which wraps the controller: `next()` returns the handler's result and the
+   * middleware may replace it. The four Fastify lifecycle hooks are available for work that must happen
+   * before the body is parsed or validated — see {@link MiddlewareHook}, and note that they run in
+   * Fastify's order, not in registration order relative to another group.
+   *
+   * ```ts
+   * app.use(RequestLogger)                 // wraps the handler
+   * app.use(kRateLimiter, 'onRequest')     // resolved from the container, runs first
+   * ```
+   */
+  use(middleware: MiddlewareRef, hook: MiddlewareHook = 'handler'): this {
+    this.#middlewares.add(middleware, hook)
+    return this
+  }
+
+  /**
+   * Registers authentication — and, with it, authorization — at `onRequest`.
+   *
+   * The two are one middleware and one call because ordering them is the mistake worth designing out: in
+   * ASP.NET Core, `UseAuthorization` before `UseAuthentication` authorizes an identity nothing has
+   * established yet. There is deliberately no `useAuthorization()` to get wrong.
+   *
+   * An application with protected routes that never calls this fails at start-up rather than serving them
+   * unguarded.
+   */
+  useAuthenticationAndAuthorization(): this {
+    return this.use(new Authentication(), 'onRequest')
   }
 
   protected override serviceKit(): ServiceKit {
@@ -113,7 +154,12 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
       health,
     }
 
-    await this.#adapter.setup({ routers: this.#routers, feats: this.#feats, services })
+    await this.#adapter.setup({
+      routers: this.#routers,
+      feats: this.#feats,
+      services,
+      middlewares: this.#middlewares,
+    })
   }
 
   protected override start(): Promise<void> {

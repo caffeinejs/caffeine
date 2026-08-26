@@ -14,8 +14,8 @@ export interface StaticPluginExt {
  * static file serving (`@fastify/static`) without http depending on this package.
  *
  * On the first `.static(...)` call it lazily creates a single {@link StaticBuilder} and registers it as a
- * service; the builder's `[kServiceConfigure]` binds the assembled mounts and the `StaticConfigurer` into the
- * container, which the adapter then discovers via `getManyOptional(FeatureConfigurer)`.
+ * service; the builder's `[kServiceConfigure]` binds the assembled mounts and the `StaticExtension` into the
+ * container, which the adapter then discovers via `getManyOptional(ServerExtension)`.
  */
 export function staticPlugin(): Plugin<StaticPluginExt> {
   let builder: StaticBuilder | undefined

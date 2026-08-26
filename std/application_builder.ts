@@ -103,6 +103,25 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     this.addModules(ConfigModule(definition.toOptions()))
   }
 
+  /**
+   * Installs plugins, merging each one's contributed methods onto this builder and re-typing it so they are
+   * visible with autocomplete.
+   *
+   * Callable at any point, and more than once — which is what makes it composable with {@link config}. A
+   * builder that re-types itself (as the HTTP builder's `config()` does) drops the augments from its type;
+   * calling `extend` again restores them.
+   *
+   * ```ts
+   * createWebApplication(fastifyAdapterFactory(server))
+   *   .extend(viewPlugin(), staticPlugin())
+   *   .view(v => v.engine({ handlebars }))
+   * ```
+   */
+  extend<const S extends readonly Plugin[]>(...plugins: S): this & Augment<S> {
+    installPlugins(this, plugins)
+    return this as this & Augment<S>
+  }
+
   /** The construction input shared by every application kind. Subclasses pass it to their app constructor. */
   protected applicationInit(): ApplicationInit {
     return {
@@ -154,14 +173,11 @@ export class ApplicationBuilder extends BaseApplicationBuilder<Application> {
 }
 
 /**
- * Creates a headless {@link Application} builder, augmented with any plugins' methods (fully typed via
- * {@link Augment}). Mirrors the HTTP `createWebApplication`.
+ * Creates a headless {@link Application} builder. Mirrors the HTTP `createWebApplication`.
+ *
+ * Install plugins with `.extend(...)` — it is fully typed the same way, and unlike a factory argument it can
+ * be called at any point in the chain.
  */
-export function createApplication<const S extends readonly Plugin[] = readonly []>(
-  options?: ApplicationBuilderOptions,
-  ...plugins: S
-): ApplicationBuilder & Augment<S> {
-  const builder = new ApplicationBuilder(options)
-  installPlugins(builder, plugins)
-  return builder as ApplicationBuilder & Augment<S>
+export function createApplication(options?: ApplicationBuilderOptions): ApplicationBuilder {
+  return new ApplicationBuilder(options)
 }

@@ -4,9 +4,9 @@ import { parse as fromYAML, stringify as toYAML } from 'yaml'
 import {
   type AuthSchemeDescriptor,
   AuthenticationSchemeProvider,
-  FeatureConfigurer,
+  ServerExtension,
   type Router,
-  type ServerPhaseContext,
+  type ServerExtensionContext,
   kAuthSchemeDescriptors,
   solutions,
 } from '@caffeinejs/http'
@@ -23,17 +23,15 @@ import { readScalarBundle, scalarPage } from './ui/scalar.js'
  * Generates the document during the server phase and fills the store the endpoints read.
  *
  * The server phase is the one moment where every route is resolved and nothing has been registered with
- * Fastify yet, so the document describes the whole application — including routes other feature configurers
+ * Fastify yet, so the document describes the whole application — including routes other extensions
  * contributed.
  *
  * Generation is eager and failures are fatal. A malformed document is not something a consumer recovers from
  * at request time, and one that silently omits routes is worse than one that never shipped; the framework
  * already refuses to start on an unconvertible route schema, and this matches it.
  */
-export class OpenAPIConfigurer extends FeatureConfigurer {
+export class OpenAPIExtension extends ServerExtension {
   readonly name = 'openapi'
-  // After the features that contribute routes, so the document describes them too.
-  readonly after = ['health', 'static', 'view']
 
   readonly #store: OpenAPIDocumentStore
   readonly #options: OpenAPIOptions
@@ -46,7 +44,7 @@ export class OpenAPIConfigurer extends FeatureConfigurer {
     this.#paths = paths
   }
 
-  configureServer = (ctx: ServerPhaseContext): void => {
+  configure = (ctx: ServerExtensionContext): void => {
     const options = this.#options
 
     const descriptors = ctx.container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
@@ -113,7 +111,7 @@ export class OpenAPIConfigurer extends FeatureConfigurer {
    * Without this the name matches nothing and the endpoints are protected by the authenticated-user
    * requirement alone — quieter than intended, and invisible until someone tests it.
    */
-  #assertSchemesExist(ctx: ServerPhaseContext): void {
+  #assertSchemesExist(ctx: ServerExtensionContext): void {
     const wanted = this.#options.secure?.schemes ?? []
     if (wanted.length === 0) {
       return
@@ -143,7 +141,7 @@ export class OpenAPIConfigurer extends FeatureConfigurer {
    * is exactly that. But an unlisted description of every endpoint and every auth scheme is worth one line of
    * output when nobody stated it was intended, and `.public()` silences it.
    */
-  #warnIfUnprotected(ctx: ServerPhaseContext): void {
+  #warnIfUnprotected(ctx: ServerExtensionContext): void {
     if (this.#options.secureExplicit || this.#options.secure !== undefined) {
       return
     }

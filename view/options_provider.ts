@@ -2,13 +2,13 @@ import { kServiceConfigure, type Service } from '@caffeinejs/std'
 import { ErrConfiguration, type ServiceKit } from '@caffeinejs/http'
 import { kViewOptionsProvider } from './keys.js'
 import { ViewBuilder } from './builder.js'
-import { ViewConfigurer } from './configurer.js'
+import { ViewExtension } from './extension.js'
 import type { ViewOptions } from './view.js'
 
 /**
  * Groups every configured view engine — the default one (`reply.view`) plus any named ones
  * (`reply.<name>`) — behind a single DI binding. `app.view(name?, configure)` routes each call here to
- * get-or-create the matching {@link ViewBuilder}; {@link ViewConfigurer} reads the provider back and
+ * get-or-create the matching {@link ViewBuilder}; {@link ViewExtension} reads the provider back and
  * registers `@fastify/view` once per {@link all} entry.
  */
 export class ViewOptionsProvider implements Service {
@@ -62,9 +62,9 @@ export class ViewOptionsProvider implements Service {
     void this.all()
 
     kit.container.bind(kViewOptionsProvider).toValue(this).internal()
-    // Self-register the server-phase configurer so the adapter discovers it via
-    // getManyOptional(FeatureConfigurer) — http no longer hardcodes it.
-    kit.container.bind(ViewConfigurer).toClass(ViewConfigurer).extends()
+    // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
+    // and registers it as a Fastify plugin — http no longer hardcodes it.
+    kit.container.bind(ViewExtension).toClass(ViewExtension).extends()
 
     return Promise.resolve()
   }

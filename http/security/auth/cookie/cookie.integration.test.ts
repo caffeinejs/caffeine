@@ -129,7 +129,7 @@ async function buildApp() {
   builder.authentication(auth => auth
     .addCookie(o => o.sessionSecret(SECRET).secure(false))
     .addCredentials())
-  const app = builder.build()
+  const app = builder.build().useAuthenticationAndAuthorization()
   await app.ready()
   return app
 }
@@ -233,7 +233,7 @@ async function buildDurableApp(graceSeconds?: number) {
       }
     })
     .addCredentials())
-  const app = builder.build()
+  const app = builder.build().useAuthenticationAndAuthorization()
   await app.ready()
   return { app, store }
 }

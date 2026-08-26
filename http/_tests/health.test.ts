@@ -233,6 +233,7 @@ describe('health probes', () => {
       .authentication(auth => auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()))
       .health()
       .build()
+      .useAuthenticationAndAuthorization()
 
     await app.run()
 

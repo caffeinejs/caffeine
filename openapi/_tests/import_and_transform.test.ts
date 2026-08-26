@@ -51,7 +51,8 @@ function build(configure: (o: Parameters<Parameters<ReturnType<typeof newBuilder
 }
 
 function newBuilder() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}, openapiPlugin())
+  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .extend(openapiPlugin())
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {

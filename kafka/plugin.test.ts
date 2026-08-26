@@ -22,7 +22,7 @@ function noopClients(): KafkaClients {
 
 describe('kafka() plugin', () => {
   it('installs the kafka() method and returns the builder for chaining', () => {
-    const app = createApplication({}, kafka('kafka', { clients: noopClients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
     expect(typeof app.kafka).toBe('function')
     // chaining returns the builder
     const chained = app.kafka(k => k.brokers('localhost:9092')).kafka('orders', k => k.brokers('localhost:9092'))
@@ -31,7 +31,7 @@ describe('kafka() plugin', () => {
 
   it('binds the default template and a labelled engine through [kServiceConfigure]', async () => {
     const container = new CaffeineIoC()
-    const app = createApplication({ container }, kafka('kafka', { clients: noopClients() }))
+    const app = createApplication({ container }).extend(kafka('kafka', { clients: noopClients() }))
 
     app.kafka(k => k.brokers('localhost:9092').groupId('g'))
 
@@ -47,7 +47,7 @@ describe('kafka() plugin', () => {
   })
 
   it('binds distinct templates for multiple named instances', async () => {
-    const app = createApplication({}, kafka('kafka', { clients: noopClients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
     app.kafka(k => k.brokers('b1').groupId('g'))
     app.kafka('orders', k => k.brokers('b2').groupId('g'))
 
@@ -65,13 +65,13 @@ describe('kafka() plugin', () => {
   })
 
   it('rejects at ready() when an instance has no brokers', async () => {
-    const app = createApplication({}, kafka('kafka', { clients: noopClients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
     app.kafka(k => k.groupId('g')) // no brokers
     await expect(app.build().ready()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 
   it('honours a caller-supplied method name', () => {
-    const app = createApplication({}, kafka('kafkaB', { clients: noopClients() }))
+    const app = createApplication({}).extend(kafka('kafkaB', { clients: noopClients() }))
     expect(typeof app.kafkaB).toBe('function')
     // @ts-expect-error the default `kafka` name is gone once renamed
     const gone: unknown = app.kafka
@@ -79,7 +79,7 @@ describe('kafka() plugin', () => {
   })
 
   it('does not expose undeclared methods (type-level)', () => {
-    const app = createApplication({}, kafka('kafka', { clients: noopClients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
     // @ts-expect-error `nope` is not contributed by any plugin
     const bad: unknown = app.nope
     expect(bad).toBeUndefined()

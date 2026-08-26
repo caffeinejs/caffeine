@@ -70,7 +70,7 @@ describe('createWebApplication default Fastify form', () => {
       }
     }
 
-    const app = createWebApplication({}, probe())
+    const app = createWebApplication().extend(probe())
     expect(typeof app.probe).toBe('function')
     app.probe('hello')
 

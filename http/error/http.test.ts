@@ -25,8 +25,9 @@ describe('ErrHTTP envelope fallback', () => {
     const res = await app.fetch('/http-err/conflict')
 
     expect(res.status).toBe(409)
+    // `error` is the status phrase, `message` the detail — the two are not interchangeable.
     expect(await res.json()).toEqual({
-      error: 'nope',
+      error: 'Conflict',
       code: 'ERR_HTTP_CONFLICT',
       statusCode: 409,
       message: 'nope',

@@ -116,7 +116,7 @@ class NamedConsumer {
 describe('named kafka instances', () => {
   it('routes to a named handler through the named instance and its own template', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k.brokers('localhost:9092').groupId('default-group'))
     app.kafka('orders', k => k.brokers('localhost:9092').groupId('orders-group'))
 

@@ -29,7 +29,7 @@ function partitionsOf(broker: FakeBroker, topic: string): number | undefined {
 describe('retry topic provisioning', () => {
   it('auto-creates the retry + dead-letter topics and opens an isolated retry consumer', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k.brokers('b').groupId('g').topicProvisioning({ partitions: 3, replicas: 1 }))
     const built = app.build()
     await built.run()
@@ -51,7 +51,7 @@ describe('retry topic provisioning', () => {
 
   it('inherits the source topic partition count when none is configured', async () => {
     const broker = new FakeBroker({ partitions: { prov: 6 } })
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k.brokers('b').groupId('g'))
     const built = app.build()
     await built.run()
@@ -66,7 +66,7 @@ describe('retry topic provisioning', () => {
 
   it('lets an instance-configured partition count override inheritance', async () => {
     const broker = new FakeBroker({ partitions: { prov: 6 } })
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k.brokers('b').groupId('g').topicProvisioning({ partitions: 2 }))
     const built = app.build()
     await built.run()
@@ -79,7 +79,7 @@ describe('retry topic provisioning', () => {
 
   it('lets a strategy-explicit partition count win over the source and config', async () => {
     const broker = new FakeBroker({ partitions: { provx: 6 } })
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k.brokers('b').groupId('g').topicProvisioning({ partitions: 2 }))
     const built = app.build()
     await built.run()
@@ -92,7 +92,7 @@ describe('retry topic provisioning', () => {
 
   it('falls back to a single partition when the source is unknown and nothing is configured', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k.brokers('b').groupId('g'))
     const built = app.build()
     await built.run()
@@ -104,7 +104,7 @@ describe('retry topic provisioning', () => {
 
   it('skips provisioning when autoCreate is false', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k.brokers('b').groupId('g').topicProvisioning({ autoCreate: false }))
     const built = app.build()
     await built.run()

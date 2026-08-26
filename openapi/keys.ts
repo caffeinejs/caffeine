@@ -1,6 +1,6 @@
 /**
  * DI key for the resolved {@link OpenAPIOptions}. Bound by the OpenAPI builder, so it is absent in an
- * application that never called `.openapi(...)` — which is how the configurer stays inert by default.
+ * application that never called `.openapi(...)` — which is how the extension stays inert by default.
  */
 export const kOpenAPIOptions = Symbol.for('@caffeinejs/openapi:options')
 

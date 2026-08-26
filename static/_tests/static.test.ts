@@ -18,7 +18,8 @@ describe('static feature', () => {
   })
 
   it('serves a file under the configured prefix', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}, staticPlugin())
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(staticPlugin())
       .static(s => s.serve(fixtures, { prefix: '/static' }))
       .build()
     await app.ready()
@@ -31,7 +32,8 @@ describe('static feature', () => {
   })
 
   it('sets the css content-type from the extension', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}, staticPlugin())
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(staticPlugin())
       .static(s => s.serve(fixtures, { prefix: '/assets' }))
       .build()
     await app.ready()
@@ -43,7 +45,8 @@ describe('static feature', () => {
   })
 
   it('404s for a missing file', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}, staticPlugin())
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(staticPlugin())
       .static(s => s.serve(fixtures, { prefix: '/static' }))
       .build()
     await app.ready()
@@ -54,7 +57,8 @@ describe('static feature', () => {
   })
 
   it('serves from multiple mounts (only the first decorates reply)', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}, staticPlugin())
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(staticPlugin())
       .static(s => s
         .serve(fixtures, { prefix: '/one' })
         .serve(fixtures2, { prefix: '/two' }))

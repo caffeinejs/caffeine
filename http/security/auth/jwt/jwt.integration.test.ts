@@ -59,7 +59,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'user-1' })
@@ -82,7 +82,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const res = await app.fetch('/jwt-no-header')
@@ -103,7 +103,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const res = await app.fetch('/jwt-bad-token', {
@@ -125,7 +125,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signExpiredToken({ sub: 'user-expired' })
@@ -150,7 +150,7 @@ describe('JWTBearerHandler', () => {
     builder.authentication(auth => auth.addJWTBearer(b =>
       b.secret(TEST_SECRET).jwtOptions({ issuer: 'https://expected.example.com', algorithms: ['HS256'] }).allowAnyAudience(),
     ))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'user-1' }, { issuer: 'https://other.example.com' })
@@ -175,7 +175,7 @@ describe('JWTBearerHandler', () => {
     builder.authentication(auth => auth.addJWTBearer(b =>
       b.secret(TEST_SECRET).jwtOptions({ audience: 'my-api', algorithms: ['HS256'] }).allowAnyIssuer(),
     ))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'user-1' }, { audience: 'other-api' })
@@ -199,7 +199,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'alice-123' })
@@ -224,7 +224,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'user-1', roles: 'admin' })
@@ -247,7 +247,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'user-1', roles: ['admin', 'editor'] })
@@ -275,7 +275,7 @@ describe('JWTBearerHandler', () => {
       b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()
         .onTokenValidated((_ctx, payload) => { onTokenValidated(payload) }),
     ))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'user-hook' })
@@ -305,7 +305,7 @@ describe('JWTBearerHandler', () => {
     builder.authentication(auth => auth.addJWTBearer(b =>
       b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience().onFail((_ctx, err) => { onFail(err) }),
     ))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const res = await app.fetch('/jwt-on-fail', {
@@ -331,7 +331,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const token = await signToken({ sub: 'user-1', roles: 'viewer' })
@@ -361,7 +361,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const res = await app.fetch('/jwt-status-guard', { method: 'POST' })
@@ -388,7 +388,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const [protectedRes, publicRes] = await Promise.all([

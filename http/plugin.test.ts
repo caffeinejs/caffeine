@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
+import { $t, kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
+import { EnvProvider } from '@caffeinejs/std/config'
 import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
 // A sentinel the plugin's configurer binds into the container so a test can prove the plugin rode
@@ -39,10 +40,11 @@ function kafka<const Name extends string = 'kafka'>(
   }
 }
 
-describe('createWebApplication plugins', () => {
+describe('builder.extend()', () => {
   it('installs the plugin method and rides the [kServiceConfigure] path into the container', async () => {
     const container = new CaffeineIoC()
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }, kafka())
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
+      .extend(kafka())
 
     expect(typeof app.kafka).toBe('function')
     app.kafka('localhost:9092')
@@ -56,7 +58,8 @@ describe('createWebApplication plugins', () => {
   })
 
   it('honours a caller-supplied method name, keeping the typing', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {}, kafka('kafkaB'))
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {})
+      .extend(kafka('kafkaB'))
 
     expect(typeof app.kafkaB).toBe('function')
     app.kafkaB('broker:1')
@@ -67,13 +70,15 @@ describe('createWebApplication plugins', () => {
   })
 
   it('merges multiple plugins without collision', () => {
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {}, kafka('a'), kafka('b'))
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {})
+      .extend(kafka('a'), kafka('b'))
     expect(typeof app.a).toBe('function')
     expect(typeof app.b).toBe('function')
   })
 
   it('does not expose undeclared methods (type-level)', () => {
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {}, kafka())
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {})
+      .extend(kafka())
     // @ts-expect-error `nope` is not contributed by any plugin
     const bad: unknown = app.nope
     expect(bad).toBeUndefined()
@@ -86,5 +91,28 @@ describe('createWebApplication plugins', () => {
     expect(bad).toBeUndefined()
     // Sanity: the plain builder still exposes its normal surface.
     expect(typeof app.build).toBe('function')
+  })
+
+  it('can be called at any point, and again after .config() re-types the builder', async () => {
+    const container = new CaffeineIoC()
+
+    // `.config()` returns a builder re-typed to carry the config type, which drops the plugin augments
+    // from the type. Extending again restores them — the reason `.extend()` is a method and not a
+    // factory argument.
+    const configured = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
+      .config($t.Object({ nothing: $t.Optional($t.String()) }), c => c.source(new EnvProvider()))
+
+    // @ts-expect-error the augments did not survive the re-type
+    const gone: unknown = configured.kafka
+    expect(gone).toBeUndefined()
+
+    const app = configured.extend(kafka())
+    expect(typeof app.kafka).toBe('function')
+    app.kafka('after-config:9092')
+
+    const built = app.build()
+    await built.ready()
+
+    expect(built.container.getOptional(kKafkaSentinel)).toEqual({ broker: 'after-config:9092' })
   })
 })

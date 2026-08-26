@@ -1,5 +1,5 @@
 import type { FastifyContextConfig, FastifyReply, FastifyRequest } from 'fastify'
-import { FeatureConfigurer, type ServerPhaseContext } from '../feature_configurer.js'
+import type { ServerExtensionContext } from '../server_extension.js'
 import { joinPaths } from '../internal/paths/paths.js'
 import { solutions } from '../error/util.js'
 import { ErrHealthConfiguration } from './errors.js'
@@ -14,33 +14,29 @@ interface ProbeRequestQuery {
 /**
  * Mounts the three probes on the root server, before any controller is registered.
  *
- * Mounting at the root rather than inside a controller's encapsulated context is what keeps the probes out of the
- * request pipeline: authentication is applied in the router phase and authorization per route, so neither can reach
- * a route registered here. No "allow anonymous" annotation is needed, and no misconfigured guard can make the
- * kubelet see a 401.
+ * The probes stay out of the request pipeline, and that is deliberate: the adapter builds no `httpContext`
+ * for a route marked with {@link kHealthRoute}, and every middleware group skips a request that has none. So
+ * no authentication middleware can reach a probe, no "allow anonymous" annotation is needed, and no
+ * misconfigured guard can make the kubelet see a 401.
  */
-export class HealthConfigurer extends FeatureConfigurer {
-  readonly name = 'health'
-
-  configureServer = (ctx: ServerPhaseContext): void => {
-    const health = ctx.services.health
-    if (!health.options.enabled) {
-      return
-    }
-
-    const paths = health.options.paths
-    assertNoCollision(ctx, [paths.live, paths.ready, paths.startup])
-
-    const probes = health.probes
-
-    mount(ctx, paths.live, query => probes.live(query))
-    mount(ctx, paths.ready, query => probes.ready(query))
-    mount(ctx, paths.startup, query => probes.startup(query))
+export function installHealthProbes(ctx: ServerExtensionContext): void {
+  const health = ctx.services.health
+  if (!health.options.enabled) {
+    return
   }
+
+  const paths = health.options.paths
+  assertNoCollision(ctx, [paths.live, paths.ready, paths.startup])
+
+  const probes = health.probes
+
+  mount(ctx, paths.live, query => probes.live(query))
+  mount(ctx, paths.ready, query => probes.ready(query))
+  mount(ctx, paths.startup, query => probes.startup(query))
 }
 
 function mount(
-  ctx: ServerPhaseContext,
+  ctx: ServerExtensionContext,
   path: string,
   handle: (query: ProbeQuery) => Promise<ProbeResponse>,
 ): void {
@@ -74,7 +70,7 @@ function probeQuery(query: ProbeRequestQuery): ProbeQuery {
   }
 }
 
-function assertNoCollision(ctx: ServerPhaseContext, probePaths: readonly string[]): void {
+function assertNoCollision(ctx: ServerExtensionContext, probePaths: readonly string[]): void {
   const taken = new Set(probePaths)
 
   for (const router of ctx.routers) {

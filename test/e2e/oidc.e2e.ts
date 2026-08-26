@@ -64,7 +64,7 @@ function buildApp() {
     .jwksURI(`${OAUTH}/oauth2/jwks`)
     .issuer(OAUTH)
     .scopes('openid', 'profile', 'email')))
-  return builder.build()
+  return builder.build().useAuthenticationAndAuthorization()
 }
 
 const serverUp = await oauthServerUp()

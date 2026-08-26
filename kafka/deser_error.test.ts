@@ -28,7 +28,7 @@ describe('deserialization-error path', () => {
     const received = deferred<{ error: unknown, record: DeserializationErrorRecord }>()
 
     const broker = new FakeBroker({ applyDeserializers: true })
-    const app = createApplication({}, kafka('kafka', { clients: broker.clients() }))
+    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
     app.kafka(k => k
       .brokers('b')
       .groupId('de-group')

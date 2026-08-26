@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
-import { FeatureConfigurer, type RoutePhaseContext, type ServerPhaseContext } from '../feature_configurer.js'
+import { addRouteHook } from '../internal/route_hooks.js'
 import { CacheStore } from './store.js'
 
 export interface CacheInvalidateOptions {
@@ -8,47 +8,33 @@ export interface CacheInvalidateOptions {
 }
 
 /**
- * Evicts cached entries after a successful mutating request, targeting the container-resolved
- * {@link CacheStore} (the same instance the `cache` configurer writes to). Runs after `cache`.
+ * Attaches the eviction hook to one route, per its `@CacheInvalidate` options.
+ *
+ * Evicts cached entries after a successful mutating request, targeting the {@link CacheStore} the cache
+ * hooks write to. Like those, `opts` is closed over rather than re-read per request.
  */
-export class CacheInvalidateConfigurer extends FeatureConfigurer {
-  readonly name = 'cache-invalidate'
-  readonly after = ['cache']
-  #store!: CacheStore
-
-  configureServer = (ctx: ServerPhaseContext): void => {
-    this.#store = ctx.container.get(CacheStore)
-  }
-
-  configureRoute = (ctx: RoutePhaseContext): void => {
-    const store = this.#store
-    if (ctx.routeDef.config?.cacheInvalidate === undefined || ctx.routeDef.config?.cacheInvalidate === false) {
+export function attachCacheInvalidateHook(
+  routeDef: RouteOptions,
+  opts: CacheInvalidateOptions,
+  store: CacheStore,
+): void {
+  async function invalidateHandler(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
+    if (reply.statusCode < 200 || reply.statusCode >= 300) {
       return
     }
 
-    async function invalidateHandler(
-      request: FastifyRequest,
-      reply: FastifyReply,
-    ): Promise<unknown> {
-      const config = request.routeOptions.config as unknown as Record<string, unknown> | undefined
-      const opts = config?.cacheInvalidate as CacheInvalidateOptions | undefined
-      if (!opts || reply.statusCode < 200 || reply.statusCode >= 300) {
-        return
-      }
+    const segment = opts.segment ?? ''
+    const paths = opts.paths ?? [request.url]
 
-      const segment = opts.segment ?? ''
-      const paths = opts.paths ?? [request.url]
-
-      const keys = new Array<string>(paths.length)
-      for (let i = 0; i < paths.length; i++) {
-        keys[i] = encodeURIComponent(paths[i])
-      }
-
-      await store.deleteMany(keys, segment)
-
-      return
+    const keys = new Array<string>(paths.length)
+    for (let i = 0; i < paths.length; i++) {
+      keys[i] = encodeURIComponent(paths[i])
     }
 
-    (ctx.routeDef.onSend as Array<RouteOptions['onSend']>).push(invalidateHandler)
+    await store.deleteMany(keys, segment)
+
+    return
   }
+
+  addRouteHook(routeDef, 'onSend', invalidateHandler)
 }

@@ -12,7 +12,7 @@ export interface OpenAPIPluginExt {
  *
  * On the first `.openapi(...)` call it lazily creates one {@link OpenAPIBuilder} and registers it as a
  * service. The builder's `[kServiceConfigure]` binds the resolved options, registers the document endpoints
- * as ordinary routes, and registers the configurer that generates the document during the server phase.
+ * as ordinary routes, and registers the extension that generates the document at start-up.
  */
 export function openapiPlugin(): Plugin<OpenAPIPluginExt> {
   let builder: OpenAPIBuilder | undefined

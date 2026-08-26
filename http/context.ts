@@ -1,7 +1,8 @@
 import { IncomingMessage } from 'http'
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
-import { FastifyRequest, RawServerDefault, RawRequestDefaultExpression, FastifyReply } from 'fastify'
+import { FastifyRequest, RawServerDefault, RawRequestDefaultExpression, FastifyReply, type FastifyContextConfig } from 'fastify'
 import { CookieSerializeOptions } from '@fastify/cookie'
+import { statusErrorBody } from './error/http.js'
 import type { RouteValidationSchema } from './route.js'
 import { type Principal } from './security/index.js'
 
@@ -53,6 +54,21 @@ export interface Context<
   get signal(): AbortSignal
 
   get user(): Principal
+
+  /** Whether the response has already been written. A middleware checks it before answering itself. */
+  get sent(): boolean
+
+  /**
+   * Replaces the request's principal. The authentication middleware is the expected caller; a handler that
+   * needs a different identity for a downstream call should pass it explicitly rather than mutate this.
+   */
+  setUser(user: Principal): this
+
+  /**
+   * What the route declared, as the adapter recorded it. The shape belongs to the adapter — the Fastify one
+   * returns its `FastifyContextConfig` — so a consumer narrows it to the adapter it is written against.
+   */
+  get routeConfig(): unknown
 
   status(code: number): this
 
@@ -134,6 +150,23 @@ export class FastifyContext<
     return this.#fastifyRequest.user
   }
 
+  setUser(user: Principal): this {
+    this.#fastifyRequest.user = user
+    return this
+  }
+
+  get sent(): boolean {
+    return this.#reply.sent
+  }
+
+  /**
+   * The route's Fastify config — where the adapter records what a route declared. The authentication
+   * middleware reads its per-route options from here, which is what keeps it off the raw request.
+   */
+  get routeConfig(): FastifyContextConfig {
+    return this.#fastifyRequest.routeOptions.config as FastifyContextConfig
+  }
+
   get statusCode(): number {
     return this.#reply.statusCode
   }
@@ -168,22 +201,29 @@ export class FastifyContext<
   }
 
   badRequest(body?: unknown): this {
-    this.#reply.code(400).send(body)
-    return this
+    return this.#fail(400, 'ERR_HTTP_BAD_REQUEST', body)
   }
 
   notFound(body?: unknown): this {
-    this.#reply.code(404).send(body)
-    return this
+    return this.#fail(404, 'ERR_HTTP_NOT_FOUND', body)
   }
 
   unprocessableEntity(body?: unknown): this {
-    this.#reply.code(422).send(body)
-    return this
+    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_ENTITY', body)
   }
 
   internalServerError(body?: unknown): this {
-    this.#reply.code(500).send(body)
+    return this.#fail(500, 'ERR_HTTP_INTERNAL_SERVER_ERROR', body)
+  }
+
+  /**
+   * Sends an error status, defaulting the body to the same envelope a thrown `ErrHTTP` renders to.
+   *
+   * Without the default these shorthands answer with an empty body, which leaves an application emitting one
+   * error shape from `@Catch` and a different one from `ctx.notFound()`.
+   */
+  #fail(statusCode: number, code: string, body?: unknown): this {
+    this.#reply.code(statusCode).send(body ?? statusErrorBody(statusCode, code))
     return this
   }
 

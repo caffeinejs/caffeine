@@ -184,7 +184,7 @@ describe('Application lifecycle', () => {
       }
     }
 
-    const app = createApplication({}, probe())
+    const app = createApplication({}).extend(probe())
     expect(typeof app.probe).toBe('function')
     app.probe('hello')
 

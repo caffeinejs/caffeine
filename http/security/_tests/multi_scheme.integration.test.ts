@@ -67,7 +67,7 @@ function buildApp(): WebApplication {
         : null))
     .default('Default'))
 
-  return builder.build() as WebApplication
+  return builder.build().useAuthenticationAndAuthorization() as WebApplication
 }
 
 describe('per-route authentication schemes', () => {

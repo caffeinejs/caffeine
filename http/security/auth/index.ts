@@ -1,3 +1,4 @@
+export { Authentication } from './authentication_middleware.js'
 export { BasicAuthenticationHandler, type BasicAuthenticationOptions } from './basic/index.js'
 export { AuthenticationBuilder } from './builder.js'
 export {

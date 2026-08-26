@@ -60,6 +60,13 @@ const servers: ServerConfig[] = [
     builtPath: resolve(__dirname, '..', 'dist', 'request', 'caffeine-request-scope', 'caffeine.js'),
   },
   {
+    name: 'caffeine-middleware',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'caffeine-middleware', 'caffeine.js')],
+    port: 3026,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'caffeine-middleware', 'caffeine.js'),
+  },
+  {
     name: 'elysia',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'elysia', 'elysia.js')],

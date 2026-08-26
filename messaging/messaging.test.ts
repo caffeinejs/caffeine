@@ -138,7 +138,7 @@ describe('messaging', () => {
   it('delivers a published message to its @Consume handler', async () => {
     received = deferred()
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .in('orders1', { destination: 'orders', via: 'primary' }))
@@ -155,7 +155,7 @@ describe('messaging', () => {
     bridged = deferred()
     const brokerA = new InMemoryBroker()
     const brokerB = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('a', inMemoryBinder(brokerA))
       .use('b', inMemoryBinder(brokerB))
@@ -174,7 +174,7 @@ describe('messaging', () => {
   it('retries a failing handler with the binding blocking-retry policy', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .in('orders3', { destination: 'orders', via: 'primary', retry: { attempts: 3, backoff: { type: 'fixed', delay: 1 } } }))
@@ -188,7 +188,7 @@ describe('messaging', () => {
   })
 
   it('fails fast at run when a binding names an unregistered binder', async () => {
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder())
       .in('orders4', { destination: 'orders', via: 'ghost' }))
@@ -200,7 +200,7 @@ describe('messaging', () => {
 
   it('publishes through the MessageBus to an outbound binding', async () => {
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .out('emit', { destination: 'emitted', via: 'primary' }))
@@ -219,7 +219,7 @@ describe('messaging', () => {
   it('extracts handler arguments via @MessageParams pickers', async () => {
     picked = deferred()
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .in('orders5', { destination: 'orders', via: 'primary' }))
@@ -235,7 +235,7 @@ describe('messaging', () => {
   it('validates + coerces an inbound payload against the binding schema', async () => {
     schemaGot = deferred()
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .in('orders6', {
@@ -256,7 +256,7 @@ describe('messaging', () => {
   it('skips the handler and fires onInvalidMessage for a bad inbound payload', async () => {
     const invalid = deferred<SchemaIssue[]>()
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .onInvalidMessage(issues => invalid.resolve(issues))
@@ -272,7 +272,7 @@ describe('messaging', () => {
 
   it('throws ErrMessageValidation for an invalid outbound payload', async () => {
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .out('emit2', { destination: 'emitted', via: 'primary', schema: $t.Object({ id: $t.Integer() }) }))
@@ -288,7 +288,7 @@ describe('messaging', () => {
     const recovered = deferred<{ binder: string, attempt: number, payload: unknown }>()
     const observed = deferred<unknown>()
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .onError(error => observed.resolve(error))
@@ -310,7 +310,7 @@ describe('messaging', () => {
     dead = deferred()
     const ref: { bus?: MessageBus } = {}
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .recoverer(async (_error, msg) => {
@@ -331,7 +331,7 @@ describe('messaging', () => {
 
   it('fails fast at run when an inbound binding has no handler', async () => {
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .in('orphan-binding', { destination: 'orphan', via: 'primary' }))
@@ -344,7 +344,7 @@ describe('messaging', () => {
   it('does not retry a non-retryable error', async () => {
     nrState = { attempts: 0, recovered: deferred() }
     const broker = new InMemoryBroker()
-    const app = createApplication({}, messaging())
+    const app = createApplication({}).extend(messaging())
     app.messaging(m => m
       .use('primary', inMemoryBinder(broker))
       .recoverer(() => nrState.recovered.resolve(nrState.attempts))

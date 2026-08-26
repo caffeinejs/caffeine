@@ -1,3 +1,4 @@
+import { STATUS_CODES } from 'node:http'
 import { ErrCaffeineWebApplication } from './common.js'
 
 export interface ErrHTTPOptions {
@@ -72,6 +73,45 @@ export class ErrHTTPBuilder {
 
 export function newHTTPError(): ErrHTTPBuilder {
   return new ErrHTTPBuilder()
+}
+
+/**
+ * The response body an {@link ErrHTTP} renders to when it does not carry its own {@link ErrHTTPOptions.body}.
+ *
+ * One shape for every 404 the application can produce — one thrown by a handler, one from a URL that matched
+ * no route, and `ctx.notFound()` — so a client parses a single envelope rather than three.
+ */
+export interface HTTPErrorBody {
+  statusCode: number
+  /** The HTTP status phrase, e.g. `"Not Found"`. The detail belongs in {@link message}. */
+  error: string
+  code: string
+  message: string
+}
+
+/**
+ * Renders the default body for an {@link ErrHTTP}.
+ *
+ * `error` is the status phrase and `message` the detail, as Fastify's own errors are shaped — the two are not
+ * interchangeable, and a client that switches on `error` needs it stable across every error of a given status.
+ */
+export function httpErrorBody(err: ErrHTTP): HTTPErrorBody {
+  return {
+    statusCode: err.statusCode,
+    error: STATUS_CODES[err.statusCode] ?? 'Error',
+    code: err.code,
+    message: err.message,
+  }
+}
+
+/**
+ * Renders the default body for a bare status code, for the response shorthands on `Context` that never build
+ * an error object.
+ */
+export function statusErrorBody(statusCode: number, code: string, message?: string): HTTPErrorBody {
+  const phrase = STATUS_CODES[statusCode] ?? 'Error'
+
+  return { statusCode, error: phrase, code, message: message ?? phrase }
 }
 
 // 4xx Client Errors

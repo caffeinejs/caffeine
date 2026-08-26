@@ -48,7 +48,7 @@ export interface OpenAPISecurityOptions {
   policy?: string | string[]
 }
 
-/** The fully resolved OpenAPI configuration the generator and the configurer read. */
+/** The fully resolved OpenAPI configuration the generator and the extension read. */
 export interface OpenAPIOptions {
   version: OpenAPIVersion
   info: InfoObject

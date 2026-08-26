@@ -3,9 +3,6 @@ import {
   AppConfigBuilder,
   BaseApplicationBuilder,
   type ApplicationBuilderOptions,
-  type Augment,
-  type Plugin,
-  installPlugins,
 } from '@caffeinejs/std'
 import type { ConfigSchema, InferConfig } from '@caffeinejs/std/config'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
@@ -114,43 +111,34 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 }
 
+/**
+ * Creates a web application builder.
+ *
+ * Install plugins with `.extend(...)` rather than here: it is typed the same way, and it can be called at
+ * any point in the chain — including after `.config()`, which re-types the builder and would otherwise drop
+ * the plugins' methods.
+ *
+ * ```ts
+ * createWebApplication()
+ *   .extend(viewPlugin(), staticPlugin())
+ *   .view(v => v.engine({ handlebars }))
+ * ```
+ */
 // Default Fastify — no adapter factory or Fastify instance required.
-export function createWebApplication<const S extends readonly Plugin[] = readonly []>(
+export function createWebApplication(
   options?: WebApplicationBuilderOptions,
-  ...plugins: S
-): WebApplicationBuilder<FastifyInstance, FastifyRequest, FastifyAdapter<FastifyInstance, FastifyRequest>> & Augment<S>
+): WebApplicationBuilder<FastifyInstance, FastifyRequest, FastifyAdapter<FastifyInstance, FastifyRequest>>
 // Explicit adapter factory — a customized Fastify instance (`fastifyAdapterFactory(myFastify)`) or a
 // custom adapter altogether.
-export function createWebApplication<
-  I,
-  REQ,
-  A extends Adapter<I, REQ> = Adapter<I, REQ>,
-  const S extends readonly Plugin[] = readonly [],
->(
+export function createWebApplication<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>(
   adapterFactory: AdapterFactory<I, REQ, A>,
   options?: WebApplicationBuilderOptions,
-  ...plugins: S
-): WebApplicationBuilder<I, REQ, A> & Augment<S>
+): WebApplicationBuilder<I, REQ, A>
 export function createWebApplication(
   first?: AdapterFactory<any, any> | WebApplicationBuilderOptions,
-  ...rest: unknown[]
+  second?: WebApplicationBuilderOptions,
 ): WebApplicationBuilder<any, any> {
-  let adapterFactory: AdapterFactory<any, any>
-  let options: WebApplicationBuilderOptions
-  let plugins: Plugin[]
-
-  if (typeof first === 'function') {
-    adapterFactory = first
-    options = (rest[0] as WebApplicationBuilderOptions | undefined) ?? {}
-    plugins = rest.slice(1) as Plugin[]
-  } else {
-    adapterFactory = fastifyAdapterFactory()
-    options = first ?? {}
-    plugins = rest as Plugin[]
-  }
-
-  const builder = new WebApplicationBuilder(adapterFactory, options)
-  installPlugins(builder, plugins)
-
-  return builder
+  return typeof first === 'function'
+    ? new WebApplicationBuilder(first, second ?? {})
+    : new WebApplicationBuilder(fastifyAdapterFactory(), first ?? {})
 }

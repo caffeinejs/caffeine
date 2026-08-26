@@ -74,14 +74,15 @@ void [PetsController]
 function buildApp(configure: (app: ReturnType<typeof newBuilder>) => void = () => {}): WebApplication {
   const builder = newBuilder()
   configure(builder)
-  return builder.build() as WebApplication
+  return builder.build().useAuthenticationAndAuthorization() as WebApplication
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an
 // application declaring authorization without authentication refuses to start. It also means every test
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}, openapiPlugin())
+  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .extend(openapiPlugin())
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }
 

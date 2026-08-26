@@ -64,7 +64,7 @@ function buildApp() {
     .userInfoEndpoint(`${OAUTH}/userinfo`)
     .subjectClaim('sub')
     .scopes('openid', 'profile', 'email')))
-  return builder.build()
+  return builder.build().useAuthenticationAndAuthorization()
 }
 
 const serverUp = await oauthServerUp()

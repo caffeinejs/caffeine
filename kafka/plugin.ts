@@ -42,7 +42,7 @@ interface KafkaBuilderHost {
  * `createWebApplication`.
  *
  * ```ts
- * const app = createApplication({}, kafka())
+ * const app = createApplication().extend(kafka())
  * app.kafka(k => k.brokers('localhost:9092').groupId('svc'))          // default instance
  * app.kafka('orders', k => k.brokers('localhost:9092').groupId('orders'))  // named instance
  * await app.build().run()

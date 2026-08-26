@@ -38,13 +38,8 @@ export function buildApp(
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie)
 
-  return createWebApplication(
-    fastifyAdapterFactory(server),
-    { container },
-    viewPlugin(),
-    staticPlugin(),
-    openapiPlugin(),
-  )
+  return createWebApplication(fastifyAdapterFactory(server), { container })
+    .extend(viewPlugin(), staticPlugin(), openapiPlugin())
     .view(v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
     .static(s => s.serve(publicRoot, { prefix: '/static' }))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
@@ -118,9 +113,9 @@ export function buildApp(
       // a browser-first demo, and the documentation (Basic) is the one place that differs.
       .default('GitHub'),
     )
-    // Config + server come after the plugin methods (.view, .static) because .config() re-types the builder and
-    // drops the plugin augments. Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT
-    // (defaults in the schema).
+    // .config() re-types the builder and drops the plugin augments, so anything using a plugin method comes
+    // before it — or after another .extend(), which restores them. Server host/port come from
+    // PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
     .config(appConfigSchema, c => c.source(new EnvProvider({ prefix: 'PETSTORE_' })))
     .server(s => s.config(c => c.server))
     // Kubernetes probes (/livez, /readyz, /startupz) plus the graceful shutdown that drives them: SIGTERM makes
@@ -132,4 +127,8 @@ export function buildApp(
       }
     })
     .build()
+    // The request pipeline, configured on the built application rather than the builder. Authentication and
+    // authorization are one call because ordering them is the mistake worth designing out — and an
+    // application with protected routes that omits this line refuses to start.
+    .useAuthenticationAndAuthorization()
 }

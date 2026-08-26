@@ -1,5 +1,5 @@
 import fastifyView from '@fastify/view'
-import { FeatureConfigurer, type ServerPhaseContext } from '@caffeinejs/http'
+import { ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
 import { kViewOptionsProvider } from './keys.js'
 import type { ViewOptionsProvider } from './options_provider.js'
 
@@ -11,10 +11,10 @@ import type { ViewOptionsProvider } from './options_provider.js'
  * globally — it reaches the encapsulated controller `register()` contexts where routes are declared. Each
  * registration carries a distinct `propertyName` (the default engine has none, decorating `reply.view`).
  */
-export class ViewConfigurer extends FeatureConfigurer {
+export class ViewExtension extends ServerExtension {
   readonly name = 'view'
 
-  configureServer = async (ctx: ServerPhaseContext): Promise<void> => {
+  configure = async (ctx: ServerExtensionContext): Promise<void> => {
     const provider = ctx.container.getOptional<ViewOptionsProvider>(kViewOptionsProvider)
     if (provider === undefined) {
       return

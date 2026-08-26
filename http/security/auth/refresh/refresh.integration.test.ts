@@ -105,7 +105,7 @@ async function buildApp() {
     .addRefreshTokens(o => o
       .refreshTTL('30d')
       .resolve(sub => (sub === 'alice' ? alicePrincipal() : null))))
-  const app = builder.build()
+  const app = builder.build().useAuthenticationAndAuthorization()
   await app.ready()
   return { app, store }
 }

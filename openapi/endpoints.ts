@@ -25,7 +25,7 @@ export interface EndpointPaths {
  * The health probes mount straight onto the Fastify instance so they can *escape* the authentication hook,
  * which runs per controller scope. These endpoints need the opposite: going through the normal routing path
  * is what makes them protectable at all, and it means authentication, authorization, error handling, content
- * negotiation and every user-registered feature configurer apply to them exactly as they do to any other
+ * negotiation and every user-registered server extension applies to them exactly as they do to any other
  * route — none of it reimplemented here.
  *
  * Must run before `buildRouting`, which `[kServiceConfigure]` guarantees.

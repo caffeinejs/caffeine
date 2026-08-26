@@ -3,20 +3,22 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/di'
 import { type FastifyInstance, type FastifyReply, type FastifyRequest, type RawReplyDefaultExpression, type RawRequestDefaultExpression, type RawServerBase, type RouteGenericInterface, type RouteOptions } from 'fastify'
+import fp from 'fastify-plugin'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import type { Router } from './route.js'
 import type { Principal } from './security/index.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
-import { FeatureConfigurer, orderConfigurers } from './feature_configurer.js'
-import { AuthenticationConfigurer } from './security/auth/authentication_configurer.js'
-import { AuthorizationConfigurer } from './security/authz/authorization_configurer.js'
-import { OIDCConfigurer } from './security/auth/oidc/oidc_configurer.js'
-import { FormBodyConfigurer } from './form/index.js'
-import { ErrorHandlingConfigurer } from './error/error_handling_configurer.js'
-import { CacheConfigurer } from './cache/cache.js'
-import { CacheInvalidateConfigurer } from './cache/cache_invalidate.js'
-import { HealthConfigurer, kHealthRoute } from './health/index.js'
+import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
+import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
+import { Authentication } from './security/auth/authentication_middleware.js'
+import { installOIDCRoutes } from './security/auth/oidc/oidc_routes.js'
+import { installFormBodyParser } from './form/index.js'
+import { installGlobalErrorHandler, installRouterErrorHandler } from './error/error_handling.js'
+import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
+import { type CacheDeps, type CacheOptions, attachCacheHooks, resolveCacheDeps } from './cache/cache.js'
+import { type CacheInvalidateOptions, attachCacheInvalidateHook } from './cache/cache_invalidate.js'
+import { installHealthProbes, kHealthRoute } from './health/index.js'
 import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { Responder } from './response.js'
@@ -62,7 +64,13 @@ export class FastifyAdapter<
     fastify.decorateRequest('controller', null)
     fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
 
-    const needsRequestScope = routers.some(
+    // Resolved here, ahead of everything else, because whether a middleware comes from request scope
+    // decides which of the two context hooks below is installed. Their `setup()` runs later — after the
+    // extensions, so a feature validating its own configuration reports before a middleware does.
+    const middlewares = input.middlewares
+    middlewares.resolveAll(this.#container)
+
+    const needsRequestScope = middlewares.requiresRequestScope || routers.some(
       router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
     )
 
@@ -96,23 +104,62 @@ export class FastifyAdapter<
       })
     }
 
-    // Feature configurers: built-in Fastify features + any DI-bound (plugin/user) ones, run in
-    // dependency order. Each hooks into the phases below via optional configureServer/Router/Route.
-    const configurers = orderConfigurers([
-      new ErrorHandlingConfigurer(),
-      new HealthConfigurer(),
-      new FormBodyConfigurer(),
-      new AuthenticationConfigurer(),
-      new AuthorizationConfigurer(),
-      new OIDCConfigurer(),
-      new CacheConfigurer(),
-      new CacheInvalidateConfigurer(),
-      ...this.#container.getManyOptional<FeatureConfigurer>(FeatureConfigurer),
-    ])
-
-    for (const configurer of configurers) {
-      await configurer.configureServer?.({ server: fastify, container: this.#container, services, routers })
+    const extensionContext: ServerExtensionContext = {
+      server: fastify,
+      container: this.#container,
+      services,
+      routers,
     }
+
+    // The built-in features. Plain calls in a stated order rather than a discovered list: they are this
+    // package's own code, and nothing about them is pluggable.
+    const globalErrorHandler = installGlobalErrorHandler(fastify, services.errorHandling)
+    installFormBodyParser(fastify)
+    installHealthProbes(extensionContext)
+    installOIDCRoutes(extensionContext)
+
+    // Extensions contributed by other packages, registered as real Fastify plugins so `dependencies`,
+    // `decorators` and the version range are enforced by Fastify — and so each shows up by name in
+    // `printPlugins()`. `fp` skips encapsulation, so an extension still decorates the root instance.
+    for (const extension of this.#container.getManyOptional<ServerExtension>(ServerExtension)) {
+      await fastify.register(fp(
+        // Async so a `configure` that throws synchronously becomes a rejection avvio can carry, rather than
+        // escaping the plugin call and stalling the boot.
+        async instance => {
+          await extension.configure({ ...extensionContext, server: instance })
+        },
+        {
+          name: extension.name,
+          dependencies: extension.dependencies as string[] | undefined,
+          decorators: extension.decorators,
+          fastify: extension.fastify,
+        },
+      ))
+    }
+
+    // After the extensions, not up with the other built-ins: a fallback may be bound by an extension, and one
+    // serving files needs the `reply.sendFile` that `@fastify/static` decorates while it registers.
+    installNotFoundHandler(
+      extensionContext,
+      this.#container.getManyOptional<NotFoundFallback>(NotFoundFallback),
+    )
+
+    await middlewares.setupAll(extensionContext)
+
+    // The pipeline is explicit, which leaves exactly one way to disable every guard in the application:
+    // forget to register the authentication middleware. An application that protects routes and then
+    // serves them to anonymous callers must not start.
+    const anyRouteNeedsAuthz = routers.some(r => r.routes.some(rt => rt.authorization.hasProtection))
+    if (anyRouteNeedsAuthz && !middlewares.has(Authentication)) {
+      throw new ErrAuthenticationMiddlewareMissing()
+    }
+
+    // Installed after the extensions so the hooks run inside a server that already has its error handler.
+    middlewares.installHooks(fastify)
+
+    // Resolved once, not per route and never per request. Unconditional, as the cache configurer's server
+    // phase was: an application that binds a store gets it constructed at start-up either way.
+    const cacheDeps: CacheDeps = resolveCacheDeps(this.#container)
 
     for (const router of routers) {
       const basePath = router.path
@@ -124,18 +171,16 @@ export class FastifyAdapter<
 
         server.decorateRequest('responseCached', false)
 
-        for (const configurer of configurers) {
-          await configurer.configureRouter?.({ server, container: this.#container, services, router })
-        }
+        installRouterErrorHandler(server, router, globalErrorHandler)
 
         for (const route of routes) {
-          let dispatch: (req: REQ, res: RES) => unknown
+          let handle: (req: REQ, res: RES) => unknown
 
           if (router.errorHandlers?.size) {
             const pickArgs = compileArgs(route.parameters)
             const handlerKey = route.handler
 
-            dispatch = async (req, res) => {
+            handle = async (req, res) => {
               const instance = req.controller!
               const args = await pickArgs(req, res)
 
@@ -145,15 +190,19 @@ export class FastifyAdapter<
             const ref = controller.get()
             const refFn = (ref[route.handler] as (...args: unknown[]) => unknown).bind(ref)
 
-            dispatch = compileHandler(route.parameters, refFn)
+            handle = compileHandler(route.parameters, refFn)
           } else {
             const handlerKey = route.handler
 
-            dispatch = compileHandler(route.parameters, (...args) => {
+            handle = compileHandler(route.parameters, (...args) => {
               const ctrl = controller.get()
               return (ctrl[handlerKey] as (...args: unknown[]) => unknown).apply(ctrl, args)
             })
           }
+
+          // The `handler` middleware group wraps the dispatch, so `next()` hands the middleware whatever
+          // the controller returned. Returns the dispatch unchanged when nothing is registered there.
+          const dispatch = middlewares.wrapHandler(handle)
 
           // Route Config
           // https://fastify.dev/docs/latest/Reference/Routes/#config
@@ -193,6 +242,13 @@ export class FastifyAdapter<
             hasHeader,
             header,
             catchBy: route.catchBy,
+            // The authentication middleware is registered once, for the whole server, so what a route
+            // declared has to travel with the route rather than be closed over per registration.
+            auth: {
+              schemes: route.authorization.options?.schemes,
+              allowAnonymous: route.authorization.options?.allowAnonymous === true,
+              authorizer: route.authorization.authorizer,
+            },
           }
 
           const url = joinPaths(basePath, route.path)
@@ -244,13 +300,18 @@ export class FastifyAdapter<
             },
           }
 
-          normalizeRouteDef(routeDef)
+          const routeFn = (s: typeof server, def: RouteOptions) => s.route(def)
 
-          const routeFn = (s: typeof server, def: RouteOptions) =>
-            s.route(tidy(def))
+          // Cache, attached only to the routes that asked for it. A route with neither decorator leaves both
+          // hook slots undefined and pays nothing.
+          const cacheOpts = config.cache as CacheOptions | false | undefined
+          if (cacheOpts !== undefined) {
+            attachCacheHooks(routeDef, cacheOpts, cacheDeps)
+          }
 
-          for (const configurer of configurers) {
-            await configurer.configureRoute?.({ server, container: this.#container, services, router, route, routeDef })
+          const invalidateOpts = config.cacheInvalidate as CacheInvalidateOptions | false | undefined
+          if (invalidateOpts !== undefined && invalidateOpts !== false) {
+            attachCacheInvalidateHook(routeDef, invalidateOpts, cacheDeps.store)
           }
 
           // BodyAsBuffer
@@ -376,48 +437,4 @@ export class FastifyAdapter<
       )
     })
   }
-}
-
-// Normalizing all route hooks to arrays to more easily support multiple hooks.
-
-const ROUTE_HOOK_KEYS = [
-  'onRequest',
-  'preParsing',
-  'onSend',
-  'onError',
-  'onTimeout',
-  'onResponse',
-  'onRequestAbort',
-  'preHandler',
-  'preValidation',
-] as const satisfies readonly (keyof RouteOptions)[]
-
-function normalizeRouteDef(routeDef: RouteOptions) {
-  for (const key of ROUTE_HOOK_KEYS) {
-    const hook = routeDef[key]
-    routeDef[key] = (hook ? (Array.isArray(hook) ? hook : [hook]) : []) as any
-  }
-}
-
-function tidy(routeDef: RouteOptions): RouteOptions {
-  for (const key of ROUTE_HOOK_KEYS) {
-    const hook = routeDef[key]
-    if (hook === undefined) {
-      continue
-    }
-
-    if (Array.isArray(hook)) {
-      if (hook.length === 0) {
-        routeDef[key] = undefined
-        continue
-      }
-
-      if (hook.length === 1) {
-        routeDef[key] = hook[0] as any
-        continue
-      }
-    }
-  }
-
-  return routeDef
 }

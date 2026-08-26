@@ -33,7 +33,7 @@ interface MessagingBuilderHost {
  * `app.kafka(...)`) does not need this plugin.
  *
  * ```ts
- * const app = createApplication({}, messaging())
+ * const app = createApplication().extend(messaging())
  * app.messaging(m => m
  *   .use('primary', inMemoryBinder())
  *   .in('orders', { destination: 'orders', via: 'primary' })
