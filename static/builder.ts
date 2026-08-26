@@ -1,5 +1,7 @@
 import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle } from '@caffeinejs/std/config'
 import { NotFoundFallback, type ServiceKit } from '@caffeinejs/http'
+import { STATIC_CONFIG_NAMESPACE, staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
 import { StaticExtension } from './extension.js'
 import { kSPASettings, kStaticMounts } from './keys.js'
@@ -15,11 +17,18 @@ import type { StaticMount } from './static.js'
  * mounts into the container under {@link kStaticMounts}. Each `.serve(...)` call adds one mount; multiple
  * mounts serve multiple directories (the {@link StaticExtension} handles `@fastify/static`'s single-decorate
  * constraint).
+ *
+ * There is one read path. A builder method does not hold its value — it writes into the configuration tree in
+ * the `CODE` band, and the feature reads the merged result. So `s.serve('public')` is a **default**: a
+ * `static.mounts` in a config file replaces it. Settings live at `static.*`; {@link config} re-points them.
+ *
+ * `C` is the application config type, recovered from the builder `app.static(...)` was reached through.
  */
-export class StaticBuilder implements Service {
+export class StaticBuilder<C = unknown> implements Service {
   #mounts: StaticMount[] = []
-  #spa: SPASettings | undefined
+  #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
+  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>
 
   /**
    * Serves `root` as static files. `options` is the full `@fastify/static` options object minus `root`
@@ -50,42 +59,126 @@ export class StaticBuilder implements Service {
   spa(root: string, options?: SPAOptions): this {
     this.#spaRoots.push(root)
 
+    // A code-level mistake, caught where it is made: two `.spa()` calls cannot both be right, and the answer
+    // does not depend on anything configuration might say later.
     if (this.#spaRoots.length > 1) {
       throw new ErrDuplicateSPAMount(this.#spaRoots)
     }
 
-    const settings = resolveSPASettings(root, options)
-    this.#spa = settings
-
-    // `wildcard: false` is load-bearing, not a tuning knob. `@fastify/static`'s default installs a catch-all
-    // `GET /*`, which makes every unknown path a *matched* route that then serves its own 404 — so the
-    // not-found handler never runs and there is nothing for the shell to fall back from. With it off the
-    // plugin enumerates the real files at start-up and a miss falls through.
-    this.#mounts.push({
-      ...options?.static,
-      root,
-      prefix: `${settings.prefix}/`,
-      index: [settings.index],
-      wildcard: false,
-      redirect: false,
-    } as StaticMount)
+    this.#spa = { ...options, root }
 
     return this
   }
 
+  /**
+   * Places the static settings elsewhere in the configuration tree, e.g. `s.config(c => c.app.assets)`.
+   *
+   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
+   */
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>): this {
+    this.#selector = selector
+    return this
+  }
+
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    kit.container.bind(kStaticMounts).toValue(this.#mounts).internal()
+    const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
+      namespace: STATIC_CONFIG_NAMESPACE,
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: staticConfigSchema,
+      values: {
+        mounts: this.#mounts.length > 0 ? this.#mounts.map(dataOf) : undefined,
+        spa: this.#spa === undefined ? undefined : dataOf(this.#spa),
+      },
+    })
+
+    // A callback cannot go through the tree at all — `Value.Convert` cannot clone a function — so each
+    // mount's callbacks are held here and re-attached by position once the slice publishes. A config source
+    // that replaces `static.mounts` replaces the callbacks with it, which is the array rule being consistent
+    // rather than an oversight.
+    const callbacks = this.#mounts.map(callbacksOf)
+    const spaCallbacks = this.#spa === undefined ? {} : callbacksOf(this.#spa)
+
+    // Whether the SPA is switched on is a code decision — reaching `.spa(...)` is the activating act, and the
+    // fallback has to be bound now, long before configuration resolves. What the tree can still change is
+    // every setting the mount runs with.
+    const spaEnabled = this.#spa !== undefined
+
+    const resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
+
+    kit.container.bind(kStaticMounts).toFactory(() => resolved.config.mounts).internal()
     // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
     // and registers it as a Fastify plugin — http no longer hardcodes it.
     kit.container.bind(StaticExtension).toClass(StaticExtension).extends()
 
-    if (this.#spa) {
-      const fallback = new SPAFallback(this.#spa)
-
-      kit.container.bind(kSPASettings).toValue(this.#spa).internal()
-      kit.container.bind(SPAFallback).toValue(fallback).extends(NotFoundFallback)
+    if (spaEnabled) {
+      kit.container.bind(kSPASettings).toFactory(() => settingsOf(resolved.config)).internal()
+      kit.container
+        .bind(SPAFallback)
+        .toFactory(() => new SPAFallback(settingsOf(resolved.config)))
+        .extends(NotFoundFallback)
     }
 
     return Promise.resolve()
   }
+}
+
+interface ResolvedStatic {
+  mounts: StaticMount[]
+  spa: SPASettings | undefined
+}
+
+function settingsOf(resolved: ResolvedStatic): SPASettings {
+  if (resolved.spa === undefined) {
+    throw new TypeError('The SPA mount is enabled but resolved to no settings')
+  }
+  return resolved.spa
+}
+
+/**
+ * Folds the published slice into what the extension and the fallback actually run with.
+ *
+ * The SPA's own mount is derived here rather than pushed by `.spa(...)`, so a prefix or an index changed in
+ * configuration reaches the `@fastify/static` registration too — appended after the plain mounts, which is the
+ * order `.spa()` used to produce.
+ */
+function resolveStatic(
+  published: StaticConfigSlice,
+  spaEnabled: boolean,
+  callbacks: readonly Record<string, unknown>[],
+  spaCallbacks: Record<string, unknown>,
+): ResolvedStatic {
+  const mounts = (published.mounts ?? []).map((mount, i) => ({ ...mount, ...callbacks[i] }) as StaticMount)
+
+  if (!spaEnabled || published.spa === undefined) {
+    return { mounts, spa: undefined }
+  }
+
+  const { root, ...rest } = { ...published.spa, ...spaCallbacks } as StaticConfigSlice['spa'] & { root: string }
+  const options = rest as SPAOptions
+  const settings = resolveSPASettings(root, options)
+
+  // `wildcard: false` is load-bearing, not a tuning knob. `@fastify/static`'s default installs a catch-all
+  // `GET /*`, which makes every unknown path a *matched* route that then serves its own 404 — so the
+  // not-found handler never runs and there is nothing for the shell to fall back from. With it off the
+  // plugin enumerates the real files at start-up and a miss falls through.
+  mounts.push({
+    ...options.static,
+    root,
+    prefix: `${settings.prefix}/`,
+    index: [settings.index],
+    wildcard: false,
+    redirect: false,
+  } as StaticMount)
+
+  return { mounts, spa: settings }
+}
+
+/** The half of an option bag a configuration tree can carry: everything that is not a function. */
+function dataOf<T extends object>(options: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(options).filter(([, value]) => typeof value !== 'function'))
+}
+
+/** The other half — the callbacks, which are re-attached after the slice publishes. */
+function callbacksOf<T extends object>(options: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(options).filter(([, value]) => typeof value === 'function'))
 }

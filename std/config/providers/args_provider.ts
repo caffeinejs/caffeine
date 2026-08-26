@@ -1,13 +1,23 @@
 import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 import { coerceText } from './_coerce.js'
 
+/** The arguments as an array, or a function returning them — the deferred form the application builder uses. */
+export type ArgvSource = readonly string[] | (() => readonly string[] | undefined)
+
 export interface ArgsConfigProviderOptions {
   /**
-   * The arguments to read. Omitted, the provider takes {@link ResolutionContext.argv} — which the application
-   * fills from `run(argv)`. Nothing here ever reaches for a host global, so the provider is identical on Node,
-   * Bun and Deno.
+   * The arguments to read. **Omitted, the provider reads nothing.**
+   *
+   * Opt-in rather than reaching for `process.argv`, because a process's flags are not always meant for it — a
+   * test runner's own switches would otherwise silently become configuration. That asymmetry with
+   * {@link EnvConfigProvider}, which does default to `process.env`, is deliberate: an environment variable is
+   * addressed to the process, a command line is addressed to whoever was invoked.
+   *
+   * The function form exists because `app.run(argv)` hands the arguments over long after `.args()` built this
+   * provider. The application builder passes a closure reading {@link ConfigDefinition.argv}, so the value is
+   * fetched at resolve time rather than captured empty at construction.
    */
-  argv?: readonly string[]
+  argv?: ArgvSource
   /** Short-switch expansions, e.g. `{ '-p': 'server.port' }`. */
   switchMappings?: Record<string, string>
 }
@@ -36,7 +46,7 @@ export interface ArgsConfigProviderOptions {
  */
 export class ArgsConfigProvider implements ConfigProvider {
   readonly id = 'args'
-  readonly #argv: readonly string[] | undefined
+  readonly #argv: ArgvSource | undefined
   readonly #switchMappings: Record<string, string>
 
   constructor(options: ArgsConfigProviderOptions = {}) {
@@ -44,8 +54,8 @@ export class ArgsConfigProvider implements ConfigProvider {
     this.#switchMappings = options.switchMappings ?? {}
   }
 
-  async load(ctx: ResolutionContext): Promise<PropertySource[]> {
-    const argv = this.#argv ?? ctx.argv ?? []
+  async load(_ctx: ResolutionContext): Promise<PropertySource[]> {
+    const argv = (typeof this.#argv === 'function' ? this.#argv() : this.#argv) ?? []
     const entries = new Map<string, ConfigEntry>()
 
     for (const [key, value, origin] of parse(argv, this.#switchMappings)) {

@@ -22,8 +22,7 @@ type AppConfig = InferSchema<typeof schema>
 
 /** An env source over a fixed map, so the tests never touch the real environment. */
 function env(values: Record<string, string>): ConfigProvider {
-  const provider = new EnvConfigProvider()
-  return { id: 'env', load: ctx => provider.load({ ...ctx, env: values }) }
+  return new EnvConfigProvider({ env: values })
 }
 
 describe('server builder + config', () => {

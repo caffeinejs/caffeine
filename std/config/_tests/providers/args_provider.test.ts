@@ -64,22 +64,33 @@ describe('ArgsConfigProvider', () => {
     expect(await parse(['/usr/bin/node', '/app/main.js'])).toEqual({})
   })
 
-  it('takes argv from the resolution context when none was configured', async () => {
-    const [source] = await new ArgsConfigProvider().load({ ...ctx, argv: ['--server.port=7000'] })
+  // The deferred form: `run(argv)` records the arguments long after `.args()` built the provider.
+  it('takes argv from a function, called at load time', async () => {
+    // Stands in for the ConfigDefinition the application builder closes over: empty when `.args()` runs,
+    // filled by the time anything resolves.
+    const recorded: { argv?: readonly string[] } = {}
+
+    const provider = new ArgsConfigProvider({ argv: () => recorded.argv })
+
+    expect((await provider.load(ctx))[0].entries.size).toBe(0)
+
+    recorded.argv = ['--server.port=7000']
+
+    const [source] = await provider.load(ctx)
     expect(source.entries.get('server.port')?.value).toBe(7000)
   })
 
-  it('contributes nothing when neither the options nor the context carry argv', async () => {
+  // Opt-in on purpose, unlike the environment provider: a test runner's own switches must never become config.
+  it('contributes nothing when no argv was configured, rather than reading process.argv', async () => {
     const [source] = await new ArgsConfigProvider().load(ctx)
     expect(source.entries.size).toBe(0)
   })
 
   it('coerces exactly as the environment provider does', async () => {
     const cases = ['true', '1', 'yes', 'on', 'false', '0', 'no', 'off', '8080', '1.5', 'hello', '']
-    const env = new EnvConfigProvider()
 
     for (const raw of cases) {
-      const [envSource] = await env.load({ ...ctx, env: { KEY: raw } })
+      const [envSource] = await new EnvConfigProvider({ env: { KEY: raw } }).load(ctx)
       const args = await parse([`--key=${raw}`])
 
       expect(args.key, `"${raw}" must coerce the same from both sources`)

@@ -1,7 +1,17 @@
 import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 import { coerceText } from './_coerce.js'
 
+/** The environment as a plain record, or a function returning one — `() => Deno.env.toObject()`, say. */
+export type EnvSource = Record<string, string | undefined> | (() => Record<string, string | undefined>)
+
 export interface EnvConfigProviderOptions {
+  /**
+   * Where the variables are read from. Defaults to `process.env`, which Node and Bun both provide.
+   *
+   * This is the host seam: pass the runtime's own accessor and the provider never reaches for a global, so the
+   * same code runs anywhere. It is also what a test supplies instead of mutating the real environment.
+   */
+  env?: EnvSource
   prefix?: string
   separator?: string
   transformKey?: (key: string) => string
@@ -32,11 +42,13 @@ function camelCase(segment: string): string {
 
 export class EnvConfigProvider implements ConfigProvider {
   readonly id = 'env'
+  readonly #env: EnvSource | undefined
   readonly #prefix: string | undefined
   readonly #separator: string
   readonly #transformKey: (key: string) => string
 
   constructor(options: EnvConfigProviderOptions = {}) {
+    this.#env = options.env
     this.#prefix = options.prefix
     this.#separator = options.separator ?? '__'
     this.#transformKey
@@ -44,8 +56,10 @@ export class EnvConfigProvider implements ConfigProvider {
         ?? (key => defaultTransformKey(key, this.#separator))
   }
 
-  async load(ctx: ResolutionContext): Promise<PropertySource[]> {
-    const env = ctx.env ?? process.env
+  async load(_ctx: ResolutionContext): Promise<PropertySource[]> {
+    const env = this.#env === undefined
+      ? process.env
+      : typeof this.#env === 'function' ? this.#env() : this.#env
     const entries = new Map<string, ConfigEntry>()
 
     for (const [rawKey, rawValue] of Object.entries(env)) {

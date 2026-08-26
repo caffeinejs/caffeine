@@ -1,9 +1,14 @@
-import type { Plugin } from '@caffeinejs/std'
+import type { ConfigTypeOf, Plugin } from '@caffeinejs/std'
 import { OpenAPIBuilder } from './builder.js'
 
 /** The builder method {@link openapiPlugin} contributes. */
 export interface OpenAPIPluginExt {
-  openapi(configure: (openapi: OpenAPIBuilder) => void): this
+  /**
+   * The config type is recovered from the builder this was reached through, so `o.config(c => c.app.docs)`
+   * is typed against the application's own schema. An explicit `Self` type parameter rather than the
+   * polymorphic `this` type: `Reconfigured` is `Omit`-based, and a mapped type instantiates `this`.
+   */
+  openapi<Self>(this: Self, configure: (openapi: OpenAPIBuilder<ConfigTypeOf<Self>>) => void): Self
 }
 
 /**
@@ -21,17 +26,18 @@ export function openapiPlugin(): Plugin<OpenAPIPluginExt> {
     name: 'openapi',
     install(ctx) {
       return {
-        openapi(configure: (openapi: OpenAPIBuilder) => void) {
+        openapi(configure: (openapi: OpenAPIBuilder<never>) => void) {
           if (builder == null) {
             builder = new OpenAPIBuilder()
             ctx.addService(builder)
           }
 
-          configure(builder)
+          // The config type is a compile-time affair only; the runtime builder is the same object either way.
+          configure(builder as OpenAPIBuilder<never>)
 
           return this
         },
-      } as OpenAPIPluginExt
+      } as unknown as OpenAPIPluginExt
     },
   }
 }

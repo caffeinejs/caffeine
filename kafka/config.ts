@@ -1,4 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
+import { $t } from '@caffeinejs/std'
 import type { Deserializers, Message, MessageToProduce, Serializers } from '@platformatic/kafka'
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
 import type { DeadLetterManager } from './retry/dead_letter_manager.js'
@@ -85,6 +86,63 @@ export interface KafkaConfig {
    */
   onError?: (error: unknown, message: KafkaMessage) => void
 }
+
+/** The default location of the kafka settings in the configuration tree. Instances sit beneath it by name. */
+export const KAFKA_CONFIG_NAMESPACE: readonly string[] = ['kafka']
+
+/**
+ * The part of {@link KafkaConfig} that can live in a configuration tree.
+ *
+ * Everything left out — serializers, the retry *strategy*, the classifier, the recoverer, the error hooks, the
+ * dead-letter manager, and the object form of `deadLetter` — is a function or a class. Those stay on the
+ * builder and are folded back in by {@link resolveConfig} once the slice publishes.
+ *
+ * `deadLetter` is a boolean here on purpose: {@link DeadLetterOptions} is two callbacks, so the object form
+ * cannot survive a config file. Setting it in code still works and wins over whatever the tree says.
+ */
+export interface KafkaConfigSlice {
+  brokers?: string[]
+  clientId?: string
+  groupId?: string
+  ackMode?: KafkaAckMode
+  retry?: RetryPolicy
+  topicProvisioning?: TopicProvisioning
+  deadLetter?: boolean
+}
+
+const backoffSchema = $t.Union([
+  $t.Object({ type: $t.Literal('fixed'), delay: $t.Number() }),
+  $t.Object({
+    type: $t.Literal('exponential'),
+    delay: $t.Number(),
+    multiplier: $t.Optional($t.Number()),
+    max: $t.Optional($t.Number()),
+  }),
+])
+
+/**
+ * The schema governing one kafka instance's slice.
+ *
+ * Nothing is defaulted here — {@link resolveConfig} already owns the defaults, and duplicating them would give
+ * two places to change `clientId` and one of them would eventually be wrong.
+ *
+ * `brokers` is a `$t.List` so `KAFKA__DEFAULT__BROKERS=a:9092,b:9092` works as well as a JSON array, and
+ * it stays optional so a missing broker list fails as {@link ErrKafkaMissingBrokers} — which says what to do —
+ * rather than as a generic "required property" complaint.
+ */
+export const kafkaConfigSchema = $t.Object({
+  brokers: $t.Optional($t.List($t.String())),
+  clientId: $t.Optional($t.String()),
+  groupId: $t.Optional($t.String()),
+  ackMode: $t.Optional($t.UnionEnum(['auto', 'record', 'manual'])),
+  retry: $t.Optional($t.Object({ attempts: $t.Number(), backoff: $t.Optional(backoffSchema) })),
+  topicProvisioning: $t.Optional($t.Object({
+    autoCreate: $t.Optional($t.Boolean()),
+    partitions: $t.Optional($t.Number()),
+    replicas: $t.Optional($t.Number()),
+  })),
+  deadLetter: $t.Optional($t.Boolean()),
+})
 
 /** Normalized configuration the runtime works with — brokers as an array, defaults filled in. */
 export interface ResolvedKafkaConfig {

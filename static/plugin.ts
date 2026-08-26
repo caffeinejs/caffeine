@@ -1,4 +1,4 @@
-import type { Plugin } from '@caffeinejs/std'
+import type { ConfigTypeOf, Plugin } from '@caffeinejs/std'
 import { StaticBuilder } from './builder.js'
 
 /**
@@ -6,7 +6,15 @@ import { StaticBuilder } from './builder.js'
  * builder used to expose directly.
  */
 export interface StaticPluginExt {
-  static(configure: (staticFiles: StaticBuilder) => void): this
+  /**
+   * The config type is recovered from the builder this was reached through, so `s.config(c => c.app.assets)`
+   * is typed against the application's own schema without the caller naming it again.
+   *
+   * An explicit `Self` type parameter rather than the polymorphic `this` type: `Reconfigured` is built on
+   * `Omit`, and a mapped type instantiates `this` to the type being mapped — which would freeze the config
+   * type to whatever the builder was *before* `.config(schema)` re-typed it, i.e. `unknown`.
+   */
+  static<Self>(this: Self, configure: (staticFiles: StaticBuilder<ConfigTypeOf<Self>>) => void): Self
 }
 
 /**
@@ -24,17 +32,18 @@ export function staticPlugin(): Plugin<StaticPluginExt> {
     name: 'static',
     install(ctx) {
       return {
-        static(configure: (staticFiles: StaticBuilder) => void) {
+        static(configure: (staticFiles: StaticBuilder<never>) => void) {
           if (builder == null) {
             builder = new StaticBuilder()
             ctx.addService(builder)
           }
 
-          configure(builder)
+          // The config type is a compile-time affair only; the runtime builder is the same object either way.
+          configure(builder as StaticBuilder<never>)
 
           return this
         },
-      } as StaticPluginExt
+      } as unknown as StaticPluginExt
     },
   }
 }

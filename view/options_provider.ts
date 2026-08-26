@@ -57,9 +57,12 @@ export class ViewOptionsProvider implements Service {
   }
 
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    // Eagerly validate every registration (each build() throws when its engine is missing) before the
-    // container initializes.
-    void this.all()
+    // Registers each engine's slice, and validates it while doing so — `register` throws when no engine was
+    // configured, which has to surface here rather than from `build()`: by the time anything builds, the
+    // adapter is already wiring routes.
+    for (const builder of this.#builders.values()) {
+      builder.register(kit.config)
+    }
 
     kit.container.bind(kViewOptionsProvider).toValue(this).internal()
     // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)

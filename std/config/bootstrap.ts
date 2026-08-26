@@ -11,6 +11,7 @@ import type { ConfigSliceFailure } from './errors.js'
 import { materialize, readByParts } from './materializer.js'
 import type { ConfigSchema, InferConfig } from './schema.js'
 import { validateConfig } from './schema.js'
+import { secretPaths } from './secrets.js'
 import type { ConfigProvider, ConfigSnapshot, ResolutionContext } from './types.js'
 
 export interface BootstrapOptions<T> {
@@ -23,6 +24,11 @@ export interface BootstrapOptions<T> {
   slices?: readonly ConfigSliceSpec[]
   context?: ResolutionContext
   failFast?: boolean
+  /**
+   * Paths the diagnostics must redact, on top of whatever the root schema marks with `$t.Secret`. The config
+   * module passes the set the feature slices contributed as they registered.
+   */
+  secrets?: ReadonlySet<string>
   /**
    * Reports a refresh that failed for one feature while the rest succeeded. Such a failure is deliberately not
    * thrown — the application keeps running on the last good values — so without this it would be silent unless
@@ -40,6 +46,8 @@ export interface ConfigBootstrapResult<T> {
   materialized: Record<string, unknown>
   /** The features whose configuration could not be resolved this pass. */
   failures: readonly ConfigSliceFailure[]
+  /** Every path to redact: the root schema's `$t.Secret` marks plus whatever the slices contributed. */
+  secrets: ReadonlySet<string>
 }
 
 const DEFAULT_CONTEXT: ResolutionContext = { app: 'application', profiles: ['default'] }
@@ -72,9 +80,12 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
   const config = createLiveAccessors(() => validated)
 
   const failures = publishSlices(options.slices, materialized)
-  const diagnostics = createConfigDiagnostics(validated, snapshot, failures)
+  // The root schema is walked here rather than by the caller: an application that declared its own secrets in
+  // `.config(schema, ...)` gets them redacted whether or not any feature registered a slice.
+  const secrets = new Set([...(options.secrets ?? []), ...secretPaths(options.schema)])
+  const diagnostics = createConfigDiagnostics(validated, snapshot, failures, secrets)
 
-  return { config, diagnostics, validated, snapshot, materialized, failures }
+  return { config, diagnostics, validated, snapshot, materialized, failures, secrets }
 }
 
 /**

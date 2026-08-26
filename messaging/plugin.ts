@@ -1,19 +1,19 @@
 import type { Container } from '@caffeinejs/di'
-import type { Plugin, Service } from '@caffeinejs/std'
+import type { ConfigTypeOf, Plugin, Service } from '@caffeinejs/std'
 import { MessagingBuilder } from './builder.js'
 import type { MessagingContainer } from './engine.js'
 import { DEFAULT_BINDER, Keys } from './symbols.js'
 
-/** The builder callback that configures one messaging integration. */
-export type MessagingConfigure = (m: MessagingBuilder) => void
+/** The builder callback that configures one messaging integration, over an application config type `C`. */
+export type MessagingConfigure<C = unknown> = (m: MessagingBuilder<C>) => void
 
 /**
  * The `messaging` builder method contributed by the plugin. Pass a builder callback, optionally preceded by an
  * integration name, and get the builder back for chaining.
  */
 export interface MessagingMethod {
-  <Self>(this: Self, configure: MessagingConfigure): Self
-  <Self>(this: Self, name: string, configure: MessagingConfigure): Self
+  <Self>(this: Self, configure: MessagingConfigure<ConfigTypeOf<Self>>): Self
+  <Self>(this: Self, name: string, configure: MessagingConfigure<ConfigTypeOf<Self>>): Self
 }
 
 // What the method needs from the builder it is invoked on (`this`). `.bind()` in a Service does not emit the
@@ -69,8 +69,8 @@ export function messaging<const Name extends string = 'messaging'>(
   // A regular function so `this` binds to the builder at the `app.messaging(...)` call site.
   function messagingMethod(
     this: MessagingBuilderHost,
-    nameOrConfigure: string | MessagingConfigure,
-    maybeConfigure?: MessagingConfigure,
+    nameOrConfigure: string | MessagingConfigure<never>,
+    maybeConfigure?: MessagingConfigure<never>,
   ): unknown {
     const instance = typeof nameOrConfigure === 'string' ? nameOrConfigure : DEFAULT_BINDER
     const configure = typeof nameOrConfigure === 'string' ? maybeConfigure : nameOrConfigure
@@ -79,7 +79,8 @@ export function messaging<const Name extends string = 'messaging'>(
     }
 
     const builder = new MessagingBuilder(instance)
-    configure(builder)
+    // The config type is a compile-time affair only; the runtime builder is the same object either way.
+    configure(builder as MessagingBuilder<never>)
     this.addService(builder)
     registerLifecycle(this)
 
@@ -89,7 +90,7 @@ export function messaging<const Name extends string = 'messaging'>(
   return {
     name,
     install() {
-      return { [name]: messagingMethod } as Record<Name, MessagingMethod>
+      return { [name]: messagingMethod } as unknown as Record<Name, MessagingMethod>
     },
   }
 }

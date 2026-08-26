@@ -1,5 +1,5 @@
 import { $t, kServiceConfigure, type Service } from '@caffeinejs/std'
-import { selectorPath, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kServerOptions } from './keys.js'
 
@@ -64,21 +64,13 @@ export class ServerBuilder<C = unknown> implements Service {
   }
 
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    const definition = kit.config
-    const parts = this.#selector === undefined
-      ? SERVER_CONFIG_NAMESPACE
-      : selectorPath(this.#selector as (c: never) => unknown)
-
-    definition.frameworkDefaults.set(parts, { ...DEFAULT_SERVER_OPTIONS })
-
-    if (this.#port !== undefined) {
-      definition.codeValues.set([...parts, 'port'], this.#port)
-    }
-    if (this.#host !== undefined) {
-      definition.codeValues.set([...parts, 'host'], this.#host)
-    }
-
-    const slice: ConfigSlice<ServerOptions> = definition.slice(parts, serverConfigSchema)
+    const slice: ConfigSlice<ServerOptions> = defineFeatureConfig(kit.config, {
+      namespace: SERVER_CONFIG_NAMESPACE,
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: serverConfigSchema,
+      defaults: { ...DEFAULT_SERVER_OPTIONS },
+      values: { port: this.#port, host: this.#host },
+    })
 
     kit.container
       .bind<ServerOptions>(kServerOptions)

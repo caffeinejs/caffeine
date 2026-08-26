@@ -1,4 +1,13 @@
 import { ErrConfiguration } from '@caffeinejs/http'
+import {
+  defineFeatureConfig,
+  instanceNamespace,
+  type ConfigAccessors,
+  type ConfigDefinition,
+  type ConfigHandle,
+  type ConfigSlice,
+} from '@caffeinejs/std/config'
+import { VIEW_CONFIG_KEYS, VIEW_CONFIG_NAMESPACE, viewConfigSchema, type ViewConfig } from './config.js'
 import type { ViewOptions } from './view.js'
 
 /**
@@ -11,11 +20,19 @@ import type { ViewOptions } from './view.js'
  * `app.view(name, ...)` once per engine; the {@link ViewOptionsProvider} owns them and reads each via
  * {@link build}.
  *
+ * Everything `@fastify/view` takes as data — `root`, `viewExt`, `layout`, the production cache — is read
+ * from the configuration tree at `view.<name>.*`, the unnamed engine at `view.default.*`. So `v.root('src')`
+ * is a **default**: `VIEW__DEFAULT__ROOT=/srv/templates` overrides it. The engine itself stays code-only.
+ *
+ * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
+ *
  * @see https://github.com/fastify/point-of-view
  */
-export class ViewBuilder {
+export class ViewBuilder<C = unknown> {
   readonly #name: string | undefined
   #options: Partial<ViewOptions> = {}
+  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<ViewConfig>
+  #resolved: ConfigSlice<ViewOptions> | undefined
 
   /**
    * @param name - The engine registration name (`@fastify/view`'s `propertyName`), decorating
@@ -105,10 +122,63 @@ export class ViewBuilder {
   }
 
   /**
+   * Places this engine's settings elsewhere in the configuration tree, e.g. `v.config(c => c.app.templates)`.
+   *
+   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
+   */
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<ViewConfig>): this {
+    this.#selector = selector
+    return this
+  }
+
+  /**
+   * Framework-internal: registers this engine's slice. Called by {@link ViewOptionsProvider} at
+   * `kServiceConfigure`, before the container initializes.
+   *
+   * The engine check happens here rather than in {@link build}, so a missing engine still fails at start-up:
+   * `build()` cannot run until configuration has resolved, and by then the adapter is already wiring routes.
+   */
+  register(definition: ConfigDefinition): void {
+    if (!this.#options.engine) {
+      throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
+    }
+
+    const code = this.#options
+
+    const slice = defineFeatureConfig<ViewConfig>(definition, {
+      namespace: instanceNamespace(VIEW_CONFIG_NAMESPACE, this.#name),
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: viewConfigSchema,
+      values: Object.fromEntries(
+        VIEW_CONFIG_KEYS
+          .filter(key => code[key as keyof ViewOptions] !== undefined)
+          .map(key => [key, code[key as keyof ViewOptions]]),
+      ),
+    })
+
+    this.#resolved = slice.derive(published => ({
+      // Code first, configuration over it: a builder method is a default, like everywhere else. `engine` and
+      // the engine's own options only exist on the code side and survive untouched.
+      ...code,
+      ...published,
+      ...(this.#name === undefined ? {} : { propertyName: this.#name }),
+    }) as ViewOptions)
+  }
+
+  /**
    * Assembles the `@fastify/view` options for this engine registration, stamping `propertyName` when the
-   * builder is named. Throws when no engine was configured.
+   * builder is named.
+   *
+   * Once {@link register} has run this reads through the slice, so what an application gets is the merged
+   * configuration — and reading it too early throws from the slice itself. A builder that was never
+   * registered has no configuration system behind it at all and simply reports what was set in code, which
+   * is what a standalone use (a unit test, a hand-assembled registration) means by `build()`.
    */
   build(): ViewOptions {
+    if (this.#resolved !== undefined) {
+      return this.#resolved.config
+    }
+
     if (!this.#options.engine) {
       throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
     }

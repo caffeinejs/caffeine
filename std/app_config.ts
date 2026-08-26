@@ -60,14 +60,18 @@ export class AppConfigBuilder<T = unknown> {
    * a test runner's own switches would otherwise silently become configuration.
    */
   args(options: ArgsConfigProviderOptions = {}): this {
-    this.#definition.sources.add(new ArgsConfigProvider(options), ConfigPriority.ARGS)
+    const definition = this.#definition
+    // Read through a closure: `run(argv)` records the arguments long after this provider is built, so a value
+    // captured here would be the empty one that was true at configure time.
+    const provider = new ArgsConfigProvider({ argv: () => definition.argv, ...options })
+
+    definition.sources.add(provider, ConfigPriority.ARGS)
     return this
   }
 
   /** Sets the resolution context (app name, profiles, label, ...). */
   context(context: ResolutionContext): this {
-    // Preserve any argv already recorded — the context a caller writes describes the app, not the invocation.
-    this.#definition.context = { argv: this.#definition.context.argv, ...context }
+    this.#definition.context = context
     return this
   }
 

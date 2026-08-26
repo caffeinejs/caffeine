@@ -7,7 +7,7 @@ import {
   type ShutdownSignal,
   type SignalDispatcher,
 } from '@caffeinejs/std'
-import { selectorPath, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kHealthOptions } from './keys.js'
 import {
@@ -167,16 +167,12 @@ export class HealthBuilder<C = unknown> implements Service {
 
     kit.feats.toggleHealth()
 
-    const definition = kit.config
-    const parts = this.#selector === undefined
-      ? HEALTH_CONFIG_NAMESPACE
-      : selectorPath(this.#selector as (c: never) => unknown)
-
-    for (const [key, value] of Object.entries(this.#config)) {
-      definition.codeValues.set([...parts, key], value as never)
-    }
-
-    const slice: ConfigSlice<HealthConfig> = definition.slice(parts, healthConfigSchema)
+    const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
+      namespace: HEALTH_CONFIG_NAMESPACE,
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: healthConfigSchema,
+      values: { ...this.#config },
+    })
     const dispatcher = this.#dispatcher
 
     // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.

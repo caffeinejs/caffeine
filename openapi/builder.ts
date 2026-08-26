@@ -1,5 +1,12 @@
 import { kServiceConfigure, type Service, AnySchema } from '@caffeinejs/std'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle } from '@caffeinejs/std/config'
 import type { Route, Router, ServiceKit } from '@caffeinejs/http'
+import {
+  OPENAPI_CONFIG_KEYS,
+  OPENAPI_CONFIG_NAMESPACE,
+  openapiConfigSchema,
+  type OpenAPIConfigSlice,
+} from './config.js'
 import { OpenAPIExtension } from './extension.js'
 import { OpenAPIDocumentStore } from './document_store.js'
 import { registerEndpoints } from './endpoints.js'
@@ -32,9 +39,20 @@ import type {
  * application already declares. This builder covers the document-level facts nothing else can know (title,
  * version, servers), where the document is served, and who may read it.
  */
-export class OpenAPIBuilder implements Service {
+export class OpenAPIBuilder<C = unknown> implements Service {
   readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
   readonly #store = new OpenAPIDocumentStore()
+  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<OpenAPIConfigSlice>
+
+  /**
+   * Places the OpenAPI settings elsewhere in the configuration tree, e.g. `o.config(c => c.app.docs)`.
+   *
+   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
+   */
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<OpenAPIConfigSlice>): this {
+    this.#selector = selector
+    return this
+  }
 
   /** The OpenAPI version to emit. Defaults to `3.1.1`; `3.2.0` unlocks the QUERY method and 3.2-only fields. */
   version(version: OpenAPIVersion): this {
@@ -261,20 +279,50 @@ export class OpenAPIBuilder implements Service {
   }
 
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    const options = this.#options
+    const code = this.#options
 
-    kit.container.bind(kOpenAPIOptions).toValue(options).internal()
+    const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
+      namespace: OPENAPI_CONFIG_NAMESPACE,
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: openapiConfigSchema,
+      values: Object.fromEntries(
+        OPENAPI_CONFIG_KEYS
+          .filter(key => code[key as keyof OpenAPIOptions] !== undefined)
+          .map(key => [key, code[key as keyof OpenAPIOptions]]),
+      ),
+    })
+
+    const resolved = slice.derive(published => {
+      // Cloned, not referenced. The validated tree is deep-frozen, and the document these values become is
+      // handed to `transformDocument` to edit in place — a frozen `info` would make that throw. Cloning here
+      // keeps the tree immutable while giving the generator an object it owns.
+      const configured = structuredClone(published) as OpenAPIConfigSlice
+
+      return {
+        ...code,
+        ...configured,
+        // Nested objects merge rather than replace: an application that configures only `errors.validation`
+        // must not lose the defaults for the other two.
+        infer: { ...code.infer, ...configured.infer },
+        errors: { ...code.errors, ...configured.errors },
+      } as OpenAPIOptions
+    })
+
+    kit.container.bind(kOpenAPIOptions).toFactory(() => resolved.config).internal()
     // The store, not the document: bindings must all be registered before `container.init()`, which runs long
     // before the server phase that generates the document. Resolving the store and reading `.document` off it
     // is the supported way to reach the document without an HTTP request.
     kit.container.bind(OpenAPIDocumentStore).toValue(this.#store).internal()
 
     // Registers the document endpoints as ordinary routes. This has to happen here, before `buildRouting`
-    // runs, which is exactly what `[kServiceConfigure]` guarantees.
-    const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
+    // runs, which is exactly what `[kServiceConfigure]` guarantees — and is why `routes` and `secure` are
+    // code-only: configuration has not resolved yet, so a configured path could never reach the router.
+    const paths = registerEndpoints(kit.container, this.#store, code, toRouteAuthz(code.secure))
 
     kit.container.bind(OpenAPIExtension)
-      .toValue(new OpenAPIExtension(this.#store, options, paths))
+      // Reads through the slice, so the generated document reflects the merged configuration. The extension
+      // runs at server setup, which is after `container.init()`.
+      .toFactory(() => new OpenAPIExtension(this.#store, resolved.config, paths))
       .extends()
 
     return Promise.resolve()

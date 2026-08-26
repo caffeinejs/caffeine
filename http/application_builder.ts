@@ -3,6 +3,7 @@ import {
   AppConfigBuilder,
   BaseApplicationBuilder,
   type ApplicationBuilderOptions,
+  type ApplicationConfigMarker,
   type Reconfigured,
 } from '@caffeinejs/std'
 import type { ConfigSchema, InferConfig } from '@caffeinejs/std/config'
@@ -18,11 +19,15 @@ import { HealthBuilder } from './health/health_builder.js'
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
 export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>, TConfig = unknown>
-  extends BaseApplicationBuilder<WebApplication<I, REQ, A>> {
+  extends BaseApplicationBuilder<WebApplication<I, REQ, A>>
+  implements ApplicationConfigMarker<TConfig> {
+  /** Phantom — names the application config type for `ConfigTypeOf`. Never assigned, never read. */
+  declare readonly __config?: TConfig
+
   readonly #adapterFactory: AdapterFactory<I, REQ, A>
 
   #authBuilder: AuthenticationBuilder | undefined
-  #cacheBuilder: CacheBuilder | undefined
+  #cacheBuilder: CacheBuilder<unknown> | undefined
   #healthBuilder: HealthBuilder<unknown> | undefined
   readonly #authzBuilder: AuthorizationBuilder
   readonly #serverBuilder: ServerBuilder<unknown>
@@ -56,13 +61,13 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  cache(configure: (cache: CacheBuilder) => void): this {
+  cache(configure: (cache: CacheBuilder<TConfig>) => void): this {
     if (this.#cacheBuilder == null) {
       this.#cacheBuilder = new CacheBuilder()
       this.addService(this.#cacheBuilder)
     }
 
-    configure(this.#cacheBuilder)
+    configure(this.#cacheBuilder as CacheBuilder<TConfig>)
 
     return this
   }

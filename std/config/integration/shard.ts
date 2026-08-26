@@ -14,6 +14,7 @@ export class ConfigShard<T> implements SelfRefreshable {
   #validated: T
   #snapshot: ConfigSnapshot
   #failures: readonly ConfigSliceFailure[]
+  #secrets: ReadonlySet<string>
   #revision = 0
   #stamps: ReadonlyMap<string, unknown>
   #sources: number
@@ -40,6 +41,7 @@ export class ConfigShard<T> implements SelfRefreshable {
     this.#validated = result.validated
     this.#snapshot = result.snapshot
     this.#failures = result.failures
+    this.#secrets = result.secrets
     this.#options = options
     const sources = sourcesOf(options)
     this.#stamps = stampsOf(sources.resolved())
@@ -74,7 +76,7 @@ export class ConfigShard<T> implements SelfRefreshable {
   }
 
   get diagnostics(): ConfigDiagnostics {
-    return createConfigDiagnostics(this.#validated, this.#snapshot, this.#failures)
+    return createConfigDiagnostics(this.#validated, this.#snapshot, this.#failures, this.#secrets)
   }
 
   /**
@@ -102,6 +104,8 @@ export class ConfigShard<T> implements SelfRefreshable {
     this.#validated = result.validated
     this.#snapshot = result.snapshot
     this.#failures = result.failures
+    // A slice registered since the last resolve may have brought new secrets with it.
+    this.#secrets = result.secrets
     this.#stamps = stampsOf(providers)
     this.#sources = sources.revision
     this.#revision++

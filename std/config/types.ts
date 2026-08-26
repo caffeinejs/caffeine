@@ -17,16 +17,19 @@ export interface PropertySource {
   entries: Map<string, ConfigEntry>
 }
 
+/**
+ * What a provider is told about the resolution it is taking part in: which application, which profiles, which
+ * label, and whether the caller has given up waiting.
+ *
+ * Deliberately free of host input. The environment and the command line used to travel here, which made every
+ * provider's `load` signature carry two fields only one provider each ever read, and put the host seam in the
+ * wrong place — a source that reads *somewhere* should be handed that somewhere by whoever constructed it.
+ * {@link EnvConfigProvider} and {@link ArgsConfigProvider} take theirs as constructor options instead.
+ */
 export interface ResolutionContext {
   app: string
   profiles: string[]
   label?: string
-  env?: Record<string, string | undefined>
-  /**
-   * The command-line arguments, as handed to `app.run(argv)`. A seam exactly like {@link env}: it is what keeps
-   * the args provider from reaching for a host global, so the same code runs on Node, Bun and Deno.
-   */
-  argv?: readonly string[]
   signal?: AbortSignal
 }
 

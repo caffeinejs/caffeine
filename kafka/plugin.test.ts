@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { createApplication } from '@caffeinejs/std'
+import type { ErrConfigSlices } from '@caffeinejs/std/config'
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
 import { kafka } from './plugin.js'
@@ -64,10 +65,18 @@ describe('kafka() plugin', () => {
     await built.close()
   })
 
+  // Brokers may arrive from any source now, so the check runs once the whole chain has merged — which makes
+  // it the slice's failure, naming the instance that could not be configured.
   it('rejects at ready() when an instance has no brokers', async () => {
     const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
     app.kafka(k => k.groupId('g')) // no brokers
-    await expect(app.build().ready()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
+
+    const error = await app.build().ready().then(() => undefined, (e: unknown) => e)
+
+    expect(error).toMatchObject({ code: 'ERR_CONFIG_SLICES' })
+    expect((error as ErrConfigSlices).failures).toHaveLength(1)
+    expect((error as ErrConfigSlices).failures[0].path).toBe('kafka.default')
+    expect((error as ErrConfigSlices).failures[0].error).toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 
   it('honours a caller-supplied method name', () => {

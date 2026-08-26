@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import type { Plugin, Service } from '@caffeinejs/std'
+import type { ConfigTypeOf, Plugin, Service } from '@caffeinejs/std'
 import { defaultKafkaClients } from './clients.js'
 import type { KafkaClients } from './config.js'
 import { ErrKafkaUnknownInstance } from './errors.js'
@@ -12,16 +12,21 @@ export interface KafkaPluginOptions {
   clients?: KafkaClients
 }
 
-/** The builder callback that configures one kafka instance. */
-export type KafkaConfigure = (k: KafkaBuilder) => void
+/** The builder callback that configures one kafka instance, over an application config type `C`. */
+export type KafkaConfigure<C = unknown> = (k: KafkaBuilder<C>) => void
 
 /**
  * The `kafka` builder method contributed by the plugin. Follows the feature-builder convention: pass a builder
  * callback, optionally preceded by an instance name, and get the builder back for chaining.
+ *
+ * The config type is recovered from `this` with {@link ConfigTypeOf}, so `k.config(c => c.app.events)` is
+ * typed against the application's own schema exactly as the built-in `s.config(c => c.app.server)` is —
+ * without the caller naming the type again. An application that declared no schema gets `unknown`, and the
+ * selector correctly offers nothing to select.
  */
 export interface KafkaMethod {
-  <Self>(this: Self, configure: KafkaConfigure): Self
-  <Self>(this: Self, name: string, configure: KafkaConfigure): Self
+  <Self>(this: Self, configure: KafkaConfigure<ConfigTypeOf<Self>>): Self
+  <Self>(this: Self, name: string, configure: KafkaConfigure<ConfigTypeOf<Self>>): Self
 }
 
 // What the method needs from the builder it is invoked on (`this`). `.bind()` in a Service does not emit the
@@ -93,8 +98,8 @@ export function kafka<const Name extends string = 'kafka'>(
   // A regular function so `this` binds to the builder at the `app.kafka(...)` call site.
   function kafkaMethod(
     this: KafkaBuilderHost,
-    nameOrConfigure: string | KafkaConfigure,
-    maybeConfigure?: KafkaConfigure,
+    nameOrConfigure: string | KafkaConfigure<never>,
+    maybeConfigure?: KafkaConfigure<never>,
   ): unknown {
     const instance = typeof nameOrConfigure === 'string' ? nameOrConfigure : DEFAULT_INSTANCE
     const configure = typeof nameOrConfigure === 'string' ? maybeConfigure : nameOrConfigure
@@ -103,7 +108,8 @@ export function kafka<const Name extends string = 'kafka'>(
     }
 
     const builder = new KafkaBuilder(instance, clients)
-    configure(builder)
+    // The config type is a compile-time affair only; the runtime builder is the same object either way.
+    configure(builder as KafkaBuilder<never>)
     this.addService(builder)
     registerLifecycle(this)
 
@@ -113,7 +119,7 @@ export function kafka<const Name extends string = 'kafka'>(
   return {
     name,
     install() {
-      return { [name]: kafkaMethod } as Record<Name, KafkaMethod>
+      return { [name]: kafkaMethod } as unknown as Record<Name, KafkaMethod>
     },
   }
 }

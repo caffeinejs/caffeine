@@ -1,5 +1,18 @@
 import type { Ctor } from '@caffeinejs/di'
 import { kServiceConfigure, type Service, type ServiceKit, AnySchema } from '@caffeinejs/std'
+import {
+  defineFeatureConfig,
+  instanceNamespace,
+  type ConfigAccessors,
+  type ConfigHandle,
+} from '@caffeinejs/std/config'
+import {
+  BINDING_CONFIG_KEYS,
+  MESSAGING_CONFIG_NAMESPACE,
+  messagingConfigSchema,
+  type BindingConfig,
+  type MessagingConfigSlice,
+} from './config.js'
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
 import { MessageBus } from './bus.js'
@@ -40,8 +53,9 @@ export interface OutBindingOptions {
  * inbound ({@link in}) and outbound ({@link out}) bindings that map logical names onto binder destinations. At
  * `ready()` its `[kServiceConfigure]` builds the runtime and binds the engine + `MessageBus` into the container.
  */
-export class MessagingBuilder implements Service {
+export class MessagingBuilder<C = unknown> implements Service {
   readonly #name: string
+  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<MessagingConfigSlice>
   readonly #binders = new Map<string, Binder | BinderFactory>()
   readonly #inbound = new Map<string, InBindingOptions>()
   readonly #outbound = new Map<string, OutBindingOptions>()
@@ -89,41 +103,57 @@ export class MessagingBuilder implements Service {
     return this
   }
 
+  /**
+   * Places this instance's settings elsewhere in the configuration tree, e.g. `m.config(c => c.app.events)`.
+   *
+   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
+   */
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<MessagingConfigSlice>): this {
+    this.#selector = selector
+    return this
+  }
+
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)
     }
 
-    const inbound = new Map<string, ConsumerBinding>()
-    for (const [binding, options] of this.#inbound) {
-      if (options.destination.length === 0) {
-        return Promise.reject(new ErrMissingDestination(binding))
-      }
-      inbound.set(binding, { binding, ...options })
-    }
+    const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
+      namespace: instanceNamespace(MESSAGING_CONFIG_NAMESPACE, this.#name),
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: messagingConfigSchema,
+      values: {
+        in: configurableHalf(this.#inbound),
+        out: configurableHalf(this.#outbound),
+      },
+    })
 
-    const outbound = new Map<string, ProducerBinding>()
-    for (const [binding, options] of this.#outbound) {
-      if (options.destination.length === 0) {
-        return Promise.reject(new ErrMissingDestination(binding))
-      }
-      outbound.set(binding, { binding, ...options })
-    }
+    const code = { in: this.#inbound, out: this.#outbound }
 
-    const runtime: MessagingRuntime = {
-      container: kit.container,
-      binders,
-      inbound,
-      outbound,
-      ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
-      ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
-      ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
-    }
+    const resolved = slice.derive(published => ({
+      // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
+      // created has nothing to attach to and is read by nothing — declaring one is a code act.
+      inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
+      outbound: bindingsOf(code.out, published.out) as Map<string, ProducerBinding>,
+    }))
+
     const rKey = runtimeKey(this.#name)
     const bKey = busKey(this.#name)
+    const container = kit.container
 
-    kit.container.bind(rKey).toValue(runtime)
+    kit.container
+      .bind(rKey)
+      // Lazy so the slice has published: configuration resolves during init.
+      .toFactory((): MessagingRuntime => ({
+        container,
+        binders,
+        inbound: resolved.config.inbound,
+        outbound: resolved.config.outbound,
+        ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
+        ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
+        ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
+      }))
 
     if (this.#name === DEFAULT_BINDER) {
       kit.container.bind(MessageBus).toClass(MessageBus, [rKey]).names(bKey)
@@ -138,4 +168,54 @@ export class MessagingBuilder implements Service {
 
     return Promise.resolve()
   }
+}
+
+/** The half of each declared binding that can travel through the tree, keyed by binding name. */
+function configurableHalf(
+  declared: ReadonlyMap<string, InBindingOptions | OutBindingOptions>,
+): Record<string, BindingConfig> | undefined {
+  if (declared.size === 0) {
+    return undefined
+  }
+
+  const out: Record<string, BindingConfig> = {}
+
+  for (const [binding, options] of declared) {
+    const held = options as unknown as Record<string, unknown>
+
+    out[binding] = Object.fromEntries(
+      BINDING_CONFIG_KEYS
+        .filter(key => held[key] !== undefined)
+        .map(key => [key, held[key]]),
+    )
+  }
+
+  return out
+}
+
+/**
+ * Folds each declared binding together with whatever configuration said about it.
+ *
+ * Code first, configuration over it — a builder value is a default here as everywhere else — and the
+ * code-only members (`schema`, `classifier`, the error constructors) ride through untouched.
+ */
+function bindingsOf(
+  declared: ReadonlyMap<string, InBindingOptions | OutBindingOptions>,
+  configured: Record<string, BindingConfig> | undefined,
+): Map<string, ConsumerBinding | ProducerBinding> {
+  const out = new Map<string, ConsumerBinding | ProducerBinding>()
+
+  for (const [binding, options] of declared) {
+    const merged = { binding, ...options, ...configured?.[binding] } as ConsumerBinding | ProducerBinding
+
+    // Checked here rather than on the builder: the destination may arrive from any source, so the only
+    // moment the answer is known is once the whole chain has merged.
+    if (merged.destination === undefined || merged.destination.length === 0) {
+      throw new ErrMissingDestination(binding)
+    }
+
+    out.set(binding, merged)
+  }
+
+  return out
 }

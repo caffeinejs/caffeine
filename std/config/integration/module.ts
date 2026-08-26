@@ -21,6 +21,8 @@ export interface ConfigModuleOptions<T> {
   slices?: readonly ConfigSliceSpec[]
   context?: ResolutionContext
   failFast?: boolean
+  /** Paths the diagnostics must redact, on top of whatever the root schema marks with `$t.Secret`. */
+  secrets?: ReadonlySet<string>
 }
 
 /**
@@ -46,6 +48,7 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
       slices: options.slices,
       context: options.context,
       failFast: options.failFast,
+      secrets: options.secrets,
       warn: message => options.warn?.(message),
     }
   } else {
@@ -57,6 +60,7 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
       slices: options.slices,
       context: options.context,
       failFast: options.failFast,
+      secrets: options.secrets,
     }
   }
 
@@ -66,6 +70,9 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
       bootstrapOpts.schema = definition.schema as ConfigSchema<T>
       bootstrapOpts.context = definition.context
       bootstrapOpts.failFast = definition.failFast
+      // Read here, not at construction: features register their slices — and their secrets — at
+      // `kServiceConfigure`, which has only just finished running.
+      bootstrapOpts.secrets = definition.secrets
     }
 
     const shard = await ConfigShard.bootstrap<T>(bootstrapOpts)

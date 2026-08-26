@@ -1,0 +1,128 @@
+import { afterEach, describe, expect, it } from 'vitest'
+import fastify from 'fastify'
+import { $t } from '@caffeinejs/std'
+import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import { AllowAnonymous, Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { kOpenAPIOptions } from '../keys.js'
+import type { OpenAPIOptions } from '../options.js'
+import { openapiPlugin } from '../plugin.js'
+import type { OpenAPIDocument } from '../spec/spec.js'
+
+@Controller('/things')
+class ThingsController {
+  @Get('/')
+  @AllowAnonymous()
+  list(): unknown {
+    return []
+  }
+}
+void [ThingsController]
+
+const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
+
+async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {
+  const res = await app.fetch('/openapi.json')
+  return await res.json() as OpenAPIDocument
+}
+
+describe('openapi configuration', () => {
+  let app: WebApplication | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  // The plan's headline case: redirect the documented server URL per environment, no rebuild.
+  it('lets the environment override a builder-set server URL', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(openapiPlugin())
+      .config(c => c.source(env({ OPENAPI__SERVERS__0__URL: 'https://api.prod.example.com' }), ConfigPriority.ENV))
+      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).server('http://localhost:3000').public())
+      .build()
+
+    await app.ready()
+
+    const doc = await documentOf(app)
+    expect(doc.servers).toEqual([{ url: 'https://api.prod.example.com' }])
+    expect(doc.info.title).toBe('Things')
+  })
+
+  it('reads the info block from the configuration tree', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(openapiPlugin())
+      .config(c => c.source(new InlineConfigProvider({
+        openapi: { info: { title: 'From Config', version: '9.9.9' } },
+      })))
+      .openapi(o => o.info({ title: 'From Code', version: '1.0.0' }).public())
+      .build()
+
+    await app.ready()
+
+    const doc = await documentOf(app)
+    expect(doc.info.title).toBe('From Config')
+    expect(doc.info.version).toBe('9.9.9')
+  })
+
+  // A partial nested override must not wipe the sibling defaults.
+  it('merges a partial errors block over the defaults', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(openapiPlugin())
+      .config(c => c.source(new InlineConfigProvider({
+        openapi: { errors: { validation: 422 } },
+      })))
+      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .build()
+
+    await app.ready()
+
+    // 422 came from configuration; 401/403 are still the defaults the builder started from.
+    const options = app.container.get<OpenAPIOptions>(kOpenAPIOptions)
+    expect(options.errors).toEqual({ validation: 422, unauthorized: 401, forbidden: 403 })
+    // `routes` is code-only and untouched by any of this.
+    expect(options.routes.json).toBe('/openapi.json')
+  })
+
+  it('re-points reads and code-set defaults together via .config()', async () => {
+    const schema = $t.Object({
+      app: $t.Object({
+        // Shaped like `InfoObject`, since the selector's return type is checked against the feature's own
+        // config interface — that structural check is the point of re-pointing being typed at all.
+        docs: $t.Object({
+          info: $t.Optional($t.Object({ title: $t.String(), version: $t.String() })),
+        }),
+      }),
+    })
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(openapiPlugin())
+      .config(schema, c => c.source(new InlineConfigProvider({
+        app: { docs: { info: { title: 'Moved', version: '2.0.0' } } },
+      })))
+      // No annotation on the selector: the config type is recovered from the builder.
+      .openapi(o => o.config(c => c.app.docs).info({ title: 'Code', version: '1.0.0' }).public())
+      .build()
+
+    await app.ready()
+
+    const doc = await documentOf(app)
+    expect(doc.info.title).toBe('Moved')
+  })
+
+  // `transformDocument` edits the document in place, and the values now come from a deep-frozen tree.
+  it('still lets transformDocument mutate a config-sourced info block', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(openapiPlugin())
+      .config(c => c.source(new InlineConfigProvider({
+        openapi: { info: { title: 'From Config', version: '1.0.0' } },
+      })))
+      .openapi(o => o.public().transformDocument(document => {
+        document.info.title = 'Renamed'
+      }))
+      .build()
+
+    await app.ready()
+
+    expect((await documentOf(app)).info.title).toBe('Renamed')
+  })
+})

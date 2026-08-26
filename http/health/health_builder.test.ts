@@ -115,7 +115,7 @@ describe('HealthBuilder', () => {
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
       .config(c => c
         .source(
-          { id: 'env', load: ctx => provider.load({ ...ctx, env: { HEALTH__DRAIN_DELAY: '30ms' } }) },
+          new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '30ms' } }),
           ConfigPriority.ENV,
         ))
       .health(h => h.drainDelay('10s'))
@@ -133,7 +133,7 @@ describe('HealthBuilder', () => {
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
       .config(c => c
         .source(
-          { id: 'env', load: ctx => provider.load({ ...ctx, env: { HEALTH__ENABLED: 'false' } }) },
+          new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }),
           ConfigPriority.ENV,
         ))
       .health()
@@ -150,7 +150,7 @@ describe('HealthBuilder', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .config(c => c
         .source(
-          { id: 'env', load: ctx => provider.load({ ...ctx, env: { HEALTH__SIGNALS: 'SIGTERM,SIGINT' } }) },
+          new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'SIGTERM,SIGINT' } }),
           ConfigPriority.ENV,
         ))
       .health(h => h.signals(['SIGTERM']))
@@ -169,7 +169,7 @@ describe('HealthBuilder', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .config(c => c
         .source(
-          { id: 'env', load: ctx => provider.load({ ...ctx, env: { HEALTH__SIGNALS: 'false' } }) },
+          new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'false' } }),
           ConfigPriority.ENV,
         ))
       .health()
@@ -187,7 +187,7 @@ describe('HealthBuilder', () => {
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
       .config(c => c
         .source(
-          { id: 'env', load: ctx => provider.load({ ...ctx, env: { HEALTH__DRAIN_DELAY: '40ms' } }) },
+          new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '40ms' } }),
           ConfigPriority.ENV,
         ))
       .build()

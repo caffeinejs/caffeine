@@ -41,17 +41,17 @@ describe('config multi-source precedence & provenance', () => {
   async function providers(): Promise<{ env: ConfigProvider, file: ConfigProvider, inline: ConfigProvider }> {
     const filePath = await writeTmp('multi-source.json', JSON.stringify({ server: { port: 8080, host: 'file-host' } }))
     return {
-      env: new EnvConfigProvider({ prefix: 'APP_' }),
+      env: new EnvConfigProvider({ prefix: 'APP_', env: ENV }),
       file: new JSONConfigProvider(filePath),
       inline: new InlineConfigProvider({ server: { port: 3000, host: 'inline-host' }, db: { url: 'inline-url' } }),
     }
   }
 
-  const env = { APP_SERVER__HOST: 'env-host' }
+  const ENV = { APP_SERVER__HOST: 'env-host' }
 
   it('resolves each key from its highest-precedence source (env > file > inline)', async () => {
     const p = await providers()
-    const ctx: ResolutionContext = { app: 'test', profiles: ['default'], env }
+    const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
       providers: [p.env, p.file, p.inline],
@@ -78,7 +78,7 @@ describe('config multi-source precedence & provenance', () => {
 
   it('reordering providers changes the winning source (first wins)', async () => {
     const p = await providers()
-    const ctx: ResolutionContext = { app: 'test', profiles: ['default'], env }
+    const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
       providers: [p.inline, p.file, p.env],
@@ -145,14 +145,13 @@ describe('config array flatten + typed handle', () => {
       'array-override.json',
       JSON.stringify({ tags: ['a', 'b'], items: [] }),
     )
-    const ctx: ResolutionContext = {
-      app: 'test',
-      profiles: ['default'],
-      env: { APP_TAGS__0: 'override' },
-    }
+    const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
-      providers: [new EnvConfigProvider({ prefix: 'APP_' }), new JSONConfigProvider(filePath)],
+      providers: [
+        new EnvConfigProvider({ prefix: 'APP_', env: { APP_TAGS__0: 'override' } }),
+        new JSONConfigProvider(filePath),
+      ],
       schema: arraySchema,
       context: ctx,
     })
@@ -176,16 +175,18 @@ describe('config array flatten + typed handle', () => {
 describe('a list set as text', () => {
   const listSchema = $t.Object({ tags: $t.List($t.String()) })
 
-  const envContext = (env: Record<string, string>): ResolutionContext =>
-    ({ app: 'test', profiles: ['default'], env })
+  const envSource = (env: Record<string, string>): EnvConfigProvider =>
+    new EnvConfigProvider({ env })
+
+  const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 
   it('reaches the validated tree as a list, over a lower band', async () => {
     const { validated, config } = await bootstrapConfig({
       sources: new ConfigSources()
         .add(new InlineConfigProvider({ tags: ['from', 'code'] }), ConfigPriority.CODE)
-        .add(new EnvConfigProvider(), ConfigPriority.ENV),
+        .add(envSource({ TAGS: 'a,b,c' }), ConfigPriority.ENV),
       schema: listSchema,
-      context: envContext({ TAGS: 'a,b,c' }),
+      context: ctx,
     })
 
     expect(validated.tags).toEqual(['a', 'b', 'c'])
@@ -197,9 +198,9 @@ describe('a list set as text', () => {
     const { validated } = await bootstrapConfig({
       sources: new ConfigSources()
         .add(new InlineConfigProvider({ tags: ['a', 'b', 'c'] }), ConfigPriority.CODE)
-        .add(new EnvConfigProvider(), ConfigPriority.ENV),
+        .add(envSource({ TAGS: 'only' }), ConfigPriority.ENV),
       schema: listSchema,
-      context: envContext({ TAGS: 'only' }),
+      context: ctx,
     })
 
     expect(validated.tags).toEqual(['only'])
@@ -209,9 +210,9 @@ describe('a list set as text', () => {
     const { validated } = await bootstrapConfig({
       sources: new ConfigSources()
         .add(new InlineConfigProvider({ tags: ['a', 'b'] }), ConfigPriority.CODE)
-        .add(new EnvConfigProvider(), ConfigPriority.ENV),
+        .add(envSource({ TAGS: '' }), ConfigPriority.ENV),
       schema: listSchema,
-      context: envContext({ TAGS: '' }),
+      context: ctx,
     })
 
     expect(validated.tags).toEqual([])
@@ -222,7 +223,7 @@ describe('a list set as text', () => {
     const { validated } = await bootstrapConfig({
       providers: [new ArgsConfigProvider({ argv: ['--tags=a,b,c'] })],
       schema: listSchema,
-      context: { app: 'test', profiles: ['default'] },
+      context: ctx,
     })
 
     expect(validated.tags).toEqual(['a', 'b', 'c'])
@@ -232,9 +233,9 @@ describe('a list set as text', () => {
     const jsonSchema = $t.Object({ db: $t.JSON($t.Object({ host: $t.String(), port: $t.Number() })) })
 
     const { validated } = await bootstrapConfig({
-      providers: [new EnvConfigProvider()],
+      providers: [envSource({ DB: '{"host":"h","port":5432}' })],
       schema: jsonSchema,
-      context: envContext({ DB: '{"host":"h","port":5432}' }),
+      context: ctx,
     })
 
     expect(validated.db).toEqual({ host: 'h', port: 5432 })

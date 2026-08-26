@@ -189,6 +189,26 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
  */
 export type Reconfigured<Self, Base, Next> = Omit<Self, keyof Base> & Next
 
+/**
+ * Recovers the application config type from whatever builder a method was invoked on.
+ *
+ * A plugin's method only ever sees `this` as an opaque `Self`, so a feature contributed by a plugin has no
+ * other way to type `f.config(c => c.app.thing)` the way the built-in `server(s => s.config(...))` is typed.
+ * The builders carry {@link ApplicationConfigMarker.__config} purely so this can read it back.
+ *
+ * The marker is optional, so a `Self` that carries none matches with `C` inferred as `unknown` — which is
+ * exactly right: an application that never declared a schema has no shape to select from.
+ */
+export type ConfigTypeOf<Self> = Self extends { readonly __config?: infer C } ? C : unknown
+
+/**
+ * The phantom an application builder carries to name its config type. Never assigned, never read at runtime —
+ * `declare readonly __config?: T` on the class is the whole implementation.
+ */
+export interface ApplicationConfigMarker<T> {
+  readonly __config?: T
+}
+
 /** Merges each plugin's contributed methods onto the builder and registers its configurer. */
 export function installPlugins(
   builder: { readonly container: Container, addService(service: Service): void },
@@ -205,27 +225,37 @@ export function installPlugins(
 }
 
 /** A headless application builder. */
-export class ApplicationBuilder extends BaseApplicationBuilder<Application> {
+export class ApplicationBuilder<TConfig = unknown>
+  extends BaseApplicationBuilder<Application>
+  implements ApplicationConfigMarker<TConfig> {
+  /** Phantom — names the application config type for {@link ConfigTypeOf}. Never assigned, never read. */
+  declare readonly __config?: TConfig
+
   build(): Application {
     return new Application(this.applicationInit())
   }
 
   /**
-   * Declares the application configuration, bound under `kAppConfig`. The `schema` argument determines the
-   * config type; the optional `configure` callback (any shape) adds sources and context. A headless
-   * application has no features that select config slices, so the builder is not re-typed; read the config via
-   * `container.get<ConfigHandle<T>>(kAppConfig)` with the type at the use site.
+   * Declares the application configuration, bound under `kAppConfig`, and re-types the builder to carry the
+   * config type `T` inferred from `schema`.
+   *
+   * Re-typed for the same reason the HTTP builder is: a plugin feature's `.config(c => c.app.thing)` selector
+   * reads the config type off the builder it was reached through, and a headless application configures kafka
+   * and messaging exactly the way an HTTP one does. Read the root config itself via
+   * `container.get<ConfigHandle<T>>(kAppConfig)`.
+   *
+   * Runtime returns the same instance; only the declared type changes.
    */
-  config(configure: (c: AppConfigBuilder) => void): this
+  config(configure: (c: AppConfigBuilder<TConfig>) => void): this
   config<S extends ConfigSchema>(
     schema: S,
     configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): this
+  ): Reconfigured<this, ApplicationBuilder<TConfig>, ApplicationBuilder<InferConfig<S>>>
   config<S extends ConfigSchema>(
-    first: S | ((c: AppConfigBuilder) => void),
+    first: S | ((c: AppConfigBuilder<TConfig>) => void),
     second?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): this {
-    this.applyConfigArgs(first, second)
+  ): unknown {
+    this.applyConfigArgs(first as S, second as never)
     return this
   }
 }
