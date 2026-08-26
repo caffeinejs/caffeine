@@ -66,7 +66,32 @@ async function launch(env: Record<string, string> = {}): Promise<Running> {
   return running
 }
 
-const probe = (port: number, path: string): Promise<Response> => fetch(`http://127.0.0.1:${port}${path}`)
+// A single retry absorbs the rare transient ECONNRESET a CI runner's socket layer produces under load;
+// it is not how the drain-window race is avoided (see waitForStatus below for that).
+const probe = async (port: number, path: string): Promise<Response> => {
+  try {
+    return await fetch(`http://127.0.0.1:${port}${path}`)
+  } catch {
+    return fetch(`http://127.0.0.1:${port}${path}`)
+  }
+}
+
+// Polls instead of sleeping a fixed delay: `beginDrain` flips readiness synchronously when the signal is
+// received, so this returns almost immediately — well inside the drain window — regardless of how loaded
+// the CI runner is. A fixed sleep raced that window and could land after the process had already torn down.
+async function waitForStatus(port: number, path: string, want: number, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  let lastStatus: number | undefined
+  while (Date.now() < deadline) {
+    lastStatus = (await probe(port, path)).status
+    if (lastStatus === want) {
+      return
+    }
+    await new Promise(resolve => setTimeout(resolve, 20))
+  }
+
+  throw new Error(`Timed out waiting for ${path} to return ${want}, last saw ${String(lastStatus)}`)
+}
 
 describe('graceful shutdown on signals', () => {
   it('drains on SIGTERM and exits cleanly', async () => {
@@ -77,9 +102,8 @@ describe('graceful shutdown on signals', () => {
     app.child.kill('SIGTERM')
 
     // Mid-drain: readiness already refuses, liveness is still fine, and real traffic is still served.
-    await new Promise(resolve => setTimeout(resolve, 150))
+    await waitForStatus(app.port, '/readyz', 503)
 
-    expect((await probe(app.port, '/readyz')).status).toBe(503)
     expect((await probe(app.port, '/livez')).status).toBe(200)
 
     const result = await app.exit
