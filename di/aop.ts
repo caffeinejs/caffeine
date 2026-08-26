@@ -194,6 +194,8 @@ interface ResolvedEntry {
 }
 
 function weave(instance: unknown, methodMap: Map<string | symbol, MethodAspect[]>, cls: AnyClass): unknown {
+  const wrapperCache = new Map<string | symbol, Function>()
+
   return new Proxy(instance as object, {
     get(target: any, prop: string | symbol, receiver: unknown): unknown {
       const aspects = methodMap.get(prop)
@@ -205,9 +207,14 @@ function weave(instance: unknown, methodMap: Map<string | symbol, MethodAspect[]
         return Reflect.get(target, prop, receiver)
       }
 
-      return function (...args: unknown[]) {
-        return executeChain(target, prop, args, aspects, cls, receiver)
+      let wrapper = wrapperCache.get(prop)
+      if (!wrapper) {
+        wrapper = function (...args: unknown[]) {
+          return executeChain(target, prop, args, aspects, cls, receiver)
+        }
+        wrapperCache.set(prop, wrapper)
       }
+      return wrapper
     },
   })
 }

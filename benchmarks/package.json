@@ -18,6 +18,7 @@
     "bench:request": "node --import=tsx request/bench.ts",
     "bench:request:bun": "node --import=tsx runtimes/bun/request/bench.ts",
     "bench:mixedscopes": "node --import=tsx mixedscopes/bench.ts",
+    "bench:aspect": "node --import=tsx aspect/bench.ts",
     "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit && tsc -p runtimes/bun/tsconfig.json --noEmit",
     "test:request": "node --import=tsx request/test.ts",
     "test:request:bun": "node --import=tsx runtimes/bun/request/test.ts",
