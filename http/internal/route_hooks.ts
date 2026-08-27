@@ -1,4 +1,24 @@
-import type { RouteOptions } from 'fastify'
+import type { RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
+
+/** Fastify route options parameterized for HTTP/1 and HTTP/2. */
+export type AdapterRouteOptions = RouteOptions<
+  RawServerBase,
+  RawRequestDefaultExpression<RawServerBase>,
+  RawReplyDefaultExpression<RawServerBase>,
+  RouteGenericInterface,
+  any
+>
+
+type AdapterOnRequestFn = Extract<
+  NonNullable<AdapterRouteOptions['onRequest']>,
+  (request: never, reply: never, ...args: never[]) => unknown
+>
+
+/** Request type carried on {@link AdapterRouteOptions} hooks. */
+export type AdapterRequest = Parameters<AdapterOnRequestFn>[0]
+
+/** Reply type carried on {@link AdapterRouteOptions} hooks. */
+export type AdapterReply = Parameters<AdapterOnRequestFn>[1]
 
 /** The route hook slots anything in this package writes to. */
 export type RouteHookKey = 'onRequest' | 'onSend'
@@ -15,14 +35,14 @@ export type RouteHookKey = 'onRequest' | 'onSend'
  * A hook the route itself declared (through `@Options`) is preserved and stays first.
  */
 export function addRouteHook<K extends RouteHookKey>(
-  routeDef: RouteOptions,
+  routeDef: AdapterRouteOptions,
   key: K,
-  fn: NonNullable<RouteOptions[K]>,
+  fn: NonNullable<AdapterRouteOptions[K]>,
 ): void {
   const existing = routeDef[key]
 
   if (existing === undefined) {
-    routeDef[key] = fn as RouteOptions[K]
+    routeDef[key] = fn as AdapterRouteOptions[K]
     return
   }
 
@@ -31,5 +51,5 @@ export function addRouteHook<K extends RouteHookKey>(
     return
   }
 
-  routeDef[key] = [existing, fn] as RouteOptions[K]
+  routeDef[key] = [existing, fn] as AdapterRouteOptions[K]
 }

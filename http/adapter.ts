@@ -2,7 +2,7 @@ import './_fastify.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
 import { Container, Scopes } from '@caffeinejs/di'
-import { type FastifyInstance, type FastifyReply, type FastifyRequest, type RawReplyDefaultExpression, type RawRequestDefaultExpression, type RawServerBase, type RouteGenericInterface, type RouteOptions } from 'fastify'
+import { type FastifyInstance, type FastifyReply, type FastifyRequest, type RawReplyDefaultExpression, type RawRequestDefaultExpression, type RawServerBase } from 'fastify'
 import fp from 'fastify-plugin'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import type { Router } from './route.js'
@@ -24,6 +24,7 @@ import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { Responder } from './response.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { joinPaths } from './internal/paths/index.js'
+import { type AdapterRouteOptions } from './internal/route_hooks.js'
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -253,13 +254,7 @@ export class FastifyAdapter<
 
           const url = joinPaths(basePath, route.path)
 
-          const routeDef: RouteOptions<
-            RawServerBase,
-            RawRequestDefaultExpression<RawServerBase>,
-            RawReplyDefaultExpression<RawServerBase>,
-            RouteGenericInterface,
-            any
-          > = {
+          const routeDef: AdapterRouteOptions = {
             method: [...new Set(route.method.map(m => m.toUpperCase()))],
             url,
             // Compiled here, once, so Fastify's Ajv owns request validation with zero schema work per request.
@@ -300,7 +295,12 @@ export class FastifyAdapter<
             },
           }
 
-          const routeFn = (s: typeof server, def: RouteOptions) => s.route(def)
+          const routeFn = (s: typeof server, def: AdapterRouteOptions) =>
+            (s as FastifyInstance<
+              RawServerBase,
+              RawRequestDefaultExpression<RawServerBase>,
+              RawReplyDefaultExpression<RawServerBase>
+            >).route(def)
 
           // Cache, attached only to the routes that asked for it. A route with neither decorator leaves both
           // hook slots undefined and pays nothing.

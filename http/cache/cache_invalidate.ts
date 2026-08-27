@@ -1,5 +1,4 @@
-import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
-import { addRouteHook } from '../internal/route_hooks.js'
+import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '../internal/route_hooks.js'
 import { CacheStore } from './store.js'
 
 export interface CacheInvalidateOptions {
@@ -14,11 +13,11 @@ export interface CacheInvalidateOptions {
  * hooks write to. Like those, `opts` is closed over rather than re-read per request.
  */
 export function attachCacheInvalidateHook(
-  routeDef: RouteOptions,
+  routeDef: AdapterRouteOptions,
   opts: CacheInvalidateOptions,
   store: CacheStore,
 ): void {
-  async function invalidateHandler(request: FastifyRequest, reply: FastifyReply): Promise<unknown> {
+  async function invalidateHandler(request: AdapterRequest, reply: AdapterReply): Promise<unknown> {
     if (reply.statusCode < 200 || reply.statusCode >= 300) {
       return
     }

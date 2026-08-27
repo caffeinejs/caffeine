@@ -1,4 +1,7 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
+  "references": [
+    { "path": "../fetchy/tsconfig.build.json" }
+  ],
+  "exclude": ["dist", "node_modules", "_tests", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
 }

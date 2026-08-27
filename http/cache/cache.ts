@@ -1,8 +1,8 @@
 import type { Container } from '@caffeinejs/di'
-import { FastifyReply, FastifyRequest, RouteOptions } from 'fastify'
+import { FastifyRequest } from 'fastify'
 import { Duration, parseDuration } from '@caffeinejs/std'
 import { FastifyContextRequest } from '../context.js'
-import { addRouteHook } from '../internal/route_hooks.js'
+import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '../internal/route_hooks.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
 import { CacheStore } from './store.js'
@@ -76,7 +76,7 @@ export function resolveCacheDeps(container: Container): CacheDeps {
  * `@Cache(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
  */
-export function attachCacheHooks(routeDef: RouteOptions, opts: CacheOptions | false, deps: CacheDeps): void {
+export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptions | false, deps: CacheDeps): void {
   const { store, etagGenerator, statusHeader } = deps
 
   if (opts !== false) {
@@ -85,7 +85,7 @@ export function attachCacheHooks(routeDef: RouteOptions, opts: CacheOptions | fa
     const read: CacheOptions = opts
 
     // OnRequest phase: check if the request is cacheable and return the cached response if it is
-    async function onRequest(request: FastifyRequest, reply: FastifyReply) {
+    async function onRequest(request: AdapterRequest, reply: AdapterReply) {
       const methods = read.methods ?? DEFAULT_METHODS
       if (!methods.includes(request.method)) {
         return
@@ -115,7 +115,7 @@ export function attachCacheHooks(routeDef: RouteOptions, opts: CacheOptions | fa
 
       // Vary-aware cache key — must match key used in onSend
       const key = read.key
-        ? read.key(new FastifyContextRequest(request))
+        ? read.key(new FastifyContextRequest(request as FastifyRequest))
         : defaultCacheKey(request, read.vary)
       const segment = read.segment ?? ''
       const cached = await store.get(key, segment)
@@ -177,7 +177,7 @@ export function attachCacheHooks(routeDef: RouteOptions, opts: CacheOptions | fa
 
   // Before sending the response,
   // we need to build the cache control headers and store the response in the cache
-  async function onSend(request: FastifyRequest, reply: FastifyReply, payload: unknown) {
+  async function onSend(request: AdapterRequest, reply: AdapterReply, payload: unknown) {
     if (request.responseCached) {
       return payload
     }
@@ -255,7 +255,7 @@ export function attachCacheHooks(routeDef: RouteOptions, opts: CacheOptions | fa
 
       // Vary-aware cache key — must match key used in onRequest
       const key = opts.key
-        ? opts.key(new FastifyContextRequest(request))
+        ? opts.key(new FastifyContextRequest(request as FastifyRequest))
         : defaultCacheKey(request, opts.vary)
 
       const segment = opts.segment ?? ''
@@ -298,7 +298,7 @@ function canonicalizeUrl(url: string): string {
 // Other methods include the method in the key to avoid cross-method collisions.
 // When vary headers are configured, their request values are appended to the key
 // so that different header combinations produce separate cache entries (RFC 7234 §4.1).
-function defaultCacheKey(request: FastifyRequest, vary?: string[]): string {
+function defaultCacheKey(request: AdapterRequest, vary?: string[]): string {
   const url = canonicalizeUrl(request.url)
   const base = request.method === 'GET' || request.method === 'HEAD'
     ? url

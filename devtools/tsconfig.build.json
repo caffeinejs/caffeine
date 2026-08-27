@@ -1,4 +1,12 @@
 {
   "extends": "./tsconfig.json",
+  "references": [
+    {
+      "path": "../di/tsconfig.build.json"
+    },
+    {
+      "path": "../http/tsconfig.build.json"
+    }
+  ],
   "exclude": ["dist", "node_modules", "ui", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
 }
