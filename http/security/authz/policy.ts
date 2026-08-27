@@ -91,7 +91,7 @@ export function compileRoutePolicy(
   }
 
   // Nothing anywhere declared an opinion about this route. Without a fallback that means "open", which is
-  // the default and matches ASP.NET when `FallbackPolicy` is unset. With one, the route is gated exactly
+  // the default when no fallback is set. With one, the route is gated exactly
   // as if it carried a bare `@Authorize` — the point being that forgetting the decorator can no longer be
   // the difference between a protected endpoint and a public one.
   if (routerOptions === undefined && routeOptions === undefined) {

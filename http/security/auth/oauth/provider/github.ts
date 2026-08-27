@@ -55,8 +55,7 @@ export function githubOAuth2Preset(
     claimActions: {
       ...rest.claimActions,
       // The claim mapping is an allowlist, so this is the whole claim set a GitHub sign-in produces
-      // unless the caller adds to it. Chosen to match what ASP.NET's `AddGitHub` maps, minus the
-      // `urn:github:*` names: identity plus the handful of display fields an application actually
+      // unless the caller adds to it. Identity plus the handful of display fields an application actually
       // renders. Everything else GitHub returns from `/user` — roughly thirty fields, mostly long
       // `*_url` strings — stays out, which is both the security boundary and what keeps the sealed
       // session cookie under the browser's ~4 KB per-cookie limit.

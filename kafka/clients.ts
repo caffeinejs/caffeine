@@ -2,8 +2,8 @@ import { Admin, Consumer, jsonDeserializer, jsonSerializer, Producer, stringDese
 import type { AdminClient, ConsumerClient, ConsumerStream, KafkaClients, KafkaConsumerEvent, KafkaDeserializers, KafkaSerializers, ProducerClient, ResolvedKafkaConfig, TopicSpec } from './config.js'
 
 /**
- * Default producer serializers: string keys, JSON values (Spring-like `KafkaTemplate<String, Object>`), and
- * string header keys/values so the retry-journey headers (`x-original-topic`, ...) encode to bytes on the wire.
+ * Default producer serializers: string keys, JSON values, and string header keys/values so the retry-journey
+ * headers (`x-original-topic`, ...) encode to bytes on the wire.
  */
 export const defaultSerializers: KafkaSerializers = {
   key: stringSerializer,

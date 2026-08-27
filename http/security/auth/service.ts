@@ -21,10 +21,9 @@ export class AuthenticationService {
    * `authenticate()`, so the second call of a request would present the token the first call had just
    * invalidated and the guard would read its own rotation as theft.
    *
-   * This is ASP.NET's `AuthenticationHandler.HandleAuthenticateOnceAsync`, which memoises
-   * `_authenticateTask` for the lifetime of a request-scoped handler. Caffeine's handlers are singletons,
-   * so the memo is keyed by `Context` instead — one instance per request, assigned once by the adapter.
-   * A `WeakMap` means the entry dies with the request rather than being something to clean up.
+   * Handlers are singletons, so the memo is keyed by `Context` — one instance per request, assigned once
+   * by the adapter. A `WeakMap` means the entry dies with the request rather than being something to
+   * clean up.
    *
    * The *promise* is cached, not the result, so concurrent callers within one request coalesce onto a
    * single in-flight verification instead of racing. A rejection is cached with the same reasoning: a

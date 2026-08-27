@@ -9,7 +9,6 @@ import { ErrCaffeineWebApplication } from '../../error/common.js'
  * Never silent. A scheme name that resolves to nothing authenticates nobody, so treating it as "no
  * credential presented" turns a typo into a route that rejects every caller with no indication of why,
  * or — where the route's policy does not require an identity — into one that admits them unauthenticated.
- * ASP.NET throws `InvalidOperationException` on the same condition, for the same reason.
  */
 export class ErrAuthSchemeNotFound extends ErrCaffeineWebApplication {
   // `registered` is tolerated as absent rather than required: this constructor runs while reporting

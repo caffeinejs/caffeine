@@ -54,7 +54,7 @@ export interface RetryDelivery {
  * The retry SPI the listener container delegates every dispatch to. A strategy declares the extra topics it needs
  * consumed + provisioned ({@link topics}, {@link deadLetterTopic}) and drives one delivery ({@link dispatch}).
  * Ship-with builtins: {@link blockingRetry} (in-process, the default), {@link retryTopics} (per-level
- * non-blocking, Spring `@RetryableTopic` / Uber reliable-reprocessing), and {@link sharedRetryTopic}.
+ * non-blocking, Uber reliable-reprocessing), and {@link sharedRetryTopic}.
  */
 export interface RetryStrategy {
   /** Extra retry topics (delay tiers) to consume + auto-create for a source topic. Blocking returns `[]`. */
@@ -119,10 +119,10 @@ export function blockingRetry(policy: RetryPolicy): RetryStrategy {
 }
 
 /**
- * Non-blocking per-level retry topics (Spring `@RetryableTopic` / the pattern Uber documented as reliable
- * reprocessing). A failing record is published to the next `${source}-retry-N` topic — each an isolated consumer
- * with its own escalating delay tier — and the source offset advances immediately, so live traffic never blocks.
- * Exhausting the last tier (or a non-retryable error) dead-letters the record.
+ * Non-blocking per-level retry topics (the pattern Uber documented as reliable reprocessing). A failing record
+ * is published to the next `${source}-retry-N` topic — each an isolated consumer with its own escalating delay
+ * tier — and the source offset advances immediately, so live traffic never blocks. Exhausting the last tier (or
+ * a non-retryable error) dead-letters the record.
  */
 export function retryTopics(policy: RetryPolicy, options: RetryTopicOptions = {}): RetryStrategy {
   const attempts = Math.max(1, policy.attempts)

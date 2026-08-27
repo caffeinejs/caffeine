@@ -106,7 +106,7 @@ export class KafkaBuilder<C = unknown> implements Service {
     return this
   }
 
-  /** Non-blocking retry via per-level topics (`${topic}-retry-N`), then dead-letter. Uber/Spring style. */
+  /** Non-blocking retry via per-level topics (`${topic}-retry-N`), then dead-letter. */
   retryTopics(policy: RetryPolicy, options?: RetryTopicOptions): this {
     this.#retryStrategy = retryTopics(policy, options)
     return this

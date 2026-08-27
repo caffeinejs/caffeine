@@ -192,8 +192,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
  * account being authenticated gets to name its own roles. Nothing about the transport prevents that —
  * unlike OIDC, there is no signature over these fields to appeal to.
  *
- * It is also what ASP.NET's `OAuthHandler` does: claims come from `ClaimActions` (`MapJsonKey`) and from
- * nowhere else. Wholesale copying additionally used to overflow the sealed session cookie past the
+ * Wholesale copying additionally used to overflow the sealed session cookie past the
  * browser's ~4 KB limit on providers with large bodies, which the browser drops silently.
  *
  * Nested objects and arrays are skipped even when mapped: a claim value has to survive the JSON

@@ -19,7 +19,7 @@ import type { Principal } from '../../index.js'
  *
  * The store owns hashing, lookup, revocation and expiry: return `null` for any token that is unknown,
  * revoked, or expired. It builds the `Principal` itself (roles, `scope` claims, etc.) via the
- * `Identity`/`Claim`/`Principal` API, mirroring an ASP.NET Core handler producing a `ClaimsPrincipal`.
+ * `Identity`/`Claim`/`Principal` API.
  */
 export abstract class OpaqueTokenStore {
   abstract validate(token: string, ctx: Context): Promise<Principal | null> | Principal | null

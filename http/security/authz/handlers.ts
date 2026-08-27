@@ -20,11 +20,11 @@ export class AuthenticatedUserHandler extends AuthzRequirementHandler<Authentica
 /**
  * Satisfied when the user holds **any** of the listed roles.
  *
- * `RequireRole("Admin", "Manager")` reads as "an admin or a manager", which is both the natural reading
- * and what ASP.NET's `RolesAuthorizationRequirement` does — it returns on the first match. Requiring all
- * of them is still expressible, and more legibly: separate `role()` calls become separate requirements,
- * and a policy's requirements are ANDed. That is also how a controller-level `@Authorize` combines with a
- * method-level one, so the two levels keep tightening rather than widening each other.
+ * `role("Admin", "Manager")` reads as "an admin or a manager", which is the natural reading — it
+ * returns on the first match. Requiring all of them is still expressible, and more legibly: separate
+ * `role()` calls become separate requirements, and a policy's requirements are ANDed. That is also how a
+ * controller-level `@Authorize` combines with a method-level one, so the two levels keep tightening
+ * rather than widening each other.
  */
 export class RoleHandler extends AuthzRequirementHandler<RoleRequirement> {
   get kind(): string {

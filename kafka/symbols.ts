@@ -6,7 +6,7 @@ export const DEFAULT_INSTANCE = 'default'
  *
  * - `KAFKA_HANDLER` labels every `@KafkaHandler` class (discovery, like the HTTP `CONTROLLER` label).
  * - `KAFKA_CONTAINER` labels every per-instance `KafkaListenerContainer` so the plugin can start/stop them all.
- * - `KAFKA_INSTANCE` tags a handler class with the name of the instance it belongs to (Spring's `containerFactory`).
+ * - `KAFKA_INSTANCE` tags a handler class with the name of the instance it belongs to.
  */
 export const Keys = {
   KAFKA_HANDLER: Symbol.for('@caffeinejs/kafka:handler'),

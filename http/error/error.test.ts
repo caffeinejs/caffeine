@@ -143,7 +143,7 @@ describe('error handler dispatch', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Integration — per-controller @Catch methods (Spring @ExceptionHandler style).
+// Integration — per-controller @Catch methods.
 // The global NotFoundHandler / CatchAllHandler above act as the fallback layer.
 // ---------------------------------------------------------------------------
 

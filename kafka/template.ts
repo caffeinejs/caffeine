@@ -12,9 +12,8 @@ export interface SendOptions {
 }
 
 /**
- * A thin, Spring-`KafkaTemplate`-style producer wrapper. The underlying platformatic `Producer` is created
- * lazily on first send, so constructing the template (which happens eagerly at container init) never opens a
- * broker connection.
+ * A thin producer wrapper. The underlying platformatic `Producer` is created lazily on first send, so
+ * constructing the template (which happens eagerly at container init) never opens a broker connection.
  */
 export class KafkaTemplate {
   readonly #runtime: KafkaRuntime

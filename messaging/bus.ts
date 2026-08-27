@@ -5,9 +5,9 @@ import { isMessage, type Message, message as toMessage } from './message.js'
 import type { MessagingRuntime } from './runtime.js'
 
 /**
- * The imperative publish API — Spring Cloud Stream's `StreamBridge` analogue. `send('binding', payload)` resolves
- * the outbound binding, lazily opens (and caches) that binding's producer on its binder, and publishes. Injected
- * wherever a component needs to produce, and handed to `@Consume` handlers via `ctx.send(...)`.
+ * The imperative publish API. `send('binding', payload)` resolves the outbound binding, lazily opens (and caches)
+ * that binding's producer on its binder, and publishes. Injected wherever a component needs to produce, and
+ * handed to `@Consume` handlers via `ctx.send(...)`.
  */
 export class MessageBus {
   readonly #runtime: MessagingRuntime

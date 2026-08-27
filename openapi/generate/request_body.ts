@@ -26,8 +26,7 @@ const NAMED_FILE_PICKERS = new Set(['multipart:file', 'multipart:streamfile', 'm
  *
  * Two sources, in order: the authored `@Schema({ body })`, and — when there is no body schema but the handler
  * takes file pickers — a synthesized `multipart/form-data` schema built from the field names those pickers
- * ask for. The synthesis is the point: an upload route is fully described by `@Params([$p.file('file')])`,
- * where NestJS needs a hand-written `@ApiConsumes` plus an `@ApiBody` restating the field.
+ * ask for. The synthesis is the point: an upload route is fully described by `@Params([$p.file('file')])`.
  */
 export function deriveRequestBody(
   route: Route<unknown>,

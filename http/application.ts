@@ -106,9 +106,8 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   /**
    * Registers authentication — and, with it, authorization — at `onRequest`.
    *
-   * The two are one middleware and one call because ordering them is the mistake worth designing out: in
-   * ASP.NET Core, `UseAuthorization` before `UseAuthentication` authorizes an identity nothing has
-   * established yet. There is deliberately no `useAuthorization()` to get wrong.
+   * The two are one middleware and one call because ordering them is the mistake worth designing out.
+   * There is deliberately no `useAuthorization()` to get wrong.
    *
    * An application with protected routes that never calls this fails at start-up rather than serving them
    * unguarded.

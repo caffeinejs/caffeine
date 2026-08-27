@@ -30,10 +30,9 @@ const DECOY_PASSWORD = 'caffeine.credentials.decoy'
 /**
  * Verifies username/password credentials and produces a {@link Principal}.
  *
- * The ASP.NET SignInManager role in Caffeine's split: {@link UserProvider} looks the user up, this
- * service runs {@link PasswordHasher} verification and builds the principal. A login endpoint calls
- * {@link attempt} and, on success, persists a session via `AuthenticationService.persist` (cookie
- * scheme) or issues a token.
+ * {@link UserProvider} looks the user up, this service runs {@link PasswordHasher} verification and
+ * builds the principal. A login endpoint calls {@link attempt} and, on success, persists a session
+ * via `AuthenticationService.persist` (cookie scheme) or issues a token.
  */
 export class CredentialsService {
   readonly #provider: UserProvider
@@ -66,10 +65,9 @@ export class CredentialsService {
    * hasher's — the moment a password can be transparently upgraded, because it is the only point at which
    * the plaintext is in hand.
    *
-   * ASP.NET's `PasswordVerificationResult.SuccessRehashNeeded` exists for this, and `PasswordHasher`
-   * already implements `needsRehash`; nothing called it, so raising the scrypt cost meant either leaving
-   * every existing user on the old parameters forever or forcing a reset. A login endpoint acting on this
-   * re-hashes and persists:
+   * {@link PasswordHasher} already implements `needsRehash`; nothing called it, so raising the scrypt
+   * cost meant either leaving every existing user on the old parameters forever or forcing a reset. A
+   * login endpoint acting on this re-hashes and persists:
    *
    * ```ts
    * const result = await creds.attemptWithRehash(email, password)
@@ -102,7 +100,7 @@ export class CredentialsService {
     }
   }
 
-  /** Alias of {@link attempt}, mirroring ASP.NET's `CheckPasswordSignInAsync` naming. */
+  /** Alias of {@link attempt}. */
   verifyCredentials(identifier: string, password: string): Promise<Principal | null> {
     return this.attempt(identifier, password)
   }

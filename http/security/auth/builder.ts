@@ -666,7 +666,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     // Registering several OAuth strategies without a Forward default used to be rejected outright, on the
     // grounds that the pipeline authenticates the default scheme only and every other strategy would be
     // dead weight. That stopped being true once a route could name its own schemes: `/login/google` and
-    // `/login/github`, each naming one, is a perfectly good configuration and ASP.NET has no such rule.
+    // `/login/github`, each naming one, is a perfectly good configuration.
     //
     // The underlying hazard is still real, so it is still reported — just as what it actually is, a
     // strategy nothing can reach, rather than as a demand for a particular default. Forward remains the

@@ -242,8 +242,7 @@ describe('per-route authentication schemes', () => {
 
   it('merges the identities of every scheme the caller satisfied', async () => {
     // First-wins made this unreachable: whichever scheme the decorator listed first won and the other
-    // identity was discarded, so a policy could never see claims asserted by both. ASP.NET folds them with
-    // SecurityHelper.MergeUserPrincipal for exactly this reason.
+    // identity was discarded, so a policy could never see claims asserted by both.
     @Authorize({ schemes: ['Default', 'Basic'] })
     @Controller('/both-schemes')
     class BothSchemesController {

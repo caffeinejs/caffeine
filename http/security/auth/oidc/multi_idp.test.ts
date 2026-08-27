@@ -210,7 +210,7 @@ describe('startup validation', () => {
 
   // Previously rejected outright, on the grounds that only the default scheme is authenticated. That
   // stopped being true once a route could name its own schemes — `/login/google` and `/login/okta`, each
-  // naming one, is a working configuration and ASP.NET has no such rule. A strategy nothing reaches is
+  // naming one, is a working configuration. A strategy nothing reaches is
   // still reported, but as a start-up warning from the configurer that can actually see the routes.
   it('T-MULTI-07: accepts several OIDC strategies without a Forward default', async () => {
     await expect(configure(b => {

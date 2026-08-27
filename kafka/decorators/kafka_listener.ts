@@ -17,7 +17,7 @@ export interface KafkaListenerOptions {
 
 /**
  * Marks a method as a Kafka topic listener — invoked once per message on the subscribed topic(s). The class
- * must be decorated with `@KafkaHandler`. Mirrors Spring's `@KafkaListener`.
+ * must be decorated with `@KafkaHandler`.
  *
  * ```ts
  * @KafkaListener({ topic: 'orders', groupId: 'orders-service' })

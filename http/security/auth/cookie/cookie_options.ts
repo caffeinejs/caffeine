@@ -51,8 +51,7 @@ export interface CookieAuthenticationOptions {
    * Return the principal (or a refreshed replacement) to accept, `null` to reject and clear the cookie.
    * The sealed cookie is self-contained, so without this nothing that happens server-side — a password
    * change, a revoked account, a role removal — reaches a session already issued until it expires on its
-   * own. ASP.NET's `CookieAuthenticationEvents.OnValidatePrincipal`; its security-stamp validation is an
-   * implementation of exactly this hook.
+   * own.
    *
    * It runs on every authenticated request, so it should be cheap: a version/stamp comparison, not a full
    * user load.

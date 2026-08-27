@@ -8,11 +8,11 @@ import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 import { AuthorizationService } from './service.js'
 
 export interface AuthorizationOptions {
-  /** What a bare `@Authorize` means. ASP.NET's `AuthorizationOptions.DefaultPolicy`. */
+  /** What a bare `@Authorize` means. */
   authorizeDecoratorDefaultPolicy: AuthzPolicy
   /**
    * Applied to routes that carry no `@Authorize` / `@Roles` at all. Unset by default, so such routes are
-   * open. ASP.NET's `AuthorizationOptions.FallbackPolicy`.
+   * open.
    */
   fallbackPolicy?: AuthzPolicy
 }
@@ -72,7 +72,7 @@ export class AuthorizationBuilder implements Service {
    * deliberate posture rather than something a dependency bump introduces. Turning it on is the difference
    * between "a route is public unless someone remembered to protect it" and "a route is protected unless
    * someone declared it public" — the second is the only one where forgetting is safe. `@AllowAnonymous`
-   * is the opt-out, exactly as `[AllowAnonymous]` is for ASP.NET's `FallbackPolicy`.
+   * is the opt-out.
    *
    * It does not affect decorated routes: those already state their own rule, and a bare `@Authorize`
    * continues to mean {@link authorizeDecoratorDefaultPolicy}.

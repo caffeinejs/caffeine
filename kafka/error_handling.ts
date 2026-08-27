@@ -83,8 +83,7 @@ export interface DeadLetterOptions {
 
 /**
  * A recoverer that republishes the failed record to a dead-letter topic (default `${topic}.DLT`) via the
- * instance's {@link KafkaTemplate}, stamping exception + provenance headers. Mirrors Spring's
- * `DeadLetterPublishingRecoverer`.
+ * instance's {@link KafkaTemplate}, stamping exception + provenance headers.
  */
 export function deadLetterRecoverer(template: KafkaTemplate, options: DeadLetterOptions = {}): KafkaRecoverer {
   return async (record, error, ctx) => {

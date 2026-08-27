@@ -23,7 +23,7 @@ interface SessionPayload {
 }
 
 /**
- * Stateful cookie session scheme (ASP.NET Cookie authentication).
+ * Stateful cookie session scheme.
  *
  * `persist` is sign-in (seal the principal into an encrypted cookie), `revoke` is sign-out (clear it),
  * `authenticate` reads and unseals the cookie back into a principal. A login endpoint verifies
@@ -91,8 +91,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * The sealed cookie is self-contained, so between issue and expiry the server has no say in whether it
    * still stands: a password change, a revoked account or a role removal does not reach a session already
    * in the wild, and the default lifetime is eight hours. This is the hook that lets a deployment answer
-   * "is this session still good?" per request — ASP.NET's `CookieAuthenticationEvents.OnValidatePrincipal`,
-   * which exists for exactly this and is what its security stamp is built on.
+   * "is this session still good?" per request.
    *
    * Returning a principal replaces the one from the cookie, so the hook doubles as the refresh path for a
    * session whose claims have gone stale. Returning `null` rejects it.
@@ -103,7 +102,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   }
 
   override async persist(ctx: Context, ticket: AuthenticationTicket): Promise<void> {
-    // ASP.NET's name for this flag, and the only one now: keeping a `rememberMe` alias that the type
+    // `isPersistent` is the only name for this flag: keeping a `rememberMe` alias that the type
     // rejects but the runtime honours would mean the compiler and the behaviour disagree.
     const rememberMe = ticket.properties?.isPersistent === true
 
@@ -139,8 +138,8 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    *
    * The negotiation matters here for the same reason it does on the OAuth strategies: a `fetch` follows a
    * 302 itself and resolves with the login page's HTML and a 200, so the caller cannot tell it was not
-   * signed in — it just gets a document where it expected JSON. ASP.NET's `OnRedirectToLogin` default does
-   * this too, sniffing `X-Requested-With`; Fetch Metadata is the modern answer to the same question.
+   * signed in — it just gets a document where it expected JSON. Fetch Metadata is the answer to that
+   * question.
    */
   override async challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
     if (this.options.onChallenge) {
@@ -171,8 +170,8 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   /**
    * The login URL, carrying where to come back to.
    *
-   * ASP.NET appends `ReturnUrlParameter` to `LoginPath` for the same reason: without it, signing in always
-   * lands on the application root and the page the user was actually trying to reach is lost.
+   * Without a return URL on the login path, signing in always lands on the application root and the page
+   * the user was actually trying to reach is lost.
    *
    * The target is an explicit `redirectURI` when the caller supplied one, otherwise the URL the challenge
    * interrupted. Either way it is validated as a same-origin absolute path before being echoed back —
@@ -195,8 +194,8 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * Sends an authenticated-but-not-permitted caller to `accessDeniedPath`, or answers 403.
    *
    * Distinct from `challenge`: the caller proved who they are and it did not help, so pointing them back
-   * at the login page invites a loop where signing in again changes nothing. ASP.NET splits the two the
-   * same way, with `AccessDeniedPath` alongside `LoginPath`.
+   * at the login page invites a loop where signing in again changes nothing. Challenge and forbid are
+   * therefore separate, with `accessDeniedPath` alongside `loginPath`.
    */
   override async forbid(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     if (this.options.onForbid) {

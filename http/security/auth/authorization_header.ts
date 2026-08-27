@@ -4,7 +4,7 @@
  * The scheme token is matched case-insensitively, because RFC 7235 §2.1 defines it that way and clients
  * act on it: `bearer <token>` and `BEARER <token>` are as valid on the wire as `Bearer <token>`, and a
  * case-sensitive `startsWith` rejects them as though no credential had been presented at all — a 401 with
- * nothing to point at. ASP.NET compares with `StringComparison.OrdinalIgnoreCase` throughout.
+ * nothing to point at. Comparison is ordinal and case-insensitive.
  *
  * Returns `undefined` when the header is absent or names a different scheme, which callers treat as "no
  * credential offered" rather than as a failure — another scheme may still authenticate this request. An

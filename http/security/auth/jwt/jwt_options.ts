@@ -11,7 +11,7 @@ export interface JWTAuthenticationOptions {
   /**
    * Includes the validation failure's description in the `WWW-Authenticate` challenge.
    *
-   * RFC 6750 §3 `error_description`. On by default, matching ASP.NET's `IncludeErrorDetails`: the text
+   * RFC 6750 §3 `error_description`. On by default: the text
    * describes the *token* the caller presented ("exp claim timestamp check failed"), which they are
    * already in a position to know, and without it a client cannot tell a expired token from a malformed
    * one. Turn it off where even that is more than an unauthenticated caller should learn.
@@ -169,9 +169,7 @@ export class JWTAuthenticationOptionsBuilder {
     // secret — the default — that admits every token signed by anything else holding the same key: a
     // sibling service, a different tenant, a token issued for an unrelated audience.
     //
-    // ASP.NET refuses the same configuration: `TokenValidationParameters` defaults `ValidateIssuer` and
-    // `ValidateAudience` to true and throws (IDX10204 / IDX10206) when the expected value is missing, so
-    // opting out has to be written down. This is that, at build time instead of first request.
+    // This is refused at build time instead of first request, so opting out has to be written down.
     const jwt = this.#options.jwtOptions
     if (!this.#anyIssuer && jwt?.issuer === undefined) {
       throw new Error(

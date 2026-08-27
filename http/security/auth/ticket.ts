@@ -3,9 +3,9 @@ import type { Principal } from '../index.js'
 /**
  * State that travels with a sign-in, a challenge, or a sign-out.
  *
- * ASP.NET's `AuthenticationProperties`, and it exists for the same reason: the caller frequently knows
- * something about the operation that the handler cannot work out for itself. Where to send the user after
- * they sign in, whether this session should outlive the browser, when it should expire regardless.
+ * The caller frequently knows something about the operation that the handler cannot work out for itself.
+ * Where to send the user after they sign in, whether this session should outlive the browser, when it
+ * should expire regardless.
  *
  * The interface has always accepted a `properties` bag on `challenge`/`forbid`/`revoke`, but nothing read
  * it — every handler narrowed the parameter away — so the only way to express "come back to /reports after

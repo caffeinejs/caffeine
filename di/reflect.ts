@@ -22,7 +22,6 @@ interface Reflect {
 
   /**
    * Returns the member-level annotation value if present, falling back to the class-level value.
-   * Equivalent to NestJS's `Reflector.getAllAndOverride`.
    *
    * @example
    * ```ts
@@ -38,7 +37,6 @@ interface Reflect {
 
   /**
    * Concatenates class-level and member-level annotation arrays — class values first.
-   * Equivalent to NestJS's `Reflector.getAllAndMerge`.
    *
    * @example
    * ```ts

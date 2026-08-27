@@ -16,9 +16,8 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
    * Why this request's token was rejected, so `challenge()` can name it.
    *
    * The handler is a singleton and the challenge runs later in the same request than the authenticate
-   * that failed, so the reason has to be parked somewhere keyed by the request. ASP.NET keeps the
-   * equivalent on the handler too — its handlers are request-scoped, so a field suffices; here the
-   * `Context` is the request identity and a `WeakMap` lets the entry die with it.
+   * that failed, so the reason has to be parked somewhere keyed by the request. The `Context` is the
+   * request identity and a `WeakMap` lets the entry die with it.
    */
   readonly #failures: WeakMap<Context, Error> = new WeakMap()
 
@@ -65,8 +64,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
    * A bare `Bearer` says only "credentials required", which is indistinguishable from "your token was
    * fine but something else went wrong" — the client cannot tell whether to refresh, re-authenticate, or
    * give up. When this request already tried and failed to validate a token, that reason is named:
-   * `error="invalid_token"` plus, if `includeErrorDetails` is on, the underlying description. ASP.NET's
-   * `JwtBearerHandler.HandleChallengeAsync` builds the same header from the same state.
+   * `error="invalid_token"` plus, if `includeErrorDetails` is on, the underlying description.
    *
    * Nothing is invented: the parameters appear only when this scheme actually failed in this request. A
    * caller who presented no credential at all gets the bare challenge, since there is no token to fault.

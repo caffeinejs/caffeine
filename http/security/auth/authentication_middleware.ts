@@ -11,10 +11,8 @@ import type { AuthenticationService } from './service.js'
  * Authenticates the request and, when the route is protected, authorizes it — in that order, in one
  * middleware.
  *
- * Authorization is not separately registrable on purpose. ASP.NET Core exposes `UseAuthentication` and
- * `UseAuthorization` as two calls the user must order correctly, and getting them the wrong way round
- * produces an application that authorizes an identity nothing has established yet. Folding them together
- * removes the ordering, and with it the mistake.
+ * Authorization is not separately registrable on purpose. Folding them together removes the ordering,
+ * and with it the mistake of authorizing an identity nothing has established yet.
  *
  * Registered at `onRequest` (see `useAuthenticationAndAuthorization`), before the body is parsed or
  * validated: an unauthenticated caller must be answered 401, not a 400 describing the route's schema.
@@ -71,10 +69,10 @@ export class Authentication extends Middleware {
 
     // A route that names schemes must be challenged by those, not by the application default. Otherwise a
     // Basic-protected route in a browser-first application answers with the default scheme's redirect,
-    // which an API client can neither follow nor satisfy. Every named scheme gets to contribute, as
-    // ASP.NET's authorization middleware does over `policy.AuthenticationSchemes`: each writes its own
-    // `WWW-Authenticate`, so a route accepting Basic or Bearer advertises both instead of whichever the
-    // decorator happened to list first. An unnamed route passes `undefined` and gets the default.
+    // which an API client can neither follow nor satisfy. Every named scheme gets to contribute: each
+    // writes its own `WWW-Authenticate`, so a route accepting Basic or Bearer advertises both instead of
+    // whichever the decorator happened to list first. An unnamed route passes `undefined` and gets the
+    // default.
     const challenged: Array<string | undefined> = schemes?.length ? [...schemes] : [undefined]
 
     if (!ctx.user.authenticated) {

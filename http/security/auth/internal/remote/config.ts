@@ -52,9 +52,6 @@ export function challengeHeaders(ctx: {
  * absence, which is real: browsers omit Fetch Metadata outside secure contexts, so plain-http development
  * depends on the fallback. Consulting `Accept` unconditionally instead would redirect htmx and any `fetch`
  * asking for an HTML fragment, both of which send `Sec-Fetch-Mode: cors` alongside `Accept: text/html`.
- *
- * ASP.NET negotiates the same way in `CookieAuthenticationEvents.OnRedirectToLogin`, though it sniffs the
- * legacy `X-Requested-With` header, which `fetch` never sends.
  */
 export function shouldRedirectChallenge(mode: ChallengeMode, headers: ChallengeRequestHeaders): boolean {
   if (mode !== 'auto') {

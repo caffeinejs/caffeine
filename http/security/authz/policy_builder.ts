@@ -12,7 +12,7 @@ export class PolicyBuilder {
   }
 
   /**
-   * Requires **any one** of `roles`, matching ASP.NET's `RequireRole`.
+   * Requires **any one** of `roles`.
    *
    * Call it twice to require both: each call is its own requirement and requirements are ANDed.
    * `.role('Admin', 'Manager')` is "admin or manager"; `.role('Admin').role('Manager')` is "both".

@@ -53,9 +53,8 @@ describe('RoleHandler', () => {
 
   // `.every`, not `.some` — every named role is required. The distinction is the difference between an
   // authorization rule and a much weaker one, and it was never exercised with more than one role.
-  // ASP.NET's RolesAuthorizationRequirement returns on the first role that matches, and
-  // `[Authorize(Roles = "Admin,Manager")]` reads as "admin or manager". Requiring both is expressed as
-  // two requirements, which the policy evaluator ANDs — see the PolicyBuilder test below.
+  // Requiring both is expressed as two requirements, which the policy evaluator ANDs — see the
+  // PolicyBuilder test below.
   it('requires ANY of the roles named on one requirement', async () => {
     const both = user([['roles', ['admin', 'staff']]])
     const one = user([['roles', ['admin']]])

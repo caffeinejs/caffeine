@@ -7,8 +7,7 @@ import type { SecurityRequirementObject, SecuritySchemeObject } from '../spec/sp
  *
  * The descriptors come from http's authentication builder, which records how each scheme expects credentials
  * at the moment it constructs the handler. Nothing here restates configuration: the `.authentication(...)`
- * call that registers a scheme is its single declaration, where NestJS wants the same scheme described a
- * second time in its `DocumentBuilder`.
+ * call that registers a scheme is its single declaration.
  *
  * Explicit `.securityScheme(...)` declarations are merged last, so a user can always override or add one the
  * framework cannot describe — notably a scheme registered through the bare `addStrategy`, which carries no
@@ -128,7 +127,7 @@ function obtainedBy(descriptor: AuthSchemeDescriptor): string | undefined {
  * `@AllowAnonymous` produces an empty array, which is the specification's way of saying "no security" and the
  * only way to opt a single route out of a document-level requirement. Everything else comes from what
  * `@Authorize` / `@Roles` already stated, so a guarded route is documented as guarded without anyone
- * repeating themselves — NestJS needs `@ApiBearerAuth()` on every one.
+ * repeating themselves.
  */
 export function deriveSecurity(
   route: Route<unknown>,

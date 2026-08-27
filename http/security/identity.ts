@@ -111,9 +111,6 @@ export class Principal {
  * scheme and a role asserted by another. Taking only the first success instead would make the outcome
  * depend on declaration order and put the two identities permanently out of reach of each other.
  *
- * ASP.NET does the same fold in `SecurityHelper.MergeUserPrincipal`, which the authorization middleware
- * runs over `policy.AuthenticationSchemes`.
- *
  * The first principal is the one that survives as the container, and identities are appended in the order
  * their schemes were named, so `findFirst` resolves ties towards the earlier scheme.
  */
@@ -145,9 +142,8 @@ class AnonymousUser extends Principal {
  *
  * A new instance per call rather than a shared singleton. `AnonymousUser.addIdentity` throws, so one
  * instance is safe today, but it would be a single mutable object standing in for every unauthenticated
- * request in the process — and the safety rests entirely on that one override staying in place. ASP.NET
- * constructs `new ClaimsPrincipal(new ClaimsIdentity())` per request for the same reason. Allocating an
- * empty object on a path that is already doing I/O is not a cost worth that coupling.
+ * request in the process — and the safety rests entirely on that one override staying in place.
+ * Allocating an empty object on a path that is already doing I/O is not a cost worth that coupling.
  */
 export function newAnonymousUser(): Principal {
   return new AnonymousUser()

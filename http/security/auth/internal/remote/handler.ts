@@ -324,8 +324,7 @@ export abstract class RemoteAuthenticationHandler<
    * Suffixed with the flow's own `state` so concurrent sign-ins do not collide. With a single fixed name,
    * opening the provider in two tabs meant the second challenge overwrote the first's cookie, and the
    * first callback then died with "state mismatch" — a flow the user started, killed by an unrelated one.
-   * ASP.NET names its correlation cookie `.AspNetCore.Correlation.{scheme}.{correlationId}` for exactly
-   * this, and the `state` value is already the per-flow random this handler mints.
+   * The `state` value is already the per-flow random this handler mints.
    *
    * `state` is base64url, which is within the cookie-name charset, so the composed name stays valid —
    * including under the `__Host-` prefix, which constrains attributes rather than the name.

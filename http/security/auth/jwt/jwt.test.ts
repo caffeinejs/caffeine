@@ -322,7 +322,7 @@ describe('JWTAuthenticationHandler', () => {
   describe('issuer and audience are required', () => {
     // `jose` skips a check whose expected value is undefined, so an unconfigured scheme verifies the
     // signature and nothing else — with a shared symmetric secret that admits every sibling service's
-    // tokens. ASP.NET refuses the same configuration rather than defaulting it open.
+    // tokens. The builder refuses that configuration rather than defaulting it open.
     it('refuses to build without an issuer', () => {
       expect(() => new JWTAuthenticationOptionsBuilder().secret(SECRET).audience('api').build())
         .toThrow(/issuer/)

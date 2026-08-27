@@ -7,9 +7,8 @@ import type { SchemaObject } from '../spec/spec.js'
  * Collects the schemas a document references and hoists the named ones into `components.schemas`.
  *
  * Naming comes from a schema's own `$id` and nothing else. That is the whole contract: a schema declared with
- * an `$id` of `Pet` produces `components.schemas.Pet`, and every use of it becomes a `$ref`. It avoids the
- * parallel registry NestJS needs (`@ApiExtraModels` plus `getSchemaPath()`), because the schema already had a
- * place to carry its name and nobody was using it.
+ * an `$id` of `Pet` produces `components.schemas.Pet`, and every use of it becomes a `$ref`, because the
+ * schema already had a place to carry its name and nobody was using it.
  */
 export class ComponentRegistry {
   readonly #schemas = new Map<string, SchemaObject>()
