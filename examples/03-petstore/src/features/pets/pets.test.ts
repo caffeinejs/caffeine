@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { WebApplication } from "@caffeinejs/http";
 import {
   ErrFetchFailed,
-  newRequest,
+  newReq,
   newURL,
   TestContainer,
   typedClient,
@@ -156,7 +156,7 @@ describe("pets feature (via @caffeinejs/testing)", () => {
 
   async function createPet(dto: CreatePetDTO = validPet): Promise<PetDTO> {
     return client.create(
-      newRequest().headers(sessionHeader(session)).json(dto).build(),
+      newReq().headers(sessionHeader(session)).json(dto).build(),
     );
   }
 
@@ -185,7 +185,7 @@ describe("pets feature (via @caffeinejs/testing)", () => {
   // answered 401. The refusal is what matters; the shape of it follows from the scheme.
   it("refuses create without a session (write:pets)", async () => {
     await expect(
-      client.create(newRequest().json(validPet).build()),
+      client.create(newReq().json(validPet).build()),
     ).rejects.toMatchObject({ status: 401 });
   });
 
@@ -215,7 +215,7 @@ describe("pets feature (via @caffeinejs/testing)", () => {
     const created = await createPet();
 
     const updated = await client.update(
-      newRequest()
+      newReq()
         .path(newURL("/pets/:id").param("id", created.id).build())
         .method("PUT")
         .headers(sessionHeader(session))
@@ -231,7 +231,7 @@ describe("pets feature (via @caffeinejs/testing)", () => {
     const removed = await client.remove(
       new Request(
         newURL("/pets/:id").param("id", created.id).build(),
-        newRequest().method("DELETE").headers(sessionHeader(session)).build(),
+        newReq().method("DELETE").headers(sessionHeader(session)).build(),
       ),
     );
     expect(removed).toBeUndefined();
@@ -247,7 +247,7 @@ describe("pets feature (via @caffeinejs/testing)", () => {
     await createPet();
 
     const collection = await client.search(
-      newRequest()
+      newReq()
         .json({ criteria: { species: ["DOG"] } })
         .build(),
     );

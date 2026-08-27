@@ -6,7 +6,7 @@ import { URLBuilder } from './url_builder.js'
  * parts ({@link RequestInitBuilder.path}/{@link RequestInitBuilder.query}) consumed only by
  * {@link RequestInitBuilder.toRequest}.
  */
-export function newRequest(): RequestInitBuilder {
+export function newReq(): RequestInitBuilder {
   return new RequestInitBuilder()
 }
 

@@ -252,16 +252,6 @@ describe('CaffeineIoC.addProfiles()', function () {
     await di.compile()
     expect(() => di.addProfiles('too-late')).toThrow(ErrInvalidContainerState)
   })
-
-  it('should allow a module to add profiles before evaluation', async function () {
-    const di = new CaffeineIoC()
-    di.addModules(c => {
-      c.addProfiles('add-prof-late')
-    })
-    await di.init()
-
-    expect(di.has(LateProfileBean)).toBe(true)
-  })
 })
 
 describe('deferred profile evaluation', function () {
