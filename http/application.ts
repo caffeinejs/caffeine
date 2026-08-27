@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import { BaseApplication, HealthIndicator, type ApplicationInit, type Service, type ShutdownOptions } from '@caffeinejs/std'
+import { BaseApplication, type ApplicationInit, type Service, type ShutdownOptions } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Router } from './route.js'
 import { Feats } from './feats.js'
@@ -14,7 +14,7 @@ import type { OIDCMeta } from './security/auth/oidc/index.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
 import { ServerOptions, kServerOptions } from './server/index.js'
-import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, type HealthOptions } from './health/index.js'
+import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, loadHealthIndicators, type HealthOptions } from './health/index.js'
 import type { HealthServices } from './health/services.js'
 
 export interface AdapterIn<R> {
@@ -225,7 +225,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   #buildHealth(): HealthServices {
     const options = this.container.get<HealthOptions>(kHealthOptions)
     const availability = this.availability
-    const registry = new HealthRegistry(this.container.getManyOptional(HealthIndicator), options)
+    const registry = new HealthRegistry(loadHealthIndicators(this.container), options)
 
     return { options, availability, registry, probes: new ProbeEndpoint(availability, registry, options) }
   }

@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { Scopes, type Ctor } from '@caffeinejs/di'
 import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/std'
 import { Authorize, Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { ErrHealthIndicatorNotSingleton } from '../health/errors.js'
 import type { HealthBuilder } from '../health/health_builder.js'
 import type { WebApplication } from '../application.js'
 
@@ -30,11 +32,28 @@ class UpIndicator extends HealthIndicator {
   }
 }
 
-async function start(configure?: (health: HealthBuilder<unknown>) => void): Promise<WebApplication> {
+function bindIndicators(app: WebApplication, ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>): void {
+  for (const indicator of indicators) {
+    if (typeof indicator === 'function') {
+      app.container.bind(indicator).toSelf().extends(HealthIndicator)
+    } else {
+      app.container
+        .bind(indicator.constructor as Ctor<HealthIndicator>)
+        .toValue(indicator)
+        .extends(HealthIndicator)
+    }
+  }
+}
+
+async function start(
+  configure?: (health: HealthBuilder<unknown>) => void,
+  ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>
+): Promise<WebApplication> {
   const app = createWebApplication(fastifyAdapterFactory(fastify()))
     .health(configure ?? (() => {}))
     .build()
 
+  bindIndicators(app, ...indicators)
   await app.run()
 
   return app
@@ -89,7 +108,7 @@ describe('health probes', () => {
   })
 
   it('fails readiness while keeping liveness up when a critical indicator is down', async () => {
-    const app = await start(h => h.indicator(DownIndicator))
+    const app = await start(undefined, DownIndicator)
 
     try {
       const ready = await probe(app, '/readyz')
@@ -106,7 +125,7 @@ describe('health probes', () => {
   })
 
   it('stays ready when a non-critical indicator is down', async () => {
-    const app = await start(h => h.indicator(DegradedIndicator).indicator(UpIndicator))
+    const app = await start(undefined, DegradedIndicator, UpIndicator)
 
     try {
       expect((await probe(app, '/readyz')).statusCode).toBe(200)
@@ -115,11 +134,8 @@ describe('health probes', () => {
     }
   })
 
-  it('discovers an indicator bound directly on the container', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).health().build()
-    app.container.bind(DownIndicator).toSelf().extends(HealthIndicator)
-
-    await app.run()
+  it('discovers an indicator bound on the container', async () => {
+    const app = await start(undefined, DownIndicator)
 
     try {
       expect((await probe(app, '/readyz')).statusCode).toBe(503)
@@ -128,13 +144,24 @@ describe('health probes', () => {
     }
   })
 
-  it('accepts an indicator instance', async () => {
-    const app = await start(h => h.indicator(new DownIndicator()))
+  it('discovers an indicator instance bound on the container', async () => {
+    const app = await start(undefined, new DownIndicator())
 
     try {
       expect((await probe(app, '/readyz')).statusCode).toBe(503)
     } finally {
       await app.close()
+    }
+  })
+
+  it('rejects a non-singleton indicator at ready', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).health().build()
+    app.container.bind(DownIndicator).toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator)
+
+    try {
+      await expect(app.ready()).rejects.toThrow(ErrHealthIndicatorNotSingleton)
+    } finally {
+      await app.close().catch(() => undefined)
     }
   })
 
@@ -166,7 +193,7 @@ describe('health probes', () => {
 
   describe('verbose', () => {
     it('is ignored unless enabled', async () => {
-      const app = await start(h => h.indicator(UpIndicator))
+      const app = await start(undefined, UpIndicator)
 
       try {
         expect((await probe(app, '/readyz?verbose')).body).toBe('ok')
@@ -176,7 +203,7 @@ describe('health probes', () => {
     })
 
     it('lists the checks when enabled', async () => {
-      const app = await start(h => h.verbose().indicator(UpIndicator).indicator(DownIndicator))
+      const app = await start(h => h.verbose(), UpIndicator, DownIndicator)
 
       try {
         const response = await probe(app, '/readyz?verbose')
@@ -193,7 +220,7 @@ describe('health probes', () => {
 
   describe('exclude', () => {
     it('is ignored unless enabled, so a query string cannot make readiness lie', async () => {
-      const app = await start(h => h.indicator(DownIndicator))
+      const app = await start(undefined, DownIndicator)
 
       try {
         expect((await probe(app, '/readyz?exclude=db')).statusCode).toBe(503)
@@ -203,7 +230,7 @@ describe('health probes', () => {
     })
 
     it('skips the named indicators when enabled', async () => {
-      const app = await start(h => h.exclude().indicator(DownIndicator).indicator(UpIndicator))
+      const app = await start(h => h.exclude(), DownIndicator, UpIndicator)
 
       try {
         expect((await probe(app, '/readyz?exclude=db')).statusCode).toBe(200)

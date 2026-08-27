@@ -1,5 +1,6 @@
+import { Injectable } from "@caffeinejs/di";
 import { HealthIndicator, type HealthReport, up } from "@caffeinejs/std";
-import type { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 /**
  * Reports whether the database is reachable, on the **readiness** probe only.
@@ -20,6 +21,7 @@ import type { PrismaClient } from "@prisma/client";
  * Nothing here belongs on `/livez`. Restarting the process does not repair a database, it only removes a
  * consumer that would otherwise reconnect on its own.
  */
+@Injectable([PrismaClient])
 export class DatabaseHealth extends HealthIndicator {
   readonly name = "database";
 

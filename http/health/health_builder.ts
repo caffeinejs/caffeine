@@ -1,6 +1,4 @@
-import { Scopes, type Ctor } from '@caffeinejs/di'
 import {
-  HealthIndicator,
   kServiceConfigure,
   kServiceDeclare,
   type DeclareKit,
@@ -34,8 +32,9 @@ import {
  * in the `CODE` band, and the feature reads the merged result. So `h.drainDelay('10s')` is a **default**:
  * `HEALTH__DRAINDELAY=30s` or `--health.drainDelay=30s` overrides it.
  *
- * The exceptions are the members that cannot be configuration at all: {@link dispatcher} is a function and
- * {@link indicator} takes classes and instances. Those stay on the builder and are merged in afterwards.
+ * The exception is {@link dispatcher}: a function cannot live in a configuration tree, so it stays on the
+ * builder and is merged in afterwards. Health indicators are not configured here — they are container-managed
+ * beans discovered through `HealthIndicator`.
  *
  * A {@link Service}: its {@link Service.configure} binds {@link HealthOptions} under {@link kHealthOptions}. The
  * bound object is live, like every other configuration in the framework — the probe budgets and the
@@ -48,7 +47,6 @@ import {
 export class HealthBuilder<C = unknown> implements Service {
   readonly #config: HealthConfig = {}
   #dispatcher: SignalDispatcher | undefined
-  readonly #indicators: Array<HealthIndicator | Ctor<HealthIndicator>> = []
   #selector: ((c: ConfigHandle<C>) => HealthConfig) | undefined
   #options: ConfigSlice<HealthOptions> | undefined
 
@@ -137,15 +135,6 @@ export class HealthBuilder<C = unknown> implements Service {
   }
 
   /**
-   * Registers a health indicator. Equivalent to binding it yourself with `.extends(HealthIndicator)`; both are
-   * discovered the same way. Code-only, like {@link dispatcher}.
-   */
-  indicator(indicator: HealthIndicator | Ctor<HealthIndicator>): this {
-    this.#indicators.push(indicator)
-    return this
-  }
-
-  /**
    * Places the health settings elsewhere in the configuration tree, e.g. `h.config(c => c.app.health)`.
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
@@ -171,17 +160,6 @@ export class HealthBuilder<C = unknown> implements Service {
   }
 
   [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    for (const indicator of this.#indicators) {
-      if (typeof indicator === 'function') {
-        kit.container.bind(indicator).toSelf().lifetime(Scopes.SINGLETON).extends(HealthIndicator)
-      } else {
-        kit.container
-          .bind(indicator.constructor as Ctor<HealthIndicator>)
-          .toValue(indicator)
-          .extends(HealthIndicator)
-      }
-    }
-
     kit.feats.toggleHealth()
 
     kit.container

@@ -18,14 +18,19 @@ export interface HealthReport {
 }
 
 /**
- * A dependency check contributed to a probe. Extend it, bind it with `.extends(HealthIndicator)`, and the HTTP
- * application discovers it through `container.getManyOptional(HealthIndicator)` — the same polymorphic pattern
- * `FeatureConfigurer` uses.
+ * A dependency check contributed to a probe. Extend it and bind the class as a singleton container bean —
+ * `@Injectable()` auto-extends the parent, or bind with `.extends(HealthIndicator)` / `@Extends()`. The HTTP
+ * application discovers every such bean through `container.getManyOptional(HealthIndicator)`.
+ *
+ * The lifetime must be singleton: the registry holds the instances for the process. A request-scoped or
+ * transient collaborator is injected as `Provider<T>` via `$i.provide(Dep)`, not by changing this class's
+ * lifetime.
  *
  * `check` receives an {@link AbortSignal} that fires when the probe deadline elapses, so a slow dependency call
  * can be cancelled instead of outliving the response it was meant to produce.
  *
  * ```ts
+ * @Injectable()
  * class DatabaseHealth extends HealthIndicator {
  *   readonly name = 'database'
  *

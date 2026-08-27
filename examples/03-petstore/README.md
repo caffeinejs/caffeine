@@ -18,9 +18,9 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** spec
 ## Architecture
 
 ```
-src/main.ts                  bootstrap: builds the app, supplies the database health indicator
+src/main.ts                  bootstrap: builds the app
 src/app.ts                   features: QUERY verb, @fastify/multipart, GitHub OAuth, Basic docs auth, health probes
-src/features/health/db.health.ts  HealthIndicator — readiness only, never liveness
+src/features/health/db.health.ts  HealthIndicator — @Injectable, readiness only, never liveness
 src/util/db/prisma.ts    single PrismaClient handle
 src/util/db/prisma.config.ts  @Configuration + @Provides(PrismaClient) — DI registration
 src/<domain>/<name>.ts       API DTOs + JSON schemas + row→DTO mapper

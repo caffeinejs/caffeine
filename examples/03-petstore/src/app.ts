@@ -14,7 +14,6 @@ import {
 import { multipartPlugin } from "@caffeinejs/http-multipart";
 import { openapiPlugin } from "@caffeinejs/openapi";
 import { staticPlugin } from "@caffeinejs/static";
-import type { HealthIndicator } from "@caffeinejs/std";
 import { EnvConfigProvider } from "@caffeinejs/std/config";
 import { viewPlugin } from "@caffeinejs/view";
 import { apiErrorSchema } from "./util/errors/index.js";
@@ -31,13 +30,11 @@ const docsUser = process.env.PETSTORE_DOCS_USER ?? "admin";
 const docsPassword = process.env.PETSTORE_DOCS_PASSWORD ?? "admin123";
 
 // Builds the web application from a given container — it never creates one, so tests can pass a
-// TestContainer with overridden dependencies. DB-agnostic: no prisma import here, which is also why the health
-// indicators are passed in rather than constructed — main.ts supplies the Prisma-backed one, tests supply fakes
-// or none at all.
+// TestContainer with overridden dependencies. DB-agnostic: no prisma import here. Health indicators are
+// container-managed; `DatabaseHealth` is discovered through the `HealthIndicator` key.
 export function buildApp(
   container: Container,
   serverOpts: FastifyServerOptions = {},
-  indicators: readonly HealthIndicator[] = [],
 ): WebApplication {
   const server = fastify({
     logger: true,
@@ -155,11 +152,7 @@ export function buildApp(
     // Kubernetes probes (/livez, /readyz, /startupz) plus the graceful shutdown that drives them: SIGTERM makes
     // /readyz answer 503 immediately, the drain delay covers the routing-table lag while requests keep being
     // served normally, and only then does the server close. No preStop sleep in the manifest.
-    .health((h) => {
-      for (const indicator of indicators) {
-        h.indicator(indicator);
-      }
-    });
+    .health();
 
   const app = builder
     .build()

@@ -8,6 +8,14 @@ export class ErrHealthConfiguration extends ErrCaffeineWebApplication {
   }
 }
 
+/** A health indicator bound with a lifetime other than singleton, detected at `ready()`. */
+export class ErrHealthIndicatorNotSingleton extends ErrCaffeineWebApplication {
+  constructor(message: string) {
+    super(message, 'ERR_HEALTH_INDICATOR_NOT_SINGLETON')
+    this.name = 'ErrHealthIndicatorNotSingleton'
+  }
+}
+
 /** The graceful shutdown exceeded its budget and connections were closed by force. */
 export class ErrShutdownTimeout extends ErrCaffeineWebApplication {
   readonly timeoutMs: number

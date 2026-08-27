@@ -4,6 +4,7 @@ import type { WebApplication } from "@caffeinejs/http";
 import { newTestContainer } from "@caffeinejs/testing";
 import { createContainer } from "../../app.container.js";
 import { buildApp } from "../../app.js";
+import { DatabaseHealth } from "./db.health.js";
 
 // Ephemeral port: the probes only answer once `run()` has started listening, and the configured default (9999)
 // would collide with anything else on the machine.
@@ -21,11 +22,14 @@ class FakeDatabaseHealth extends HealthIndicator {
   }
 }
 
-async function start(indicators: HealthIndicator[]): Promise<WebApplication> {
+async function start(fake: HealthIndicator): Promise<WebApplication> {
   const app = buildApp(
-    newTestContainer(createContainer()).build(),
+    newTestContainer(createContainer())
+      .override(DatabaseHealth, (b) =>
+        b.toValue(fake as unknown as DatabaseHealth).extends(HealthIndicator),
+      )
+      .build(),
     { logger: false },
-    indicators,
   );
   await app.run();
   return app;
@@ -45,7 +49,7 @@ describe("health probes", () => {
   });
 
   it("reports ready once the database answers", async () => {
-    app = await start([new FakeDatabaseHealth(true)]);
+    app = await start(new FakeDatabaseHealth(true));
 
     expect((await probe(app, "/readyz")).statusCode).toBe(200);
     expect((await probe(app, "/livez")).statusCode).toBe(200);
@@ -53,7 +57,7 @@ describe("health probes", () => {
   });
 
   it("fails readiness but never liveness when the database is unreachable", async () => {
-    app = await start([new FakeDatabaseHealth(false)]);
+    app = await start(new FakeDatabaseHealth(false));
 
     expect((await probe(app, "/readyz")).statusCode).toBe(503);
     // The pod must not be restarted because Postgres blinked — restarting repairs nothing.
@@ -71,7 +75,7 @@ describe("health probes", () => {
       }
     })();
 
-    const started = await start([indicator]);
+    const started = await start(indicator);
     const before = checks;
 
     const closing = started.close();
@@ -84,7 +88,7 @@ describe("health probes", () => {
   });
 
   it("leaves the probes reachable without authentication", async () => {
-    app = await start([]);
+    app = await start(new FakeDatabaseHealth(true));
 
     // Every other route in this application sits behind an authentication scheme.
     expect((await probe(app, "/readyz")).statusCode).toBe(200);
