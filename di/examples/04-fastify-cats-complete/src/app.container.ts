@@ -18,5 +18,5 @@ export async function createContainer(): Promise<CaffeineIoC> {
   // The health components are configured "manually" using a Module function.
   // All the other decorated components are automatically registered once the `scan` loads them once.
   // Both concepts can be mixed.
-  return new CaffeineIoC(healthModule)
+  return new CaffeineIoC({ modules: [healthModule] })
 }

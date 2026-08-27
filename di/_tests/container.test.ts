@@ -383,7 +383,7 @@ describe('init() idempotency (M-3)', function () {
         .toValue({})
     }
 
-    const di = new CaffeineIoC({ decorators: false }, module)
+    const di = new CaffeineIoC({ decorators: false, modules: [module] })
 
     await di.init()
     await di.init()
@@ -699,10 +699,12 @@ describe('async singleton resolution timing (L-3)', function () {
   })
 })
 
-describe('CaffeineIoC constructor — module function as first argument', function () {
-  it('should accept a module function without an options object', async function () {
-    const di = new CaffeineIoC((container: ContainerBindingOps) => {
-      container.bind('greeting').toValue('hello')
+describe('CaffeineIoC constructor — modules via options', function () {
+  it('should accept a module function on Options.modules', async function () {
+    const di = new CaffeineIoC({
+      modules: [(container: ContainerBindingOps) => {
+        container.bind('greeting').toValue('hello')
+      }],
     })
     await di.init()
 

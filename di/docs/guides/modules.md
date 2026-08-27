@@ -1,34 +1,47 @@
 # Modules
 
-A **module** is a plain function that receives a container and registers
-bindings into it. Modules are how you compose imperative configuration — split
-bindings into cohesive groups, import them by feature, and pass them to the
-container at construction time.
+A **module** is a named registration graph: classes to import (so their
+decorators evaluate), nested modules to load, and an optional function that
+registers extra bindings. Pass modules through `Options.modules` or
+`addModules()`. They run during `compile()` / `init()`, not in the constructor.
 
 ```ts
 import { CaffeineIoC, mod, type ContainerBindingOps } from '@caffeinejs/di'
 
-function databaseModule(di: ContainerBindingOps) {
+const databaseModule = mod('database', (di: ContainerBindingOps) => {
   di.bind(Database).toClass(PostgresDatabase)
   di.bind(UserRepository).toClass(UserRepository, [Database])
-}
+})
 
-function emailModule(di: ContainerBindingOps) {
+const emailModule = mod('email', (di: ContainerBindingOps) => {
   di.bind(Mailer).toClass(SmtpMailer)
-}
+})
 
-const di = new CaffeineIoC(databaseModule, emailModule)
+const di = new CaffeineIoC({ modules: [databaseModule, emailModule] })
 await di.init()
 ```
 
-Modules passed to the `CaffeineIoC` constructor are applied immediately, before
-`init()` is called.
+`needs` and `provides` are optional thunks. They are called when the container
+collects the graph, so circular file imports do not read a sibling module while
+it is still evaluating. Omit either field when the list would be empty.
+
+```ts
+export const orderModule = mod({
+  name: 'order',
+  needs: () => [userModule],
+  provides: () => [OrderController],
+  fn: di => {
+    di.bind(OrderProcessor).toSelf()
+  },
+})
+```
+
+A bare function is still accepted as a module. The container wraps it as
+`{ name, fn }`.
 
 ## Naming a module
 
-Use `mod()` to attach a debug name to any module. The name appears in error
-messages and hook events, making it easier to trace which module registered a
-failing binding.
+Use `mod(name, fn)` to attach a debug name. The name appears in hook events.
 
 ```ts
 import { mod } from '@caffeinejs/di'
@@ -38,9 +51,11 @@ const databaseModule = mod('database', (di) => {
 })
 ```
 
+`mod(module)` stamps an existing object. It does not call `needs` or `provides`.
+
 ## Async modules
 
-Modules can be async. The container awaits each async module during `init()`.
+Modules can be async. The container awaits each async `fn` during `init()`.
 
 ```ts
 const configModule = mod('config', async (di) => {
@@ -48,7 +63,7 @@ const configModule = mod('config', async (di) => {
   di.bind(AppConfig).toValue(config)
 })
 
-const di = new CaffeineIoC(configModule)
+const di = new CaffeineIoC({ modules: [configModule] })
 await di.init()
 ```
 
@@ -101,10 +116,11 @@ For profile-based or decorator-driven activation, see
 
 A child container inherits all bindings from its parent and can override or
 extend them without affecting the parent. This is useful for request-scoped
-setups or multi-tenant isolation.
+setups or multi-tenant isolation. Children do not inherit the parent's module
+list.
 
 ```ts
-const parent = new CaffeineIoC(commonModule)
+const parent = new CaffeineIoC({ modules: [commonModule] })
 await parent.init()
 
 const child = parent.newChild()

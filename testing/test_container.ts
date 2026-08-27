@@ -1,5 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import type { Binder, Container, Identifier, Key, Module, Snapshot } from '@caffeinejs/di'
+import type { Binder, Container, Identifier, Key, Module, ModuleFn, Snapshot } from '@caffeinejs/di'
 import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
 interface IsolationEntry {
@@ -23,7 +23,7 @@ export class TestContainer {
   #asyncPolicy: Set<Key> | null = null
   #focusRoots: Set<Key> | null = null
   #profiles: Identifier[] | null = null
-  #modules: Module[] = []
+  #modules: Array<Module | ModuleFn> = []
   #lazy: boolean = true
 
   constructor(container: Container)
@@ -68,7 +68,7 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  modules(module: Module, ...rest: Module[]): this {
+  modules(module: Module | ModuleFn, ...rest: Array<Module | ModuleFn>): this {
     this.#modules.push(module, ...rest)
     return this
   }
@@ -291,14 +291,12 @@ export class TestContainer {
       snap = snap.filter(k => !this.#skips.has(k))
     }
 
-    const di = new CaffeineIoC(
-      {
-        decorators: false,
-        lazy: this.#lazy,
-        ...(this.#profiles != null && { profiles: this.#profiles }),
-      },
-      ...this.#modules,
-    )
+    const di = new CaffeineIoC({
+      decorators: false,
+      lazy: this.#lazy,
+      ...(this.#profiles != null && { profiles: this.#profiles }),
+      modules: this.#modules,
+    })
     di.restore(snap)
 
     for (const [key, { configure }] of this.#isolations) {

@@ -1,4 +1,4 @@
-import { CaffeineIoC, type Container, type Module, type Options } from '@caffeinejs/di'
+import { CaffeineIoC, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
 import { Application, type ApplicationInit, type BaseApplication, type HookBinding } from './application.js'
 import { AppConfigBuilder, kAppConfig } from './app_config.js'
 import {
@@ -93,7 +93,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     return this
   }
 
-  addModules(module: Module, ...modules: Module[]): this {
+  addModules(module: Module | ModuleFn, ...modules: Array<Module | ModuleFn>): this {
     this.#container.addModules(module, ...modules)
     return this
   }

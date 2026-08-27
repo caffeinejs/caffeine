@@ -98,9 +98,11 @@ describe('Conditionals', function () {
       @ConditionalOn(ctx => ctx.container.has(ModuleSvc))
       class DependsOnModuleSvc {}
 
-      const di = new CaffeineIoC((container: ContainerBindingOps) => {
-        container.bind(ModuleSvc)
-          .toSelf()
+      const di = new CaffeineIoC({
+        modules: [(container: ContainerBindingOps) => {
+          container.bind(ModuleSvc)
+            .toSelf()
+        }],
       })
 
       await di.init()

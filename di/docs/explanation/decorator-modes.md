@@ -86,10 +86,9 @@ Register bindings directly on the container using the fluent `bind()` API and
 module functions. No decorators, no `reflect-metadata`, no TypeScript flags.
 
 ```ts
-import { CaffeineIoC } from '@caffeinejs/di'
-import type { Module } from '@caffeinejs/di'
+import { CaffeineIoC, type ModuleFn } from '@caffeinejs/di'
 
-const appModule: Module = di => {
+const appModule: ModuleFn = di => {
   di.bind(Logger).toSelf()
   di.bind(Database).toAsyncFactory(async () => {
     return connectToDatabase(process.env.DATABASE_URL)
@@ -97,7 +96,7 @@ const appModule: Module = di => {
   di.bind(UserService).toClass(UserService, [Logger, Database])
 }
 
-const di = new CaffeineIoC({ decorators: false }, appModule)
+const di = new CaffeineIoC({ decorators: false, modules: [appModule] })
 await di.init()
 ```
 

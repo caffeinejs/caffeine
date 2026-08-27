@@ -12,12 +12,12 @@ Any test that calls `container.get()`, `container.getRequired()`, or `container.
 
 ```ts
 // correct
-const di = new CaffeineIoC(mod)
+const di = new CaffeineIoC({ modules: [mod] })
 await di.init()
 expect(di.get(Svc)).toBeInstanceOf(Svc)
 
 // wrong — init() not called
-const di = new CaffeineIoC(mod)
+const di = new CaffeineIoC({ modules: [mod] })
 expect(di.get(Svc)).toBeInstanceOf(Svc)
 ```
 

@@ -22,7 +22,7 @@ The production container is **never initialized directly** in tests. Instead:
 
 ```ts
 // app.container.ts — builds but never inits
-export const appContainer = new CaffeineIoC(databaseModule, emailModule)
+export const appContainer = new CaffeineIoC({ modules: [databaseModule, emailModule] })
 
 // test
 const di = new TestContainer(appContainer)

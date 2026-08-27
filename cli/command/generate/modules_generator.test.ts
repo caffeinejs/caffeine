@@ -44,7 +44,7 @@ describe('generateModules()', () => {
     await generateModules({ files, output, importExtension: '.js' })
 
     const content = await Bun.file(output).text()
-    expect(content).toContain('export const modules: Module[] = [')
+    expect(content).toContain('export const modules: Array<Module | ModuleFn> = [')
     expect(content).toContain('..._pick(_0),')
     expect(content).toContain('..._pick(_1),')
   })
@@ -71,7 +71,7 @@ describe('generateModules()', () => {
 
     const content = await Bun.file(output).text()
     expect(content).toContain('import { kModule } from \'@caffeinejs/di\'')
-    expect(content).toContain('import type { Module } from \'@caffeinejs/di\'')
+    expect(content).toContain('import type { Module, ModuleFn } from \'@caffeinejs/di\'')
   })
 
   it('includes auto-generated header', async () => {

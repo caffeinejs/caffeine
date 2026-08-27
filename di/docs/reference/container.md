@@ -44,11 +44,12 @@
 ## Constructor
 
 ```ts
-new CaffeineIoC(...modules: Module[])
-new CaffeineIoC(options: Options, ...modules: Module[])
+new CaffeineIoC(options?: Partial<Options>)
 ```
 
-Creates a new container and immediately applies every module passed to it.
+Creates a new container. Modules listed in `options.modules` are queued and
+applied during `compile()` / `init()`. Further modules can be appended with
+`addModules()` until the container is initialized.
 When `decorators` is `true` (the default), `autoWire()` is called in the
 constructor to pick up all `@Injectable` classes registered so far.
 
@@ -64,6 +65,7 @@ constructor to pick up all `@Injectable` classes registered so far.
 | `checks.scopes` | `ScopeCheckMode` | `'compatible-scopes-only'` | Scope compatibility validation mode. |
 | `checks.circularReferences` | `boolean` | `true` | Detect circular dependencies during `init()`. |
 | `decorators` | `boolean` | `true` | When `true`, calls `autoWire()` automatically in the constructor. |
+| `modules` | `Array<Module \| ModuleFn>` | `[]` | Modules to load during `compile()` / `init()`. |
 
 **`ScopeCheckMode`** values:
 
@@ -282,7 +284,7 @@ resolvers, and eagerly instantiates non-lazy singletons.
 return `undefined` or throw.
 
 ```ts
-const di = new CaffeineIoC(appModule)
+const di = new CaffeineIoC({ modules: [appModule] })
 await di.init()
 ```
 
@@ -379,7 +381,7 @@ parent.
 Child containers must also be initialized with `await child.init()`.
 
 ```ts
-const parent = new CaffeineIoC(sharedModule)
+const parent = new CaffeineIoC({ modules: [sharedModule] })
 await parent.init()
 
 const child = parent.newChild()

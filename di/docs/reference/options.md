@@ -189,6 +189,28 @@ await di.init()
 
 ---
 
+### `modules`
+
+```ts
+modules?: Array<Module | ModuleFn>
+```
+
+**Default:** `[]`
+
+Modules to load during `compile()` / `init()`. A `Module` is an object with
+`name`, optional `needs` / `provides` thunks, and optional `fn`. A `ModuleFn`
+is a bare registration function; the container wraps it.
+
+Further modules can be appended with `addModules()` until `init()`.
+
+```ts
+const di = new CaffeineIoC({ modules: [orderModule, userModule] })
+```
+
+See the [Modules guide](../guides/modules.md).
+
+---
+
 ### `metadataReader`
 
 ```ts
@@ -229,4 +251,5 @@ const di = new CaffeineIoC({
 | `checks.scopes` | `ScopeCheckMode` | `'compatible-scopes-only'` |
 | `checks.circularReferences` | `boolean` | `true` |
 | `decorators` | `boolean` | `true` |
+| `modules` | `Array<Module \| ModuleFn>` | `[]` |
 | `metadataReader` | `MetadataReader` | `undefined` |

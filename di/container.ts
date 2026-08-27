@@ -32,7 +32,7 @@ import { MetadataReader } from './metadata_reader.js'
 import { Ctor } from './types.js'
 import { BindingDescriptor, Container, Options, ScopeCheckMode } from './container_interface.js'
 import { HookListener } from './hooks.js'
-import { Module, runModule } from './module.js'
+import { runModules, type Module, type ModuleFn } from './module.js'
 import { Conditional, ConditionContext } from './conditional.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
@@ -61,7 +61,7 @@ const DEFAULT_OPTIONS: Partial<Options> = {
  * @sealed
  */
 export class CaffeineIoC implements Container {
-  private readonly modules: Module[]
+  private readonly modules: Array<Module | ModuleFn>
   private readonly registry = new Map<Key, Binding>()
   private readonly bindings = new Map<Key, Binding[]>()
   private readonly bindingsByLabel = new Map<symbol, [Key, Binding][]>()
@@ -91,26 +91,10 @@ export class CaffeineIoC implements Container {
   /**
    * Creates a new container instance.
    *
-   * @param modules - The modules to load into the container.
-   */
-  constructor(...modules: Module[])
-  /**
-   * Creates a new container instance.
-   *
    * @param options - The options to configure the container.
-   * @param modules - The modules to load into the container.
    */
-  constructor(options: Partial<Options>, ...modules: Module[])
-  /**
-   * Creates a new container instance.
-   *
-   * @param optionsOrModuleFns - The options or modules to configure the container.
-   * @param modules - The modules to load into the container.
-   */
-  constructor(optionsOrModuleFns: Partial<Options> | Module = {}, ...modules: Module[]) {
-    const isModuleFn = typeof optionsOrModuleFns === 'function'
-    const opts = { ...DEFAULT_OPTIONS, ...(isModuleFn ? {} : optionsOrModuleFns) } as Options
-    const allModuleFns = isModuleFn ? [optionsOrModuleFns, ...modules] : modules
+  constructor(options: Partial<Options> = {}) {
+    const opts = { ...DEFAULT_OPTIONS, ...options } as Options
 
     this.parent = opts.parent
     this.profiles = new Set(opts.profiles ?? [])
@@ -120,7 +104,7 @@ export class CaffeineIoC implements Container {
     this.scopeID = opts.defaultScopeID ?? Scopes.SINGLETON
     this.metadataReader = opts.metadataReader || (() => ({}))
     this.scopes = new Map<Identifier, Scope>()
-    this.modules = allModuleFns
+    this.modules = [...(opts.modules ?? [])]
 
     for (const [id, factory] of scopeEntries()) {
       this.scopes.set(id, factory(this))
@@ -689,7 +673,7 @@ export class CaffeineIoC implements Container {
    *
    * @throws {@link ErrInvalidContainerState} if the container has already been initialized
    */
-  addModules(module: Module, ...rest: Module[]): void {
+  addModules(module: Module | ModuleFn, ...rest: Array<Module | ModuleFn>): void {
     if (this._ready) {
       throw new ErrInvalidContainerState('Cannot add modules once the container has been initialized')
     }
@@ -1391,7 +1375,8 @@ export class CaffeineIoC implements Container {
     if (this._compiled) {
       return
     }
-    await Promise.all(this.modules.map((module, index) => runModule(module, this, index)))
+
+    await runModules(this.modules, this)
     await this.evaluatePendingConditionals()
 
     if (this.circularReferences) {
@@ -1721,14 +1706,6 @@ export class CaffeineIoC implements Container {
   }
 }
 
-export function newContainer(...modules: Module[]): CaffeineIoC
-export function newContainer(options: Partial<Options>, ...modules: Module[]): CaffeineIoC
-export function newContainer(
-  optionsOrModuleFn: Partial<Options> | Module = {},
-  ...modules: Module[]
-): CaffeineIoC {
-  const isModuleFn = typeof optionsOrModuleFn === 'function'
-  const allModuleFns = isModuleFn ? [optionsOrModuleFn, ...modules] : modules
-
-  return new CaffeineIoC(isModuleFn ? {} : optionsOrModuleFn, ...allModuleFns)
+export function newContainer(options: Partial<Options> = {}): CaffeineIoC {
+  return new CaffeineIoC(options)
 }

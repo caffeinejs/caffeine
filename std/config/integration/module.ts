@@ -1,4 +1,4 @@
-import { Keys, type Module, Scopes } from '@caffeinejs/di'
+import { Keys, mod, type Module, Scopes } from '@caffeinejs/di'
 import type { BootstrapOptions } from '../bootstrap.js'
 import type { ConfigHandle } from '../accessor.js'
 import type { ConfigDefinition } from '../definition.js'
@@ -54,7 +54,7 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
         secrets: (options as ConfigModuleOptions<T>).secrets,
       }
 
-  return async container => {
+  return mod('ConfigModule', async container => {
     // Idempotent, so the usual path — the application bootstrapped between the two service steps — hands back
     // the shard it already built rather than resolving a second time.
     const shard = definition !== undefined
@@ -107,7 +107,7 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
     container.hooks.on('onDisposed', async () => {
       await shard.dispose()
     })
-  }
+  })
 }
 
 function isDefinition<T>(options: ConfigModuleOptions<T> | ConfigDefinition): options is ConfigDefinition {

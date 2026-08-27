@@ -168,7 +168,7 @@ describe('$i.ordered() with .order() binder option', function () {
         .order(3)
     })
 
-    const di = new CaffeineIoC(m)
+    const di = new CaffeineIoC({ modules: [m] })
     await di.init()
 
     const plugins = di.build(
@@ -207,7 +207,7 @@ describe('$i.ordered() with .order() binder option', function () {
         .order(2)
     })
 
-    const di = new CaffeineIoC(m)
+    const di = new CaffeineIoC({ modules: [m] })
     await di.init()
 
     const svcs = di.build(

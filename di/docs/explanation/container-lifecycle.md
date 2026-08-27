@@ -10,13 +10,12 @@ where to register things, why `init()` must be called before `get()`, and what
 ## Phase 1 — Construction
 
 ```ts
-const di = new CaffeineIoC(moduleA, moduleB)
+const di = new CaffeineIoC({ modules: [moduleA, moduleB] })
 ```
 
 During construction:
 
-- Every module function passed to the constructor is executed. A module is any
-  function that receives the container and calls `di.bind(...)`.
+- Modules in `options.modules` are queued. They are not executed yet.
 - When `decorators: true` (the default), `autoWire()` is called automatically.
   This scans the global decorator registry and registers every `@Injectable` and
   `@Configuration` class that has been imported so far.
@@ -36,18 +35,20 @@ await di.init()
 
 During init, the container does all its heavy lifting:
 
-1. **Profile filtering** — bindings whose `@Profile` is not in the active set
+1. **Module graph** — collect reachable modules from `Options.modules` /
+   `addModules()`, then run each module `fn` once.
+2. **Profile filtering** — bindings whose `@Profile` is not in the active set
    are dropped.
-2. **Conditional evaluation** — `@ConditionalOn` predicates are evaluated;
+3. **Conditional evaluation** — `@ConditionalOn` predicates are evaluated;
    bindings that return `false` are dropped.
-3. **Scope validation** — the container checks that no binding violates the
+4. **Scope validation** — the container checks that no binding violates the
    configured scope rules (e.g. singleton depending on transient).
-4. **Circular dependency detection** — the graph is checked for cycles.
-5. **Injection resolver compilation** — the container compiles the injection
+5. **Circular dependency detection** — the graph is checked for cycles.
+6. **Injection resolver compilation** — the container compiles the injection
    strategy for each binding so resolution is fast.
-6. **Eager instantiation** — all non-lazy singleton bindings are created. Async
+7. **Eager instantiation** — all non-lazy singleton bindings are created. Async
    factories are awaited in dependency order.
-7. **PostConstruct hooks** — `@PostConstruct` (and `.postConstruct()`) callbacks
+8. **PostConstruct hooks** — `@PostConstruct` (and `.postConstruct()`) callbacks
    run after each instance is created.
 
 `init()` is async because it awaits async factories. Skipping `init()` and
@@ -101,7 +102,7 @@ Child containers share the parent's binding registry but maintain their own
 instance cache. They follow the same four phases:
 
 ```ts
-const parent = new CaffeineIoC(sharedModule)
+const parent = new CaffeineIoC({ modules: [sharedModule] })
 await parent.init()
 
 const child = parent.newChild()

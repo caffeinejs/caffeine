@@ -27,11 +27,13 @@ Use `toAsyncFactory()` on the binder when wiring dependencies in a module:
 ```ts
 import { CaffeineIoC } from '@caffeinejs/di'
 
-const di = new CaffeineIoC(mod => {
-  mod.bind(DatabasePool).toAsyncFactory(async ctx => {
-    const config = ctx.container.get(AppConfig)
-    return createPool(config.databaseUrl)
-  })
+const di = new CaffeineIoC({
+  modules: [mod => {
+    mod.bind(DatabasePool).toAsyncFactory(async ctx => {
+      const config = ctx.container.get(AppConfig)
+      return createPool(config.databaseUrl)
+    })
+  }],
 })
 
 await di.init()

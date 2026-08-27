@@ -12,7 +12,7 @@ import { PostProcessor } from './post_processor.js'
 import { Injection } from './injection.js'
 import { Ctor } from './types.js'
 import { Provider } from './provider.js'
-import { Module } from './module.js'
+import type { Module, ModuleFn } from './module.js'
 
 /**
  * Scope validation checks to apply during container initialization.
@@ -90,6 +90,14 @@ export interface Options {
    * @defaultValue `true`
    */
   decorators?: boolean
+
+  /**
+   * Modules to load. Applied during {@link Container.compile} / {@link Container.init}.
+   * Further modules can be appended with {@link Container.addModules} until init.
+   *
+   * @defaultValue `[]`
+   */
+  modules?: Array<Module | ModuleFn>
 }
 
 /**
@@ -162,7 +170,7 @@ export interface Container {
 
   aspect<T extends MethodAspect<any>>(cls: Ctor<T>): AOPBinder<T>
 
-  addModules(module: Module, ...rest: Module[]): void
+  addModules(module: Module | ModuleFn, ...rest: Array<Module | ModuleFn>): void
 
   resetInstances(): Promise<void>
 
