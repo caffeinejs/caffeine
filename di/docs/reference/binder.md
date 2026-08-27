@@ -23,6 +23,7 @@
   - [preDestroy](#predestroy)
   - [intercept](#intercept)
   - [conditional](#conditional)
+  - [profiles](#profiles)
   - [extends](#extends)
   - [internal](#internal)
 
@@ -330,6 +331,19 @@ Predicates receive a `ConditionContext` with `container.has()`.
 di.bind(RedisCacheService)
   .toSelf()
   .conditional(ctx => ctx.container.has(RedisClient))
+```
+
+### profiles
+
+```ts
+profiles(profile, ...profiles)
+```
+
+Restricts this binding to the given profiles. The binding is only active when
+one of them is enabled on the container.
+
+```ts
+di.bind(MockEmailService).toSelf().profiles('test', 'development')
 ```
 
 ### extends

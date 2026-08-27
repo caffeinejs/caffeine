@@ -141,7 +141,7 @@ See the [Profiles guide](./profiles.md) for full documentation.
 
 | | `@Profile` | `@ConditionalOn` |
 |---|---|---|
-| Activation | Container `profiles` option | Arbitrary predicate at init time |
+| Activation | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time |
 | Style | Declarative — name a group | Imperative — write a function |
 | Async support | No | Yes |
 | Best for | Environment / persona groupings | Feature flags, presence checks, env vars |

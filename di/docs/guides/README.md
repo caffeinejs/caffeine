@@ -65,7 +65,7 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
   cycles.
 
 - [Profiles](./profiles.md) — group bindings under named profiles (`test`, `production`,
-  `eu`) and activate them declaratively via the container `profiles` option.
+  `eu`) and activate them via the container `profiles` option or `addProfiles()`.
 
 - [Mixing Scopes](./mixing-scopes.md) — safely inject shorter-lived dependencies into
   longer-lived components using `provide()` and `Provider<T>`; scope validation options.

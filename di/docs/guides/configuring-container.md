@@ -63,8 +63,9 @@ See the [Lazy guide](./lazy-bindings.md) for the full breakdown.
 
 **Default:** `[]`
 
-Activates the named profiles. Bindings annotated with `@Profile('name')` are
-only registered when the matching profile is active.
+Activates the named profiles. Bindings annotated with `@Profile('name')` or
+configured with `.profiles('name')` are only registered when the matching
+profile is active. Call `addProfiles()` to append more before `compile()`.
 
 ```ts
 const di = new CaffeineIoC({ profiles: ['production'] })

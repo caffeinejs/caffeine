@@ -1,11 +1,13 @@
 # Profiles
 
-Profiles are named activation groups. A binding decorated with `@Profile` is only
-registered when that profile is listed in the container's `profiles` option at
-construction time.
+Profiles are named activation groups. A binding decorated with `@Profile` or
+configured with `.profiles()` is only registered when one of those profiles is
+in the container's active set — via the `profiles` constructor option or
+`addProfiles()` before `compile()` / `init()`.
 
-Bindings without any `@Profile` are always registered, regardless of which profiles
-are active — the same semantics Docker Compose uses for its profiles.
+Bindings without any profile restriction are always registered, regardless of
+which profiles are active — the same semantics Docker Compose uses for its
+profiles.
 
 ```ts
 import { Profile } from '@caffeinejs/di/decorators'
@@ -41,7 +43,8 @@ class StubPaymentGateway extends PaymentGateway {
 }
 ```
 
-Activate profiles when constructing the container:
+Activate profiles when constructing the container, or later with `addProfiles()`
+as long as the container has not been compiled:
 
 ```ts
 const di = new CaffeineIoC({ profiles: ['test'] })
@@ -49,6 +52,12 @@ await di.init()
 
 di.get(StubPaymentGateway) // resolves — 'test' is active
 di.get(StripeEUGateway)    // resolves — no profile, always active
+```
+
+```ts
+const di = new CaffeineIoC()
+di.addProfiles('test')
+await di.init()
 ```
 
 When no profiles are active, only no-profile bindings are registered:
@@ -124,14 +133,24 @@ await di.init()
 
 ---
 
+## Fluent `.profiles()`
+
+Manual bindings use the same OR semantics as `@Profile`:
+
+```ts
+di.bind(StubPaymentGateway).toSelf().profiles('test', 'development')
+```
+
+---
+
 ## `@Profile` vs `@ConditionalOn`
 
 Both mechanisms control whether a binding is registered at `init()` time. The right
 choice depends on what drives the decision.
 
-| | `@Profile` | `@ConditionalOn` |
+| | `@Profile` / `.profiles()` | `@ConditionalOn` |
 |---|---|---|
-| Activation | Container `profiles` option | Arbitrary predicate at init time |
+| Activation | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time |
 | Style | Declarative — name a group | Imperative — write a function |
 | Async support | No | Yes |
 | Best for | Environment / persona groupings | Feature flags, presence checks, env vars |

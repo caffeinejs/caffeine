@@ -172,6 +172,8 @@ export interface Container {
 
   addModules(module: Module | ModuleFn, ...rest: Array<Module | ModuleFn>): void
 
+  addProfiles(profile: Identifier, ...profiles: Identifier[]): void
+
   resetInstances(): Promise<void>
 
   resetInstance(key: Key): Promise<void>

@@ -9,7 +9,7 @@ import { DecoratedBindingConfig, MemberMetadata } from './spec.js'
 
 const Bindings = new Map<Key, DecoratedBindingConfig>()
 const ByProfile = new Map<Identifier, Set<Key>>()
-const ProvidedBindings = new Map<Identifier, Array<[Key, DecoratedBindingConfig]>>()
+const ProvidedBindings: Array<[Key, DecoratedBindingConfig]> = []
 const MetadataWeakMap = new WeakMap<TypeID, MemberMetadata>()
 const Injectables = new Set<Key>()
 
@@ -148,58 +148,18 @@ function getOrCreateBindingConfiguration(key: Key): DecoratedBindingConfig {
 }
 
 /**
- * Gets the binding configurations for the given active profiles.
- * The container uses this function to retrieve all decorated bindings configured for the given profiles.
+ * Gets all decorated binding configurations.
+ * The container uses this function to retrieve decorated bindings; profile matching happens later.
  */
-export function getBindingConfigurations(
-  activeProfiles: ReadonlySet<Identifier>,
-): IterableIterator<[Key, DecoratedBindingConfig]> {
-  const ref = Bindings
-  return (function* () {
-    for (const [key, config] of ref) {
-      const profiles = config.getProfiles
-      if (!profiles || profiles.size === 0) {
-        yield [key, config]
-      } else {
-        for (const p of profiles) {
-          if (activeProfiles.has(p)) {
-            yield [key, config]
-            break
-          }
-        }
-      }
-    }
-  })()
+export function getBindingConfigurations(): IterableIterator<[Key, DecoratedBindingConfig]> {
+  return Bindings.entries()
 }
 
 /**
- * Gets the provided bindings from configuration classes for the given active profiles.
+ * Gets the provided bindings from configuration classes.
  */
-export function providedBindingConfigurations(
-  activeProfiles: ReadonlySet<Identifier>,
-): Array<[Key, DecoratedBindingConfig]> {
-  const seen = new Set<DecoratedBindingConfig>()
-  const result: Array<[Key, DecoratedBindingConfig]> = []
-  const noProfileEntries = ProvidedBindings.get('') ?? []
-
-  for (const entry of noProfileEntries) {
-    if (!seen.has(entry[1])) {
-      seen.add(entry[1])
-      result.push(entry)
-    }
-  }
-
-  for (const profile of activeProfiles) {
-    const profileEntries = ProvidedBindings.get(profile) ?? []
-    for (const entry of profileEntries) {
-      if (!seen.has(entry[1])) {
-        seen.add(entry[1])
-        result.push(entry)
-      }
-    }
-  }
-
-  return result
+export function providedBindingConfigurations(): Array<[Key, DecoratedBindingConfig]> {
+  return ProvidedBindings
 }
 
 /**
@@ -209,12 +169,7 @@ export function addProvidedBindings<T>(key: Key<T>, config: DecoratedBindingConf
   notNil(key)
   notNil(config)
 
-  const ps = config.getProfiles
-  const profilesToRegister = ps && ps.size > 0 ? ps : new Set<Identifier>([''])
-  for (const profile of profilesToRegister) {
-    injectablesPerProfile(profile)
-      .push([key, config])
-  }
+  ProvidedBindings.push([key, config])
 }
 
 /**
@@ -222,15 +177,6 @@ export function addProvidedBindings<T>(key: Key<T>, config: DecoratedBindingConf
  */
 export function decoratorConfigToBinding<T>(config: DecoratedBindingConfig): Binding<T> {
   return config.binding()
-}
-
-function injectablesPerProfile(profile: Identifier): Array<[Key, DecoratedBindingConfig]> {
-  let arr = ProvidedBindings.get(profile)
-  if (!arr) {
-    arr = []
-    ProvidedBindings.set(profile, arr)
-  }
-  return arr
 }
 
 // Testing Utilities
@@ -241,7 +187,7 @@ function injectablesPerProfile(profile: Identifier): Array<[Key, DecoratedBindin
 export interface DecoratorRegistrySnapshot {
   readonly bindings: Map<Key, DecoratedBindingConfig>
   readonly byProfile: Map<Identifier, Set<Key>>
-  readonly providedBindings: Map<Identifier, Array<[Key, DecoratedBindingConfig]>>
+  readonly providedBindings: Array<[Key, DecoratedBindingConfig]>
   readonly injectables: Set<Key>
 }
 
@@ -252,7 +198,7 @@ export function snapshotDecoratorRegistry(): DecoratorRegistrySnapshot {
   return {
     bindings: new Map(Bindings),
     byProfile: new Map([...ByProfile.entries()].map(([k, v]) => [k, new Set(v)])),
-    providedBindings: new Map([...ProvidedBindings.entries()].map(([k, v]) => [k, [...v]])),
+    providedBindings: [...ProvidedBindings],
     injectables: new Set(Injectables),
   }
 }
@@ -271,9 +217,9 @@ export function restoreDecoratorRegistry(snapshot: DecoratorRegistrySnapshot): v
     ByProfile.set(k, new Set(v))
   }
 
-  ProvidedBindings.clear()
-  for (const [k, v] of snapshot.providedBindings) {
-    ProvidedBindings.set(k, [...v])
+  ProvidedBindings.length = 0
+  for (const entry of snapshot.providedBindings) {
+    ProvidedBindings.push(entry)
   }
 
   Injectables.clear()

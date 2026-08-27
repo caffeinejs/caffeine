@@ -23,9 +23,10 @@ profiles?: Identifier[]
 
 **Default:** `[]`
 
-The set of active profiles. A binding annotated with `@Profile('name')` is
-registered only when `'name'` appears in this array. Bindings with no
-`@Profile` annotation are always registered.
+The set of active profiles. A binding annotated with `@Profile('name')` or
+configured with `.profiles('name')` is registered only when `'name'` appears
+in this array. Further profiles can be appended with `addProfiles()` until
+`compile()`. Bindings with no profile restriction are always registered.
 
 ```ts
 const di = new CaffeineIoC({ profiles: ['production'] })

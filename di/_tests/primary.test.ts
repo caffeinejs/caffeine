@@ -33,9 +33,9 @@ describe('@Primary', function () {
       }
     }
 
-    it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new CaffeineIoC({ profiles: ['double-primary'] }))
-        .toThrow(ErrMultiplePrimary)
+    it('should throw ErrMultiplePrimary at setup time', async function () {
+      const di = new CaffeineIoC({ profiles: ['double-primary'] })
+      await expect(di.init()).rejects.toThrow(ErrMultiplePrimary)
     })
   })
 
@@ -62,9 +62,9 @@ describe('@Primary', function () {
       }
     }
 
-    it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new CaffeineIoC({ profiles: ['double-primary'] }))
-        .toThrow(ErrMultiplePrimary)
+    it('should throw ErrMultiplePrimary at setup time', async function () {
+      const di = new CaffeineIoC({ profiles: ['double-primary'] })
+      await expect(di.init()).rejects.toThrow(ErrMultiplePrimary)
     })
   })
 

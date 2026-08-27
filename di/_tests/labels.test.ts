@@ -108,7 +108,7 @@ describe('Label', function () {
       .toHaveLength(0)
   })
 
-  it('should respect profile when querying labels via child container', function () {
+  it('should respect profile when querying labels via child container', async function () {
     const sym = Symbol('ns-label')
 
     @Label(sym)
@@ -118,6 +118,8 @@ describe('Label', function () {
 
     const root = new CaffeineIoC()
     const child = new CaffeineIoC({ profiles: ['myns'] })
+    await root.init()
+    await child.init()
 
     expect(root.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
       .toHaveLength(0)

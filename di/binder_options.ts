@@ -325,6 +325,27 @@ export class BinderOptions<TValue> {
   }
 
   /**
+   * Restricts this binding to the given profiles. The binding is only active when
+   * one of the given profiles is enabled in the container.
+   *
+   * @example
+   * ```ts
+   * container.bind(key).toClass(MockEmailService).profiles('test', 'development')
+   * ```
+   */
+  profiles(profile: Identifier, ...profiles: Identifier[]): this {
+    notNil(profile, `Parameter profile must not be null or undefined`)
+
+    this.binding.profiles.add(profile)
+    for (const p of profiles) {
+      this.binding.profiles.add(p)
+    }
+    this.sync()
+
+    return this
+  }
+
+  /**
    * Declares the base class this binding's concrete type extends, enabling polymorphic resolution.
    * Usually used with abstract classes.
    * With this, the abstract class constructor can be used as the key to

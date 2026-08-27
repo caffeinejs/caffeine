@@ -127,7 +127,7 @@ describe('Method Injections', function () {
     }
 
     it('should resolve and inject all parameters', async function () {
-      const di = new CaffeineIoC({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false, profiles: ['method-injections-comp'] })
       di.bind(TransientDep).toSelf()
       di.bind(B1).toSelf().names(kBs)
       di.bind(B2).toSelf().names(kBs, kBase)
@@ -173,7 +173,7 @@ describe('Method Injections', function () {
     }
 
     it('should inject dependencies in all setter methods', async function () {
-      const di = new CaffeineIoC({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false, profiles: ['method-injections-test'] })
       di.bind(TransientDep).toSelf().lifetime(Scopes.TRANSIENT)
       di.bind(B1).toSelf().names(kBs)
       di.bind(B2).toSelf().names(kBs, kBase)
@@ -223,7 +223,7 @@ describe('Method Injections', function () {
     }
 
     it('should inject dependencies on setter methods after property injections', async function () {
-      const di = new CaffeineIoC({ decorators: false })
+      const di = new CaffeineIoC({ decorators: false, profiles: ['method-injections-dep'] })
       di.bind(kValue).toValue('test')
       di.bind(kMethodValue).toValue('method_test')
       di.bind(Dep).toSelf()

@@ -174,7 +174,8 @@ Defers instantiation until first access instead of during `init()`.
 ```
 
 Activates this binding only when one of the given profiles is active. The
-container's active profiles are set via the `profiles` constructor option.
+container's active profiles are set via the `profiles` constructor option or
+`addProfiles()`.
 
 ```ts
 @Injectable()

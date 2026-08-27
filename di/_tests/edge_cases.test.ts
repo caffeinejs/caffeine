@@ -485,9 +485,9 @@ describe('E2: Two @Configuration classes providing the same key — ambiguity er
     }
   }
 
-  it('should throw ErrRepeatedInjectableConfiguration during autoWire', function () {
-    expect(() => new CaffeineIoC({ profiles: [NS_E2] }))
-      .toThrow(ErrRepeatedInjectableConfiguration)
+  it('should throw ErrRepeatedInjectableConfiguration during autoWire', async function () {
+    const di = new CaffeineIoC({ profiles: [NS_E2] })
+    await expect(di.init()).rejects.toThrow(ErrRepeatedInjectableConfiguration)
   })
 })
 
@@ -533,7 +533,7 @@ describe('F1: @PostConstruct throws — error propagates from init()', function 
       }
     }
 
-    const di = new CaffeineIoC({ decorators: false })
+    const di = new CaffeineIoC({ decorators: false, profiles: ['ec-f1'] })
     di.bind(EC_F1BadInit)
       .toSelf()
 

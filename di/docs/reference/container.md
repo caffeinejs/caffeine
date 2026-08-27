@@ -12,6 +12,7 @@
   - [bind](#bind)
   - [rebind](#rebind)
   - [autoWire](#autowire)
+  - [addProfiles](#addprofiles)
 - [Inspection](#inspection)
   - [getBinding](#getbinding)
   - [getBindings](#getbindings)
@@ -57,7 +58,7 @@ constructor to pick up all `@Injectable` classes registered so far.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `profiles` | `Identifier[]` | `[]` | Active profiles. Bindings annotated with `@Profile` are included only when their profile is in this list. |
+| `profiles` | `Identifier[]` | `[]` | Active profiles. Bindings restricted with `@Profile` or `.profiles()` are included only when their profile is in this list. Can be extended with `addProfiles()` until compile. |
 | `defaultScopeId` | `Identifier` | `Scopes.SINGLETON` | Scope used for bindings that do not specify one. |
 | `parent` | `Container` | — | Parent container. Unresolved keys are looked up in the parent. |
 | `lazy` | `boolean` | `false` | When `true`, singletons are not instantiated during `init()` — they are created on first access. |
@@ -187,6 +188,21 @@ in the constructor when `decorators: true`.
 
 Call it manually if you decorated classes are imported after the container was
 created.
+
+### addProfiles
+
+```ts
+addProfiles(profile: Identifier, ...profiles: Identifier[]): void
+```
+
+Adds profiles to the container's active set. Profile matching runs during
+`compile()` / `init()`. Throws if the container has already been compiled.
+
+```ts
+const di = new CaffeineIoC()
+di.addProfiles('test', 'eu')
+await di.init()
+```
 
 ---
 

@@ -9,6 +9,7 @@ import {
   hasInjectable,
   decoratorConfigToBinding,
 } from './decorators/registrar/index.js'
+import type { DecoratedBindingConfig } from './decorators/registrar/spec.js'
 import {
   ErrRepeatedInjectableConfiguration,
   ErrNoUniqueInjectionForKey,
@@ -53,6 +54,15 @@ const DEFAULT_OPTIONS: Partial<Options> = {
   },
 }
 
+interface PendingBinding {
+  key: Key
+  config?: DecoratedBindingConfig
+  binding?: Binding
+  fallback: boolean
+  providedByConfig?: Key
+  profileRejected?: boolean
+}
+
 /**
  * CaffeineIoC IoC container implementation of the {@link Container} interface.
  * A container must always be initialized before it can be used.
@@ -74,16 +84,20 @@ export class CaffeineIoC implements Container {
 
   readonly postProcessors: Set<PostProcessor> = new Set()
   readonly hooks: HookListener = new HookListener()
-  readonly profiles: ReadonlySet<Identifier>
   readonly parent?: Container
   readonly refresher!: Refresher
   readonly requestScopeManager!: RequestScopeManager
 
+  private readonly _profiles: Set<Identifier>
   private _ready = false
   private _initializing = false
   private _compiled = false
-  private _pendingConditionals: { key: Key, binding: Binding, fallback: boolean, providedByConfig?: Key }[] = []
+  private _pendingConditionals: PendingBinding[] = []
+  private _pendingProfiles: PendingBinding[] = []
+  private _pendingManualProfiles: PendingBinding[] = []
+  private _pendingManualProfileKeys = new Set<Key>()
   private _pendingConfigKeys: Map<Key, Key[]> = new Map()
+  private _evaluatingProfiles = false
   private _pendingConditionalKeys = new Set<Key>()
   private _sortedAsyncEntries: [Key, Binding][] = []
   private _aspectScopeCache: Set<Identifier> | null = null
@@ -97,7 +111,7 @@ export class CaffeineIoC implements Container {
     const opts = { ...DEFAULT_OPTIONS, ...options } as Options
 
     this.parent = opts.parent
-    this.profiles = new Set(opts.profiles ?? [])
+    this._profiles = new Set(opts.profiles ?? [])
     this.lazy = opts.lazy
     this.circularReferences = opts.checks?.circularReferences ?? false
     this.scopeCheckMode = opts.checks?.scopes ?? 'no-mix'
@@ -149,6 +163,14 @@ export class CaffeineIoC implements Container {
    */
   get ready(): boolean {
     return this._ready
+  }
+
+  /**
+   * Active profiles. Bindings restricted with `@Profile` or `.profiles()` are
+   * only registered when one of their profiles is in this set.
+   */
+  get profiles(): ReadonlySet<Identifier> {
+    return this._profiles
   }
 
   /**
@@ -627,6 +649,9 @@ export class CaffeineIoC implements Container {
     }
 
     this._pendingConditionals = this._pendingConditionals.filter(e => e.key !== key)
+    this._pendingProfiles = this._pendingProfiles.filter(e => e.key !== key)
+    this._pendingManualProfiles = this._pendingManualProfiles.filter(e => e.key !== key)
+    this._pendingManualProfileKeys.delete(key)
     this._pendingConfigKeys.delete(key)
 
     return this.bind(key as TypedKey<T>)
@@ -679,6 +704,28 @@ export class CaffeineIoC implements Container {
     }
 
     this.modules.push(module, ...rest)
+  }
+
+  /**
+   * Adds profiles to the container's active set.
+   * Profile matching runs during {@link compile} / {@link init}.
+   *
+   * @param profile - The first profile to activate.
+   * @param profiles - Additional profiles to activate.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has already been compiled
+   */
+  addProfiles(profile: Identifier, ...profiles: Identifier[]): void {
+    if (this._ready || this._compiled) {
+      throw new ErrInvalidContainerState('Cannot add profiles once the container has been compiled')
+    }
+
+    notNil(profile, `Parameter profile must not be null or undefined`)
+
+    this._profiles.add(profile)
+    for (const p of profiles) {
+      this._profiles.add(p)
+    }
   }
 
   /**
@@ -821,9 +868,13 @@ export class CaffeineIoC implements Container {
     const pendingFallbacks: [Key, Binding][] = []
     const pendingFallbackProvided: [Key, Binding][] = []
 
-    for (const [key, config] of getBindingConfigurations(this.profiles)) {
+    for (const [key, config] of getBindingConfigurations()) {
       if (!hasInjectable(key)) {
         throw new ErrOrphanedBindingConfig(key)
+      }
+
+      if (this.queueProfiledConfig(key, config)) {
+        continue
       }
 
       const binding = config.binding()
@@ -842,11 +893,6 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      if (!this.isRegistrable(binding)) {
-        this.hooks.emit('onBindingNotRegistered', { key, binding })
-        continue
-      }
-
       if (binding.conditionals.length > 0) {
         if (binding.configuration) {
           this._pendingConfigKeys.set(key, binding.keysProvided ?? [])
@@ -858,12 +904,16 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    for (const [key, config] of providedBindingConfigurations(this.profiles)) {
+    for (const [key, config] of providedBindingConfigurations()) {
+      const configKey = this.findPendingConfigForKey(key)
+
+      if (this.queueProfiledConfig(key, config, configKey)) {
+        continue
+      }
+
       const binding = config.binding()
 
       this.hooks.emit('onSetup', { key, binding })
-
-      const configKey = this.findPendingConfigForKey(key)
 
       if (binding.fallback) {
         if (binding.conditionals.length > 0 || configKey !== undefined) {
@@ -876,11 +926,6 @@ export class CaffeineIoC implements Container {
 
       if (configKey !== undefined) {
         this._pendingConditionals.push({ key, binding, fallback: false, providedByConfig: configKey })
-        continue
-      }
-
-      if (!this.isRegistrable(binding)) {
-        this.hooks.emit('onBindingNotRegistered', { key, binding })
         continue
       }
 
@@ -1164,6 +1209,16 @@ export class CaffeineIoC implements Container {
     if (!this._compiled && config.conditionals.length > 0) {
       this._pendingConditionalKeys.add(key)
     }
+
+    if (!this._compiled && !this._evaluatingProfiles && canonical.profiles.size > 0
+      && !this._pendingManualProfileKeys.has(key)) {
+      this._pendingManualProfileKeys.add(key)
+      this._pendingManualProfiles.push({
+        key,
+        binding: canonical,
+        fallback: canonical.fallback === true,
+      })
+    }
   }
 
   private async refresh(label?: symbol): Promise<void> {
@@ -1240,17 +1295,210 @@ export class CaffeineIoC implements Container {
   }
 
   private isRegistrable(binding: Binding): boolean {
-    if (binding.profiles.size === 0) {
+    return this.matchesProfiles(binding.profiles)
+  }
+
+  private matchesProfiles(profiles: Set<Identifier> | undefined): boolean {
+    if (!profiles || profiles.size === 0) {
       return true
     }
 
-    for (const p of binding.profiles) {
-      if (this.profiles.has(p)) {
+    const active = this._profiles
+    if (active.size === 0) {
+      return false
+    }
+
+    for (const p of profiles) {
+      if (active.has(p)) {
         return true
       }
     }
 
     return false
+  }
+
+  private queueProfiledConfig(key: Key, config: DecoratedBindingConfig, providedByConfig?: Key): boolean {
+    const profiles = config.getProfiles
+    if (!profiles || profiles.size === 0) {
+      return false
+    }
+
+    const conditionals = config.getConditionals
+    const hasConditionals = conditionals !== undefined && conditionals.length > 0
+    const entry: PendingBinding = {
+      key,
+      config,
+      fallback: config.isFallback === true,
+      providedByConfig,
+    }
+
+    this._pendingProfiles.push(entry)
+
+    if (hasConditionals && config.isConfiguration === true && config.getSource === undefined) {
+      this._pendingConfigKeys.set(key, config.getKeysProvided ?? [])
+    }
+
+    if (hasConditionals || providedByConfig !== undefined) {
+      this._pendingConditionals.push(entry)
+    }
+
+    return true
+  }
+
+  private isConfigClass(entry: PendingBinding): boolean {
+    if (entry.providedByConfig !== undefined) {
+      return false
+    }
+
+    if (entry.config !== undefined) {
+      return entry.config.isConfiguration === true && entry.config.getSource === undefined
+    }
+
+    return entry.binding?.configuration === true && entry.binding.source === undefined
+  }
+
+  private entryMatchesProfiles(entry: PendingBinding): boolean {
+    return this.matchesProfiles(entry.config?.getProfiles ?? entry.binding?.profiles)
+  }
+
+  private shouldDeferToConditionals(entry: PendingBinding): boolean {
+    const conditionals = entry.config?.getConditionals ?? entry.binding?.conditionals
+    return (conditionals !== undefined && conditionals.length > 0) || entry.providedByConfig !== undefined
+  }
+
+  private materializePending(entry: PendingBinding): Binding {
+    if (entry.binding !== undefined) {
+      return entry.binding
+    }
+
+    const binding = entry.config!.binding()
+    entry.binding = binding
+    return binding
+  }
+
+  private rejectProfile(entry: PendingBinding): void {
+    entry.profileRejected = true
+    if (entry.binding !== undefined) {
+      this.unref(entry.key)
+      this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding: entry.binding })
+    }
+  }
+
+  private registerProfileHit(entry: PendingBinding): void {
+    const binding = this.materializePending(entry)
+    this.hooks.emit('onSetup', { key: entry.key, binding })
+
+    if (binding.configuredBy !== undefined && this.registry.has(entry.key)) {
+      throw new ErrRepeatedInjectableConfiguration(
+        `Found multiple bindings with the same injection key "${keyStr(entry.key)}" configured at "${binding.configuredBy}"`,
+      )
+    }
+
+    this.configureBinding(entry.key, binding)
+    this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
+  }
+
+  private leaveForConditionals(entry: PendingBinding): void {
+    const binding = this.materializePending(entry)
+    this.hooks.emit('onSetup', { key: entry.key, binding })
+  }
+
+  private evaluatePendingProfiles(): void {
+    this._evaluatingProfiles = true
+
+    try {
+      for (const entry of this._pendingProfiles) {
+        if (!this.isConfigClass(entry) || entry.fallback) {
+          continue
+        }
+
+        if (!this.entryMatchesProfiles(entry)) {
+          this.rejectProfile(entry)
+          continue
+        }
+
+        if (this.shouldDeferToConditionals(entry)) {
+          this.leaveForConditionals(entry)
+          continue
+        }
+
+        this.registerProfileHit(entry)
+      }
+
+      for (const entry of this._pendingProfiles) {
+        if (this.isConfigClass(entry) || entry.fallback || entry.providedByConfig !== undefined) {
+          continue
+        }
+
+        if (!this.entryMatchesProfiles(entry)) {
+          this.rejectProfile(entry)
+          continue
+        }
+
+        if (this.shouldDeferToConditionals(entry)) {
+          this.leaveForConditionals(entry)
+          continue
+        }
+
+        this.registerProfileHit(entry)
+      }
+
+      for (const entry of this._pendingProfiles) {
+        if (entry.providedByConfig === undefined) {
+          continue
+        }
+
+        if (!this.entryMatchesProfiles(entry)) {
+          this.rejectProfile(entry)
+          continue
+        }
+
+        if (this.shouldDeferToConditionals(entry)) {
+          this.leaveForConditionals(entry)
+          continue
+        }
+
+        this.registerProfileHit(entry)
+      }
+
+      for (const entry of this._pendingProfiles) {
+        if (!entry.fallback) {
+          continue
+        }
+
+        if (!this.entryMatchesProfiles(entry)) {
+          this.rejectProfile(entry)
+          continue
+        }
+
+        if (this.shouldDeferToConditionals(entry)) {
+          this.leaveForConditionals(entry)
+          continue
+        }
+
+        const binding = this.materializePending(entry)
+        this.hooks.emit('onSetup', { key: entry.key, binding })
+
+        if (this.registry.has(entry.key)) {
+          this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
+          continue
+        }
+
+        this.configureBinding(entry.key, binding)
+        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
+      }
+
+      for (const entry of this._pendingManualProfiles) {
+        if (!this.matchesProfiles(entry.binding!.profiles)) {
+          this.rejectProfile(entry)
+        }
+      }
+    } finally {
+      this._evaluatingProfiles = false
+      this._pendingProfiles = []
+      this._pendingManualProfiles = []
+      this._pendingManualProfileKeys.clear()
+    }
   }
 
   private registerBinding<T>(key: Key<T>, binding: Binding<T>): Binding<T> {
@@ -1377,6 +1625,7 @@ export class CaffeineIoC implements Container {
     }
 
     await runModules(this.modules, this)
+    this.evaluatePendingProfiles()
     await this.evaluatePendingConditionals()
 
     if (this.circularReferences) {
@@ -1531,36 +1780,50 @@ export class CaffeineIoC implements Container {
     }
 
     for (const entry of this._pendingConditionals) {
+      if (entry.profileRejected || entry.binding === undefined) {
+        continue
+      }
+
       if (!entry.binding.configuration || entry.fallback || entry.providedByConfig !== undefined) {
         continue
       }
 
-      const ctx: ConditionContext = { container: this, key: entry.key, binding: entry.binding }
-      const pass = await evalAll(entry.binding.conditionals, ctx)
+      const binding = entry.binding
+      const ctx: ConditionContext = { container: this, key: entry.key, binding }
+      const pass = await evalAll(binding.conditionals, ctx)
 
       if (pass) {
-        registerEntry(entry.key, entry.binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding: entry.binding })
+        registerEntry(entry.key, binding)
+        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
 
         for (const provided of this._pendingConditionals) {
+          if (provided.profileRejected || provided.binding === undefined) {
+            continue
+          }
+
           if (provided.providedByConfig !== entry.key || provided.fallback) {
             continue
           }
 
-          const pCtx: ConditionContext = { container: this, key: provided.key, binding: provided.binding }
-          const pPass = await evalAll(provided.binding.conditionals, pCtx)
+          const providedBinding = provided.binding
+          const pCtx: ConditionContext = { container: this, key: provided.key, binding: providedBinding }
+          const pPass = await evalAll(providedBinding.conditionals, pCtx)
 
           if (pPass) {
-            registerEntry(provided.key, provided.binding)
-            this.hooks.emit('onBindingRegistered', { key: provided.key, binding: provided.binding })
+            registerEntry(provided.key, providedBinding)
+            this.hooks.emit('onBindingRegistered', { key: provided.key, binding: providedBinding })
           } else {
-            this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: provided.binding })
+            this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: providedBinding })
           }
         }
       } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding: entry.binding })
+        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
 
         for (const provided of this._pendingConditionals) {
+          if (provided.profileRejected || provided.binding === undefined) {
+            continue
+          }
+
           if (provided.providedByConfig === entry.key) {
             this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: provided.binding })
           }
@@ -1569,39 +1832,49 @@ export class CaffeineIoC implements Container {
     }
 
     for (const entry of this._pendingConditionals) {
+      if (entry.profileRejected || entry.binding === undefined) {
+        continue
+      }
+
       if (entry.binding.configuration || entry.fallback || entry.providedByConfig !== undefined) {
         continue
       }
 
-      const ctx: ConditionContext = { container: this, key: entry.key, binding: entry.binding }
-      const pass = await evalAll(entry.binding.conditionals, ctx)
+      const binding = entry.binding
+      const ctx: ConditionContext = { container: this, key: entry.key, binding }
+      const pass = await evalAll(binding.conditionals, ctx)
 
       if (pass) {
-        registerEntry(entry.key, entry.binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding: entry.binding })
+        registerEntry(entry.key, binding)
+        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
       } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding: entry.binding })
+        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
       }
     }
 
     for (const entry of this._pendingConditionals) {
+      if (entry.profileRejected || entry.binding === undefined) {
+        continue
+      }
+
       if (!entry.fallback || entry.providedByConfig !== undefined) {
         continue
       }
 
-      if (this.registry.has(entry.key) || !this.isRegistrable(entry.binding)) {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding: entry.binding })
+      const binding = entry.binding
+      if (this.registry.has(entry.key)) {
+        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
         continue
       }
 
-      const ctx: ConditionContext = { container: this, key: entry.key, binding: entry.binding }
-      const pass = await evalAll(entry.binding.conditionals, ctx)
+      const ctx: ConditionContext = { container: this, key: entry.key, binding }
+      const pass = await evalAll(binding.conditionals, ctx)
 
       if (pass) {
-        registerEntry(entry.key, entry.binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding: entry.binding })
+        registerEntry(entry.key, binding)
+        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
       } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding: entry.binding })
+        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
       }
     }
 

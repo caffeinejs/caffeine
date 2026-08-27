@@ -214,7 +214,7 @@ describe('Container Operations', function () {
       }
 
       it('should reset only the requested instance and call destroy hook if any', async function () {
-        const di = new CaffeineIoC()
+        const di = new CaffeineIoC({ profiles: ['container-ops-async-reset'] })
 
         di.bind(kValue)
           .toValue('test')
@@ -588,11 +588,12 @@ describe('async singleton resolution timing (L-3)', function () {
           .toContain('Ambiguous')
       })
 
-      it('should not throw when a primary binding disambiguates multiple candidates', function () {
+      it('should not throw when a primary binding disambiguates multiple candidates', async function () {
         const di = new CaffeineIoC({ profiles: [kArfrPrimaryNs] })
         di.bind('consumer')
           .toFunction((_: unknown) => ({}), [kArfrPrimaryKey])
 
+        await di.compile()
         expect(() => di.assertResolvable()).not.toThrow()
       })
 

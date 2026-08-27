@@ -69,6 +69,26 @@ export class DecoratedBindingConfig {
     return this.#tags
   }
 
+  get getConditionals(): Conditional[] | undefined {
+    return this.#conditionals
+  }
+
+  get isFallback(): boolean | undefined {
+    return this.#fallback
+  }
+
+  get isConfiguration(): boolean | undefined {
+    return this.#configuration
+  }
+
+  get getKeysProvided(): Key[] | undefined {
+    return this.#keysProvided
+  }
+
+  get getSource(): { ctor: Ctor, method: string | symbol } | undefined {
+    return this.#source
+  }
+
   profiles(profiles: Identifier | Identifier[]): this {
     this.#profiles ??= new Set()
 
