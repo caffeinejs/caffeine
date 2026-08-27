@@ -8,7 +8,9 @@ import type { HealthBuilder } from '../health/health_builder.js'
 import type { WebApplication } from '../application.js'
 
 class DownIndicator extends HealthIndicator {
-  readonly name = 'db'
+  get name(): string {
+    return 'db'
+  }
 
   check(): HealthReport {
     return down('connection refused')
@@ -16,8 +18,13 @@ class DownIndicator extends HealthIndicator {
 }
 
 class DegradedIndicator extends HealthIndicator {
-  readonly name = 'metrics'
-  readonly critical = false
+  get name(): string {
+    return 'metrics'
+  }
+
+  get critical(): boolean {
+    return false
+  }
 
   check(): HealthReport {
     return down('unreachable')
@@ -25,7 +32,9 @@ class DegradedIndicator extends HealthIndicator {
 }
 
 class UpIndicator extends HealthIndicator {
-  readonly name = 'cache'
+  get name(): string {
+    return 'cache'
+  }
 
   check(): HealthReport {
     return up()

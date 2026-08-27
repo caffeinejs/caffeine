@@ -11,7 +11,9 @@ import { DatabaseHealth } from "./db.health.js";
 process.env.PETSTORE_SERVER__PORT = "0";
 
 class FakeDatabaseHealth extends HealthIndicator {
-  readonly name = "database";
+  get name(): string {
+    return "database";
+  }
 
   constructor(private readonly healthy: boolean) {
     super();
@@ -68,7 +70,9 @@ describe("health probes", () => {
   it("refuses readiness as soon as shutdown begins, without touching the database", async () => {
     let checks = 0;
     const indicator = new (class extends HealthIndicator {
-      readonly name = "database";
+      get name(): string {
+        return "database";
+      }
       check(): HealthReport {
         checks++;
         return up();

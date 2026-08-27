@@ -1,4 +1,4 @@
-import { DEFAULT_HEALTH_GROUPS, type HealthGroup, type HealthIndicator, type HealthReport, type HealthStatus } from '@caffeinejs/std'
+import { type HealthGroup, type HealthIndicator, type HealthReport, type HealthStatus } from '@caffeinejs/std'
 
 /** One indicator's outcome for a single evaluation. */
 export interface IndicatorOutcome {
@@ -55,7 +55,7 @@ export class HealthRegistry {
     this.#options = options
 
     for (const indicator of indicators) {
-      for (const group of indicator.groups ?? DEFAULT_HEALTH_GROUPS) {
+      for (const group of indicator.groups) {
         const list = this.#byGroup.get(group)
         if (list === undefined) {
           this.#byGroup.set(group, [indicator])
@@ -152,7 +152,7 @@ export class HealthRegistry {
   }
 
   async #check(indicator: HealthIndicator, deadline: AbortSignal): Promise<IndicatorOutcome> {
-    const critical = indicator.critical ?? true
+    const critical = indicator.critical
     const started = Date.now()
     const controller = new AbortController()
     const abort = (reason: unknown): void => controller.abort(reason)

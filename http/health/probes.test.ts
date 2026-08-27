@@ -6,12 +6,24 @@ import { type HealthOptions, defaultHealthOptions } from './options.js'
 
 class Stub extends HealthIndicator {
   constructor(
-    readonly name: string,
+    private readonly id: string,
     private readonly report: () => HealthReport,
-    readonly groups?: readonly HealthGroup[],
-    readonly critical?: boolean,
+    private readonly groupList?: readonly HealthGroup[],
+    private readonly isCritical?: boolean,
   ) {
     super()
+  }
+
+  get name(): string {
+    return this.id
+  }
+
+  get groups(): readonly HealthGroup[] {
+    return this.groupList ?? super.groups
+  }
+
+  get critical(): boolean {
+    return this.isCritical ?? super.critical
   }
 
   check(): HealthReport {

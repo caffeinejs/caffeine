@@ -5,7 +5,9 @@ import { ErrHealthIndicatorNotSingleton } from './errors.js'
 import { loadHealthIndicators } from './load.js'
 
 class Stub extends HealthIndicator {
-  readonly name = 'stub'
+  get name(): string {
+    return 'stub'
+  }
 
   check(): HealthReport {
     return up()

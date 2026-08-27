@@ -32,7 +32,9 @@ export interface HealthReport {
  * ```ts
  * @Injectable()
  * class DatabaseHealth extends HealthIndicator {
- *   readonly name = 'database'
+ *   get name(): string {
+ *     return 'database'
+ *   }
  *
  *   async check(signal: AbortSignal): Promise<HealthReport> {
  *     await this.db.query('SELECT 1', { signal })
@@ -43,20 +45,24 @@ export interface HealthReport {
  */
 export abstract class HealthIndicator {
   /** Identifies the indicator in a verbose probe body. Must be unique across the application. */
-  abstract readonly name: string
+  abstract get name(): string
 
   /** The probes this indicator contributes to. Defaults to {@link DEFAULT_HEALTH_GROUPS}. */
-  readonly groups?: readonly HealthGroup[]
+  get groups(): readonly HealthGroup[] {
+    return DEFAULT_HEALTH_GROUPS
+  }
 
   /**
    * Whether a `down` verdict fails the probe. Defaults to `true`.
    *
-   * Set it to `false` for a dependency the process can serve without: the indicator then reports `degraded`,
+   * Override it to `false` for a dependency the process can serve without: the indicator then reports `degraded`,
    * the probe stays 200, and the pod keeps taking traffic. Consider it for any dependency shared across every
    * replica — a critical indicator on a shared database removes the whole fleet from the Service at once, and no
    * pod then receives the traffic that would show it recovered.
    */
-  readonly critical?: boolean
+  get critical(): boolean {
+    return true
+  }
 
   abstract check(signal: AbortSignal): Promise<HealthReport> | HealthReport
 }

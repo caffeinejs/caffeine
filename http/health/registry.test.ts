@@ -10,12 +10,24 @@ class Stub extends HealthIndicator {
   calls = 0
 
   constructor(
-    readonly name: string,
+    private readonly id: string,
     private readonly report: () => Promise<HealthReport> | HealthReport,
-    readonly groups?: readonly HealthGroup[],
-    readonly critical?: boolean,
+    private readonly groupList?: readonly HealthGroup[],
+    private readonly isCritical?: boolean,
   ) {
     super()
+  }
+
+  get name(): string {
+    return this.id
+  }
+
+  get groups(): readonly HealthGroup[] {
+    return this.groupList ?? super.groups
+  }
+
+  get critical(): boolean {
+    return this.isCritical ?? super.critical
   }
 
   check(): Promise<HealthReport> | HealthReport {
@@ -94,7 +106,9 @@ describe('HealthRegistry', () => {
     let aborted = false
 
     class Watcher extends HealthIndicator {
-      readonly name = 'watcher'
+      get name(): string {
+        return 'watcher'
+      }
 
       check(signal: AbortSignal): Promise<never> {
         signal.addEventListener('abort', () => {

@@ -14,16 +14,18 @@ import { PrismaClient } from "@prisma/client";
  * - the petstore does nothing useful without its data, so reporting "ready" while every request 500s would be a
  *   lie the orchestrator cannot act on.
  *
- * For a dependency the application *can* serve without — a metrics sink, a recommendation service — set
- * `readonly critical = false`. The indicator then reports `degraded`, `/readyz` stays 200, and the pod keeps
- * taking the traffic it can still handle.
+ * For a dependency the application *can* serve without — a metrics sink, a recommendation service — override
+ * `get critical()` to return `false`. The indicator then reports `degraded`, `/readyz` stays 200, and the pod
+ * keeps taking the traffic it can still handle.
  *
  * Nothing here belongs on `/livez`. Restarting the process does not repair a database, it only removes a
  * consumer that would otherwise reconnect on its own.
  */
 @Injectable([PrismaClient])
 export class DatabaseHealth extends HealthIndicator {
-  readonly name = "database";
+  get name(): string {
+    return "database";
+  }
 
   readonly #prisma: PrismaClient;
 

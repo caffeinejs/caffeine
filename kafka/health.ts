@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import { HealthIndicator, type HealthGroup, type HealthReport } from '@caffeinejs/std'
+import { HealthIndicator, type HealthReport } from '@caffeinejs/std'
 import type { KafkaContainerStatus, KafkaListenerContainer } from './listener_container.js'
 import { Keys } from './symbols.js'
 
@@ -19,8 +19,9 @@ const HEALTHY: ReadonlySet<KafkaContainerStatus> = new Set<KafkaContainerStatus>
  * it just removes a consumer that would otherwise resume the moment the group recovers.
  */
 export class KafkaHealthIndicator extends HealthIndicator {
-  readonly name = 'kafka'
-  readonly groups: readonly HealthGroup[] = ['readiness']
+  get name(): string {
+    return 'kafka'
+  }
 
   readonly #container: Container
 
