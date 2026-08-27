@@ -23,34 +23,31 @@ export interface RootModuleSource {
 }
 
 export function renderFolderModule(source: FolderModuleSource): string {
+  const needs = sortNamedImports(source.needs)
   const lines = [
     HEADER,
     '',
     'import { mod, type Module } from \'@caffeinejs/di\'',
-    ...source.sideEffectImports.map(p => `import '${p}'`),
-    ...source.needs.map(renderNamedImport),
+    ...relativeImportLines(source.sideEffectImports, needs),
     '',
-    renderModConst(source.exportName, source.moduleName, source.needs),
+    renderModConst(source.exportName, source.moduleName, needs),
     '',
   ]
   return lines.join('\n')
 }
 
 export function renderRootModule(source: RootModuleSource): string {
-  const aliases = source.modules.map(m => m.alias)
-  const provides = aliases.length === 0
-    ? '[]'
-    : `[${aliases.join(', ')}]`
+  const modules = sortNamedImports(source.modules)
   const lines = [
     HEADER,
     '',
     'import { mod, type Module } from \'@caffeinejs/di\'',
-    ...source.modules.map(renderNamedImport),
+    ...modules.map(renderNamedImport),
     '',
-    `export const rootModule: Module = mod({`,
-    `  name: 'root',`,
-    `  provides: () => ${provides},`,
-    `})`,
+    'export const rootModule: Module = mod({',
+    '  name: \'root\',',
+    `  provides: () => ${renderThunkArray(modules.map(m => m.alias), '  ')},`,
+    '})',
     '',
   ]
   return lines.join('\n')
@@ -102,13 +99,43 @@ function renderModConst(exportName: string, moduleName: string, needs: NamedImpo
   if (needs.length === 0) {
     return `export const ${exportName}: Module = mod({ name: '${escapeQuotes(moduleName)}' })`
   }
-  const aliases = needs.map(n => n.alias).join(', ')
   return [
     `export const ${exportName}: Module = mod({`,
     `  name: '${escapeQuotes(moduleName)}',`,
-    `  needs: () => [${aliases}],`,
+    `  needs: () => ${renderThunkArray(needs.map(n => n.alias), '  ')},`,
     `})`,
   ].join('\n')
+}
+
+function renderThunkArray(aliases: string[], indent: string): string {
+  const inner = indent + '  '
+  const body = aliases.map(alias => `${inner}${alias},`).join('\n')
+  return `[\n${body}\n${indent}]`
+}
+
+function sortNamedImports(items: NamedImport[]): NamedImport[] {
+  return [...items].sort((a, b) => {
+    const byPath = a.importPath.localeCompare(b.importPath)
+    if (byPath !== 0) {
+      return byPath
+    }
+    return a.exportName.localeCompare(b.exportName)
+  })
+}
+
+function relativeImportLines(sideEffectImports: string[], named: NamedImport[]): string[] {
+  const rows: Array<{ path: string, line: string }> = [
+    ...sideEffectImports.map(p => ({ path: p, line: `import '${p}'` })),
+    ...named.map(item => ({ path: item.importPath, line: renderNamedImport(item) })),
+  ]
+  rows.sort((a, b) => {
+    const byPath = a.path.localeCompare(b.path)
+    if (byPath !== 0) {
+      return byPath
+    }
+    return a.line.localeCompare(b.line)
+  })
+  return rows.map(row => row.line)
 }
 
 function escapeQuotes(value: string): string {

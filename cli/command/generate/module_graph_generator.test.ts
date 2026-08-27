@@ -71,7 +71,18 @@ describe('generateModuleGraph()', () => {
     expect(orders).not.toContain('OrderService')
     expect(orders).toContain('import { usersModule } from \'../users/users.generated.mod.js\'')
     expect(orders).toContain('import { extraOrdersModule } from \'./orders.mod.js\'')
-    expect(orders).toContain('needs: () => [extraOrdersModule, usersModule]')
+    expect(orders.indexOf('\'../users/users.generated.mod.js\'')).toBeLessThan(
+      orders.indexOf('\'./order.service.js\''),
+    )
+    expect(orders.indexOf('\'./order.service.js\'')).toBeLessThan(
+      orders.indexOf('\'./orders.mod.js\''),
+    )
+    expect(orders).toContain([
+      '  needs: () => [',
+      '    usersModule,',
+      '    extraOrdersModule,',
+      '  ],',
+    ].join('\n'))
     expect(orders).toContain('name: \'orders\'')
 
     expect(users).toContain('export const usersModule: Module = mod({ name: \'users\' })')
@@ -86,7 +97,15 @@ describe('generateModuleGraph()', () => {
     expect(app).toContain('mod({ name: \'app\' })')
 
     expect(root).toContain('name: \'root\'')
-    expect(root).toContain('provides: () => [')
+    expect(root).toContain([
+      '  provides: () => [',
+      '    appModule,',
+      '    cacheModule,',
+      '    dbModule,',
+      '    ordersModule,',
+      '    usersModule,',
+      '  ],',
+    ].join('\n'))
     expect(root).not.toContain('needs:')
     expect(root).toContain('appModule')
     expect(root).toContain('ordersModule')
