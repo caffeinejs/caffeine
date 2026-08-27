@@ -1,14 +1,19 @@
 import type { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import multipartPlugin from '@fastify/multipart'
 import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
-import '../index.js'
-import type { MultipartField, MultipartFileNode, WebMultipartFile } from '../multipart.js'
+import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
+import { multipartPlugin } from './index.js'
 
 const BOUNDARY = '----TestBoundary123'
 
 type ME = { name: string, value: string } | { name: string, filename: string, content: string, mime?: string }
+
+function multipartApp() {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .extend(multipartPlugin())
+    .multipart()
+}
 
 function multipartBody(
   entries: Array<ME>): Buffer {
@@ -71,7 +76,7 @@ describe('Multipart file upload', () => {
     @Controller('/up1')
     class Up1Controller {
       @Post('/upload')
-      @Params([$p.webStreamFile()])
+      @Params([$p.multipart.webStreamFile()])
       async upload(f: ReadableStream<WebMultipartFile>) {
         const [first] = await readStream(f)
         received = first
@@ -81,9 +86,7 @@ describe('Multipart file upload', () => {
 
     void [Up1Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -107,7 +110,7 @@ describe('Multipart file upload', () => {
     @Controller('/up2')
     class Up2Controller {
       @Post('/upload')
-      @Params([$p.webStreamFile('document')])
+      @Params([$p.multipart.webStreamFile('document')])
       async upload(f: ReadableStream<WebMultipartFile>) {
         const [first] = await readStream(f)
         received = first
@@ -117,9 +120,7 @@ describe('Multipart file upload', () => {
 
     void [Up2Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -140,7 +141,7 @@ describe('Multipart file upload', () => {
     @Controller('/up3')
     class Up3Controller {
       @Post('/upload')
-      @Params([$p.webStreamFile('missing')])
+      @Params([$p.multipart.webStreamFile('missing')])
       async upload(f: ReadableStream<WebMultipartFile>) {
         items = await readStream(f)
         return {}
@@ -149,9 +150,7 @@ describe('Multipart file upload', () => {
 
     void [Up3Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -171,7 +170,7 @@ describe('Multipart file upload', () => {
     @Controller('/up4')
     class Up4Controller {
       @Post('/upload')
-      @Params([$p.webStreamFile()])
+      @Params([$p.multipart.webStreamFile()])
       async upload(f: ReadableStream<WebMultipartFile>) {
         const [first] = await readStream(f)
         bytes = await readFileBytes(first.stream)
@@ -181,9 +180,7 @@ describe('Multipart file upload', () => {
 
     void [Up4Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -203,7 +200,7 @@ describe('Multipart file upload', () => {
     @Controller('/up5')
     class Up5Controller {
       @Post('/upload')
-      @Params([$p.webStreamFile('avatar'), $p.query('userID')])
+      @Params([$p.multipart.webStreamFile('avatar'), $p.query('userID')])
       async upload(f: ReadableStream<WebMultipartFile>, userID: string) {
         const [first] = await readStream(f)
         receivedFile = first
@@ -214,9 +211,7 @@ describe('Multipart file upload', () => {
 
     void [Up5Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -236,7 +231,7 @@ describe('Multipart file upload', () => {
     @Controller('/up6')
     class Up6Controller {
       @Post('/upload')
-      @Params([$p.webStreamFiles()])
+      @Params([$p.multipart.webStreamFiles()])
       async upload(f: ReadableStream<WebMultipartFile>) {
         received = await readStream(f)
         return {}
@@ -245,9 +240,7 @@ describe('Multipart file upload', () => {
 
     void [Up6Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -271,7 +264,7 @@ describe('Multipart file upload', () => {
     @Controller('/up7')
     class Up7Controller {
       @Post('/upload')
-      @Params([$p.webStreamParts()])
+      @Params([$p.multipart.webStreamParts()])
       async upload(p: ReadableStream<WebMultipartFile | MultipartField>) {
         received = await readStream(p)
         return {}
@@ -280,9 +273,7 @@ describe('Multipart file upload', () => {
 
     void [Up7Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -308,7 +299,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf1')
     class Wf1Controller {
       @Post('/upload')
-      @Params([$p.file()])
+      @Params([$p.multipart.file()])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -317,9 +308,7 @@ describe('Multipart file upload', () => {
 
     void [Wf1Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -335,13 +324,13 @@ describe('Multipart file upload', () => {
     expect(Buffer.from(await received!.arrayBuffer()).toString()).toBe('jpeg-bytes')
   })
 
-  it('file() via @Params builder — p.file() is the same picker as $p.file()', async () => {
+  it('file() via @Params builder — p.multipart.file() is the same picker as $p.multipart.file()', async () => {
     let received: File | undefined
 
     @Controller('/wf1b')
     class Wf1bController {
       @Post('/upload')
-      @Params(p => [p.file()])
+      @Params(p => [p.multipart.file()])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -350,9 +339,7 @@ describe('Multipart file upload', () => {
 
     void [Wf1bController]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -373,7 +360,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf2')
     class Wf2Controller {
       @Post('/upload')
-      @Params([$p.file('document')])
+      @Params([$p.multipart.file('document')])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -382,9 +369,7 @@ describe('Multipart file upload', () => {
 
     void [Wf2Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -408,7 +393,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf3')
     class Wf3Controller {
       @Post('/upload')
-      @Params([$p.file('missing')])
+      @Params([$p.multipart.file('missing')])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -417,9 +402,7 @@ describe('Multipart file upload', () => {
 
     void [Wf3Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -438,7 +421,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf4')
     class Wf4Controller {
       @Post('/upload')
-      @Params([$p.files()])
+      @Params([$p.multipart.files()])
       async upload(f: File[]) {
         received = f
         return {}
@@ -447,9 +430,7 @@ describe('Multipart file upload', () => {
 
     void [Wf4Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -474,7 +455,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf5')
     class Wf5Controller {
       @Post('/upload')
-      @Params([$p.formData()])
+      @Params([$p.multipart.formData()])
       async upload(fd: FormData) {
         received = fd
         return {}
@@ -483,9 +464,7 @@ describe('Multipart file upload', () => {
 
     void [Wf5Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -512,7 +491,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf1')
     class Nf1Controller {
       @Post('/upload')
-      @Params([$p.streamFile()])
+      @Params([$p.multipart.streamFile()])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           received = chunk as MultipartFileNode
@@ -523,9 +502,7 @@ describe('Multipart file upload', () => {
 
     void [Nf1Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -548,7 +525,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf2')
     class Nf2Controller {
       @Post('/upload')
-      @Params([$p.streamFile('document')])
+      @Params([$p.multipart.streamFile('document')])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           received = chunk as MultipartFileNode
@@ -559,9 +536,7 @@ describe('Multipart file upload', () => {
 
     void [Nf2Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -584,7 +559,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf3')
     class Nf3Controller {
       @Post('/upload')
-      @Params([$p.streamFiles()])
+      @Params([$p.multipart.streamFiles()])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           const node = chunk as MultipartFileNode
@@ -597,9 +572,7 @@ describe('Multipart file upload', () => {
 
     void [Nf3Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({
@@ -623,7 +596,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf4')
     class Nf4Controller {
       @Post('/upload')
-      @Params([$p.streamParts()])
+      @Params([$p.multipart.streamParts()])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           const part = chunk as MultipartFileNode | MultipartField
@@ -638,9 +611,7 @@ describe('Multipart file upload', () => {
 
     void [Nf4Controller]
 
-    const server = fastify()
-    await server.register(multipartPlugin)
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = multipartApp().build()
     await app.ready()
 
     await app.instance.inject({

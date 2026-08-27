@@ -126,6 +126,16 @@ than an oversight. A real deployment would map the role from org or team members
 
 Needs a reachable PostgreSQL and `DATABASE_URL` (copy `.env.example` → `.env`).
 
+Root `npm run build` (`tsc`) does **not** produce the `caffeine` CLI binary. Build it once
+(after clone, clean, or whenever `node_modules/.bin/caffeine` is missing) before generate/build:
+
+```sh
+npm run build:cli   # bun-compile @caffeinejs/cli + link node_modules/.bin/caffeine
+# or: make build:cli
+```
+
+Then:
+
 ```sh
 npm run build -w @caffeinejs/example-petstore   # prisma generate + caffeine generate
 npm run db:migrate:dev -w @caffeinejs/example-petstore   # author/apply migrations

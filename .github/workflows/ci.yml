@@ -45,8 +45,7 @@ jobs:
 
       - name: Build
         run: |
-          npm run build -w cli
-          npm link -w cli
+          npm run build:cli
 
           npm run build
           npm run build --workspaces --if-present

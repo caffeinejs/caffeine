@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import type { RouteOptions } from 'fastify'
-import { addRouteHook } from './route_hooks.js'
+import { addRouteHook, type AdapterRouteOptions } from './route_hooks.js'
 
-const newRouteDef = (): RouteOptions =>
-  ({ method: 'GET', url: '/', handler: () => undefined }) as unknown as RouteOptions
+const newRouteDef = (): AdapterRouteOptions =>
+  ({ method: 'GET', url: '/', handler: () => undefined }) as unknown as AdapterRouteOptions
 
 const a = (): void => {}
 const b = (): void => {}

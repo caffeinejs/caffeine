@@ -6,21 +6,25 @@ import { $p } from '@caffeinejs/http'
 import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
+export interface MultipartPickers {
+  file<R = unknown>(fieldname?: string): ParameterPickOptions<R>
+  files<R = unknown>(): ParameterPickOptions<R>
+  formData<R = unknown>(): ParameterPickOptions<R>
+  streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
+  streamFiles<R = unknown>(): ParameterPickOptions<R>
+  streamParts<R = unknown>(): ParameterPickOptions<R>
+  webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
+  webStreamFiles<R = unknown>(): ParameterPickOptions<R>
+  webStreamParts<R = unknown>(): ParameterPickOptions<R>
+}
+
 declare module '@caffeinejs/http' {
   interface HTTPPickers {
-    webStreamParts<R = unknown>(): ParameterPickOptions<R>
-    webStreamFiles<R = unknown>(): ParameterPickOptions<R>
-    webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
-    streamParts<R = unknown>(): ParameterPickOptions<R>
-    streamFiles<R = unknown>(): ParameterPickOptions<R>
-    streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
-    file<R = unknown>(fieldname?: string): ParameterPickOptions<R>
-    files<R = unknown>(): ParameterPickOptions<R>
-    formData<R = unknown>(): ParameterPickOptions<R>
+    readonly multipart: MultipartPickers
   }
 }
 
-export function webStreamParts<R = unknown>(): ParameterPickOptions<R> {
+function webStreamParts<R = unknown>(): ParameterPickOptions<R> {
   return {
     type: 'multipart:streamparts:web',
     picker: ((req: FastifyRequest) => {
@@ -55,7 +59,7 @@ export function webStreamParts<R = unknown>(): ParameterPickOptions<R> {
   }
 }
 
-export function webStreamFiles<R = unknown>(): ParameterPickOptions<R> {
+function webStreamFiles<R = unknown>(): ParameterPickOptions<R> {
   return {
     type: 'multipart:streamfiles:web',
     picker: ((req: FastifyRequest) => {
@@ -82,7 +86,7 @@ export function webStreamFiles<R = unknown>(): ParameterPickOptions<R> {
   }
 }
 
-export function webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
+function webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
   return {
     name: fieldname,
     type: 'multipart:streamfile:web',
@@ -121,7 +125,7 @@ export function webStreamFile<R = unknown>(fieldname?: string): ParameterPickOpt
   }
 }
 
-export function streamParts<R = unknown>(): ParameterPickOptions<R> {
+function streamParts<R = unknown>(): ParameterPickOptions<R> {
   return {
     type: 'multipart:streamparts',
     picker: ((req: FastifyRequest) => {
@@ -139,7 +143,7 @@ export function streamParts<R = unknown>(): ParameterPickOptions<R> {
   }
 }
 
-export function streamFiles<R = unknown>(): ParameterPickOptions<R> {
+function streamFiles<R = unknown>(): ParameterPickOptions<R> {
   return {
     type: 'multipart:streamfiles',
     picker: ((req: FastifyRequest) => {
@@ -153,7 +157,7 @@ export function streamFiles<R = unknown>(): ParameterPickOptions<R> {
   }
 }
 
-export function streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
+function streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
   return {
     name: fieldname,
     type: 'multipart:streamfile',
@@ -172,7 +176,7 @@ export function streamFile<R = unknown>(fieldname?: string): ParameterPickOption
   }
 }
 
-export function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
+function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
   return {
     name: fieldname,
     type: 'multipart:file',
@@ -195,7 +199,7 @@ export function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
   }
 }
 
-export function files<R = unknown>(): ParameterPickOptions<R> {
+function files<R = unknown>(): ParameterPickOptions<R> {
   return {
     type: 'multipart:files',
     async: true,
@@ -215,7 +219,7 @@ export function files<R = unknown>(): ParameterPickOptions<R> {
   }
 }
 
-export function formData<R = unknown>(): ParameterPickOptions<R> {
+function formData<R = unknown>(): ParameterPickOptions<R> {
   return {
     type: 'multipart:formdata',
     async: true,
@@ -240,7 +244,7 @@ export function formData<R = unknown>(): ParameterPickOptions<R> {
   }
 }
 
-Object.assign($p, {
+export const multipart: MultipartPickers = {
   webStreamParts,
   webStreamFiles,
   webStreamFile,
@@ -250,4 +254,6 @@ Object.assign($p, {
   file,
   files,
   formData,
-})
+}
+
+Object.assign($p, { multipart })

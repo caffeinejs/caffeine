@@ -1,14 +1,5 @@
-import './pickers.js'
-
+export { MultipartBuilder } from './builder.js'
+export { MultipartExtension, type MultipartOptions } from './extension.js'
 export type * from './multipart.js'
-export {
-  file,
-  files,
-  formData,
-  streamFile,
-  streamFiles,
-  streamParts,
-  webStreamFile,
-  webStreamFiles,
-  webStreamParts,
-} from './pickers.js'
+export type { MultipartPickers } from './pickers.js'
+export { multipartPlugin, type MultipartPluginExt } from './plugin.js'

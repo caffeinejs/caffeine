@@ -10,6 +10,10 @@ export
 build: ## build all packages
 	@npm run build:force
 
+.PHONY: build\:cli
+build\:cli: ## build the caffeine CLI binary and link node_modules/.bin/caffeine
+	@npm run build:cli
+
 build\:%: ## build a single package and its local deps (e.g. build:http)
 	@npm run build -w $*
 
@@ -76,7 +80,7 @@ example\:devtools:
 	@npx tsx examples/02-devtools-basic/index.ts
 
 .PHONY: example\:petstore
-example\:petstore: ## run the petstore example (Postgres in Docker, app on host at http://localhost:9999)
+example\:petstore: build\:cli ## run the petstore example (Postgres in Docker, app on host at http://localhost:9999)
 	@docker compose -f examples/03-petstore/docker-compose.yml up -d postgres
 	@echo "waiting for postgres ..."
 	@until docker compose -f examples/03-petstore/docker-compose.yml exec -T postgres pg_isready -U petstore -d petstore >/dev/null 2>&1; do sleep 1; done
@@ -156,6 +160,7 @@ ts7: clean ## clean, then build all packages with TypeScript 7 in Docker (host t
 help: ## show help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf "\033[36m%-20s\033[0m %s\n" "build:<package>" "build a single package and its local deps (e.g. build:http)"
+	@printf "\033[36m%-20s\033[0m %s\n" "build:cli" "build the caffeine CLI binary and link node_modules/.bin/caffeine"
 	@printf "\033[36m%-20s\033[0m %s\n" "test:<package>" "run the test suite of a single package (e.g. test:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "lint:<package>" "lint a single package and fix errors (e.g. lint:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "lint-check:<package>" "lint a single package without fixing (e.g. lint-check:http)"

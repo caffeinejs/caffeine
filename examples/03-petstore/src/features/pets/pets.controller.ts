@@ -13,7 +13,6 @@ import {
   Status,
   $p,
 } from "@caffeinejs/http";
-import "@caffeinejs/http-multipart";
 import { APIGroup, Operation } from "@caffeinejs/openapi";
 import { apiErrorSchema } from "../../util/errors/index.js";
 import type {
@@ -157,7 +156,7 @@ export class PetsController {
     await this.pets.remove(id);
   }
 
-  // Multipart upload — $p.file() yields a Web API File for the `file` field, and is also what tells the
+  // Multipart upload — $p.multipart.file() yields a Web API File for the `file` field, and is also what tells the
   // OpenAPI generator this route consumes multipart/form-data with a binary `file` part. Nothing restates it.
   @Post("/:id/images")
   @Status(201)
@@ -166,7 +165,7 @@ export class PetsController {
     params: petIdParamSchema,
     response: { 201: petPhotoSchema, 404: apiErrorSchema },
   })
-  @Params([$p.param("id"), $p.file("file")])
+  @Params([$p.param("id"), $p.multipart.file("file")])
   @Operation({
     operationId: "uploadPetPhoto",
     summary: "Upload a photo for a pet",

@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
 import fastify, { type FastifyServerOptions } from "fastify";
-import FastifyMultipart from "@fastify/multipart";
 import FastifyCookie from "@fastify/cookie";
 import handlebars from "handlebars";
 import type { Container } from "@caffeinejs/di";
@@ -12,10 +11,11 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from "@caffeinejs/http";
-import type { HealthIndicator } from "@caffeinejs/std";
-import { EnvConfigProvider } from "@caffeinejs/std/config";
+import { multipartPlugin } from "@caffeinejs/http-multipart";
 import { openapiPlugin } from "@caffeinejs/openapi";
 import { staticPlugin } from "@caffeinejs/static";
+import type { HealthIndicator } from "@caffeinejs/std";
+import { EnvConfigProvider } from "@caffeinejs/std/config";
 import { viewPlugin } from "@caffeinejs/view";
 import { apiErrorSchema } from "./util/errors/index.js";
 import { GITHUB_SESSION_COOKIE, githubConfig } from "./features/auth/index.js";
@@ -44,14 +44,14 @@ export function buildApp(
     routerOptions: { ignoreTrailingSlash: true },
     ...serverOpts,
   }).addHttpMethod("QUERY", { hasBody: true });
-  server.register(FastifyMultipart);
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie);
 
   const builder = createWebApplication(fastifyAdapterFactory(server), {
     container,
   })
-    .extend(viewPlugin(), staticPlugin(), openapiPlugin())
+    .extend(viewPlugin(), staticPlugin(), openapiPlugin(), multipartPlugin())
+    .multipart()
     .view((v) =>
       v.engine({ handlebars })
         .root(viewsRoot)

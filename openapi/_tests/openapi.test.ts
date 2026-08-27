@@ -16,11 +16,13 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import '@caffeinejs/http-multipart'
+import { multipartPlugin } from '@caffeinejs/http-multipart'
 import { APIGroup, Operation } from '../decorators/index.js'
 import { ErrOpenAPIConfiguration } from '../errors.js'
 import { openapiPlugin } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
+
+void multipartPlugin
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -65,7 +67,7 @@ class PetsController {
   @Post('/:id/images')
   @Status(201)
   @Roles('write:pets')
-  @Params([$p.param('id'), $p.file('file')])
+  @Params([$p.param('id'), $p.multipart.file('file')])
   upload() {
     return { uploaded: true }
   }
