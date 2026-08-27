@@ -28,8 +28,8 @@ RUN bun /app/cli/dist/bin.js generate
 
 FROM base AS runtime
 
-# Only the generated DI registration file crosses the stage boundary.
-COPY --from=codegen /app/examples/03-petstore/src/__caffeine__.gen.ts ./examples/03-petstore/src/__caffeine__.gen.ts
+# Generated module graph (*.generated.mod.ts) crosses the stage boundary.
+COPY --from=codegen /app/examples/03-petstore/src ./examples/03-petstore/src
 
 # Prisma's client generator is plain Node, so it stays here.
 WORKDIR /app/examples/03-petstore

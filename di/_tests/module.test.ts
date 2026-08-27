@@ -577,6 +577,84 @@ describe('Module', function () {
       expect(order).toContain('a')
       expect(order).toContain('b')
     })
+
+    it('should collect children from a provides-only root', async function () {
+      const order: string[] = []
+      const a = mod('a', () => {
+        order.push('a')
+      })
+      const b = mod('b', () => {
+        order.push('b')
+      })
+      const c = mod('c', () => {
+        order.push('c')
+      })
+      const root = mod({
+        name: 'root',
+        provides: () => [a, b, c],
+      })
+
+      const di = new CaffeineIoC({ decorators: false, modules: [root] })
+      await di.init()
+
+      expect(order).toEqual(['a', 'b', 'c'])
+    })
+
+    it('should collect a cycle among provided children and run each fn once', async function () {
+      const order: string[] = []
+      const a: Module = {
+        name: 'a',
+        needs: () => [b],
+        fn: () => {
+          order.push('a')
+        },
+      }
+      const b: Module = {
+        name: 'b',
+        needs: () => [a],
+        fn: () => {
+          order.push('b')
+        },
+      }
+      mod(a)
+      mod(b)
+      const root = mod({
+        name: 'root',
+        provides: () => [a, b],
+      })
+
+      const di = new CaffeineIoC({ decorators: false, modules: [root] })
+      await di.init()
+
+      expect(order).toHaveLength(2)
+      expect(order.filter(n => n === 'a')).toHaveLength(1)
+      expect(order.filter(n => n === 'b')).toHaveLength(1)
+    })
+
+    it('should collect a long needs chain from a provides-only root', async function () {
+      const order: number[] = []
+      const chain: Module[] = []
+      for (let i = 0; i < 64; i++) {
+        const index = i
+        chain.push(mod({
+          name: `n${index}`,
+          needs: () => (index === 0 ? [] : [chain[index - 1]]),
+          fn: () => {
+            order.push(index)
+          },
+        }))
+      }
+      const root = mod({
+        name: 'root',
+        provides: () => [chain[63]],
+      })
+
+      const di = new CaffeineIoC({ decorators: false, modules: [root] })
+      await di.init()
+
+      expect(order).toHaveLength(64)
+      expect(order).toEqual(Array.from({ length: 64 }, (_, i) => i))
+    })
   })
 
   describe('circular modules', function () {

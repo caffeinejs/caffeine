@@ -7,7 +7,7 @@
   "tabWidth": 2,
   "sortPackageJson": false,
   "ignorePatterns": [
-    "src/__caffeine__.gen.ts",
+    "**/*.generated.mod.ts",
     "prisma/migrations/**",
     "**/*.hbs"
   ]

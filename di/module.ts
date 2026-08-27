@@ -117,34 +117,45 @@ function collectModules(roots: Array<Module | ModuleFn>): Module[] {
   const queued = new Set<ModuleFn | Module>()
   const path = new Set<ModuleFn | Module>()
   const order: Module[] = []
+  const stack: Array<{ input: Module | ModuleFn, module?: Module, phase: 'enter' | 'exit' }> = []
 
-  function visit(input: Module | ModuleFn): void {
-    const module = normalizeModule(input)
+  for (let i = roots.length - 1; i >= 0; i--) {
+    stack.push({ input: roots[i], phase: 'enter' })
+  }
+
+  while (stack.length > 0) {
+    const frame = stack.pop()!
+    if (frame.phase === 'exit') {
+      const module = frame.module!
+      const key = module.fn ?? module
+      path.delete(key)
+      queued.add(key)
+      order.push(module)
+      continue
+    }
+
+    const module = normalizeModule(frame.input)
     const key = module.fn ?? module
 
     if (queued.has(key) || path.has(key)) {
-      return
+      continue
     }
 
     path.add(key)
+    stack.push({ input: frame.input, module, phase: 'exit' })
 
+    const children: Array<Module | ModuleFn> = []
     for (const dep of module.needs?.() ?? []) {
-      visit(dep)
+      children.push(dep)
     }
-
     for (const item of module.provides?.() ?? []) {
       if (isNestedModule(item)) {
-        visit(item)
+        children.push(item)
       }
     }
-
-    path.delete(key)
-    queued.add(key)
-    order.push(module)
-  }
-
-  for (const root of roots) {
-    visit(root)
+    for (let i = children.length - 1; i >= 0; i--) {
+      stack.push({ input: children[i], phase: 'enter' })
+    }
   }
 
   return order

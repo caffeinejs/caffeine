@@ -14,9 +14,22 @@ export interface ModulesConfig {
   importExtension?: '.js' | '.ts' | ''
 }
 
+export interface ModuleGraphConfig {
+  include: string[]
+  exclude?: string[]
+  root?: string
+  importExtension?: '.js' | '.ts' | ''
+  moduleName?: (name: string) => string
+  depth?: number
+  depths?: Record<string, number>
+  maxDepth?: number
+  skip?: string[]
+}
+
 export interface CaffeineConfig {
   generate?: GenerateConfig
   modules?: ModulesConfig
+  moduleGraph?: ModuleGraphConfig
 }
 
 export function defineConfig(config: CaffeineConfig): CaffeineConfig {

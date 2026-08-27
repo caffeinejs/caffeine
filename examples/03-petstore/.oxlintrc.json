@@ -9,7 +9,7 @@
   },
   "ignorePatterns": [
     "dist/**",
-    "src/__caffeine__.gen.ts"
+    "**/*.generated.mod.ts"
   ],
   "rules": {
     "typescript/no-explicit-any": "off",

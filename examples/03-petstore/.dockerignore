@@ -2,5 +2,5 @@
 **/dist
 **/*.tsbuildinfo
 **/.env
-examples/03-petstore/src/__caffeine__.gen.ts
+examples/03-petstore/src/**/*.generated.mod.ts
 .git
