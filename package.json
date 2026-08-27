@@ -38,7 +38,7 @@
     "test:coverage": "vitest run --coverage",
     "test:property": "vitest run prop.test",
     "test:watch": "vitest",
-    "test:typecheck": "tsc -p tsconfig.test.json",
+    "test:typecheck": "tsc -p tsconfig.test.colocated.json && tsc -p tsconfig.test.json",
     "test:typecheck:benchmarks": "npm run test:typecheck -w @caffeinejs/benchmarks",
     "test:memory": "npm run test:memory --workspaces --if-present",
     "lint": "eslint",

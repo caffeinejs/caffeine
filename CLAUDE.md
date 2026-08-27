@@ -32,6 +32,13 @@ After making any code changes, always run checks in this order and fix any failu
 
 When in doubt about which bucket a change falls into, run the full suite.
 
+Root `npm run test:typecheck` runs two `tsc` projects:
+
+1. [`tsconfig.test.colocated.json`](tsconfig.test.colocated.json) — tests under `di` / `http` / `http-multipart` / `static` / `view`, with `paths` aliases to those packages' **source** so co-located relative imports and `@caffeinejs/*` share one type identity.
+2. [`tsconfig.test.json`](tsconfig.test.json) — all other tests, resolving `@caffeinejs/*` through each package's `exports` → `dist/*.d.ts` (no source `paths`). Requires a prior `npm run build` (CI and `make check` already order it that way). Stale `dist/` can miss source-only type edits — rebuild the touched packages before typecheck when public types change.
+
+Repeat local runs reuse `.cache/tsconfig.test*.tsbuildinfo` (gitignored).
+
 ## Private modules
 
 Files prefixed with `_` (e.g., `_noop.ts`) are private to their directory. Do not import them from a different directory. This is enforced by the `no-restricted-imports` ESLint rule.

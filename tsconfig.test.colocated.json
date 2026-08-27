@@ -1,0 +1,38 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "jsx": "preserve",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": true,
+    "tsBuildInfoFile": "./.cache/tsconfig.test.colocated.tsbuildinfo",
+    "paths": {
+      "@caffeinejs/di": ["./di/index.ts"],
+      "@caffeinejs/http": ["./http/index.ts"],
+      "@caffeinejs/http-multipart": ["./http-multipart/index.ts"],
+      "@caffeinejs/static": ["./static/index.ts"],
+      "@caffeinejs/view": ["./view/index.ts"]
+    }
+  },
+  "include": [
+    "di/**/*.test.ts",
+    "di/**/*.spec.ts",
+    "http/**/*.test.ts",
+    "http/**/*.spec.ts",
+    "http-multipart/**/*.test.ts",
+    "http-multipart/**/*.spec.ts",
+    "static/**/*.test.ts",
+    "static/**/*.spec.ts",
+    "view/**/*.test.ts",
+    "view/**/*.spec.ts"
+  ],
+  "exclude": [
+    "**/dist",
+    "**/node_modules",
+    "di/decorators/legacy/**",
+    "cli/**"
+  ]
+}

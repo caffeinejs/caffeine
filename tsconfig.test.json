@@ -7,13 +7,8 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
-    "paths": {
-      "@caffeinejs/di": ["./di/index.ts"],
-      "@caffeinejs/http": ["./http/index.ts"],
-      "@caffeinejs/http-multipart": ["./http-multipart/index.ts"],
-      "@caffeinejs/static": ["./static/index.ts"],
-      "@caffeinejs/view": ["./view/index.ts"]
-    }
+    "incremental": true,
+    "tsBuildInfoFile": "./.cache/tsconfig.test.tsbuildinfo"
   },
   "include": [
     "**/*.test.ts",
@@ -23,7 +18,11 @@
   "exclude": [
     "**/dist",
     "**/node_modules",
-    "di/decorators/legacy/**",
+    "di/**",
+    "http/**",
+    "http-multipart/**",
+    "static/**",
+    "view/**",
     "cli/**"
   ]
 }

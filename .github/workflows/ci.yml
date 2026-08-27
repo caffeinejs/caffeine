@@ -55,6 +55,16 @@ jobs:
           npm run lint
           npm run lint -w @caffeinejs/example-petstore
 
+      - name: Restore test typecheck cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/tsconfig.test.tsbuildinfo
+            .cache/tsconfig.test.colocated.tsbuildinfo
+          key: test-typecheck-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.test.json', 'tsconfig.test.colocated.json', 'tsconfig.json') }}-${{ hashFiles('**/*.test.ts', '**/*.spec.ts', 'test/**/*.e2e.ts') }}
+          restore-keys: |
+            test-typecheck-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.test.json', 'tsconfig.test.colocated.json', 'tsconfig.json') }}-
+
       - name: Type Check
         run: npm run test:typecheck
 
