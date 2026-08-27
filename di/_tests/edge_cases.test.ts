@@ -485,9 +485,8 @@ describe('E2: Two @Configuration classes providing the same key — ambiguity er
     }
   }
 
-  it('should throw ErrRepeatedInjectableConfiguration during autoWire', async function () {
-    const di = new CaffeineIoC({ profiles: [NS_E2] })
-    await expect(di.init()).rejects.toThrow(ErrRepeatedInjectableConfiguration)
+  it('should throw ErrRepeatedInjectableConfiguration during autoWire', function () {
+    expect(() => new CaffeineIoC({ profiles: [NS_E2] })).toThrow(ErrRepeatedInjectableConfiguration)
   })
 })
 

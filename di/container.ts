@@ -792,7 +792,7 @@ export class CaffeineIoC implements Container {
     }
 
     for (const [key, binding] of snap.entries()) {
-      this.configureBinding(key, binding)
+      this.configureBinding(key, binding, false)
     }
   }
 
@@ -1137,7 +1137,7 @@ export class CaffeineIoC implements Container {
    * @param key - The key to configure the binding for.
    * @param config - The binding configuration.
    */
-  private configureBinding<T>(key: Key<T>, config: Binding<T>): void {
+  private configureBinding<T>(key: Key<T>, config: Binding<T>, queueProfileEval = true): void {
     notNil(key)
     notNil(config)
 
@@ -1210,7 +1210,7 @@ export class CaffeineIoC implements Container {
       this._pendingConditionalKeys.add(key)
     }
 
-    if (!this._compiled && !this._evaluatingProfiles && canonical.profiles.size > 0
+    if (queueProfileEval && !this._compiled && !this._evaluatingProfiles && canonical.profiles.size > 0
       && !this._pendingManualProfileKeys.has(key)) {
       this._pendingManualProfileKeys.add(key)
       this._pendingManualProfiles.push({
@@ -1320,6 +1320,10 @@ export class CaffeineIoC implements Container {
   private queueProfiledConfig(key: Key, config: DecoratedBindingConfig, providedByConfig?: Key): boolean {
     const profiles = config.getProfiles
     if (!profiles || profiles.size === 0) {
+      return false
+    }
+
+    if (this.matchesProfiles(profiles)) {
       return false
     }
 

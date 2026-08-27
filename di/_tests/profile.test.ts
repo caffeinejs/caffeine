@@ -254,16 +254,14 @@ describe('CaffeineIoC.addProfiles()', function () {
   })
 })
 
-describe('deferred profile evaluation', function () {
+describe('constructor profile evaluation', function () {
   @Injectable()
-  @Profile('defer-prof')
-  class DeferredProfBean {}
+  @Profile('ctor-prof')
+  class CtorProfBean {}
 
-  it('should not register a decorated @Profile type until init', async function () {
-    const di = new CaffeineIoC({ profiles: ['defer-prof'] })
-    expect(di.has(DeferredProfBean)).toBe(false)
-    await di.init()
-    expect(di.has(DeferredProfBean)).toBe(true)
+  it('registers a decorated @Profile type during autoWire when the profile is active', function () {
+    const di = new CaffeineIoC({ profiles: ['ctor-prof'] })
+    expect(di.has(CtorProfBean)).toBe(true)
   })
 })
 
