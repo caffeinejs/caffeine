@@ -15,15 +15,6 @@ export interface HTTPPickers {
   signal<R = unknown>(): ParameterPickOptions<R>
   port<R = unknown>(): ParameterPickOptions<R>
   address<R = unknown>(): ParameterPickOptions<R>
-  webStreamParts<R = unknown>(): ParameterPickOptions<R>
-  webStreamFiles<R = unknown>(): ParameterPickOptions<R>
-  webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
-  streamParts<R = unknown>(): ParameterPickOptions<R>
-  streamFiles<R = unknown>(): ParameterPickOptions<R>
-  streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
-  file<R = unknown>(fieldname?: string): ParameterPickOptions<R>
-  files<R = unknown>(): ParameterPickOptions<R>
-  formData<R = unknown>(): ParameterPickOptions<R>
   cookie<R = unknown>(name?: string): ParameterPickOptions<R>
   signedCookie<R = unknown>(name?: string): ParameterPickOptions<R>
   pick<R = unknown>(fn: (req: R) => unknown | Promise<unknown>, opts?: { async?: boolean },): ParameterPickOptions<R>
@@ -81,42 +72,6 @@ function address<R = unknown>(): ParameterPickOptions<R> {
   return { type: 'address' }
 }
 
-function webStreamParts<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:streamparts:web' }
-}
-
-function webStreamFiles<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:streamfiles:web' }
-}
-
-function webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
-  return { name: fieldname, type: 'multipart:streamfile:web' }
-}
-
-function streamParts<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:streamparts' }
-}
-
-function streamFiles<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:streamfiles' }
-}
-
-function streamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
-  return { name: fieldname, type: 'multipart:streamfile' }
-}
-
-function file<R = unknown>(fieldname?: string): ParameterPickOptions<R> {
-  return { name: fieldname, type: 'multipart:file', async: true }
-}
-
-function files<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:files', async: true }
-}
-
-function formData<R = unknown>(): ParameterPickOptions<R> {
-  return { type: 'multipart:formdata', async: true }
-}
-
 function cookie<R = unknown>(name?: string): ParameterPickOptions<R> {
   return { name, type: 'cookie' }
 }
@@ -132,7 +87,7 @@ function pick<R = unknown>(
   return { type: 'custom', picker: fn as ParameterPicker<R>, async: opts?.async }
 }
 
-export const $p: HTTPPickers = {
+export const $p = {
   fastifyRequest,
   fastifyReply,
   param,
@@ -146,16 +101,7 @@ export const $p: HTTPPickers = {
   signal,
   port,
   address,
-  webStreamParts,
-  webStreamFiles,
-  webStreamFile,
-  streamParts,
-  streamFiles,
-  streamFile,
-  file,
-  files,
-  formData,
   cookie,
   signedCookie,
   pick,
-}
+} as HTTPPickers

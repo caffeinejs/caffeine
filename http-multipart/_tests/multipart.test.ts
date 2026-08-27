@@ -2,9 +2,9 @@ import type { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import multipartPlugin from '@fastify/multipart'
-import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory } from '../index.js'
-import { $p } from '../route_picker.js'
-import { WebMultipartFile, MultipartFileNode, MultipartField } from '../multipart/index.js'
+import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
+import '../index.js'
+import type { MultipartField, MultipartFileNode, WebMultipartFile } from '../multipart.js'
 
 const BOUNDARY = '----TestBoundary123'
 
@@ -332,6 +332,38 @@ describe('Multipart file upload', () => {
     expect(received).toBeInstanceOf(File)
     expect(received!.name).toBe('photo.jpg')
     expect(received!.type).toBe('image/jpeg')
+    expect(Buffer.from(await received!.arrayBuffer()).toString()).toBe('jpeg-bytes')
+  })
+
+  it('file() via @Params builder — p.file() is the same picker as $p.file()', async () => {
+    let received: File | undefined
+
+    @Controller('/wf1b')
+    class Wf1bController {
+      @Post('/upload')
+      @Params(p => [p.file()])
+      async upload(f: File | undefined) {
+        received = f
+        return {}
+      }
+    }
+
+    void [Wf1bController]
+
+    const server = fastify()
+    await server.register(multipartPlugin)
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    await app.instance.inject({
+      method: 'POST',
+      url: '/wf1b/upload',
+      headers: multipartHeaders(),
+      payload: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
+    })
+
+    expect(received).toBeInstanceOf(File)
+    expect(received!.name).toBe('photo.jpg')
     expect(Buffer.from(await received!.arrayBuffer()).toString()).toBe('jpeg-bytes')
   })
 

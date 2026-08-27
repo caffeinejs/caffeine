@@ -11,6 +11,7 @@
     "scan",
     "std",
     "http",
+    "http-multipart",
     "view",
     "static",
     "openapi",

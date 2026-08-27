@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { $p } from '@caffeinejs/http'
+import '@caffeinejs/http-multipart'
 import { $t } from '@caffeinejs/std'
 import { ErrOpenAPIOperationConflict } from '../errors.js'
 import { generateDocument } from '../generate/generator.js'

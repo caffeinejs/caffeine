@@ -1,4 +1,5 @@
 import { AllowAnonymous, Controller, Delete, ErrHTTPNotFound, Get, Params, Post, Put, Query, Roles, Schema, Status, $p } from '@caffeinejs/http'
+import '@caffeinejs/http-multipart'
 import { APIGroup, Operation } from '@caffeinejs/openapi'
 import { apiErrorSchema } from '../../util/errors/index.js'
 import type { CreatePetDTO, PetFilters, PetSearchCriteria, UpdatePetDTO } from './pet.js'

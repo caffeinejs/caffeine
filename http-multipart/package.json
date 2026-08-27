@@ -1,7 +1,7 @@
 {
-  "name": "@caffeinejs/openapi",
+  "name": "@caffeinejs/http-multipart",
   "version": "0.0.0",
-  "description": "OpenAPI support for CaffeineJS",
+  "description": "Caffeine HTTP multipart pickers",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -24,22 +24,15 @@
   },
   "dependencies": {
     "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
-    "yaml": "^2.9.0"
+    "@caffeinejs/std": "*"
   },
   "peerDependencies": {
-    "@scalar/api-reference": "^1.0.0",
+    "@fastify/multipart": "^10.0.0",
     "fastify": "^5.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@scalar/api-reference": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@caffeinejs/di": "*",
-    "@caffeinejs/http-multipart": "*",
-    "@scalar/api-reference": "^1.66.1",
+    "@fastify/multipart": "^10.0.0",
     "fastify": "^5.8.5"
   }
 }

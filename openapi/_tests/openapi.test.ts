@@ -16,6 +16,7 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
+import '@caffeinejs/http-multipart'
 import { APIGroup, Operation } from '../decorators/index.js'
 import { ErrOpenAPIConfiguration } from '../errors.js'
 import { openapiPlugin } from '../plugin.js'

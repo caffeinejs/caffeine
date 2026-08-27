@@ -134,7 +134,7 @@ A package's `index.ts` barrel aggregating that package's **own** modules is not 
 
 ## Monorepo structure
 
-Packages: `di` (`@caffeinejs/di`), `http` (`@caffeinejs/http`), `http-fastify-adapter` (`@caffeinejs/http-fastify-adapter`). Examples live under `di/examples/`. Shared build tooling lives in `tools/`.
+Packages: `di` (`@caffeinejs/di`), `http` (`@caffeinejs/http`), `http-multipart` (`@caffeinejs/http-multipart`). Examples live under `di/examples/`. Shared build tooling lives in `tools/`.
 
 Cross-package imports use the package name, not relative paths across workspace boundaries.
 

@@ -67,6 +67,7 @@ jobs:
             di/dist \
             std/dist \
             http/dist \
+            http-multipart/dist \
             view/dist \
             static/dist \
             openapi/dist \
@@ -99,6 +100,7 @@ jobs:
             di/dist/
             std/dist/
             http/dist/
+            http-multipart/dist/
             view/dist/
             static/dist/
             openapi/dist/
