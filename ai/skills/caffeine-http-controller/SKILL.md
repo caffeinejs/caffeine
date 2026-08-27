@@ -1,0 +1,62 @@
+---
+name: caffeine-http-controller
+description: >-
+  Add a Caffeine HTTP controller and routes (@Controller, @Get, @Post, @Params, $p).
+  Use when creating REST endpoints, a new controller class, or wiring createWebApplication
+  in a Caffeine app. Not Nest @Controller modules.
+---
+
+# HTTP controller
+
+Use this skill when adding or changing HTTP routes in Caffeine.
+
+If `ai/docs/http.md` or `ai/docs/rules.md` exist in this repo, read them first.
+
+## Steps
+
+1. Create a class. Decorate with `@Controller('/path')`. Constructor-inject collaborators (use cases, not the Fastify instance).
+2. Add method decorators (`@Get('/')`, `@Post('/')`, …). Pick args with `@Params([$p.body()])` / `$p.param('id')` as needed.
+3. Side-effect-import the file from `main.ts` (or the app entry) so the decorator runs.
+4. `tsconfig` must include `"lib": ["Decorators", "esnext.decorators"]`. Imports use `.js` extensions.
+5. Throw `ErrHTTPNotFound` (etc.) for missing resources. Do not use Nest `HttpException`.
+
+## Shape
+
+```ts
+import { Controller, Get, Post, Params, $p } from '@caffeinejs/http'
+
+@Controller('/examples')
+export class ExampleController {
+  constructor(private readonly list: ListExamplesUseCase) {}
+
+  @Get('/')
+  getAll() {
+    return this.list.execute()
+  }
+
+  @Post('/')
+  @Params([$p.body()])
+  createOne(input: { name: string }) {
+    return this.create.execute(input.name)
+  }
+}
+```
+
+App:
+
+```ts
+import { createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import Fastify from 'fastify'
+import './presentation/example.controller.js'
+
+const app = createWebApplication(fastifyAdapterFactory(Fastify({ logger: true }))).build()
+```
+
+## Verify
+
+Run the app’s `test` / `build` scripts. Hit the new route with `fetch` or the test helper the project already uses.
+
+## Related
+
+- `caffeine-error-handlers` for `@Catch`
+- `docs/http.md`, `docs/rules.md`

@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
-import { scaffold } from './scaffolder.js'
+import { findAiDir, scaffold } from './scaffolder.js'
 
 export const VALID_FLAVORS = ['http'] as const
 export const VALID_ARCHS = ['3tier', 'usecase'] as const
@@ -13,6 +13,8 @@ export interface ScaffoldOptions {
   flavor?: string
   arch?: string
   name?: string
+  /** When false, skip AGENTS.md / CLAUDE.md / `.agents/skills/`. Defaults to true. */
+  agentsMd?: boolean
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -21,7 +23,7 @@ async function exists(p: string): Promise<boolean> {
 
 export async function run(opts: ScaffoldOptions): Promise<void> {
   if (!opts.name) {
-    console.error('[caffeine] scaffold requires a project name: caffeine scaffold <name>')
+    console.error('[caffeine] scaffold requires a project name: caffeine scaffold <name> [--no-agents-md]')
     process.exit(1)
   }
 
@@ -47,6 +49,12 @@ export async function run(opts: ScaffoldOptions): Promise<void> {
     process.exit(1)
   }
 
-  await scaffold({ templateDir, outDir, projectName: opts.name })
+  await scaffold({
+    templateDir,
+    outDir,
+    projectName: opts.name,
+    agentsMd: opts.agentsMd,
+    aiDir: opts.agentsMd === false ? undefined : await findAiDir(import.meta.dirname),
+  })
   console.log(`[caffeine] scaffolded ${opts.name} → ${flavor}/${arch}`)
 }

@@ -1,5 +1,7 @@
 # Claude Code Guidelines
 
+User-app and framework-usage agent files live in [`ai/`](ai/). This file is **contributor** rules for this repository. Do not copy it into application repos.
+
 ## Import style
 
 Group all imports from the same module into a single import statement. Do not split them across multiple lines. This is enforced by `import-x/no-duplicates`.

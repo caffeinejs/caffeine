@@ -12,6 +12,7 @@ interface CommandOpts {
   flavor?: string
   arch?: string
   name?: string
+  agentsMd?: boolean
 }
 
 type CommandRunner = (opts: CommandOpts) => Promise<void>
@@ -29,6 +30,7 @@ const { values, positionals } = parseArgs({
     watch: { type: 'boolean', short: 'w', default: false },
     flavor: { type: 'string', short: 'f' },
     arch: { type: 'string', short: 'a' },
+    'no-agents-md': { type: 'boolean', default: false },
   },
   allowPositionals: true,
 })
@@ -49,6 +51,7 @@ const opts: CommandOpts = {
   flavor: values.flavor,
   arch: values.arch,
   name: positionals[1],
+  agentsMd: values['no-agents-md'] !== true,
 }
 
 if (values.watch) {
