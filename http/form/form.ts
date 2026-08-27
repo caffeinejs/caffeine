@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import qs from 'fast-querystring'
 import { MediaType } from '../media.js'
 
 const FORM_BODY_LIMIT = 1_048_576
@@ -22,9 +21,25 @@ function formBodyParser(
   done: (err: Error | null, value?: unknown) => void,
 ): void {
   try {
-    done(null, qs.parse(body))
+    done(null, parseFormURLEncoded(body))
   } catch (err) {
     (err as { statusCode?: number }).statusCode = 400
     done(err as Error)
   }
+}
+
+function parseFormURLEncoded(body: string): Record<string, string | string[]> {
+  const params = new URLSearchParams(body)
+  const result = Object.create(null) as Record<string, string | string[]>
+  for (const [key, value] of params) {
+    const existing = result[key]
+    if (existing === undefined) {
+      result[key] = value
+    } else if (Array.isArray(existing)) {
+      existing.push(value)
+    } else {
+      result[key] = [existing, value]
+    }
+  }
+  return result
 }

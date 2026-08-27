@@ -122,6 +122,50 @@ describe('form url-encoded body', () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined()
   })
 
+  it('parses an empty body as an empty object', async () => {
+    @Controller('/form-empty')
+    class FormEmptyController {
+      @Post('/echo')
+      @Params([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormEmptyController)
+    const res = await app.instance.inject({
+      method: 'POST',
+      url: '/form-empty/echo',
+      payload: '',
+      headers: { 'content-type': FORM },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({})
+  })
+
+  it('treats a key with no equals as an empty string', async () => {
+    @Controller('/form-bare-key')
+    class FormBareKeyController {
+      @Post('/echo')
+      @Params([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormBareKeyController)
+    const res = await app.instance.inject({
+      method: 'POST',
+      url: '/form-bare-key/echo',
+      payload: 'ok',
+      headers: { 'content-type': FORM },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ ok: '' })
+  })
+
   it('no longer answers 415 for an urlencoded body', async () => {
     @Controller('/form-415')
     class Form415Controller {

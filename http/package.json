@@ -33,7 +33,6 @@
   "dependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*",
-    "fast-querystring": "^1.1.2",
     "jose": "^5.0.0",
     "lru-cache": "^11.0.0"
   },
