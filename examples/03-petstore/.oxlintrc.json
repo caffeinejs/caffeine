@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "import"],
+  "env": {
+    "node": true
+  },
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "src/__caffeine__.gen.ts"
+  ],
+  "rules": {
+    "typescript/no-explicit-any": "off",
+    "typescript/no-non-null-assertion": "off"
+  }
+}

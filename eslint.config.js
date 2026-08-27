@@ -19,6 +19,7 @@ export default defineConfig(
       'di/_benchmarks/**',
       'di/_tests/deno/**',
       'fetchy/fetchy/_benchmarks/generated/**',
+      'examples/03-petstore/**',
     ],
   },
   eslint.configs.recommended,

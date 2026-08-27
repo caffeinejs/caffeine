@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "printWidth": 120,
+  "tabWidth": 2,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "src/__caffeine__.gen.ts",
+    "prisma/migrations/**",
+    "**/*.hbs"
+  ]
+}

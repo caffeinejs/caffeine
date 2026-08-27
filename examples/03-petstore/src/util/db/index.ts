@@ -1,2 +1,2 @@
-export * from './prisma.config.js'
-export * from './prisma.js'
+export * from "./prisma.config.js";
+export * from "./prisma.js";

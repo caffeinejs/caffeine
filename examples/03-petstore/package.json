@@ -9,7 +9,10 @@
     "start": "tsx src/main.ts",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "lint": "oxlint . && oxfmt --check .",
+    "lint:fix": "oxlint --fix . && oxfmt .",
+    "fmt": "oxfmt ."
   },
   "dependencies": {
     "@caffeinejs/di": "*",
@@ -32,6 +35,8 @@
   "devDependencies": {
     "@caffeinejs/cli": "*",
     "@types/node": "^22.9.0",
+    "oxfmt": "^0.5.0",
+    "oxlint": "^1.80.0",
     "prisma": "^6.2.1",
     "tsx": "^4.22.4"
   }

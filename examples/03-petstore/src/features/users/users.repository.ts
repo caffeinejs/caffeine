@@ -1,7 +1,7 @@
-import { Injectable } from '@caffeinejs/di'
-import { PrismaClient } from '@prisma/client'
-import type { CreateUserDTO, UpdateUserDTO } from './user.js'
-import { toUserDTO } from './user.js'
+import { Injectable } from "@caffeinejs/di";
+import { PrismaClient } from "@prisma/client";
+import type { CreateUserDTO, UpdateUserDTO } from "./user.js";
+import { toUserDTO } from "./user.js";
 
 @Injectable([PrismaClient])
 export class UsersRepository {
@@ -19,18 +19,18 @@ export class UsersRepository {
         phone: dto.phone,
         password: dto.password,
       },
-    })
-    return toUserDTO(row)
+    });
+    return toUserDTO(row);
   }
 
   async get(id: string) {
-    const row = await this.prisma.user.findUnique({ where: { id } })
-    return row ? toUserDTO(row) : undefined
+    const row = await this.prisma.user.findUnique({ where: { id } });
+    return row ? toUserDTO(row) : undefined;
   }
 
   async update(id: string, dto: UpdateUserDTO) {
     if ((await this.prisma.user.count({ where: { id } })) === 0) {
-      return undefined
+      return undefined;
     }
     const row = await this.prisma.user.update({
       where: { id },
@@ -41,21 +41,24 @@ export class UsersRepository {
         phone: dto.phone,
         password: dto.password,
       },
-    })
-    return toUserDTO(row)
+    });
+    return toUserDTO(row);
   }
 
   async remove(id: string): Promise<boolean> {
     if ((await this.prisma.user.count({ where: { id } })) === 0) {
-      return false
+      return false;
     }
-    await this.prisma.user.delete({ where: { id } })
-    return true
+    await this.prisma.user.delete({ where: { id } });
+    return true;
   }
 
   /** Verifies credentials for the login endpoint; returns the user id when they match. */
-  async verifyCredentials(username: string, password: string): Promise<string | undefined> {
-    const row = await this.prisma.user.findUnique({ where: { username } })
-    return row && row.password === password ? row.id : undefined
+  async verifyCredentials(
+    username: string,
+    password: string,
+  ): Promise<string | undefined> {
+    const row = await this.prisma.user.findUnique({ where: { username } });
+    return row && row.password === password ? row.id : undefined;
   }
 }
