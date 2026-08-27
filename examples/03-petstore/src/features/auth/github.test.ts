@@ -29,7 +29,7 @@ describe("authentication wiring", () => {
   let app: WebApplication;
 
   beforeAll(async () => {
-    app = buildApp(newTestContainer(createContainer()).build(), {
+    app = buildApp(newTestContainer(await createContainer()).build(), {
       logger: false,
     });
     await app.ready();
@@ -197,7 +197,7 @@ describe("documentation is protected by Basic, independently of the default sche
   let app: WebApplication;
 
   beforeAll(async () => {
-    app = buildApp(newTestContainer(createContainer()).build(), {
+    app = buildApp(newTestContainer(await createContainer()).build(), {
       logger: false,
     });
     await app.ready();

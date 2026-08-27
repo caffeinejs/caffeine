@@ -11,7 +11,7 @@ import {
   Provides,
 } from '@caffeinejs/di'
 import { InstanceTracker } from './tracker.js'
-import { TestContainer } from './test_container.js'
+import { newTestContainer, TestContainer } from './test_container.js'
 
 describe('TestContainer', function () {
   const kMsg = Symbol('kMsg')
@@ -120,6 +120,36 @@ describe('TestContainer', function () {
 
       expect(di.get(WithOptionalDep))
         .toBeInstanceOf(WithOptionalDep)
+    })
+  })
+
+  describe('empty constructor', function () {
+    it('autoWires decorated types without a source container', async function () {
+      const di = new TestContainer().build()
+      await di.init()
+
+      expect(di.get(Repository)).toBeInstanceOf(Repository)
+    })
+
+    it('newTestContainer() with no arguments matches the empty constructor', async function () {
+      const di = newTestContainer().build()
+      await di.init()
+
+      expect(di.get(Repository)).toBeInstanceOf(Repository)
+    })
+
+    it('modules() still accumulate and run at init', async function () {
+      const kClock = Symbol('kClock')
+      const clock = { now: () => 0 }
+      const di = new TestContainer()
+        .modules(c => {
+          c.bind(kClock).toValue(clock)
+        })
+        .build()
+      await di.init()
+
+      expect(di.get(kClock)).toBe(clock)
+      expect(di.get(Repository)).toBeInstanceOf(Repository)
     })
   })
 
@@ -676,28 +706,39 @@ describe('TestContainer', function () {
       })
     })
 
-    describe('overrideWithValue() / isolateWithValue()', function () {
-      it('overrideWithValue is shorthand for override(key, b => b.toValue(value))', async function () {
+    describe('overrideWithMock() / isolateWithMock()', function () {
+      it('overrideWithMock is shorthand for override(key, b => b.toValue(mock))', async function () {
         const fakeConn = new CgDbConn(new CgDbPool('fake'))
         const source = new CaffeineIoC()
         const di = new TestContainer(source)
           .focus(CgOrderService)
           .skipAsyncBindings()
-          .overrideWithValue(kCgDbConn, fakeConn)
-          .overrideWithValue(kCgCache, new CgCacheClient('r'))
+          .overrideWithMock(kCgDbConn, fakeConn)
+          .overrideWithMock(kCgCache, new CgCacheClient('r'))
           .build()
         await di.init()
 
         expect(di.get(CgOrderService).conn).toBe(fakeConn)
       })
 
-      it('isolateWithValue is shorthand for isolate(key, pruneShared, b => b.toValue(value))', async function () {
+      it('overrideWithMock accepts a duck-typed object without a type assertion', async function () {
+        const fake = { isMock: true }
+        const source = new CaffeineIoC()
+        const di = new TestContainer(source)
+          .overrideWithMock(Repository, fake)
+          .build()
+        await di.init()
+
+        expect(di.get(Repository)).toBe(fake)
+      })
+
+      it('isolateWithMock is shorthand for isolate(key, pruneShared, b => b.toValue(mock))', async function () {
         const fakeConn = new CgDbConn(new CgDbPool('fake'))
         const source = new CaffeineIoC()
         const di = new TestContainer(source)
           .focus(CgOrderService)
-          .isolateWithValue(kCgDbConn, false, fakeConn)
-          .overrideWithValue(kCgCache, new CgCacheClient('r'))
+          .isolateWithMock(kCgDbConn, false, fakeConn)
+          .overrideWithMock(kCgCache, new CgCacheClient('r'))
           .build()
         await di.init()
 

@@ -1,6 +1,12 @@
 import { testClient } from './client.js'
 import { ErrFetchFailed } from './error.js'
-import type { Fetchable, HandlerClient, RouterCtor, TypedTestClient } from './types.js'
+import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
+
+export type TypedTestClient<C extends RouterCtor> = {
+  [H in RouteMethods<C>]: (input?: Request | RequestInit) => Promise<
+    InstanceType<C>[H] extends (...args: never[]) => infer R ? Awaited<R> : never
+  >
+}
 
 export function typedClient<C extends RouterCtor>(
   routerRef: C,

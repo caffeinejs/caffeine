@@ -1,5 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest'
-import type { RouteMethods, TestClient } from './types.js'
+import type { TestClient } from './client.js'
+import type { RouteMethods } from './types.js'
 
 class _Fixture {
   list(): unknown[] {

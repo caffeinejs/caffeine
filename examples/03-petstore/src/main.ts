@@ -3,7 +3,7 @@ import { createContainer } from "./app.container.js";
 import { buildApp } from "./app.js";
 import { prisma } from "./util/db/index.js";
 
-const app = buildApp(createContainer());
+const app = buildApp(await createContainer());
 
 // Closing the pool belongs after the drain, not before it: `application:pre-shutdown` runs once readiness has
 // already been refusing for the drain delay, so no in-flight request loses its connection mid-query.

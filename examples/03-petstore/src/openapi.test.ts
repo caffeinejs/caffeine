@@ -59,7 +59,7 @@ function operationIds(): string[] {
 }
 
 beforeAll(async () => {
-  app = buildApp(newTestContainer(createContainer()).build(), {
+  app = buildApp(newTestContainer(await createContainer()).build(), {
     logger: false,
   });
   await app.ready();

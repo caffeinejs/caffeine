@@ -9,13 +9,18 @@ interface IsolationEntry {
 
 /**
  * TestContainer is a fluent builder that takes a {@link Container} or {@link Snapshot},
- * applies filters, transformations, and produces an uninitialized {@link Container},
- * suitable for use in tests.
+ * or constructs an empty container when called with no arguments. It applies filters
+ * and transformations and produces an uninitialized {@link Container}, suitable for use
+ * in tests.
+ *
+ * The empty constructor creates a container internally so a test can import a single
+ * feature module instead of the whole application graph.
  *
  * By default, the resulting container will be lazy.
  */
 export class TestContainer {
   readonly #snap: Snapshot
+  readonly #fromScratch: boolean
   readonly #overrides = new Map<Key, (binder: Binder<any>) => void>()
   readonly #isolations = new Map<Key, IsolationEntry>()
   readonly #skips = new Set<Key>()
@@ -26,13 +31,21 @@ export class TestContainer {
   #modules: Array<Module | ModuleFn> = []
   #lazy: boolean = true
 
+  constructor()
   constructor(container: Container)
   constructor(snap: Snapshot)
-  constructor(source: Container | Snapshot) {
+  constructor(source?: Container | Snapshot) {
+    if (source === undefined) {
+      this.#fromScratch = true
+      this.#snap = new CaffeineIoC().snapshot()
+      return
+    }
+
     if (source == null) {
       throw new Error('TestContainer requires either a Container instance or a container Snapshot')
     }
 
+    this.#fromScratch = false
     this.#snap = source instanceof CaffeineIoC ? source.snapshot() : source as Snapshot
   }
 
@@ -99,17 +112,20 @@ export class TestContainer {
   }
 
   /**
-   * Replaces the binding for `key` in the test container with the given value.
+   * Replaces the binding for `key` in the test container with a mock or ready-made value.
+   *
+   * `mock` is typed as `T | object` so a vitest mock or a duck-typed fake can be passed
+   * without a double assertion (`as unknown as T`).
    *
    * @example
    * ```ts
    * new TestContainer(source)
-   *   .overrideWithValue(Repository, mockRepo)
+   *   .overrideWithMock(Repository, mockRepo)
    *   .build()
    * ```
    */
-  overrideWithValue<T>(key: Key<T>, value: T): this {
-    return this.override(key, b => b.toValue(value))
+  overrideWithMock<T>(key: Key<T>, mock: T | object): this {
+    return this.override(key, b => b.toValue(mock as T))
   }
 
   /**
@@ -142,9 +158,12 @@ export class TestContainer {
   }
 
   /**
-   * Replaces the binding for `key` with the given value and prunes its dependencies.
+   * Replaces the binding for `key` with a mock or ready-made value and prunes its dependencies.
    *
-   * Shorthand for `.isolate(key, pruneSharedDependencies, b => b.toValue(value))`.
+   * Shorthand for `.isolate(key, pruneSharedDependencies, b => b.toValue(mock))`.
+   *
+   * `mock` is typed as `T | object` so a vitest mock or a duck-typed fake can be passed
+   * without a double assertion (`as unknown as T`).
    *
    * When `pruneSharedDependencies` is `false`, only dependencies exclusive to `key`
    * are pruned. When `true`, all transitive dependencies are pruned.
@@ -152,12 +171,12 @@ export class TestContainer {
    * @example
    * ```ts
    * new TestContainer(source)
-   *   .isolateWithValue(Repository, false, mockRepo)
+   *   .isolateWithMock(Repository, false, mockRepo)
    *   .build()
    * ```
    */
-  isolateWithValue<T>(key: Key<T>, pruneSharedDependencies: boolean, value: T): this {
-    return this.isolate(key, pruneSharedDependencies, b => b.toValue(value))
+  isolateWithMock<T>(key: Key<T>, pruneSharedDependencies: boolean, mock: T | object): this {
+    return this.isolate(key, pruneSharedDependencies, b => b.toValue(mock as T))
   }
 
   /**
@@ -223,7 +242,7 @@ export class TestContainer {
    * // mock one dep of the focused tree
    * new TestContainer(source)
    *   .focus(Controller)
-   *   .overrideWithValue(Repository, mockRepo)
+   *   .overrideWithMock(Repository, mockRepo)
    *   .build()
    * ```
    */
@@ -292,7 +311,7 @@ export class TestContainer {
     }
 
     const di = new CaffeineIoC({
-      decorators: false,
+      decorators: this.#fromScratch,
       lazy: this.#lazy,
       ...(this.#profiles != null && { profiles: this.#profiles }),
       modules: this.#modules,
@@ -312,6 +331,12 @@ export class TestContainer {
 }
 
 /**
+ * Creates a new test container with an empty internal container.
+ * Use {@link TestContainer.modules} to load a feature module without importing the
+ * whole application graph.
+ */
+export function newTestContainer(): TestContainer
+/**
  * Creates a new test container using the given {@link Container} as the base.
  * All the bindings from the base container will be available in the new container.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
@@ -328,12 +353,15 @@ export function newTestContainer(container: Container): TestContainer
  */
 export function newTestContainer(snap: Snapshot): TestContainer
 /**
- * Creates a new test container using the given {@link Container} or {@link Snapshot} as the base.
- * All the bindings from the container or snapshot will be available in the new container.
+ * Creates a new test container using the given {@link Container} or {@link Snapshot} as the base,
+ * or an empty internal container when called with no arguments.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param source - The container or snapshot to use as the foundation for the test container.
  */
-export function newTestContainer(source: Container | Snapshot): TestContainer {
+export function newTestContainer(source?: Container | Snapshot): TestContainer {
+  if (source === undefined) {
+    return new TestContainer()
+  }
   return new TestContainer(source as Container)
 }

@@ -13,13 +13,3 @@ export type RouteMethods<C extends RouterCtor> = {
 }[keyof InstanceType<C>]
 
 export type HandlerClient = (input?: Request | RequestInit) => Promise<Response>
-
-export type TestClient<C extends RouterCtor> = {
-  [H in RouteMethods<C>]: HandlerClient
-}
-
-export type TypedTestClient<C extends RouterCtor> = {
-  [H in RouteMethods<C>]: (input?: Request | RequestInit) => Promise<
-    InstanceType<C>[H] extends (...args: never[]) => infer R ? Awaited<R> : never
-  >
-}

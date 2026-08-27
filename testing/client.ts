@@ -1,7 +1,11 @@
 import { getRouter } from '@caffeinejs/http'
 import { ErrNoRouter } from './error.js'
 import { mergeRequest, resolveRouteURL } from './_util.js'
-import type { Fetchable, RouterCtor, TestClient } from './types.js'
+import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
+
+export type TestClient<C extends RouterCtor> = {
+  [H in RouteMethods<C>]: HandlerClient
+}
 
 export function testClient<ROUTER extends RouterCtor>(
   routerRef: ROUTER,

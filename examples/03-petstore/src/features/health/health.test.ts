@@ -24,7 +24,7 @@ class FakeDatabaseHealth extends HealthIndicator {
 
 async function start(fake: HealthIndicator): Promise<WebApplication> {
   const app = buildApp(
-    newTestContainer(createContainer())
+    newTestContainer(await createContainer())
       .override(DatabaseHealth, (b) =>
         b.toValue(fake as unknown as DatabaseHealth).extends(HealthIndicator),
       )

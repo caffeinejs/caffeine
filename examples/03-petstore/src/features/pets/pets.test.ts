@@ -4,11 +4,10 @@ import type { WebApplication } from "@caffeinejs/http";
 import {
   ErrFetchFailed,
   newRequest,
-  newTestContainer,
   newURL,
+  TestContainer,
   typedClient,
 } from "@caffeinejs/testing";
-import { createContainer } from "../../app.container.js";
 import { buildApp } from "../../app.js";
 import {
   sessionHeader,
@@ -23,6 +22,7 @@ import type {
   UpdatePetDTO,
 } from "./pet.js";
 import { PetsController } from "./pets.controller.js";
+import { petsModule } from "./pets.generated.mod.js";
 import { PetsRepository } from "./pets.repository.js";
 
 // In-memory stand-in for the Prisma-backed repository, so the feature is tested with no database.
@@ -132,11 +132,9 @@ describe("pets feature (via @caffeinejs/testing)", () => {
   let session: string;
 
   beforeAll(async () => {
-    // Base the test container on the real application container, override just the pets repository.
-    const container = newTestContainer(createContainer())
-      .override(PetsRepository, (b) =>
-        b.toValue(fake as unknown as PetsRepository),
-      )
+    const container = new TestContainer()
+      .modules(petsModule)
+      .overrideWithMock(PetsRepository, fake)
       .build();
 
     app = buildApp(container, { logger: false });

@@ -27,7 +27,7 @@ export const appContainer = new CaffeineIoC({ modules: [databaseModule, emailMod
 // test
 const di = new TestContainer(appContainer)
   .focus(OrderService)
-  .overrideWithValue(OrderRepository, fakeRepo)
+  .overrideWithMock(OrderRepository, fakeRepo)
   .build()                    // uninitialized — app hooks do init() / dispose()
 
 const app = buildApp(di)      // app owns the container lifecycle from here
@@ -36,12 +36,24 @@ await app.ready()
 const svc = di.get(OrderService)
 ```
 
+The empty constructor skips step 1: `TestContainer` creates a container internally so a
+test can import a single feature module instead of the whole application graph.
+
+```ts
+import { ordersModule } from './orders.generated.mod.js'
+
+const di = new TestContainer()
+  .modules(ordersModule)
+  .overrideWithMock(OrderRepository, fakeRepo)
+  .build()
+```
+
 The container that comes out of `.build()` is a real CaffeineIoC container with all
 production wiring intact, minus the pieces you replaced.
 
-## Source: container or snapshot
+## Source: container, snapshot, or empty
 
-`TestContainer` accepts an uninitialized container or a `Snapshot`:
+`TestContainer` accepts an uninitialized container, a `Snapshot`, or no argument:
 
 ```ts
 // from the uninitialized production container
@@ -50,11 +62,20 @@ const di = new TestContainer(appContainer).build()
 // from a snapshot — avoids re-reading decorator registrations on every test
 const snap = appContainer.snapshot()
 const di = new TestContainer(snap).build()
+
+// from scratch — no application graph; import a feature module instead
+const di = new TestContainer()
+  .modules(ordersModule)
+  .overrideWithMock(OrderRepository, fakeRepo)
+  .build()
 ```
 
 When the production container is cheap to construct, passing it directly is fine.
 When decorator scanning or module setup is expensive, snapshot it once and reuse
 across test suites.
+
+When constructed empty, `.build()` enables decorator auto-wiring so types imported
+via the feature module register on the test container.
 
 ## Replacing a binding
 
@@ -66,11 +87,13 @@ const di = new TestContainer(appContainer)
   .build()
 ```
 
-`.overrideWithValue()` is the shorthand for replacing with a ready-made value:
+`.overrideWithMock()` is the shorthand for replacing with a mock or ready-made value.
+The mock argument is typed loosely enough that a vitest mock or a duck-typed fake
+does not need a double assertion:
 
 ```ts
 const di = new TestContainer(appContainer)
-  .overrideWithValue(EmailClient, noOpEmailClient)
+  .overrideWithMock(EmailClient, noOpEmailClient)
   .build()
 ```
 
@@ -122,11 +145,11 @@ const di = new TestContainer(appContainer)
 Pass `false` to preserve bindings that other parts of the tree also depend on.
 Pass `true` to force-prune everything reachable from the replaced key.
 
-`.isolateWithValue()` is the shorthand:
+`.isolateWithMock()` is the shorthand:
 
 ```ts
 const di = new TestContainer(appContainer)
-  .isolateWithValue(Database, true, inMemoryDb)
+  .isolateWithMock(Database, true, inMemoryDb)
   .build()
 ```
 
@@ -186,6 +209,18 @@ const di = new TestContainer(appContainer)
 await di.init()
 ```
 
+For a feature-focused test, start from an empty `TestContainer` and pass only the
+generated feature module:
+
+```ts
+import { ordersModule } from './orders.generated.mod.js'
+
+const di = new TestContainer()
+  .modules(ordersModule)
+  .overrideWithMock(OrderRepository, fakeRepo)
+  .build()
+```
+
 ## Lazy loading
 
 `TestContainer` is lazy by default — bindings are not instantiated until first
@@ -228,7 +263,7 @@ describe('POST /orders', () => {
 
     const di = new TestContainer(appContainer)
       .focus(OrderService)
-      .override(OrderRepository, b => b.toValue({ save, findById }))
+      .overrideWithMock(OrderRepository, { save, findById })
       .skipAsyncBindings()
       .build()
 
