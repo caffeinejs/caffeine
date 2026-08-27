@@ -47,7 +47,7 @@ export default defineConfig(
             './di/tsconfig.json',
             './std/tsconfig.json',
             './http/tsconfig.json',
-            './http-multipart/tsconfig.json',
+            './multipart/tsconfig.json',
             './view/tsconfig.json',
             './static/tsconfig.json',
             './openapi/tsconfig.json',

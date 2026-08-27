@@ -11,7 +11,7 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from "@caffeinejs/http";
-import { multipartPlugin } from "@caffeinejs/http-multipart";
+import { multipartPlugin } from "@caffeinejs/multipart";
 import { openapiPlugin } from "@caffeinejs/openapi";
 import { staticPlugin } from "@caffeinejs/static";
 import { EnvConfigProvider } from "@caffeinejs/std/config";

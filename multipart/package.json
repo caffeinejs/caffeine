@@ -1,7 +1,7 @@
 {
-  "name": "@caffeinejs/http-multipart",
+  "name": "@caffeinejs/multipart",
   "version": "0.0.0",
-  "description": "Caffeine HTTP multipart plugin",
+  "description": "Caffeine multipart plugin",
   "license": "MIT",
   "private": true,
   "type": "module",

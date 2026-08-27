@@ -45,7 +45,7 @@
       "path": "./http"
     },
     {
-      "path": "./http-multipart"
+      "path": "./multipart"
     },
     {
       "path": "./view"

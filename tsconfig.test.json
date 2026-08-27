@@ -20,7 +20,7 @@
     "**/node_modules",
     "di/**",
     "http/**",
-    "http-multipart/**",
+    "multipart/**",
     "static/**",
     "view/**",
     "cli/**"

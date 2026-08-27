@@ -12,7 +12,7 @@
     "paths": {
       "@caffeinejs/di": ["./di/index.ts"],
       "@caffeinejs/http": ["./http/index.ts"],
-      "@caffeinejs/http-multipart": ["./http-multipart/index.ts"],
+      "@caffeinejs/multipart": ["./multipart/index.ts"],
       "@caffeinejs/static": ["./static/index.ts"],
       "@caffeinejs/view": ["./view/index.ts"]
     }
@@ -22,8 +22,8 @@
     "di/**/*.spec.ts",
     "http/**/*.test.ts",
     "http/**/*.spec.ts",
-    "http-multipart/**/*.test.ts",
-    "http-multipart/**/*.spec.ts",
+    "multipart/**/*.test.ts",
+    "multipart/**/*.spec.ts",
     "static/**/*.test.ts",
     "static/**/*.spec.ts",
     "view/**/*.test.ts",

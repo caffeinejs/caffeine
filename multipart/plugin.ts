@@ -1,4 +1,3 @@
-import './pickers.js'
 import type { Plugin } from '@caffeinejs/std'
 import { MultipartBuilder } from './builder.js'
 
@@ -17,12 +16,12 @@ export interface MultipartPluginExt {
 }
 
 /**
- * The `@caffeinejs/http-multipart` application plugin. Pass it to
+ * The `@caffeinejs/multipart` application plugin. Pass it to
  * `createWebApplication(...).extend(multipartPlugin())` then call `.multipart()` so the adapter registers
- * `@fastify/multipart` and `$p.multipart.*` pickers can read the request.
+ * `@fastify/multipart` and `$multipart.*` pickers can read the request.
  *
- * Importing this factory also patches `$p` with the multipart namespace — `@Params([$p.multipart.file()])`
- * runs at controller evaluation, which is before `.extend()`.
+ * Import `$multipart` from `@caffeinejs/multipart` at the controller (or any module that builds
+ * `@Params([...])`) — the plugin does not patch HTTP `$p`.
  *
  * On the first `.multipart(...)` call it lazily creates a single {@link MultipartBuilder} and registers it as
  * a service; the builder's `configure()` binds the multipart server extension.

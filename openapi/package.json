@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@caffeinejs/di": "*",
-    "@caffeinejs/http-multipart": "*",
+    "@caffeinejs/multipart": "*",
     "@scalar/api-reference": "^1.66.1",
     "fastify": "^5.8.5"
   }

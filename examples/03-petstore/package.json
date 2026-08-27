@@ -17,7 +17,7 @@
   "dependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
-    "@caffeinejs/http-multipart": "*",
+    "@caffeinejs/multipart": "*",
     "@caffeinejs/openapi": "*",
     "@caffeinejs/static": "*",
     "@caffeinejs/std": "*",

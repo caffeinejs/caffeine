@@ -11,7 +11,7 @@
       "path": "./http/tsconfig.build.json"
     },
     {
-      "path": "./http-multipart/tsconfig.build.json"
+      "path": "./multipart/tsconfig.build.json"
     },
     {
       "path": "./view/tsconfig.build.json"

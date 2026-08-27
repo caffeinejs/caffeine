@@ -2,7 +2,6 @@
 
 import { Readable } from 'node:stream'
 import type { FastifyRequest } from 'fastify'
-import { $p } from '@caffeinejs/http'
 import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
@@ -16,12 +15,6 @@ export interface MultipartPickers {
   webStreamFile<R = unknown>(fieldname?: string): ParameterPickOptions<R>
   webStreamFiles<R = unknown>(): ParameterPickOptions<R>
   webStreamParts<R = unknown>(): ParameterPickOptions<R>
-}
-
-declare module '@caffeinejs/http' {
-  interface HTTPPickers {
-    readonly multipart: MultipartPickers
-  }
 }
 
 function webStreamParts<R = unknown>(): ParameterPickOptions<R> {
@@ -244,7 +237,11 @@ function formData<R = unknown>(): ParameterPickOptions<R> {
   }
 }
 
-export const multipart: MultipartPickers = {
+/**
+ * The built-in multipart parameter pickers, mirroring the HTTP `$p` catalog.
+ * Import from `@caffeinejs/multipart` and pass into `@Params([...])`.
+ */
+export const $multipart: MultipartPickers = {
   webStreamParts,
   webStreamFiles,
   webStreamFile,
@@ -255,5 +252,3 @@ export const multipart: MultipartPickers = {
   files,
   formData,
 }
-
-Object.assign($p, { multipart })

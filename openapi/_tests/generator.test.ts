@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { $p } from '@caffeinejs/http'
-import { multipartPlugin } from '@caffeinejs/http-multipart'
+import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std'
 import { ErrOpenAPIOperationConflict } from '../errors.js'
 import { generateDocument } from '../generate/generator.js'
@@ -8,8 +8,6 @@ import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { kOpenAPISelf } from '../keys.js'
 import type { OperationObject } from '../spec/spec.js'
 import { fixtureOptions, fixtureRoute, fixtureRouter } from './_fixtures.js'
-
-void multipartPlugin
 
 const petSchema = $t.Object({ id: $t.String(), name: $t.String() }, { $id: 'Pet' })
 const petIdParams = $t.Object({ id: $t.String({ format: 'uuid' }) })
@@ -156,7 +154,7 @@ describe('generateDocument', () => {
 
   it('synthesizes a multipart body from file pickers', () => {
     const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/:id/images', 'upload').parameters([$p.param('id'), $p.multipart.file('file')]),
+      fixtureRoute('POST', '/:id/images', 'upload').parameters([$p.param('id'), $multipart.file('file')]),
     ]))
 
     const document = generateDocument({ routers: [router], options: fixtureOptions() })
