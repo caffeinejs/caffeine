@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Params, Post, $p } from '@caffeinejs/http'
+import { Controller, Delete, Get, Args, Post, $p } from '@caffeinejs/http'
 import { PaymentService } from './payment.service.js'
 
 @Controller('/payments', [PaymentService])
@@ -9,14 +9,14 @@ export class PaymentController {
   findAll(): unknown[] { return this.service.findAll() }
 
   @Get('/:id')
-  @Params([$p.param('id')])
+  @Args([$p.param('id')])
   findOne(id: string): unknown { return this.service.findById(id) }
 
   @Post('/')
-  @Params([$p.body()])
+  @Args([$p.body()])
   process(body: unknown): unknown { return this.service.process(body) }
 
   @Delete('/:id')
-  @Params([$p.param('id')])
+  @Args([$p.param('id')])
   remove(id: string): void { this.service.delete(id) }
 }

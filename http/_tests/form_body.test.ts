@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { $p } from '../route_picker.js'
 
 const FORM = 'application/x-www-form-urlencoded'
@@ -17,7 +17,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-object')
     class FormObjectController {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(b: Record<string, unknown>) {
         return b
       }
@@ -39,7 +39,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-array')
     class FormArrayController {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(b: Record<string, unknown>) {
         return b
       }
@@ -60,7 +60,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-decode')
     class FormDecodeController {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(b: Record<string, unknown>) {
         return b
       }
@@ -81,7 +81,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-charset')
     class FormCharsetController {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(b: Record<string, unknown>) {
         return b
       }
@@ -103,7 +103,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-proto')
     class FormProtoController {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(_b: Record<string, unknown>) {
         return { polluted: ({} as Record<string, unknown>).polluted ?? null }
       }
@@ -126,7 +126,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-empty')
     class FormEmptyController {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(b: Record<string, unknown>) {
         return b
       }
@@ -148,7 +148,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-bare-key')
     class FormBareKeyController {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(b: Record<string, unknown>) {
         return b
       }
@@ -170,7 +170,7 @@ describe('form url-encoded body', () => {
     @Controller('/form-415')
     class Form415Controller {
       @Post('/echo')
-      @Params([$p.body()])
+      @Args([$p.body()])
       echo(b: Record<string, unknown>) {
         return b
       }

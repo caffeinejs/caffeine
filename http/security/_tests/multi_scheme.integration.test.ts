@@ -11,7 +11,7 @@ import {
   Controller,
   Get,
   Identity,
-  Params,
+  Args,
   Principal,
   WebApplication,
   createWebApplication,
@@ -85,7 +85,7 @@ describe('per-route authentication schemes', () => {
     class DocsSchemeController {
       @Get('/')
       @Authorize({ schemes: ['Basic'] })
-      @Params([$p.context()])
+      @Args([$p.context()])
       read(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
@@ -149,7 +149,7 @@ describe('per-route authentication schemes', () => {
     class MultiController {
       @Get('/')
       @Authorize({ schemes: ['Basic', 'Default'] })
-      @Params([$p.context()])
+      @Args([$p.context()])
       read(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
@@ -174,7 +174,7 @@ describe('per-route authentication schemes', () => {
     class PlainController {
       @Get('/')
       @Authorize()
-      @Params([$p.context()])
+      @Args([$p.context()])
       read(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
@@ -197,7 +197,7 @@ describe('per-route authentication schemes', () => {
       @Get('/')
       @AllowAnonymous()
       @Authorize({ schemes: ['Basic'] })
-      @Params([$p.context()])
+      @Args([$p.context()])
       read(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value ?? null }
       }
@@ -223,7 +223,7 @@ describe('per-route authentication schemes', () => {
     @Controller('/class-scheme')
     class ClassSchemeController {
       @Get('/')
-      @Params([$p.context()])
+      @Args([$p.context()])
       read(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
@@ -247,7 +247,7 @@ describe('per-route authentication schemes', () => {
     @Controller('/both-schemes')
     class BothSchemesController {
       @Get('/')
-      @Params([$p.context()])
+      @Args([$p.context()])
       read(ctx: Context) {
         return { types: ctx.user.identities.map(i => i.authenticationType) }
       }
@@ -274,7 +274,7 @@ describe('per-route authentication schemes', () => {
     @Controller('/either-scheme')
     class EitherSchemeController {
       @Get('/')
-      @Params([$p.context()])
+      @Args([$p.context()])
       read(ctx: Context) {
         return { types: ctx.user.identities.map(i => i.authenticationType) }
       }

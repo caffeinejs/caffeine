@@ -14,7 +14,7 @@ import {
   Get,
   PasswordHasher,
   Post,
-  Params,
+  Args,
   type RememberMeRecord,
   type RememberMeRotation,
   RememberMeTokenStore,
@@ -74,7 +74,7 @@ interface LoginDto { email: string, password: string, rememberMe?: boolean }
 class SessionController {
   constructor(private readonly creds: CredentialsService, private readonly auth: AuthenticationService) {}
 
-  @Params([$p.body(), $p.context()])
+  @Args([$p.body(), $p.context()])
   @Post('/login')
   async login(dto: LoginDto, ctx: Context) {
     const user = await this.creds.attempt(dto.email, dto.password)
@@ -86,7 +86,7 @@ class SessionController {
     return { ok: true }
   }
 
-  @Params([$p.context()])
+  @Args([$p.context()])
   @Post('/logout')
   async logout(ctx: Context) {
     await this.auth.revoke(ctx, 'Cookie')
@@ -97,7 +97,7 @@ class SessionController {
 @Authorize()
 @Controller('/me')
 class MeController {
-  @Params([$p.context()])
+  @Args([$p.context()])
   @Get('/')
   me(ctx: Context) {
     return { sub: ctx.user.findFirst('sub')?.value, admin: ctx.user.isInRole('admin') }
@@ -110,7 +110,7 @@ class MeController {
 @Authorize({ schemes: ['Cookie'] })
 @Controller('/scoped-me')
 class SchemeScopedMeController {
-  @Params([$p.context()])
+  @Args([$p.context()])
   @Get('/')
   me(ctx: Context) {
     return { sub: ctx.user.findFirst('sub')?.value }

@@ -5,8 +5,6 @@ import {
   type Context,
   Controller,
   Get,
-  Params,
-  $p,
 } from "@caffeinejs/http";
 import { APIGroup } from "@caffeinejs/openapi";
 import { View } from "@caffeinejs/view";
@@ -29,9 +27,8 @@ export class GithubAuthController {
   // Already-signed-in requests must NOT re-challenge: the callback redirects back to the URL that
   // started the flow (this route), so a blind challenge here loops forever. Send them to the
   // dashboard instead — which is also the landing page after a fresh sign-in.
-  @Get("/login/github")
+  @Get("/login/github", (p) => [p.context()])
   @AllowAnonymous()
-  @Params([$p.context()])
   async login(ctx: Context) {
     if (ctx.user.authenticated) {
       ctx.redirect("/dashboard");
@@ -42,9 +39,8 @@ export class GithubAuthController {
 
   // Post-login landing page: a small HTML profile of whoever is signed in.
   // Rendered from src/views/dashboard.hbs; Handlebars auto-escapes the model, so no manual escaping.
-  @Get("/dashboard")
+  @Get("/dashboard", (p) => [p.context()])
   @Authorize()
-  @Params([$p.context()])
   dashboard(ctx: Context) {
     const user = ctx.user;
     const name =
@@ -81,18 +77,16 @@ export class GithubAuthController {
   }
 
   // Clears the GitHub session cookie and returns home. Anonymous so signing out never 401s.
-  @Get("/logout")
+  @Get("/logout", (p) => [p.context()])
   @AllowAnonymous()
-  @Params([$p.context()])
   async logout(ctx: Context) {
     await this.auth.revoke(ctx, "GitHub");
     ctx.redirect("/");
   }
 
   // Machine-readable principal for API clients. Accepts either scheme.
-  @Get("/me")
+  @Get("/me", (p) => [p.context()])
   @Authorize()
-  @Params([$p.context()])
   me(ctx: Context) {
     const user = ctx.user;
     return {

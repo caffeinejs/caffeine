@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
-import { type Context, Controller, Get, Header, createWebApplication, Params, Post, fastifyAdapterFactory } from '../index.js'
+import { type Context, Controller, Get, Header, createWebApplication, Args, Post, fastifyAdapterFactory } from '../index.js'
 import { $p } from '../route_picker.js'
 
 describe('Redirect', () => {
@@ -8,7 +8,7 @@ describe('Redirect', () => {
     @Controller('/redirect')
     class RedirectController {
       @Get('/')
-      @Params([$p.context()])
+      @Args([$p.context()])
       get(ctx: Context) {
         ctx.redirect('/foo')
       }

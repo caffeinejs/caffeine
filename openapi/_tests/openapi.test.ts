@@ -7,7 +7,7 @@ import {
   AllowAnonymous,
   Controller,
   Get,
-  Params,
+  Args,
   Post,
   Roles,
   Schema,
@@ -48,7 +48,7 @@ class PetsController {
   @Get('/:id')
   @AllowAnonymous()
   @Schema({ params: $t.Object({ id: $t.String() }), response: { 200: petSchema } })
-  @Params([$p.param('id')])
+  @Args([$p.param('id')])
   get(id: string) {
     return { id, name: 'Rex' }
   }
@@ -57,7 +57,7 @@ class PetsController {
   @Status(201)
   @Roles('write:pets')
   @Schema({ body: petSchema })
-  @Params([$p.body()])
+  @Args([$p.body()])
   create(body: unknown) {
     return body
   }
@@ -65,7 +65,7 @@ class PetsController {
   @Post('/:id/images')
   @Status(201)
   @Roles('write:pets')
-  @Params([$p.param('id'), $multipart.file('file')])
+  @Args([$p.param('id'), $multipart.file('file')])
   upload() {
     return { uploaded: true }
   }

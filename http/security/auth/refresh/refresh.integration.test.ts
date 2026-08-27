@@ -9,7 +9,7 @@ import {
   Get,
   Identity,
   JWTService,
-  Params,
+  Args,
   Post,
   Principal,
   type RefreshTokenRecord,
@@ -64,13 +64,13 @@ class AuthController {
     return this.refresh.issue(alicePrincipal())
   }
 
-  @Params([$p.body()])
+  @Args([$p.body()])
   @Post('/refresh')
   async doRefresh(dto: RefreshDto) {
     return this.refresh.refresh(dto.refreshToken)
   }
 
-  @Params([$p.body()])
+  @Args([$p.body()])
   @Post('/logout-all')
   async logoutAll(dto: RefreshDto) {
     await this.refresh.revokeAllForSubject('alice')
@@ -87,7 +87,7 @@ class AuthController {
 @Authorize()
 @Controller('/me')
 class MeController {
-  @Params([$p.context()])
+  @Args([$p.context()])
   @Get('/')
   me(ctx: Context) {
     return { sub: ctx.user.findFirst('sub')?.value, admin: ctx.user.isInRole('admin') }

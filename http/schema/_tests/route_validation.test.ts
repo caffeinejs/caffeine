@@ -10,7 +10,7 @@ import {
   fastifyAdapterFactory,
   type FastifyContext,
   Get,
-  Params,
+  Args,
   Post,
   Schema,
 } from '../../index.js'
@@ -39,7 +39,7 @@ class PetsController {
   @Get('/')
   @AllowAnonymous()
   @Schema({ querystring: ListPetsQuery, response: { 200: $t.Object({ page: $t.Integer() }) } })
-  @Params([$p.query()])
+  @Args([$p.query()])
   list(query: unknown): unknown {
     return query
   }
@@ -47,21 +47,21 @@ class PetsController {
   @Get('/filter')
   @AllowAnonymous()
   @Schema({ querystring: FilterQuery })
-  @Params([$p.query()])
+  @Args([$p.query()])
   filter(query: unknown): unknown {
     return query
   }
 
   @Post('/')
   @Schema({ body: CreatePet })
-  @Params([$p.body()])
+  @Args([$p.body()])
   create(body: unknown): unknown {
     return { created: body }
   }
 
   @Post('/zod')
   @Schema({ body: ZodBody })
-  @Params([$p.body()])
+  @Args([$p.body()])
   createFromZod(body: unknown): unknown {
     return { created: body }
   }
@@ -75,7 +75,7 @@ class PetsController {
 
   @Get('/headers')
   @Schema({ headers: $t.Object({ 'x-tenant': $t.String() }) })
-  @Params([$p.context()])
+  @Args([$p.context()])
   headers(ctx: FastifyContext): unknown {
     return { hasHost: ctx.req.hasHeader('host'), tenant: ctx.req.header('x-tenant') }
   }

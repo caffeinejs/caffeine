@@ -47,8 +47,9 @@ export function compileHandler<
   const hasAsync = params.some(p => p.async === true)
 
   // Arity-based compilation for up to 6 parameters.
-  // 6 parameters should account for all practical use cases:
-  // [signal, path params, query, header, body, context]
+  // 6 parameters should account for many of the usual use cases.
+  // Example:
+  // [context, signal, path_params, query, header, body].
 
   if (!hasAsync) {
     switch (a.length) {

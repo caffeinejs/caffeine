@@ -1,7 +1,7 @@
 import type { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, Post, Params, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
+import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 import { $multipart, multipartPlugin } from './index.js'
 
@@ -76,7 +76,7 @@ describe('Multipart file upload', () => {
     @Controller('/up1')
     class Up1Controller {
       @Post('/upload')
-      @Params([$multipart.webStreamFile()])
+      @Args([$multipart.webStreamFile()])
       async upload(f: ReadableStream<WebMultipartFile>) {
         const [first] = await readStream(f)
         received = first
@@ -110,7 +110,7 @@ describe('Multipart file upload', () => {
     @Controller('/up2')
     class Up2Controller {
       @Post('/upload')
-      @Params([$multipart.webStreamFile('document')])
+      @Args([$multipart.webStreamFile('document')])
       async upload(f: ReadableStream<WebMultipartFile>) {
         const [first] = await readStream(f)
         received = first
@@ -141,7 +141,7 @@ describe('Multipart file upload', () => {
     @Controller('/up3')
     class Up3Controller {
       @Post('/upload')
-      @Params([$multipart.webStreamFile('missing')])
+      @Args([$multipart.webStreamFile('missing')])
       async upload(f: ReadableStream<WebMultipartFile>) {
         items = await readStream(f)
         return {}
@@ -170,7 +170,7 @@ describe('Multipart file upload', () => {
     @Controller('/up4')
     class Up4Controller {
       @Post('/upload')
-      @Params([$multipart.webStreamFile()])
+      @Args([$multipart.webStreamFile()])
       async upload(f: ReadableStream<WebMultipartFile>) {
         const [first] = await readStream(f)
         bytes = await readFileBytes(first.stream)
@@ -200,7 +200,7 @@ describe('Multipart file upload', () => {
     @Controller('/up5')
     class Up5Controller {
       @Post('/upload')
-      @Params([$multipart.webStreamFile('avatar'), $p.query('userID')])
+      @Args([$multipart.webStreamFile('avatar'), $p.query('userID')])
       async upload(f: ReadableStream<WebMultipartFile>, userID: string) {
         const [first] = await readStream(f)
         receivedFile = first
@@ -231,7 +231,7 @@ describe('Multipart file upload', () => {
     @Controller('/up6')
     class Up6Controller {
       @Post('/upload')
-      @Params([$multipart.webStreamFiles()])
+      @Args([$multipart.webStreamFiles()])
       async upload(f: ReadableStream<WebMultipartFile>) {
         received = await readStream(f)
         return {}
@@ -264,7 +264,7 @@ describe('Multipart file upload', () => {
     @Controller('/up7')
     class Up7Controller {
       @Post('/upload')
-      @Params([$multipart.webStreamParts()])
+      @Args([$multipart.webStreamParts()])
       async upload(p: ReadableStream<WebMultipartFile | MultipartField>) {
         received = await readStream(p)
         return {}
@@ -299,7 +299,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf1')
     class Wf1Controller {
       @Post('/upload')
-      @Params([$multipart.file()])
+      @Args([$multipart.file()])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -324,13 +324,13 @@ describe('Multipart file upload', () => {
     expect(Buffer.from(await received!.arrayBuffer()).toString()).toBe('jpeg-bytes')
   })
 
-  it('file() via @Params builder — $multipart.file() works inside a builder that closes over it', async () => {
+  it('file() via @Args builder — $multipart.file() works inside a builder that closes over it', async () => {
     let received: File | undefined
 
     @Controller('/wf1b')
     class Wf1bController {
       @Post('/upload')
-      @Params(() => [$multipart.file()])
+      @Args(() => [$multipart.file()])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -360,7 +360,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf2')
     class Wf2Controller {
       @Post('/upload')
-      @Params([$multipart.file('document')])
+      @Args([$multipart.file('document')])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -393,7 +393,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf3')
     class Wf3Controller {
       @Post('/upload')
-      @Params([$multipart.file('missing')])
+      @Args([$multipart.file('missing')])
       async upload(f: File | undefined) {
         received = f
         return {}
@@ -421,7 +421,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf4')
     class Wf4Controller {
       @Post('/upload')
-      @Params([$multipart.files()])
+      @Args([$multipart.files()])
       async upload(f: File[]) {
         received = f
         return {}
@@ -455,7 +455,7 @@ describe('Multipart file upload', () => {
     @Controller('/wf5')
     class Wf5Controller {
       @Post('/upload')
-      @Params([$multipart.formData()])
+      @Args([$multipart.formData()])
       async upload(fd: FormData) {
         received = fd
         return {}
@@ -491,7 +491,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf1')
     class Nf1Controller {
       @Post('/upload')
-      @Params([$multipart.streamFile()])
+      @Args([$multipart.streamFile()])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           received = chunk as MultipartFileNode
@@ -525,7 +525,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf2')
     class Nf2Controller {
       @Post('/upload')
-      @Params([$multipart.streamFile('document')])
+      @Args([$multipart.streamFile('document')])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           received = chunk as MultipartFileNode
@@ -559,7 +559,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf3')
     class Nf3Controller {
       @Post('/upload')
-      @Params([$multipart.streamFiles()])
+      @Args([$multipart.streamFiles()])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           const node = chunk as MultipartFileNode
@@ -596,7 +596,7 @@ describe('Multipart file upload', () => {
     @Controller('/nf4')
     class Nf4Controller {
       @Post('/upload')
-      @Params([$multipart.streamParts()])
+      @Args([$multipart.streamParts()])
       async upload(stream: Readable) {
         for await (const chunk of stream) {
           const part = chunk as MultipartFileNode | MultipartField

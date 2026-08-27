@@ -3,7 +3,7 @@ import fastify from 'fastify'
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
 import { Injectable, Lifetime, Named, Primary, Scopes } from '@caffeinejs/di'
-import { Catch, CatchWith, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Params, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
+import { Catch, CatchWith, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Args, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
 // ---------------------------------------------------------------------------
@@ -104,7 +104,7 @@ void [Greeter, NotFoundHandler, CatchAllHandler]
 @Controller('/pets')
 class PetsController {
   @Get('/:id')
-  @Params([$p.param('id')])
+  @Args([$p.param('id')])
   get(id: string): unknown {
     throw new ErrHTTPNotFound(`Pet "${id}" not found`)
   }
@@ -151,7 +151,7 @@ describe('error handler dispatch', () => {
 @Controller('/shop')
 class ShopController {
   @Get('/:id')
-  @Params([$p.param('id')])
+  @Args([$p.param('id')])
   get(id: string): unknown {
     throw new ErrHTTPNotFound(`item ${id}`)
   }
@@ -232,7 +232,7 @@ class TxController {
 class ValidatedController {
   @Post('/')
   @Schema({ body: $t.Object({ name: $t.String() }) })
-  @Params([$p.body()])
+  @Args([$p.body()])
   create(body: unknown): unknown {
     return { created: body }
   }
@@ -460,7 +460,7 @@ class CatchByValidatedController {
   @Post('/')
   @CatchWith(ValidationHandler)
   @Schema({ body: $t.Object({ name: $t.String() }) })
-  @Params([$p.body()])
+  @Args([$p.body()])
   create(body: unknown): unknown {
     return { created: body }
   }

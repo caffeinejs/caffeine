@@ -9,7 +9,7 @@ import { configureRoute } from './registrar/registrar.js'
  * ```ts
  * @Post('/')
  * @Schema({ body: CreatePet, response: { 201: PetDTO } })
- * @Params([$p.body()])
+ * @Args([$p.body()])
  * create(dto: InferSchema<typeof CreatePet>) { ... }
  * ```
  */

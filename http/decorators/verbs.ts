@@ -1,58 +1,33 @@
+import type { HTTPPickers } from '../route_picker.js'
+import { type Picks, resolveParams } from './_params.js'
 import { configureRoute } from './registrar/registrar.js'
 
-export function Get(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'get')
+type MethodDecorator = (target: Function, context: ClassMethodDecoratorContext) => void
+
+function createMethodDecorator(method: string) {
+  function decorator(path: string): MethodDecorator
+  function decorator(path: string, params: Picks): MethodDecorator
+  function decorator(path: string, build: (p: HTTPPickers) => Picks): MethodDecorator
+  function decorator(path: string, arg?: Picks | ((p: HTTPPickers) => Picks)): MethodDecorator {
+    const params = arg === undefined ? undefined : resolveParams(arg)
+
+    return function (_target: Function, context: ClassMethodDecoratorContext): void {
+      configureMethod(context, path, method, params)
+    }
   }
+
+  return decorator
 }
 
-export function Post(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'post')
-  }
-}
-
-export function Put(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'put')
-  }
-}
-
-export function Delete(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'delete')
-  }
-}
-
-export function Patch(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'patch')
-  }
-}
-
-export function Head(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'head')
-  }
-}
-
-export function Options(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'options')
-  }
-}
-
-export function Trace(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'trace')
-  }
-}
-
-export function Query(path: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureMethod(context, path, 'query')
-  }
-}
+export const Get = createMethodDecorator('get')
+export const Post = createMethodDecorator('post')
+export const Put = createMethodDecorator('put')
+export const Delete = createMethodDecorator('delete')
+export const Patch = createMethodDecorator('patch')
+export const Head = createMethodDecorator('head')
+export const Options = createMethodDecorator('options')
+export const Trace = createMethodDecorator('trace')
+export const Query = createMethodDecorator('query')
 
 export function Method(method: string | string[]) {
   return function (_target: Function, context: ClassMethodDecoratorContext): void {
@@ -64,9 +39,12 @@ function configureMethod(
   context: ClassMethodDecoratorContext,
   path: string,
   method: string | string[],
+  params?: Picks,
 ) {
-  configureRoute(context, spec => spec
-    .method(method)
-    .handler(context.name)
-    .path(path))
+  configureRoute(context, spec => {
+    spec.method(method).handler(context.name).path(path)
+    if (params !== undefined) {
+      spec.parameters(params)
+    }
+  })
 }

@@ -6,7 +6,7 @@ import { configureConsume } from './registrar.js'
 type Picks = ParameterPickOptions<Message>[]
 
 /**
- * Declares how a `@Consume` method's arguments are extracted from the message. Mirrors HTTP's `@Params`: pass a
+ * Declares how a `@Consume` method's arguments are extracted from the message. Mirrors HTTP's `@Args`: pass a
  * function that receives the built-in portable pickers and returns an ordered array, one entry per argument.
  * Without `@MessageParams`, the handler receives the message payload as its single argument.
  *

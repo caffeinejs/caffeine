@@ -4,11 +4,9 @@ import {
   Delete,
   ErrHTTPNotFound,
   Get,
-  Params,
   Post,
   Schema,
   Status,
-  $p,
 } from "@caffeinejs/http";
 import { APIGroup, Operation } from "@caffeinejs/openapi";
 import { apiErrorSchema } from "../../util/errors/index.js";
@@ -21,14 +19,13 @@ import { OrdersRepository } from "./orders.repository.js";
 export class OrdersController {
   constructor(private readonly orders: OrdersRepository) {}
 
-  @Post("/")
+  @Post("/", (p) => [p.body()])
   @Status(201)
   @Authorize()
   @Schema({
     body: createOrderSchema,
     response: { 201: orderSchema, 404: apiErrorSchema, 422: apiErrorSchema },
   })
-  @Params([$p.body()])
   @Operation({
     operationId: "createOrder",
     summary: "Place an adoption order",
@@ -39,13 +36,12 @@ export class OrdersController {
     return this.orders.create(dto);
   }
 
-  @Get("/:id")
+  @Get("/:id", (p) => [p.param("id")])
   @Authorize()
   @Schema({
     params: orderIdParamSchema,
     response: { 200: orderSchema, 404: apiErrorSchema },
   })
-  @Params([$p.param("id")])
   @Operation({ operationId: "getOrder", summary: "Get an order by ID" })
   async get(id: string) {
     const order = await this.orders.get(id);
@@ -57,11 +53,10 @@ export class OrdersController {
     return order;
   }
 
-  @Delete("/:id")
+  @Delete("/:id", (p) => [p.param("id")])
   @Status(204)
   @Authorize()
   @Schema({ params: orderIdParamSchema })
-  @Params([$p.param("id")])
   @Operation({ operationId: "deleteOrder", summary: "Cancel an order" })
   async remove(id: string) {
     await this.orders.remove(id);

@@ -6,7 +6,7 @@ import { configureListener } from './registrar.js'
 type Picks = ParameterPickOptions<KafkaMessage>[]
 
 /**
- * Declares how a `@KafkaListener` method's arguments are extracted from the message. Mirrors HTTP's `@Params`:
+ * Declares how a `@KafkaListener` method's arguments are extracted from the message. Mirrors HTTP's `@Args`:
  * pass a function that receives the built-in Kafka pickers and returns an ordered array, one entry per
  * argument. Without `@KafkaParams`, the handler receives the whole {@link KafkaMessage}.
  *

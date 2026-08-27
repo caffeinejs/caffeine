@@ -10,7 +10,7 @@ import {
   Controller,
   Get,
   Claim,
-  Params,
+  Args,
   createWebApplication,
   fastifyAdapterFactory,
   $p,
@@ -214,7 +214,7 @@ describe('OIDC integration', () => {
     @Authorize()
     @Controller('/oidc-int-session')
     class OIDCIntSessionController {
-      @Params([$p.context()])
+      @Args([$p.context()])
       @Get('/')
       index(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }

@@ -4,14 +4,12 @@ import {
   Delete,
   ErrHTTPNotFound,
   Get,
-  Params,
   Post,
   Put,
   Query,
   Roles,
   Schema,
   Status,
-  $p,
 } from "@caffeinejs/http";
 import { $multipart } from "@caffeinejs/multipart";
 import { APIGroup, Operation } from "@caffeinejs/openapi";
@@ -51,13 +49,12 @@ export class PetsController {
   constructor(private readonly pets: PetsRepository) {}
 
   // Public read — no controller-level guard, so unguarded routes are open.
-  @Get("/")
+  @Get("/", (p) => [p.query()])
   @AllowAnonymous()
   @Schema({
     querystring: listPetsQuerySchema,
     response: { 200: petListSchema },
   })
-  @Params([$p.query()])
   @Operation({
     operationId: "listPets",
     summary: "List pets matching the given filters",
@@ -78,10 +75,9 @@ export class PetsController {
   // OpenAPI 3.2 QUERY verb on /pets — structured search criteria in the body. Requires
   // fastify.addHttpMethod('QUERY', …) in src/app.ts before routing, and .version('3.2.0') on the OpenAPI
   // builder: a 3.1 path item has no field for a non-standard method, so a 3.1 document would omit this route.
-  @Query("/")
+  @Query("/", (p) => [p.body()])
   @AllowAnonymous()
   @Schema({ response: { 200: petListSchema } })
-  @Params([$p.body()])
   @Operation({
     operationId: "searchPets",
     summary: "Search pets by structured criteria",
@@ -90,13 +86,12 @@ export class PetsController {
     return this.pets.search(body ?? {});
   }
 
-  @Get("/:id")
+  @Get("/:id", (p) => [p.param("id")])
   @AllowAnonymous()
   @Schema({
     params: petIdParamSchema,
     response: { 200: petSchema, 404: apiErrorSchema },
   })
-  @Params([$p.param("id")])
   @Operation({
     operationId: "getPet",
     summary: "Get a pet by ID",
@@ -112,27 +107,25 @@ export class PetsController {
     return pet;
   }
 
-  @Post("/")
+  @Post("/", (p) => [p.body()])
   @Status(201)
   @Roles("write:pets")
   @Schema({
     body: createPetSchema,
     response: { 201: petSchema, 422: apiErrorSchema },
   })
-  @Params([$p.body()])
   @Operation({ operationId: "createPet", summary: "Add a pet to the store" })
   create(dto: CreatePetDTO) {
     return this.pets.create(dto);
   }
 
-  @Put("/:id")
+  @Put("/:id", (p) => [p.param("id"), p.body()])
   @Roles("write:pets")
   @Schema({
     params: petIdParamSchema,
     body: updatePetSchema,
     response: { 200: petSchema, 404: apiErrorSchema, 422: apiErrorSchema },
   })
-  @Params([$p.param("id"), $p.body()])
   @Operation({ operationId: "updatePet", summary: "Update an existing pet" })
   async update(id: string, dto: UpdatePetDTO) {
     const pet = await this.pets.update(id, dto);
@@ -144,11 +137,10 @@ export class PetsController {
     return pet;
   }
 
-  @Delete("/:id")
+  @Delete("/:id", (p) => [p.param("id")])
   @Status(204)
   @Roles("write:pets")
   @Schema({ params: petIdParamSchema })
-  @Params([$p.param("id")])
   @Operation({
     operationId: "deletePet",
     summary: "Remove a pet from the store",
@@ -159,14 +151,13 @@ export class PetsController {
 
   // Multipart upload — $multipart.file() yields a Web API File for the `file` field, and is also what tells the
   // OpenAPI generator this route consumes multipart/form-data with a binary `file` part. Nothing restates it.
-  @Post("/:id/images")
+  @Post("/:id/images", (p) => [p.param("id"), $multipart.file("file")])
   @Status(201)
   @Roles("write:pets")
   @Schema({
     params: petIdParamSchema,
     response: { 201: petPhotoSchema, 404: apiErrorSchema },
   })
-  @Params([$p.param("id"), $multipart.file("file")])
   @Operation({
     operationId: "uploadPetPhoto",
     summary: "Upload a photo for a pet",

@@ -7,7 +7,7 @@ import {
   type Context,
   Controller,
   Get,
-  Params,
+  Args,
   Post,
   Status,
   createWebApplication,
@@ -189,7 +189,7 @@ describe('JWTBearerHandler', () => {
     @Authorize()
     @Controller('/jwt-sub-claim')
     class JWTSubClaimController {
-      @Params([$p.context()])
+      @Args([$p.context()])
       @Get('/')
       list(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }

@@ -239,7 +239,7 @@ function formData<R = unknown>(): ParameterPickOptions<R> {
 
 /**
  * The built-in multipart parameter pickers, mirroring the HTTP `$p` catalog.
- * Import from `@caffeinejs/multipart` and pass into `@Params([...])`.
+ * Import from `@caffeinejs/multipart` and pass into `@Args([...])`.
  */
 export const $multipart: MultipartPickers = {
   webStreamParts,

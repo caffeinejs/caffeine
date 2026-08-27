@@ -21,7 +21,7 @@ export interface MultipartPluginExt {
  * `@fastify/multipart` and `$multipart.*` pickers can read the request.
  *
  * Import `$multipart` from `@caffeinejs/multipart` at the controller (or any module that builds
- * `@Params([...])`) — the plugin does not patch HTTP `$p`.
+ * `@Args([...])`) — the plugin does not patch HTTP `$p`.
  *
  * On the first `.multipart(...)` call it lazily creates a single {@link MultipartBuilder} and registers it as
  * a service; the builder's `configure()` binds the multipart server extension.

@@ -11,7 +11,7 @@ import {
   BaseAuthenticationHandler,
   Claim,
   Identity,
-  Params,
+  Args,
   Principal,
   Roles,
   createWebApplication,
@@ -384,7 +384,7 @@ describe('auth configurer (fake handler)', () => {
     @Authorize()
     @Controller('/auth-ctx-user')
     class CtxUserController {
-      @Params([$p.context()])
+      @Args([$p.context()])
       @Get('/')
       list(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }

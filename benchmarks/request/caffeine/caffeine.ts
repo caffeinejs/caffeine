@@ -1,4 +1,4 @@
-import { Controller, Get, createWebApplication, Params, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
+import { Controller, Get, createWebApplication, Args, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 
@@ -32,7 +32,7 @@ class AppController {
   }
 
   @Post('/api/test/:text/:num/:bool')
-  @Params([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
+  @Args([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
   helloWorld(
     ctx: FastifyContext,

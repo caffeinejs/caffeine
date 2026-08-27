@@ -1,7 +1,7 @@
 ---
 name: caffeine-http-controller
 description: >-
-  Add a Caffeine HTTP controller and routes (@Controller, @Get, @Post, @Params, $p).
+  Add a Caffeine HTTP controller and routes (@Controller, @Get, @Post, @Args, $p).
   Use when creating REST endpoints, a new controller class, or wiring createWebApplication
   in a Caffeine app. Not Nest @Controller modules.
 ---
@@ -15,7 +15,7 @@ If `ai/docs/http.md` or `ai/docs/rules.md` exist in this repo, read them first.
 ## Steps
 
 1. Create a class. Decorate with `@Controller('/path')`. Constructor-inject collaborators (use cases, not the Fastify instance).
-2. Add method decorators (`@Get('/')`, `@Post('/')`, …). Pick args with `@Params([$p.body()])` / `$p.param('id')` as needed.
+2. Add method decorators (`@Get('/')`, `@Post('/')`, …). Pick args with `@Args([$p.body()])` / `$p.param('id')` as needed.
 3. Side-effect-import the file from `main.ts` (or the app entry) so the decorator runs.
 4. `tsconfig` must include `"lib": ["Decorators", "esnext.decorators"]`. Imports use `.js` extensions.
 5. Throw `ErrHTTPNotFound` (etc.) for missing resources. Do not use Nest `HttpException`.
@@ -23,7 +23,7 @@ If `ai/docs/http.md` or `ai/docs/rules.md` exist in this repo, read them first.
 ## Shape
 
 ```ts
-import { Controller, Get, Post, Params, $p } from '@caffeinejs/http'
+import { Controller, Get, Post, Args, $p } from '@caffeinejs/http'
 
 @Controller('/examples')
 export class ExampleController {
@@ -35,7 +35,7 @@ export class ExampleController {
   }
 
   @Post('/')
-  @Params([$p.body()])
+  @Args([$p.body()])
   createOne(input: { name: string }) {
     return this.create.execute(input.name)
   }

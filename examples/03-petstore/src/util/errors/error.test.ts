@@ -11,12 +11,10 @@ import {
   ErrHTTPUnauthorized,
   ErrorHandler,
   Get,
-  Params,
   Post,
   Schema,
   createWebApplication,
   fastifyAdapterFactory,
-  $p,
 } from "@caffeinejs/http";
 import { $t } from "@caffeinejs/std";
 import { viewPlugin } from "@caffeinejs/view";
@@ -27,16 +25,14 @@ import type { ErrorBody } from "./error.handlers.js";
 // A throwing controller exercising each error path the global handlers cover.
 @Controller("/things")
 class ThingsController {
-  @Get("/")
+  @Get("/", (p) => [p.query()])
   @Schema({ querystring: $t.Object({ n: $t.Optional($t.Integer()) }) })
-  @Params([$p.query()])
   list(query: unknown): unknown {
     return query;
   }
 
-  @Post("/")
+  @Post("/", (p) => [p.body()])
   @Schema({ body: $t.Object({ name: $t.String() }) })
-  @Params([$p.body()])
   create(body: unknown): unknown {
     return body;
   }
@@ -51,8 +47,7 @@ class ThingsController {
     throw new ErrHTTPUnauthorized("Invalid credentials");
   }
 
-  @Get("/:id")
-  @Params([$p.param("id")])
+  @Get("/:id", (p) => [p.param("id")])
   get(id: string): unknown {
     throw new ErrHTTPNotFound(
       `The requested thing with ID "${id}" was not found`,
@@ -75,8 +70,7 @@ void [SilentNotFoundHandler];
 @CatchWith(SilentNotFoundHandler)
 @Controller("/gadgets")
 class GadgetsController {
-  @Get("/:id")
-  @Params([$p.param("id")])
+  @Get("/:id", (p) => [p.param("id")])
   get(id: string): unknown {
     throw new ErrHTTPNotFound(`No gadget "${id}"`);
   }

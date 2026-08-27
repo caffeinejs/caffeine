@@ -6,7 +6,7 @@ import {
   type Context,
   Controller,
   Get,
-  Params,
+  Args,
   $p,
   createWebApplication,
   fastifyAdapterFactory,
@@ -21,7 +21,7 @@ const SESSION_SECRET = 'spring-oauth2-e2e-session-secret-32!'
 @Controller('/oauth2-me')
 class OAuth2MeController {
   @Get('/')
-  @Params([$p.context()])
+  @Args([$p.context()])
   me(ctx: Context) {
     return {
       sub: ctx.user.findFirst('sub')?.value,

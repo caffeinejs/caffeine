@@ -4,7 +4,7 @@ import Fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
 import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
 import { $p } from './route_picker.js'
-import { Controller, Get, Method, createWebApplication, Params, fastifyAdapterFactory, FastifyContext } from './index.js'
+import { Controller, Get, Method, createWebApplication, Args, fastifyAdapterFactory, FastifyContext } from './index.js'
 
 describe('Fastify Adapter', () => {
   // Opens a real ephemeral socket via Supertest (unlike the .inject() test below), so it can hang up
@@ -39,7 +39,7 @@ describe('Fastify Adapter', () => {
       @Controller('/users')
       class TestController {
         @Get('/:id')
-        @Params([$p.param('id'), $p.query('filter'), $p.header('x-test')])
+        @Args([$p.param('id'), $p.query('filter'), $p.header('x-test')])
         async get(id: string, filter: string, test: string) {
           return { ok: true, id, filter, test }
         }
@@ -62,7 +62,7 @@ describe('Fastify Adapter', () => {
       @Controller('/test')
       class PickersController {
         @Get('/pickers')
-        @Params([$p.url(), $p.path(), $p.signal(), $p.port(), $p.address()])
+        @Args([$p.url(), $p.path(), $p.signal(), $p.port(), $p.address()])
         get(
           u: string,
           p: string,
@@ -101,7 +101,7 @@ describe('Fastify Adapter', () => {
       @Controller('/async-pick')
       class AsyncPickController {
         @Get('/value')
-        @Params([$p.pick(req => Promise.resolve((req as { url: string }).url.toUpperCase()), { async: true })])
+        @Args([$p.pick(req => Promise.resolve((req as { url: string }).url.toUpperCase()), { async: true })])
         get(uppercased: string) {
           return { value: uppercased }
         }
@@ -121,7 +121,7 @@ describe('Fastify Adapter', () => {
       @Controller('/mixed-pick')
       class MixedPickController {
         @Get('/:id')
-        @Params([
+        @Args([
           $p.param('id'),
           $p.pick(req => Promise.resolve(`async:${(req as { url: string }).url}`), { async: true }),
         ])
@@ -147,7 +147,7 @@ describe('Fastify Adapter', () => {
       class MethodController {
         @Method([...methods])
         @Get('/action')
-        @Params([$p.method()])
+        @Args([$p.method()])
         action(m: string) {
           return { method: m }
         }
@@ -234,7 +234,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class NamedCookieController {
         @Get('/session')
-        @Params([$p.cookie('session')])
+        @Args([$p.cookie('session')])
         get(session: string | undefined) {
           return { session }
         }
@@ -256,7 +256,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class AllCookiesController {
         @Get('/all')
-        @Params([$p.cookie()])
+        @Args([$p.cookie()])
         get(cookies: Record<string, string | undefined>) {
           return cookies
         }
@@ -282,7 +282,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class SignedController {
         @Get('/signed')
-        @Params([$p.signedCookie('tok')])
+        @Args([$p.signedCookie('tok')])
         get(tok: string | false | undefined) {
           return { tok }
         }
@@ -304,7 +304,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class TamperedController {
         @Get('/tampered')
-        @Params([$p.signedCookie('tok')])
+        @Args([$p.signedCookie('tok')])
         get(tok: string | false | undefined) {
           return { valid: tok !== false }
         }
@@ -326,7 +326,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class SetCookieController {
         @Get('/set')
-        @Params([$p.context()])
+        @Args([$p.context()])
         get(ctx: FastifyContext) {
           ctx.cookie('session', 'hello', { httpOnly: true, path: '/' })
           return { ok: true }
@@ -351,7 +351,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class GetCookieController {
         @Get('/get')
-        @Params([$p.context()])
+        @Args([$p.context()])
         get(ctx: FastifyContext) {
           return { value: ctx.req.cookie('token') }
         }
@@ -377,7 +377,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class ReqSignedCookieController {
         @Get('/read')
-        @Params([$p.context()])
+        @Args([$p.context()])
         read(ctx: FastifyContext) {
           return { value: ctx.req.signedCookie('tok') }
         }
@@ -399,7 +399,7 @@ describe('Fastify Adapter', () => {
       @Controller('/ck')
       class DeleteCookieController {
         @Get('/delete')
-        @Params([$p.context()])
+        @Args([$p.context()])
         get(ctx: FastifyContext) {
           ctx.deleteCookie('session')
           return { ok: true }

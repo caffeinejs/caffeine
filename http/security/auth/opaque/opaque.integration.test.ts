@@ -9,7 +9,7 @@ import {
   Get,
   Identity,
   OpaqueTokenStore,
-  Params,
+  Args,
   Principal,
   createWebApplication,
   fastifyAdapterFactory,
@@ -49,7 +49,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     @Authorize()
     @Controller('/opaque-ok')
     class OpaqueOkController {
-      @Params([$p.context()])
+      @Args([$p.context()])
       @Get('/')
       list(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value, scope: ctx.user.findFirst('scope')?.value }

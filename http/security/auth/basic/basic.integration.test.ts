@@ -7,7 +7,7 @@ import {
   Controller,
   Get,
   Identity,
-  Params,
+  Args,
   Principal,
   createWebApplication,
   fastifyAdapterFactory,
@@ -23,7 +23,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     @Authorize()
     @Controller('/basic-ok')
     class BasicOkController {
-      @Params([$p.context()])
+      @Args([$p.context()])
       @Get('/')
       list(ctx: Context) {
         return { sub: ctx.user.findFirst('sub')?.value }

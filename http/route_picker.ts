@@ -1,9 +1,12 @@
 import { FastifyRequest } from 'fastify'
 import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
 
+export interface FSTPickers {
+  request<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R>
+  reply<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R>
+}
+
 export interface HTTPPickers {
-  fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R>
-  fastifyReply<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R>
   param<R = unknown>(name?: string): ParameterPickOptions<R>
   query<R = unknown>(name?: string): ParameterPickOptions<R>
   body<R = unknown>(): ParameterPickOptions<R>
@@ -17,15 +20,21 @@ export interface HTTPPickers {
   address<R = unknown>(): ParameterPickOptions<R>
   cookie<R = unknown>(name?: string): ParameterPickOptions<R>
   signedCookie<R = unknown>(name?: string): ParameterPickOptions<R>
-  pick<R = unknown>(fn: (req: R) => unknown | Promise<unknown>, opts?: { async?: boolean },): ParameterPickOptions<R>
-}
+  pick<R = unknown>(fn: (req: R) => unknown | Promise<unknown>, opts?: { async?: boolean }): ParameterPickOptions<R>
+  map<In, Out, R = unknown>(
+    pick: ParameterPickOptions<R>,
+    fn: (value: In) => Out | Promise<Out>,
+    opts?: { async?: boolean },
+  ): ParameterPickOptions<unknown>
+  mapAsync<In, Out, R = unknown>(
+    pick: ParameterPickOptions<R>,
+    fn: (value: In) => Promise<Out>,
+  ): ParameterPickOptions<unknown>
+  async<R = unknown>(
+    picker: ParameterPicker<R>,
+  ): ParameterPickOptions<R>
 
-function fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {
-  return { type: 'fastify:request' }
-}
-
-function fastifyReply<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {
-  return { type: 'fastify:reply' }
+  fst: FSTPickers
 }
 
 function param<R = unknown>(name?: string): ParameterPickOptions<R> {
@@ -87,9 +96,48 @@ function pick<R = unknown>(
   return { type: 'custom', picker: fn as ParameterPicker<R>, async: opts?.async }
 }
 
+function map<In, Out, R>(
+  pick: ParameterPickOptions<R>,
+  fn: (value: In) => Out | Promise<Out>,
+  opts?: { async?: boolean },
+): ParameterPickOptions<unknown> {
+  const prev = pick.picker as ParameterPicker<unknown> | undefined
+  if (prev === undefined) {
+    throw new Error('Cannot map: no picker function')
+  }
+
+  const async = pick.async === true || opts?.async === true
+  const picker: ParameterPicker<unknown> = async
+    ? req => Promise.resolve(prev(req)).then(value => fn(value as In))
+    : req => fn(prev(req) as In)
+
+  return { type: 'custom', picker, async: async ? true : pick.async }
+}
+
+function mapAsync<In, Out, R>(
+  pick: ParameterPickOptions<R>,
+  fn: (value: In) => Promise<Out>,
+): ParameterPickOptions<unknown> {
+  return map(pick, fn, { async: true })
+}
+
+function async<R = unknown>(
+  picker: ParameterPicker<R>,
+): ParameterPickOptions<R> {
+  return { type: 'custom', picker, async: true }
+}
+
+// Fastify-specific pickers.
+
+function fastifyRequest<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {
+  return { type: 'fastify:request' }
+}
+
+function fastifyReply<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R> {
+  return { type: 'fastify:reply' }
+}
+
 export const $p = {
-  fastifyRequest,
-  fastifyReply,
   param,
   query,
   body,
@@ -104,4 +152,12 @@ export const $p = {
   cookie,
   signedCookie,
   pick,
+  map,
+  mapAsync,
+  async,
+
+  fst: {
+    request: fastifyRequest,
+    reply: fastifyReply,
+  },
 } as HTTPPickers
