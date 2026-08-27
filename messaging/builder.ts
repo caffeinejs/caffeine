@@ -1,5 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
-import { type DeclareKit, type Service, type ServiceKit, AnySchema } from '@caffeinejs/std'
+import { type DeclareKit, type Service, type ServiceKit, AnySchema, kServiceConfigure, kServiceDeclare } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   instanceNamespace,
@@ -115,7 +115,7 @@ export class MessagingBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
       namespace: instanceNamespace(MESSAGING_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -136,7 +136,7 @@ export class MessagingBuilder<C = unknown> implements Service {
     }))
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)

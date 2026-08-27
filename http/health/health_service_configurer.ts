@@ -1,4 +1,4 @@
-import { ApplicationAvailability, type DeclareKit, type Service } from '@caffeinejs/std'
+import { ApplicationAvailability, kServiceDeclare, kServiceConfigure, type DeclareKit, type Service } from '@caffeinejs/std'
 import type { ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kHealthOptions } from './keys.js'
@@ -39,7 +39,7 @@ export class HealthServiceConfigurer implements Service {
     this.#configured = configured
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     if (this.#configured) {
       return
     }
@@ -48,7 +48,7 @@ export class HealthServiceConfigurer implements Service {
     this.#options = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     if (!kit.container.has(ApplicationAvailability)) {
       // The application's own instance, not a container-constructed one: the lifecycle writes to that object, and
       // a second instance would report a state nothing ever updates.

@@ -1,4 +1,4 @@
-import { $t, type DeclareKit, type Service } from '@caffeinejs/std'
+import { $t, kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kServerOptions } from './keys.js'
@@ -64,7 +64,7 @@ export class ServerBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     this.#slice = defineFeatureConfig(kit.config, {
       namespace: SERVER_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -74,7 +74,7 @@ export class ServerBuilder<C = unknown> implements Service {
     })
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const slice = this.#slice!
 
     kit.container

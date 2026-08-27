@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from './schema/t.js'
 import { InlineConfigProvider, type ConfigSlice } from './config/index.js'
 import type { DeclareKit, Service, ServiceKit } from './service.js'
-import { createApplication } from './index.js'
+import { createApplication, kServiceConfigure, kServiceDeclare } from './index.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
 const widgetSchema = $t.Object({ size: $t.Optional($t.Number()) })
@@ -18,12 +18,12 @@ class WidgetService implements Service {
   slice: ConfigSlice<WidgetConfig> | undefined
   bound: number | undefined
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     this.steps.push('declare')
     this.slice = kit.config.slice(['widget'], widgetSchema)
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     this.steps.push('configure')
     this.bound = this.slice!.config.size
     kit.container.bind('widget.size').toValue(this.bound)
@@ -62,7 +62,7 @@ describe('service lifecycle', () => {
     class TooEarly implements Service {
       error: unknown
 
-      declare(kit: DeclareKit): void {
+      [kServiceDeclare](kit: DeclareKit): void {
         const slice = kit.config.slice(['widget'], widgetSchema)
         try {
           void slice.config
@@ -71,7 +71,7 @@ describe('service lifecycle', () => {
         }
       }
 
-      configure(): Promise<void> {
+      [kServiceConfigure](): Promise<void> {
         return Promise.resolve()
       }
     }
@@ -88,7 +88,7 @@ describe('service lifecycle', () => {
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
       .addService({
-        configure(): Promise<void> {
+        [kServiceConfigure](): Promise<void> {
           configured = true
           return Promise.resolve()
         },
@@ -102,14 +102,14 @@ describe('service lifecycle', () => {
 
   it('fails start-up when a slice cannot be resolved, before anything binds', async () => {
     class Strict implements Service {
-      configured = false
+      configured: boolean = false;
 
-      declare(kit: DeclareKit): void {
+      [kServiceDeclare](kit: DeclareKit) {
         // The tree carries a number here, so a string schema cannot validate.
         kit.config.slice(['widget', 'size'], $t.Object({ nested: $t.String() }))
       }
 
-      configure(): Promise<void> {
+      [kServiceConfigure](kit: ServiceKit): Promise<void> {
         this.configured = true
         return Promise.resolve()
       }

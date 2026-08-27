@@ -1,6 +1,8 @@
 import { Scopes, type Ctor } from '@caffeinejs/di'
 import {
   HealthIndicator,
+  kServiceConfigure,
+  kServiceDeclare,
   type DeclareKit,
   type Duration,
   type Service,
@@ -154,7 +156,7 @@ export class HealthBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
       namespace: HEALTH_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -168,7 +170,7 @@ export class HealthBuilder<C = unknown> implements Service {
       finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })))
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     for (const indicator of this.#indicators) {
       if (typeof indicator === 'function') {
         kit.container.bind(indicator).toSelf().lifetime(Scopes.SINGLETON).extends(HealthIndicator)

@@ -2,7 +2,7 @@ import { type Container, type Key, Scopes } from '@caffeinejs/di'
 import { ConfigDefinition } from './config/index.js'
 import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
-import { type Service, type ServiceKit } from './service.js'
+import { kServiceConfigure, kServiceDeclare, type Service, type ServiceKit } from './service.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
@@ -124,12 +124,12 @@ export abstract class BaseApplication {
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()
 
-    await Promise.all(services.map(service => service.declare?.({ config: this.#config })))
+    await Promise.all(services.map(service => service[kServiceDeclare]?.({ config: this.#config })))
     await this.#config.bootstrap()
 
     const kit = this.serviceKit()
 
-    await Promise.all(services.map(service => service.configure(kit)))
+    await Promise.all(services.map(service => service[kServiceConfigure](kit)))
     await this.#container.init()
     await this.setup()
 

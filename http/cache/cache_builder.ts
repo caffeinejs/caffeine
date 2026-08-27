@@ -1,4 +1,4 @@
-import { $t, type DeclareKit, type Service } from '@caffeinejs/std'
+import { $t, kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { ETagGenerator } from './cache.js'
@@ -69,7 +69,7 @@ export class CacheBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     this.#slice = defineFeatureConfig<CacheConfig>(kit.config, {
       namespace: CACHE_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -79,7 +79,7 @@ export class CacheBuilder<C = unknown> implements Service {
     })
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     if (this.#store !== undefined) {
       kit.container.bind(CacheStore).toValue(this.#store).internal()
     }

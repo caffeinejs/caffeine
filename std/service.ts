@@ -30,12 +30,25 @@ export interface ServiceKit extends DeclareKit {
 }
 
 /**
+ * Symbol-keyed declaration hook a {@link Service} may implement.
+ *
+ * Symbol-keyed, like {@link kServiceConfigure}, because every service is also a user-facing fluent builder:
+ * `ServerBuilder`, `KafkaBuilder`, `AuthenticationBuilder`. A plain method name would put the framework's own
+ * lifecycle into that autocomplete surface, and `configure` in particular already means the *opposite* thing
+ * on the options builders (`ViewBuilder.configure(options)` — "configure yourself with these").
+ */
+export const kServiceDeclare = Symbol('declare')
+
+/** Symbol-keyed configuration hook a {@link Service} implements. */
+export const kServiceConfigure = Symbol('configure')
+
+/**
  * A unit of application configuration that binds values into the container at `ready()` time, before
  * `container.init()`. Builders (auth, cache, view, ...) and plugin-contributed configurers implement it.
  *
- * The two steps run in order across every service — every `declare` finishes, then configuration resolves,
- * then every `configure` runs. That ordering is what lets a feature read its own resolved settings while it
- * is still able to bind, which is the whole reason the steps are separate.
+ * The two steps run in order across every service — every declaration finishes, then configuration resolves,
+ * then every configure runs. That ordering is what lets a feature read its own resolved settings while it is
+ * still able to bind, which is the whole reason the steps are separate.
  */
 export interface Service {
   /**
@@ -43,19 +56,15 @@ export interface Service {
    * this feature's slice.
    *
    * Runs **before** configuration resolves, so nothing here may read a resolved value — a slice read at this
-   * point throws `ERR_CONFIG_NOT_RESOLVED`. Optional: a service with nothing to configure omits it.
+   * point throws `ERR_CONFIG_NOT_RESOLVED`. Optional: a service with nothing to declare omits it.
    */
-  declare?(kit: DeclareKit): void | Promise<void>
+  [kServiceDeclare]?(kit: DeclareKit): void | Promise<void>
 
   /**
    * Binds this feature into the container, with its configuration already resolved and every slice published.
    *
-   * The application calls it; a feature never calls it on itself. Note the direction — a `configure` on an
-   * options builder (`ViewBuilder.configure(options)`) means the opposite, "configure yourself with these",
-   * and no class carries both senses.
-   *
    * A value read here is a **snapshot**: it is read once, while binding. A feature that has to follow a later
    * refresh must hold the slice and read through it, as the server and cache options do.
    */
-  configure(kit: ServiceKit): Promise<void>
+  [kServiceConfigure](kit: ServiceKit): Promise<void>
 }

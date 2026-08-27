@@ -1,5 +1,5 @@
 import { Provider, type Ctor, type Key } from '@caffeinejs/di'
-import { type DeclareKit, type Service } from '@caffeinejs/std'
+import { kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   type ConfigAccessors,
@@ -294,7 +294,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     this.#authSlice = defineFeatureConfig<AuthConfigSlice>(kit.config, {
       namespace: AUTH_CONFIG_NAMESPACE,
       selector: this.#selector,
@@ -468,7 +468,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     }
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     this.#buildSchemes()
 
     const configuredDefaults = this.#authSlice?.config ?? {}

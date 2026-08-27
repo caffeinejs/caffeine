@@ -1,5 +1,5 @@
 import { Ctor, Identifier, Provider, Scopes } from '@caffeinejs/di'
-import { type Service } from '@caffeinejs/std'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
 import { Context } from '../context.js'
 import type { ServiceKit } from '../service.js'
 import { ActionResult } from '../response.js'
@@ -77,7 +77,7 @@ export class ErrorHandlerProvider {
 }
 
 export class ErrorHandlingServiceConfigurer implements Service {
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const handlerBinding = kit.container.getBindings(ErrorHandler)
     const handlers = new Map<Ctor<Error>, Provider<ErrorHandler<Error>>>()
 

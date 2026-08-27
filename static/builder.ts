@@ -1,4 +1,4 @@
-import { type DeclareKit, type Service } from '@caffeinejs/std'
+import { kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import { NotFoundFallback, type ServiceKit } from '@caffeinejs/http'
 import { STATIC_CONFIG_NAMESPACE, staticConfigSchema, type StaticConfigSlice } from './config.js'
@@ -81,7 +81,7 @@ export class StaticBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
       namespace: STATIC_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -106,7 +106,7 @@ export class StaticBuilder<C = unknown> implements Service {
     this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const resolved = this.#resolved!
 
     kit.container.bind(kStaticMounts).toValue(resolved.config.mounts).internal()

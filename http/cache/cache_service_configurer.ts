@@ -1,5 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { type Service } from '@caffeinejs/std'
+import { kServiceConfigure, type Service } from '@caffeinejs/std'
 import type { ServiceKit } from '../service.js'
 import { CacheStore, MemoryCacheStore } from './store.js'
 
@@ -13,7 +13,7 @@ import { CacheStore, MemoryCacheStore } from './store.js'
  * through `app.cache(c => c.store(...))` or a direct `container.bind(CacheStore)`.
  */
 export class CacheServiceConfigurer implements Service {
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     if (!kit.container.has(CacheStore)) {
       kit.container.bind(CacheStore)
         .toClass(MemoryCacheStore)

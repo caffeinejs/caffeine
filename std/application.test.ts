@@ -7,6 +7,7 @@ import {
   OnApplicationShutdown,
   OnPreApplicationShutdown,
   createApplication,
+  kServiceConfigure,
 } from './index.js'
 
 // Builds a headless app over an isolated container (no global autowire) with only the explicit binds —
@@ -169,7 +170,7 @@ describe('Application lifecycle', () => {
         name: 'probe',
         install(ctx) {
           ctx.addService({
-            configure(kit) {
+            [kServiceConfigure](kit) {
               kit.container.bind(kSentinel).toValue({ value: state.value })
               return Promise.resolve()
             },

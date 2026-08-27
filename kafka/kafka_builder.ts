@@ -1,5 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
-import { HealthIndicator, type DeclareKit, type Service, type ServiceKit } from '@caffeinejs/std'
+import { HealthIndicator, kServiceConfigure, kServiceDeclare, type DeclareKit, type Service, type ServiceKit } from '@caffeinejs/std'
 import { defineFeatureConfig, instanceNamespace, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import { KAFKA_CONFIG_NAMESPACE, kafkaConfigSchema, type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaConfigSlice, type KafkaDeserializers, type KafkaMessage, type ResolvedKafkaConfig, type KafkaSerializers, resolveConfig, type TopicProvisioning } from './config.js'
@@ -183,7 +183,7 @@ export class KafkaBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     const slice = defineFeatureConfig<KafkaConfigSlice>(kit.config, {
       namespace: instanceNamespace(KAFKA_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -241,7 +241,7 @@ export class KafkaBuilder<C = unknown> implements Service {
     })
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const resolved = this.#resolved!
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)

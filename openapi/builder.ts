@@ -1,4 +1,4 @@
-import { type DeclareKit, type Service, AnySchema } from '@caffeinejs/std'
+import { kServiceConfigure, kServiceDeclare, type DeclareKit, type Service, AnySchema } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { Route, Router, ServiceKit } from '@caffeinejs/http'
 import {
@@ -279,7 +279,7 @@ export class OpenAPIBuilder<C = unknown> implements Service {
     return this
   }
 
-  declare(kit: DeclareKit): void {
+  [kServiceDeclare](kit: DeclareKit): void {
     const code = this.#options
 
     const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
@@ -311,7 +311,7 @@ export class OpenAPIBuilder<C = unknown> implements Service {
     })
   }
 
-  configure(kit: ServiceKit): Promise<void> {
+  [kServiceConfigure](kit: ServiceKit): Promise<void> {
     const resolved = this.#resolved!
     const options = resolved.config
 

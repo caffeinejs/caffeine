@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
-import { ApplicationAvailability } from '@caffeinejs/std'
+import { ApplicationAvailability, kServiceConfigure } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
 import type { Context } from '../../../context.js'
 import type { Feats } from '../../../feats.js'
@@ -189,7 +189,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       const handler = new OpaqueTokenAuthenticationHandler('OpaqueToken', { store: OpaqueTokenStore })
 
       const builder = new AuthenticationBuilder().addStrategy('OpaqueToken', handler)
-      await builder.configure(makeKit(wrap))
+      await builder[kServiceConfigure](makeKit(wrap))
 
       expect(wrap).toHaveBeenCalledWith(OpaqueTokenStore)
 
@@ -204,7 +204,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       const handler = new OpaqueTokenAuthenticationHandler('OpaqueToken', { store })
 
       const builder = new AuthenticationBuilder().addStrategy('OpaqueToken', handler)
-      await builder.configure(makeKit(wrap))
+      await builder[kServiceConfigure](makeKit(wrap))
 
       expect(wrap).not.toHaveBeenCalled()
 
