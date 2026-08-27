@@ -13,6 +13,13 @@
   ],
   "rules": {
     "typescript/no-explicit-any": "off",
-    "typescript/no-non-null-assertion": "off"
+    "typescript/no-non-null-assertion": "off",
+    "import/extensions": [
+      "error",
+      "always",
+      {
+        "ignorePackages": true
+      }
+    ]
   }
 }
