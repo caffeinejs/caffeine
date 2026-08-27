@@ -156,6 +156,28 @@ ts7: clean ## clean, then build all packages with TypeScript 7 in Docker (host t
 # General purpose tasks
 # .
 
+.PHONY: status
+status: ## print GitHub CI status for the current branch
+	@command -v gh >/dev/null 2>&1 || { echo "Cannot find gh: install GitHub CLI (https://cli.github.com)"; exit 1; }
+	@gh auth status -h github.com >/dev/null 2>&1 || { echo "Cannot use gh: run gh auth login"; exit 1; }
+	@branch=$$(git branch --show-current); \
+	repo=$$(gh repo view --json nameWithOwner -q .nameWithOwner); \
+	echo "CI status for branch $$branch ($$repo)"; \
+	echo; \
+	if gh pr view "$$branch" --json number -q .number >/dev/null 2>&1; then \
+	  echo "Pull request checks:"; \
+	  gh pr checks || true; \
+	  echo; \
+	fi; \
+	echo "Workflow runs (CI):"; \
+	gh run list --workflow=ci.yml --branch "$$branch" --limit 5; \
+	run_id=$$(gh run list --workflow=ci.yml --branch "$$branch" --limit 1 --json databaseId -q '.[0].databaseId'); \
+	if [ -n "$$run_id" ] && [ "$$run_id" != "null" ]; then \
+	  echo; \
+	  echo "Latest run jobs:"; \
+	  gh run view "$$run_id" --json jobs -q '.jobs[] | "\(.name)\t\(.status)\t\(.conclusion // "-")"'; \
+	fi
+
 .PHONY: help
 help: ## show help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
