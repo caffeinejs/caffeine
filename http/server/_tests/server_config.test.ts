@@ -96,12 +96,12 @@ describe('server builder + config', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .config(schema, c => c
         .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
-        .args())
+        // Given exactly as `process.argv` arrives, interpreter and script path included.
+        .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] }))
       .server(s => s.port(3000))
       .build()
 
-    // Handed over exactly as `process.argv` arrives, interpreter and script path included.
-    await app.ready(['/usr/bin/node', '/app/main.js', '--server.port=9090'])
+    await app.ready()
 
     expect(app.container.get<ServerOptions>(kServerOptions)).toEqual({ host: '127.0.0.1', port: 9090 })
   })

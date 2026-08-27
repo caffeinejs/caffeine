@@ -4,7 +4,7 @@ import type { ConfigProvider } from './types.js'
  * Where a source sits in the precedence chain. Higher wins.
  *
  * The bands exist because registration order cannot express precedence here: feature builders register their
- * values at `kServiceConfigure`, which runs *after* the application builder collected the user's sources, so
+ * values at `configure()`, which runs *after* the application builder collected the user's sources, so
  * ordering alone would make a code-set default beat an environment variable — exactly backwards for anything
  * that ships as a container image.
  *

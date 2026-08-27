@@ -64,26 +64,42 @@ describe('ArgsConfigProvider', () => {
     expect(await parse(['/usr/bin/node', '/app/main.js'])).toEqual({})
   })
 
-  // The deferred form: `run(argv)` records the arguments long after `.args()` built the provider.
-  it('takes argv from a function, called at load time', async () => {
-    // Stands in for the ConfigDefinition the application builder closes over: empty when `.args()` runs,
-    // filled by the time anything resolves.
-    const recorded: { argv?: readonly string[] } = {}
+  it('falls back to the host arguments when none were configured', async () => {
+    const original = process.argv
+    process.argv = ['/usr/bin/node', '/app/main.js', '--server.port=7000']
 
-    const provider = new ArgsConfigProvider({ argv: () => recorded.argv })
-
-    expect((await provider.load(ctx))[0].entries.size).toBe(0)
-
-    recorded.argv = ['--server.port=7000']
-
-    const [source] = await provider.load(ctx)
-    expect(source.entries.get('server.port')?.value).toBe(7000)
+    try {
+      const [source] = await new ArgsConfigProvider().load(ctx)
+      expect(source.entries.get('server.port')?.value).toBe(7000)
+    } finally {
+      process.argv = original
+    }
   })
 
-  // Opt-in on purpose, unlike the environment provider: a test runner's own switches must never become config.
-  it('contributes nothing when no argv was configured, rather than reading process.argv', async () => {
-    const [source] = await new ArgsConfigProvider().load(ctx)
-    expect(source.entries.size).toBe(0)
+  it('lets an explicit argv win over the host arguments', async () => {
+    const original = process.argv
+    process.argv = ['/usr/bin/node', '/app/main.js', '--server.port=7000']
+
+    try {
+      const [source] = await new ArgsConfigProvider({ argv: ['--server.port=8080'] }).load(ctx)
+      expect(source.entries.get('server.port')?.value).toBe(8080)
+    } finally {
+      process.argv = original
+    }
+  })
+
+  // A host without a `process` at all — the provider contributes nothing rather than throwing.
+  it('contributes nothing where there is no host command line', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'process')!
+    // @ts-expect-error - deleting a global the runtime declares as always present
+    delete globalThis.process
+
+    try {
+      const [source] = await new ArgsConfigProvider().load(ctx)
+      expect(source.entries.size).toBe(0)
+    } finally {
+      Object.defineProperty(globalThis, 'process', descriptor)
+    }
   })
 
   it('coerces exactly as the environment provider does', async () => {

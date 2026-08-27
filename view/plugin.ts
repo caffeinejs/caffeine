@@ -23,7 +23,7 @@ export interface ViewPluginExt {
  * server-side rendering (`@fastify/view`) without http depending on this package.
  *
  * On the first `.view(...)` call it lazily creates a single {@link ViewOptionsProvider} and registers it as
- * a service; the provider's `[kServiceConfigure]` binds itself and the `ViewConfigurer` into the container,
+ * a service; the provider's `configure()` binds itself and the `ViewConfigurer` into the container,
  * which the adapter then discovers via `getManyOptional(FeatureConfigurer)`.
  */
 export function viewPlugin(): Plugin<ViewPluginExt> {

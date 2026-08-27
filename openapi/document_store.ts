@@ -15,7 +15,7 @@ export interface OpenAPIPayload {
  * Holds what the document endpoints serve.
  *
  * A mutable holder exists because of an ordering constraint: the endpoints are registered during
- * `[kServiceConfigure]`, before routing is built, while the document can only be generated afterwards — it
+ * `configure()`, before routing is built, while the document can only be generated afterwards — it
  * describes those very routes. The controller is constructed with an empty store and the server phase fills
  * it, so nothing has to resolve lazily or re-enter the container.
  *

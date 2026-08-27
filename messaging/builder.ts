@@ -1,10 +1,11 @@
 import type { Ctor } from '@caffeinejs/di'
-import { kServiceConfigure, type Service, type ServiceKit, AnySchema } from '@caffeinejs/std'
+import { type DeclareKit, type Service, type ServiceKit, AnySchema } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   instanceNamespace,
   type ConfigAccessors,
   type ConfigHandle,
+  type ConfigSlice,
 } from '@caffeinejs/std/config'
 import {
   BINDING_CONFIG_KEYS,
@@ -51,7 +52,7 @@ export interface OutBindingOptions {
 /**
  * Fluent configuration for one messaging integration: register binder instances with {@link use}, then declare
  * inbound ({@link in}) and outbound ({@link out}) bindings that map logical names onto binder destinations. At
- * `ready()` its `[kServiceConfigure]` builds the runtime and binds the engine + `MessageBus` into the container.
+ * `ready()` its `configure()` builds the runtime and binds the engine + `MessageBus` into the container.
  */
 export class MessagingBuilder<C = unknown> implements Service {
   readonly #name: string
@@ -62,6 +63,7 @@ export class MessagingBuilder<C = unknown> implements Service {
   #onInvalidMessage?: InvalidMessageHandler
   #onError?: ErrorObserver
   #recoverer?: Recoverer
+  #resolved?: ConfigSlice<{ inbound: Map<string, ConsumerBinding>, outbound: Map<string, ProducerBinding> }>
 
   constructor(name: string) {
     this.#name = name
@@ -113,12 +115,7 @@ export class MessagingBuilder<C = unknown> implements Service {
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    const binders = new Map<string, Binder>()
-    for (const [name, binder] of this.#binders) {
-      binders.set(name, typeof binder === 'function' ? binder(name) : binder)
-    }
-
+  declare(kit: DeclareKit): void {
     const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
       namespace: instanceNamespace(MESSAGING_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -131,21 +128,28 @@ export class MessagingBuilder<C = unknown> implements Service {
 
     const code = { in: this.#inbound, out: this.#outbound }
 
-    const resolved = slice.derive(published => ({
+    this.#resolved = slice.derive(published => ({
       // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
       // created has nothing to attach to and is read by nothing — declaring one is a code act.
       inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
       outbound: bindingsOf(code.out, published.out) as Map<string, ProducerBinding>,
     }))
+  }
 
+  configure(kit: ServiceKit): Promise<void> {
+    const binders = new Map<string, Binder>()
+    for (const [name, binder] of this.#binders) {
+      binders.set(name, typeof binder === 'function' ? binder(name) : binder)
+    }
+
+    const resolved = this.#resolved!
     const rKey = runtimeKey(this.#name)
     const bKey = busKey(this.#name)
     const container = kit.container
 
     kit.container
       .bind(rKey)
-      // Lazy so the slice has published: configuration resolves during init.
-      .toFactory((): MessagingRuntime => ({
+      .toValue<MessagingRuntime>({
         container,
         binders,
         inbound: resolved.config.inbound,
@@ -153,7 +157,7 @@ export class MessagingBuilder<C = unknown> implements Service {
         ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
         ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
         ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
-      }))
+      })
 
     if (this.#name === DEFAULT_BINDER) {
       kit.container.bind(MessageBus).toClass(MessageBus, [rKey]).names(bKey)

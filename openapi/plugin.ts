@@ -16,7 +16,7 @@ export interface OpenAPIPluginExt {
  * generate and serve an OpenAPI document without http depending on this package.
  *
  * On the first `.openapi(...)` call it lazily creates one {@link OpenAPIBuilder} and registers it as a
- * service. The builder's `[kServiceConfigure]` binds the resolved options, registers the document endpoints
+ * service. The builder's `configure()` binds the resolved options, registers the document endpoints
  * as ordinary routes, and registers the extension that generates the document at start-up.
  */
 export function openapiPlugin(): Plugin<OpenAPIPluginExt> {

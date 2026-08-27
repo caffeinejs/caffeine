@@ -1,5 +1,5 @@
-import { kServiceConfigure, type Service } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle } from '@caffeinejs/std/config'
+import { type DeclareKit, type Service } from '@caffeinejs/std'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import { NotFoundFallback, type ServiceKit } from '@caffeinejs/http'
 import { STATIC_CONFIG_NAMESPACE, staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
@@ -13,7 +13,7 @@ import type { StaticMount } from './static.js'
  * Configures static file serving over `@fastify/static`. Bound via
  * `app.static(s => s.serve(dir, { prefix: '/static' }))`.
  *
- * A {@link Service}, like `ViewBuilder`/`ServerBuilder` — its {@link kServiceConfigure} binds the assembled
+ * A {@link Service}, like `ViewBuilder`/`ServerBuilder` — its {@link Service.configure} binds the assembled
  * mounts into the container under {@link kStaticMounts}. Each `.serve(...)` call adds one mount; multiple
  * mounts serve multiple directories (the {@link StaticExtension} handles `@fastify/static`'s single-decorate
  * constraint).
@@ -29,6 +29,7 @@ export class StaticBuilder<C = unknown> implements Service {
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
   #selector?: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>
+  #resolved?: ConfigSlice<ResolvedStatic>
 
   /**
    * Serves `root` as static files. `options` is the full `@fastify/static` options object minus `root`
@@ -80,7 +81,7 @@ export class StaticBuilder<C = unknown> implements Service {
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  declare(kit: DeclareKit): void {
     const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
       namespace: STATIC_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -98,23 +99,26 @@ export class StaticBuilder<C = unknown> implements Service {
     const callbacks = this.#mounts.map(callbacksOf)
     const spaCallbacks = this.#spa === undefined ? {} : callbacksOf(this.#spa)
 
-    // Whether the SPA is switched on is a code decision — reaching `.spa(...)` is the activating act, and the
-    // fallback has to be bound now, long before configuration resolves. What the tree can still change is
-    // every setting the mount runs with.
+    // Reaching `.spa(...)` is the activating act; configuration parameterizes the mount but never switches it
+    // on, so that a config file cannot start serving a shell the application never asked for.
     const spaEnabled = this.#spa !== undefined
 
-    const resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
+    this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
+  }
 
-    kit.container.bind(kStaticMounts).toFactory(() => resolved.config.mounts).internal()
+  configure(kit: ServiceKit): Promise<void> {
+    const resolved = this.#resolved!
+
+    kit.container.bind(kStaticMounts).toValue(resolved.config.mounts).internal()
     // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
     // and registers it as a Fastify plugin — http no longer hardcodes it.
     kit.container.bind(StaticExtension).toClass(StaticExtension).extends()
 
-    if (spaEnabled) {
-      kit.container.bind(kSPASettings).toFactory(() => settingsOf(resolved.config)).internal()
+    if (this.#spa !== undefined) {
+      kit.container.bind(kSPASettings).toValue(settingsOf(resolved.config)).internal()
       kit.container
         .bind(SPAFallback)
-        .toFactory(() => new SPAFallback(settingsOf(resolved.config)))
+        .toValue(new SPAFallback(settingsOf(resolved.config)))
         .extends(NotFoundFallback)
     }
 

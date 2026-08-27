@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { $t, kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
+import { $t, type Plugin, type Service } from '@caffeinejs/std'
 import { EnvConfigProvider } from '@caffeinejs/std/config'
 import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
 // A sentinel the plugin's configurer binds into the container so a test can prove the plugin rode
-// the same `[kServiceConfigure]` path as the built-in auth/authz services.
+// the same `configure()` path as the built-in auth/authz services.
 const kKafkaSentinel = Symbol('kafka-sentinel')
 
 interface KafkaState {
@@ -21,7 +21,7 @@ function kafka<const Name extends string = 'kafka'>(
 ): Plugin<Record<Name, (broker: string) => void>> {
   const state: KafkaState = { broker: undefined }
   const service: Service = {
-    [kServiceConfigure](kit) {
+    configure(kit) {
       kit.container.bind(kKafkaSentinel).toValue({ broker: state.broker })
       return Promise.resolve()
     },
@@ -41,7 +41,7 @@ function kafka<const Name extends string = 'kafka'>(
 }
 
 describe('builder.extend()', () => {
-  it('installs the plugin method and rides the [kServiceConfigure] path into the container', async () => {
+  it('installs the plugin method and rides the configure() path into the container', async () => {
     const container = new CaffeineIoC()
     const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
       .extend(kafka())

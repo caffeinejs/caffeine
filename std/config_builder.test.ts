@@ -95,31 +95,36 @@ describe('base .config() builder', () => {
     expect(app.container.get<ConfigHandle<AppConfig>>(kAppConfig).server.host).toBe('second')
   })
 
-  it('reads command-line arguments handed to run()', async () => {
+  it('reads command-line arguments, above every other source', async () => {
     const container = new CaffeineIoC({ decorators: false })
     const app = createApplication({ container })
       .config(schema, c => c
         .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
-        .args())
+        .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] }))
       .build()
 
-    await app.run(['/usr/bin/node', '/app/main.js', '--server.host=from-args'])
+    await app.run()
 
     expect(app.container.get<ConfigHandle<AppConfig>>(kAppConfig).server.host).toBe('from-args')
   })
 
-  it('refuses arguments that arrive after the configuration resolved', async () => {
-    const container = new CaffeineIoC({ decorators: false })
-    const app = createApplication({ container })
-      .config(schema, c => c
-        .source(new InlineConfigProvider({ server: { host: 'h', port: 1 } }))
-        .args())
-      .build()
+  it('takes the host arguments when .args() names none', async () => {
+    const original = process.argv
+    process.argv = ['/usr/bin/node', '/app/main.js', '--server.host=from-process']
 
-    await app.ready()
+    try {
+      const container = new CaffeineIoC({ decorators: false })
+      const app = createApplication({ container })
+        .config(schema, c => c
+          .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
+          .args())
+        .build()
 
-    // Silently dropping the operator's flags is the failure mode this replaces.
-    await expect(app.run(['--server.host=too-late']))
-      .rejects.toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_ARGS_TOO_LATE' })
+      await app.run()
+
+      expect(app.container.get<ConfigHandle<AppConfig>>(kAppConfig).server.host).toBe('from-process')
+    } finally {
+      process.argv = original
+    }
   })
 })

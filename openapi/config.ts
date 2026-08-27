@@ -16,15 +16,25 @@ export const OPENAPI_CONFIG_NAMESPACE: readonly string[] = ['openapi']
 /**
  * The part of {@link OpenAPIOptions} that can live in a configuration tree.
  *
- * **`routes` is deliberately absent.** The document endpoints are registered as ordinary routes from
- * `[kServiceConfigure]`, which runs before `buildRouting` and therefore before configuration resolves —
- * there is no moment at which a configured path could still reach the router. It stays a code-only setting.
- *
- * Also absent: everything that is a function (`operationId`, `tagFor`, `schemaName`, `transformDocument`),
- * a schema (`errorSchema`), or the security policy the endpoints are compiled against (`secure`), which is
- * needed at the same pre-resolution moment as `routes`.
+ * Absent: everything that is a function (`operationId`, `tagFor`, `schemaName`, `transformDocument`), a schema
+ * (`errorSchema`), and the security policy the endpoints are compiled against (`secure`) — an `AuthzPolicy` is
+ * a composition of requirement objects and predicates, so there is nothing a tree could carry.
  */
 export interface OpenAPIConfigSlice {
+  /**
+   * Where the document endpoints are served. `yaml` and `docs` accept `false` to switch one off, which is what
+   * `OPENAPI__ROUTES__YAML=false` resolves to.
+   *
+   * Configurable because the endpoints are registered while the feature configures, which now happens after the
+   * configuration has resolved. Each key merges over the code-set routes rather than replacing the block, so
+   * setting only `docs` leaves `base` and `json` alone.
+   */
+  routes?: {
+    base?: string
+    json?: string
+    yaml?: string | false
+    docs?: string | false
+  }
   version?: OpenAPIVersion
   info?: InfoObject
   servers?: ServerObject[]
@@ -43,6 +53,7 @@ export interface OpenAPIConfigSlice {
 
 /** The keys {@link OpenAPIConfigSlice} declares, used to split the builder's options into the two halves. */
 export const OPENAPI_CONFIG_KEYS: readonly (keyof OpenAPIConfigSlice)[] = [
+  'routes',
   'version',
   'info',
   'servers',
@@ -71,6 +82,13 @@ const specObject = (): ReturnType<typeof $t.Record> => $t.Record($t.String(), $t
 
 /** The schema governing the OpenAPI slice. Nothing is defaulted — `defaultOpenAPIOptions` already is. */
 export const openapiConfigSchema = $t.Object({
+  routes: $t.Optional($t.Object({
+    base: $t.Optional($t.String()),
+    json: $t.Optional($t.String()),
+    // `false` switches the endpoint off, and is what an env var spelled `=false` coerces to.
+    yaml: $t.Optional($t.Union([$t.String(), $t.Boolean()])),
+    docs: $t.Optional($t.Union([$t.String(), $t.Boolean()])),
+  })),
   version: $t.Optional($t.String()),
   info: $t.Optional(specObject()),
   servers: $t.Optional($t.Array(specObject())),

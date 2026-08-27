@@ -28,7 +28,7 @@ export interface EndpointPaths {
  * negotiation and every user-registered server extension applies to them exactly as they do to any other
  * route — none of it reimplemented here.
  *
- * Must run before `buildRouting`, which `[kServiceConfigure]` guarantees.
+ * Must run before `buildRouting`, which `configure()` guarantees.
  */
 export function registerEndpoints(
   container: Container,

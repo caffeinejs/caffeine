@@ -10,5 +10,5 @@ export type * from './plugin.js'
 // surface (validateSchema, toJSONSchema, the guards) is framework plumbing — import it from '@caffeinejs/std/schema'.
 export type { AnySchema, InferSchema } from './schema/schema.js'
 export { $t } from './schema/t.js'
-export * from './service.js'
+export type * from './service.js'
 // framework/* is intentionally NOT re-exported here — import it via the '@caffeinejs/std/framework' subpath.

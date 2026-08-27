@@ -1,23 +1,17 @@
 import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 import { coerceText } from './_coerce.js'
 
-/** The arguments as an array, or a function returning them — the deferred form the application builder uses. */
-export type ArgvSource = readonly string[] | (() => readonly string[] | undefined)
-
 export interface ArgsConfigProviderOptions {
   /**
-   * The arguments to read. **Omitted, the provider reads nothing.**
+   * The arguments to read. Omitted, the host's own are used — `process.argv` where there is a `process`,
+   * nothing where there is not.
    *
-   * Opt-in rather than reaching for `process.argv`, because a process's flags are not always meant for it — a
-   * test runner's own switches would otherwise silently become configuration. That asymmetry with
-   * {@link EnvConfigProvider}, which does default to `process.env`, is deliberate: an environment variable is
-   * addressed to the process, a command line is addressed to whoever was invoked.
-   *
-   * The function form exists because `app.run(argv)` hands the arguments over long after `.args()` built this
-   * provider. The application builder passes a closure reading {@link ConfigDefinition.argv}, so the value is
-   * fetched at resolve time rather than captured empty at construction.
+   * Adding this provider at all is the opt-in, so nothing reads a command line unless the application asked
+   * for command-line configuration. The one case left to know about is a process whose flags were meant for
+   * something else: an application that calls `.args()` and is then booted inside a test runner reads that
+   * runner's switches. Pass an explicit array wherever that matters.
    */
-  argv?: ArgvSource
+  argv?: readonly string[]
   /** Short-switch expansions, e.g. `{ '-p': 'server.port' }`. */
   switchMappings?: Record<string, string>
 }
@@ -46,7 +40,7 @@ export interface ArgsConfigProviderOptions {
  */
 export class ArgsConfigProvider implements ConfigProvider {
   readonly id = 'args'
-  readonly #argv: ArgvSource | undefined
+  readonly #argv: readonly string[] | undefined
   readonly #switchMappings: Record<string, string>
 
   constructor(options: ArgsConfigProviderOptions = {}) {
@@ -55,7 +49,7 @@ export class ArgsConfigProvider implements ConfigProvider {
   }
 
   async load(_ctx: ResolutionContext): Promise<PropertySource[]> {
-    const argv = (typeof this.#argv === 'function' ? this.#argv() : this.#argv) ?? []
+    const argv = this.#argv ?? hostArgv()
     const entries = new Map<string, ConfigEntry>()
 
     for (const [key, value, origin] of parse(argv, this.#switchMappings)) {
@@ -64,6 +58,14 @@ export class ArgsConfigProvider implements ConfigProvider {
 
     return [{ name: 'args', entries }]
   }
+}
+
+/**
+ * The host's own command line, read through `globalThis` so this file has no host binding of its own. A
+ * runtime without a `process` contributes nothing rather than failing.
+ */
+function hostArgv(): readonly string[] {
+  return (globalThis as { process?: { argv?: readonly string[] } }).process?.argv ?? []
 }
 
 type Parsed = [key: string, value: string, origin: string]

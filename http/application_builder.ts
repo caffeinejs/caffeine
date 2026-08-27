@@ -45,13 +45,13 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.addService(this.#serverBuilder)
   }
 
-  authentication(configure: (auth: AuthenticationBuilder) => void): this {
+  authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
       this.addService(this.#authBuilder)
     }
 
-    configure(this.#authBuilder)
+    configure(this.#authBuilder as AuthenticationBuilder<TConfig>)
 
     return this
   }

@@ -44,7 +44,7 @@ export function configureRoute(ctx: ClassMemberDecoratorContext, mut: (spec: Rou
  * through here means those routes are indistinguishable from decorated ones by the time `buildRouting` reads them,
  * so they inherit authentication, authorization, and error handling instead of reimplementing each.
  *
- * Must run before `buildRouting`, i.e. no later than a service's `[kServiceConfigure]`.
+ * Must run before `buildRouting`, i.e. no later than a service's `configure()`.
  */
 export function registerRouter(key: Function, mut: (spec: RouterBuilder) => void): void {
   let cur = RouterRegistry.get(key)

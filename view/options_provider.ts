@@ -1,4 +1,4 @@
-import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import { type DeclareKit, type Service } from '@caffeinejs/std'
 import { ErrConfiguration, type ServiceKit } from '@caffeinejs/http'
 import { kViewOptionsProvider } from './keys.js'
 import { ViewBuilder } from './builder.js'
@@ -56,14 +56,16 @@ export class ViewOptionsProvider implements Service {
     return out
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  declare(kit: DeclareKit): void {
     // Registers each engine's slice, and validates it while doing so — `register` throws when no engine was
     // configured, which has to surface here rather than from `build()`: by the time anything builds, the
     // adapter is already wiring routes.
     for (const builder of this.#builders.values()) {
       builder.register(kit.config)
     }
+  }
 
+  configure(kit: ServiceKit): Promise<void> {
     kit.container.bind(kViewOptionsProvider).toValue(this).internal()
     // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
     // and registers it as a Fastify plugin — http no longer hardcodes it.

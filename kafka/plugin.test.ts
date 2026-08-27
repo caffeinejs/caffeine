@@ -30,7 +30,7 @@ describe('kafka() plugin', () => {
     expect(chained).toBe(app)
   })
 
-  it('binds the default template and a labelled engine through [kServiceConfigure]', async () => {
+  it('binds the default template and a labelled engine through configure()', async () => {
     const container = new CaffeineIoC()
     const app = createApplication({ container }).extend(kafka('kafka', { clients: noopClients() }))
 

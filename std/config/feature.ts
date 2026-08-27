@@ -48,7 +48,7 @@ export interface FeatureConfigSpec<T> {
  *
  * The shape every feature follows: resolve where the settings live, write the framework defaults and the
  * builder's code-set values into their bands, then register the slice that reads the merged result. A feature's
- * `[kServiceConfigure]` is left with its bindings and nothing else.
+ * `configure()` is left with its bindings and nothing else.
  *
  * **Calling this is what makes a namespace live.** A slice is registered because the builder ran, never because
  * the tree happens to contain a matching key — so configuration alone can never activate a feature the

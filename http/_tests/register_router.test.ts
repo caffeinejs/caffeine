@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
-import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import { type Service } from '@caffeinejs/std'
 import {
   $p,
   Keys,
@@ -25,7 +25,7 @@ function signToken(payload: Record<string, unknown>): Promise<string> {
 
 /**
  * Stands in for what a package outside http does: bind its own controller and register its routes during
- * `[kServiceConfigure]`, before `buildRouting` runs.
+ * `configure()`, before `buildRouting` runs.
  */
 class ProgrammaticService implements Service {
   readonly #authz: RouteAuthzOptions | undefined
@@ -42,7 +42,7 @@ class ProgrammaticService implements Service {
     this.#authz = authz
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  configure(kit: ServiceKit): Promise<void> {
     const endpoints = this.#endpoints
     kit.container.bind(endpoints).toValue(new endpoints()).labels(Keys.CONTROLLER)
 
@@ -77,7 +77,7 @@ describe('registerRouter', () => {
     }
   })
 
-  it('routes a controller bound during [kServiceConfigure]', async () => {
+  it('routes a controller bound during configure()', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.addService(new ProgrammaticService())
     app = builder.build()

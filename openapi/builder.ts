@@ -1,5 +1,5 @@
-import { kServiceConfigure, type Service, AnySchema } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle } from '@caffeinejs/std/config'
+import { type DeclareKit, type Service, AnySchema } from '@caffeinejs/std'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { Route, Router, ServiceKit } from '@caffeinejs/http'
 import {
   OPENAPI_CONFIG_KEYS,
@@ -43,6 +43,7 @@ export class OpenAPIBuilder<C = unknown> implements Service {
   readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
   readonly #store = new OpenAPIDocumentStore()
   #selector?: (c: ConfigHandle<C>) => ConfigAccessors<OpenAPIConfigSlice>
+  #resolved?: ConfigSlice<OpenAPIOptions>
 
   /**
    * Places the OpenAPI settings elsewhere in the configuration tree, e.g. `o.config(c => c.app.docs)`.
@@ -278,7 +279,7 @@ export class OpenAPIBuilder<C = unknown> implements Service {
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  declare(kit: DeclareKit): void {
     const code = this.#options
 
     const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
@@ -292,7 +293,7 @@ export class OpenAPIBuilder<C = unknown> implements Service {
       ),
     })
 
-    const resolved = slice.derive(published => {
+    this.#resolved = slice.derive(published => {
       // Cloned, not referenced. The validated tree is deep-frozen, and the document these values become is
       // handed to `transformDocument` to edit in place — a frozen `info` would make that throw. Cloning here
       // keeps the tree immutable while giving the generator an object it owns.
@@ -305,26 +306,61 @@ export class OpenAPIBuilder<C = unknown> implements Service {
         // must not lose the defaults for the other two.
         infer: { ...code.infer, ...configured.infer },
         errors: { ...code.errors, ...configured.errors },
+        routes: mergeRoutes(code.routes, configured.routes),
       } as OpenAPIOptions
     })
+  }
 
-    kit.container.bind(kOpenAPIOptions).toFactory(() => resolved.config).internal()
+  configure(kit: ServiceKit): Promise<void> {
+    const resolved = this.#resolved!
+    const options = resolved.config
+
+    kit.container.bind(kOpenAPIOptions).toValue(options).internal()
     // The store, not the document: bindings must all be registered before `container.init()`, which runs long
     // before the server phase that generates the document. Resolving the store and reading `.document` off it
     // is the supported way to reach the document without an HTTP request.
     kit.container.bind(OpenAPIDocumentStore).toValue(this.#store).internal()
 
-    // Registers the document endpoints as ordinary routes. This has to happen here, before `buildRouting`
-    // runs, which is exactly what `[kServiceConfigure]` guarantees — and is why `routes` and `secure` are
-    // code-only: configuration has not resolved yet, so a configured path could never reach the router.
-    const paths = registerEndpoints(kit.container, this.#store, code, toRouteAuthz(code.secure))
+    // Registers the document endpoints as ordinary routes. Still here, before `buildRouting` runs — but now
+    // fed the *resolved* options, because configuration resolved before this step.
+    const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
 
     kit.container.bind(OpenAPIExtension)
       // Reads through the slice, so the generated document reflects the merged configuration. The extension
       // runs at server setup, which is after `container.init()`.
-      .toFactory(() => new OpenAPIExtension(this.#store, resolved.config, paths))
+      .toValue(new OpenAPIExtension(this.#store, options, paths))
       .extends()
 
     return Promise.resolve()
+  }
+}
+
+/**
+ * Folds the configured routes over the code-set ones, key by key.
+ *
+ * Per key rather than wholesale, so `OPENAPI__ROUTES__DOCS=/reference` moves the documentation page without
+ * also erasing where the JSON document is served. `false` is how a configuration switches an endpoint off,
+ * matching `.yaml(false)` / `.docs(false)` — and it is what an env var spelled `=false` coerces to.
+ */
+function mergeRoutes(
+  code: OpenAPIOptions['routes'],
+  configured: OpenAPIConfigSlice['routes'],
+): OpenAPIOptions['routes'] {
+  if (configured === undefined) {
+    return code
+  }
+
+  const optional = (value: string | false | undefined, fallback: string | undefined): string | undefined => {
+    if (value === undefined) {
+      return fallback
+    }
+    return value === false ? undefined : value
+  }
+
+  return {
+    base: configured.base ?? code.base,
+    json: configured.json ?? code.json,
+    yaml: optional(configured.yaml, code.yaml),
+    docs: optional(configured.docs, code.docs),
   }
 }

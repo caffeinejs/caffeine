@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
+import { type Plugin, type Service } from '@caffeinejs/std'
 import { Controller, Get, createWebApplication } from '../index.js'
 
 describe('createWebApplication default Fastify form', () => {
@@ -51,7 +51,7 @@ describe('createWebApplication default Fastify form', () => {
     function probe(): Plugin<{ probe: (value: string) => void }> {
       const state: { value: string | undefined } = { value: undefined }
       const service: Service = {
-        [kServiceConfigure](kit) {
+        configure(kit) {
           kit.container.bind(kProbe).toValue({ value: state.value })
           return Promise.resolve()
         },

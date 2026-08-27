@@ -79,8 +79,37 @@ describe('openapi configuration', () => {
     // 422 came from configuration; 401/403 are still the defaults the builder started from.
     const options = app.container.get<OpenAPIOptions>(kOpenAPIOptions)
     expect(options.errors).toEqual({ validation: 422, unauthorized: 401, forbidden: 403 })
-    // `routes` is code-only and untouched by any of this.
+    // `routes` was not configured here, so it is still what the builder started from.
     expect(options.routes.json).toBe('/openapi.json')
+  })
+
+  // The endpoints are registered while the feature configures, which now happens after configuration resolves.
+  it('serves the documentation page at a configured route', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(openapiPlugin())
+      .config(c => c.source(env({ OPENAPI__ROUTES__DOCS: '/reference' }), ConfigPriority.ENV))
+      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .build()
+
+    await app.ready()
+
+    expect((await app.fetch('/reference')).status).toBe(200)
+    expect((await app.fetch('/docs')).status).toBe(404)
+    // Only `docs` moved: the sibling routes keep the values the builder had.
+    expect((await app.fetch('/openapi.json')).status).toBe(200)
+  })
+
+  it('switches an endpoint off when configuration says false', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(openapiPlugin())
+      .config(c => c.source(env({ OPENAPI__ROUTES__YAML: 'false' }), ConfigPriority.ENV))
+      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .build()
+
+    await app.ready()
+
+    expect(app.container.get<OpenAPIOptions>(kOpenAPIOptions).routes.yaml).toBeUndefined()
+    expect((await app.fetch('/openapi.yaml')).status).toBe(404)
   })
 
   it('re-points reads and code-set defaults together via .config()', async () => {

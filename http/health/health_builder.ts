@@ -1,7 +1,7 @@
 import { Scopes, type Ctor } from '@caffeinejs/di'
 import {
   HealthIndicator,
-  kServiceConfigure,
+  type DeclareKit,
   type Duration,
   type Service,
   type ShutdownSignal,
@@ -35,7 +35,7 @@ import {
  * The exceptions are the members that cannot be configuration at all: {@link dispatcher} is a function and
  * {@link indicator} takes classes and instances. Those stay on the builder and are merged in afterwards.
  *
- * A {@link Service}: its {@link kServiceConfigure} binds {@link HealthOptions} under {@link kHealthOptions}. The
+ * A {@link Service}: its {@link Service.configure} binds {@link HealthOptions} under {@link kHealthOptions}. The
  * bound object is live, like every other configuration in the framework — the probe budgets and the
  * response-shaping flags are read per request, so a refresh reaches them. The fields consumed once at boot, the
  * probe routes and the installed signals, simply stop mattering afterwards: nothing re-registers a route because
@@ -48,6 +48,7 @@ export class HealthBuilder<C = unknown> implements Service {
   #dispatcher: SignalDispatcher | undefined
   readonly #indicators: Array<HealthIndicator | Ctor<HealthIndicator>> = []
   #selector: ((c: ConfigHandle<C>) => HealthConfig) | undefined
+  #options: ConfigSlice<HealthOptions> | undefined
 
   /** Forces the probes on or off, overriding the Kubernetes auto-detection. */
   enabled(enabled: boolean = true): this {
@@ -153,7 +154,21 @@ export class HealthBuilder<C = unknown> implements Service {
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  declare(kit: DeclareKit): void {
+    const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
+      namespace: HEALTH_CONFIG_NAMESPACE,
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: healthConfigSchema,
+      values: { ...this.#config },
+    })
+    const dispatcher = this.#dispatcher
+
+    // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
+    this.#options = slice.derive(config =>
+      finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })))
+  }
+
+  configure(kit: ServiceKit): Promise<void> {
     for (const indicator of this.#indicators) {
       if (typeof indicator === 'function') {
         kit.container.bind(indicator).toSelf().lifetime(Scopes.SINGLETON).extends(HealthIndicator)
@@ -167,25 +182,13 @@ export class HealthBuilder<C = unknown> implements Service {
 
     kit.feats.toggleHealth()
 
-    const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
-      namespace: HEALTH_CONFIG_NAMESPACE,
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: healthConfigSchema,
-      values: { ...this.#config },
-    })
-    const dispatcher = this.#dispatcher
-
-    // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
-    const options = slice.derive(config =>
-      finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })))
-
     kit.container
       .bind<HealthOptions>(kHealthOptions)
-      // Lazy so the slice is published (configuration resolves during init). The bound object is live: the
-      // probe budgets and the response-shaping flags are read per request, and a refresh must reach them.
-      // The fields consumed once at boot — the probe routes, the installed signals — simply stop mattering
-      // afterwards; nothing re-registers a route because a value changed underneath it.
-      .toFactory(() => options.config)
+      // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags —
+      // which are read per request — follow a refresh. The fields consumed once at boot, the probe routes and
+      // the installed signals, simply stop mattering afterwards; nothing re-registers a route because a value
+      // changed underneath it.
+      .toValue(this.#options!.config)
       .internal()
 
     return Promise.resolve()

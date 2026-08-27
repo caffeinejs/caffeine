@@ -133,7 +133,7 @@ export class ViewBuilder<C = unknown> {
 
   /**
    * Framework-internal: registers this engine's slice. Called by {@link ViewOptionsProvider} at
-   * `kServiceConfigure`, before the container initializes.
+   * `configure()`, before the container initializes.
    *
    * The engine check happens here rather than in {@link build}, so a missing engine still fails at start-up:
    * `build()` cannot run until configuration has resolved, and by then the adapter is already wiring routes.

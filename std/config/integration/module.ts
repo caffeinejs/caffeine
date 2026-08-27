@@ -1,4 +1,4 @@
-import { type Module, Scopes } from '@caffeinejs/di'
+import { Keys, type Module, Scopes } from '@caffeinejs/di'
 import type { BootstrapOptions } from '../bootstrap.js'
 import type { ConfigHandle } from '../accessor.js'
 import type { ConfigDefinition } from '../definition.js'
@@ -28,59 +28,55 @@ export interface ConfigModuleOptions<T> {
 /**
  * Binds an application's configuration.
  *
- * Given a {@link ConfigDefinition}, everything is read when the module runs — at `container.init()`, which is
- * after every `kServiceConfigure` has had its chance to register sources and slices. That ordering is what
- * makes a feature able to contribute to the tree it later reads from.
+ * Given a {@link ConfigDefinition}, the resolved configuration is normally already there: the application
+ * calls `definition.bootstrap()` between the two service steps, so every feature could read its own settings
+ * while it was binding. This module then only binds what that produced.
+ *
+ * A definition that was never bootstrapped is resolved here instead, at `container.init()`. That is the
+ * standalone path — a container assembled by hand, with no application driving the lifecycle — and it is why
+ * the module owns the bindings rather than the application.
  */
 export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefinition): Module {
-  let definition: ConfigDefinition | undefined
-  let bootstrapOpts: BootstrapOptions<T>
-  let token: symbol | string
+  const definition = isDefinition(options) ? options : undefined
+  const token = options.token
 
-  if (isDefinition(options)) {
-    definition = options
-    token = options.token
-    bootstrapOpts = {
-      sources: options.sources,
-      // The definition is type-erased — its schema is whatever `.config()` declared, and `T` is recovered from
-      // the caller that named it.
-      schema: options.schema as ConfigSchema<T>,
-      slices: options.slices,
-      context: options.context,
-      failFast: options.failFast,
-      secrets: options.secrets,
-      warn: message => options.warn?.(message),
-    }
-  } else {
-    token = options.token
-    bootstrapOpts = {
-      sources: options.sources,
-      providers: options.providers,
-      schema: options.schema,
-      slices: options.slices,
-      context: options.context,
-      failFast: options.failFast,
-      secrets: options.secrets,
-    }
-  }
+  // A definition resolves itself, so the fields it holds are read when *it* bootstraps rather than captured
+  // here. Only the options-object form needs its arguments assembled up front.
+  const bootstrapOpts: BootstrapOptions<T> | undefined = definition !== undefined
+    ? undefined
+    : {
+        sources: (options as ConfigModuleOptions<T>).sources,
+        providers: (options as ConfigModuleOptions<T>).providers,
+        schema: (options as ConfigModuleOptions<T>).schema,
+        slices: (options as ConfigModuleOptions<T>).slices,
+        context: (options as ConfigModuleOptions<T>).context,
+        failFast: (options as ConfigModuleOptions<T>).failFast,
+        secrets: (options as ConfigModuleOptions<T>).secrets,
+      }
 
   return async container => {
-    // Read at init: by now every feature has registered its sources and slices.
-    if (definition !== undefined) {
-      bootstrapOpts.schema = definition.schema as ConfigSchema<T>
-      bootstrapOpts.context = definition.context
-      bootstrapOpts.failFast = definition.failFast
-      // Read here, not at construction: features register their slices — and their secrets — at
-      // `kServiceConfigure`, which has only just finished running.
-      bootstrapOpts.secrets = definition.secrets
-    }
-
-    const shard = await ConfigShard.bootstrap<T>(bootstrapOpts)
-    definition?.markBootstrapped()
+    // Idempotent, so the usual path — the application bootstrapped between the two service steps — hands back
+    // the shard it already built rather than resolving a second time.
+    const shard = definition !== undefined
+      ? await definition.bootstrap() as ConfigShard<T>
+      : await ConfigShard.bootstrap<T>(bootstrapOpts!)
 
     const shardKey = Symbol('@caffeinejs/config:shard')
 
     container.bind<ConfigHandle<T>>(token as symbol).toValue(shard.handle)
+
+    // The same handle, under the container's well-known values key, so `$i.value(c => c.database.host)` reads
+    // the application configuration. The handle is live and the config resolver calls the binding's factory on
+    // every read, so an injected value follows a refresh rather than freezing at construction.
+    //
+    // Guarded: an application that bound its own values provider meant it, and silently replacing it would be
+    // the kind of framework surprise that is very hard to find. Checked by walking the entries because a module
+    // is handed the binding operations only — `has()` is not among them.
+    const boundAlready = [...container.entries()].some(([key]) => key === Keys.kValuesProvider)
+
+    if (!boundAlready) {
+      container.bindValuesProvider<ConfigHandle<T>>().toValue(shard.handle)
+    }
 
     container
       .bind<Configuration<T>>(kConfiguration)

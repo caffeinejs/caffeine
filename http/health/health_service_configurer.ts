@@ -1,4 +1,4 @@
-import { ApplicationAvailability, kServiceConfigure, type Service } from '@caffeinejs/std'
+import { ApplicationAvailability, type DeclareKit, type Service } from '@caffeinejs/std'
 import type { ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kHealthOptions } from './keys.js'
@@ -26,7 +26,29 @@ import {
  * Always registered after the `HealthBuilder`, so a configured setup wins.
  */
 export class HealthServiceConfigurer implements Service {
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  readonly #configured: boolean
+  #options: ConfigSlice<HealthOptions> | undefined
+
+  /**
+   * @param configured - Whether a {@link HealthBuilder} is among the application's services. Passed in rather
+   *   than probed for, because the question has to be answered while declaring — before any binding exists to
+   *   check. Registering a second health slice when one is already there would derive the options twice, and
+   *   `finalizeHealthOptions` emits its warnings from inside the derivation.
+   */
+  constructor(configured = false) {
+    this.#configured = configured
+  }
+
+  declare(kit: DeclareKit): void {
+    if (this.#configured) {
+      return
+    }
+
+    const slice: ConfigSlice<HealthConfig> = kit.config.slice(HEALTH_CONFIG_NAMESPACE, healthConfigSchema)
+    this.#options = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
+  }
+
+  configure(kit: ServiceKit): Promise<void> {
     if (!kit.container.has(ApplicationAvailability)) {
       // The application's own instance, not a container-constructed one: the lifecycle writes to that object, and
       // a second instance would report a state nothing ever updates.
@@ -35,13 +57,10 @@ export class HealthServiceConfigurer implements Service {
         .internal()
     }
 
-    if (!kit.container.has(kHealthOptions)) {
-      const slice: ConfigSlice<HealthConfig> = kit.config.slice(HEALTH_CONFIG_NAMESPACE, healthConfigSchema)
-      const options = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
-
+    if (this.#options !== undefined && !kit.container.has(kHealthOptions)) {
       kit.container
         .bind<HealthOptions>(kHealthOptions)
-        .toFactory(() => options.config)
+        .toValue(this.#options.config)
         .internal()
     }
 

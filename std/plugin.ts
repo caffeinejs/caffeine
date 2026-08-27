@@ -3,7 +3,7 @@ import type { Service } from './service.js'
 
 /**
  * Runtime seam handed to a plugin at install time. A plugin registers its configurer via
- * {@link addService} (it rides the same `[kServiceConfigure]` path as the built-in services) and may read
+ * {@link addService} (it rides the same `configure()` path as the built-in services) and may read
  * the DI {@link container} to bind eagerly if it needs to.
  */
 export interface PluginContext {

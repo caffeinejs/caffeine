@@ -1,4 +1,4 @@
-import { $t, kServiceConfigure, type Service } from '@caffeinejs/std'
+import { $t, type DeclareKit, type Service } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kServerOptions } from './keys.js'
@@ -30,7 +30,7 @@ const serverConfigSchema = $t.Object({
  * By default the settings live at `server.*`. {@link config} re-points them — `s.config(c => c.app.server)`
  * moves both the reads and the code-set defaults to `app.server.*`, checked against the application schema.
  *
- * A {@link Service}: its {@link kServiceConfigure} binds a fixed {@link ServerOptions} under
+ * A {@link Service}: its {@link Service.configure} binds a fixed {@link ServerOptions} under
  * {@link kServerOptions}. That snapshot is deliberate — the listen address cannot change while the server runs,
  * so a config refresh does not move it.
  *
@@ -41,6 +41,7 @@ export class ServerBuilder<C = unknown> implements Service {
   #port: number | undefined
   #host: string | undefined
   #selector?: (c: ConfigHandle<C>) => ServerOptions
+  #slice: ConfigSlice<ServerOptions> | undefined
 
   port(port: number): this {
     this.#port = port
@@ -63,24 +64,28 @@ export class ServerBuilder<C = unknown> implements Service {
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
-    const slice: ConfigSlice<ServerOptions> = defineFeatureConfig(kit.config, {
+  declare(kit: DeclareKit): void {
+    this.#slice = defineFeatureConfig(kit.config, {
       namespace: SERVER_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: serverConfigSchema,
       defaults: { ...DEFAULT_SERVER_OPTIONS },
       values: { port: this.#port, host: this.#host },
     })
+  }
+
+  configure(kit: ServiceKit): Promise<void> {
+    const slice = this.#slice!
 
     kit.container
       .bind<ServerOptions>(kServerOptions)
-      // Lazy so the slice is published (configuration resolves during init); runs once, then the singleton
-      // caches the object — which is live, so its fields keep following refreshes like every other config.
+      // The slice's own object, not a copy: it is live, so its fields keep following refreshes like every
+      // other configuration in the framework.
       //
       // The listen address still stops moving where it always did: the application spreads these options
       // immediately before the adapter binds the socket, and that copy is what the server runs on. Freezing
       // the whole object here instead would only mean nobody could ever see what configuration now says.
-      .toFactory(() => slice.config)
+      .toValue(slice.config)
       .internal()
 
     return Promise.resolve()

@@ -14,7 +14,7 @@ import type { OIDCMeta } from './security/auth/oidc/index.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
 import { ServerOptions, kServerOptions } from './server/index.js'
-import { ErrShutdownTimeout, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, type HealthOptions } from './health/index.js'
+import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, type HealthOptions } from './health/index.js'
 import type { HealthServices } from './health/services.js'
 
 export interface AdapterIn<R> {
@@ -126,7 +126,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
       ...this.services,
       new ErrorHandlingServiceConfigurer(),
       new CacheServiceConfigurer(),
-      new HealthServiceConfigurer(),
+      new HealthServiceConfigurer(this.services.some(service => service instanceof HealthBuilder)),
     ]
   }
 

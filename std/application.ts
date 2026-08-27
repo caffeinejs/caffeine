@@ -2,7 +2,7 @@ import { type Container, type Key, Scopes } from '@caffeinejs/di'
 import { ConfigDefinition } from './config/index.js'
 import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
-import { kServiceConfigure, type Service, type ServiceKit } from './service.js'
+import { type Service, type ServiceKit } from './service.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
@@ -23,7 +23,7 @@ export interface ApplicationInit {
   hooks: ApplicationHooks<BaseApplication>
   /** The resolved drain policy. Defaults apply when the builder was given none. */
   shutdown?: ShutdownOptions
-  /** The live configuration definition, so `run(argv)` can record the command line before it is resolved. */
+  /** The live configuration definition, handed to every service so it can contribute to the tree. */
   config?: ConfigDefinition
 }
 
@@ -103,26 +103,33 @@ export abstract class BaseApplication {
   }
 
   /**
-   * Brings the application up to the point where it can serve: services configure, the container initializes
-   * (which is where configuration resolves), and the platform is set up.
+   * Brings the application up to the point where it can serve.
    *
-   * `argv` is the process's command-line arguments, forwarded to the args config source. Pass the host's own
-   * array — `process.argv` on Node, `Deno.args` on Deno — and nothing here needs to know which host it is on.
-   * It must arrive before configuration resolves, so supplying it to an application that is already ready
-   * throws `ERR_CONFIG_ARGS_TOO_LATE` rather than quietly dropping the operator's flags.
+   * Four steps, in this order:
+   *
+   * 1. every service **declares** — framework defaults, the values its builder methods collected, its slice;
+   * 2. configuration **resolves**, and every slice publishes;
+   * 3. every service **configures** — binding into the container, now able to read its own settings;
+   * 4. the container initializes and the platform is set up.
+   *
+   * Steps 1 and 2 are separate for one reason: a feature must be able to read its resolved configuration while
+   * it is still able to bind. Resolving inside `container.init()` — after every service had configured — is
+   * what used to make a setting consumed at binding time impossible to configure at all.
    */
-  async ready(argv?: readonly string[]): Promise<void> {
-    if (argv !== undefined) {
-      this.#config.setArgv(argv)
-    }
-
+  async ready(): Promise<void> {
     if (this.#ready) {
       return
     }
 
+    // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
+    const services = this.configurers()
+
+    await Promise.all(services.map(service => service.declare?.({ config: this.#config })))
+    await this.#config.bootstrap()
+
     const kit = this.serviceKit()
 
-    await Promise.all(this.configurers().map(service => service[kServiceConfigure](kit)))
+    await Promise.all(services.map(service => service.configure(kit)))
     await this.#container.init()
     await this.setup()
 
@@ -133,12 +140,10 @@ export abstract class BaseApplication {
     this.#ready = true
   }
 
-  /** Readies the application if needed, then starts it. See {@link ready} for what `argv` is for. */
-  async run(argv?: readonly string[]): Promise<void> {
+  /** Readies the application if needed, then starts it. */
+  async run(): Promise<void> {
     if (!this.#ready) {
-      await this.ready(argv)
-    } else if (argv !== undefined) {
-      this.#config.setArgv(argv)
+      await this.ready()
     }
 
     const options = this.shutdownOptions()

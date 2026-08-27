@@ -7,7 +7,6 @@ import {
   OnApplicationShutdown,
   OnPreApplicationShutdown,
   createApplication,
-  kServiceConfigure,
 } from './index.js'
 
 // Builds a headless app over an isolated container (no global autowire) with only the explicit binds —
@@ -161,7 +160,7 @@ describe('Application lifecycle', () => {
     expect(warmups).toContain('warm')
   })
 
-  it('installs a plugin method and rides the [kServiceConfigure] path', async () => {
+  it('installs a plugin method and rides the configure() path', async () => {
     const kSentinel = Symbol('sentinel')
     const state: { value: string | undefined } = { value: undefined }
 
@@ -170,7 +169,7 @@ describe('Application lifecycle', () => {
         name: 'probe',
         install(ctx) {
           ctx.addService({
-            [kServiceConfigure](kit) {
+            configure(kit) {
               kit.container.bind(kSentinel).toValue({ value: state.value })
               return Promise.resolve()
             },

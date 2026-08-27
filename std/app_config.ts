@@ -55,17 +55,11 @@ export class AppConfigBuilder<T = unknown> {
   /**
    * Reads configuration from the command line, above every other source.
    *
-   * The arguments themselves come from `app.run(argv)` — `run(process.argv)` on Node, `run(Deno.args)` on Deno.
-   * They are opt-in rather than picked up automatically, because a process's flags are not always meant for it:
-   * a test runner's own switches would otherwise silently become configuration.
+   * The arguments are the host's own unless `options.argv` names others. Calling this is the opt-in: an
+   * application that never does reads no command line at all.
    */
   args(options: ArgsConfigProviderOptions = {}): this {
-    const definition = this.#definition
-    // Read through a closure: `run(argv)` records the arguments long after this provider is built, so a value
-    // captured here would be the empty one that was true at configure time.
-    const provider = new ArgsConfigProvider({ argv: () => definition.argv, ...options })
-
-    definition.sources.add(provider, ConfigPriority.ARGS)
+    this.#definition.sources.add(new ArgsConfigProvider(options), ConfigPriority.ARGS)
     return this
   }
 

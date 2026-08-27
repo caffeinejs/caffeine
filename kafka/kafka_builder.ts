@@ -1,8 +1,8 @@
 import type { Ctor } from '@caffeinejs/di'
-import { HealthIndicator, kServiceConfigure, type Service, type ServiceKit } from '@caffeinejs/std'
-import { defineFeatureConfig, instanceNamespace, type ConfigAccessors, type ConfigHandle } from '@caffeinejs/std/config'
+import { HealthIndicator, type DeclareKit, type Service, type ServiceKit } from '@caffeinejs/std'
+import { defineFeatureConfig, instanceNamespace, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import { defaultDeserializers, defaultSerializers } from './clients.js'
-import { KAFKA_CONFIG_NAMESPACE, kafkaConfigSchema, type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaConfigSlice, type KafkaDeserializers, type KafkaMessage, type KafkaSerializers, resolveConfig, type TopicProvisioning } from './config.js'
+import { KAFKA_CONFIG_NAMESPACE, kafkaConfigSchema, type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaConfigSlice, type KafkaDeserializers, type KafkaMessage, type ResolvedKafkaConfig, type KafkaSerializers, resolveConfig, type TopicProvisioning } from './config.js'
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
 import { KafkaHealthIndicator } from './health.js'
@@ -16,7 +16,7 @@ import { KafkaTemplate } from './template.js'
 /**
  * Fluent configuration for one (optionally named) Kafka integration. Follows the repo feature-builder
  * convention (`app.kafka(k => k.brokers(...).groupId(...))`): it accumulates settings, then at `ready()` time
- * its `[kServiceConfigure]` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
+ * its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
  * the container under per-instance keys.
  *
  * There is one read path for everything a configuration tree can carry. A builder method does not hold its
@@ -51,6 +51,7 @@ export class KafkaBuilder<C = unknown> implements Service {
   #recoverer?: KafkaRecoverer
   #onDeserializationError?: DeserializationErrorHandler
   #onError?: (error: unknown, message: KafkaMessage) => void
+  #resolved?: ConfigSlice<ResolvedKafkaConfig>
 
   constructor(name: string, clients: KafkaClients) {
     this.#name = name
@@ -182,7 +183,7 @@ export class KafkaBuilder<C = unknown> implements Service {
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  declare(kit: DeclareKit): void {
     const slice = defineFeatureConfig<KafkaConfigSlice>(kit.config, {
       namespace: instanceNamespace(KAFKA_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -217,7 +218,7 @@ export class KafkaBuilder<C = unknown> implements Service {
       onError: this.#onError,
     }
 
-    const resolved = slice.derive(published => {
+    this.#resolved = slice.derive(published => {
       const brokers = published.brokers ?? []
 
       // Checked here rather than on the builder: the brokers may arrive from any source, so the only moment
@@ -238,21 +239,23 @@ export class KafkaBuilder<C = unknown> implements Service {
         { serializers: defaultSerializers, deserializers: defaultDeserializers },
       )
     })
+  }
 
+  configure(kit: ServiceKit): Promise<void> {
+    const resolved = this.#resolved!
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)
     const container = kit.container
 
     kit.container
       .bind(rKey)
-      // Lazy so the slice has published by the time this runs — configuration resolves during init. The
-      // config object is live, so a refresh reaches whatever reads through it.
-      .toFactory((): KafkaRuntime => ({
+      // The config object is the slice's own and is live, so a refresh reaches whatever reads through it.
+      .toValue<KafkaRuntime>({
         name: this.#name,
         container,
         config: resolved.config,
         clients: this.#clients,
-      }))
+      })
 
     // The default instance's template is bound under the KafkaTemplate class (so it can be injected by type),
     // carrying tKey as a name alias. Named instances bind under their name key only.
