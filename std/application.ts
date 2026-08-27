@@ -1,11 +1,12 @@
 import { type Container, type Key, Scopes } from '@caffeinejs/di'
-import { ConfigDefinition } from './config/index.js'
-import { ApplicationHooks } from './hooks.js'
+import { ConfigDefinition, defineFeatureConfig } from './config/index.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
-import { kServiceConfigure, kServiceDeclare, type Service, type ServiceKit } from './service.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
+import { ApplicationHooks } from './hooks.js'
+import { $t } from './schema/t.js'
+import { kServiceConfigure, kServiceDeclare, type Service, type ServiceKit } from './service.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
 export interface HookBinding {
@@ -32,6 +33,20 @@ interface Dispatch {
   method: string | symbol
 }
 
+const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
+
+interface CaffeineConfig {
+  name: string
+  profiles: string[]
+}
+
+const DEFAULT_CAFFEINE_CONFIG: CaffeineConfig = { name: '', profiles: [] }
+
+const caffeineConfigSchema = $t.Object({
+  name: $t.String({ default: DEFAULT_CAFFEINE_CONFIG.name }),
+  profiles: $t.List($t.String(), { default: DEFAULT_CAFFEINE_CONFIG.profiles }),
+})
+
 /**
  * Platform-neutral application foundation: owns the DI container, the configuration {@link Service}s, and
  * the lifecycle (ready → run → shutdown) with both decorator-driven (`@OnApplicationReady`, ...) and
@@ -46,6 +61,7 @@ export abstract class BaseApplication {
   readonly #availability = new ApplicationAvailability()
   readonly #shutdownInit: ShutdownOptions | undefined
   readonly #config: ConfigDefinition
+  #name = ''
   #dispatch?: Map<ApplicationEvent, Dispatch[]>
   #ready = false
   #shutdown?: GracefulShutdown
@@ -64,6 +80,11 @@ export abstract class BaseApplication {
 
   get container(): Container {
     return this.#container
+  }
+
+  /** The application name from `caffeine.name`. Empty until {@link ready} has run. */
+  get name(): string {
+    return this.#name
   }
 
   /**
@@ -105,27 +126,38 @@ export abstract class BaseApplication {
   /**
    * Brings the application up to the point where it can serve.
    *
-   * Four steps, in this order:
-   *
-   * 1. every service **declares** — framework defaults, the values its builder methods collected, its slice;
+   * 1. the always-on `caffeine` slice is registered, then every service **declares**;
    * 2. configuration **resolves**, and every slice publishes;
-   * 3. every service **configures** — binding into the container, now able to read its own settings;
-   * 4. the container initializes and the platform is set up.
+   * 3. `caffeine.name` and `caffeine.profiles` are applied;
+   * 4. every service **configures** — binding into the container, now able to read its own settings;
+   * 5. the container initializes and the platform is set up.
    *
-   * Steps 1 and 2 are separate for one reason: a feature must be able to read its resolved configuration while
-   * it is still able to bind. Resolving inside `container.init()` — after every service had configured — is
-   * what used to make a setting consumed at binding time impossible to configure at all.
+   * Declare and resolve are separate so a feature can read its resolved configuration while it is still able
+   * to bind. Resolving inside `container.init()` — after every service had configured — is what used to make
+   * a setting consumed at binding time impossible to configure at all.
    */
   async ready(): Promise<void> {
     if (this.#ready) {
       return
     }
 
+    const caffeine = defineFeatureConfig<CaffeineConfig>(this.#config, {
+      namespace: CAFFEINE_CONFIG_NAMESPACE,
+      schema: caffeineConfigSchema,
+      defaults: { ...DEFAULT_CAFFEINE_CONFIG },
+    })
+
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()
 
     await Promise.all(services.map(service => service[kServiceDeclare]?.({ config: this.#config })))
     await this.#config.bootstrap()
+
+    this.#name = caffeine.config.name
+    const profiles = caffeine.config.profiles.filter(profile => profile !== '')
+    if (profiles.length > 0) {
+      this.#container.addProfiles(profiles[0], ...profiles.slice(1))
+    }
 
     const kit = this.serviceKit()
 

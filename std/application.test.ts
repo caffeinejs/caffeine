@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { CaffeineIoC, Injectable, Scopes } from '@caffeinejs/di'
+import { CaffeineIoC, Injectable, Profile, Scopes } from '@caffeinejs/di'
+import { InlineConfigProvider } from './config/index.js'
 import {
   type Plugin,
   OnApplicationReady,
@@ -192,6 +193,68 @@ describe('Application lifecycle', () => {
     await built.ready()
 
     expect(built.container.getOptional(kSentinel)).toEqual({ value: 'hello' })
+  })
+})
+
+describe('application name and profiles', () => {
+  @Injectable()
+  @Profile('eu')
+  class EuOnly {}
+
+  it('defaults name to empty after ready()', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).build()
+    await app.ready()
+
+    expect(app.name).toBe('')
+  })
+
+  it('reads caffeine.name from a config source', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .config(c => c.source(new InlineConfigProvider({ caffeine: { name: 'petstore' } })))
+      .build()
+    await app.ready()
+
+    expect(app.name).toBe('petstore')
+  })
+
+  it('applies caffeine.profiles to the container', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .config(c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+      .build()
+    await app.ready()
+
+    expect(app.container.profiles.has('eu')).toBe(true)
+  })
+
+  it('unions config profiles onto a user-supplied container', async () => {
+    const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
+    const app = createApplication({ container })
+      .config(c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+      .build()
+    await app.ready()
+
+    expect(container.profiles.has('test')).toBe(true)
+    expect(container.profiles.has('eu')).toBe(true)
+  })
+
+  it('does not register a @Profile bean without matching config profiles', async () => {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(EuOnly).toSelf()
+    const app = createApplication({ container }).build()
+    await app.ready()
+
+    expect(container.has(EuOnly)).toBe(false)
+  })
+
+  it('registers a @Profile bean when caffeine.profiles includes it', async () => {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(EuOnly).toSelf()
+    const app = createApplication({ container })
+      .config(c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+      .build()
+    await app.ready()
+
+    expect(container.has(EuOnly)).toBe(true)
   })
 })
 
