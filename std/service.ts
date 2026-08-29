@@ -45,6 +45,9 @@ export interface ServiceBootstrapIn {
   availability: ApplicationAvailability
 }
 
+/**
+ * A service is a unit of functionality that contributes to the application.
+ */
 export interface Service {
   /**
    * Stable identifier for this service, used in logs and diagnostics.
@@ -52,14 +55,19 @@ export interface Service {
   get name(): string
 
   /**
+   * Ensures the service has all the requirements it needs to run.
+   */
+  ensureRequirements?(input: ServiceBeforeBootstrapIn): void | Promise<void>
+
+  /**
    * Runs before configuration resolves. Register slices and defaults here; resolved values are not available yet.
    */
-  beforeBootstrap?(kit: ServiceBeforeBootstrapIn): void | Promise<void>
+  beforeBootstrap?(input: ServiceBeforeBootstrapIn): void | Promise<void>
 
   /**
    * Runs after configuration resolves and before the container initializes. Bind runtime artifacts here.
    */
-  bootstrap(kit: ServiceBootstrapIn): Promise<void>
+  bootstrap(input: ServiceBootstrapIn): Promise<void>
 }
 
 /**
@@ -67,3 +75,23 @@ export interface Service {
  * appear in autocomplete on `.server(s => ...)`, `.kafka(k => ...)`, and similar.
  */
 export type ServiceAPI<T extends Service> = Omit<T, keyof Service>
+
+/**
+ * Contributions keeps track of the contributions made by {@link Service}s.
+ * Service contributions can any arbitrary type and are used to configure application features.
+ */
+export class Contributions {
+  #contributions: Map<symbol, unknown> = new Map()
+
+  contribute<T>(key: symbol, value: T): void {
+    if (this.#contributions.has(key)) {
+      throw new Error(`Contribution ${key.toString()} already contributed`)
+    }
+
+    this.#contributions.set(key, value)
+  }
+
+  contribution<T>(key: symbol): T {
+    return this.#contributions.get(key) as T
+  }
+}

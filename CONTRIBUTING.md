@@ -1,5 +1,7 @@
 # Contributing
 
+Agent instructions for this repository live in [`AGENTS.md`](AGENTS.md).
+
 ## Prerequisites
 
 - Node.js >= 20
@@ -52,5 +54,5 @@ Keep the description short (under 72 characters), imperative mood, no trailing p
 
 - Keep PRs focused — one concern per PR
 - Add or update tests for any changed behaviour
-- All checks must pass before requesting review (`make all`)
+- All checks must pass before requesting review (`make check`)
 - Link to a related issue when one exists
