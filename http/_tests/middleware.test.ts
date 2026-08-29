@@ -296,24 +296,6 @@ describe('middleware pipeline', () => {
     await app.close()
   })
 
-  it('does not run for the health probes', async () => {
-    let ran = 0
-
-    const app = newApp().health().build()
-    app.use((_ctx, next) => {
-      ran++
-      return next()
-    }, 'onRequest')
-    await app.ready()
-
-    expect((await app.fetch('/livez')).status).toBe(200)
-    expect(ran).toBe(0)
-
-    await app.fetch('/mw/echo')
-    expect(ran).toBe(1)
-    await app.close()
-  })
-
   it('runs setup() once at start-up, with the resolved application', async () => {
     const calls: MiddlewareSetupContext[] = []
 

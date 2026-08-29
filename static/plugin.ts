@@ -1,4 +1,4 @@
-import type { ConfigTypeOf, Plugin } from '@caffeinejs/std'
+import type { ConfigTypeOf, Plugin, ServiceAPI } from '@caffeinejs/std'
 import { StaticBuilder } from './builder.js'
 
 /**
@@ -14,7 +14,7 @@ export interface StaticPluginExt {
    * `Omit`, and a mapped type instantiates `this` to the type being mapped — which would freeze the config
    * type to whatever the builder was *before* `.config(schema)` re-typed it, i.e. `unknown`.
    */
-  static<Self>(this: Self, configure: (staticFiles: StaticBuilder<ConfigTypeOf<Self>>) => void): Self
+  static<Self>(this: Self, configure: (staticFiles: ServiceAPI<StaticBuilder<ConfigTypeOf<Self>>>) => void): Self
 }
 
 /**

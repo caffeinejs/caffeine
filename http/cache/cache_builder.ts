@@ -1,4 +1,4 @@
-import { $t, kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
+import { $t, ServiceBeforeBootstrapIn, Service, type ServiceAPI } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { ETagGenerator } from './cache.js'
@@ -43,18 +43,22 @@ export class CacheBuilder<C = unknown> implements Service {
   #selector?: (c: ConfigHandle<C>) => ConfigAccessors<CacheConfig>
   #slice: ConfigSlice<CacheConfig> | undefined
 
-  store(store: CacheStore): this {
+  get name(): string {
+    return 'cache'
+  }
+
+  store(store: CacheStore): ServiceAPI<this> {
     this.#store = store
     return this
   }
 
-  etagGenerator(generator: ETagGenerator): this {
+  etagGenerator(generator: ETagGenerator): ServiceAPI<this> {
     this.#etagGenerator = generator
     return this
   }
 
   /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/BYPASS. */
-  statusHeader(name: string): this {
+  statusHeader(name: string): ServiceAPI<this> {
     this.#statusHeader = name
     return this
   }
@@ -64,12 +68,12 @@ export class CacheBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<CacheConfig>): this {
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<CacheConfig>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
 
-  [kServiceDeclare](kit: DeclareKit): void {
+  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     this.#slice = defineFeatureConfig<CacheConfig>(kit.config, {
       namespace: CACHE_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -79,7 +83,7 @@ export class CacheBuilder<C = unknown> implements Service {
     })
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceKit): Promise<void> {
     if (this.#store !== undefined) {
       kit.container.bind(CacheStore).toValue(this.#store).internal()
     }

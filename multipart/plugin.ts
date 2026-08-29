@@ -1,4 +1,4 @@
-import type { Plugin } from '@caffeinejs/std'
+import type { Plugin, ServiceAPI } from '@caffeinejs/std'
 import { MultipartBuilder } from './builder.js'
 
 /**
@@ -12,7 +12,7 @@ export interface MultipartPluginExt {
   /**
    * Activates multipart uploads. Configure Fastify options through {@link MultipartBuilder.options}.
    */
-  multipart<Self>(this: Self, configure: (m: MultipartBuilder) => void): Self
+  multipart<Self>(this: Self, configure: (m: ServiceAPI<MultipartBuilder>) => void): Self
 }
 
 /**

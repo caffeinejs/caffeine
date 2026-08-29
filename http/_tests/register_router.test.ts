@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
-import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import { type Service } from '@caffeinejs/std'
 import {
   $p,
   Keys,
@@ -42,7 +42,11 @@ class ProgrammaticService implements Service {
     this.#authz = authz
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  get name(): string {
+    return 'programmatic'
+  }
+
+  bootstrap(kit: ServiceKit): Promise<void> {
     const endpoints = this.#endpoints
     kit.container.bind(endpoints).toValue(new endpoints()).labels(Keys.CONTROLLER)
 

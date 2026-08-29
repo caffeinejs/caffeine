@@ -19,6 +19,10 @@
       "types": "./dist/decorators/registrar/index.d.ts",
       "default": "./dist/decorators/registrar/index.js"
     },
+    "./guards": {
+      "types": "./dist/guards/index.d.ts",
+      "default": "./dist/guards/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

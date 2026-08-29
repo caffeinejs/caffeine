@@ -101,6 +101,7 @@ export class CaffeineIoC implements Container {
   private _pendingConditionalKeys = new Set<Key>()
   private _sortedAsyncEntries: [Key, Binding][] = []
   private _aspectScopeCache: Set<Identifier> | null = null
+  private _hasRequestScoped = false
 
   /**
    * Creates a new container instance.
@@ -171,6 +172,13 @@ export class CaffeineIoC implements Container {
    */
   get profiles(): ReadonlySet<Identifier> {
     return this._profiles
+  }
+
+  /**
+   * Whether the container has at least one request scoped component.
+   */
+  get hasRequestScoped(): boolean {
+    return this._hasRequestScoped
   }
 
   /**
@@ -1218,6 +1226,10 @@ export class CaffeineIoC implements Container {
         binding: canonical,
         fallback: canonical.fallback === true,
       })
+    }
+
+    if (canonical.scopeID === Scopes.REQUEST) {
+      this._hasRequestScoped = true
     }
   }
 

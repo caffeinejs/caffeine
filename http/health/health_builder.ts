@@ -1,14 +1,13 @@
 import {
-  kServiceConfigure,
-  kServiceDeclare,
-  type DeclareKit,
+  type ServiceBeforeBootstrapIn,
   type Duration,
-  type Service,
   type ShutdownSignal,
   type SignalDispatcher,
+  Service,
+  type ServiceAPI,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
-import type { ServiceKit } from '../service.js'
+import { ServiceKit } from '../service.js'
 import { kHealthOptions } from './keys.js'
 import {
   HEALTH_CONFIG_NAMESPACE,
@@ -50,14 +49,18 @@ export class HealthBuilder<C = unknown> implements Service {
   #selector: ((c: ConfigHandle<C>) => HealthConfig) | undefined
   #options: ConfigSlice<HealthOptions> | undefined
 
+  get name(): string {
+    return 'health'
+  }
+
   /** Forces the probes on or off, overriding the Kubernetes auto-detection. */
-  enabled(enabled: boolean = true): this {
+  enabled(enabled: boolean = true): ServiceAPI<this> {
     this.#config.enabled = enabled
     return this
   }
 
   /** Overrides one or more probe paths. Defaults: `/livez`, `/readyz`, `/startupz`. */
-  paths(paths: Partial<HealthPaths>): this {
+  paths(paths: Partial<HealthPaths>): ServiceAPI<this> {
     this.#config.paths = { ...this.#config.paths, ...paths }
     return this
   }
@@ -66,13 +69,13 @@ export class HealthBuilder<C = unknown> implements Service {
    * How long to keep serving after readiness starts refusing, before the server closes. Covers the orchestrator's
    * routing-table propagation lag; traffic still arrives during this window and is answered normally.
    */
-  drainDelay(delay: Duration): this {
+  drainDelay(delay: Duration): ServiceAPI<this> {
     this.#config.drainDelay = delay
     return this
   }
 
   /** The budget for in-flight requests to finish once the server is closing. */
-  shutdownTimeout(timeout: Duration): this {
+  shutdownTimeout(timeout: Duration): ServiceAPI<this> {
     this.#config.shutdownTimeout = timeout
     return this
   }
@@ -81,43 +84,43 @@ export class HealthBuilder<C = unknown> implements Service {
    * The pod's `terminationGracePeriodSeconds`. It cannot be read from inside the pod, so it must be mirrored here
    * (or injected through the downward API) for the boot-time budget check to mean anything.
    */
-  terminationGracePeriod(period: Duration): this {
+  terminationGracePeriod(period: Duration): ServiceAPI<this> {
     this.#config.terminationGracePeriod = period
     return this
   }
 
   /** Per-indicator budget. An indicator exceeding it is aborted and reported down. */
-  indicatorTimeout(timeout: Duration): this {
+  indicatorTimeout(timeout: Duration): ServiceAPI<this> {
     this.#config.indicatorTimeout = timeout
     return this
   }
 
   /** Whole-probe budget, regardless of indicator count. */
-  probeDeadline(deadline: Duration): this {
+  probeDeadline(deadline: Duration): ServiceAPI<this> {
     this.#config.probeDeadline = deadline
     return this
   }
 
   /** How long an evaluation is reused. Bounds the load the probes place on the dependencies they check. */
-  cacheTTL(ttl: Duration): this {
+  cacheTTL(ttl: Duration): ServiceAPI<this> {
     this.#config.cacheTTL = ttl
     return this
   }
 
   /** Allows `?verbose` to expand the response body. Off by default: the body names your dependencies. */
-  verbose(verbose: boolean = true): this {
+  verbose(verbose: boolean = true): ServiceAPI<this> {
     this.#config.verbose = verbose
     return this
   }
 
   /** Allows `?exclude=<name>` to skip an indicator. Off by default: it lets a caller make readiness lie. */
-  exclude(exclude: boolean = true): this {
+  exclude(exclude: boolean = true): ServiceAPI<this> {
     this.#config.exclude = exclude
     return this
   }
 
   /** The signals that trigger a graceful shutdown, or `false` to install no handlers. */
-  signals(signals: readonly ShutdownSignal[] | false): this {
+  signals(signals: readonly ShutdownSignal[] | false): ServiceAPI<this> {
     this.#config.signals = signals === false ? false : [...signals]
     return this
   }
@@ -129,7 +132,7 @@ export class HealthBuilder<C = unknown> implements Service {
    *
    * Not configuration — a function cannot live in a configuration tree — so this one is code-only.
    */
-  dispatcher(dispatcher: SignalDispatcher): this {
+  dispatcher(dispatcher: SignalDispatcher): ServiceAPI<this> {
     this.#dispatcher = dispatcher
     return this
   }
@@ -140,12 +143,12 @@ export class HealthBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    * Both the reads and the defaults written by the builder methods follow it.
    */
-  config(selector: (c: ConfigHandle<C>) => HealthConfig): this {
+  config(selector: (c: ConfigHandle<C>) => HealthConfig): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
 
-  [kServiceDeclare](kit: DeclareKit): void {
+  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
       namespace: HEALTH_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -159,7 +162,7 @@ export class HealthBuilder<C = unknown> implements Service {
       finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })))
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceKit): Promise<void> {
     kit.feats.toggleHealth()
 
     kit.container

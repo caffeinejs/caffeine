@@ -25,8 +25,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "rm -rf dist && npm run build:esm",
-    "build:esm": "tsc --build --force tsconfig.build.json",
+    "build": "rm -rf dist && tsc --build --force tsconfig.build.json",
     "test:typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run",
     "test:property": "vitest run _tests/property",

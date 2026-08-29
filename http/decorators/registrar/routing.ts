@@ -1,7 +1,8 @@
-import type { Ctor } from '@caffeinejs/di'
+import type { Ctor, Key } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { RouteValidationSchema } from '../../route.js'
 import type { ErrorHandlerRef } from '../../error/error.js'
+import { Guard } from '../../guards/guard.js'
 import { mergeValue } from './_merge.js'
 
 export interface RouterSpec<R> {
@@ -19,6 +20,8 @@ export interface RouterSpec<R> {
   extras?: Map<symbol, unknown>
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
+  guards?: Key<Guard>[]
+  guardOptions?: Record<string | symbol, unknown>
 }
 
 export interface RouteSpec<R> {
@@ -38,6 +41,8 @@ export interface RouteSpec<R> {
   options?: Map<string, unknown>
   extras?: Map<symbol, unknown>
   catchBy?: ErrorHandlerRef[]
+  guards?: Key<Guard>[]
+  guardOptions?: Record<string | symbol, unknown>
 }
 
 export interface RouteAuthzOptions {
@@ -62,6 +67,8 @@ export class RouterBuilder {
   #extras?: Map<symbol, unknown>
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
+  #guards?: Key<Guard>[]
+  #guardOptions?: Record<string | symbol, unknown>
 
   path(path: string) {
     this.#path = path
@@ -119,6 +126,26 @@ export class RouterBuilder {
 
   authorize(opts: RouteAuthzOptions) {
     this.#authorize = opts
+    return this
+  }
+
+  guards(guards: Key<Guard>[]) {
+    this.#guards ??= []
+    this.#guards.push(...guards)
+    return this
+  }
+
+  guardOptions<K extends string | symbol>(key: K, value: unknown): this
+  guardOptions<K extends string | symbol>(options: Record<K, unknown>): this
+  guardOptions<K extends string | symbol>(keyOrOptions: K | Record<K, unknown>, value?: unknown): this {
+    this.#guardOptions ??= {}
+    if (typeof keyOrOptions === 'string' || typeof keyOrOptions === 'symbol') {
+      this.#guardOptions[keyOrOptions] = value
+    } else {
+      for (const [key, value] of Object.entries(keyOrOptions)) {
+        this.#guardOptions[key] = value
+      }
+    }
     return this
   }
 
@@ -185,6 +212,8 @@ export class RouterBuilder {
       extras: this.#extras,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
+      guards: this.#guards,
+      guardOptions: this.#guardOptions,
     }
   }
 }
@@ -206,6 +235,8 @@ export class RouteBuilder {
   #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
   #catchBy?: ErrorHandlerRef[]
+  #guards?: Key<Guard>[]
+  #guardOptions?: Record<string | symbol, unknown>
 
   header(name: string, value: string | string[]) {
     this.#header ??= new Map()
@@ -277,6 +308,26 @@ export class RouteBuilder {
     return this
   }
 
+  guards(guards: Key<Guard>[]): this {
+    this.#guards ??= []
+    this.#guards.push(...guards)
+    return this
+  }
+
+  guardOptions<K extends string | symbol>(key: K, value: unknown): this
+  guardOptions<K extends string | symbol>(options: Record<K, unknown>): this
+  guardOptions<K extends string | symbol>(keyOrOptions: K | Record<K, unknown>, value?: unknown): this {
+    this.#guardOptions ??= {}
+    if (typeof keyOrOptions === 'string' || typeof keyOrOptions === 'symbol') {
+      this.#guardOptions[keyOrOptions] = value
+    } else {
+      for (const [key, value] of Object.entries(keyOrOptions)) {
+        this.#guardOptions[key] = value
+      }
+    }
+    return this
+  }
+
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -337,6 +388,8 @@ export class RouteBuilder {
       options: this.#options,
       extras: this.#extras,
       catchBy: this.#catchBy,
+      guards: this.#guards,
+      guardOptions: this.#guardOptions,
     }
   }
 }

@@ -1,6 +1,6 @@
-import { kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
+import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, ServiceBootstrapIn } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
-import { NotFoundFallback, type ServiceKit } from '@caffeinejs/http'
+import { NotFoundFallback } from '@caffeinejs/http'
 import { STATIC_CONFIG_NAMESPACE, staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
 import { StaticExtension } from './extension.js'
@@ -31,11 +31,15 @@ export class StaticBuilder<C = unknown> implements Service {
   #selector?: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>
   #resolved?: ConfigSlice<ResolvedStatic>
 
+  get name(): string {
+    return 'static'
+  }
+
   /**
    * Serves `root` as static files. `options` is the full `@fastify/static` options object minus `root`
    * (`prefix`, `index`, `wildcard`, `maxAge`, ...). Call again to serve additional directories.
    */
-  serve(root: string, options?: Omit<StaticMount, 'root'>): this {
+  serve(root: string, options?: Omit<StaticMount, 'root'>): ServiceAPI<this> {
     this.#mounts.push({ root, ...options } as StaticMount)
     return this
   }
@@ -57,7 +61,7 @@ export class StaticBuilder<C = unknown> implements Service {
    * app.static(s => s.spa('site/dist'))
    * ```
    */
-  spa(root: string, options?: SPAOptions): this {
+  spa(root: string, options?: SPAOptions): ServiceAPI<this> {
     this.#spaRoots.push(root)
 
     // A code-level mistake, caught where it is made: two `.spa()` calls cannot both be right, and the answer
@@ -76,12 +80,12 @@ export class StaticBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>): this {
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
 
-  [kServiceDeclare](kit: DeclareKit): void {
+  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
       namespace: STATIC_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -106,7 +110,7 @@ export class StaticBuilder<C = unknown> implements Service {
     this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const resolved = this.#resolved!
 
     kit.container.bind(kStaticMounts).toValue(resolved.config.mounts).internal()

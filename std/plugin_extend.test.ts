@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider } from './config/index.js'
-import { kServiceConfigure, type Service } from './service.js'
+import { type Service } from './service.js'
 import type { Plugin } from './plugin.js'
 
 // A sentinel the plugin's service binds, so a test can prove `.extend()` rides the same
@@ -14,7 +14,10 @@ function tracker<const Name extends string = 'track'>(
 ): Plugin<Record<Name, (value: string) => void>> {
   const state: { value: string | undefined } = { value: undefined }
   const service: Service = {
-    [kServiceConfigure](kit) {
+    get name() {
+      return 'track'
+    },
+    bootstrap(kit) {
       kit.container.bind(kSentinel).toValue({ value: state.value })
       return Promise.resolve()
     },

@@ -1,11 +1,11 @@
 import type { Container } from '@caffeinejs/di'
-import type { ConfigTypeOf, Plugin, Service } from '@caffeinejs/std'
+import type { ConfigTypeOf, Plugin, Service, ServiceAPI } from '@caffeinejs/std'
 import { MessagingBuilder } from './builder.js'
 import type { MessagingContainer } from './engine.js'
 import { DEFAULT_BINDER, Keys } from './symbols.js'
 
 /** The builder callback that configures one messaging integration, over an application config type `C`. */
-export type MessagingConfigure<C = unknown> = (m: MessagingBuilder<C>) => void
+export type MessagingConfigure<C = unknown> = (m: ServiceAPI<MessagingBuilder<C>>) => void
 
 /**
  * The `messaging` builder method contributed by the plugin. Pass a builder callback, optionally preceded by an

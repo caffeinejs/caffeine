@@ -1,5 +1,4 @@
-import { kServiceConfigure, type Service } from '@caffeinejs/std'
-import type { ServiceKit } from '@caffeinejs/http'
+import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/std'
 import { MultipartExtension, type MultipartOptions } from './extension.js'
 
 /**
@@ -11,15 +10,19 @@ import { MultipartExtension, type MultipartOptions } from './extension.js'
 export class MultipartBuilder implements Service {
   #options: MultipartOptions = {}
 
+  get name(): string {
+    return 'multipart'
+  }
+
   /**
    * Forwards an options bag to `@fastify/multipart` (`limits`, `attachFieldsToBody`, …).
    */
-  options(opts: MultipartOptions): this {
+  options(opts: MultipartOptions): ServiceAPI<this> {
     this.#options = opts
     return this
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     kit.container.bind(MultipartExtension).toValue(new MultipartExtension(this.#options)).extends()
     return Promise.resolve()
   }

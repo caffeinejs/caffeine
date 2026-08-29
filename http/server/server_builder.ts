@@ -1,4 +1,4 @@
-import { $t, kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
+import { $t, type Service, type ServiceAPI, ServiceBeforeBootstrapIn } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { ServiceKit } from '../service.js'
 import { kServerOptions } from './keys.js'
@@ -43,12 +43,16 @@ export class ServerBuilder<C = unknown> implements Service {
   #selector?: (c: ConfigHandle<C>) => ServerOptions
   #slice: ConfigSlice<ServerOptions> | undefined
 
-  port(port: number): this {
+  get name(): string {
+    return 'server'
+  }
+
+  port(port: number): ServiceAPI<this> {
     this.#port = port
     return this
   }
 
-  host(host: string): this {
+  host(host: string): ServiceAPI<this> {
     this.#host = host
     return this
   }
@@ -59,12 +63,12 @@ export class ServerBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    * Both the reads and the defaults written by {@link port}/{@link host} follow it.
    */
-  config(selector: (c: ConfigHandle<C>) => ServerOptions): this {
+  config(selector: (c: ConfigHandle<C>) => ServerOptions): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
 
-  [kServiceDeclare](kit: DeclareKit): void {
+  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     this.#slice = defineFeatureConfig(kit.config, {
       namespace: SERVER_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -74,7 +78,7 @@ export class ServerBuilder<C = unknown> implements Service {
     })
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceKit): Promise<void> {
     const slice = this.#slice!
 
     kit.container

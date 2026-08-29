@@ -7,15 +7,14 @@ on:
       benchmark:
         description: 'Benchmark to run'
         required: true
-        default: 'helloworld'
         type: choice
         options:
           - aspect
           - helloworld
+          - mixedscopes
           - startup
           - request
           - request:bun
-          - mixedscopes
 
 concurrency:
   group: bench-${{ github.ref }}

@@ -168,6 +168,7 @@ replay_pid*
 
 # Project
 
+.todo/
 .vscode/
 
 dist/

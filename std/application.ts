@@ -6,7 +6,7 @@ import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
 import { $t } from './schema/t.js'
-import { kServiceConfigure, kServiceDeclare, type Service, type ServiceKit } from './service.js'
+import { type Service, ServiceBootstrapIn } from './service.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
 export interface HookBinding {
@@ -61,7 +61,9 @@ export abstract class BaseApplication {
   readonly #availability = new ApplicationAvailability()
   readonly #shutdownInit: ShutdownOptions | undefined
   readonly #config: ConfigDefinition
+
   #name = ''
+  #profiles: string[] = []
   #dispatch?: Map<ApplicationEvent, Dispatch[]>
   #ready = false
   #shutdown?: GracefulShutdown
@@ -85,6 +87,10 @@ export abstract class BaseApplication {
   /** The application name from `caffeine.name`. Empty until {@link ready} has run. */
   get name(): string {
     return this.#name
+  }
+
+  get profiles(): readonly string[] {
+    return [...this.#profiles]
   }
 
   /**
@@ -150,18 +156,25 @@ export abstract class BaseApplication {
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()
 
-    await Promise.all(services.map(service => service[kServiceDeclare]?.({ config: this.#config })))
+    await Promise
+      .all(services
+        .map(service =>
+          service.beforeBootstrap?.({ config: this.#config, container: this.#container })))
     await this.#config.bootstrap()
 
-    this.#name = caffeine.config.name
     const profiles = caffeine.config.profiles.filter(profile => profile !== '')
     if (profiles.length > 0) {
       this.#container.addProfiles(profiles[0], ...profiles.slice(1))
     }
 
+    this.#name = caffeine.config.name
+    this.#profiles = caffeine.config.profiles
+
     const kit = this.serviceKit()
 
-    await Promise.all(services.map(service => service[kServiceConfigure](kit)))
+    await Promise
+      .all(services
+        .map(service => service.bootstrap(kit)))
     await this.#container.init()
     await this.setup()
 
@@ -268,7 +281,7 @@ export abstract class BaseApplication {
   }
 
   /** The kit passed to each {@link Service}. Subclasses may widen it (e.g. add platform handles). */
-  protected serviceKit(): ServiceKit {
+  protected serviceKit(): ServiceBootstrapIn {
     return { container: this.#container, availability: this.#availability, config: this.#config }
   }
 

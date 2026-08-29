@@ -121,6 +121,7 @@ export interface Container {
   readonly refresher: Refresher
   readonly requestScopeManager: RequestScopeManager
   readonly ready: boolean
+  readonly hasRequestScoped: boolean
 
   readonly [Symbol.toStringTag]: string
 

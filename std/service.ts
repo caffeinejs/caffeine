@@ -1,4 +1,4 @@
-import type { Container } from '@caffeinejs/di'
+import type { Container, ContainerBindingOps } from '@caffeinejs/di'
 import type { ConfigDefinition } from './config/index.js'
 import type { ApplicationAvailability } from './health/availability.js'
 
@@ -9,9 +9,16 @@ import type { ApplicationAvailability } from './health/availability.js'
  * nothing" is enforced by the type rather than left to a comment — and a feature cannot accidentally depend
  * on a binding order that does not exist yet.
  */
-export interface DeclareKit {
-  /** The live configuration definition: where a feature writes its defaults and registers its slice. */
+export interface ServiceBeforeBootstrapIn {
+  /**
+   * The live configuration definition: where a feature writes its defaults and registers its slice.
+   */
   config: ConfigDefinition
+
+  /**
+   * IoC container exposing only binding operations.
+   */
+  container: ContainerBindingOps
 }
 
 /**
@@ -20,8 +27,17 @@ export interface DeclareKit {
  * application's {@link ApplicationAvailability}; concrete applications may extend it with platform-specific
  * handles (e.g. the HTTP app adds feature flags).
  */
-export interface ServiceKit extends DeclareKit {
+export interface ServiceBootstrapIn {
+  /**
+   * IoC container exposing all its operations.
+   */
   container: Container
+
+  /**
+   * The live configuration definition: where a feature writes its defaults and registers its slice.
+   */
+  config: ConfigDefinition
+
   /**
    * The application's availability. Bind this instance rather than letting the container construct one — the
    * lifecycle writes to the application's, and a second instance would report a state nothing ever updates.
@@ -29,42 +45,25 @@ export interface ServiceKit extends DeclareKit {
   availability: ApplicationAvailability
 }
 
-/**
- * Symbol-keyed declaration hook a {@link Service} may implement.
- *
- * Symbol-keyed, like {@link kServiceConfigure}, because every service is also a user-facing fluent builder:
- * `ServerBuilder`, `KafkaBuilder`, `AuthenticationBuilder`. A plain method name would put the framework's own
- * lifecycle into that autocomplete surface, and `configure` in particular already means the *opposite* thing
- * on the options builders (`ViewBuilder.configure(options)` — "configure yourself with these").
- */
-export const kServiceDeclare = Symbol('declare')
-
-/** Symbol-keyed configuration hook a {@link Service} implements. */
-export const kServiceConfigure = Symbol('configure')
-
-/**
- * A unit of application configuration that binds values into the container at `ready()` time, before
- * `container.init()`. Builders (auth, cache, view, ...) and plugin-contributed configurers implement it.
- *
- * The two steps run in order across every service — every declaration finishes, then configuration resolves,
- * then every configure runs. That ordering is what lets a feature read its own resolved settings while it is
- * still able to bind, which is the whole reason the steps are separate.
- */
 export interface Service {
   /**
-   * Contributes to the configuration tree: framework defaults, the values the builder methods collected, and
-   * this feature's slice.
-   *
-   * Runs **before** configuration resolves, so nothing here may read a resolved value — a slice read at this
-   * point throws `ERR_CONFIG_NOT_RESOLVED`. Optional: a service with nothing to declare omits it.
+   * Stable identifier for this service, used in logs and diagnostics.
    */
-  [kServiceDeclare]?(kit: DeclareKit): void | Promise<void>
+  get name(): string
 
   /**
-   * Binds this feature into the container, with its configuration already resolved and every slice published.
-   *
-   * A value read here is a **snapshot**: it is read once, while binding. A feature that has to follow a later
-   * refresh must hold the slice and read through it, as the server and cache options do.
+   * Runs before configuration resolves. Register slices and defaults here; resolved values are not available yet.
    */
-  [kServiceConfigure](kit: ServiceKit): Promise<void>
+  beforeBootstrap?(kit: ServiceBeforeBootstrapIn): void | Promise<void>
+
+  /**
+   * Runs after configuration resolves and before the container initializes. Bind runtime artifacts here.
+   */
+  bootstrap(kit: ServiceBootstrapIn): Promise<void>
 }
+
+/**
+ * The fluent configuration surface of a {@link Service}, with the lifecycle hooks omitted so they do not
+ * appear in autocomplete on `.server(s => ...)`, `.kafka(k => ...)`, and similar.
+ */
+export type ServiceAPI<T extends Service> = Omit<T, keyof Service>

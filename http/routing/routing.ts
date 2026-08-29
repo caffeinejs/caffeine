@@ -1,16 +1,23 @@
-import { Container, Ctor } from '@caffeinejs/di'
+import { Container, Ctor, Key } from '@caffeinejs/di'
 import { CatchMetadata, ErrCaffeineWebApplication, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
 import { solutions } from '../error/util.js'
 import { Keys } from '../symbols.js'
 import { CatchByMap, Router } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
-import { getRouter, type RouteAuthzOptions } from '../decorators/registrar/index.js'
+import { getRouter, RouterSpec, RouteSpec, type RouteAuthzOptions } from '../decorators/registrar/index.js'
+import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
+import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
+import { Guard } from '../guards/index.js'
 
 export function buildRouting<REQ>(container: Container): Router<REQ>[] {
   // Authorization is always configured, so its evaluators/handlers/options are always bound.
   const authzEvaluators: Map<string, PolicyEvaluator> = container.get(kAuthzEvaluators)
   const authzHandlers: Map<string, AuthzRequirementHandler<AuthzRequirement>> = container.get(kAuthzHandlers)
   const authzOptions: AuthorizationOptions = container.get(kAuthzOpts)
+
+  const compiledGuards = new Map<GuardRef, CompiledGuard>()
+  const globalGuardKeys = container.get<readonly GuardRef[]>(kGlobalGuards)
+  const globalGuards = compileGuardKeys(container, globalGuardKeys, 'application', compiledGuards)
 
   const controllers = container.getBindingsByLabel(Keys.CONTROLLER)
   const routers = new Array<Router<REQ>>(controllers.length)
@@ -97,6 +104,15 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
           options: options,
           extras: route.extras,
           catchBy: buildCatchByMap(container, route.catchBy, `${refName(key)}.${String(route.handler)}`),
+          guards: compileRouteGuardChain(
+            container,
+            compiledGuards,
+            globalGuards,
+            router.guards,
+            route.guards,
+            `${refName(key)}.${String(route.handler)}`,
+          ),
+          guardOptions: compileGuardOptions(router, route),
           authorization: (() => {
             // Always compiled, never gated on a decorator being present: an undecorated route is exactly
             // the one a configured fallback policy has to reach, and compileRoutePolicy is what knows
@@ -164,6 +180,33 @@ function normalizeList(value: string | string[] | undefined): string[] {
     return []
   }
   return Array.isArray(value) ? value : [value]
+}
+
+function compileRouteGuardChain(
+  container: Container,
+  compiledGuards: Map<GuardRef, CompiledGuard>,
+  globalGuards: CompiledGuard[],
+  routerGuards: Key<Guard>[] | undefined,
+  routeGuards: Key<Guard>[] | undefined,
+  owner: string,
+): CompiledGuard[] | undefined {
+  const routerKeys = routerGuards ?? []
+  const routeKeys = routeGuards ?? []
+  const local = compileGuardKeys(container, [...routerKeys, ...routeKeys], owner, compiledGuards)
+
+  if (globalGuards.length === 0 && local.length === 0) {
+    return undefined
+  }
+
+  if (local.length === 0) {
+    return globalGuards
+  }
+
+  if (globalGuards.length === 0) {
+    return local
+  }
+
+  return [...globalGuards, ...local]
 }
 
 function refName(ref: unknown): string {
@@ -255,4 +298,25 @@ function buildErrorHandlerMap(
   }
 
   return map
+}
+
+function compileGuardOptions<R>(
+  router: RouterSpec<R>,
+  route: RouteSpec<R>,
+): Record<string | symbol, unknown> {
+  const guardOptions: Record<string | symbol, unknown> = {}
+
+  if (router.guardOptions) {
+    for (const [k, v] of Object.entries(router.guardOptions)) {
+      guardOptions[k] = v
+    }
+  }
+
+  if (route.guardOptions) {
+    for (const [k, v] of Object.entries(route.guardOptions)) {
+      guardOptions[k] = v
+    }
+  }
+
+  return guardOptions
 }

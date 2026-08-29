@@ -30,6 +30,12 @@ declare module 'fastify' {
         allowAnonymous: boolean
         authorizer?: AuthzRouteService
       }
+      /**
+       * The controller constructor and handler name, so a Guard can read `Symbol.metadata` without
+       * a Nest-style ExecutionContext.
+       */
+      controller?: Function
+      handler?: string | symbol
     }
   }
 }

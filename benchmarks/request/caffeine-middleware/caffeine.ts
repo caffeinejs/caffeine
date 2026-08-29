@@ -1,4 +1,5 @@
-import { Controller, Get, createWebApplication, Args, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
+import { Injectable } from '@caffeinejs/di'
+import { Controller, Get, createWebApplication, Args, Post, Schema, $p, fastifyAdapterFactory, FastifyContext, Guard, ErrHTTPUnauthorized, GuardInput, UseGuards } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 
@@ -24,6 +25,17 @@ const responseSchema = {
   }),
 }
 
+@Injectable()
+class ApiKeyGuard extends Guard {
+  canActivate(input: GuardInput<unknown>): boolean {
+    if (input.context.req.header('x-api-key') !== 'benchmark') {
+      throw new ErrHTTPUnauthorized()
+    }
+
+    return true
+  }
+}
+
 @Controller('')
 class AppController {
   @Get('/health')
@@ -34,6 +46,7 @@ class AppController {
   @Post('/api/test/:text/:num/:bool')
   @Args([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
+  @UseGuards(ApiKeyGuard)
   helloWorld(
     ctx: FastifyContext,
     params: DataSchema,
@@ -57,25 +70,15 @@ void [AppController]
 
 const server = fastify({ logger: false })
 
-const app = createWebApplication(fastifyAdapterFactory(server)).build()
+const app = createWebApplication(fastifyAdapterFactory(server))
+  .build()
 
 // The same two hooks the `caffeine` fixture registers directly on Fastify, expressed as middlewares. The
 // work is identical; the delta against that fixture is the pipeline's overhead and nothing else.
 app.use((ctx, next) => {
-  ctx.header('x-request-id',
-    Math
-      .random()
-      .toString(36)
-      .slice(2))
+  ctx.header('x-request-id', Math.random().toString(36).slice(2))
   return next()
-}, 'onRequest')
-
-app.use((ctx, next) => {
-  if (ctx.req.url.startsWith('/api/') && ctx.req.header('x-api-key') !== 'benchmark') {
-    return ctx.status(401).body({ error: 'Unauthorized' })
-  }
-  return next()
-}, 'preHandler')
+})
 
 await app.ready()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

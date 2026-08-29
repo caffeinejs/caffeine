@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { $t, kServiceConfigure, type Plugin, type Service } from '@caffeinejs/std'
+import { $t, type Plugin, type Service } from '@caffeinejs/std'
 import { EnvConfigProvider } from '@caffeinejs/std/config'
 import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
@@ -21,7 +21,10 @@ function kafka<const Name extends string = 'kafka'>(
 ): Plugin<Record<Name, (broker: string) => void>> {
   const state: KafkaState = { broker: undefined }
   const service: Service = {
-    [kServiceConfigure](kit) {
+    get name() {
+      return 'kafka'
+    },
+    bootstrap(kit) {
       kit.container.bind(kKafkaSentinel).toValue({ broker: state.broker })
       return Promise.resolve()
     },

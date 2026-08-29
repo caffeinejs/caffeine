@@ -5,6 +5,7 @@ import {
   type ApplicationBuilderOptions,
   type ApplicationConfigMarker,
   type Reconfigured,
+  type ServiceAPI,
 } from '@caffeinejs/std'
 import type { ConfigSchema, InferConfig } from '@caffeinejs/std/config'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
@@ -15,6 +16,7 @@ import { AuthorizationBuilder } from './security/authz/index.js'
 import { CacheBuilder } from './cache/cache_builder.js'
 import { ServerBuilder } from './server/index.js'
 import { HealthBuilder } from './health/health_builder.js'
+import { GuardsBuilder } from './guards/builder.js'
 
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
@@ -31,6 +33,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   #healthBuilder: HealthBuilder<unknown> | undefined
   readonly #authzBuilder: AuthorizationBuilder
   readonly #serverBuilder: ServerBuilder<unknown>
+  readonly #guardsBuilder: GuardsBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
     super(options)
@@ -39,13 +42,16 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.#authzBuilder = new AuthorizationBuilder()
     this.addService(this.#authzBuilder)
 
+    this.#guardsBuilder = new GuardsBuilder()
+    this.addService(this.#guardsBuilder)
+
     // Registered unconditionally: the listen address is read from the configuration tree, so `SERVER__PORT`
     // has to work on an application that never calls `.server()`.
     this.#serverBuilder = new ServerBuilder<unknown>()
     this.addService(this.#serverBuilder)
   }
 
-  authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
+  authentication(configure: (auth: ServiceAPI<AuthenticationBuilder<TConfig>>) => void): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
       this.addService(this.#authBuilder)
@@ -56,12 +62,29 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  authorization(configure: (authz: AuthorizationBuilder) => void): this {
+  authorization(configure: (authz: ServiceAPI<AuthorizationBuilder>) => void): this {
     configure(this.#authzBuilder)
     return this
   }
 
-  cache(configure: (cache: CacheBuilder<TConfig>) => void): this {
+  /**
+   * Lists the container Keys of guards that run on every route, in registration order, before
+   * controller- and method-level `@UseGuards`.
+   *
+   * Does not bind the classes. Each Key must already be a container-managed Guard.
+   * Calling this is not required for `@UseGuards` on controllers.
+   *
+   * ```ts
+   * createWebApplication()
+   *   .guards(g => g.use(RolesGuard).use(kNamedAuthGuard))
+   * ```
+   */
+  guards(configure: (guards: ServiceAPI<GuardsBuilder>) => void): this {
+    configure(this.#guardsBuilder)
+    return this
+  }
+
+  cache(configure: (cache: ServiceAPI<CacheBuilder<TConfig>>) => void): this {
     if (this.#cacheBuilder == null) {
       this.#cacheBuilder = new CacheBuilder()
       this.addService(this.#cacheBuilder)
@@ -103,7 +126,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * and the signal handlers are installed either way, because dropping in-flight requests on shutdown is not a
    * behaviour anyone opts into deliberately.
    */
-  health(configure?: (health: HealthBuilder<TConfig>) => void): this {
+  health(configure?: (health: ServiceAPI<HealthBuilder<TConfig>>) => void): this {
     if (this.#healthBuilder == null) {
       this.#healthBuilder = new HealthBuilder<unknown>()
       this.addService(this.#healthBuilder)
@@ -114,7 +137,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  server(configure: (server: ServerBuilder<TConfig>) => void): this {
+  server(configure: (server: ServiceAPI<ServerBuilder<TConfig>>) => void): this {
     configure(this.#serverBuilder as ServerBuilder<TConfig>)
     return this
   }

@@ -5,6 +5,7 @@ import { FastifyRequest } from 'fastify'
 import type { ErrorHandler } from './error/error.js'
 import { AuthzRouteService } from './security/authz/index.js'
 import { RouteAuthzOptions } from './decorators/registrar/routing.js'
+import type { CompiledGuard } from './guards/compile.js'
 
 /** Error types mapped to the handler class that renders them, as declared by `@CatchWith`. */
 export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
@@ -18,10 +19,6 @@ export interface Router<R = FastifyRequest> {
   controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>
   errorHandlers?: Map<Ctor<Error>, string | symbol>
   catchBy?: CatchByMap
-  /**
-   * Class-level metadata a decorator attached to the controller, keyed by symbol. The runtime reads none of it;
-   * it is the extension slot a package outside http uses to carry its own annotations through routing.
-   */
   extras?: Map<symbol, unknown>
 }
 
@@ -42,6 +39,8 @@ export interface Route<R = FastifyRequest> {
   options?: Map<string, unknown>
   extras?: Map<symbol, unknown>
   catchBy?: CatchByMap
+  guards?: CompiledGuard[]
+  guardOptions?: Record<string | symbol, unknown>
   authorization: RouteAuthorization
 }
 

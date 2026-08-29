@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest'
-import { kServiceConfigure } from '@caffeinejs/std'
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
@@ -66,14 +65,14 @@ function makeKit(): { kit: ServiceKit, bindings: Map<unknown, unknown> } {
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  await builder[kServiceConfigure](makeKit().kit)
+  await builder.bootstrap(makeKit().kit)
 }
 
 async function configureAndReadOIDCMeta(build: (b: AuthenticationBuilder) => void): Promise<OIDCMeta> {
   const builder = new AuthenticationBuilder()
   build(builder)
   const { kit, bindings } = makeKit()
-  await builder[kServiceConfigure](kit)
+  await builder.bootstrap(kit)
   return bindings.get(kOIDCMeta) as OIDCMeta
 }
 
@@ -322,7 +321,7 @@ describe('Forward wiring through configure', () => {
     builder.addStrategy('Target', target as never)
     builder.addStrategy('auth', forward)
     builder.default('auth')
-    await builder[kServiceConfigure](makeKit().kit)
+    await builder.bootstrap(makeKit().kit)
 
     // Before the fix this threw reading `defaultAuthenticateScheme` of undefined.
     await expect(forward.authenticate(makeCtx())).resolves.toMatchObject({ succeeded: true })

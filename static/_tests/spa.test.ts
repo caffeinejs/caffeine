@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import type { ServiceAPI } from '@caffeinejs/std'
 import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticBuilder, staticPlugin } from '../index.js'
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
@@ -21,7 +22,7 @@ void [APIController]
 describe('SPA fallback', () => {
   let app: WebApplication | undefined
 
-  const start = async (configure: (builder: StaticBuilder) => void) => {
+  const start = async (configure: (builder: ServiceAPI<StaticBuilder>) => void) => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .extend(staticPlugin())
       .static(configure)

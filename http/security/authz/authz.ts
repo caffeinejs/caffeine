@@ -1,5 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import { type Service, type ServiceAPI } from '@caffeinejs/std'
 import type { ServiceKit } from '../../service.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
@@ -20,18 +20,22 @@ export interface AuthorizationOptions {
 export class AuthorizationBuilder implements Service {
   readonly #policies: Map<string, AuthzPolicy> = new Map()
 
+  get name(): string {
+    return 'authz'
+  }
+
   #authzDecoratorPolicy: AuthzPolicy = new PolicyBuilder()
     .requireAuthenticated()
     .build()
 
   #fallbackPolicy: AuthzPolicy | undefined
 
-  addPolicy(policy: AuthzPolicy): this
-  addPolicy(name: string, configure: (builder: PolicyBuilder) => void): this
+  addPolicy(policy: AuthzPolicy): ServiceAPI<this>
+  addPolicy(name: string, configure: (builder: PolicyBuilder) => void): ServiceAPI<this>
   addPolicy(
     nameOrPolicy: string | AuthzPolicy,
     configure?: (builder: PolicyBuilder) => void,
-  ): this {
+  ): ServiceAPI<this> {
     if (typeof nameOrPolicy === 'string') {
       const builder = new PolicyBuilder()
       configure?.(builder)
@@ -46,11 +50,11 @@ export class AuthorizationBuilder implements Service {
     return this
   }
 
-  authorizeDecoratorDefaultPolicy(policy: AuthzPolicy): this
-  authorizeDecoratorDefaultPolicy(configure: (builder: PolicyBuilder) => void): this
+  authorizeDecoratorDefaultPolicy(policy: AuthzPolicy): ServiceAPI<this>
+  authorizeDecoratorDefaultPolicy(configure: (builder: PolicyBuilder) => void): ServiceAPI<this>
   authorizeDecoratorDefaultPolicy(
     policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void),
-  ): this {
+  ): ServiceAPI<this> {
     if (typeof policyOrConfigure === 'function') {
       const builder = new PolicyBuilder()
       policyOrConfigure(builder)
@@ -77,9 +81,9 @@ export class AuthorizationBuilder implements Service {
    * It does not affect decorated routes: those already state their own rule, and a bare `@Authorize`
    * continues to mean {@link authorizeDecoratorDefaultPolicy}.
    */
-  fallbackPolicy(policy: AuthzPolicy): this
-  fallbackPolicy(configure: (builder: PolicyBuilder) => void): this
-  fallbackPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
+  fallbackPolicy(policy: AuthzPolicy): ServiceAPI<this>
+  fallbackPolicy(configure: (builder: PolicyBuilder) => void): ServiceAPI<this>
+  fallbackPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): ServiceAPI<this> {
     if (typeof policyOrConfigure === 'function') {
       const builder = new PolicyBuilder()
       policyOrConfigure(builder)
@@ -95,11 +99,11 @@ export class AuthorizationBuilder implements Service {
   }
 
   /** Shorthand for the common posture: every undecorated route requires an authenticated user. */
-  requireAuthenticatedByDefault(): this {
+  requireAuthenticatedByDefault(): ServiceAPI<this> {
     return this.fallbackPolicy(p => p.requireAuthenticated())
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceKit): Promise<void> {
     kit.container.bind(AuthenticatedUserHandler)
       .toSelf()
       .lifetime(Scopes.SINGLETON)

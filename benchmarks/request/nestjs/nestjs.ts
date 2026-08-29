@@ -31,12 +31,12 @@ class Schema {
 class RequestIdInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const res = context.switchToHttp().getResponse<{ header: (name: string, value: string) => void }>()
-    res.header('x-request-id', Math.random().toString(36)
-      .slice(2))
+    res.header('x-request-id', Math.random().toString(36).slice(2))
     return next.handle()
   }
 }
 
+@Injectable()
 class ApiKeyGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<{ headers: Record<string, string> }>()
@@ -56,7 +56,7 @@ class TestController {
   }
 
   @Post('/api/test/:text/:num/:bool')
-  @UseGuards(new ApiKeyGuard())
+  @UseGuards(ApiKeyGuard)
   @HttpCode(200)
   test(
     @Param() params: Schema,

@@ -3,4 +3,5 @@ export const Keys = {
   kRequestScopeManager: Symbol.for('@caffeinejs/di:request-scope-manager'),
   kValuesProvider: Symbol('@caffeinejs/di:values-provider'),
   kAnnotations: Symbol('@caffeinejs/di:annotations'),
+  kMetadata: Symbol('@caffeinejs/di:metadata'),
 }

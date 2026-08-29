@@ -18,13 +18,15 @@ import { installGlobalErrorHandler, installRouterErrorHandler } from './error/er
 import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
 import { type CacheDeps, type CacheOptions, attachCacheHooks, resolveCacheDeps } from './cache/cache.js'
 import { type CacheInvalidateOptions, attachCacheInvalidateHook } from './cache/cache_invalidate.js'
-import { installHealthProbes, kHealthRoute } from './health/index.js'
+import { installHealthProbes } from './health/index.js'
 import { FastifyContext } from './context.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
 import { Responder } from './response.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { joinPaths } from './internal/paths/index.js'
 import { type AdapterRouteOptions } from './internal/route_hooks.js'
+import { attachGuardHook } from './guards/attach.js'
+import { kGuardOptions } from './guards/keys.js'
 
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
@@ -54,6 +56,7 @@ export class FastifyAdapter<
   }
 
   async setup(input: AdapterIn<REQ>): Promise<void> {
+    const container = this.#container
     const routers = input.routers as Router<REQ>[]
     const fastify = this.#fastify
     const services = input.services
@@ -69,37 +72,17 @@ export class FastifyAdapter<
     // decides which of the two context hooks below is installed. Their `setup()` runs later — after the
     // extensions, so a feature validating its own configuration reports before a middleware does.
     const middlewares = input.middlewares
-    middlewares.resolveAll(this.#container)
+    middlewares.resolveAll(container)
 
-    const needsRequestScope = middlewares.requiresRequestScope || routers.some(
-      router => this.#container.hasScopeInGraph(router.key, Scopes.REQUEST),
-    )
-
-    // The hook is server-level, so it also sees the probe routes. Those have no controller, no parameters and no
-    // request scope, so building a context for them would be pure overhead on the most frequently called routes in
-    // the process.
-    const isProbe = (req: FastifyRequest): boolean =>
-      (req.routeOptions.config as unknown as Record<symbol, unknown> | undefined)?.[kHealthRoute] === true
-
-    if (needsRequestScope) {
-      const man = this.#container.requestScopeManager
+    if (container.hasRequestScoped) {
+      const man = container.requestScopeManager
       fastify.addHook('onRequest', (req, reply, done) => {
-        if (isProbe(req)) {
-          done()
-          return
-        }
-
         const ctx = new FastifyContext(req, reply)
         req.httpContext = ctx
         this.#fastifyCtxAls.run(ctx, () => man.run(() => done()))
       })
     } else {
       fastify.addHook('onRequest', (req, reply, done) => {
-        if (isProbe(req)) {
-          done()
-          return
-        }
-
         req.httpContext = new FastifyContext(req, reply)
         done()
       })
@@ -107,7 +90,7 @@ export class FastifyAdapter<
 
     const extensionContext: ServerExtensionContext = {
       server: fastify,
-      container: this.#container,
+      container,
       services,
       routers,
     }
@@ -122,7 +105,7 @@ export class FastifyAdapter<
     // Extensions contributed by other packages, registered as real Fastify plugins so `dependencies`,
     // `decorators` and the version range are enforced by Fastify — and so each shows up by name in
     // `printPlugins()`. `fp` skips encapsulation, so an extension still decorates the root instance.
-    for (const extension of this.#container.getManyOptional<ServerExtension>(ServerExtension)) {
+    for (const extension of container.getManyOptional<ServerExtension>(ServerExtension)) {
       await fastify.register(fp(
         // Async so a `configure` that throws synchronously becomes a rejection avvio can carry, rather than
         // escaping the plugin call and stalling the boot.
@@ -142,7 +125,7 @@ export class FastifyAdapter<
     // serving files needs the `reply.sendFile` that `@fastify/static` decorates while it registers.
     installNotFoundHandler(
       extensionContext,
-      this.#container.getManyOptional<NotFoundFallback>(NotFoundFallback),
+      container.getManyOptional<NotFoundFallback>(NotFoundFallback),
     )
 
     await middlewares.setupAll(extensionContext)
@@ -160,7 +143,7 @@ export class FastifyAdapter<
 
     // Resolved once, not per route and never per request. Unconditional, as the cache configurer's server
     // phase was: an application that binds a store gets it constructed at start-up either way.
-    const cacheDeps: CacheDeps = resolveCacheDeps(this.#container)
+    const cacheDeps: CacheDeps = resolveCacheDeps(container)
 
     for (const router of routers) {
       const basePath = router.path
@@ -223,6 +206,15 @@ export class FastifyAdapter<
             }
           }
 
+          // Guard Options
+          if (route.guardOptions) {
+            const opts: Record<string | symbol, unknown> = {}
+            for (const [k, v] of Object.entries(route.guardOptions)) {
+              opts[k] = v
+            }
+            config[kGuardOptions] = opts
+          }
+
           const status = route.statusCode!
           const hasStatus = typeof status === 'number' && status > 0
           const contentType = route.contentType
@@ -250,6 +242,8 @@ export class FastifyAdapter<
               allowAnonymous: route.authorization.options?.allowAnonymous === true,
               authorizer: route.authorization.authorizer,
             },
+            controller: typeof router.key === 'function' ? router.key : undefined,
+            handler: route.handler,
           }
 
           const url = joinPaths(basePath, route.path)
@@ -312,6 +306,10 @@ export class FastifyAdapter<
           const invalidateOpts = config.cacheInvalidate as CacheInvalidateOptions | false | undefined
           if (invalidateOpts !== undefined && invalidateOpts !== false) {
             attachCacheInvalidateHook(routeDef, invalidateOpts, cacheDeps.store)
+          }
+
+          if (route.guards !== undefined && route.guards.length > 0) {
+            attachGuardHook(routeDef, route.guards)
           }
 
           // BodyAsBuffer

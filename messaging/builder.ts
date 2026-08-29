@@ -1,5 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
-import { type DeclareKit, type Service, type ServiceKit, AnySchema, kServiceConfigure, kServiceDeclare } from '@caffeinejs/std'
+import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, AnySchema, ServiceBootstrapIn } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   instanceNamespace,
@@ -69,38 +69,42 @@ export class MessagingBuilder<C = unknown> implements Service {
     this.#name = name
   }
 
+  get name(): string {
+    return 'messaging'
+  }
+
   /** Handles inbound messages that fail their binding's schema (runs instead of the handler; skips + advances). */
-  onInvalidMessage(handler: InvalidMessageHandler): this {
+  onInvalidMessage(handler: InvalidMessageHandler): ServiceAPI<this> {
     this.#onInvalidMessage = handler
     return this
   }
 
   /** Observation hook fired when the pipeline gives up on a message (logging/metrics); does not decide recovery. */
-  onError(observer: ErrorObserver): this {
+  onError(observer: ErrorObserver): ServiceAPI<this> {
     this.#onError = observer
     return this
   }
 
   /** Terminal recoverer invoked once retries are exhausted; e.g. `bus.send` the failed message to a DLT binding. */
-  recoverer(recoverer: Recoverer): this {
+  recoverer(recoverer: Recoverer): ServiceAPI<this> {
     this.#recoverer = recoverer
     return this
   }
 
   /** Registers a binder instance under `name`; a binding's `via` selects it. Accepts a binder or a factory. */
-  use(name: string, binder: Binder | BinderFactory): this {
+  use(name: string, binder: Binder | BinderFactory): ServiceAPI<this> {
     this.#binders.set(name, binder)
     return this
   }
 
   /** Declares an inbound binding: a logical name `@Consume` attaches to, mapped to a binder destination. */
-  in(binding: string, options: InBindingOptions): this {
+  in(binding: string, options: InBindingOptions): ServiceAPI<this> {
     this.#inbound.set(binding, options)
     return this
   }
 
   /** Declares an outbound binding: a logical name `bus.send` publishes to, mapped to a binder destination. */
-  out(binding: string, options: OutBindingOptions): this {
+  out(binding: string, options: OutBindingOptions): ServiceAPI<this> {
     this.#outbound.set(binding, options)
     return this
   }
@@ -110,12 +114,12 @@ export class MessagingBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<MessagingConfigSlice>): this {
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<MessagingConfigSlice>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
 
-  [kServiceDeclare](kit: DeclareKit): void {
+  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
       namespace: instanceNamespace(MESSAGING_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -136,7 +140,7 @@ export class MessagingBuilder<C = unknown> implements Service {
     }))
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)

@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import type { ConfigTypeOf, Plugin, Service } from '@caffeinejs/std'
+import type { ConfigTypeOf, Plugin, Service, ServiceAPI } from '@caffeinejs/std'
 import { defaultKafkaClients } from './clients.js'
 import type { KafkaClients } from './config.js'
 import { ErrKafkaUnknownInstance } from './errors.js'
@@ -13,7 +13,7 @@ export interface KafkaPluginOptions {
 }
 
 /** The builder callback that configures one kafka instance, over an application config type `C`. */
-export type KafkaConfigure<C = unknown> = (k: KafkaBuilder<C>) => void
+export type KafkaConfigure<C = unknown> = (k: ServiceAPI<KafkaBuilder<C>>) => void
 
 /**
  * The `kafka` builder method contributed by the plugin. Follows the feature-builder convention: pass a builder

@@ -1,5 +1,5 @@
 import { Provider, type Ctor, type Key } from '@caffeinejs/di'
-import { kServiceConfigure, kServiceDeclare, type DeclareKit, type Service } from '@caffeinejs/std'
+import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   type ConfigAccessors,
@@ -9,7 +9,7 @@ import {
 } from '@caffeinejs/std/config'
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
-import type { ServiceKit } from '../../service.js'
+import { ServiceKit } from '../../service.js'
 import {
   AUTH_CONFIG_NAMESPACE,
   CREDENTIALS_CONFIG_SEGMENT,
@@ -105,9 +105,13 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     this.#options = options
   }
 
-  addStrategy(name: string, handler: AuthenticationHandler): this
-  addStrategy(name: string, key: Key<AuthenticationHandler>): this
-  addStrategy(name: string, keyOrHandler: Key<AuthenticationHandler> | AuthenticationHandler): this {
+  get name(): string {
+    return 'auth'
+  }
+
+  addStrategy(name: string, handler: AuthenticationHandler): ServiceAPI<this>
+  addStrategy(name: string, key: Key<AuthenticationHandler>): ServiceAPI<this>
+  addStrategy(name: string, keyOrHandler: Key<AuthenticationHandler> | AuthenticationHandler): ServiceAPI<this> {
     this.#schemes.set(name, keyOrHandler)
     return this
   }
@@ -118,7 +122,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, while declaring, to record the path.
    * Both `auth.*` and every `auth.schemes.<name>.*` beneath it move together.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<AuthConfigSlice>): this {
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<AuthConfigSlice>): ServiceAPI<this> {
     this.#selector = selector as (c: never) => unknown
     return this
   }
@@ -144,12 +148,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     this.#descriptors.set(name, descriptor)
   }
 
-  addJWTBearer(opts: (opts: JWTAuthenticationOptionsBuilder) => void): this
-  addJWTBearer(name: string, opts: (opts: JWTAuthenticationOptionsBuilder) => void): this
+  addJWTBearer(opts: (opts: JWTAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addJWTBearer(name: string, opts: (opts: JWTAuthenticationOptionsBuilder) => void): ServiceAPI<this>
   addJWTBearer(
     optsOrName: ((opts: JWTAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: JWTAuthenticationOptionsBuilder) => void,
-  ): this {
+  ): ServiceAPI<this> {
     const name = typeof optsOrName === 'string'
       ? optsOrName
       : 'Bearer'
@@ -163,12 +167,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this.#register(name, 'jwt', optsFn as (builder: never) => void)
   }
 
-  addBasic(opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
-  addBasic(name: string, opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
+  addBasic(opts: (opts: BasicAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addBasic(name: string, opts: (opts: BasicAuthenticationOptionsBuilder) => void): ServiceAPI<this>
   addBasic(
     optsOrName: ((opts: BasicAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: BasicAuthenticationOptionsBuilder) => void,
-  ): this {
+  ): ServiceAPI<this> {
     const name = typeof optsOrName === 'string'
       ? optsOrName
       : 'Basic'
@@ -182,12 +186,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this.#register(name, 'basic', optsFn as (builder: never) => void)
   }
 
-  addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
-  addCookie(name: string, opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
+  addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addCookie(name: string, opts: (opts: CookieAuthenticationOptionsBuilder) => void): ServiceAPI<this>
   addCookie(
     optsOrName: ((opts: CookieAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: CookieAuthenticationOptionsBuilder) => void,
-  ): this {
+  ): ServiceAPI<this> {
     const name = typeof optsOrName === 'string'
       ? optsOrName
       : 'Cookie'
@@ -206,18 +210,18 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * `PasswordHasher` (`ScryptPasswordHasher`, overridable). The user must bind a `UserProvider`
    * implementation to the container. Not a scheme — pair it with `addCookie` for session login.
    */
-  addCredentials(options: CredentialsServiceOptions = {}): this {
+  addCredentials(options: CredentialsServiceOptions = {}): ServiceAPI<this> {
     this.#credentials = options
     return this
   }
 
-  addOpaqueToken(): this
-  addOpaqueToken(opts: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): this
-  addOpaqueToken(name: string, opts?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): this
+  addOpaqueToken(): ServiceAPI<this>
+  addOpaqueToken(opts: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addOpaqueToken(name: string, opts?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): ServiceAPI<this>
   addOpaqueToken(
     optsOrName?: ((opts: OpaqueTokenAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void,
-  ): this {
+  ): ServiceAPI<this> {
     const name = typeof optsOrName === 'string'
       ? optsOrName
       : 'OpaqueToken'
@@ -230,11 +234,11 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this.#register(name, 'opaque', (optsFn ?? noOptions) as (builder: never) => void)
   }
 
-  addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
+  addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): ServiceAPI<this> {
     return this.#register(name, 'oidc', configure as (builder: never) => void)
   }
 
-  addOIDCGoogle(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
+  addOIDCGoogle(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): ServiceAPI<this> {
     return this.addOIDC(name, opts => {
       opts.discoveryURL(GOOGLE_ISSUER).issuer(GOOGLE_ISSUER)
       configure(opts)
@@ -247,7 +251,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * Prefer `addOIDC` wherever a provider supports it: a signed id_token is a stronger identity
    * assertion than a JSON body fetched with a bearer token.
    */
-  addOAuth2(name: string, configure: (opts: OAuth2AuthenticationOptionsBuilder) => void): this {
+  addOAuth2(name: string, configure: (opts: OAuth2AuthenticationOptionsBuilder) => void): ServiceAPI<this> {
     return this.#register(name, 'oauth', configure as (builder: never) => void)
   }
 
@@ -255,31 +259,31 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     name: string,
     configure: (opts: OAuth2AuthenticationOptionsBuilder) => void,
     preset: GithubPresetOptions = {},
-  ): this {
+  ): ServiceAPI<this> {
     return this.#register(name, 'github', configure as (builder: never) => void, preset)
   }
 
-  forward(name: string, selector: (ctx: Context) => string | Promise<string>): this {
+  forward(name: string, selector: (ctx: Context) => string | Promise<string>): ServiceAPI<this> {
     const handler = new ForwardAuthenticationHandler(selector)
     return this.addStrategy(name, handler)
   }
 
-  default(name: string): this {
+  default(name: string): ServiceAPI<this> {
     this.#options.defaultAuthenticateScheme = name
     return this
   }
 
-  defaultChallenge(name: string): this {
+  defaultChallenge(name: string): ServiceAPI<this> {
     this.#options.defaultChallengeScheme = name
     return this
   }
 
-  defaultForbid(name: string): this {
+  defaultForbid(name: string): ServiceAPI<this> {
     this.#options.defaultForbidScheme = name
     return this
   }
 
-  mapUser(mapper: PrincipalMapper | string | symbol): this {
+  mapUser(mapper: PrincipalMapper | string | symbol): ServiceAPI<this> {
     this.#mapper = mapper
     return this
   }
@@ -289,12 +293,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * revoke) that signs access tokens with the default JWT scheme's shared service and persists refresh
    * tokens in the container-bound {@link RefreshTokenStore}. Requires a JWT bearer scheme.
    */
-  addRefreshTokens(configure: (options: RefreshTokenOptionsBuilder) => void): this {
+  addRefreshTokens(configure: (options: RefreshTokenOptionsBuilder) => void): ServiceAPI<this> {
     this.#refreshConfigure = configure
     return this
   }
 
-  [kServiceDeclare](kit: DeclareKit): void {
+  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     this.#authSlice = defineFeatureConfig<AuthConfigSlice>(kit.config, {
       namespace: AUTH_CONFIG_NAMESPACE,
       selector: this.#selector,
@@ -468,7 +472,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     }
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceKit): Promise<void> {
     this.#buildSchemes()
 
     const configuredDefaults = this.#authSlice?.config ?? {}

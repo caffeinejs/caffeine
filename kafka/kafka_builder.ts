@@ -1,5 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
-import { HealthIndicator, kServiceConfigure, kServiceDeclare, type DeclareKit, type Service, type ServiceKit } from '@caffeinejs/std'
+import { HealthIndicator, type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { defineFeatureConfig, instanceNamespace, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import { KAFKA_CONFIG_NAMESPACE, kafkaConfigSchema, type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaConfigSlice, type KafkaDeserializers, type KafkaMessage, type ResolvedKafkaConfig, type KafkaSerializers, resolveConfig, type TopicProvisioning } from './config.js'
@@ -58,116 +58,120 @@ export class KafkaBuilder<C = unknown> implements Service {
     this.#clients = clients
   }
 
+  get name(): string {
+    return 'kafka'
+  }
+
   /** One or more `host:port` bootstrap brokers. Required. */
-  brokers(brokers: string | string[]): this {
+  brokers(brokers: string | string[]): ServiceAPI<this> {
     this.#brokers = brokers
     return this
   }
 
   /** Client identifier reported to the broker. */
-  clientId(clientId: string): this {
+  clientId(clientId: string): ServiceAPI<this> {
     this.#clientId = clientId
     return this
   }
 
   /** Default consumer group id for listeners that do not declare their own. */
-  groupId(groupId: string): this {
+  groupId(groupId: string): ServiceAPI<this> {
     this.#groupId = groupId
     return this
   }
 
   /** Overrides the default producer serializers (`{ key: string, value: json }`). */
-  serializers(serializers: KafkaSerializers): this {
+  serializers(serializers: KafkaSerializers): ServiceAPI<this> {
     this.#serializers = serializers
     return this
   }
 
   /** Overrides the default consumer deserializers (`{ key: string, value: json }`). */
-  deserializers(deserializers: KafkaDeserializers): this {
+  deserializers(deserializers: KafkaDeserializers): ServiceAPI<this> {
     this.#deserializers = deserializers
     return this
   }
 
   /** Commit strategy: `auto` (default), `record` (commit after each success), or `manual` (`ctx.ack()`). */
-  ackMode(mode: KafkaAckMode): this {
+  ackMode(mode: KafkaAckMode): ServiceAPI<this> {
     this.#ackMode = mode
     return this
   }
 
   /** Instance-default retry policy for failing handlers (blocking, in-process retry). */
-  retry(policy: RetryPolicy): this {
+  retry(policy: RetryPolicy): ServiceAPI<this> {
     this.#retry = policy
     return this
   }
 
   /** Sets an explicit instance-default retry strategy (blocking, retry-topics, or custom); overrides `retry`. */
-  retryStrategy(strategy: RetryStrategy): this {
+  retryStrategy(strategy: RetryStrategy): ServiceAPI<this> {
     this.#retryStrategy = strategy
     return this
   }
 
   /** Non-blocking retry via per-level topics (`${topic}-retry-N`), then dead-letter. */
-  retryTopics(policy: RetryPolicy, options?: RetryTopicOptions): this {
+  retryTopics(policy: RetryPolicy, options?: RetryTopicOptions): ServiceAPI<this> {
     this.#retryStrategy = retryTopics(policy, options)
     return this
   }
 
   /** Non-blocking retry via a single shared `${topic}-retry` topic (attempt/delay carried in headers). */
-  sharedRetryTopic(policy: RetryPolicy, options?: RetryTopicOptions): this {
+  sharedRetryTopic(policy: RetryPolicy, options?: RetryTopicOptions): ServiceAPI<this> {
     this.#retryStrategy = sharedRetryTopic(policy, options)
     return this
   }
 
   /** Configures auto-creation of the retry/dead-letter topics (partitions/replicas, or opt-out). */
-  topicProvisioning(options: TopicProvisioning): this {
+  topicProvisioning(options: TopicProvisioning): ServiceAPI<this> {
     this.#topicProvisioning = options
     return this
   }
 
   /** Overrides the built-in dead-letter manager (inspect/purge/re-inject) for this instance. */
-  deadLetterManager(manager: DeadLetterManager): this {
+  deadLetterManager(manager: DeadLetterManager): ServiceAPI<this> {
     this.#deadLetterManager = manager
     return this
   }
 
   /** Enables dead-letter recovery (default `${topic}.DLT`) once retries are exhausted. */
-  deadLetter(options: DeadLetterOptions | boolean = true): this {
+  deadLetter(options: DeadLetterOptions | boolean = true): ServiceAPI<this> {
     this.#deadLetter = options
     return this
   }
 
   /** Exceptions that must never be retried. */
-  notRetryable(...errors: Ctor<Error>[]): this {
+  notRetryable(...errors: Ctor<Error>[]): ServiceAPI<this> {
     this.#notRetryable = [...(this.#notRetryable ?? []), ...errors]
     return this
   }
 
   /** If set, only these exceptions are retried. */
-  retryable(...errors: Ctor<Error>[]): this {
+  retryable(...errors: Ctor<Error>[]): ServiceAPI<this> {
     this.#retryable = [...(this.#retryable ?? []), ...errors]
     return this
   }
 
   /** Full control over retry classification; wins over `notRetryable`/`retryable`. */
-  classifier(classifier: ErrorClassifier): this {
+  classifier(classifier: ErrorClassifier): ServiceAPI<this> {
     this.#classifier = classifier
     return this
   }
 
   /** Terminal recoverer after retries are exhausted; overrides the built-in dead-letter recoverer. */
-  recoverer(recoverer: KafkaRecoverer): this {
+  recoverer(recoverer: KafkaRecoverer): ServiceAPI<this> {
     this.#recoverer = recoverer
     return this
   }
 
   /** Handles records that fail deserialization (routed here instead of the listener). */
-  onDeserializationError(handler: DeserializationErrorHandler): this {
+  onDeserializationError(handler: DeserializationErrorHandler): ServiceAPI<this> {
     this.#onDeserializationError = handler
     return this
   }
 
   /** Observation hook invoked when the pipeline gives up on a message (logging/metrics). */
-  onError(onError: (error: unknown, message: KafkaMessage) => void): this {
+  onError(onError: (error: unknown, message: KafkaMessage) => void): ServiceAPI<this> {
     this.#onError = onError
     return this
   }
@@ -178,12 +182,12 @@ export class KafkaBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    * Both the reads and the defaults written by the builder methods follow it.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<KafkaConfigSlice>): this {
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<KafkaConfigSlice>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
 
-  [kServiceDeclare](kit: DeclareKit): void {
+  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice = defineFeatureConfig<KafkaConfigSlice>(kit.config, {
       namespace: instanceNamespace(KAFKA_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
@@ -241,7 +245,7 @@ export class KafkaBuilder<C = unknown> implements Service {
     })
   }
 
-  [kServiceConfigure](kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const resolved = this.#resolved!
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)
