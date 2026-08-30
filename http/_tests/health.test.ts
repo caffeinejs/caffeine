@@ -68,16 +68,16 @@ async function start(
   return app
 }
 
-const probe = (app: WebApplication, url: string) => app.instance.inject({ method: 'GET', url })
+const probe = (app: WebApplication, url: string) => app.fetch(url)
 
 describe('health probes', () => {
   it('mounts the three probes with kubernetes paths', async () => {
     const app = await start()
 
     try {
-      expect((await probe(app, '/livez')).statusCode).toBe(200)
-      expect((await probe(app, '/readyz')).statusCode).toBe(200)
-      expect((await probe(app, '/startupz')).statusCode).toBe(200)
+      expect((await probe(app, '/livez')).status).toBe(200)
+      expect((await probe(app, '/readyz')).status).toBe(200)
+      expect((await probe(app, '/startupz')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -87,7 +87,7 @@ describe('health probes', () => {
     const app = await start(h => h.enabled(false))
 
     try {
-      expect((await probe(app, '/readyz')).statusCode).toBe(404)
+      expect((await probe(app, '/readyz')).status).toBe(404)
     } finally {
       await app.close()
     }
@@ -98,7 +98,7 @@ describe('health probes', () => {
     await app.run()
 
     try {
-      expect((await probe(app, '/readyz')).statusCode).toBe(404)
+      expect((await probe(app, '/readyz')).status).toBe(404)
     } finally {
       await app.close()
     }
@@ -108,9 +108,9 @@ describe('health probes', () => {
     const app = await start(h => h.paths({ ready: '/health/ready' }))
 
     try {
-      expect((await probe(app, '/health/ready')).statusCode).toBe(200)
-      expect((await probe(app, '/readyz')).statusCode).toBe(404)
-      expect((await probe(app, '/livez')).statusCode).toBe(200)
+      expect((await probe(app, '/health/ready')).status).toBe(200)
+      expect((await probe(app, '/readyz')).status).toBe(404)
+      expect((await probe(app, '/livez')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -122,12 +122,12 @@ describe('health probes', () => {
     try {
       const ready = await probe(app, '/readyz')
 
-      expect(ready.statusCode).toBe(503)
-      expect(ready.body).toBe('readyz check failed')
+      expect(ready.status).toBe(503)
+      expect(await ready.text()).toBe('readyz check failed')
 
       // The whole reason the probes are separate: a failing dependency must never restart the container.
-      expect((await probe(app, '/livez')).statusCode).toBe(200)
-      expect((await probe(app, '/startupz')).statusCode).toBe(200)
+      expect((await probe(app, '/livez')).status).toBe(200)
+      expect((await probe(app, '/startupz')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -137,7 +137,7 @@ describe('health probes', () => {
     const app = await start(undefined, DegradedIndicator, UpIndicator)
 
     try {
-      expect((await probe(app, '/readyz')).statusCode).toBe(200)
+      expect((await probe(app, '/readyz')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -147,7 +147,7 @@ describe('health probes', () => {
     const app = await start(undefined, DownIndicator)
 
     try {
-      expect((await probe(app, '/readyz')).statusCode).toBe(503)
+      expect((await probe(app, '/readyz')).status).toBe(503)
     } finally {
       await app.close()
     }
@@ -157,7 +157,7 @@ describe('health probes', () => {
     const app = await start(undefined, new DownIndicator())
 
     try {
-      expect((await probe(app, '/readyz')).statusCode).toBe(503)
+      expect((await probe(app, '/readyz')).status).toBe(503)
     } finally {
       await app.close()
     }
@@ -178,10 +178,10 @@ describe('health probes', () => {
     const app = await start()
 
     try {
-      const response = await app.instance.inject({ method: 'HEAD', url: '/readyz' })
+      const response = await app.fetch('/readyz', { method: 'HEAD' })
 
-      expect(response.statusCode).toBe(200)
-      expect(response.body).toBe('')
+      expect(response.status).toBe(200)
+      expect(await response.text()).toBe('')
     } finally {
       await app.close()
     }
@@ -193,8 +193,8 @@ describe('health probes', () => {
     try {
       const response = await probe(app, '/readyz')
 
-      expect(response.headers['cache-control']).toBe('no-store')
-      expect(response.headers['content-type']).toBe('text/plain; charset=utf-8')
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8')
     } finally {
       await app.close()
     }
@@ -205,7 +205,7 @@ describe('health probes', () => {
       const app = await start(undefined, UpIndicator)
 
       try {
-        expect((await probe(app, '/readyz?verbose')).body).toBe('ok')
+        expect(await (await probe(app, '/readyz?verbose')).text()).toBe('ok')
       } finally {
         await app.close()
       }
@@ -217,10 +217,12 @@ describe('health probes', () => {
       try {
         const response = await probe(app, '/readyz?verbose')
 
-        expect(response.statusCode).toBe(503)
-        expect(response.body).toContain('[+]cache ok')
-        expect(response.body).toContain('[-]db failed: connection refused')
-        expect(response.body).toContain('readyz check failed')
+        const text = await response.text()
+
+        expect(response.status).toBe(503)
+        expect(text).toContain('[+]cache ok')
+        expect(text).toContain('[-]db failed: connection refused')
+        expect(text).toContain('readyz check failed')
       } finally {
         await app.close()
       }
@@ -232,7 +234,7 @@ describe('health probes', () => {
       const app = await start(undefined, DownIndicator)
 
       try {
-        expect((await probe(app, '/readyz?exclude=db')).statusCode).toBe(503)
+        expect((await probe(app, '/readyz?exclude=db')).status).toBe(503)
       } finally {
         await app.close()
       }
@@ -242,9 +244,9 @@ describe('health probes', () => {
       const app = await start(h => h.exclude(), DownIndicator, UpIndicator)
 
       try {
-        expect((await probe(app, '/readyz?exclude=db')).statusCode).toBe(200)
-        expect((await probe(app, '/readyz?exclude=db,cache')).statusCode).toBe(200)
-        expect((await probe(app, '/readyz?exclude=cache')).statusCode).toBe(503)
+        expect((await probe(app, '/readyz?exclude=db')).status).toBe(200)
+        expect((await probe(app, '/readyz?exclude=db,cache')).status).toBe(200)
+        expect((await probe(app, '/readyz?exclude=cache')).status).toBe(503)
       } finally {
         await app.close()
       }
@@ -274,9 +276,9 @@ describe('health probes', () => {
     await app.run()
 
     try {
-      expect((await probe(app, '/secured/data')).statusCode).toBe(401)
-      expect((await probe(app, '/readyz')).statusCode).toBe(200)
-      expect((await probe(app, '/livez')).statusCode).toBe(200)
+      expect((await probe(app, '/secured/data')).status).toBe(401)
+      expect((await probe(app, '/readyz')).status).toBe(200)
+      expect((await probe(app, '/livez')).status).toBe(200)
     } finally {
       await app.close()
     }

@@ -24,15 +24,10 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormObjectController)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-object/echo',
-      payload: 'name=ada&age=36',
-      headers: { 'content-type': FORM },
-    })
+    const res = await app.fetch('/form-object/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'name=ada&age=36' })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ name: 'ada', age: '36' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ name: 'ada', age: '36' })
   })
 
   it('collects a repeated key into an array', async () => {
@@ -46,14 +41,9 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormArrayController)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-array/echo',
-      payload: 'tag=a&tag=b',
-      headers: { 'content-type': FORM },
-    })
+    const res = await app.fetch('/form-array/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'tag=a&tag=b' })
 
-    expect(res.json()).toEqual({ tag: ['a', 'b'] })
+    expect(await res.json()).toEqual({ tag: ['a', 'b'] })
   })
 
   it('percent- and plus-decodes values', async () => {
@@ -67,14 +57,9 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormDecodeController)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-decode/echo',
-      payload: 'msg=hello+world%21',
-      headers: { 'content-type': FORM },
-    })
+    const res = await app.fetch('/form-decode/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'msg=hello+world%21' })
 
-    expect(res.json()).toEqual({ msg: 'hello world!' })
+    expect(await res.json()).toEqual({ msg: 'hello world!' })
   })
 
   it('parses when the content-type carries a charset parameter', async () => {
@@ -88,15 +73,10 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormCharsetController)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-charset/echo',
-      payload: 'name=ada',
-      headers: { 'content-type': `${FORM}; charset=utf-8` },
-    })
+    const res = await app.fetch('/form-charset/echo', { method: 'POST', headers: { 'content-type': `${FORM}; charset=utf-8` }, body: 'name=ada' })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ name: 'ada' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ name: 'ada' })
   })
 
   it('does not pollute Object.prototype via a __proto__ field', async () => {
@@ -110,15 +90,10 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormProtoController)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-proto/echo',
-      payload: '__proto__[polluted]=yes&__proto__=yes',
-      headers: { 'content-type': FORM },
-    })
+    const res = await app.fetch('/form-proto/echo', { method: 'POST', headers: { 'content-type': FORM }, body: '__proto__[polluted]=yes&__proto__=yes' })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ polluted: null })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ polluted: null })
     expect(({} as Record<string, unknown>).polluted).toBeUndefined()
   })
 
@@ -133,15 +108,10 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormEmptyController)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-empty/echo',
-      payload: '',
-      headers: { 'content-type': FORM },
-    })
+    const res = await app.fetch('/form-empty/echo', { method: 'POST', headers: { 'content-type': FORM }, body: '' })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({})
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({})
   })
 
   it('treats a key with no equals as an empty string', async () => {
@@ -155,15 +125,10 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormBareKeyController)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-bare-key/echo',
-      payload: 'ok',
-      headers: { 'content-type': FORM },
-    })
+    const res = await app.fetch('/form-bare-key/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'ok' })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ ok: '' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: '' })
   })
 
   it('no longer answers 415 for an urlencoded body', async () => {
@@ -177,14 +142,9 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(Form415Controller)
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/form-415/echo',
-      payload: 'ok=1',
-      headers: { 'content-type': FORM },
-    })
+    const res = await app.fetch('/form-415/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'ok=1' })
 
-    expect(res.statusCode).not.toBe(415)
-    expect(res.statusCode).toBe(200)
+    expect(res.status).not.toBe(415)
+    expect(res.status).toBe(200)
   })
 })

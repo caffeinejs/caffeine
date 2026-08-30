@@ -19,11 +19,11 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const resA = await app.instance.inject({ method: 'GET', url: '/versioned/a' })
-    const resB = await app.instance.inject({ method: 'GET', url: '/versioned/b' })
+    const resA = await app.fetch('/versioned/a')
+    const resB = await app.fetch('/versioned/b')
 
-    expect(resA.headers['x-api-version']).toBe('1')
-    expect(resB.headers['x-api-version']).toBe('1')
+    expect(resA.headers.get('x-api-version')).toBe('1')
+    expect(resB.headers.get('x-api-version')).toBe('1')
   })
 
   it('applies method-level header only to that route', async () => {
@@ -42,11 +42,11 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const hit = await app.instance.inject({ method: 'GET', url: '/targeted/with-header' })
-    const miss = await app.instance.inject({ method: 'GET', url: '/targeted/without-header' })
+    const hit = await app.fetch('/targeted/with-header')
+    const miss = await app.fetch('/targeted/without-header')
 
-    expect(hit.headers['x-custom']).toBe('yes')
-    expect(miss.headers['x-custom']).toBeUndefined()
+    expect(hit.headers.get('x-custom')).toBe('yes')
+    expect(miss.headers.get('x-custom')).toBeNull()
   })
 
   it('class-level header with array value is sent as multi-value header', async () => {
@@ -62,9 +62,10 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/multi-class/route' })
+    const res = await app.fetch('/multi-class/route')
 
-    expect(res.headers['x-roles']).toEqual(['admin', 'user'])
+    // Fetch Headers joins repeated values with ', ' — the on-the-wire form of a multi-value header.
+    expect(res.headers.get('x-roles')).toBe('admin, user')
   })
 
   it('method-level header with array value is sent as multi-value header', async () => {
@@ -80,9 +81,9 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/multi-method/route' })
+    const res = await app.fetch('/multi-method/route')
 
-    expect(res.headers['x-flags']).toEqual(['read', 'write'])
+    expect(res.headers.get('x-flags')).toBe('read, write')
   })
 
   it('method-level header overrides class-level header with same name', async () => {
@@ -99,10 +100,10 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/override/route' })
+    const res = await app.fetch('/override/route')
 
-    expect(res.headers['x-tier']).toBe('method')
-    expect(res.headers['x-tier']).not.toBe(['class', 'method'])
+    expect(res.headers.get('x-tier')).toBe('method')
+    expect(res.headers.get('x-tier')).not.toBe(['class', 'method'])
   })
 
   it('appends "; charset=<charset>" when a charset argument is given', async () => {
@@ -118,9 +119,9 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/charset/route' })
+    const res = await app.fetch('/charset/route')
 
-    expect(res.headers['x-media']).toBe('application/json; charset=utf-8')
+    expect(res.headers.get('x-media')).toBe('application/json; charset=utf-8')
   })
 
   it('leaves the value unchanged when no charset argument is given', async () => {
@@ -136,9 +137,9 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/no-charset/route' })
+    const res = await app.fetch('/no-charset/route')
 
-    expect(res.headers['x-media']).toBe('application/json')
+    expect(res.headers.get('x-media')).toBe('application/json')
   })
 
   it('appends the charset to each value of an array header', async () => {
@@ -154,11 +155,9 @@ describe('Header', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/charset-array/route' })
+    const res = await app.fetch('/charset-array/route')
 
-    expect(res.headers['x-media-list']).toEqual([
-      'application/json; charset=utf-8',
-      'application/xml; charset=utf-8',
-    ])
+    expect(res.headers.get('x-media-list'))
+      .toBe('application/json; charset=utf-8, application/xml; charset=utf-8')
   })
 })

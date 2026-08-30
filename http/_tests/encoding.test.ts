@@ -46,14 +46,9 @@ describe('Encoding', () => {
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const res = await server.inject({
-      method: 'POST',
-      url: '/encoding-single/upload',
-      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
-      payload,
-    })
+    const res = await app.fetch('/encoding-single/upload', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: payload })
 
-    expect(res.statusCode).toBe(415)
+    expect(res.status).toBe(415)
   })
 
   it('@Encoding(["gzip", "br"]) accepts both gzip and br encoded requests', async () => {
@@ -77,22 +72,12 @@ describe('Encoding', () => {
     const gzipPayload = await gzip(JSON.stringify({ msg: 'hello' }))
     const brotliPayload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const resGzip = await server.inject({
-      method: 'POST',
-      url: '/encoding-multi/upload',
-      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
-      payload: gzipPayload,
-    })
+    const resGzip = await app.fetch('/encoding-multi/upload', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: gzipPayload })
 
-    const resBrotli = await server.inject({
-      method: 'POST',
-      url: '/encoding-multi/upload',
-      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
-      payload: brotliPayload,
-    })
+    const resBrotli = await app.fetch('/encoding-multi/upload', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: brotliPayload })
 
-    expect(resGzip.statusCode).toBe(200)
-    expect(resBrotli.statusCode).toBe(200)
+    expect(resGzip.status).toBe(200)
+    expect(resBrotli.status).toBe(200)
   })
 
   it('class-level @Encoding applies to all routes on the controller', async () => {
@@ -120,21 +105,11 @@ describe('Encoding', () => {
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const resA = await server.inject({
-      method: 'POST',
-      url: '/encoding-class/a',
-      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
-      payload,
-    })
+    const resA = await app.fetch('/encoding-class/a', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: payload })
 
-    const resB = await server.inject({
-      method: 'POST',
-      url: '/encoding-class/b',
-      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
-      payload,
-    })
+    const resB = await app.fetch('/encoding-class/b', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: payload })
 
-    expect(resA.statusCode).toBe(415)
-    expect(resB.statusCode).toBe(415)
+    expect(resA.status).toBe(415)
+    expect(resB.status).toBe(415)
   })
 })

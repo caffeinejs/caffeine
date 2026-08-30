@@ -18,14 +18,9 @@ describe('BodyLimit', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const over = await app.instance.inject({
-      method: 'POST',
-      url: '/limited/data',
-      payload: 'x'.repeat(20),
-      headers: { 'content-type': 'text/plain' },
-    })
+    const over = await app.fetch('/limited/data', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'x'.repeat(20) })
 
-    expect(over.statusCode).toBe(413)
+    expect(over.status).toBe(413)
   })
 
   it('method-level @BodyLimit overrides class-level', async () => {
@@ -52,21 +47,11 @@ describe('BodyLimit', () => {
     const body = 'x'.repeat(50)
     const headers = { 'content-type': 'text/plain' }
 
-    const classRes = await app.instance.inject({
-      method: 'POST',
-      url: '/mixed-limit/class-limit',
-      payload: body,
-      headers,
-    })
+    const classRes = await app.fetch('/mixed-limit/class-limit', { method: 'POST', headers, body: body })
 
-    const routeRes = await app.instance.inject({
-      method: 'POST',
-      url: '/mixed-limit/route-limit',
-      payload: body,
-      headers,
-    })
+    const routeRes = await app.fetch('/mixed-limit/route-limit', { method: 'POST', headers, body: body })
 
-    expect(classRes.statusCode).toBe(200)
-    expect(routeRes.statusCode).toBe(413)
+    expect(classRes.status).toBe(200)
+    expect(routeRes.status).toBe(413)
   })
 })

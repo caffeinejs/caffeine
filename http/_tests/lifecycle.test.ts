@@ -25,9 +25,9 @@ describe('Adapter Lifecycle', () => {
 
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/lc/ping' })
+    const res = await app.fetch('/lc/ping')
 
-    expect(res.statusCode).toBe(200)
+    expect(res.status).toBe(200)
     expect(order).toEqual(['ready-hook', 'request'])
   })
 
@@ -87,13 +87,13 @@ describe('Adapter Lifecycle', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const beforeClose = await app.instance.inject({ method: 'GET', url: '/lc4/ping' })
-    expect(beforeClose.statusCode).toBe(200)
+    const beforeClose = await app.fetch('/lc4/ping')
+    expect(beforeClose.status).toBe(200)
 
     await app.close()
 
     await expect(
-      app.instance.inject({ method: 'GET', url: '/lc4/ping' }),
+      app.fetch('/lc4/ping'),
     ).rejects.toThrow()
   })
 })

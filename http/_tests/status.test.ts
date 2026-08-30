@@ -18,9 +18,9 @@ describe('Status', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'POST', url: '/status/created' })
+    const res = await app.fetch('/status/created', { method: 'POST' })
 
-    expect(res.statusCode).toBe(201)
+    expect(res.status).toBe(201)
   })
 
   it('leaves status code to Fastify when @Status is not set', async () => {
@@ -37,8 +37,8 @@ describe('Status', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/status-default/ok' })
+    const res = await app.fetch('/status-default/ok')
 
-    expect(res.statusCode).toBe(200)
+    expect(res.status).toBe(200)
   })
 })

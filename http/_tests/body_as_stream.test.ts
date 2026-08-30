@@ -28,15 +28,10 @@ describe('BodyAsStream', () => {
 
     const payload = Buffer.from('hello stream world')
 
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/stream/upload',
-      payload,
-      headers: { 'content-type': 'text/plain' },
-    })
+    const res = await app.fetch('/stream/upload', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ isStream: true, size: payload.byteLength })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ isStream: true, size: payload.byteLength })
   })
 
   it('yields correct bytes for binary data (application/octet-stream)', async () => {
@@ -62,15 +57,10 @@ describe('BodyAsStream', () => {
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
 
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/stream-binary/data',
-      payload,
-      headers: { 'content-type': 'application/octet-stream' },
-    })
+    const res = await app.fetch('/stream-binary/data', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: payload })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ bytes: [1, 2, 3, 255] })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ bytes: [1, 2, 3, 255] })
   })
 
   it('receives JSON payload as a stream without parsing', async () => {
@@ -95,15 +85,10 @@ describe('BodyAsStream', () => {
 
     const jsonStr = JSON.stringify({ key: 'value' })
 
-    const res = await app.instance.inject({
-      method: 'POST',
-      url: '/stream-json/data',
-      payload: jsonStr,
-      headers: { 'content-type': 'application/json' },
-    })
+    const res = await app.fetch('/stream-json/data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: jsonStr })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ raw: jsonStr })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ raw: jsonStr })
   })
 
   it('does not affect other routes on the same controller', async () => {
@@ -128,24 +113,14 @@ describe('BodyAsStream', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const streamRes = await app.instance.inject({
-      method: 'POST',
-      url: '/stream-mixed/raw',
-      payload: 'hello',
-      headers: { 'content-type': 'text/plain' },
-    })
+    const streamRes = await app.fetch('/stream-mixed/raw', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'hello' })
 
-    const parsedRes = await app.instance.inject({
-      method: 'POST',
-      url: '/stream-mixed/parsed',
-      payload: JSON.stringify({ x: 1 }),
-      headers: { 'content-type': 'application/json' },
-    })
+    const parsedRes = await app.fetch('/stream-mixed/parsed', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: 1 }) })
 
-    expect(streamRes.statusCode).toBe(200)
-    expect(streamRes.json()).toEqual({ isStream: true })
+    expect(streamRes.status).toBe(200)
+    expect(await streamRes.json()).toEqual({ isStream: true })
 
-    expect(parsedRes.statusCode).toBe(200)
-    expect(parsedRes.json()).toEqual({ body: { x: 1 } })
+    expect(parsedRes.status).toBe(200)
+    expect(await parsedRes.json()).toEqual({ body: { x: 1 } })
   })
 })

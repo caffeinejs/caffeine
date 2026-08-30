@@ -18,11 +18,11 @@ describe('Prefix', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const hit = await app.instance.inject({ method: 'GET', url: '/v1/users/list' })
-    const miss = await app.instance.inject({ method: 'GET', url: '/users/list' })
+    const hit = await app.fetch('/v1/users/list')
+    const miss = await app.fetch('/users/list')
 
-    expect(hit.statusCode).toBe(200)
-    expect(miss.statusCode).toBe(404)
+    expect(hit.status).toBe(200)
+    expect(miss.status).toBe(404)
   })
 
   it('each controller gets its own independent prefix', async () => {
@@ -49,10 +49,10 @@ describe('Prefix', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const v1 = await app.instance.inject({ method: 'GET', url: '/v1/items/all' })
-    const v2 = await app.instance.inject({ method: 'GET', url: '/v2/items/all' })
+    const v1 = await app.fetch('/v1/items/all')
+    const v2 = await app.fetch('/v2/items/all')
 
-    expect(v1.statusCode).toBe(200)
-    expect(v2.statusCode).toBe(200)
+    expect(v1.status).toBe(200)
+    expect(v2.status).toBe(200)
   })
 })

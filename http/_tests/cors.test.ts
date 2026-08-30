@@ -19,14 +19,10 @@ describe('CORS', () => {
       const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cors-global/resource',
-        headers: { origin: 'https://example.com' },
-      })
+      const res = await app.fetch('/cors-global/resource', { headers: { origin: 'https://example.com' } })
 
-      expect(res.statusCode).toBe(200)
-      expect(res.headers['access-control-allow-origin']).toBe('*')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('access-control-allow-origin')).toBe('*')
     })
 
     it('responds to preflight OPTIONS with CORS headers and allowed methods', async () => {
@@ -43,18 +39,14 @@ describe('CORS', () => {
       const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
-      const res = await server.inject({
-        method: 'OPTIONS',
-        url: '/cors-preflight/endpoint',
-        headers: {
-          origin: 'https://allowed.com',
-          'access-control-request-method': 'GET',
-        },
-      })
+      const res = await app.fetch('/cors-preflight/endpoint', { method: 'OPTIONS', headers: {
+        origin: 'https://allowed.com',
+        'access-control-request-method': 'GET',
+      } })
 
-      expect(res.statusCode).toBe(204)
-      expect(res.headers['access-control-allow-origin']).toBe('https://allowed.com')
-      expect(res.headers['access-control-allow-methods']).toMatch(/GET/)
+      expect(res.status).toBe(204)
+      expect(res.headers.get('access-control-allow-origin')).toBe('https://allowed.com')
+      expect(res.headers.get('access-control-allow-methods')).toMatch(/GET/)
     })
 
     it('does not add CORS headers when @fastify/cors is not registered', async () => {
@@ -69,14 +61,10 @@ describe('CORS', () => {
       const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/no-cors/resource',
-        headers: { origin: 'https://example.com' },
-      })
+      const res = await app.fetch('/no-cors/resource', { headers: { origin: 'https://example.com' } })
 
-      expect(res.statusCode).toBe(200)
-      expect(res.headers['access-control-allow-origin']).toBeUndefined()
+      expect(res.status).toBe(200)
+      expect(res.headers.get('access-control-allow-origin')).toBeNull()
     })
   })
 
@@ -107,22 +95,14 @@ describe('CORS', () => {
       const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
-      const resSpecific = await server.inject({
-        method: 'GET',
-        url: '/cors-specific/data',
-        headers: { origin: 'https://trusted.com' },
-      })
+      const resSpecific = await app.fetch('/cors-specific/data', { headers: { origin: 'https://trusted.com' } })
 
-      const resDefault = await server.inject({
-        method: 'GET',
-        url: '/cors-default/data',
-        headers: { origin: 'https://trusted.com' },
-      })
+      const resDefault = await app.fetch('/cors-default/data', { headers: { origin: 'https://trusted.com' } })
 
       // @CORS({ origin: 'https://trusted.com' }) overrides the global origin for this controller
-      expect(resSpecific.headers['access-control-allow-origin']).toBe('https://trusted.com')
+      expect(resSpecific.headers.get('access-control-allow-origin')).toBe('https://trusted.com')
       // No @CORS → falls back to global origin 'https://global.com'
-      expect(resDefault.headers['access-control-allow-origin']).toBe('https://global.com')
+      expect(resDefault.headers.get('access-control-allow-origin')).toBe('https://global.com')
     })
 
     it('@CORS(false) disables CORS for the decorated controller while global CORS applies elsewhere', async () => {
@@ -147,20 +127,12 @@ describe('CORS', () => {
       const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
-      const resDisabled = await server.inject({
-        method: 'GET',
-        url: '/cors-disabled/resource',
-        headers: { origin: 'https://example.com' },
-      })
+      const resDisabled = await app.fetch('/cors-disabled/resource', { headers: { origin: 'https://example.com' } })
 
-      const resEnabled = await server.inject({
-        method: 'GET',
-        url: '/cors-enabled/resource',
-        headers: { origin: 'https://example.com' },
-      })
+      const resEnabled = await app.fetch('/cors-enabled/resource', { headers: { origin: 'https://example.com' } })
 
-      expect(resDisabled.headers['access-control-allow-origin']).toBeUndefined()
-      expect(resEnabled.headers['access-control-allow-origin']).toBe('*')
+      expect(resDisabled.headers.get('access-control-allow-origin')).toBeNull()
+      expect(resEnabled.headers.get('access-control-allow-origin')).toBe('*')
     })
 
     it('@CORS(false) removes CORS headers from actual requests to that controller', async () => {
@@ -188,20 +160,12 @@ describe('CORS', () => {
       const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
-      const resOff = await server.inject({
-        method: 'GET',
-        url: '/cors-off-actual/endpoint',
-        headers: { origin: 'https://example.com' },
-      })
+      const resOff = await app.fetch('/cors-off-actual/endpoint', { headers: { origin: 'https://example.com' } })
 
-      const resOn = await server.inject({
-        method: 'GET',
-        url: '/cors-on-actual/endpoint',
-        headers: { origin: 'https://example.com' },
-      })
+      const resOn = await app.fetch('/cors-on-actual/endpoint', { headers: { origin: 'https://example.com' } })
 
-      expect(resOff.headers['access-control-allow-origin']).toBeUndefined()
-      expect(resOn.headers['access-control-allow-origin']).toBe('*')
+      expect(resOff.headers.get('access-control-allow-origin')).toBeNull()
+      expect(resOn.headers.get('access-control-allow-origin')).toBe('*')
     })
   })
 })

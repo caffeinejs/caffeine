@@ -21,14 +21,10 @@ describe('Compress', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const res = await server.inject({
-      method: 'GET',
-      url: '/compress-global/data',
-      headers: { 'accept-encoding': 'br, gzip, deflate' },
-    })
+    const res = await app.fetch('/compress-global/data', { headers: { 'accept-encoding': 'br, gzip, deflate' } })
 
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['content-encoding']).toMatch(/br|gzip|deflate/)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-encoding')).toMatch(/br|gzip|deflate/)
   })
 
   it('@Compress(false) disables compression for the route while global compression applies elsewhere', async () => {
@@ -54,23 +50,15 @@ describe('Compress', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const resOff = await server.inject({
-      method: 'GET',
-      url: '/compress-mixed/no-compress',
-      headers: { 'accept-encoding': 'br, gzip, deflate' },
-    })
+    const resOff = await app.fetch('/compress-mixed/no-compress', { headers: { 'accept-encoding': 'br, gzip, deflate' } })
 
-    const resOn = await server.inject({
-      method: 'GET',
-      url: '/compress-mixed/with-compress',
-      headers: { 'accept-encoding': 'br, gzip, deflate' },
-    })
+    const resOn = await app.fetch('/compress-mixed/with-compress', { headers: { 'accept-encoding': 'br, gzip, deflate' } })
 
-    expect(resOff.statusCode).toBe(200)
-    expect(resOff.headers['content-encoding']).toBeUndefined()
+    expect(resOff.status).toBe(200)
+    expect(resOff.headers.get('content-encoding')).toBeNull()
 
-    expect(resOn.statusCode).toBe(200)
-    expect(resOn.headers['content-encoding']).toMatch(/br|gzip|deflate/)
+    expect(resOn.status).toBe(200)
+    expect(resOn.headers.get('content-encoding')).toMatch(/br|gzip|deflate/)
   })
 
   it('@Compress({ threshold: 1 }) forces compression on small payloads that the global threshold skips', async () => {
@@ -97,22 +85,14 @@ describe('Compress', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const resLow = await server.inject({
-      method: 'GET',
-      url: '/compress-threshold/low-threshold',
-      headers: { 'accept-encoding': 'gzip' },
-    })
+    const resLow = await app.fetch('/compress-threshold/low-threshold', { headers: { 'accept-encoding': 'gzip' } })
 
-    const resDefault = await server.inject({
-      method: 'GET',
-      url: '/compress-threshold/default-threshold',
-      headers: { 'accept-encoding': 'gzip' },
-    })
+    const resDefault = await app.fetch('/compress-threshold/default-threshold', { headers: { 'accept-encoding': 'gzip' } })
 
-    expect(resLow.statusCode).toBe(200)
-    expect(resLow.headers['content-encoding']).toBe('gzip')
+    expect(resLow.status).toBe(200)
+    expect(resLow.headers.get('content-encoding')).toBe('gzip')
 
-    expect(resDefault.statusCode).toBe(200)
-    expect(resDefault.headers['content-encoding']).toBeUndefined()
+    expect(resDefault.status).toBe(200)
+    expect(resDefault.headers.get('content-encoding')).toBeNull()
   })
 })

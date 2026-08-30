@@ -20,9 +20,9 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-ttl-num/data' })
-      expect(res.statusCode).toBe(200)
-      expect(res.headers['cache-control']).toBe('public, max-age=60')
+      const res = await app.fetch('/cache-cc-ttl-num/data')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=60')
     })
 
     it('@Cache({ ttl: "5m" }) → "public, max-age=300"', async () => {
@@ -39,8 +39,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-ttl-str-m/data' })
-      expect(res.headers['cache-control']).toBe('public, max-age=300')
+      const res = await app.fetch('/cache-cc-ttl-str-m/data')
+      expect(res.headers.get('cache-control')).toBe('public, max-age=300')
     })
 
     it('@Cache({ ttl: "1h30m" }) → "public, max-age=5400"', async () => {
@@ -57,8 +57,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-ttl-compound/data' })
-      expect(res.headers['cache-control']).toBe('public, max-age=5400')
+      const res = await app.fetch('/cache-cc-ttl-compound/data')
+      expect(res.headers.get('cache-control')).toBe('public, max-age=5400')
     })
   })
 
@@ -77,9 +77,9 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-smaxage/data' })
-      expect(res.headers['cache-control']).toContain('max-age=300')
-      expect(res.headers['cache-control']).toContain('s-maxage=3600')
+      const res = await app.fetch('/cache-cc-smaxage/data')
+      expect(res.headers.get('cache-control')).toContain('max-age=300')
+      expect(res.headers.get('cache-control')).toContain('s-maxage=3600')
     })
   })
 
@@ -98,8 +98,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-swr/data' })
-      expect(res.headers['cache-control']).toContain('stale-while-revalidate=30')
+      const res = await app.fetch('/cache-cc-swr/data')
+      expect(res.headers.get('cache-control')).toContain('stale-while-revalidate=30')
     })
 
     it('@Cache({ ttl: 60, staleIfError: "1h" }) → includes "stale-if-error=3600"', async () => {
@@ -116,8 +116,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-sie/data' })
-      expect(res.headers['cache-control']).toContain('stale-if-error=3600')
+      const res = await app.fetch('/cache-cc-sie/data')
+      expect(res.headers.get('cache-control')).toContain('stale-if-error=3600')
     })
   })
 
@@ -136,8 +136,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-private/data' })
-      expect(res.headers['cache-control']).toBe('private, max-age=60')
+      const res = await app.fetch('/cache-cc-private/data')
+      expect(res.headers.get('cache-control')).toBe('private, max-age=60')
     })
 
     it('@Cache({ ttl: 60, privacy: "public" }) → "public, max-age=60"', async () => {
@@ -154,8 +154,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-public/data' })
-      expect(res.headers['cache-control']).toContain('public')
+      const res = await app.fetch('/cache-cc-public/data')
+      expect(res.headers.get('cache-control')).toContain('public')
     })
   })
 
@@ -174,8 +174,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-nostore/data' })
-      expect(res.headers['cache-control']).toBe('no-store')
+      const res = await app.fetch('/cache-cc-nostore/data')
+      expect(res.headers.get('cache-control')).toBe('no-store')
     })
 
     it('@Cache({ noCache: true }) → "no-cache"', async () => {
@@ -192,8 +192,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-nocache/data' })
-      expect(res.headers['cache-control']).toContain('no-cache')
+      const res = await app.fetch('/cache-cc-nocache/data')
+      expect(res.headers.get('cache-control')).toContain('no-cache')
     })
 
     it('@Cache({ ttl: 60, mustRevalidate: true }) → includes "must-revalidate"', async () => {
@@ -210,8 +210,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-mustrevalidate/data' })
-      expect(res.headers['cache-control']).toContain('must-revalidate')
+      const res = await app.fetch('/cache-cc-mustrevalidate/data')
+      expect(res.headers.get('cache-control')).toContain('must-revalidate')
     })
 
     it('@Cache({ ttl: 60, immutable: true }) → includes "immutable"', async () => {
@@ -228,8 +228,8 @@ describe('Cache-Control headers', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-cc-immutable/data' })
-      expect(res.headers['cache-control']).toContain('immutable')
+      const res = await app.fetch('/cache-cc-immutable/data')
+      expect(res.headers.get('cache-control')).toContain('immutable')
     })
   })
 
@@ -247,8 +247,8 @@ describe('Cache-Control headers', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-cc-empty/data' })
-    expect(res.headers['cache-control']).toBeUndefined()
+    const res = await app.fetch('/cache-cc-empty/data')
+    expect(res.headers.get('cache-control')).toBeNull()
   })
 })
 
@@ -267,8 +267,8 @@ describe('Vary header', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-vary-single/data' })
-    expect(res.headers['vary']).toBe('Accept-Language')
+    const res = await app.fetch('/cache-vary-single/data')
+    expect(res.headers.get('vary')).toBe('Accept-Language')
   })
 
   it('@Cache({ vary: ["Accept", "Accept-Encoding"] }) → "Vary: Accept, Accept-Encoding"', async () => {
@@ -285,8 +285,8 @@ describe('Vary header', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-vary-multi/data' })
-    expect(res.headers['vary']).toBe('Accept, Accept-Encoding')
+    const res = await app.fetch('/cache-vary-multi/data')
+    expect(res.headers.get('vary')).toBe('Accept, Accept-Encoding')
   })
 
   it('no vary option → no Vary header', async () => {
@@ -303,8 +303,8 @@ describe('Vary header', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-vary-none/data' })
-    expect(res.headers['vary']).toBeUndefined()
+    const res = await app.fetch('/cache-vary-none/data')
+    expect(res.headers.get('vary')).toBeNull()
   })
 })
 
@@ -323,10 +323,10 @@ describe('ETag', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-etag-present/data' })
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['etag']).toBeDefined()
-    expect(res.headers['etag']).toMatch(/^"[a-f0-9]+"$/)
+    const res = await app.fetch('/cache-etag-present/data')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('etag')).toBeDefined()
+    expect(res.headers.get('etag')).toMatch(/^"[a-f0-9]+"$/)
   })
 
   it('same response body on two requests → same ETag', async () => {
@@ -343,10 +343,10 @@ describe('ETag', () => {
       .build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/cache-etag-stable/data' })
-    const res2 = await server.inject({ method: 'GET', url: '/cache-etag-stable/data' })
+    const res1 = await app.fetch('/cache-etag-stable/data')
+    const res2 = await app.fetch('/cache-etag-stable/data')
 
-    expect(res1.headers['etag']).toBe(res2.headers['etag'])
+    expect(res1.headers.get('etag')).toBe(res2.headers.get('etag'))
   })
 
   it('different response bodies → different ETags', async () => {
@@ -367,12 +367,12 @@ describe('ETag', () => {
       .build()
     await app.ready()
 
-    const resA = await server.inject({ method: 'GET', url: '/cache-etag-diff/a' })
-    const resB = await server.inject({ method: 'GET', url: '/cache-etag-diff/b' })
+    const resA = await app.fetch('/cache-etag-diff/a')
+    const resB = await app.fetch('/cache-etag-diff/b')
 
-    expect(resA.headers['etag']).toBeDefined()
-    expect(resB.headers['etag']).toBeDefined()
-    expect(resA.headers['etag']).not.toBe(resB.headers['etag'])
+    expect(resA.headers.get('etag')).toBeDefined()
+    expect(resB.headers.get('etag')).toBeDefined()
+    expect(resA.headers.get('etag')).not.toBe(resB.headers.get('etag'))
   })
 
   it('@Cache({ etag: false }) → no ETag header', async () => {
@@ -389,8 +389,8 @@ describe('ETag', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-etag-disabled/data' })
-    expect(res.headers['etag']).toBeUndefined()
+    const res = await app.fetch('/cache-etag-disabled/data')
+    expect(res.headers.get('etag')).toBeNull()
   })
 
   it('@Cache({ noStore: true }) → no ETag header', async () => {
@@ -407,8 +407,8 @@ describe('ETag', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-etag-nostore/data' })
-    expect(res.headers['etag']).toBeUndefined()
+    const res = await app.fetch('/cache-etag-nostore/data')
+    expect(res.headers.get('etag')).toBeNull()
   })
 
   it('stream response body → no ETag (cannot hash a stream)', async () => {
@@ -425,9 +425,9 @@ describe('ETag', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-etag-stream/data' })
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['etag']).toBeUndefined()
+    const res = await app.fetch('/cache-etag-stream/data')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('etag')).toBeNull()
   })
 })
 
@@ -446,17 +446,13 @@ describe('304 Not Modified', () => {
       .build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/cache-304-match/data' })
-    const etag = res1.headers['etag'] as string
+    const res1 = await app.fetch('/cache-304-match/data')
+    const etag = res1.headers.get('etag') as string
     expect(etag).toBeDefined()
 
-    const res2 = await server.inject({
-      method: 'GET',
-      url: '/cache-304-match/data',
-      headers: { 'if-none-match': etag },
-    })
-    expect(res2.statusCode).toBe(304)
-    expect(res2.body).toBe('')
+    const res2 = await app.fetch('/cache-304-match/data', { headers: { 'if-none-match': etag } })
+    expect(res2.status).toBe(304)
+    expect(await res2.text()).toBe('')
   })
 
   it('GET with non-matching If-None-Match → 200, full body', async () => {
@@ -473,15 +469,11 @@ describe('304 Not Modified', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-304-nomatch/data' })
+    await app.fetch('/cache-304-nomatch/data')
 
-    const res = await server.inject({
-      method: 'GET',
-      url: '/cache-304-nomatch/data',
-      headers: { 'if-none-match': '"stale-etag-value"' },
-    })
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ value: 'cached' })
+    const res = await app.fetch('/cache-304-nomatch/data', { headers: { 'if-none-match': '"stale-etag-value"' } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ value: 'cached' })
   })
 
   it('GET with stale If-None-Match after cache clear → 200, new ETag', async () => {
@@ -501,18 +493,14 @@ describe('304 Not Modified', () => {
       .build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/cache-304-stale/data' })
-    const oldEtag = res1.headers['etag'] as string
+    const res1 = await app.fetch('/cache-304-stale/data')
+    const oldEtag = res1.headers.get('etag') as string
 
     await store.clear()
 
-    const res2 = await server.inject({
-      method: 'GET',
-      url: '/cache-304-stale/data',
-      headers: { 'if-none-match': oldEtag },
-    })
-    expect(res2.statusCode).toBe(200)
-    expect(res2.headers['etag']).toBeDefined()
+    const res2 = await app.fetch('/cache-304-stale/data', { headers: { 'if-none-match': oldEtag } })
+    expect(res2.status).toBe(200)
+    expect(res2.headers.get('etag')).toBeDefined()
   })
 
   it('HEAD with matching If-None-Match → 304', async () => {
@@ -529,15 +517,11 @@ describe('304 Not Modified', () => {
       .build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/cache-304-head/data' })
-    const etag = res1.headers['etag'] as string
+    const res1 = await app.fetch('/cache-304-head/data')
+    const etag = res1.headers.get('etag') as string
 
-    const res2 = await server.inject({
-      method: 'HEAD',
-      url: '/cache-304-head/data',
-      headers: { 'if-none-match': etag },
-    })
-    expect(res2.statusCode).toBe(304)
+    const res2 = await app.fetch('/cache-304-head/data', { method: 'HEAD', headers: { 'if-none-match': etag } })
+    expect(res2.status).toBe(304)
   })
 })
 
@@ -561,13 +545,13 @@ describe('Cache store', () => {
       .build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/cache-store-bypass/data' })
+    const res1 = await app.fetch('/cache-store-bypass/data')
     expect(callCount).toBe(1)
-    expect(res1.json()).toEqual({ count: 1 })
+    expect(await res1.json()).toEqual({ count: 1 })
 
-    const res2 = await server.inject({ method: 'GET', url: '/cache-store-bypass/data' })
+    const res2 = await app.fetch('/cache-store-bypass/data')
     expect(callCount).toBe(1)
-    expect(res2.json()).toEqual({ count: 1 })
+    expect(await res2.json()).toEqual({ count: 1 })
   })
 
   it('@Cache({ noStore: true }) always calls handler', async () => {
@@ -589,8 +573,8 @@ describe('Cache store', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-store-nostore/data' })
-    await server.inject({ method: 'GET', url: '/cache-store-nostore/data' })
+    await app.fetch('/cache-store-nostore/data')
+    await app.fetch('/cache-store-nostore/data')
     expect(callCount).toBe(2)
   })
 
@@ -613,8 +597,8 @@ describe('Cache store', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'POST', url: '/cache-store-post-default/data' })
-    await server.inject({ method: 'POST', url: '/cache-store-post-default/data' })
+    await app.fetch('/cache-store-post-default/data', { method: 'POST' })
+    await app.fetch('/cache-store-post-default/data', { method: 'POST' })
     expect(callCount).toBe(2)
   })
 
@@ -637,13 +621,13 @@ describe('Cache store', () => {
       .build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'POST', url: '/cache-store-post-custom/data' })
+    const res1 = await app.fetch('/cache-store-post-custom/data', { method: 'POST' })
     expect(callCount).toBe(1)
-    expect(res1.json()).toEqual({ count: 1 })
+    expect(await res1.json()).toEqual({ count: 1 })
 
-    const res2 = await server.inject({ method: 'POST', url: '/cache-store-post-custom/data' })
+    const res2 = await app.fetch('/cache-store-post-custom/data', { method: 'POST' })
     expect(callCount).toBe(1)
-    expect(res2.json()).toEqual({ count: 1 })
+    expect(await res2.json()).toEqual({ count: 1 })
   })
 
   it('@Cache({ statusCodes: [200, 201] }) caches 201 but not 400', async () => {
@@ -676,8 +660,8 @@ describe('Cache store', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-store-status/ok' })
-    await server.inject({ method: 'GET', url: '/cache-store-status/ok' })
+    await app.fetch('/cache-store-status/ok')
+    await app.fetch('/cache-store-status/ok')
     expect(okCount).toBe(1)
   })
 
@@ -703,15 +687,15 @@ describe('Cache store', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-store-clear/data' })
+    await app.fetch('/cache-store-clear/data')
     expect(callCount).toBe(1)
 
-    await server.inject({ method: 'GET', url: '/cache-store-clear/data' })
+    await app.fetch('/cache-store-clear/data')
     expect(callCount).toBe(1)
 
     await store.clear()
 
-    await server.inject({ method: 'GET', url: '/cache-store-clear/data' })
+    await app.fetch('/cache-store-clear/data')
     expect(callCount).toBe(2)
   })
 })
@@ -736,8 +720,8 @@ describe('Cache key', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-key-default/data' })
-    await server.inject({ method: 'GET', url: '/cache-key-default/data' })
+    await app.fetch('/cache-key-default/data')
+    await app.fetch('/cache-key-default/data')
     expect(callCount).toBe(1)
   })
 
@@ -768,10 +752,10 @@ describe('Cache key', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-key-urls/a' })
-    await server.inject({ method: 'GET', url: '/cache-key-urls/a' })
-    await server.inject({ method: 'GET', url: '/cache-key-urls/b' })
-    await server.inject({ method: 'GET', url: '/cache-key-urls/b' })
+    await app.fetch('/cache-key-urls/a')
+    await app.fetch('/cache-key-urls/a')
+    await app.fetch('/cache-key-urls/b')
+    await app.fetch('/cache-key-urls/b')
 
     expect(aCount).toBe(1)
     expect(bCount).toBe(1)
@@ -796,8 +780,8 @@ describe('Cache key', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-key-custom-path/data?v=1' })
-    await server.inject({ method: 'GET', url: '/cache-key-custom-path/data?v=2' })
+    await app.fetch('/cache-key-custom-path/data?v=1')
+    await app.fetch('/cache-key-custom-path/data?v=2')
     expect(callCount).toBe(1)
   })
 
@@ -820,12 +804,12 @@ describe('Cache key', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-key-custom-query/data?lang=en' })
-    await server.inject({ method: 'GET', url: '/cache-key-custom-query/data?lang=pt' })
+    await app.fetch('/cache-key-custom-query/data?lang=en')
+    await app.fetch('/cache-key-custom-query/data?lang=pt')
     expect(callCount).toBe(2)
 
-    await server.inject({ method: 'GET', url: '/cache-key-custom-query/data?lang=en' })
-    await server.inject({ method: 'GET', url: '/cache-key-custom-query/data?lang=pt' })
+    await app.fetch('/cache-key-custom-query/data?lang=en')
+    await app.fetch('/cache-key-custom-query/data?lang=pt')
     expect(callCount).toBe(2)
   })
 })
@@ -848,11 +832,11 @@ describe('Decorator scope', () => {
       .build()
     await app.ready()
 
-    const resA = await server.inject({ method: 'GET', url: '/cache-scope-class/a' })
-    const resB = await server.inject({ method: 'GET', url: '/cache-scope-class/b' })
+    const resA = await app.fetch('/cache-scope-class/a')
+    const resB = await app.fetch('/cache-scope-class/b')
 
-    expect(resA.headers['cache-control']).toBe('public, max-age=60')
-    expect(resB.headers['cache-control']).toBe('public, max-age=60')
+    expect(resA.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(resB.headers.get('cache-control')).toBe('public, max-age=60')
   })
 
   it('route-level @Cache applies only to the decorated method', async () => {
@@ -872,11 +856,11 @@ describe('Decorator scope', () => {
       .build()
     await app.ready()
 
-    const resCached = await server.inject({ method: 'GET', url: '/cache-scope-method/cached' })
-    const resUncached = await server.inject({ method: 'GET', url: '/cache-scope-method/uncached' })
+    const resCached = await app.fetch('/cache-scope-method/cached')
+    const resUncached = await app.fetch('/cache-scope-method/uncached')
 
-    expect(resCached.headers['cache-control']).toBeDefined()
-    expect(resUncached.headers['cache-control']).toBeUndefined()
+    expect(resCached.headers.get('cache-control')).toBeDefined()
+    expect(resUncached.headers.get('cache-control')).toBeNull()
   })
 
   it('route-level @Cache completely replaces router-level @Cache (no partial merge)', async () => {
@@ -894,9 +878,9 @@ describe('Decorator scope', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-scope-replace/route' })
-    expect(res.headers['cache-control']).toBe('public, max-age=30')
-    expect(res.headers['cache-control']).not.toContain('private')
+    const res = await app.fetch('/cache-scope-replace/route')
+    expect(res.headers.get('cache-control')).toBe('public, max-age=30')
+    expect(res.headers.get('cache-control')).not.toContain('private')
   })
 })
 
@@ -919,11 +903,11 @@ describe('Undecorated routes', () => {
       .build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/cache-undecorated/data' })
-    await server.inject({ method: 'GET', url: '/cache-undecorated/data' })
+    const res1 = await app.fetch('/cache-undecorated/data')
+    await app.fetch('/cache-undecorated/data')
 
-    expect(res1.headers['cache-control']).toBeUndefined()
-    expect(res1.headers['etag']).toBeUndefined()
+    expect(res1.headers.get('cache-control')).toBeNull()
+    expect(res1.headers.get('etag')).toBeNull()
     expect(callCount).toBe(2)
   })
 })
@@ -943,12 +927,12 @@ describe('@Cache(false)', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-false-method/data' })
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['cache-control']).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
-    expect(res.headers['expires']).toBe('0')
-    expect(res.headers['pragma']).toBe('no-cache')
-    expect(res.headers['surrogate-control']).toBe('no-store')
+    const res = await app.fetch('/cache-false-method/data')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
+    expect(res.headers.get('expires')).toBe('0')
+    expect(res.headers.get('pragma')).toBe('no-cache')
+    expect(res.headers.get('surrogate-control')).toBe('no-store')
   })
 
   it('class-level @Cache(false) → all routes in controller get no-cache headers', async () => {
@@ -968,11 +952,11 @@ describe('@Cache(false)', () => {
       .build()
     await app.ready()
 
-    const resA = await server.inject({ method: 'GET', url: '/cache-false-class/a' })
-    const resB = await server.inject({ method: 'GET', url: '/cache-false-class/b' })
+    const resA = await app.fetch('/cache-false-class/a')
+    const resB = await app.fetch('/cache-false-class/b')
 
-    expect(resA.headers['cache-control']).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
-    expect(resB.headers['cache-control']).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
+    expect(resA.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
+    expect(resB.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
   })
 
   it('@Cache(false) → handler called on every request (never served from cache)', async () => {
@@ -994,9 +978,9 @@ describe('@Cache(false)', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-false-nocache/data' })
-    await server.inject({ method: 'GET', url: '/cache-false-nocache/data' })
-    await server.inject({ method: 'GET', url: '/cache-false-nocache/data' })
+    await app.fetch('/cache-false-nocache/data')
+    await app.fetch('/cache-false-nocache/data')
+    await app.fetch('/cache-false-nocache/data')
     expect(callCount).toBe(3)
   })
 })
@@ -1022,14 +1006,14 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({ method: 'GET', url: '/cache-bug1-etag-false/data' })
-      expect(res1.statusCode).toBe(200)
-      expect(res1.headers['etag']).toBeUndefined()
+      const res1 = await app.fetch('/cache-bug1-etag-false/data')
+      expect(res1.status).toBe(200)
+      expect(res1.headers.get('etag')).toBeNull()
       expect(callCount).toBe(1)
 
-      const res2 = await server.inject({ method: 'GET', url: '/cache-bug1-etag-false/data' })
-      expect(res2.statusCode).toBe(200)
-      expect(res2.json()).toEqual({ count: 1 })
+      const res2 = await app.fetch('/cache-bug1-etag-false/data')
+      expect(res2.status).toBe(200)
+      expect(await res2.json()).toEqual({ count: 1 })
       expect(callCount).toBe(1)
     })
 
@@ -1047,14 +1031,10 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-bug1-inm-ignored/data' })
+      await app.fetch('/cache-bug1-inm-ignored/data')
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-bug1-inm-ignored/data',
-        headers: { 'if-none-match': '"some-etag"' },
-      })
-      expect(res.statusCode).toBe(200)
+      const res = await app.fetch('/cache-bug1-inm-ignored/data', { headers: { 'if-none-match': '"some-etag"' } })
+      expect(res.status).toBe(200)
     })
   })
 
@@ -1078,12 +1058,12 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({ method: 'GET', url: '/cache-bug2-private/data' })
-      expect(res1.headers['cache-control']).toContain('private')
+      const res1 = await app.fetch('/cache-bug2-private/data')
+      expect(res1.headers.get('cache-control')).toContain('private')
       expect(callCount).toBe(1)
 
-      const res2 = await server.inject({ method: 'GET', url: '/cache-bug2-private/data' })
-      expect(res2.json()).toEqual({ count: 2 })
+      const res2 = await app.fetch('/cache-bug2-private/data')
+      expect(await res2.json()).toEqual({ count: 2 })
       expect(callCount).toBe(2)
     })
   })
@@ -1108,16 +1088,8 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({
-        method: 'GET',
-        url: '/cache-bug3-vary-separate/data',
-        headers: { 'accept-language': 'en-US' },
-      })
-      await server.inject({
-        method: 'GET',
-        url: '/cache-bug3-vary-separate/data',
-        headers: { 'accept-language': 'pt-BR' },
-      })
+      await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'en-US' } })
+      await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'pt-BR' } })
       expect(callCount).toBe(2)
     })
 
@@ -1140,16 +1112,8 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({
-        method: 'GET',
-        url: '/cache-bug3-vary-hit/data',
-        headers: { 'accept-language': 'en-US' },
-      })
-      await server.inject({
-        method: 'GET',
-        url: '/cache-bug3-vary-hit/data',
-        headers: { 'accept-language': 'en-US' },
-      })
+      await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
+      await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
       expect(callCount).toBe(1)
     })
 
@@ -1173,24 +1137,12 @@ describe('Bug fixes', () => {
       await app.ready()
 
       // same Accept-Language, different Accept → separate entry
-      await server.inject({
-        method: 'GET',
-        url: '/cache-bug3-vary-multi/data',
-        headers: { 'accept-language': 'en', accept: 'application/json' },
-      })
-      await server.inject({
-        method: 'GET',
-        url: '/cache-bug3-vary-multi/data',
-        headers: { 'accept-language': 'en', accept: 'text/html' },
-      })
+      await app.fetch('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'application/json' } })
+      await app.fetch('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'text/html' } })
       expect(callCount).toBe(2)
 
       // exact same headers → cache hit
-      await server.inject({
-        method: 'GET',
-        url: '/cache-bug3-vary-multi/data',
-        headers: { 'accept-language': 'en', accept: 'application/json' },
-      })
+      await app.fetch('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'application/json' } })
       expect(callCount).toBe(2)
     })
   })
@@ -1215,20 +1167,16 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-bug4-cc-nocache/data' })
+      await app.fetch('/cache-bug4-cc-nocache/data')
       expect(callCount).toBe(1)
 
       // Second request — normally would be cached
-      await server.inject({ method: 'GET', url: '/cache-bug4-cc-nocache/data' })
+      await app.fetch('/cache-bug4-cc-nocache/data')
       expect(callCount).toBe(1)
 
       // Third request with no-cache — must bypass cache
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-bug4-cc-nocache/data',
-        headers: { 'cache-control': 'no-cache' },
-      })
-      expect(res.statusCode).toBe(200)
+      const res = await app.fetch('/cache-bug4-cc-nocache/data', { headers: { 'cache-control': 'no-cache' } })
+      expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
 
@@ -1251,15 +1199,11 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-bug4-pragma/data' })
+      await app.fetch('/cache-bug4-pragma/data')
       expect(callCount).toBe(1)
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-bug4-pragma/data',
-        headers: { pragma: 'no-cache' },
-      })
-      expect(res.statusCode).toBe(200)
+      const res = await app.fetch('/cache-bug4-pragma/data', { headers: { pragma: 'no-cache' } })
+      expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
   })
@@ -1279,14 +1223,14 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const getRes = await server.inject({ method: 'GET', url: '/cache-bug5-head-nobody/data' })
-      expect(getRes.statusCode).toBe(200)
-      expect(getRes.headers['etag']).toBeDefined()
+      const getRes = await app.fetch('/cache-bug5-head-nobody/data')
+      expect(getRes.status).toBe(200)
+      expect(getRes.headers.get('etag')).toBeDefined()
 
-      const headRes = await server.inject({ method: 'HEAD', url: '/cache-bug5-head-nobody/data' })
-      expect(headRes.statusCode).toBe(200)
-      expect(headRes.body).toBe('')
-      expect(headRes.headers['content-type']).toBeDefined()
+      const headRes = await app.fetch('/cache-bug5-head-nobody/data', { method: 'HEAD' })
+      expect(headRes.status).toBe(200)
+      expect(await headRes.text()).toBe('')
+      expect(headRes.headers.get('content-type')).toBeDefined()
     })
 
     it('HEAD with matching If-None-Match after GET primes cache → 304', async () => {
@@ -1303,17 +1247,13 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const getRes = await server.inject({ method: 'GET', url: '/cache-bug5-head-304/data' })
-      const etag = getRes.headers['etag'] as string
+      const getRes = await app.fetch('/cache-bug5-head-304/data')
+      const etag = getRes.headers.get('etag') as string
       expect(etag).toBeDefined()
 
-      const headRes = await server.inject({
-        method: 'HEAD',
-        url: '/cache-bug5-head-304/data',
-        headers: { 'if-none-match': etag },
-      })
-      expect(headRes.statusCode).toBe(304)
-      expect(headRes.body).toBe('')
+      const headRes = await app.fetch('/cache-bug5-head-304/data', { method: 'HEAD', headers: { 'if-none-match': etag } })
+      expect(headRes.status).toBe(304)
+      expect(await headRes.text()).toBe('')
     })
   })
 
@@ -1337,13 +1277,13 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({ method: 'GET', url: '/cache-vary-star/data' })
-      expect(res1.statusCode).toBe(200)
-      expect(res1.headers['vary']).toBe('*')
+      const res1 = await app.fetch('/cache-vary-star/data')
+      expect(res1.status).toBe(200)
+      expect(res1.headers.get('vary')).toBe('*')
       expect(callCount).toBe(1)
 
-      const res2 = await server.inject({ method: 'GET', url: '/cache-vary-star/data' })
-      expect(res2.statusCode).toBe(200)
+      const res2 = await app.fetch('/cache-vary-star/data')
+      expect(res2.status).toBe(200)
       expect(callCount).toBe(2)
     })
   })
@@ -1382,7 +1322,7 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-segment/data' })
+      await app.fetch('/cache-segment/data')
       expect(spyStore.getCalls).toEqual(['products'])
       expect(spyStore.setCalls).toEqual(['products'])
     })
@@ -1408,22 +1348,14 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({
-        method: 'GET',
-        url: '/cache-auth-private/data',
-        headers: { authorization: 'Bearer token123' },
-      })
-      expect(res1.statusCode).toBe(200)
-      expect(res1.headers['cache-control']).toContain('private')
+      const res1 = await app.fetch('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
+      expect(res1.status).toBe(200)
+      expect(res1.headers.get('cache-control')).toContain('private')
       expect(callCount).toBe(1)
 
       // Second request — must not be served from cache
-      const res2 = await server.inject({
-        method: 'GET',
-        url: '/cache-auth-private/data',
-        headers: { authorization: 'Bearer token123' },
-      })
-      expect(res2.statusCode).toBe(200)
+      const res2 = await app.fetch('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
+      expect(res2.status).toBe(200)
       expect(callCount).toBe(2)
     })
 
@@ -1446,19 +1378,11 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({
-        method: 'GET',
-        url: '/cache-auth-public-override/data',
-        headers: { authorization: 'Bearer token123' },
-      })
+      await app.fetch('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
       expect(callCount).toBe(1)
 
-      const res2 = await server.inject({
-        method: 'GET',
-        url: '/cache-auth-public-override/data',
-        headers: { authorization: 'Bearer token123' },
-      })
-      expect(res2.statusCode).toBe(200)
+      const res2 = await app.fetch('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
+      expect(res2.status).toBe(200)
       expect(callCount).toBe(1)
     })
   })
@@ -1497,7 +1421,7 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-key-encode/data?a=1&b=2' })
+      await app.fetch('/cache-key-encode/data?a=1&b=2')
 
       expect(keySeen.length).toBeGreaterThan(0)
       // key must not contain raw special chars that would corrupt store backends
@@ -1527,20 +1451,16 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-req-nostore/data' })
+      await app.fetch('/cache-req-nostore/data')
       expect(callCount).toBe(1)
 
       // Second request normally would be cached
-      await server.inject({ method: 'GET', url: '/cache-req-nostore/data' })
+      await app.fetch('/cache-req-nostore/data')
       expect(callCount).toBe(1)
 
       // Third request with no-store must bypass cache
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-req-nostore/data',
-        headers: { 'cache-control': 'no-store' },
-      })
-      expect(res.statusCode).toBe(200)
+      const res = await app.fetch('/cache-req-nostore/data', { headers: { 'cache-control': 'no-store' } })
+      expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
   })
@@ -1560,18 +1480,14 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({ method: 'GET', url: '/cache-304-headers/data' })
-      const etag = res1.headers['etag'] as string
+      const res1 = await app.fetch('/cache-304-headers/data')
+      const etag = res1.headers.get('etag') as string
       expect(etag).toBeDefined()
 
-      const res304 = await server.inject({
-        method: 'GET',
-        url: '/cache-304-headers/data',
-        headers: { 'if-none-match': etag },
-      })
-      expect(res304.statusCode).toBe(304)
-      expect(res304.headers['etag']).toBe(etag)
-      expect(res304.headers['cache-control']).toBeDefined()
+      const res304 = await app.fetch('/cache-304-headers/data', { headers: { 'if-none-match': etag } })
+      expect(res304.status).toBe(304)
+      expect(res304.headers.get('etag')).toBe(etag)
+      expect(res304.headers.get('cache-control')).toBeDefined()
     })
   })
 
@@ -1590,14 +1506,10 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-inm-wildcard/data' })
+      await app.fetch('/cache-inm-wildcard/data')
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-inm-wildcard/data',
-        headers: { 'if-none-match': '*' },
-      })
-      expect(res.statusCode).toBe(304)
+      const res = await app.fetch('/cache-inm-wildcard/data', { headers: { 'if-none-match': '*' } })
+      expect(res.status).toBe(304)
     })
 
     it('If-None-Match comma-separated list → 304 when one entry matches', async () => {
@@ -1614,15 +1526,11 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({ method: 'GET', url: '/cache-inm-list/data' })
-      const etag = res1.headers['etag'] as string
+      const res1 = await app.fetch('/cache-inm-list/data')
+      const etag = res1.headers.get('etag') as string
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-inm-list/data',
-        headers: { 'if-none-match': `"stale-one", ${etag}, "stale-two"` },
-      })
-      expect(res.statusCode).toBe(304)
+      const res = await app.fetch('/cache-inm-list/data', { headers: { 'if-none-match': `"stale-one", ${etag}, "stale-two"` } })
+      expect(res.status).toBe(304)
     })
 
     it('If-None-Match weak ETag W/"xxx" matches strong "xxx"', async () => {
@@ -1639,17 +1547,13 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({ method: 'GET', url: '/cache-inm-weak/data' })
-      const strongEtag = res1.headers['etag'] as string
+      const res1 = await app.fetch('/cache-inm-weak/data')
+      const strongEtag = res1.headers.get('etag') as string
       expect(strongEtag).toMatch(/^"[a-f0-9]+"$/)
 
       const weakEtag = `W/${strongEtag}`
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-inm-weak/data',
-        headers: { 'if-none-match': weakEtag },
-      })
-      expect(res.statusCode).toBe(304)
+      const res = await app.fetch('/cache-inm-weak/data', { headers: { 'if-none-match': weakEtag } })
+      expect(res.status).toBe(304)
     })
   })
 
@@ -1683,8 +1587,8 @@ describe('Bug fixes', () => {
       await app.ready()
 
       // Prime both segments
-      await server.inject({ method: 'GET', url: '/cache-seg-iso-a/data' })
-      await server.inject({ method: 'GET', url: '/cache-seg-iso-b/data' })
+      await app.fetch('/cache-seg-iso-a/data')
+      await app.fetch('/cache-seg-iso-b/data')
 
       // Clear only segment 'a'
       await store.clear('a')
@@ -1713,9 +1617,9 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-proxy-revalidate/data' })
-      expect(res.statusCode).toBe(200)
-      expect(res.headers['cache-control']).toContain('proxy-revalidate')
+      const res = await app.fetch('/cache-proxy-revalidate/data')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toContain('proxy-revalidate')
     })
   })
 
@@ -1745,13 +1649,13 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-invalidate-self/resource' })
-      await server.inject({ method: 'GET', url: '/cache-invalidate-self/resource' })
+      await app.fetch('/cache-invalidate-self/resource')
+      await app.fetch('/cache-invalidate-self/resource')
       expect(getCount).toBe(1)
 
-      await server.inject({ method: 'POST', url: '/cache-invalidate-self/resource' })
+      await app.fetch('/cache-invalidate-self/resource', { method: 'POST' })
 
-      await server.inject({ method: 'GET', url: '/cache-invalidate-self/resource' })
+      await app.fetch('/cache-invalidate-self/resource')
       expect(getCount).toBe(2)
     })
 
@@ -1780,12 +1684,12 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-invalidate-paths/resource' })
+      await app.fetch('/cache-invalidate-paths/resource')
       expect(getCount).toBe(1)
 
-      await server.inject({ method: 'POST', url: '/cache-invalidate-paths/other' })
+      await app.fetch('/cache-invalidate-paths/other', { method: 'POST' })
 
-      await server.inject({ method: 'GET', url: '/cache-invalidate-paths/resource' })
+      await app.fetch('/cache-invalidate-paths/resource')
       expect(getCount).toBe(2)
     })
 
@@ -1815,13 +1719,13 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-invalidate-4xx/resource' })
+      await app.fetch('/cache-invalidate-4xx/resource')
       expect(getCount).toBe(1)
 
-      const del = await server.inject({ method: 'DELETE', url: '/cache-invalidate-4xx/resource' })
-      expect(del.statusCode).toBe(400)
+      const del = await app.fetch('/cache-invalidate-4xx/resource', { method: 'DELETE' })
+      expect(del.status).toBe(400)
 
-      await server.inject({ method: 'GET', url: '/cache-invalidate-4xx/resource' })
+      await app.fetch('/cache-invalidate-4xx/resource')
       expect(getCount).toBe(1)
     })
   })
@@ -1841,12 +1745,8 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-only-if-cached-miss/data',
-        headers: { 'cache-control': 'only-if-cached' },
-      })
-      expect(res.statusCode).toBe(504)
+      const res = await app.fetch('/cache-only-if-cached-miss/data', { headers: { 'cache-control': 'only-if-cached' } })
+      expect(res.status).toBe(504)
     })
 
     it('cache hit + only-if-cached → 200 served from cache', async () => {
@@ -1868,15 +1768,11 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-only-if-cached-hit/data' })
+      await app.fetch('/cache-only-if-cached-hit/data')
       expect(callCount).toBe(1)
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-only-if-cached-hit/data',
-        headers: { 'cache-control': 'only-if-cached' },
-      })
-      expect(res.statusCode).toBe(200)
+      const res = await app.fetch('/cache-only-if-cached-hit/data', { headers: { 'cache-control': 'only-if-cached' } })
+      expect(res.status).toBe(200)
       expect(callCount).toBe(1)
     })
   })
@@ -1896,9 +1792,9 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-no-transform/data' })
-      expect(res.statusCode).toBe(200)
-      expect(res.headers['cache-control']).toContain('no-transform')
+      const res = await app.fetch('/cache-no-transform/data')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toContain('no-transform')
     })
   })
 
@@ -1917,8 +1813,8 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res = await server.inject({ method: 'GET', url: '/cache-last-modified/data' })
-      expect(res.headers['last-modified']).toBeDefined()
+      const res = await app.fetch('/cache-last-modified/data')
+      expect(res.headers.get('last-modified')).toBeDefined()
     })
 
     it('If-Modified-Since at or after Last-Modified → 304', async () => {
@@ -1935,17 +1831,13 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      const res1 = await server.inject({ method: 'GET', url: '/cache-ims-match/data' })
-      const lastModified = res1.headers['last-modified'] as string
+      const res1 = await app.fetch('/cache-ims-match/data')
+      const lastModified = res1.headers.get('last-modified') as string
       expect(lastModified).toBeDefined()
 
-      const res2 = await server.inject({
-        method: 'GET',
-        url: '/cache-ims-match/data',
-        headers: { 'if-modified-since': lastModified },
-      })
-      expect(res2.statusCode).toBe(304)
-      expect(res2.headers['cache-control']).toBeDefined()
+      const res2 = await app.fetch('/cache-ims-match/data', { headers: { 'if-modified-since': lastModified } })
+      expect(res2.status).toBe(304)
+      expect(res2.headers.get('cache-control')).toBeDefined()
     })
 
     it('If-Modified-Since before Last-Modified → 200 with full body', async () => {
@@ -1962,15 +1854,11 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-ims-stale/data' })
+      await app.fetch('/cache-ims-stale/data')
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-ims-stale/data',
-        headers: { 'if-modified-since': new Date(Date.now() - 60_000).toUTCString() },
-      })
-      expect(res.statusCode).toBe(200)
-      expect(res.json()).toEqual({ ok: true })
+      const res = await app.fetch('/cache-ims-stale/data', { headers: { 'if-modified-since': new Date(Date.now() - 60_000).toUTCString() } })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true })
     })
 
     it('If-None-Match takes precedence over If-Modified-Since when both are present', async () => {
@@ -1987,19 +1875,15 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-inm-precedence/data' })
+      await app.fetch('/cache-inm-precedence/data')
 
       // Stale If-Modified-Since would normally yield 200, but a non-matching
       // If-None-Match must be evaluated instead and also yield 200.
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-inm-precedence/data',
-        headers: {
-          'if-none-match': '"does-not-match"',
-          'if-modified-since': new Date(Date.now() + 60_000).toUTCString(),
-        },
-      })
-      expect(res.statusCode).toBe(200)
+      const res = await app.fetch('/cache-inm-precedence/data', { headers: {
+        'if-none-match': '"does-not-match"',
+        'if-modified-since': new Date(Date.now() + 60_000).toUTCString(),
+      } })
+      expect(res.status).toBe(200)
     })
   })
 
@@ -2023,15 +1907,11 @@ describe('Bug fixes', () => {
         .build()
       await app.ready()
 
-      await server.inject({ method: 'GET', url: '/cache-req-maxage0/data' })
+      await app.fetch('/cache-req-maxage0/data')
       expect(callCount).toBe(1)
 
-      const res = await server.inject({
-        method: 'GET',
-        url: '/cache-req-maxage0/data',
-        headers: { 'cache-control': 'max-age=0' },
-      })
-      expect(res.statusCode).toBe(200)
+      const res = await app.fetch('/cache-req-maxage0/data', { headers: { 'cache-control': 'max-age=0' } })
+      expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
   })
@@ -2091,8 +1971,8 @@ describe('Cache builder & container-managed store', () => {
     const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-di-custom-store/data' })
-    const res2 = await server.inject({ method: 'GET', url: '/cache-di-custom-store/data' })
+    await app.fetch('/cache-di-custom-store/data')
+    const res2 = await app.fetch('/cache-di-custom-store/data')
 
     const resolved = app.container.get(CacheStore) as MapStore
     expect(resolved).toBeInstanceOf(MapStore)
@@ -2101,7 +1981,7 @@ describe('Cache builder & container-managed store', () => {
     expect(resolved.ops).toContain('get')
     // Second request served from the custom store — handler ran only once.
     expect(callCount).toBe(1)
-    expect(res2.json()).toEqual({ count: 1 })
+    expect(await res2.json()).toEqual({ count: 1 })
   })
 
   it('zero configuration → default in-process store caches without any CacheStore binding', async () => {
@@ -2126,8 +2006,8 @@ describe('Cache builder & container-managed store', () => {
     // The always-on CacheServiceConfigurer binds the default MemoryCacheStore under CacheStore.
     expect(app.container.get(CacheStore)).toBeInstanceOf(MemoryCacheStore)
 
-    await server.inject({ method: 'GET', url: '/cache-di-default/data' })
-    await server.inject({ method: 'GET', url: '/cache-di-default/data' })
+    await app.fetch('/cache-di-default/data')
+    await app.fetch('/cache-di-default/data')
     expect(callCount).toBe(1)
   })
 
@@ -2152,14 +2032,14 @@ describe('Cache builder & container-managed store', () => {
       .build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/cache-builder-store/data' })
-    const res2 = await server.inject({ method: 'GET', url: '/cache-builder-store/data' })
+    await app.fetch('/cache-builder-store/data')
+    const res2 = await app.fetch('/cache-builder-store/data')
 
     expect(app.container.get(CacheStore)).toBe(store)
     expect(store.ops).toContain('set')
     expect(store.ops).toContain('get')
     expect(callCount).toBe(1)
-    expect(res2.json()).toEqual({ count: 1 })
+    expect(await res2.json()).toEqual({ count: 1 })
   })
 
   it('app.cache(c => c.store(...).etagGenerator(...)) applies both', async () => {
@@ -2178,8 +2058,8 @@ describe('Cache builder & container-managed store', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-builder-both/data' })
-    expect(res.headers['etag']).toBe('"builder-etag"')
+    const res = await app.fetch('/cache-builder-both/data')
+    expect(res.headers.get('etag')).toBe('"builder-etag"')
     expect(store.ops).toContain('set')
   })
 
@@ -2198,8 +2078,8 @@ describe('Cache builder & container-managed store', () => {
     const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-di-etag/data' })
-    expect(res.headers['etag']).toBe('"sentinel-etag"')
+    const res = await app.fetch('/cache-di-etag/data')
+    expect(res.headers.get('etag')).toBe('"sentinel-etag"')
   })
 
   it('a per-route @Cache({ etagGenerator }) still wins over the container-bound generator', async () => {
@@ -2217,8 +2097,8 @@ describe('Cache builder & container-managed store', () => {
     const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/cache-di-etag-override/data' })
-    expect(res.headers['etag']).toBe('"route-override"')
+    const res = await app.fetch('/cache-di-etag-override/data')
+    expect(res.headers.get('etag')).toBe('"route-override"')
   })
 })
 
@@ -2236,11 +2116,11 @@ describe('X-Cache status header', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/xc-basic/data' })
-    expect(res1.headers['x-cache']).toBe('MISS')
+    const res1 = await app.fetch('/xc-basic/data')
+    expect(res1.headers.get('x-cache')).toBe('MISS')
 
-    const res2 = await server.inject({ method: 'GET', url: '/xc-basic/data' })
-    expect(res2.headers['x-cache']).toBe('HIT')
+    const res2 = await app.fetch('/xc-basic/data')
+    expect(res2.headers.get('x-cache')).toBe('HIT')
   })
 
   it('HIT on a 304 Not Modified served from cache', async () => {
@@ -2256,16 +2136,12 @@ describe('X-Cache status header', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const res1 = await server.inject({ method: 'GET', url: '/xc-304/data' })
-    const etag = res1.headers['etag'] as string
+    const res1 = await app.fetch('/xc-304/data')
+    const etag = res1.headers.get('etag') as string
 
-    const res2 = await server.inject({
-      method: 'GET',
-      url: '/xc-304/data',
-      headers: { 'if-none-match': etag },
-    })
-    expect(res2.statusCode).toBe(304)
-    expect(res2.headers['x-cache']).toBe('HIT')
+    const res2 = await app.fetch('/xc-304/data', { headers: { 'if-none-match': etag } })
+    expect(res2.status).toBe(304)
+    expect(res2.headers.get('x-cache')).toBe('HIT')
   })
 
   it('BYPASS when the request sends Cache-Control: no-store', async () => {
@@ -2281,12 +2157,8 @@ describe('X-Cache status header', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const res = await server.inject({
-      method: 'GET',
-      url: '/xc-bypass/data',
-      headers: { 'cache-control': 'no-store' },
-    })
-    expect(res.headers['x-cache']).toBe('BYPASS')
+    const res = await app.fetch('/xc-bypass/data', { headers: { 'cache-control': 'no-store' } })
+    expect(res.headers.get('x-cache')).toBe('BYPASS')
   })
 
   it('BYPASS on a @Cache(false) route', async () => {
@@ -2302,8 +2174,8 @@ describe('X-Cache status header', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/xc-false/data' })
-    expect(res.headers['x-cache']).toBe('BYPASS')
+    const res = await app.fetch('/xc-false/data')
+    expect(res.headers.get('x-cache')).toBe('BYPASS')
   })
 
   it('app.cache(c => c.statusHeader(...)) renames the header', async () => {
@@ -2321,9 +2193,9 @@ describe('X-Cache status header', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({ method: 'GET', url: '/xc-custom/data' })
-    expect(res.headers['x-cache']).toBeUndefined()
-    expect(res.headers['x-my-cache']).toBe('MISS')
+    const res = await app.fetch('/xc-custom/data')
+    expect(res.headers.get('x-cache')).toBeNull()
+    expect(res.headers.get('x-my-cache')).toBe('MISS')
   })
 })
 
@@ -2346,11 +2218,11 @@ describe('Canonical query keys', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/qk-order/data?a=1&b=2' })
-    const res2 = await server.inject({ method: 'GET', url: '/qk-order/data?b=2&a=1' })
+    await app.fetch('/qk-order/data?a=1&b=2')
+    const res2 = await app.fetch('/qk-order/data?b=2&a=1')
 
     expect(callCount).toBe(1)
-    expect(res2.headers['x-cache']).toBe('HIT')
+    expect(res2.headers.get('x-cache')).toBe('HIT')
   })
 
   it('different param values still partition into separate entries', async () => {
@@ -2371,8 +2243,8 @@ describe('Canonical query keys', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/qk-values/data?a=1' })
-    await server.inject({ method: 'GET', url: '/qk-values/data?a=2' })
+    await app.fetch('/qk-values/data?a=1')
+    await app.fetch('/qk-values/data?a=2')
     expect(callCount).toBe(2)
   })
 })
@@ -2391,12 +2263,12 @@ describe('Age header & request max-age', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/age-hit/data' })
-    const res2 = await server.inject({ method: 'GET', url: '/age-hit/data' })
+    await app.fetch('/age-hit/data')
+    const res2 = await app.fetch('/age-hit/data')
 
-    expect(res2.headers['x-cache']).toBe('HIT')
-    expect(res2.headers['age']).toBeDefined()
-    expect(Number(res2.headers['age'])).toBeGreaterThanOrEqual(0)
+    expect(res2.headers.get('x-cache')).toBe('HIT')
+    expect(res2.headers.get('age')).toBeDefined()
+    expect(Number(res2.headers.get('age'))).toBeGreaterThanOrEqual(0)
   })
 
   it('request Cache-Control: max-age larger than the entry age is served from cache', async () => {
@@ -2412,13 +2284,9 @@ describe('Age header & request max-age', () => {
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    await server.inject({ method: 'GET', url: '/age-maxage-ok/data' })
-    const res2 = await server.inject({
-      method: 'GET',
-      url: '/age-maxage-ok/data',
-      headers: { 'cache-control': 'max-age=100' },
-    })
-    expect(res2.headers['x-cache']).toBe('HIT')
+    await app.fetch('/age-maxage-ok/data')
+    const res2 = await app.fetch('/age-maxage-ok/data', { headers: { 'cache-control': 'max-age=100' } })
+    expect(res2.headers.get('x-cache')).toBe('HIT')
   })
 
   it('request Cache-Control: max-age smaller than the entry age revalidates', async () => {
@@ -2453,13 +2321,9 @@ describe('Age header & request max-age', () => {
       .build()
     await app.ready()
 
-    const res = await server.inject({
-      method: 'GET',
-      url: '/age-maxage-stale/data',
-      headers: { 'cache-control': 'max-age=10' },
-    })
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['x-cache']).toBe('MISS')
+    const res = await app.fetch('/age-maxage-stale/data', { headers: { 'cache-control': 'max-age=10' } })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-cache')).toBe('MISS')
     expect(callCount).toBe(1)
   })
 })

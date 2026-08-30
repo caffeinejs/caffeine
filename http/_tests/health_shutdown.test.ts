@@ -48,16 +48,16 @@ describe('graceful shutdown', () => {
   it('refuses readiness before the drain delay elapses, while liveness stays up', async () => {
     const app = await start(h => h.drainDelay(300))
 
-    expect((await app.instance.inject({ method: 'GET', url: '/readyz' })).statusCode).toBe(200)
+    expect((await app.fetch('/readyz')).status).toBe(200)
 
     const closing = app.close()
 
     // No await in between: the flip has to be visible on the very next poll, not after the delay.
-    const ready = await app.instance.inject({ method: 'GET', url: '/readyz' })
-    const live = await app.instance.inject({ method: 'GET', url: '/livez' })
+    const ready = await app.fetch('/readyz')
+    const live = await app.fetch('/livez')
 
-    expect(ready.statusCode).toBe(503)
-    expect(live.statusCode).toBe(200)
+    expect(ready.status).toBe(503)
+    expect(live.status).toBe(200)
     expect(app.instance.server.listening).toBe(true)
 
     await closing

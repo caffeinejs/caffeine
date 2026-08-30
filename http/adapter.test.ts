@@ -7,7 +7,7 @@ import { $p } from './route_picker.js'
 import { Controller, Get, Method, createWebApplication, Args, fastifyAdapterFactory, FastifyContext } from './index.js'
 
 describe('Fastify Adapter', () => {
-  // Opens a real ephemeral socket via Supertest (unlike the .inject() test below), so it can hang up
+  // Opens a real ephemeral socket via Supertest (unlike the app.fetch() tests below), so it can hang up
   // under parallel-suite port/event-loop contention. Retry keeps the real-socket smoke test without
   // making it flaky.
   it('exposes the underlying server as a Supertest-compatible listener', { retry: 2 }, async () => {
@@ -22,16 +22,16 @@ describe('Fastify Adapter', () => {
       .expect(200, { ok: true })
   })
 
-  it('exposes the underlying fastify instance and can be tested with .inject()', async () => {
+  it('exposes the underlying fastify instance and can be tested with app.fetch()', async () => {
     const server = Fastify()
     server.get('/', () => ({ ok: true }))
 
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
-    const result = await app.instance.inject('/')
+    const result = await app.fetch('/')
 
-    expect(result.json()).toEqual({ ok: true })
+    expect(await result.json()).toEqual({ ok: true })
   })
 
   describe('when a controller is decorated with @Get', () => {
@@ -85,10 +85,10 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
-      const res = await app.instance.inject({ method: 'GET', url: '/test/pickers?foo=bar' })
+      const res = await app.fetch('/test/pickers?foo=bar')
 
-      expect(res.statusCode).toBe(200)
-      expect(res.json()).toMatchObject({
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({
         url: '/test/pickers?foo=bar',
         path: '/test/pickers',
         hasSignal: true,
@@ -112,9 +112,9 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
-      const res = await app.instance.inject({ method: 'GET', url: '/async-pick/value' })
-      expect(res.statusCode).toBe(200)
-      expect(res.json()).toEqual({ value: '/ASYNC-PICK/VALUE' })
+      const res = await app.fetch('/async-pick/value')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ value: '/ASYNC-PICK/VALUE' })
     })
 
     it('resolves mixed sync and async pickers on the same route', async () => {
@@ -135,9 +135,9 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
-      const res = await app.instance.inject({ method: 'GET', url: '/mixed-pick/42' })
-      expect(res.statusCode).toBe(200)
-      expect(res.json()).toMatchObject({ id: '42', asyncVal: 'async:/mixed-pick/42' })
+      const res = await app.fetch('/mixed-pick/42')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ id: '42', asyncVal: 'async:/mixed-pick/42' })
     })
 
     it('injects the HTTP method string into the handler', async () => {
@@ -159,8 +159,8 @@ describe('Fastify Adapter', () => {
       await app.ready()
 
       for (const m of methods) {
-        const res = await app.instance.inject({ method: m, url: '/method-test/action' })
-        expect(res.json()).toEqual({ method: m })
+        const res = await app.fetch('/method-test/action', { method: m })
+        expect(await res.json()).toEqual({ method: m })
       }
     })
   })
@@ -185,13 +185,13 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
-      const r1 = await app.instance.inject({ method: 'GET', url: '/req-ctrl/id' })
-      const r2 = await app.instance.inject({ method: 'GET', url: '/req-ctrl/id' })
+      const r1 = await app.fetch('/req-ctrl/id')
+      const r2 = await app.fetch('/req-ctrl/id')
 
-      expect(r1.statusCode).toBe(200)
-      expect(r2.statusCode).toBe(200)
-      expect(r1.json().id).toBe(1)
-      expect(r2.json().id).toBe(2)
+      expect(r1.status).toBe(200)
+      expect(r2.status).toBe(200)
+      expect((await r1.json()).id).toBe(1)
+      expect((await r2.json()).id).toBe(2)
     })
 
     it('gives a fresh request-scoped service instance per request when injected into a transient controller', async () => {
@@ -219,13 +219,13 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
-      const r1 = await app.instance.inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
-      const r2 = await app.instance.inject({ method: 'GET', url: '/transient-ctrl/svc-id' })
+      const r1 = await app.fetch('/transient-ctrl/svc-id')
+      const r2 = await app.fetch('/transient-ctrl/svc-id')
 
-      expect(r1.statusCode).toBe(200)
-      expect(r2.statusCode).toBe(200)
-      expect(r1.json().id).toBe(1)
-      expect(r2.json().id).toBe(2)
+      expect(r1.status).toBe(200)
+      expect(r2.status).toBe(200)
+      expect((await r1.json()).id).toBe(1)
+      expect((await r2.json()).id).toBe(2)
     })
   })
 

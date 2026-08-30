@@ -20,11 +20,11 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/fetch/json' })
+    const res = await app.fetch('/fetch/json')
 
-    expect(res.statusCode).toBe(201)
-    expect(res.headers['x-custom']).toBe('yes')
-    expect(res.json()).toEqual({ hello: 'world' })
+    expect(res.status).toBe(201)
+    expect(res.headers.get('x-custom')).toBe('yes')
+    expect(await res.json()).toEqual({ hello: 'world' })
   })
 
   it('handles a no-body Response (204)', async () => {
@@ -41,10 +41,10 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/fetch/empty' })
+    const res = await app.fetch('/fetch/empty')
 
-    expect(res.statusCode).toBe(204)
-    expect(res.body).toBe('')
+    expect(res.status).toBe(204)
+    expect(await res.text()).toBe('')
   })
 
   it('streams a Buffer body', async () => {
@@ -66,11 +66,11 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/fetch/buf' })
+    const res = await app.fetch('/fetch/buf')
 
-    expect(res.statusCode).toBe(200)
-    expect(res.headers['content-type']).toMatch('application/octet-stream')
-    expect(Buffer.from(res.rawPayload)).toEqual(data)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toMatch('application/octet-stream')
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(data)
   })
 
   it('streams a Buffer body with correct byte length', async () => {
@@ -92,11 +92,12 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const res = await app.instance.inject({ method: 'GET', url: '/fetch/binary' })
+    const res = await app.fetch('/fetch/binary')
 
-    expect(res.statusCode).toBe(200)
-    expect(res.rawPayload.length).toBe(5)
-    expect(Array.from(res.rawPayload)).toEqual([0x00, 0x01, 0x02, 0x03, 0xff])
+    expect(res.status).toBe(200)
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    expect(bytes.length).toBe(5)
+    expect(Array.from(bytes)).toEqual([0x00, 0x01, 0x02, 0x03, 0xff])
   })
 
   describe('Mixing with decorator headers', () => {
@@ -115,10 +116,10 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
-      const res = await app.instance.inject({ method: 'GET', url: '/mix-class/route' })
+      const res = await app.fetch('/mix-class/route')
 
-      expect(res.headers['x-class']).toBe('from-decorator')
-      expect(res.headers['x-response']).toBe('from-response')
+      expect(res.headers.get('x-class')).toBe('from-decorator')
+      expect(res.headers.get('x-response')).toBe('from-response')
     })
 
     it('method @Header and Response headers with different keys are both present', async () => {
@@ -136,10 +137,10 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
-      const res = await app.instance.inject({ method: 'GET', url: '/mix-method/route' })
+      const res = await app.fetch('/mix-method/route')
 
-      expect(res.headers['x-method']).toBe('from-decorator')
-      expect(res.headers['x-response']).toBe('from-response')
+      expect(res.headers.get('x-method')).toBe('from-decorator')
+      expect(res.headers.get('x-response')).toBe('from-response')
     })
 
     it('Response header overrides class @Header with same key', async () => {
@@ -157,9 +158,9 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
-      const res = await app.instance.inject({ method: 'GET', url: '/override-class/route' })
+      const res = await app.fetch('/override-class/route')
 
-      expect(res.headers['x-version']).toBe('response')
+      expect(res.headers.get('x-version')).toBe('response')
     })
 
     it('Response header overrides method @Header with same key', async () => {
@@ -177,9 +178,9 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
       await app.ready()
 
-      const res = await app.instance.inject({ method: 'GET', url: '/override-method/route' })
+      const res = await app.fetch('/override-method/route')
 
-      expect(res.headers['x-version']).toBe('response')
+      expect(res.headers.get('x-version')).toBe('response')
     })
   })
 })
