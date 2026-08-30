@@ -1,8 +1,8 @@
-import { buildBindingGraph, type HookListener, type Key, Binding } from '@caffeinejs/di'
+import { buildBindingGraph, type HookListener, type InjectionToken, Binding } from '@caffeinejs/di'
 import type { DevtoolsStore } from '../store.js'
 import type { BindingSnapshot, DevtoolsEvent } from '../types.js'
 
-function keyLabel(key: Key): string {
+function keyLabel(key: InjectionToken): string {
   if (typeof key === 'string') {
     return key
   }
@@ -12,7 +12,7 @@ function keyLabel(key: Key): string {
   return (key as { name?: string }).name ?? String(key)
 }
 
-function toSnapshot(key: Key, binding: Binding): BindingSnapshot {
+function toSnapshot(key: InjectionToken, binding: Binding): BindingSnapshot {
   return {
     id: binding.id,
     key: keyLabel(key),
@@ -33,7 +33,7 @@ export class ContainerCollector {
     private readonly broadcast: (event: DevtoolsEvent) => void,
   ) {}
 
-  backfill(entries: Iterable<[Key, Binding]>): void {
+  backfill(entries: Iterable<[InjectionToken, Binding]>): void {
     const all = Array.from(entries)
     for (const [key, binding] of all) {
       this.store.addBinding(toSnapshot(key, binding))
@@ -41,7 +41,7 @@ export class ContainerCollector {
     this.store.setGraph(buildBindingGraph(all))
   }
 
-  attach(entries: () => Iterable<[Key, Binding]>): void {
+  attach(entries: () => Iterable<[InjectionToken, Binding]>): void {
     this.hooks.on('onBindingRegistered', ({ key, binding }) => {
       this.store.addBinding(toSnapshot(key, binding))
       this.store.setGraph(buildBindingGraph(entries()))

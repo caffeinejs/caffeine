@@ -1,4 +1,4 @@
-import type { Key } from '@caffeinejs/di'
+import type { InjectionToken } from '@caffeinejs/di'
 import type { Route, Router } from '@caffeinejs/http'
 
 /**
@@ -7,7 +7,7 @@ import type { Route, Router } from '@caffeinejs/http'
  * `PetsController` becomes `Pets`, which is both the default tag and the first half of the default
  * operationId. The suffix carries no information a reader of the document needs.
  */
-export function controllerBaseName(key: Key): string {
+export function controllerBaseName(key: InjectionToken): string {
   const name = typeof key === 'function' ? key.name : String(key)
   return name.replace(/Controller$/, '') || name
 }

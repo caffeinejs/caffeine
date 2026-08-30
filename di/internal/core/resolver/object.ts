@@ -3,7 +3,7 @@ import { ObjectInjection, ObjectInjections } from '../../../injection.js'
 import { ContainerOps } from '../../../container_interface.js'
 import { DeferredCtor } from '../../../deferred_ctor.js'
 import { ErrNoResolutionForKey } from '../../../errors.js'
-import { Key, TypedKey, keyStr } from '../../../key.js'
+import { InjectionToken, TypedKey, keyStr } from '../../../key.js'
 import { solutions } from '../../util/errutil/errutil.js'
 import { excludeSelf } from './_binding_util.js'
 
@@ -12,7 +12,7 @@ export const objectFactory: InjectionResolverFactory = ctx =>
 
 function compileObjectNode(
   container: ContainerOps,
-  key: Key,
+  key: InjectionToken,
   node: ObjectInjection | ObjectInjections,
   fieldPath: string,
 ): InjectionResolver {

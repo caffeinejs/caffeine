@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { CaffeineIoC } from '../container.js'
 import { $i } from '../injection.js'
 
 describe('CaffeineIoC', function () {
-  const kTestName = Symbol('test-name')
+  const kTestName = token<any>(Symbol('test-name'))
 
   @Injectable()
   class Test {}
@@ -26,9 +27,9 @@ describe('CaffeineIoC', function () {
 
   it('should print the type name when calling toString()', function () {
     const di = new CaffeineIoC()
-    di.bind('tk100')
+    di.bind(token<any>('tk100'))
       .toValue('test')
-    di.bind('tk200')
+    di.bind(token<any>('tk200'))
       .toValue('test')
 
     const str = di.toString()

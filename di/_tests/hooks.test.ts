@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { Async } from '../decorators/async.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -299,7 +300,7 @@ describe('Hooks', function () {
 
     // 1
     class IncompleteWithProp {
-      @Inject('')
+      @Inject(token<any>(''))
       message!: string
     }
 
@@ -317,14 +318,14 @@ describe('Hooks', function () {
     @Configuration()
     class Conf {
       // 5
-      @Provides(Symbol('test1'))
+      @Provides(token<any>(Symbol('test1')))
       @ConditionalOn(() => false)
       test1() {
         return 'test1'
       }
 
       // 6
-      @Provides(Symbol('test2'))
+      @Provides(token<any>(Symbol('test2')))
       test2() {
         return 'test2'
       }

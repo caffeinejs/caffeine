@@ -1,5 +1,6 @@
 import '../index.nodejs.js'
 import { describe, it, beforeEach, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 import { Configuration } from '../decorators/configuration.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
@@ -25,7 +26,7 @@ import { Provider } from '../provider.js'
 //     the plain non-primary sibling wins sole ownership of the key.
 describe('A1: @ConditionalOn on @Primary — non-primary wins when condition fails', function () {
   const NS_A1 = 'ec-a1'
-  const kA1 = Symbol('ec-a1')
+  const kA1 = token<any>(Symbol('ec-a1'))
 
   @ConditionalOn(() => false)
   @Primary()
@@ -53,8 +54,8 @@ describe('A1: @ConditionalOn on @Primary — non-primary wins when condition fai
 //     binding already covers the key, the fallback+primary is simply skipped.
 describe('A2: @Fallback + @Primary on @Provides', function () {
   const NS_A2 = 'ec-a2'
-  const kA2Shared = Symbol('ec-a2-shared')
-  const kA2Alone = Symbol('ec-a2-alone')
+  const kA2Shared = token<any>(Symbol('ec-a2-shared'))
+  const kA2Alone = token<any>(Symbol('ec-a2-alone'))
 
   @Configuration()
   @Profile(NS_A2)
@@ -104,7 +105,7 @@ describe('A2: @Fallback + @Primary on @Provides', function () {
 describe('B4: toFactory() returning null — null is a valid resolved value', function () {
   it('should return null without throwing', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    const kB4 = Symbol('ec-b4')
+    const kB4 = token<any>(Symbol('ec-b4'))
 
     di.bind(kB4)
       .toFactory(() => null as any)
@@ -249,11 +250,11 @@ describe('C5: RequestScopeManager.run() — returns a Promise for both sync and 
 
 describe('D1: injectAll with zero matching bindings — returns empty array', function () {
   it('should inject an empty array when no binding exists for the key', async function () {
-    const kD1Missing = Symbol('ec-d1-missing')
+    const kD1Missing = token<any>(Symbol('ec-d1-missing'))
     let captured: unknown[] | undefined
 
     const di = new CaffeineIoC({ decorators: false })
-    const kD1Consumer = Symbol('ec-d1-consumer')
+    const kD1Consumer = token<any>(Symbol('ec-d1-consumer'))
 
     di.bind(kD1Consumer)
       .toFunction((deps: unknown[]) => {
@@ -271,12 +272,12 @@ describe('D1: injectAll with zero matching bindings — returns empty array', fu
 
 describe('D3: get() with manual bind — primary wins among named bindings', function () {
   it('should return the primary binding when multiple named bindings exist', async function () {
-    const kD3 = Symbol('ec-d3')
+    const kD3 = token<any>(Symbol('ec-d3'))
     const di = new CaffeineIoC({ decorators: false })
-    di.bind('a')
+    di.bind(token<any>('a'))
       .toValue('plain')
       .names(kD3)
-    di.bind('b')
+    di.bind(token<any>('b'))
       .toValue('winner')
       .names(kD3)
       .primary()
@@ -289,7 +290,7 @@ describe('D3: get() with manual bind — primary wins among named bindings', fun
 
 describe('D2: getMany() with @Primary — primary instance is first in result', function () {
   it('should return the primary binding first when primary() is called before names()', async function () {
-    const kD2a = Symbol('ec-d2a')
+    const kD2a = token<any>(Symbol('ec-d2a'))
     const di = new CaffeineIoC({ decorators: false })
     class EC_D2aRegular {}
     class EC_D2aPrimary {}
@@ -313,7 +314,7 @@ describe('D2: getMany() with @Primary — primary instance is first in result', 
   })
 
   it('should return the primary binding first when names() is called before primary()', async function () {
-    const kD2b = Symbol('ec-d2b')
+    const kD2b = token<any>(Symbol('ec-d2b'))
     const di = new CaffeineIoC({ decorators: false })
     class EC_D2bRegular {}
     class EC_D2bPrimary {}
@@ -411,9 +412,9 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
 //     affect which guard is visible when the condition function runs.
 describe('E1: @ConditionalOn at class + method level — independent evaluation', function () {
   const NS_E1 = 'ec-e1'
-  const kE1ClassFlag = Symbol('ec-e1-class-flag')
-  const kE1MethodFlag = Symbol('ec-e1-method-flag')
-  const kE1Bean = Symbol('ec-e1-bean')
+  const kE1ClassFlag = token<any>(Symbol('ec-e1-class-flag'))
+  const kE1MethodFlag = token<any>(Symbol('ec-e1-method-flag'))
+  const kE1Bean = token<any>(Symbol('ec-e1-bean'))
 
   @Configuration()
   @Profile(NS_E1)
@@ -465,7 +466,7 @@ describe('E1: @ConditionalOn at class + method level — independent evaluation'
 //     results in ErrRepeatedInjectableConfiguration during autoWire.
 describe('E2: Two @Configuration classes providing the same key — ambiguity error', function () {
   const NS_E2 = 'ec-e2'
-  const kE2Bean = Symbol('ec-e2-bean')
+  const kE2Bean = token<any>(Symbol('ec-e2-bean'))
 
   @Configuration()
   @Profile(NS_E2)
@@ -494,7 +495,7 @@ describe('E2: Two @Configuration classes providing the same key — ambiguity er
 //     Direct resolution by type returns undefined; resolution by namedKey works.
 describe('E3: @Provides(type, namedKey) — bean registered under namedKey only', function () {
   const NS_E3 = 'ec-e3'
-  const kE3Named = Symbol('ec-e3-named')
+  const kE3Named = token<any>(Symbol('ec-e3-named'))
 
   class EC_E3Service {}
 

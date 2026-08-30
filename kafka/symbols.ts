@@ -1,3 +1,8 @@
+import { token } from '@caffeinejs/di'
+import type { KafkaRuntime } from './runtime.js'
+import type { KafkaTemplate } from './template.js'
+import type { KafkaListenerContainer } from './listener_container.js'
+
 /** The default instance name used when a kafka integration is declared without an explicit name. */
 export const DEFAULT_INSTANCE = 'default'
 
@@ -46,16 +51,16 @@ export const RetryHeaders = {
  * the `KafkaTemplate` class itself (this symbol is a name alias on it), so default users may inject either.
  * Named-instance users inject via this key: `@Inject(kafkaTemplate('orders'))`.
  */
-export function kafkaTemplate(name: string = DEFAULT_INSTANCE): symbol {
-  return Symbol.for(`@caffeinejs/kafka:template:${name}`)
+export function kafkaTemplate(name: string = DEFAULT_INSTANCE) {
+  return token<KafkaTemplate>(Symbol.for(`@caffeinejs/kafka:template:${name}`))
 }
 
 /** Internal: the DI key of the runtime seam for a named instance. */
-export function runtimeKey(name: string): symbol {
-  return Symbol.for(`@caffeinejs/kafka:runtime:${name}`)
+export function runtimeKey(name: string) {
+  return token<KafkaRuntime>(Symbol.for(`@caffeinejs/kafka:runtime:${name}`))
 }
 
 /** Internal: the DI key of the listener-container engine for a named instance. */
-export function containerKey(name: string): symbol {
-  return Symbol.for(`@caffeinejs/kafka:engine:${name}`)
+export function containerKey(name: string) {
+  return token<KafkaListenerContainer>(Symbol.for(`@caffeinejs/kafka:engine:${name}`))
 }

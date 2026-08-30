@@ -34,7 +34,7 @@ into another. The outermost call determines the final behaviour:
 optional(allOf(Plugin))
 
 // injects all Movie bindings as Map<string, Movie>, or undefined if none registered
-optional(mapped('movie'))
+optional(mapped(kMovie))
 ```
 
 ---
@@ -142,7 +142,7 @@ left to right.
 ```ts
 import { compose, optional, allOf } from '@caffeinejs/di'
 
-const optionalMany = (key: Key) => compose(key, optional, allOf)
+const optionalMany = (key: InjectionToken) => compose(key, optional, allOf)
 
 @Injectable([optionalMany(Plugin)])
 class App {

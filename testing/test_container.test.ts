@@ -9,12 +9,13 @@ import {
   Injectable,
   Profile,
   Provides,
+  token,
 } from '@caffeinejs/di'
 import { InstanceTracker } from './tracker.js'
 import { newTestContainer, TestContainer } from './test_container.js'
 
 describe('TestContainer', function () {
-  const kMsg = Symbol('kMsg')
+  const kMsg = token<any>(Symbol('kMsg'))
 
   @Injectable()
   class Repository {}
@@ -139,7 +140,7 @@ describe('TestContainer', function () {
     })
 
     it('modules() still accumulate and run at init', async function () {
-      const kClock = Symbol('kClock')
+      const kClock = token<any>(Symbol('kClock'))
       const clock = { now: () => 0 }
       const di = new TestContainer()
         .modules(c => {
@@ -227,7 +228,7 @@ describe('TestContainer', function () {
   })
 
   describe('skipAsyncBindings() / skip()', function () {
-    const kConn = Symbol('kConn')
+    const kConn = token<any>(Symbol('kConn'))
 
     @Configuration()
     class InfraConfig {
@@ -448,11 +449,11 @@ describe('TestContainer', function () {
   })
 
   describe('complex async graphs', function () {
-    const kCgConnStr = Symbol('kCgConnStr')
-    const kCgDbPool = Symbol('kCgDbPool')
-    const kCgDbConn = Symbol('kCgDbConn')
-    const kCgRedisURL = Symbol('kCgRedisURL')
-    const kCgCache = Symbol('kCgCache')
+    const kCgConnStr = token<any>(Symbol('kCgConnStr'))
+    const kCgDbPool = token<any>(Symbol('kCgDbPool'))
+    const kCgDbConn = token<any>(Symbol('kCgDbConn'))
+    const kCgRedisURL = token<any>(Symbol('kCgRedisURL'))
+    const kCgCache = token<any>(Symbol('kCgCache'))
 
     class CgDbPool {
       constructor(readonly connStr: string) {}
@@ -626,7 +627,7 @@ describe('TestContainer', function () {
     })
 
     it('modules() registers a test-local binding not in the source', async function () {
-      const kTestClock = Symbol('kTestClock')
+      const kTestClock = token<any>(Symbol('kTestClock'))
       const fakeClock = { now: () => 0 }
 
       const source = new CaffeineIoC()
@@ -655,7 +656,7 @@ describe('TestContainer', function () {
         .build()
       await di.init()
 
-      expect(di.profiles.has('staging')).toBe(true)
+      expect(di.profiles.has(token<any>('staging'))).toBe(true)
     })
 
     it('snapshot from profile-aware source captures @Profile-gated classes', async function () {

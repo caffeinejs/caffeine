@@ -66,7 +66,7 @@ symbol.
 type InjectionResolverFactoryContext<T = unknown> = {
   readonly container: ContainerOps
   readonly descriptor: InjectionDescriptor<T>
-  readonly key?: Key<T>
+  readonly key?: InjectionToken<T>
   readonly kind: 'constructor' | 'property' | 'method'
   readonly member: Identifier
   readonly index: number

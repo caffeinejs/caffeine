@@ -221,7 +221,7 @@ metadataReader?: MetadataReader
 **Default:** `undefined`
 
 ```ts
-type MetadataReader = (key: Key) => Partial<Binding>
+type MetadataReader = (key: InjectionToken) => Partial<Binding>
 ```
 
 A function called for every binding at registration time. Its return value is

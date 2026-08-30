@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { Binding } from '../binding.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lifetime } from '../decorators/lifetime.js'
@@ -14,7 +15,7 @@ import { Configuration } from '../decorators/configuration.js'
 describe('Post Processors', function () {
   const ppSpy = vi.fn()
   const sSpy = vi.fn()
-  const kScope = Symbol('custom_transient')
+  const kScope = token<any>(Symbol('custom_transient'))
 
   class CustomTransient implements Scope {
     provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {

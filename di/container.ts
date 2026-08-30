@@ -27,7 +27,7 @@ import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scop
 import { Scopes, scopeEntries, Scope } from './scope.js'
 import { checkScopes } from './internal/core/scope/validations.js'
 import { PostProcessor } from './post_processor.js'
-import { keyStr, Key, TypedKey, NamedKey, Identifier } from './key.js'
+import { keyStr, InjectionToken, Identifier } from './key.js'
 import { notNil } from './internal/util/assert/index.js'
 import { MetadataReader } from './metadata_reader.js'
 import { Ctor } from './types.js'
@@ -55,11 +55,11 @@ const DEFAULT_OPTIONS: Partial<Options> = {
 }
 
 interface PendingBinding {
-  key: Key
+  key: InjectionToken
   config?: DecoratedBindingConfig
   binding?: Binding
   fallback: boolean
-  providedByConfig?: Key
+  providedByConfig?: InjectionToken
   profileRejected?: boolean
 }
 
@@ -72,9 +72,9 @@ interface PendingBinding {
  */
 export class CaffeineIoC implements Container {
   private readonly modules: Array<Module | ModuleFn>
-  private readonly registry = new Map<Key, Binding>()
-  private readonly bindings = new Map<Key, Binding[]>()
-  private readonly bindingsByLabel = new Map<symbol, [Key, Binding][]>()
+  private readonly registry = new Map<InjectionToken, Binding>()
+  private readonly bindings = new Map<InjectionToken | Identifier, Binding[]>()
+  private readonly bindingsByLabel = new Map<symbol, [InjectionToken, Binding][]>()
   private readonly metadataReader: MetadataReader
   private readonly lazy?: boolean
   private readonly circularReferences: boolean
@@ -95,11 +95,11 @@ export class CaffeineIoC implements Container {
   private _pendingConditionals: PendingBinding[] = []
   private _pendingProfiles: PendingBinding[] = []
   private _pendingManualProfiles: PendingBinding[] = []
-  private _pendingManualProfileKeys = new Set<Key>()
-  private _pendingConfigKeys: Map<Key, Key[]> = new Map()
+  private _pendingManualProfileKeys = new Set<InjectionToken>()
+  private _pendingConfigKeys: Map<InjectionToken, InjectionToken[]> = new Map()
   private _evaluatingProfiles = false
-  private _pendingConditionalKeys = new Set<Key>()
-  private _sortedAsyncEntries: [Key, Binding][] = []
+  private _pendingConditionalKeys = new Set<InjectionToken>()
+  private _sortedAsyncEntries: [InjectionToken, Binding][] = []
   private _aspectScopeCache: Set<Identifier> | null = null
   private _hasRequestScoped = false
 
@@ -199,14 +199,12 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrNoResolutionForKey} if no binding is registered for the given key
    * @throws {@link ErrNoUniqueInjectionForKey} if multiple bindings are registered for the same key and none is primary
    */
-  get<T>(key: TypedKey<T>): T
-  get<T = unknown>(key: NamedKey): T
-  get<T = unknown>(key: Key): T {
+  get<T>(key: InjectionToken<T>): T {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
 
-    const bindings = this.getBindings<T>(key as TypedKey<T>)
+    const bindings = this.getBindings<T>(key)
     if (bindings.length === 0) {
       throw new ErrNoResolutionForKey(`Cannot resolve key '${keyStr(key)}'`)
     }
@@ -233,7 +231,7 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrInvalidContainerState} if the container is not initialized
    * @throws {@link ErrNoUniqueInjectionForKey} if multiple bindings are registered for the same key and none is primary
    */
-  getOptional<T = unknown>(key: Key<T>): T | undefined {
+  getOptional<T = unknown>(key: InjectionToken<T>): T | undefined {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
@@ -263,9 +261,7 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrInvalidContainerState} if the container is not initialized
    * @throws {@link ErrNoResolutionForKey} if no binding is registered for the given key
    */
-  getMany<T>(key: TypedKey<T>): T[]
-  getMany<T = unknown>(key: NamedKey): T[]
-  getMany<T>(key: Key<T>): T[] {
+  getMany<T>(key: InjectionToken<T>): T[] {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
@@ -296,9 +292,7 @@ export class CaffeineIoC implements Container {
    *
    * @throws {@link ErrInvalidContainerState} if the container is not initialized
    */
-  getManyOptional<T>(key: TypedKey<T>): T[]
-  getManyOptional<T = unknown>(key: NamedKey): T[]
-  getManyOptional<T>(key: Key<T>): T[] {
+  getManyOptional<T>(key: InjectionToken<T>): T[] {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
@@ -327,7 +321,7 @@ export class CaffeineIoC implements Container {
    *
    * @returns A {@link Provider} of {@link T}.
    */
-  wrap<T = unknown>(key: Key<T>): Provider<T> {
+  wrap<T = unknown>(key: InjectionToken<T>): Provider<T> {
     const binding = this.getBinding(key)
     if (binding === undefined) {
       throw new ErrNoResolutionForKey(`Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`)
@@ -346,7 +340,7 @@ export class CaffeineIoC implements Container {
    *
    * @returns A {@link Provider} of {@link T}[].
    */
-  wrapMany<T = unknown>(key: Key<T>): Provider<T[]> {
+  wrapMany<T = unknown>(key: InjectionToken<T>): Provider<T[]> {
     const bindings = this.getBindings<T>(key)
     if (bindings.length === 0) {
       throw new ErrNoResolutionForKey(`Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`)
@@ -415,8 +409,8 @@ export class CaffeineIoC implements Container {
    *
    * @throws {@link ErrNoResolutionForKey} if no binding is registered for the given key
    */
-  getBinding<T = unknown>(key: Key<T>): Binding<T> {
-    const bindings = this.getBindings<T>(key as TypedKey<T>)
+  getBinding<T = unknown>(key: InjectionToken<T>): Binding<T> {
+    const bindings = this.getBindings<T>(key)
 
     if (bindings.length === 0) {
       return undefined as unknown as Binding<T>
@@ -439,7 +433,7 @@ export class CaffeineIoC implements Container {
    *
    * @param key - The key to resolve the bindings for.
    */
-  getBindings<T = unknown>(key: Key<T>): Binding<T>[] {
+  getBindings<T = unknown>(key: InjectionToken<T>): Binding<T>[] {
     const bindings = this.bindings.get(key)
     if (bindings && bindings.length > 0) {
       return bindings as Binding<T>[]
@@ -484,7 +478,7 @@ export class CaffeineIoC implements Container {
    *
    * @param key - The key to check for.
    */
-  has<T>(key: Key<T>): boolean {
+  has<T>(key: InjectionToken<T>): boolean {
     return this.registry.has(key) || (this.parent?.has(key) ?? false)
   }
 
@@ -496,7 +490,7 @@ export class CaffeineIoC implements Container {
    *
    * @returns True if the key or any of its underlying dependencies have the given scope.
    */
-  hasScopeInGraph(key: Key, scopeID: Identifier): boolean {
+  hasScopeInGraph(key: InjectionToken, scopeID: Identifier): boolean {
     if (!this.has(key)) {
       return false
     }
@@ -580,7 +574,7 @@ export class CaffeineIoC implements Container {
 
       const injection = typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep }
 
-      resolvers[i] = compileDescriptorResolver(this, injection.key as Key, injection, 'constructor', '', i)
+      resolvers[i] = compileDescriptorResolver(this, injection.key as InjectionToken, injection, 'constructor', '', i)
     }
 
     const deps = new Array<unknown>(resolvers.length)
@@ -602,9 +596,7 @@ export class CaffeineIoC implements Container {
    *
    * @returns A {@link Binder} to configure the binding.
    */
-  bind<T>(key: TypedKey<T>): Binder<T>
-  bind<T = unknown>(key: NamedKey): Binder<T>
-  bind<T>(key: Key<T>): Binder<T> {
+  bind<T>(key: InjectionToken<T>): Binder<T> {
     notNil(key)
 
     if (this._ready) {
@@ -614,7 +606,7 @@ export class CaffeineIoC implements Container {
     const type = getBindingConfiguration(key)
     const binding = newBinding<T>(type ? decoratorConfigToBinding(type) : {})
 
-    return new Binder<T>(key, binding, b => this.configureBinding(key as Key, b))
+    return new Binder<T>(key, binding, b => this.configureBinding(key as InjectionToken, b))
   }
 
   /**
@@ -631,7 +623,7 @@ export class CaffeineIoC implements Container {
    * ```
    */
   bindValuesProvider<T = unknown>(): Binder<T> {
-    return this.bind<T>(Keys.kValuesProvider)
+    return this.bind(Keys.kValuesProvider as InjectionToken<T>)
   }
 
   /**
@@ -643,9 +635,7 @@ export class CaffeineIoC implements Container {
    *
    * @returns A {@link Binder} to configure the binding.
    */
-  rebind<T>(key: TypedKey<T>): Binder<T>
-  rebind<T = unknown>(key: NamedKey): Binder<T>
-  rebind<T>(key: Key<T>): Binder<T> {
+  rebind<T>(key: InjectionToken<T>): Binder<T> {
     notNil(key)
 
     if (this._ready) {
@@ -662,7 +652,7 @@ export class CaffeineIoC implements Container {
     this._pendingManualProfileKeys.delete(key)
     this._pendingConfigKeys.delete(key)
 
-    return this.bind(key as TypedKey<T>)
+    return this.bind(key)
   }
 
   /**
@@ -763,7 +753,7 @@ export class CaffeineIoC implements Container {
    * For testing purposes.
    */
   snapshot(): Snapshot {
-    const entries: [Key, Binding][] = []
+    const entries: [InjectionToken, Binding][] = []
 
     for (const [key, binding] of this.registry) {
       if (binding.internal) {
@@ -816,10 +806,10 @@ export class CaffeineIoC implements Container {
    * Resets the instance bound to the given key.
    * Async bindings associated with the key will be automatically re-initialized.
    */
-  async resetInstance(key: Key): Promise<void> {
+  async resetInstance(key: InjectionToken): Promise<void> {
     notNil(key)
 
-    const bindings = this.getBindings(key as TypedKey<any>)
+    const bindings = this.getBindings(key)
     const asyncBindings = bindings.filter(b => b.async)
 
     if (asyncBindings.length === 0) {
@@ -873,8 +863,8 @@ export class CaffeineIoC implements Container {
       throw new ErrInvalidContainerState('Cannot register binding: container is already initialized')
     }
 
-    const pendingFallbacks: [Key, Binding][] = []
-    const pendingFallbackProvided: [Key, Binding][] = []
+    const pendingFallbacks: [InjectionToken, Binding][] = []
+    const pendingFallbackProvided: [InjectionToken, Binding][] = []
 
     for (const [key, config] of getBindingConfigurations()) {
       if (!hasInjectable(key)) {
@@ -1097,7 +1087,7 @@ export class CaffeineIoC implements Container {
   /**
    * Returns an iterator over the bindings in the container.
    */
-  entries(): IterableIterator<[Key, Binding]> {
+  entries(): IterableIterator<[InjectionToken, Binding]> {
     return this.registry.entries()
   }
 
@@ -1131,7 +1121,7 @@ export class CaffeineIoC implements Container {
     )
   }
 
-  [Symbol.iterator](): IterableIterator<[Key, Binding]> {
+  [Symbol.iterator](): IterableIterator<[InjectionToken, Binding]> {
     return this.registry.entries()
   }
 
@@ -1145,7 +1135,7 @@ export class CaffeineIoC implements Container {
    * @param key - The key to configure the binding for.
    * @param config - The binding configuration.
    */
-  private configureBinding<T>(key: Key<T>, config: Binding<T>, queueProfileEval = true): void {
+  private configureBinding<T>(key: InjectionToken<T>, config: Binding<T>, queueProfileEval = true): void {
     notNil(key)
     notNil(config)
 
@@ -1237,7 +1227,7 @@ export class CaffeineIoC implements Container {
     return (this.scopes.get(Scopes.REFRESH) as RefreshScope).refresh(label)
   }
 
-  private unref(key: Key) {
+  private unref(key: InjectionToken) {
     const binding = this.registry.get(key)
     if (binding === undefined) {
       return
@@ -1329,7 +1319,7 @@ export class CaffeineIoC implements Container {
     return false
   }
 
-  private queueProfiledConfig(key: Key, config: DecoratedBindingConfig, providedByConfig?: Key): boolean {
+  private queueProfiledConfig(key: InjectionToken, config: DecoratedBindingConfig, providedByConfig?: InjectionToken): boolean {
     const profiles = config.getProfiles
     if (!profiles || profiles.size === 0) {
       return false
@@ -1517,7 +1507,7 @@ export class CaffeineIoC implements Container {
     }
   }
 
-  private registerBinding<T>(key: Key<T>, binding: Binding<T>): Binding<T> {
+  private registerBinding<T>(key: InjectionToken<T>, binding: Binding<T>): Binding<T> {
     const existing = this.registry.get(key)
     if (existing) {
       Object.assign(existing, binding, { id: existing.id })
@@ -1531,7 +1521,7 @@ export class CaffeineIoC implements Container {
     }
   }
 
-  private mapLabeled(key: Key, binding: Binding): void {
+  private mapLabeled(key: InjectionToken, binding: Binding): void {
     for (const label of binding.labels) {
       let list = this.bindingsByLabel.get(label)
       if (!list) {
@@ -1679,7 +1669,7 @@ export class CaffeineIoC implements Container {
     this._compiled = true
   }
 
-  private async resolveAsyncBinding(key: Key, binding: Binding): Promise<void> {
+  private async resolveAsyncBinding(key: InjectionToken, binding: Binding): Promise<void> {
     const scope = this.scopes.get(binding.scopeID) as SingletonScope
     await (binding.unscopedFactory({ container: this, key, binding }) as Promise<unknown>)
       .then(instance => {
@@ -1707,15 +1697,15 @@ export class CaffeineIoC implements Container {
    * Dependencies are derived from constructor injections only — property and method injections
    * are excluded because they are not supported on async bindings.
    */
-  private sortAsyncBindings(): [Key, Binding][] {
+  private sortAsyncBindings(): [InjectionToken, Binding][] {
     const asyncEntries = [...this.registry.entries()].filter(([, b]) => b.async)
     if (asyncEntries.length < 2) {
       return asyncEntries
     }
 
-    const asyncKeySet = new Set<Key>(asyncEntries.map(([k]) => k))
-    const adjList = new Map<Key, Key[]>()
-    const inDegree = new Map<Key, number>()
+    const asyncKeySet = new Set<InjectionToken>(asyncEntries.map(([k]) => k))
+    const adjList = new Map<InjectionToken, InjectionToken[]>()
+    const inDegree = new Map<InjectionToken, number>()
 
     for (const [key] of asyncEntries) {
       adjList.set(key, [])
@@ -1723,9 +1713,9 @@ export class CaffeineIoC implements Container {
     }
 
     for (const [key, binding] of asyncEntries) {
-      const depKeys = new Set<Key>(
+      const depKeys = new Set<InjectionToken>(
         [
-          ...binding.injections.map(d => d.key as Key),
+          ...binding.injections.map(d => d.key as InjectionToken),
         ].filter(k => asyncKeySet.has(k)),
       )
 
@@ -1735,8 +1725,8 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    const aspectQueue: Key[] = []
-    const otherQueue: Key[] = []
+    const aspectQueue: InjectionToken[] = []
+    const otherQueue: InjectionToken[] = []
     for (const [key, deg] of inDegree) {
       if (deg === 0) {
         if (this.registry.get(key)?.labels.includes(kAspectLabel)) {
@@ -1746,9 +1736,9 @@ export class CaffeineIoC implements Container {
         }
       }
     }
-    const queue: Key[] = [...aspectQueue, ...otherQueue]
+    const queue: InjectionToken[] = [...aspectQueue, ...otherQueue]
 
-    const result: [Key, Binding][] = []
+    const result: [InjectionToken, Binding][] = []
     while (queue.length > 0) {
       const key = queue.shift()!
       result.push([key, this.registry.get(key)!])
@@ -1768,7 +1758,7 @@ export class CaffeineIoC implements Container {
     return result.length === asyncEntries.length ? result : asyncEntries
   }
 
-  private findPendingConfigForKey(key: Key): Key | undefined {
+  private findPendingConfigForKey(key: InjectionToken): InjectionToken | undefined {
     for (const [configKey, providedKeys] of this._pendingConfigKeys) {
       if (providedKeys.includes(key)) {
         return configKey
@@ -1790,7 +1780,7 @@ export class CaffeineIoC implements Container {
       return true
     }
 
-    const registerEntry = (key: Key, binding: Binding): void => {
+    const registerEntry = (key: InjectionToken, binding: Binding): void => {
       this.configureBinding(key, binding)
       justRegistered.add(this.registry.get(key)!.id)
     }
@@ -1894,7 +1884,7 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    const toUnref: Key[] = []
+    const toUnref: InjectionToken[] = []
     for (const [key, binding] of this.registry) {
       if (binding.conditionals.length > 0 && !justRegistered.has(binding.id)) {
         const ctx: ConditionContext = {
@@ -1933,7 +1923,7 @@ export class CaffeineIoC implements Container {
         return true
       }
 
-      const injKeys: (Key | undefined)[] = [
+      const injKeys: (InjectionToken | undefined)[] = [
         ...binding.injections.map(i => i.key),
         ...[...binding.injectableProperties.values()].map(i => i.key),
         ...[...binding.injectableMethods.values()].flatMap(list => list.map(i => i.key)),
@@ -1971,7 +1961,7 @@ export class CaffeineIoC implements Container {
         visited.add(binding.id)
         scopes.add(binding.scopeID)
 
-        const injKeys: (Key | undefined)[] = [
+        const injKeys: (InjectionToken | undefined)[] = [
           ...binding.injections.map(i => i.key),
           ...[...binding.injectableProperties.values()].map(i => i.key),
           ...[...binding.injectableMethods.values()].flatMap(list => list.map(i => i.key)),

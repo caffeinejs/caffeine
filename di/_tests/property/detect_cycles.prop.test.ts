@@ -1,5 +1,6 @@
 import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { token } from '../../key.js'
 import { CaffeineIoC } from '../../container.js'
 import { ErrCircularDependency } from '../../errors.js'
 import { $i } from '../../injection.js'
@@ -54,11 +55,11 @@ describe('detectCycles via init (property)', function () {
 
   it('optional closing edge does not trigger ErrCircularDependency at init', async function () {
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind('a')
-      .toFunction((_b: unknown) => ({}), [$i.optional('b')])
+    di.bind(token<any>('a'))
+      .toFunction((_b: unknown) => ({}), [$i.optional(token<any>('b'))])
       .lazy()
-    di.bind('b')
-      .toFunction((_a: unknown) => ({}), ['a'])
+    di.bind(token<any>('b'))
+      .toFunction((_a: unknown) => ({}), [token<any>('a')])
       .lazy()
 
     await expect(di.init()).resolves.toBeUndefined()
@@ -66,13 +67,13 @@ describe('detectCycles via init (property)', function () {
 
   it('defer closing edge does not trigger ErrCircularDependency at init', async function () {
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind('a')
+    di.bind(token<any>('a'))
       .toFunction(
         (_b: unknown) => ({}),
-        [$i.defer(() => 'b')],
+        [$i.defer(() => token<any>('b'))],
       )
-    di.bind('b')
-      .toFunction((_a: unknown) => ({}), ['a'])
+    di.bind(token<any>('b'))
+      .toFunction((_a: unknown) => ({}), [token<any>('a')])
 
     await expect(di.init()).resolves.toBeUndefined()
   })

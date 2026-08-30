@@ -1,3 +1,4 @@
+import { token, type NamedToken } from '@caffeinejs/di'
 import { secretPaths } from './secrets.js'
 import { ConfigSlice, type ConfigSliceSpec } from './slice.js'
 import { ConfigPriority, ConfigSources } from './sources.js'
@@ -7,7 +8,7 @@ import { ConfigShard } from './integration/shard.js'
 import type { ResolutionContext } from './types.js'
 
 /** DI key for the {@link ConfigDefinition} the application builder owns. Features resolve it to register a slice. */
-export const kConfigDefinition = Symbol.for('@caffeinejs/std:config.definition')
+export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs/std:config.definition'))
 
 const DEFAULT_CONTEXT = (): ResolutionContext => ({ app: 'application', profiles: ['default'] })
 
@@ -21,7 +22,7 @@ const DEFAULT_CONTEXT = (): ResolutionContext => ({ app: 'application', profiles
  * the application builder and every feature contribute to the same tree, in whatever order they happen to run.
  */
 export class ConfigDefinition {
-  readonly token: symbol
+  readonly token: NamedToken<any>
   readonly sources = new ConfigSources()
   readonly slices: ConfigSliceSpec[] = []
 
@@ -45,7 +46,7 @@ export class ConfigDefinition {
   warn: ((message: string) => void) | undefined
   #shard: ConfigShard<unknown> | undefined
 
-  constructor(token: symbol) {
+  constructor(token: NamedToken<any>) {
     this.token = token
     this.sources.add(this.frameworkDefaults, ConfigPriority.FRAMEWORK)
     this.sources.add(this.codeValues, ConfigPriority.CODE)

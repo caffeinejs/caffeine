@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, beforeAll, expect } from 'vitest'
+import { token } from '../key.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -9,8 +10,8 @@ import { ErrInvalidContainerState, ErrNoResolutionForKey, ErrRepeatedInjectableC
 import { Configuration } from '../decorators/configuration.js'
 
 describe('Named Dependencies', function () {
-  const kAck = Symbol('ok')
-  const kBye = 'test-named-dependencies-bye'
+  const kAck = token<any>(Symbol('ok'))
+  const kBye = token<any>('test-named-dependencies-bye')
 
   @Injectable()
   @Named(kBye)
@@ -71,7 +72,7 @@ describe('Named Dependencies', function () {
 
   describe('failure scenarios resolving many', function () {
     it('should fail when trying to set multiple raw beans with same name', function () {
-      const kTest = Symbol('test')
+      const kTest = token<any>(Symbol('test'))
 
       expect(() => {
         @Configuration()
@@ -93,7 +94,7 @@ describe('Named Dependencies', function () {
     })
 
     it('should fail when repeating the same bean key', function () {
-      const kOne = Symbol('one')
+      const kOne = token<any>(Symbol('one'))
 
       expect(() => {
         @Configuration()
@@ -116,9 +117,9 @@ describe('Named Dependencies', function () {
   })
 
   describe('when configuration provides many components of same type with different names', function () {
-    const kTwo = Symbol('two')
-    const kAm = Symbol('am')
-    const kEu = Symbol('eu')
+    const kTwo = token<any>(Symbol('two'))
+    const kAm = token<any>(Symbol('am'))
+    const kEu = token<any>(Symbol('eu'))
 
     @Configuration()
     class Conf {
@@ -189,7 +190,7 @@ describe('Named Dependencies', function () {
       })
 
       it('should return empty array for unregistered symbol key', async function () {
-        const kMissing = Symbol('missing')
+        const kMissing = token<any>(Symbol('missing'))
         const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
@@ -200,7 +201,7 @@ describe('Named Dependencies', function () {
         const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
-        expect(di.getManyOptional('no-such-key')).toEqual([])
+        expect(di.getManyOptional(token<any>('no-such-key'))).toEqual([])
       })
     })
 
@@ -218,7 +219,7 @@ describe('Named Dependencies', function () {
       })
 
       it('should return array with one instance for symbol key', async function () {
-        const kSymbol = Symbol('getManyOptional-single')
+        const kSymbol = token<any>(Symbol('getManyOptional-single'))
         const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
           c.bind(kSymbol).toValue(42)
@@ -233,11 +234,11 @@ describe('Named Dependencies', function () {
       it('should return array with one instance for string key', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
-          c.bind('str-key').toValue('hello')
+          c.bind(token<any>('str-key')).toValue('hello')
         })
         await di.init()
 
-        const result = di.getManyOptional('str-key')
+        const result = di.getManyOptional(token<any>('str-key'))
         expect(result).toHaveLength(1)
         expect(result[0]).toBe('hello')
       })
@@ -245,7 +246,7 @@ describe('Named Dependencies', function () {
 
     describe('contrast with getMany', function () {
       it('should return empty array where getMany would throw', async function () {
-        const kUnknown = Symbol('unknown')
+        const kUnknown = token<any>(Symbol('unknown'))
         const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
@@ -263,7 +264,7 @@ describe('Named Dependencies', function () {
 
   describe('attempting to use same name multiple times', function () {
     it('should fail to register the component', function () {
-      const kTest = Symbol('test')
+      const kTest = token<any>(Symbol('test'))
 
       expect(() => {
         @Injectable()

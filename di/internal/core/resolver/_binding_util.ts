@@ -4,13 +4,13 @@ import { ErrNoUniqueInjectionForKey } from '../../../errors.js'
 import {
   InjectionResolverFactoryContext,
 } from '../../../injection_resolver.js'
-import { Key, keyStr, TypedKey } from '../../../key.js'
+import { InjectionToken, keyStr, TypedKey } from '../../../key.js'
 import { describeContext } from './_fmt.js'
 
 export function excludeSelf<T>(
   bindings: Binding<T>[],
-  consumerKey: Key,
-  depKey: Key,
+  consumerKey: InjectionToken,
+  depKey: InjectionToken,
   container: ContainerOps,
 ): Binding<T>[] {
   if (consumerKey === depKey) {
@@ -24,7 +24,7 @@ export function excludeSelf<T>(
 
 export function uniqueBindingOrThrow(
   ctx: InjectionResolverFactoryContext,
-  key: Key,
+  key: InjectionToken,
 ): Binding<unknown> | undefined {
   return getUniqueBinding(
     ctx.container,

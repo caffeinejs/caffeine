@@ -3,7 +3,7 @@ import { Conditional } from '../../conditional.js'
 import { ErrInvalidDecorator, ErrRepeatedInjectableConfiguration } from '../../errors.js'
 import { Factory, AsyncFactory } from '../../factory.js'
 import { Injection, InjectionDescriptor } from '../../injection.js'
-import { Identifier, Key, keyStr } from '../../key.js'
+import { Identifier, InjectionToken, keyStr } from '../../key.js'
 import { PostResolutionInterceptor } from '../../post_resolution_interceptor.js'
 import { Ctor } from '../../types.js'
 import { normalizeInjections, normalizeInjection } from '../util/index.js'
@@ -14,7 +14,7 @@ export class DecoratedBindingConfig {
   #names?: Identifier[]
   #factory?: Factory<unknown> | AsyncFactory<unknown>
   #conditionals?: Conditional[]
-  #key?: Key
+  #key?: InjectionToken
   #dependencies?: InjectionDescriptor[]
   #type?: Function
   #primary?: boolean
@@ -24,8 +24,8 @@ export class DecoratedBindingConfig {
   #interceptors?: PostResolutionInterceptor[]
   #tags?: Map<symbol, unknown>
   #configuration?: boolean
-  #keysProvided?: Key[]
-  #extend?: Key
+  #keysProvided?: InjectionToken[]
+  #extend?: InjectionToken
   #postConstruct?: Identifier | ((value: any) => void)
   #preDestroy?: Identifier | ((value: any) => void | Promise<void>)
   #injectableProperties?: Map<Identifier, InjectionDescriptor<unknown>>
@@ -37,7 +37,7 @@ export class DecoratedBindingConfig {
   #async?: boolean
   #metadataMerged?: boolean
 
-  constructor(key?: Key) {
+  constructor(key?: InjectionToken) {
     this.#key = key
   }
 
@@ -49,7 +49,7 @@ export class DecoratedBindingConfig {
     return this.#scopeID
   }
 
-  get bindingKey(): Key | undefined {
+  get bindingKey(): InjectionToken | undefined {
     return this.#key
   }
 
@@ -81,7 +81,7 @@ export class DecoratedBindingConfig {
     return this.#configuration
   }
 
-  get getKeysProvided(): Key[] | undefined {
+  get getKeysProvided(): InjectionToken[] | undefined {
     return this.#keysProvided
   }
 
@@ -143,7 +143,7 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  key(key: Key): this {
+  key(key: InjectionToken): this {
     this.#key = key
     return this
   }
@@ -207,12 +207,12 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  keysProvided(keys: Key[]): this {
+  keysProvided(keys: InjectionToken[]): this {
     this.#keysProvided = keys
     return this
   }
 
-  extend(key: Key): this {
+  extend(key: InjectionToken): this {
     this.#extend = key
     return this
   }

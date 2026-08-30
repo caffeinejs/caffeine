@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { CaffeineIoC } from '../container.js'
 
 describe('interfaces', function () {
   describe('given an interface with multiple implementations and one of them using a named key', function () {
-    const kRepo = Symbol('repo')
+    const kRepo = token<any>(Symbol('repo'))
 
     interface Repository {
       save(): string

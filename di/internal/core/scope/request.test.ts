@@ -2,6 +2,7 @@ import HTTP, { IncomingMessage, ServerResponse } from 'http'
 import { randomUUID } from 'node:crypto'
 import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
 import Supertest from 'supertest'
+import { token } from '../../../key.js'
 import { CaffeineIoC, Scopes } from '../../../index.nodejs.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
@@ -117,13 +118,13 @@ describe('Request Scope', function () {
           .toThrow()
 
         await Supertest(server)
-          .get('/')
+          .get(token<any>('/'))
           .expect(200)
           .expect(res => expect(res.text)
             .toEqual(val))
 
         await Supertest(server)
-          .get('/')
+          .get(token<any>('/'))
           .expect(200)
           .expect(res => expect(res.text)
             .toEqual(val))

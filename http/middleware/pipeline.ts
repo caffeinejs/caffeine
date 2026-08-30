@@ -1,4 +1,4 @@
-import { type Container, type Key, type Provider, Scopes } from '@caffeinejs/di'
+import { type Container, type InjectionToken, type Provider, Scopes } from '@caffeinejs/di'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Context } from '../context.js'
 import { type ActionResult, type ActionResultTypes, Responder } from '../response.js'
@@ -103,7 +103,7 @@ export class MiddlewarePipeline {
         entry.instance = ref
         entry.handle = (c, next) => ref.handle(c, next)
       } else if (isMiddlewareClass(ref) || typeof ref !== 'function') {
-        const key = ref as Key<Middleware>
+        const key = ref as InjectionToken<Middleware>
         const provider: Provider<Middleware> = container.wrap<Middleware>(key)
 
         if (container.hasScopeInGraph(key, Scopes.REQUEST)) {

@@ -73,7 +73,8 @@ Binds the key to a constant value. The value is returned as-is on every
 resolution.
 
 ```ts
-di.bind('app.version').toValue('1.0.0')
+const kAppVersion = token<string>('app.version')
+di.bind(kAppVersion).toValue('1.0.0')
 di.bind(AppConfig).toValue(config)
 ```
 

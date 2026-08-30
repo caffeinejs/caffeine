@@ -5,9 +5,9 @@ import { Body, Params, Path } from '../util/decorators/params.js'
 import { Post } from '../util/decorators/post.js'
 import { Put } from '../util/decorators/put.js'
 import { Pet } from './pets.js'
-import { PetsRepository } from './pets.repo.js'
+import { kPetsRepository, PetsRepository } from './pets.repo.js'
 
-@Controller('/pets', [Symbol.for('pets.repository')])
+@Controller('/pets', [kPetsRepository])
 export class PetsController {
   constructor(private readonly petsRepository: PetsRepository) {}
 

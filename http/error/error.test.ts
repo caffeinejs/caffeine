@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
-import { Injectable, Lifetime, Named, Primary, Scopes } from '@caffeinejs/di'
+import { Injectable, Lifetime, Named, Primary, Scopes, token } from '@caffeinejs/di'
 import { Catch, CatchWith, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Args, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
@@ -363,7 +363,7 @@ class ValidationHandler extends ErrorHandler<Error> {
   }
 }
 
-// Two handlers share a name; @Primary decides which one @CatchWith('deltaHandler') resolves.
+// Two handlers share a name; @Primary decides which one @CatchWith(token<any>('deltaHandler')) resolves.
 @Named('deltaHandler')
 @Catch(ErrDelta, { global: false })
 class DeltaFallbackHandler extends ErrorHandler<ErrDelta> {
@@ -444,7 +444,7 @@ class CatchByPriorityController {
   }
 }
 
-@CatchWith('deltaHandler')
+@CatchWith(token<any>('deltaHandler'))
 @Controller('/cb-named')
 class CatchByNamedController {
   @Get('/delta')

@@ -53,7 +53,7 @@ off<E extends keyof Hooks>(event: E, listener: (args: Hooks[E]) => void): this
 Removes a previously registered listener.
 
 ```ts
-const handler = ({ key }: { key: Key }) => console.log(key)
+const handler = ({ key }: { key: InjectionToken }) => console.log(key)
 
 container.hooks.on('onBindingRegistered', handler)
 container.hooks.off('onBindingRegistered', handler)
@@ -80,7 +80,7 @@ before the binding is accepted or rejected.
 
 ```ts
 container.hooks.on('onSetup', ({ key, binding }) => {
-  // key: Key
+  // key: InjectionToken
   // binding: BindingDecoratorConfig
 })
 ```
@@ -92,7 +92,7 @@ accepted into the container.
 
 ```ts
 container.hooks.on('onBindingRegistered', ({ key, binding }) => {
-  // key: Key
+  // key: InjectionToken
   // binding: BindingDecoratorConfig
 })
 ```
@@ -104,7 +104,7 @@ Fired when a binding is evaluated but skipped — for example, because its
 
 ```ts
 container.hooks.on('onBindingNotRegistered', ({ key, binding }) => {
-  // key: Key
+  // key: InjectionToken
   // binding: BindingDecoratorConfig
 })
 ```
@@ -150,7 +150,7 @@ Fired after an instance is created and fully initialized (including
 
 ```ts
 container.hooks.on('onBindingInitialized', ({ key, binding, instance, async }) => {
-  // key: Key
+  // key: InjectionToken
   // binding: Binding
   // instance: unknown — the created instance
   // async: boolean — true if created by an async factory
@@ -163,7 +163,7 @@ Fired when instance creation throws.
 
 ```ts
 container.hooks.on('onBindingInitializationFailed', ({ key, binding, error, async }) => {
-  // key: Key
+  // key: InjectionToken
   // binding: Binding
   // error: unknown — the thrown error
   // async: boolean

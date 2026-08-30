@@ -1,4 +1,4 @@
-import { Key } from './key.js'
+import { InjectionToken } from './key.js'
 import { Binding } from './binding.js'
 import { ContainerOps } from './container_interface.js'
 
@@ -16,11 +16,11 @@ export interface ResolutionContext {
   readonly container: ContainerOps
 
   /**
-   * The {@link Key} of the binding.
+   * The {@link InjectionToken} of the binding.
    *
    * @readonly
    */
-  readonly key: Key<unknown>
+  readonly key: InjectionToken<unknown>
 
   /**
    * The {@link Binding} instance.

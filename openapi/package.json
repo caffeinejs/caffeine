@@ -23,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*",
     "yaml": "^2.9.0"
@@ -37,7 +38,6 @@
     }
   },
   "devDependencies": {
-    "@caffeinejs/di": "*",
     "@caffeinejs/multipart": "*",
     "@scalar/api-reference": "^1.66.1",
     "fastify": "^5.8.5"

@@ -2,7 +2,7 @@ import { DeferredCtor } from './deferred_ctor.js'
 import { ErrMissingInjectionKey } from './errors.js'
 import { solutions } from './internal/util/errutil/index.js'
 import { BuiltInResolvers } from './injection_resolver.js'
-import { Key, isValidKey } from './key.js'
+import { InjectionToken, isValidKey } from './key.js'
 
 /**
  * InjectionDescriptor describes an injection for a component dependency.
@@ -11,7 +11,7 @@ export type InjectionDescriptor<T = any> = {
   /**
    * The key of the desired dependency.
    */
-  key?: Key<T>
+  key?: InjectionToken<T>
 
   /**
    * Whether to inject multiple bindings associated with the same key.
@@ -69,9 +69,9 @@ export type ObjectInjection = InjectionDescriptor | ObjectInjections
  * }
  * ```
  */
-export type Injection<T = unknown> = Key<T> | InjectionDescriptor<T>
+export type Injection<T = unknown> = InjectionToken<T> | InjectionDescriptor<T>
 
-type SpecValue = Key | InjectionDescriptor | ObjectInjectionSpec
+type SpecValue = InjectionToken | InjectionDescriptor | ObjectInjectionSpec
 
 type ObjectInjectionSpec = {
   [prop: string | symbol]: SpecValue
@@ -106,7 +106,7 @@ type ObjectInjectionSpec = {
  * }
  * ```
  */
-function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function allOf(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
@@ -127,7 +127,7 @@ function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor 
     throw new ErrMissingInjectionKey(`Cannot call 'allOf': key is null or undefined`)
   }
 
-  return { key: keyOrDescriptor as Key, multiple: true, resolver: BuiltInResolvers.DEFAULT }
+  return { key: keyOrDescriptor as InjectionToken, multiple: true, resolver: BuiltInResolvers.DEFAULT }
 }
 
 /**
@@ -157,7 +157,7 @@ function allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor 
  * }
  * ```
  */
-function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function ordered(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
@@ -178,7 +178,7 @@ function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescripto
     throw new ErrMissingInjectionKey(`Cannot call 'ordered': key is null or undefined`)
   }
 
-  return { key: keyOrDescriptor as Key, resolver: BuiltInResolvers.ORDERED }
+  return { key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.ORDERED }
 }
 
 /**
@@ -191,15 +191,17 @@ function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescripto
  * ```ts
  * interface Movie {}
  *
- * @Injectable('movie')
+ * const kMovie = token<Movie>('movie')
+ *
+ * @Injectable(kMovie)
  * @Named('horror')
  * class Horror implements Movie {}
  *
- * @Injectable('movie')
+ * @Injectable(kMovie)
  * @Named('comedy')
  * class Comedy implements Movie {}
  *
- * @Injectable([$i.mapped('movie')])
+ * @Injectable([$i.mapped(kMovie)])
  * class MovieService {
  *   constructor(readonly movies: Map<string, Movie>) {}
  * }
@@ -208,7 +210,7 @@ function ordered(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescripto
  *
  * ```
  */
-function mapped(key: Key): InjectionDescriptor {
+function mapped(key: InjectionToken): InjectionDescriptor {
   if (key == null) {
     throw new ErrMissingInjectionKey(
       `Cannot call 'mapped': key is null or undefined`
@@ -236,7 +238,7 @@ function mapped(key: Key): InjectionDescriptor {
  * }
  * ```
  */
-function defer(keyFn: () => Key): InjectionDescriptor {
+function defer(keyFn: () => InjectionToken): InjectionDescriptor {
   return { key: new DeferredCtor(keyFn), resolver: BuiltInResolvers.DEFER }
 }
 
@@ -253,9 +255,9 @@ function defer(keyFn: () => Key): InjectionDescriptor {
  * }
  * ```
  */
-function optional(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function optional(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
   if (isValidKey(keyOrDescriptor)) {
-    return { key: keyOrDescriptor as Key, optional: true }
+    return { key: keyOrDescriptor as InjectionToken, optional: true }
   }
 
   const descriptor = keyOrDescriptor as InjectionDescriptor
@@ -302,7 +304,7 @@ function object(spec: ObjectInjectionSpec): InjectionDescriptor {
  * }
  * ```
  */
-function provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor {
+function provide(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(
       `Cannot call 'provide': key is null or undefined`
@@ -314,7 +316,7 @@ function provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescripto
   }
 
   if (isValidKey(keyOrDescriptor)) {
-    return { key: keyOrDescriptor as Key, resolver: BuiltInResolvers.PROVIDER }
+    return { key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.PROVIDER }
   }
 
   const descriptor = keyOrDescriptor as InjectionDescriptor
@@ -391,7 +393,7 @@ function value<T = unknown, R = unknown>(
  * @param key - The key to compose the injection descriptors for.
  * @param fns - The injection functions to compose.
  */
-function compose(key: Key, ...fns: Array<(key: Key) => InjectionDescriptor>): InjectionDescriptor {
+function compose(key: InjectionToken, ...fns: Array<(key: InjectionToken) => InjectionDescriptor>): InjectionDescriptor {
   return fns.reduce((acc, fn) => ({ ...acc, ...fn(key) }), {} as InjectionDescriptor)
 }
 
@@ -403,7 +405,7 @@ function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
     const value = spec[prop]
 
     if (isValidKey(value)) {
-      children[prop] = { key: value as Key } satisfies ObjectInjection
+      children[prop] = { key: value as InjectionToken } satisfies ObjectInjection
     } else if (typeof value === 'object' && value !== null && 'key' in value) {
       const desc = value as InjectionDescriptor
 

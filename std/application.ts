@@ -1,5 +1,6 @@
-import { type Container, type Key, Scopes } from '@caffeinejs/di'
+import { type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
 import { ConfigDefinition, defineFeatureConfig } from './config/index.js'
+import { kAppConfig } from './app_config.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
@@ -10,7 +11,7 @@ import { type Service, ServiceBootstrapIn } from './service.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
 export interface HookBinding {
-  key: Key
+  key: InjectionToken
   ctor: Function
 }
 
@@ -77,7 +78,7 @@ export abstract class BaseApplication {
     this.#shutdownInit = init.shutdown
     // An application constructed without a builder still gets one, so services can register unconditionally.
     // Nothing bootstraps it in that case, which is what a missing config module means.
-    this.#config = init.config ?? new ConfigDefinition(Symbol.for('@caffeinejs/std:app.config'))
+    this.#config = init.config ?? new ConfigDefinition(kAppConfig)
   }
 
   get container(): Container {

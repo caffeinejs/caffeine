@@ -1,4 +1,4 @@
-import { Injectable } from '@caffeinejs/di'
+import { Injectable, token } from '@caffeinejs/di'
 import { Pet } from './pets.js'
 
 export interface PetsRepository {
@@ -9,7 +9,9 @@ export interface PetsRepository {
   delete(id: number): boolean
 }
 
-@Injectable(Symbol.for('pets.repository'))
+export const kPetsRepository = token<PetsRepository>(Symbol.for('pets.repository'))
+
+@Injectable(kPetsRepository)
 export class PetsInMemoryRepository implements PetsRepository {
   private readonly pets: Pet[] = []
   private seq = 1

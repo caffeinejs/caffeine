@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -81,7 +82,7 @@ describe('Configuration', function () {
 
   describe('named class factory', function () {
     const spy = vi.fn()
-    const kTest = Symbol('test')
+    const kTest = token<any>(Symbol('test'))
 
     class Service {
       readonly id: string = randomUUID()
@@ -96,7 +97,7 @@ describe('Configuration', function () {
     @Configuration()
     @Profile('provides-named')
     class Conf {
-      @Provides(Service, ['msg'])
+      @Provides(Service, [token<any>('msg')])
       @Named(kTest)
       service(msg: string) {
         spy()
@@ -108,7 +109,7 @@ describe('Configuration', function () {
       const di = new CaffeineIoC({ profiles: ['provides-named'] })
       const msg = 'hello world'
 
-      di.bind('msg')
+      di.bind(token<any>('msg'))
         .toValue(msg)
       await di.init()
 
@@ -129,13 +130,13 @@ describe('Configuration', function () {
   describe('value factory', function () {
     @Configuration()
     class ValueFactory {
-      @Provides('txt')
+      @Provides(token<any>('txt'))
       txt() {
         return 'hello world'
       }
     }
 
-    @Injectable(['txt'])
+    @Injectable([token<any>('txt')])
     class UsingTxt {
       constructor(readonly txt: string) {}
     }
@@ -143,7 +144,7 @@ describe('Configuration', function () {
     it('should inject value provided by bean method', async function () {
       const di = new CaffeineIoC()
       await di.init()
-      const txt = di.get('txt')
+      const txt = di.get(token<any>('txt'))
       const usingTxt = di.get(UsingTxt)
       const expected = 'hello world'
 
@@ -155,7 +156,7 @@ describe('Configuration', function () {
   })
 
   describe('configuration class with primary beans', function () {
-    const kInterface = Symbol('interface')
+    const kInterface = token<any>(Symbol('interface'))
 
     abstract class Abs {
       abstract test(): string

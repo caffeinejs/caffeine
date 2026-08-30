@@ -2,7 +2,7 @@ import { Injection } from '../injection.js'
 import { Ctor } from '../types.js'
 import { ErrInvalidDecorator, ErrScopeMismatchInConfiguration } from '../errors.js'
 import { solutions } from '../internal/util/errutil/index.js'
-import { Key } from '../key.js'
+import { InjectionToken } from '../key.js'
 import { isNil } from '../internal/util/assert/index.js'
 import {
   addProvidedBindings,
@@ -41,7 +41,7 @@ export function Configuration<T>(injections?: Injection[]) {
     const configurations = Array.from(members.entries())
       .map(([_, options]) => options)
     const keys = configurations.map(x => x.bindingKey)
-      .filter((k): k is Key => k !== undefined)
+      .filter((k): k is InjectionToken => k !== undefined)
 
     const classBinding = defineInjectable<T>(context.metadata, target, config =>
       config

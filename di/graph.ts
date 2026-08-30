@@ -1,5 +1,5 @@
 import { Binding } from './binding.js'
-import { Key, isNamedKey, keyStr } from './key.js'
+import { InjectionToken, isNamedKey, keyStr } from './key.js'
 
 export interface GraphNode {
   id: number
@@ -32,7 +32,7 @@ export interface BindingGraph {
  *
  * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a `Markdown` table.
  */
-export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph): string {
+export function graphToMarkdown(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)
 
   if (graph.nodes.length === 0) {
@@ -44,7 +44,7 @@ export function graphToMarkdown(input: Iterable<[Key, Binding]> | BindingGraph):
 
   lines.push('## Bindings')
   lines.push('')
-  lines.push('| Key | Dependencies | Scope | Names | Labels | Primary | Lazy |')
+  lines.push('| InjectionToken | Dependencies | Scope | Names | Labels | Primary | Lazy |')
   lines.push('| --- | --- | --- | --- | --- | --- | --- |')
 
   for (const node of graph.nodes) {
@@ -125,7 +125,7 @@ function escapeMermaid(text: string): string {
  *
  * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a `Mermaid` diagram.
  */
-export function graphToMermaid(input: Iterable<[Key, Binding]> | BindingGraph): string {
+export function graphToMermaid(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)
 
   if (graph.nodes.length === 0) {
@@ -169,7 +169,7 @@ function escapeDot(text: string): string {
  *
  * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a Graphviz DOT digraph.
  */
-export function graphToDot(input: Iterable<[Key, Binding]> | BindingGraph): string {
+export function graphToDot(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)
 
   if (graph.nodes.length === 0) {
@@ -220,7 +220,7 @@ export function graphToDot(input: Iterable<[Key, Binding]> | BindingGraph): stri
  *
  * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a JSON string.
  */
-export function graphToJSON(input: Iterable<[Key, Binding]> | BindingGraph): string {
+export function graphToJSON(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string {
   return JSON.stringify(resolveGraph(input), null, 2)
 }
 
@@ -231,7 +231,7 @@ export function graphToJSON(input: Iterable<[Key, Binding]> | BindingGraph): str
  *
  * @returns A string representing the {@link CaffeineIoC} container dependencies graph as a plain-text tree.
  */
-export function graphToText(input: Iterable<[Key, Binding]> | BindingGraph): string {
+export function graphToText(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string {
   const graph = resolveGraph(input)
 
   if (graph.nodes.length === 0) {
@@ -264,7 +264,7 @@ function scopeStr(scopeID: string | symbol): string {
   return String(scopeID)
 }
 
-function isBindingGraph(input: Iterable<[Key, Binding]> | BindingGraph): input is BindingGraph {
+function isBindingGraph(input: Iterable<[InjectionToken, Binding]> | BindingGraph): input is BindingGraph {
   return (
     typeof input === 'object'
     && input !== null
@@ -275,7 +275,7 @@ function isBindingGraph(input: Iterable<[Key, Binding]> | BindingGraph): input i
   )
 }
 
-function resolveGraph(input: Iterable<[Key, Binding]> | BindingGraph): BindingGraph {
+function resolveGraph(input: Iterable<[InjectionToken, Binding]> | BindingGraph): BindingGraph {
   return isBindingGraph(input) ? input : buildBindingGraph(input)
 }
 
@@ -350,9 +350,9 @@ function nodeDependencyLabels(
   return labels.filter(l => !seen.has(l) && seen.add(l))
 }
 
-export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGraph {
+export function buildBindingGraph(bindings: Iterable<[InjectionToken, Binding]>): BindingGraph {
   const entries = Array.from(bindings)
-  const keyToID = new Map<Key, number>()
+  const keyToID = new Map<InjectionToken, number>()
   const nameToIds = new Map<string, number[]>()
   const labelToIds = new Map<string, number[]>()
   const nodes: GraphNode[] = []
@@ -388,7 +388,7 @@ export function buildBindingGraph(bindings: Iterable<[Key, Binding]>): BindingGr
 
   const edges: GraphEdge[] = []
 
-  function addInjectionEdge(fromID: number, injKey: Key | undefined, kind: EdgeKind, meta: string): void {
+  function addInjectionEdge(fromID: number, injKey: InjectionToken | undefined, kind: EdgeKind, meta: string): void {
     if (injKey == null) {
       return
     }

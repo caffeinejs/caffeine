@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
 import { ErrInvalidContainerState } from '../errors.js'
@@ -62,14 +63,14 @@ describe('Module', function () {
 
     it('should give each module access to the container', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind('key')
+        container.bind(token<any>('key'))
           .toValue('value')
       }
 
       const di = new CaffeineIoC({ decorators: false, modules: [module] })
       await di.init()
 
-      expect(di.get('key'))
+      expect(di.get(token<any>('key')))
         .toBe('value')
     })
 
@@ -113,19 +114,19 @@ describe('Module', function () {
 
     it('should execute modules after autoWire', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind('manual-key')
+        container.bind(token<any>('manual-key'))
           .toValue('manual-value')
       }
 
       const di = new CaffeineIoC({ modules: [module] })
       await di.init()
 
-      expect(di.get('manual-key'))
+      expect(di.get(token<any>('manual-key')))
         .toBe('manual-value')
     })
 
     it('should coexist with auto-wired bindings', async function () {
-      const kToken = Symbol('module-test-token')
+      const kToken = token<any>(Symbol('module-test-token'))
       const module: ModuleFn = (container: ContainerBindingOps) => {
         container.bind(kToken)
           .toValue(42)
@@ -732,8 +733,8 @@ describe('Module', function () {
       expect(moduleFnCalls).toHaveLength(2)
       expect(moduleFnCalls).toContain('alpha')
       expect(moduleFnCalls).toContain('beta')
-      expect(di.get('alpha')).toBe('alpha')
-      expect(di.get('beta')).toBe('beta')
+      expect(di.get(token<any>('alpha'))).toBe('alpha')
+      expect(di.get(token<any>('beta'))).toBe('beta')
     })
 
     it('should load a nested provides cycle from the other root', async function () {
@@ -741,8 +742,8 @@ describe('Module', function () {
       await di.init()
 
       expect(moduleFnCalls).toHaveLength(2)
-      expect(di.get('alpha')).toBe('alpha')
-      expect(di.get('beta')).toBe('beta')
+      expect(di.get(token<any>('alpha'))).toBe('alpha')
+      expect(di.get(token<any>('beta'))).toBe('beta')
     })
   })
 })

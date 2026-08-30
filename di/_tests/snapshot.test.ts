@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 import { type Options } from '../container_interface.js'
 import { type Snapshot } from '../snapshot.js'
@@ -9,9 +10,9 @@ function newContainerFromSnapshot(snap: Snapshot, options?: Partial<Options>): C
   return di
 }
 
-const kDb = Symbol('db')
-const kAPI = Symbol('api')
-const kLabel = Symbol('label')
+const kDb = token<any>(Symbol('db'))
+const kAPI = token<any>(Symbol('api'))
+const kLabel = token<any>(Symbol('label'))
 
 describe('ContainerSnapshot', function () {
   describe('snapshot()', function () {
@@ -72,7 +73,7 @@ describe('ContainerSnapshot', function () {
     })
 
     it('class binding with symbol key resolves via factory in new container', async function () {
-      const kSvc = Symbol('svc')
+      const kSvc = token<any>(Symbol('svc'))
 
       class Svc {
         readonly tag = 'real'
@@ -189,7 +190,7 @@ describe('ContainerSnapshot', function () {
       const testDi = newContainerFromSnapshot(di.snapshot(), { profiles: ['test'] })
       await testDi.init()
 
-      expect(testDi.profiles.has('test')).toBe(true)
+      expect(testDi.profiles.has(token<any>('test'))).toBe(true)
       expect(testDi.get(kDb)).toBe('prod-db')
     })
   })

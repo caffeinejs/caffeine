@@ -1,4 +1,4 @@
-import { Key } from './key.js'
+import { InjectionToken } from './key.js'
 
 /**
  * DeferredCtor wraps a deferred key resolution.
@@ -20,9 +20,9 @@ export class DeferredCtor<T> {
     setPrototypeOf: (t, proto) => Reflect.setPrototypeOf(t() as object, proto),
   }
 
-  constructor(private readonly callback: () => Key<T>) {}
+  constructor(private readonly callback: () => InjectionToken<T>) {}
 
-  createProxy(creator: (ctor: Key<T>) => T): T {
+  createProxy(creator: (ctor: InjectionToken<T>) => T): T {
     let init = false
     let value: T
 
@@ -37,7 +37,7 @@ export class DeferredCtor<T> {
     return new Proxy<any>(deferredObject, DeferredCtor._handler)
   }
 
-  unwrap(): Key<T> {
+  unwrap(): InjectionToken<T> {
     return this.callback()
   }
 }

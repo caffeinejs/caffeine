@@ -34,10 +34,10 @@ inject.provide(EmailSender)
 ## Injection type
 
 ```ts
-type Injection<T = unknown> = Key<T> | InjectionDescriptor<T>
+type Injection<T = unknown> = InjectionToken<T> | InjectionDescriptor<T>
 ```
 
-Every place that accepts a dependency specification accepts either a bare `Key`
+Every place that accepts a dependency specification accepts either a bare `InjectionToken`
 or a full `InjectionDescriptor`. Helpers like `optional()` and `allOf()` return
 `InjectionDescriptor` values that you pass in the same position.
 
@@ -52,7 +52,7 @@ class App { ... }
 
 ```ts
 type InjectionDescriptor<T = any> = {
-  key?: Key<T>       // the dependency key
+  key?: InjectionToken<T>       // the dependency key
   multiple?: boolean // inject all bindings for the key (returns T[])
   optional?: boolean // ok if missing — injects undefined instead of throwing
   resolver?: symbol  // custom resolver (overrides the default)
@@ -67,7 +67,7 @@ type InjectionDescriptor<T = any> = {
 ### allOf
 
 ```ts
-allOf(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor
+allOf(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor
 ```
 
 Injects all bindings registered for a key as an array. This is the injection
@@ -93,7 +93,7 @@ class Pipeline {
 ### optional
 
 ```ts
-optional(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor
+optional(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor
 ```
 
 Marks a dependency as optional. If no binding is registered for the key, the
@@ -115,7 +115,7 @@ Can be combined with other helpers:
 ### provide
 
 ```ts
-provide(keyOrDescriptor: Key | InjectionDescriptor): InjectionDescriptor
+provide(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor
 ```
 
 Wraps the resolved dependency in a `Provider<T>`. The provider's `get()` method
@@ -142,7 +142,7 @@ class NotificationService {
 ### mapped
 
 ```ts
-mapped(key: Key): InjectionDescriptor
+mapped(key: InjectionToken): InjectionDescriptor
 ```
 
 Injects all bindings for `key` as a `Map<string, T>`, where the map key is
@@ -150,15 +150,17 @@ the binding's name. Useful when you need to look up bindings by name at
 runtime.
 
 ```ts
-@Injectable()
+const kMovie = token<Movie>('movie')
+
+@Injectable(kMovie)
 @Named('horror')
 class HorrorMovie implements Movie { ... }
 
-@Injectable()
+@Injectable(kMovie)
 @Named('comedy')
 class ComedyMovie implements Movie { ... }
 
-@Injectable([mapped('movie')])
+@Injectable([mapped(kMovie)])
 class MovieService {
   constructor(readonly movies: Map<string, Movie>) {}
   // movies.get('horror') → HorrorMovie instance
@@ -177,7 +179,7 @@ descriptors.
 
 ```ts
 type ObjectInjectionSpec = {
-  [prop: string | symbol]: Key | InjectionDescriptor | ObjectInjectionSpec
+  [prop: string | symbol]: InjectionToken | InjectionDescriptor | ObjectInjectionSpec
 }
 ```
 
@@ -191,7 +193,7 @@ class UserService {
 ### defer
 
 ```ts
-defer(keyFn: () => Key): InjectionDescriptor
+defer(keyFn: () => InjectionToken): InjectionDescriptor
 ```
 
 Defers key resolution until the container constructs the instance. Use this
@@ -230,12 +232,12 @@ class DatabaseClient {
 ### compose
 
 ```ts
-compose(key: Key, ...fns: Array<(key: Key) => InjectionDescriptor>): InjectionDescriptor
+compose(key: InjectionToken, ...fns: Array<(key: InjectionToken) => InjectionDescriptor>): InjectionDescriptor
 ```
 
 Composes multiple injection modifier functions around a single key. Applies
 each function's result to the descriptor from left to right.
 
 ```ts
-const injectOptionalMany = (key: Key) => compose(key, optional, allOf)
+const injectOptionalMany = (key: InjectionToken) => compose(key, optional, allOf)
 ```

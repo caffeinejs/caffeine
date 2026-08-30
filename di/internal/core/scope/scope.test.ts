@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, afterAll, expect, vi } from 'vitest'
+import { token } from '../../../key.js'
 import { Binding } from '../../../binding.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
@@ -11,7 +12,7 @@ import { bindScope, hasScope, Scopes, Scope, unbindScope } from '../../../scope.
 import { ResolutionContext } from '../../../resolution_context.js'
 
 describe('Scoping', function () {
-  const kCustomScopeID = Symbol('custom')
+  const kCustomScopeID = token<any>(Symbol('custom'))
   const spy = vi.fn()
 
   class CustomScope implements Scope {

@@ -1,3 +1,8 @@
+import { token } from '@caffeinejs/di'
+import type { MessagingRuntime } from './runtime.js'
+import type { MessageBus } from './bus.js'
+import type { MessagingContainer } from './engine.js'
+
 /** The default binder instance name used when a messaging integration is declared without an explicit name. */
 export const DEFAULT_BINDER = 'default'
 
@@ -15,19 +20,19 @@ export const Keys = {
 }
 
 /** Internal: the DI key of the binder-instance runtime seam for a named instance. */
-export function runtimeKey(name: string): symbol {
-  return Symbol.for(`@caffeinejs/messaging:runtime:${name}`)
+export function runtimeKey(name: string) {
+  return token<MessagingRuntime>(Symbol.for(`@caffeinejs/messaging:runtime:${name}`))
 }
 
 /** Internal: the DI key of the dispatch engine for a named messaging integration. */
-export function containerKey(name: string): symbol {
-  return Symbol.for(`@caffeinejs/messaging:engine:${name}`)
+export function containerKey(name: string) {
+  return token<MessagingContainer>(Symbol.for(`@caffeinejs/messaging:engine:${name}`))
 }
 
 /**
  * The DI key of the `MessageBus` for a named messaging integration. The default integration's bus is also bound
  * under the `MessageBus` class itself (this symbol is a name alias on it), so default users may inject either.
  */
-export function busKey(name: string = DEFAULT_BINDER): symbol {
-  return Symbol.for(`@caffeinejs/messaging:bus:${name}`)
+export function busKey(name: string = DEFAULT_BINDER) {
+  return token<MessageBus>(Symbol.for(`@caffeinejs/messaging:bus:${name}`))
 }

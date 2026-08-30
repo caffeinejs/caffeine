@@ -1,4 +1,4 @@
-import { Scopes, type Key } from '@caffeinejs/di'
+import { Scopes, type InjectionToken } from '@caffeinejs/di'
 import { type Service, type ServiceAPI } from '@caffeinejs/std'
 import type { ServiceKit } from '../service.js'
 import type { Guard } from './guard.js'
@@ -11,13 +11,13 @@ import { kGlobalGuards } from './keys.js'
  * Order of {@link GuardsBuilder.global} is global execution order, before controller- and method-level `@UseGuards`.
  */
 export class GuardsBuilder implements Service {
-  readonly #keys: Key<Guard>[] = []
+  readonly #keys: InjectionToken<Guard>[] = []
 
   get name(): string {
     return 'guards'
   }
 
-  global(key: Key<Guard>, ...keys: Key<Guard>[]): ServiceAPI<this> {
+  global(key: InjectionToken<Guard>, ...keys: InjectionToken<Guard>[]): ServiceAPI<this> {
     this.#keys.push(key, ...keys)
     return this
   }

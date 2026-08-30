@@ -1,24 +1,24 @@
 import { Binding } from '../../binding.js'
 import { ErrInvalidDecorator } from '../../errors.js'
 import { notNil } from '../../internal/util/assert/index.js'
-import { Identifier, Key } from '../../key.js'
+import { Identifier, InjectionToken } from '../../key.js'
 import { Injection } from '../../injection.js'
 import { normalizeInjections } from '../util/util.js'
 import { idfy, MemberKind, TypeID } from './types.js'
 import { DecoratedBindingConfig, MemberMetadata } from './spec.js'
 
-const Bindings = new Map<Key, DecoratedBindingConfig>()
-const ByProfile = new Map<Identifier, Set<Key>>()
-const ProvidedBindings: Array<[Key, DecoratedBindingConfig]> = []
+const Bindings = new Map<InjectionToken, DecoratedBindingConfig>()
+const ByProfile = new Map<Identifier, Set<InjectionToken>>()
+const ProvidedBindings: Array<[InjectionToken, DecoratedBindingConfig]> = []
 const MetadataWeakMap = new WeakMap<TypeID, MemberMetadata>()
-const Injectables = new Set<Key>()
+const Injectables = new Set<InjectionToken>()
 
 /**
  * Marks a class as an injectable and optionally configure its binding.
  */
 export function defineInjectable<T>(
   id: TypeID,
-  key: Key<T>,
+  key: InjectionToken<T>,
   configure: (config: DecoratedBindingConfig) => void,
 ): DecoratedBindingConfig {
   Injectables.add(key)
@@ -43,7 +43,7 @@ export function defineInjectable<T>(
  */
 export function extendInjectableAttributes<T>(
   id: TypeID,
-  key: Key<T>,
+  key: InjectionToken<T>,
   configure: (config: DecoratedBindingConfig) => void,
 ): void {
   notNil(key)
@@ -110,7 +110,7 @@ export function extendMemberInjectableAttributes(
 /**
  * Checks if a binding is registered for the given key.
  */
-export function hasInjectable(key: Key): boolean {
+export function hasInjectable(key: InjectionToken): boolean {
   return Injectables.has(key)
 }
 
@@ -133,11 +133,11 @@ export function getInjectionMetadata(id: TypeID): MemberMetadata {
 /**
  * Gets the binding configuration for the given key.
  */
-export function getBindingConfiguration(key: Key): DecoratedBindingConfig | undefined {
+export function getBindingConfiguration(key: InjectionToken): DecoratedBindingConfig | undefined {
   return Bindings.get(notNil(key))
 }
 
-function getOrCreateBindingConfiguration(key: Key): DecoratedBindingConfig {
+function getOrCreateBindingConfiguration(key: InjectionToken): DecoratedBindingConfig {
   let binding = Bindings.get(key)
   if (!binding) {
     binding = new DecoratedBindingConfig(key)
@@ -151,21 +151,21 @@ function getOrCreateBindingConfiguration(key: Key): DecoratedBindingConfig {
  * Gets all decorated binding configurations.
  * The container uses this function to retrieve decorated bindings; profile matching happens later.
  */
-export function getBindingConfigurations(): IterableIterator<[Key, DecoratedBindingConfig]> {
+export function getBindingConfigurations(): IterableIterator<[InjectionToken, DecoratedBindingConfig]> {
   return Bindings.entries()
 }
 
 /**
  * Gets the provided bindings from configuration classes.
  */
-export function providedBindingConfigurations(): Array<[Key, DecoratedBindingConfig]> {
+export function providedBindingConfigurations(): Array<[InjectionToken, DecoratedBindingConfig]> {
   return ProvidedBindings
 }
 
 /**
  * Configures a provided binding from a configuration class.
  */
-export function addProvidedBindings<T>(key: Key<T>, config: DecoratedBindingConfig): void {
+export function addProvidedBindings<T>(key: InjectionToken<T>, config: DecoratedBindingConfig): void {
   notNil(key)
   notNil(config)
 
@@ -185,10 +185,10 @@ export function decoratorConfigToBinding<T>(config: DecoratedBindingConfig): Bin
  * Represents a snapshot of the registry.
  */
 export interface DecoratorRegistrySnapshot {
-  readonly bindings: Map<Key, DecoratedBindingConfig>
-  readonly byProfile: Map<Identifier, Set<Key>>
-  readonly providedBindings: Array<[Key, DecoratedBindingConfig]>
-  readonly injectables: Set<Key>
+  readonly bindings: Map<InjectionToken, DecoratedBindingConfig>
+  readonly byProfile: Map<Identifier, Set<InjectionToken>>
+  readonly providedBindings: Array<[InjectionToken, DecoratedBindingConfig]>
+  readonly injectables: Set<InjectionToken>
 }
 
 /**

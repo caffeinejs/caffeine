@@ -1,4 +1,4 @@
-import { Key, Identifier } from './key.js'
+import { InjectionToken, Identifier } from './key.js'
 import { Binding } from './binding.js'
 import { Conditional } from './conditional.js'
 import { notNil } from './internal/util/assert/index.js'
@@ -14,21 +14,25 @@ import { DeferredCtor } from './deferred_ctor.js'
  * scope, names, interceptors, and more.
  */
 export class BinderOptions<TValue> {
-  readonly key: Key<TValue> | undefined
+  readonly key: InjectionToken<TValue> | undefined
   readonly binding: Binding<TValue>
   private readonly register: ((binding: Binding<any>) => void) | undefined
 
-  constructor(key: Key<TValue> | unknown, binding: Binding<TValue>, register?: (binding: Binding<any>) => void)
+  constructor(
+    key: InjectionToken<TValue> | unknown,
+    binding: Binding<TValue>,
+    register?: (binding: Binding<any>) => void,
+  )
   constructor(binding: Binding<TValue>)
   constructor(
-    keyOrBinding: Key<TValue> | Binding<TValue> | undefined,
+    keyOrBinding: InjectionToken<TValue> | Binding<TValue> | undefined,
     binding?: Binding<TValue>,
     register?: (binding: Binding<any>) => void,
   ) {
     if (binding === undefined) {
       this.binding = keyOrBinding as Binding<TValue>
     } else {
-      this.key = keyOrBinding as Key<TValue>
+      this.key = keyOrBinding as InjectionToken<TValue>
       this.binding = binding
       this.register = register
     }
@@ -178,7 +182,7 @@ export class BinderOptions<TValue> {
     const descriptor: InjectionDescriptor
       = typeof injection === 'object' && !(injection instanceof DeferredCtor)
         ? (injection as InjectionDescriptor)
-        : { key: injection as Key }
+        : { key: injection as InjectionToken }
 
     this.binding.injectableProperties.set(property, descriptor)
     this.sync()
@@ -202,7 +206,7 @@ export class BinderOptions<TValue> {
     }
 
     const descriptors: InjectionDescriptor[] = deps.map(dep =>
-      typeof dep === 'object' && !(dep instanceof DeferredCtor) ? (dep as InjectionDescriptor) : { key: dep as Key },
+      typeof dep === 'object' && !(dep instanceof DeferredCtor) ? (dep as InjectionDescriptor) : { key: dep as InjectionToken },
     )
 
     this.binding.injectableMethods.set(method, descriptors)
@@ -216,7 +220,7 @@ export class BinderOptions<TValue> {
    *
    * @example
    * ```ts
-   * const Plugin = Symbol('Plugin')
+   * const Plugin = token<MyPlugin>(Symbol('Plugin'))
    * container.bind(key).toClass(MyPlugin).labels(Plugin)
    * container.getMany(Plugin) // [MyPlugin instance]
    * ```

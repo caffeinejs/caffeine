@@ -24,7 +24,7 @@ import {
 ### graphToText
 
 ```ts
-graphToText(input: Iterable<[Key, Binding]>): string
+graphToText(input: Iterable<[InjectionToken, Binding]>): string
 ```
 
 Renders the graph as a plain-text tree. Suitable for terminal output and
@@ -52,7 +52,7 @@ Database(scope=singleton)
 ### graphToMarkdown
 
 ```ts
-graphToMarkdown(input: Iterable<[Key, Binding]>): string
+graphToMarkdown(input: Iterable<[InjectionToken, Binding]>): string
 ```
 
 Renders the graph as a Markdown table. Suitable for embedding in GitHub
@@ -67,7 +67,7 @@ console.log(graphToMarkdown(container))
 ### graphToMermaid
 
 ```ts
-graphToMermaid(input: Iterable<[Key, Binding]>): string
+graphToMermaid(input: Iterable<[InjectionToken, Binding]>): string
 ```
 
 Renders the graph as a [Mermaid](https://mermaid.js.org/) flowchart diagram.
@@ -94,7 +94,7 @@ flowchart LR
 ### graphToDot
 
 ```ts
-graphToDot(input: Iterable<[Key, Binding]>): string
+graphToDot(input: Iterable<[InjectionToken, Binding]>): string
 ```
 
 Renders the graph in [GraphViz DOT](https://graphviz.org/doc/info/lang.html)
@@ -109,7 +109,7 @@ console.log(graphToDot(container))
 ### graphToJson
 
 ```ts
-graphToJson(input: Iterable<[Key, Binding]>): string
+graphToJson(input: Iterable<[InjectionToken, Binding]>): string
 ```
 
 Renders the graph as a JSON string. Suitable for custom tooling or storage.

@@ -4,7 +4,7 @@ import { Binder } from './binder.js'
 import { type BinderOptions } from './binder_options.js'
 import { type AsyncFactory, type Factory } from './factory.js'
 import { type Injection } from './injection.js'
-import { type Key } from './key.js'
+import { type InjectionToken } from './key.js'
 import { type Ctor } from './types.js'
 
 /**
@@ -54,7 +54,7 @@ export class AOPBinder<T> extends Binder<T> {
     return this.wrap(super.toFunction(fn, injections))
   }
 
-  override aliasOf(targetKey: Key<T>): AOPBinderOptions<T> {
+  override aliasOf(targetKey: InjectionToken<T>): AOPBinderOptions<T> {
     return this.wrap(super.aliasOf(targetKey))
   }
 }

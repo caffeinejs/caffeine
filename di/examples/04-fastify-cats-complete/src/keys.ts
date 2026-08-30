@@ -1,3 +1,6 @@
-// Injection keys
-export const kPgPool = Symbol.for('pg.pool')
-export const kHealthRoutes = Symbol.for('health.routes')
+import type { FastifyInstance } from 'fastify'
+import type { Pool } from 'pg'
+import { token } from '@caffeinejs/di'
+
+export const kPgPool = token<Pool>(Symbol.for('pg.pool'))
+export const kHealthRoutes = token<(fastify: FastifyInstance) => Promise<FastifyInstance>>(Symbol.for('health.routes'))

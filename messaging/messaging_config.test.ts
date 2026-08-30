@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Container } from '@caffeinejs/di'
 import { $t, createApplication } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
 import { inMemoryBinder } from './binder.testkit.js'
@@ -8,7 +9,7 @@ import { runtimeKey } from './symbols.js'
 
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
 
-function runtimeOf(container: { get: (key: symbol) => unknown }, instance = 'default'): MessagingRuntime {
+function runtimeOf(container: Container, instance = 'default'): MessagingRuntime {
   return container.get(runtimeKey(instance)) as MessagingRuntime
 }
 

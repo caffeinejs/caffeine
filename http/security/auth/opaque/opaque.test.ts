@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
+import { token } from '@caffeinejs/di'
 import { ApplicationAvailability } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
 import type { Context } from '../../../context.js'
@@ -179,7 +180,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
         container: { bind, wrap } as unknown as Container,
         availability: new ApplicationAvailability(),
         feats: { toggleAuthentication: vi.fn().mockReturnThis() } as unknown as Feats,
-        config: new ConfigDefinition(Symbol('app.config')),
+        config: new ConfigDefinition(token<any>(Symbol('app.config'))),
       }
     }
 

@@ -13,7 +13,7 @@ import type { MetadataReader } from '@caffeinejs/di'
 ## MetadataReader
 
 ```ts
-type MetadataReader = (key: Key) => Partial<Binding>
+type MetadataReader = (key: InjectionToken) => Partial<Binding>
 ```
 
 A function called once per binding registration, after decorator metadata is

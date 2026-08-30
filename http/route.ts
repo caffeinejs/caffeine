@@ -1,4 +1,4 @@
-import { Binding, Ctor, Key, Provider } from '@caffeinejs/di'
+import { Binding, Ctor, InjectionToken, Provider } from '@caffeinejs/di'
 import type { AnySchema } from '@caffeinejs/std'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import { FastifyRequest } from 'fastify'
@@ -14,7 +14,7 @@ export interface Router<R = FastifyRequest> {
   path: string
   prefix?: string
   routes: Route<R>[]
-  key: Key
+  key: InjectionToken
   binding: Binding
   controller: Provider<Record<string | symbol, (...args: unknown[]) => unknown>>
   errorHandlers?: Map<Ctor<Error>, string | symbol>

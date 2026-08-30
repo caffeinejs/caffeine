@@ -1,4 +1,4 @@
-import type { Key } from '@caffeinejs/di'
+import type { InjectionToken } from '@caffeinejs/di'
 import type { Context } from '../../../context.js'
 import { OpaqueTokenStore } from './opaque_token_store.js'
 
@@ -7,7 +7,7 @@ export interface OpaqueTokenAuthenticationOptions {
    * The store that validates a raw token and resolves it to a `Principal`. A DI key (defaulting to
    * the `OpaqueTokenStore` abstract-class token) or an inline instance.
    */
-  store: Key<OpaqueTokenStore> | OpaqueTokenStore
+  store: InjectionToken<OpaqueTokenStore> | OpaqueTokenStore
   /** HTTP authentication scheme keyword expected in the `Authorization` header. Defaults to `Bearer`. */
   scheme?: string
   realm?: string
@@ -19,7 +19,7 @@ export interface OpaqueTokenAuthenticationOptions {
 export class OpaqueTokenAuthenticationOptionsBuilder {
   readonly #options: Partial<OpaqueTokenAuthenticationOptions> = {}
 
-  store(store: Key<OpaqueTokenStore> | OpaqueTokenStore): this {
+  store(store: InjectionToken<OpaqueTokenStore> | OpaqueTokenStore): this {
     this.#options.store = store
     return this
   }

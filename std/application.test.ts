@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { CaffeineIoC, Injectable, Profile, Scopes } from '@caffeinejs/di'
+import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import { InlineConfigProvider } from './config/index.js'
 import {
   type Plugin,
@@ -162,7 +162,7 @@ describe('Application lifecycle', () => {
   })
 
   it('installs a plugin method and rides the configure() path', async () => {
-    const kSentinel = Symbol('sentinel')
+    const kSentinel = token<any>(Symbol('sentinel'))
     const state: { value: string | undefined } = { value: undefined }
 
     function probe(): Plugin<{ probe: (value: string) => void }> {
@@ -225,7 +225,7 @@ describe('application name and profiles', () => {
       .build()
     await app.ready()
 
-    expect(app.container.profiles.has('eu')).toBe(true)
+    expect(app.container.profiles.has(token<any>('eu'))).toBe(true)
   })
 
   it('unions config profiles onto a user-supplied container', async () => {
@@ -235,8 +235,8 @@ describe('application name and profiles', () => {
       .build()
     await app.ready()
 
-    expect(container.profiles.has('test')).toBe(true)
-    expect(container.profiles.has('eu')).toBe(true)
+    expect(container.profiles.has(token<any>('test'))).toBe(true)
+    expect(container.profiles.has(token<any>('eu'))).toBe(true)
   })
 
   it('does not register a @Profile bean without matching config profiles', async () => {

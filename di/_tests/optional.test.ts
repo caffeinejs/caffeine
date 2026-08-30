@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Profile } from '../decorators/profile.js'
@@ -26,7 +27,7 @@ describe('Optional Injections', function () {
       constructor(readonly repo?: Repo) {}
     }
 
-    @Injectable([$i.optional('service')])
+    @Injectable([$i.optional(token<any>('service'))])
     class Ctrl {
       constructor(readonly service?: Service) {}
     }
@@ -52,7 +53,7 @@ describe('Optional Injections', function () {
   })
 
   describe('with default values', function () {
-    const kVal = Symbol('test')
+    const kVal = token<any>(Symbol('test'))
 
     class Dep {
       constructor(readonly value: string) {}
@@ -95,27 +96,27 @@ describe('Optional Injections', function () {
 describe('container.getOptional()', function () {
   it('should return the instance when the key is registered', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind('svc').toValue('hello')
+    di.bind(token<any>('svc')).toValue('hello')
     await di.init()
 
-    expect(di.getOptional('svc')).toBe('hello')
+    expect(di.getOptional(token<any>('svc'))).toBe('hello')
   })
 
   it('should return undefined when the key is not registered', async function () {
     const di = new CaffeineIoC({ decorators: false })
     await di.init()
 
-    expect(di.getOptional('nonexistent')).toBeUndefined()
+    expect(di.getOptional(token<any>('nonexistent'))).toBeUndefined()
   })
 
   it('should return the primary instance when multiple bindings share a key', async function () {
-    const kSvc = Symbol('opt-primary')
+    const kSvc = token<any>(Symbol('opt-primary'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind('primary-val').toValue('primary')
+    di.bind(token<any>('primary-val')).toValue('primary')
       .names(kSvc)
       .primary()
-    di.bind('secondary-val').toValue('secondary')
+    di.bind(token<any>('secondary-val')).toValue('secondary')
       .names(kSvc)
     await di.init()
 
@@ -123,12 +124,12 @@ describe('container.getOptional()', function () {
   })
 
   it('should throw ErrNoUniqueInjectionForKey when multiple bindings exist without a primary', async function () {
-    const kSvc = Symbol('opt-ambig')
+    const kSvc = token<any>(Symbol('opt-ambig'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind('val-a').toValue('alpha')
+    di.bind(token<any>('val-a')).toValue('alpha')
       .names(kSvc)
-    di.bind('val-b').toValue('bravo')
+    di.bind(token<any>('val-b')).toValue('bravo')
       .names(kSvc)
     await di.init()
 

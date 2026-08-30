@@ -1,7 +1,7 @@
-import type { Identifier, Key, PostProcessor, ResolutionContext } from '@caffeinejs/di'
+import type { Identifier, InjectionToken, PostProcessor, ResolutionContext } from '@caffeinejs/di'
 
 export interface InstantiationEvent {
-  key: Key
+  key: InjectionToken
   scopeID: Identifier
   instance: unknown
   timestamp: number
@@ -24,11 +24,11 @@ export class InstanceTracker implements PostProcessor {
     return instance
   }
 
-  instancesOf<T>(key: Key<T>): T[] {
+  instancesOf<T>(key: InjectionToken<T>): T[] {
     return this.#events.filter(e => e.key === key).map(e => e.instance as T)
   }
 
-  wasInstantiated(key: Key): boolean {
+  wasInstantiated(key: InjectionToken): boolean {
     return this.#events.some(e => e.key === key)
   }
 

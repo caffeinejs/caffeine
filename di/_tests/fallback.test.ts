@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Fallback } from '../decorators/fallback.js'
@@ -59,9 +60,9 @@ describe('@Fallback() on a class', function () {
 // preventing mid-run accumulation that could affect unrelated tests.
 
 describe('@Fallback() on a @Provides method', function () {
-  const kFallbackOnly = Symbol('fb-fallback-only')
-  const kShared = Symbol('fb-shared')
-  const kConcrete = Symbol('fb-concrete')
+  const kFallbackOnly = token<any>(Symbol('fb-fallback-only'))
+  const kShared = token<any>(Symbol('fb-shared'))
+  const kConcrete = token<any>(Symbol('fb-concrete'))
 
   @Configuration()
   class LibConfig {
@@ -120,7 +121,7 @@ describe('@Fallback() on a @Provides method', function () {
 
 describe('.fallback() on BinderOptions', function () {
   it('should register the binding when no other binding exists for the key', async function () {
-    const kFlu = Symbol('flu-only')
+    const kFlu = token<any>(Symbol('flu-only'))
 
     class FluLib {
       tag() {
@@ -142,7 +143,7 @@ describe('.fallback() on BinderOptions', function () {
   })
 
   it('should be overridden when a subsequent non-fallback binding is registered for the same key', async function () {
-    const kFlu2 = Symbol('flu-overridden')
+    const kFlu2 = token<any>(Symbol('flu-overridden'))
 
     class FluLib {
       tag() {
@@ -173,8 +174,8 @@ describe('.fallback() on BinderOptions', function () {
 // ----- @Fallback() ordering guarantee ----------------------------------------
 
 describe('@Fallback() ordering guarantee via @Provides', function () {
-  const kFirst = Symbol('order-first')
-  const kSecond = Symbol('order-second')
+  const kFirst = token<any>(Symbol('order-first'))
+  const kSecond = token<any>(Symbol('order-second'))
 
   @Configuration()
   class FirstConfig {

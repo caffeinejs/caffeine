@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Inject } from '../decorators/inject.js'
 import { CaffeineIoC } from '../container.js'
@@ -7,7 +8,7 @@ import { ErrInvalidBinding } from '../errors.js'
 
 describe('class field injection', function () {
   // Shared deps registered via @Injectable at describe scope — visible to all tests in this file
-  const kNone = Symbol('none')
+  const kNone = token<any>(Symbol('none'))
 
   @Injectable()
   class DepA {
@@ -248,7 +249,7 @@ describe('class field injection', function () {
 
   describe('BinderOptions.injectProperty() — validation', function () {
     it('should throw ErrInvalidBinding when key is a symbol', function () {
-      const kSym = Symbol('sym')
+      const kSym = token<any>(Symbol('sym'))
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
@@ -263,7 +264,7 @@ describe('class field injection', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
-        di.bind('stringKey')
+        di.bind(token<any>('stringKey'))
           .toValue('x')
           .injectProperty('prop', DepA)
       })

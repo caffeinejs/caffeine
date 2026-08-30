@@ -62,7 +62,7 @@ identical in both flavours; differences are noted inline where they exist.
 ### @Injectable
 
 ```ts
-@Injectable(key?: Key, deps?: Injection[])
+@Injectable(key?: InjectionToken, deps?: Injection[])
 @Injectable(deps?: Injection[])
 ```
 
@@ -82,8 +82,10 @@ class UserService {
   constructor(private readonly db: Database) {}
 }
 
-// With explicit key
-@Injectable(Symbol.for('user-service'))
+// With explicit named token
+const kUserService = token<UserService>(Symbol.for('user-service'))
+
+@Injectable(kUserService)
 class UserService { ... }
 
 // With explicit deps (stage 3 decorators, no reflect-metadata)
@@ -196,8 +198,8 @@ receives a `ConditionContext`.
 
 ```ts
 interface ConditionContext {
-  container: { has(key: Key): boolean }
-  key: Key
+  container: { has(key: InjectionToken): boolean }
+  key: InjectionToken
   binding: BindingDecoratorConfig
 }
 ```
@@ -368,7 +370,7 @@ parameter types are inferred from `reflect-metadata`.
 ### @Provides
 
 ```ts
-@Provides(key: Key, deps?: Injection[])
+@Provides(key: InjectionToken, deps?: Injection[])
 ```
 
 Registers a method's return value as a binding for `key`. Must be used inside
@@ -413,7 +415,7 @@ arguments on a method, marks that method as the pre-destroy hook.
 ### @Inject
 
 ```ts
-@Inject(key: Key): ParameterDecorator & PropertyDecorator
+@Inject(key: InjectionToken): ParameterDecorator & PropertyDecorator
 @Inject(descriptor: InjectionDescriptor): ParameterDecorator & PropertyDecorator
 @Inject(...deps: Injection[]): MethodDecorator
 ```

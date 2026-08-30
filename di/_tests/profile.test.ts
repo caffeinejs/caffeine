@@ -1,4 +1,5 @@
 import { describe, it, beforeAll, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
@@ -35,8 +36,8 @@ describe('Profile', function () {
 
   class ProfBean {}
 
-  const kDep = Symbol('dep')
-  const kDiffRef = Symbol('diffRef')
+  const kDep = token<any>(Symbol('dep'))
+  const kDiffRef = token<any>(Symbol('diffRef'))
 
   @Configuration()
   @Profile('prof2')
@@ -222,7 +223,7 @@ describe('CaffeineIoC.addProfiles()', function () {
     expect(di.has(LateProfileBean)).toBe(false)
 
     di.addProfiles('add-prof-late')
-    expect(di.profiles.has('add-prof-late')).toBe(true)
+    expect(di.profiles.has(token<any>('add-prof-late'))).toBe(true)
 
     await di.init()
     expect(di.has(LateProfileBean)).toBe(true)

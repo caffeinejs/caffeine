@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { $i } from '../injection.js'
 import { CaffeineIoC } from '../container.js'
 
 describe('Destructuring', function () {
-  const kDep = Symbol('test')
-  const kBase = Symbol('base-impls')
-  const kSymbolField = Symbol('symbol-field')
+  const kDep = token<any>(Symbol('test'))
+  const kBase = token<any>(Symbol('base-impls'))
+  const kSymbolField = token<any>(Symbol('symbol-field'))
 
   abstract class Base {}
 

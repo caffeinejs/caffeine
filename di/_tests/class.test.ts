@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, beforeAll, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
@@ -101,7 +102,7 @@ describe('Class', function () {
   })
 
   describe('when injecting multiple dependencies with the same key', function () {
-    const kIdentifier = Symbol('testID')
+    const kIdentifier = token<any>(Symbol('testID'))
 
     abstract class Base {
       abstract hello(): string
@@ -144,7 +145,7 @@ describe('Class', function () {
 
   describe('resolving multiple for same Key', function () {
     describe('when multiple resolutions exists for a named Key', function () {
-      const kName = Symbol('svc')
+      const kName = token<any>(Symbol('svc'))
 
       @Injectable()
       @Named(kName)
@@ -174,7 +175,7 @@ describe('Class', function () {
     })
 
     describe('when multiple injectables are named equally but none is defined as primary', function () {
-      const name = 'svc-no-single'
+      const name = token<any>('svc-no-single')
 
       @Injectable()
       @Named(name)
@@ -206,7 +207,7 @@ describe('Class', function () {
         const di = new CaffeineIoC()
         await di.init()
 
-        expect(() => di.getMany('nonexistent'))
+        expect(() => di.getMany(token<any>('nonexistent')))
           .toThrow(ErrNoResolutionForKey)
       })
     })
@@ -372,7 +373,7 @@ describe('Class', function () {
   })
 
   describe('when using a custom key', function () {
-    const kKey = Symbol('key')
+    const kKey = token<any>(Symbol('key'))
 
     @Injectable(kKey)
     class Service {

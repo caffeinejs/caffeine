@@ -1,4 +1,5 @@
 import { CaffeineIoC } from '../../../container.js'
+import { token } from '../../../key.js'
 import { $i } from '../../../injection.js'
 import type { Injection } from '../../../injection.js'
 
@@ -33,14 +34,14 @@ function fnWithArity(arity: number): (...args: unknown[]) => object {
 
 function toInjection(edge: CycleEdge): Injection {
   if (edge.optional) {
-    return $i.optional(edge.to)
+    return $i.optional(token<any>(edge.to))
   }
 
   if (edge.defer) {
-    return $i.defer(() => edge.to)
+    return $i.defer(() => token<any>(edge.to))
   }
 
-  return edge.to
+  return token<any>(edge.to)
 }
 
 export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true): CaffeineIoC {
@@ -56,13 +57,13 @@ export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true):
     const deps = edges.filter(e => e.from === key)
 
     if (deps.length === 0) {
-      di.bind(key)
+      di.bind(token<any>(key))
         .toValue({})
       continue
     }
 
     const injections = deps.map(toInjection)
-    di.bind(key)
+    di.bind(token<any>(key))
       .toFunction(fnWithArity(deps.length), injections)
   }
 

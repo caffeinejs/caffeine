@@ -1,7 +1,8 @@
 import { newBinding } from '../../../binding.js'
+import { token } from '../../../key.js'
 import type { Binding } from '../../../binding.js'
 
-const SINGLETON = Symbol('singleton')
+const SINGLETON = token<any>(Symbol('singleton'))
 
 export { SINGLETON }
 

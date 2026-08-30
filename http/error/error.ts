@@ -1,4 +1,4 @@
-import { Ctor, Identifier, Provider, Scopes } from '@caffeinejs/di'
+import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 import { type Service } from '@caffeinejs/std'
 import { Context } from '../context.js'
 import type { ServiceKit } from '../service.js'
@@ -58,7 +58,7 @@ export abstract class ErrorHandler<E extends Error> {
  * assigned to it with `@Named`. Both are resolved through the container, so `@Primary`, `@ConditionalOn`
  * and `@Profile` apply as they do anywhere else.
  */
-export type ErrorHandlerRef = Ctor<ErrorHandler<Error>> | Identifier
+export type ErrorHandlerRef = InjectionToken<ErrorHandler<Error>>
 
 // ErrorHandlerProvider holds the mapping of error types to their handlers.
 // It's used to resolve the most specific handler for an error by walking its prototype chain.

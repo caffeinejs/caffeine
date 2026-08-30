@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { $t } from '../../schema/t.js'
 import { createLiveAccessors } from '../accessor.js'
@@ -7,7 +7,7 @@ import { ConfigPriority } from '../sources.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
 
-const APP_CONFIG = Symbol('app.config')
+const APP_CONFIG = token<any>(Symbol('app.config'))
 
 interface Slice { paths: { live: string }, port: number }
 

@@ -2,11 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { Binding } from '../binding.js'
 import { CaffeineIoC } from '../container.js'
 import { InjectionDescriptor } from '../injection.js'
-import { Key } from '../key.js'
+import { InjectionToken, token } from '../key.js'
 import { MetadataReader } from '../metadata_reader.js'
 
 const Symbols = {
-  injections: Symbol('di_injections'),
+  injections: token<any>(Symbol('di_injections')),
 }
 
 const builtInMetadataReader: MetadataReader = (key: any): Partial<Binding> => {
@@ -41,7 +41,7 @@ const builtInMetadataReader: MetadataReader = (key: any): Partial<Binding> => {
 
 describe('Custom Binding Metadata', function () {
   describe('when using a static factory method with Symbols.injections', function () {
-    const kNm = Symbol('nm')
+    const kNm = token<any>(Symbol('nm'))
 
     class Dep {}
 
@@ -90,7 +90,7 @@ describe('Custom Binding Metadata', function () {
     it('should allow set an alternative metadata reader', function () {
       const spy = vi.fn()
 
-      const custom: MetadataReader = (key: Key): Partial<Binding> => {
+      const custom: MetadataReader = (key: InjectionToken): Partial<Binding> => {
         spy()
         return builtInMetadataReader(key)
       }

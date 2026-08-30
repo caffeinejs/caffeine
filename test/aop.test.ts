@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { CaffeineIoC, Aspect, Profile, createAnnotation, reflect, $aop } from '@caffeinejs/di'
-import type { JoinPoint, MethodAspect, PointcutClassPredicate, PointcutMethodPredicate, Key } from '@caffeinejs/di'
+import type { JoinPoint, MethodAspect, PointcutClassPredicate, PointcutMethodPredicate, InjectionToken } from '@caffeinejs/di'
 
 // ─── Guard interface ──────────────────────────────────────────────────────────
 
@@ -10,7 +10,7 @@ interface Guard {
 
 // ─── UseGuard annotation ──────────────────────────────────────────────────────
 
-const UseGuard = createAnnotation<Key>()
+const UseGuard = createAnnotation<InjectionToken>()
 
 // ─── Pointcut predicates ──────────────────────────────────────────────────────
 

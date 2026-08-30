@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateKeyPair } from 'jose'
-import { CaffeineIoC, Configuration, Injectable, Profile, Provides } from '@caffeinejs/di'
+import { CaffeineIoC, Configuration, Injectable, Profile, Provides, token } from '@caffeinejs/di'
 import { JWTService, JWTServiceBuilder } from './jwt_service.js'
 import type { JWTKeyResolver } from './jwt_service_options.js'
 
@@ -111,18 +111,18 @@ describe('JWTService via @Configuration/@Provides', () => {
   @Configuration()
   @Profile('jwt-service-test')
   class JWTConfig {
-    @Provides(JWTService, 'jwt-access')
+    @Provides(JWTService, token<JWTService>('jwt-access'))
     access(): JWTService {
       return new JWTServiceBuilder().secret('access-secret-value-for-tests-xxxxxx').issuer('access').build()
     }
 
-    @Provides(JWTService, 'jwt-refresh')
+    @Provides(JWTService, token<JWTService>('jwt-refresh'))
     refresh(): JWTService {
       return new JWTServiceBuilder().secret('refresh-secret-value-for-tests-xxxxx').issuer('refresh').build()
     }
   }
 
-  @Injectable(['jwt-access'])
+  @Injectable([token<JWTService>('jwt-access')])
   @Profile('jwt-service-test')
   class TokenIssuer {
     constructor(readonly jwt: JWTService) {}
@@ -134,8 +134,8 @@ describe('JWTService via @Configuration/@Provides', () => {
     const di = new CaffeineIoC({ profiles: ['jwt-service-test'] })
     await di.init()
 
-    const access = di.get<JWTService>('jwt-access')
-    const refresh = di.get<JWTService>('jwt-refresh')
+    const access = di.get(token<JWTService>('jwt-access'))
+    const refresh = di.get(token<JWTService>('jwt-refresh'))
     expect(access).toBeInstanceOf(JWTService)
     expect(refresh).toBeInstanceOf(JWTService)
     expect(access).not.toBe(refresh)
@@ -143,8 +143,8 @@ describe('JWTService via @Configuration/@Provides', () => {
     const issuer = di.get(TokenIssuer)
     expect(issuer.jwt).toBe(access)
 
-    const token = await issuer.jwt.sign({ sub: 'u1' })
-    expect((await access.verify(token)).iss).toBe('access')
-    await expect(refresh.verify(token)).rejects.toThrow()
+    const signed = await issuer.jwt.sign({ sub: 'u1' })
+    expect((await access.verify(signed)).iss).toBe('access')
+    await expect(refresh.verify(signed)).rejects.toThrow()
   })
 })

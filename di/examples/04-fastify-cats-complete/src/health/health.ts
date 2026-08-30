@@ -1,4 +1,4 @@
-export const HEALTH_CHECK = Symbol.for('health.check')
+import { token } from '@caffeinejs/di'
 
 export interface HealthResult {
   name: string
@@ -9,3 +9,5 @@ export interface HealthResult {
 export abstract class HealthCheck {
   abstract check(): Promise<HealthResult>
 }
+
+export const HEALTH_CHECK = token<HealthCheck>(Symbol.for('health.check'))

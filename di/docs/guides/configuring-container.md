@@ -173,7 +173,7 @@ await di.init()
 
 **Default:** `undefined`
 
-A function `(key: Key) => Partial<Binding>` called for every binding at
+A function `(key: InjectionToken) => Partial<Binding>` called for every binding at
 registration time. Its return value is merged into the binding, letting you
 inject metadata from an external source (config files, environment variables,
 feature flags) without decorators.

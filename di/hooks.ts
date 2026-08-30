@@ -1,16 +1,16 @@
 import { notNil } from './internal/util/assert/index.js'
 import { Binding } from './binding.js'
-import { Key } from './key.js'
+import { InjectionToken } from './key.js'
 
 /**
  * Represents a set of hooks that can be used to listen to events within a {@link Container} instance.
  */
 interface Hooks {
-  onSetup: { key: Key, binding: Binding }
+  onSetup: { key: InjectionToken, binding: Binding }
 
-  onBindingRegistered: { key: Key, binding: Binding }
+  onBindingRegistered: { key: InjectionToken, binding: Binding }
 
-  onBindingNotRegistered: { key: Key, binding: Binding }
+  onBindingNotRegistered: { key: InjectionToken, binding: Binding }
 
   onSetupComplete: {}
 
@@ -20,9 +20,9 @@ interface Hooks {
 
   onDisposed: {}
 
-  onBindingInitialized: { key: Key, binding: Binding, instance: unknown, async: boolean }
+  onBindingInitialized: { key: InjectionToken, binding: Binding, instance: unknown, async: boolean }
 
-  onBindingInitializationFailed: { key: Key, binding: Binding, error: unknown, async: boolean }
+  onBindingInitializationFailed: { key: InjectionToken, binding: Binding, error: unknown, async: boolean }
 }
 
 /**

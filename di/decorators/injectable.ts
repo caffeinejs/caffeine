@@ -1,6 +1,6 @@
 import { ErrInvalidDecorator } from '../errors.js'
 import { AbstractCtor, Ctor } from '../types.js'
-import { isNamedKey, Identifier, Key } from '../key.js'
+import { isNamedKey, NamedToken, InjectionToken } from '../key.js'
 import { Injection } from '../injection.js'
 import { defineInjectable } from './registrar/index.js'
 import { Extends } from './extends.js'
@@ -8,10 +8,10 @@ import { Extends } from './extends.js'
 /**
  * Marks a class as an injectable component, registering it in the container.
  *
- * Pass a named key (string or symbol) to bind by name instead of type.
+ * Pass a named token (`token<T>(...)`) to bind by name instead of type.
  * For abstract-type binding use `@Extends` instead.
  *
- * @param key - Optional named identifier.
+ * @param key - Optional named token.
  * @param dependencies - Optional constructor injections.
  *
  * @example
@@ -19,18 +19,20 @@ import { Extends } from './extends.js'
  * @Injectable()
  * class UserService {}
  *
- * @Injectable('userService')
+ * const kUserService = token<UserService>('userService')
+ *
+ * @Injectable(kUserService)
  * class UserService {}
  * ```
  */
 export function Injectable(): (target: Ctor, context: ClassDecoratorContext) => void
-export function Injectable(key: Identifier): (target: Ctor, context: ClassDecoratorContext) => void
+export function Injectable(key: NamedToken<any>): (target: Ctor, context: ClassDecoratorContext) => void
 export function Injectable(dependencies: Injection[]): (target: Ctor, context: ClassDecoratorContext) => void
 export function Injectable(
-  key: Identifier,
+  key: NamedToken<any>,
   dependencies: Injection[],
 ): (target: Ctor, context: ClassDecoratorContext) => void
-export function Injectable<T>(keyOrDependencies?: Key | Injection[], dependencies?: Injection[]) {
+export function Injectable<T>(keyOrDependencies?: InjectionToken | Injection[], dependencies?: Injection[]) {
   const key = keyOrDependencies !== undefined && !Array.isArray(keyOrDependencies) ? keyOrDependencies : undefined
   const deps = Array.isArray(keyOrDependencies) ? keyOrDependencies : dependencies ?? []
 

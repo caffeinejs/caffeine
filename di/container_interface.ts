@@ -1,4 +1,4 @@
-import { Identifier, Key, TypedKey, NamedKey } from './key.js'
+import { Identifier, InjectionToken } from './key.js'
 import { Binding } from './binding.js'
 import { Binder } from './binder.js'
 import type { AOPBinder } from './aop_binder.js'
@@ -104,7 +104,7 @@ export interface Options {
  * Describes a binding in the container and its associated key.
  */
 export interface BindingDescriptor {
-  key: Key
+  key: InjectionToken
   binding: Binding
 }
 
@@ -127,47 +127,41 @@ export interface Container {
 
   autoWire(): void
 
-  get<T>(key: TypedKey<T>): T
-  get<T = unknown>(key: NamedKey): T
+  get<T>(key: InjectionToken<T>): T
 
-  getOptional<T>(key: TypedKey<T>): T | undefined
-  getOptional<T = unknown>(key: NamedKey): T | undefined
+  getOptional<T>(key: InjectionToken<T>): T | undefined
 
-  getMany<T>(key: TypedKey<T>): T[]
-  getMany<T = unknown>(key: NamedKey): T[]
+  getMany<T>(key: InjectionToken<T>): T[]
 
-  getManyOptional<T>(key: TypedKey<T>): T[]
-  getManyOptional<T = unknown>(key: NamedKey): T[]
+  getManyOptional<T>(key: InjectionToken<T>): T[]
 
-  wrap<T = unknown>(key: Key<T>): Provider<T>
-  wrapMany<T = unknown>(key: Key<T>): Provider<T[]>
+  wrap<T = unknown>(key: InjectionToken<T>): Provider<T>
+  wrapMany<T = unknown>(key: InjectionToken<T>): Provider<T[]>
 
   wrapBinding<T = unknown>(binding: Binding<T>): Provider<T>
   wrapBindings<T = unknown>(bindings: Binding<T>[]): Provider<T[]>
 
-  getBinding<T = unknown>(key: Key<T>): Binding<T>
+  getBinding<T = unknown>(key: InjectionToken<T>): Binding<T>
 
-  getBindings<T = unknown>(key: Key<T>): Binding<T>[]
+  getBindings<T = unknown>(key: InjectionToken<T>): Binding<T>[]
 
   getBindingsBy(predicate: (descriptor: BindingDescriptor) => boolean): BindingDescriptor[]
 
   getBindingsByLabel(label: symbol): BindingDescriptor[]
 
-  has<T>(key: Key<T>): boolean
+  has<T>(key: InjectionToken<T>): boolean
 
-  hasScopeInGraph(key: Key, scopeID: Identifier): boolean
+  hasScopeInGraph(key: InjectionToken, scopeID: Identifier): boolean
 
   build<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections?: (Injection | undefined | null)[]): T
 
   builder<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections?: (Injection | undefined | null)[]): () => T
 
-  bind<T>(key: TypedKey<T>): Binder<T>
-  bind<T = unknown>(key: NamedKey): Binder<T>
+  bind<T>(key: InjectionToken<T>): Binder<T>
 
   bindValuesProvider<T = unknown>(): Binder<T>
 
-  rebind<T>(key: TypedKey<T>): Binder<T>
-  rebind<T = unknown>(key: NamedKey): Binder<T>
+  rebind<T>(key: InjectionToken<T>): Binder<T>
 
   aspect<T extends MethodAspect<any>>(cls: Ctor<T>): AOPBinder<T>
 
@@ -177,7 +171,7 @@ export interface Container {
 
   resetInstances(): Promise<void>
 
-  resetInstance(key: Key): Promise<void>
+  resetInstance(key: InjectionToken): Promise<void>
 
   resetBinding(binding: Binding): void | Promise<void>
 
@@ -189,7 +183,7 @@ export interface Container {
 
   dispose(): Promise<void>
 
-  entries(): IterableIterator<[Key, Binding]>
+  entries(): IterableIterator<[InjectionToken, Binding]>
 
   snapshot(): Snapshot
 

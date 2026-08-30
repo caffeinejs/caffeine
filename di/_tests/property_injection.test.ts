@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
@@ -6,8 +7,8 @@ import { Named } from '../decorators/named.js'
 import { CaffeineIoC } from '../container.js'
 
 describe('Property Injection', function () {
-  const kValue = Symbol('value')
-  const kNamedDep = Symbol('named-dep')
+  const kValue = token<any>(Symbol('value'))
+  const kNamedDep = token<any>(Symbol('named-dep'))
 
   @Injectable()
   class Dep {

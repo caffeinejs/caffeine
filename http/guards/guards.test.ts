@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import fastify, { type FastifyContextConfig, type RouteOptions } from 'fastify'
-import { ErrInvalidDecorator, Injectable, Lifetime, Scopes, defineMetadata, getMetadataOverride } from '@caffeinejs/di'
+import { ErrInvalidDecorator, Injectable, Lifetime, Scopes, defineMetadata, getMetadataOverride, token } from '@caffeinejs/di'
 import {
   Catch,
   Claim,
@@ -320,7 +320,7 @@ describe('builder', () => {
 
   void [ListedGuard, NotAGuard, BuilderOkController, BuilderUseController]
 
-  it('runs a global guard listed by Key on every route', async () => {
+  it('runs a global guard listed by InjectionToken on every route', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .guards(g => g.global(ListedGuard))
       .build()
@@ -342,8 +342,8 @@ describe('builder', () => {
     await app.close()
   })
 
-  it('rejects a missing Key at start-up', async () => {
-    const kMissing = Symbol('missing-guard')
+  it('rejects a missing InjectionToken at start-up', async () => {
+    const kMissing = token<Guard>(Symbol('missing-guard'))
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .guards(g => g.global(kMissing))
       .build()
@@ -351,7 +351,7 @@ describe('builder', () => {
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 
-  it('rejects a Key that is not a Guard at start-up', async () => {
+  it('rejects a InjectionToken that is not a Guard at start-up', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .guards(g => g.global(NotAGuard as never))
       .build()
@@ -500,7 +500,7 @@ describe('authorization', () => {
     Admin = 'admin',
   }
 
-  const kRoles = Symbol('roles')
+  const kRoles = token<any>(Symbol('roles'))
 
   function Roles(...roles: Role[]) {
     return (_target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => {
@@ -732,14 +732,14 @@ describe('zero_cost', () => {
   })
 
   it('leaves onRequest empty on a route with no guards', () => {
-    const route = registered.get('GET /guard-hooks/plain')!
+    const route = registered.get(token<any>('GET /guard-hooks/plain'))!
 
     expect(route).toBeDefined()
     expect(route.onRequest).toBeUndefined()
   })
 
   it('attaches a function, not a one-element array, when a route has guards', () => {
-    const route = registered.get('GET /guard-hooks/guarded')!
+    const route = registered.get(token<any>('GET /guard-hooks/guarded'))!
 
     expect(typeof route.onRequest).toBe('function')
   })

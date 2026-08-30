@@ -49,9 +49,9 @@ Multiple predicates passed to `.conditional()` are ANDed — all must return
 ```ts
 interface ConditionContext {
   readonly container: {
-    has(key: Key): boolean
+    has(key: InjectionToken): boolean
   }
-  readonly key: Key
+  readonly key: InjectionToken
   readonly binding: BindingDecoratorConfig
 }
 ```

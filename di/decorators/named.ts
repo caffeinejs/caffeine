@@ -17,14 +17,16 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  * interface Repository { }
  *
  * @Injectable()
- * @Named('repository', 'in-memory)
+ * @Named('repository', 'in-memory')
  * class InMemoryRepository implements Repository { }
  *
  * @Named('repository', 'mysql')
  * @Injectable()
  * class MySQLRepository implements Repository { }
  *
- * @Injectable(['mysql'])
+ * const kMysql = token<Repository>('mysql')
+ *
+ * @Injectable([kMysql])
  * class MainDataSource {
  *   constructor(readonly repository: Repository) {}
  * }

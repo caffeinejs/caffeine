@@ -1,6 +1,6 @@
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { Factory, AsyncFactory, FactoryCreator } from './factory.js'
-import { Identifier, Key } from './key.js'
+import { Identifier, InjectionToken } from './key.js'
 import { InjectionDescriptor } from './injection.js'
 import { Conditional } from './conditional.js'
 import { InjectionResolver } from './injection_resolver.js'
@@ -115,12 +115,12 @@ export interface Binding<T = any> {
   /**
    * The additional binding keys provided by this binding.
    */
-  keysProvided: Key[]
+  keysProvided: InjectionToken[]
 
   /**
    * Class that this binding extends.
    */
-  extend?: Key
+  extend?: InjectionToken
 
   /**
    * Whether this binding is the primary binding for the component.
@@ -245,7 +245,7 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
  */
 export function getUniqueBinding<T>(
   container: ContainerOps,
-  key: Key,
+  key: InjectionToken<T>,
   onKeyNoFound?: () => void,
   onNoUniqueFound?: () => void,
 ): Binding<T> | undefined {

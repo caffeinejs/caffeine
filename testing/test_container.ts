@@ -1,5 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import type { Binder, Container, Identifier, Key, Module, ModuleFn, Snapshot } from '@caffeinejs/di'
+import type { Binder, Container, Identifier, InjectionToken, Module, ModuleFn, Snapshot } from '@caffeinejs/di'
 import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
 interface IsolationEntry {
@@ -21,12 +21,12 @@ interface IsolationEntry {
 export class TestContainer {
   readonly #snap: Snapshot
   readonly #fromScratch: boolean
-  readonly #overrides = new Map<Key, (binder: Binder<any>) => void>()
-  readonly #isolations = new Map<Key, IsolationEntry>()
-  readonly #skips = new Set<Key>()
+  readonly #overrides = new Map<InjectionToken, (binder: Binder<any>) => void>()
+  readonly #isolations = new Map<InjectionToken, IsolationEntry>()
+  readonly #skips = new Set<InjectionToken>()
 
-  #asyncPolicy: Set<Key> | null = null
-  #focusRoots: Set<Key> | null = null
+  #asyncPolicy: Set<InjectionToken> | null = null
+  #focusRoots: Set<InjectionToken> | null = null
   #profiles: Identifier[] | null = null
   #modules: Array<Module | ModuleFn> = []
   #lazy: boolean = true
@@ -106,7 +106,7 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  override<T>(key: Key<T>, configure: (binder: Binder<T>) => void): this {
+  override<T>(key: InjectionToken<T>, configure: (binder: Binder<T>) => void): this {
     this.#overrides.set(key, configure as (binder: Binder<any>) => void)
     return this
   }
@@ -124,7 +124,7 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  overrideWithMock<T>(key: Key<T>, mock: T | object): this {
+  overrideWithMock<T>(key: InjectionToken<T>, mock: T | object): this {
     return this.override(key, b => b.toValue(mock as T))
   }
 
@@ -152,7 +152,7 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  isolate<T>(key: Key<T>, pruneSharedDependencies: boolean, configure: (binder: Binder<T>) => void): this {
+  isolate<T>(key: InjectionToken<T>, pruneSharedDependencies: boolean, configure: (binder: Binder<T>) => void): this {
     this.#isolations.set(key, { configure, pruneSharedDependencies })
     return this
   }
@@ -175,7 +175,7 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  isolateWithMock<T>(key: Key<T>, pruneSharedDependencies: boolean, mock: T | object): this {
+  isolateWithMock<T>(key: InjectionToken<T>, pruneSharedDependencies: boolean, mock: T | object): this {
     return this.isolate(key, pruneSharedDependencies, b => b.toValue(mock as T))
   }
 
@@ -197,7 +197,7 @@ export class TestContainer {
    * new TestContainer(source).skipAsyncBindings(kConn).skipAsyncBindings(kDb).build()
    * ```
    */
-  skipAsyncBindings(...exceptions: Key[]): this {
+  skipAsyncBindings(...exceptions: InjectionToken[]): this {
     if (this.#asyncPolicy == null) {
       this.#asyncPolicy = new Set()
     }
@@ -210,7 +210,7 @@ export class TestContainer {
   /**
    * Removes the listed bindings from the test container.
    */
-  skip(key: Key, ...rest: Key[]): this {
+  skip(key: InjectionToken, ...rest: InjectionToken[]): this {
     this.#skips.add(key)
     for (const k of rest) {
       this.#skips.add(k)
@@ -246,7 +246,7 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  focus(root: Key, ...rest: Key[]): this {
+  focus(root: InjectionToken, ...rest: InjectionToken[]): this {
     if (this.#focusRoots == null) {
       this.#focusRoots = new Set()
     }
@@ -264,12 +264,12 @@ export class TestContainer {
     let snap = this.#snap
 
     if (this.#asyncPolicy != null) {
-      const exempt = new Set<Key>([...this.#overrides.keys(), ...this.#isolations.keys()])
+      const exempt = new Set<InjectionToken>([...this.#overrides.keys(), ...this.#isolations.keys()])
       snap = snap.filter((k, b) => !b.async || this.#asyncPolicy!.has(k) || exempt.has(k))
     }
 
     if (this.#focusRoots != null) {
-      const kept = new Set<Key>(this.#focusRoots)
+      const kept = new Set<InjectionToken>(this.#focusRoots)
       for (const k of allTransitiveDeps(snap, this.#focusRoots)) {
         kept.add(k)
       }
@@ -278,8 +278,8 @@ export class TestContainer {
 
     if (this.#isolations.size > 0) {
       const isolatedKeys = new Set(this.#isolations.keys())
-      const exclusiveKeys = new Set<Key>()
-      const allDepKeys = new Set<Key>()
+      const exclusiveKeys = new Set<InjectionToken>()
+      const allDepKeys = new Set<InjectionToken>()
 
       for (const [key, { pruneSharedDependencies: pruneShared }] of this.#isolations) {
         if (pruneShared) {
@@ -289,7 +289,7 @@ export class TestContainer {
         }
       }
 
-      const pruned = new Set<Key>()
+      const pruned = new Set<InjectionToken>()
 
       if (exclusiveKeys.size > 0) {
         for (const k of exclusiveDeps(snap, exclusiveKeys)) {

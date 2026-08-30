@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -83,9 +84,9 @@ describe('Abstract Classes', function () {
   })
 
   describe('given multiple implementations of an abstract class', function () {
-    const kMongo = Symbol.for('mongodb')
-    const kSql = Symbol.for('sql')
-    const kAll = Symbol('all-repos')
+    const kMongo = token<any>(Symbol.for('mongodb'))
+    const kSql = token<any>(Symbol.for('sql'))
+    const kAll = token<any>(Symbol('all-repos'))
 
     abstract class Repo {
       abstract list(): string

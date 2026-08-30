@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { Aspect } from '../decorators/aspect.js'
@@ -335,7 +336,7 @@ describe('AOP', function () {
       work() { return 42 }
     }
 
-    const kLogPrefix = Symbol('log-prefix')
+    const kLogPrefix = token<any>(Symbol('log-prefix'))
     const logged: string[] = []
 
     @Aspect([$aop.forClass(Target, 'work')])
@@ -400,7 +401,7 @@ describe('AOP', function () {
   })
 
   describe('constructor deps', function () {
-    const kGreetSvc = Symbol('greet-svc')
+    const kGreetSvc = token<any>(Symbol('greet-svc'))
 
     class GreetSvc {
       msg() { return 'hello-from-svc' }
@@ -708,7 +709,7 @@ describe('AOP', function () {
     }
     void MatchClassAspect
 
-    const kSvcLabel = Symbol('svc-label')
+    const kSvcLabel = token<any>(Symbol('svc-label'))
 
     @Label(kSvcLabel)
     @Injectable()
@@ -731,7 +732,7 @@ describe('AOP', function () {
     }
     void LabelAspect
 
-    const kTagSvc = Symbol('tag-svc')
+    const kTagSvc = token<any>(Symbol('tag-svc'))
     const TaggedMethodAnn = createAnnotation<true>()
 
     @Tag(kTagSvc, true)

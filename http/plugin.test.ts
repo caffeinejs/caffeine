@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { $t, type Plugin, type Service } from '@caffeinejs/std'
 import { EnvConfigProvider } from '@caffeinejs/std/config'
 import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
 // A sentinel the plugin's configurer binds into the container so a test can prove the plugin rode
 // the same `configure()` path as the built-in auth/authz services.
-const kKafkaSentinel = Symbol('kafka-sentinel')
+const kKafkaSentinel = token<any>(Symbol('kafka-sentinel'))
 
 interface KafkaState {
   broker: string | undefined

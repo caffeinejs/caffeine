@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { Named } from '../decorators/named.js'
 import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
@@ -20,12 +21,12 @@ describe('Real World', function () {
   const sendSpy = vi.fn()
   const userSpy = vi.fn()
 
-  const kEmail = Symbol('mail')
-  const kSms = 'sms'
-  const kAm = Symbol('am')
-  const kAf = Symbol('af')
-  const kAs = Symbol('as')
-  const kRegions = Symbol('regions')
+  const kEmail = token<any>(Symbol('mail'))
+  const kSms = token<any>('sms')
+  const kAm = token<any>(Symbol('am'))
+  const kAf = token<any>(Symbol('af'))
+  const kAs = token<any>(Symbol('as'))
+  const kRegions = token<any>(Symbol('regions'))
 
   const Globals = {
     Env: 'test',
@@ -177,7 +178,7 @@ describe('Real World', function () {
     }
   }
 
-  @Injectable('token', [UserRepository, kSms])
+  @Injectable(token<any>('token'), [UserRepository, kSms])
   class UserService {
     constructor(
       private readonly userRepository: UserRepository,

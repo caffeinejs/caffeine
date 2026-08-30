@@ -13,14 +13,14 @@ import {
 } from './internal/core/interceptor/index.js'
 import { InjectionDescriptor } from './injection.js'
 import { BuiltInResolvers, InjectionResolver, resolverFor } from './injection_resolver.js'
-import { keyStr, Key, Identifier } from './key.js'
+import { keyStr, InjectionToken, Identifier } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { Scope, Scopes } from './scope.js'
 import { Ctor } from './types.js'
 
 export function compileDescriptorResolver(
   container: Container,
-  key: Key,
+  key: InjectionToken,
   injection: InjectionDescriptor<unknown>,
   kind: 'constructor' | 'property' | 'method',
   member: Identifier,
@@ -35,7 +35,7 @@ export function compileDescriptorResolver(
   return resolverFor(resolverName)({ container, key, descriptor: injection, kind, member, index })
 }
 
-export function compileInjectionResolvers(container: Container, key: Key, binding: Binding): void {
+export function compileInjectionResolvers(container: Container, key: InjectionToken, binding: Binding): void {
   if (binding.injections.length > 0) {
     binding.injectionResolvers = new Array(binding.injections.length)
     for (let i = 0; i < binding.injections.length; i++) {
@@ -61,7 +61,7 @@ export function compileInjectionResolvers(container: Container, key: Key, bindin
 export function compileFactory<T>(
   container: Container,
   scopes: Map<Identifier, Scope>,
-  key: Key<T>,
+  key: InjectionToken<T>,
   binding: Binding<T>,
 ): void {
   const scopeID = binding.scopeID

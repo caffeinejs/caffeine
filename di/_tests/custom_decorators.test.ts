@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Provides } from '../decorators/provides.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -34,11 +35,11 @@ describe('Custom decorator primitives', function () {
   })
 
   describe('configureInjectable — factory with metadata', function () {
-    const kDep = Symbol('dep-field')
+    const kDep = token<any>(Symbol('dep-field'))
 
     function MyFieldInject(key: symbol) {
       return (_target: Function | object | undefined, context: ClassMemberDecoratorContext) => {
-        defineMemberInjection(context.metadata, context.name, context.kind, { key })
+        defineMemberInjection(context.metadata, context.name, context.kind, { key: token<any>(key) })
       }
     }
 
@@ -73,7 +74,7 @@ describe('Custom decorator primitives', function () {
   describe('configureMethodOrPropertyInjectable — method partial', function () {
     const LazyBean = (_target: object, context: ClassMethodDecoratorContext) =>
       extendMemberInjectableAttributes(context.metadata, context.name, config => config.lazy(true))
-    const kService = Symbol('lazy-bean')
+    const kService = token<any>(Symbol('lazy-bean'))
 
     @Configuration()
     class ConfLazyBean {
@@ -111,7 +112,7 @@ describe('Custom decorator primitives', function () {
       expect(a).not.toBe(b)
     })
 
-    const sym = Symbol('composed-label')
+    const sym = token<any>(Symbol('composed-label'))
     const Controller = composeDecorators(Injectable(), Label(sym))
 
     @Controller
@@ -130,11 +131,11 @@ describe('Custom decorator primitives', function () {
   })
 
   describe('configureInjectionMetadata', function () {
-    const kCustomDep = Symbol('custom-dep')
+    const kCustomDep = token<any>(Symbol('custom-dep'))
 
     function MyInject(key: symbol) {
       return (_target: Function | object | undefined, context: ClassMemberDecoratorContext) => {
-        defineMemberInjection(context.metadata, context.name, context.kind, { key })
+        defineMemberInjection(context.metadata, context.name, context.kind, { key: token<any>(key) })
       }
     }
 

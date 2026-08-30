@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import type { ConfigHandle } from '../../accessor.js'
@@ -12,7 +12,7 @@ const schema = z.object({
 })
 type AppConfig = z.infer<typeof schema>
 
-const APP_CONFIG = Symbol('app.config')
+const APP_CONFIG = token<any>(Symbol('app.config'))
 
 function makeModule(data: Record<string, unknown>) {
   return ConfigModule<AppConfig>({
@@ -28,7 +28,7 @@ describe('ConfigModule', () => {
     container.addModules(makeModule({ http: { host: 'localhost', port: 3000 }, db: { url: 'postgres://localhost' } }))
     await container.init()
 
-    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG as symbol)
+    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
     expect(config.http.host).toBe('localhost')
     expect(config.http.port).toBe(3000)
     expect(config.db.url).toBe('postgres://localhost')
@@ -39,13 +39,13 @@ describe('ConfigModule', () => {
     container.addModules(makeModule({ http: { host: 'h', port: 80 }, db: { url: 'u' } }))
     await container.init()
 
-    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG as symbol)
+    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
     const ownMethods = Object.keys(config).filter(k => typeof (config as never)[k] === 'function')
     expect(ownMethods).toHaveLength(0)
   })
 
   it('two ConfigModule registrations refresh independently', async () => {
-    const DB_TOKEN = Symbol('db.config')
+    const DB_TOKEN = token<any>(Symbol('db.config'))
     const dbSchema = z.object({ db: z.object({ url: z.string() }) })
     type DBConfig = z.infer<typeof dbSchema>
 
@@ -62,8 +62,8 @@ describe('ConfigModule', () => {
     )
     await container.init()
 
-    const appConfig = container.get<ConfigHandle<AppConfig>>(APP_CONFIG as symbol)
-    const dbConfig = container.get<ConfigHandle<DBConfig>>(DB_TOKEN as symbol)
+    const appConfig = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
+    const dbConfig = container.get<ConfigHandle<DBConfig>>(DB_TOKEN)
 
     expect(appConfig.http.host).toBe('app')
     expect(dbConfig.db.url).toBe('postgres://a')
@@ -95,7 +95,7 @@ describe('ConfigModule', () => {
     )
     await container.init()
 
-    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG as symbol)
+    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
     expect(config.http.host).toBe('before')
 
     data = { http: { host: 'after', port: 443 }, db: { url: 'u' } }

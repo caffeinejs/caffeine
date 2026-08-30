@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import type { MethodAspect } from '../aop.js'
 import { $aop } from '../aop.js'
 import { CaffeineIoC } from '../container.js'
@@ -8,11 +9,11 @@ describe('hasScopeWithinGraph', function () {
   it('returns false for unregistered key', async function () {
     const di = new CaffeineIoC({ decorators: false })
     await di.init()
-    expect(di.hasScopeInGraph(Symbol('not-registered'), Scopes.SINGLETON)).toBe(false)
+    expect(di.hasScopeInGraph(token<any>(Symbol('not-registered')), Scopes.SINGLETON)).toBe(false)
   })
 
   it('returns true when root binding has the scope', async function () {
-    const kA = Symbol('ghs-root-scope')
+    const kA = token<any>(Symbol('ghs-root-scope'))
     const di = new CaffeineIoC({ decorators: false })
     di.bind(kA).toValue('a')
       .lifetime(Scopes.SINGLETON)
@@ -21,7 +22,7 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('returns false when root binding does not have the scope', async function () {
-    const kA = Symbol('ghs-root-no-scope')
+    const kA = token<any>(Symbol('ghs-root-no-scope'))
     const di = new CaffeineIoC({ decorators: false })
     di.bind(kA).toValue('a')
       .lifetime(Scopes.TRANSIENT)
@@ -30,9 +31,9 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('returns true when a transitive dependency has the scope', async function () {
-    const kA = Symbol('ghs-trans-a')
-    const kB = Symbol('ghs-trans-b')
-    const kC = Symbol('ghs-trans-c')
+    const kA = token<any>(Symbol('ghs-trans-a'))
+    const kB = token<any>(Symbol('ghs-trans-b'))
+    const kC = token<any>(Symbol('ghs-trans-c'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
     di.bind(kC).toValue('c')
       .lifetime(Scopes.SINGLETON)
@@ -45,8 +46,8 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('returns false when no binding in the graph has the scope', async function () {
-    const kA = Symbol('ghs-none-a')
-    const kB = Symbol('ghs-none-b')
+    const kA = token<any>(Symbol('ghs-none-a'))
+    const kB = token<any>(Symbol('ghs-none-b'))
     const di = new CaffeineIoC({ decorators: false })
     di.bind(kB).toValue('b')
       .lifetime(Scopes.TRANSIENT)
@@ -57,8 +58,8 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('handles cycles without infinite loop', async function () {
-    const kA = Symbol('ghs-cycle-a')
-    const kB = Symbol('ghs-cycle-b')
+    const kA = token<any>(Symbol('ghs-cycle-a'))
+    const kB = token<any>(Symbol('ghs-cycle-b'))
     const di = new CaffeineIoC({ checks: { circularReferences: false, scopes: 'off' }, decorators: false })
     di.bind(kA).toFunction((_: unknown) => 'a', [kB])
       .lifetime(Scopes.TRANSIENT)
@@ -69,8 +70,8 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('finds scope through a named-key injection', async function () {
-    const kSvc = 'ghs-named-svc'
-    const kOwner = Symbol('ghs-named-owner')
+    const kSvc = token<any>('ghs-named-svc')
+    const kOwner = token<any>(Symbol('ghs-named-owner'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
     di.bind(kSvc).toValue('svc')
       .lifetime(Scopes.SINGLETON)
@@ -97,8 +98,8 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
   }
 
   it('returns true when aspect dep graph contains the target scope', async function () {
-    const kController = Symbol('ghs-aspect-ctrl')
-    const kDep = Symbol('ghs-aspect-dep')
+    const kController = token<any>(Symbol('ghs-aspect-ctrl'))
+    const kDep = token<any>(Symbol('ghs-aspect-dep'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
     di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
@@ -112,7 +113,7 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
   })
 
   it('returns false when no aspect dep or controller dep has the target scope', async function () {
-    const kController = Symbol('ghs-aspect-no-scope-ctrl')
+    const kController = token<any>(Symbol('ghs-aspect-no-scope-ctrl'))
     const di = new CaffeineIoC({ decorators: false })
 
     di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
@@ -125,8 +126,8 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
   })
 
   it('returns false pre-compile because aspect scope cache is not yet built', function () {
-    const kController = Symbol('ghs-aspect-precompile-ctrl')
-    const kDep = Symbol('ghs-aspect-precompile-dep')
+    const kController = token<any>(Symbol('ghs-aspect-precompile-ctrl'))
+    const kDep = token<any>(Symbol('ghs-aspect-precompile-dep'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
     di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)

@@ -272,15 +272,17 @@ binding's name. Useful when you need to look up an implementation by name at
 runtime.
 
 ```ts
-@Injectable()
+const kMovie = token<Movie>('movie')
+
+@Injectable(kMovie)
 @Named('horror')
 class HorrorMovie implements Movie { ... }
 
-@Injectable()
+@Injectable(kMovie)
 @Named('comedy')
 class ComedyMovie implements Movie { ... }
 
-@Injectable([mapped('movie')])
+@Injectable([mapped(kMovie)])
 class MovieService {
   constructor(readonly movies: Map<string, Movie>) {}
   // movies.get('horror') → HorrorMovie instance

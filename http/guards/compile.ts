@@ -1,4 +1,4 @@
-import { Scopes, type Binding, type Container, type Key, type Provider } from '@caffeinejs/di'
+import { Scopes, type Binding, type Container, type InjectionToken, type Provider } from '@caffeinejs/di'
 import { ErrConfiguration } from '../error/common.js'
 import { solutions } from '../error/util.js'
 import { Guard } from './guard.js'
@@ -14,7 +14,7 @@ export type CompiledGuard
  * Singleton guards whose graph does not reach request scope are instantiated once here.
  * Everything else is a {@link Provider} so `get()` runs inside the live request scope.
  *
- * `compiledByKey` is shared across globals and every route so a Key compiled twice (global +
+ * `compiledByKey` is shared across globals and every route so a InjectionToken compiled twice (global +
  * `@UseGuards`, or the same guard on two methods) reuses the closed-over instance / provider.
  */
 export function compileGuardKeys(
@@ -75,7 +75,7 @@ function compileOne(
   return compiled
 }
 
-function isGuardBinding(binding: Binding, key: Key<Guard>): boolean {
+function isGuardBinding(binding: Binding, key: InjectionToken<Guard>): boolean {
   if (typeof key === 'function' && key.prototype instanceof Guard) {
     return true
   }

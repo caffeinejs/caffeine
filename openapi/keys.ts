@@ -1,8 +1,11 @@
+import { token } from '@caffeinejs/di'
+import type { OpenAPIOptions } from './options.js'
+
 /**
  * DI key for the resolved {@link OpenAPIOptions}. Bound by the OpenAPI builder, so it is absent in an
  * application that never called `.openapi(...)` — which is how the extension stays inert by default.
  */
-export const kOpenAPIOptions = Symbol.for('@caffeinejs/openapi:options')
+export const kOpenAPIOptions = token<OpenAPIOptions>(Symbol.for('@caffeinejs/openapi:options'))
 
 /**
  * Router-level marker on the package's own document endpoints. The generator skips a router carrying it, so

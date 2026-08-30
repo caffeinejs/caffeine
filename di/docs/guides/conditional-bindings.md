@@ -23,8 +23,8 @@ and returning `boolean` or `Promise<boolean>`.
 type Conditional = (ctx: ConditionContext) => boolean | Promise<boolean>
 
 interface ConditionContext {
-  container: { has(key: Key): boolean }
-  key: Key
+  container: { has(key: InjectionToken): boolean }
+  key: InjectionToken
   binding: BindingDecoratorConfig
 }
 ```

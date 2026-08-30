@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -11,7 +12,7 @@ import { Profile } from '../decorators/profile.js'
 
 describe('@Primary', function () {
   describe('when two @Injectable classes share a named key and both are marked @Primary', function () {
-    const kSvc = Symbol('svc-double-primary')
+    const kSvc = token<any>(Symbol('svc-double-primary'))
 
     @Injectable()
     @Named(kSvc)
@@ -39,7 +40,7 @@ describe('@Primary', function () {
   })
 
   describe('when two @Provides methods share a key and both are marked @Primary', function () {
-    const kMsg = Symbol('msg-double-primary')
+    const kMsg = token<any>(Symbol('msg-double-primary'))
 
     class Msg {
       constructor(readonly value: string) {}
@@ -67,7 +68,7 @@ describe('@Primary', function () {
   })
 
   describe('when two @Injectable classes share a named key, both are @Primary, but one is conditionally excluded', function () {
-    const kActive = Symbol('svc-conditional-primary')
+    const kActive = token<any>(Symbol('svc-conditional-primary'))
 
     @Injectable()
     @Named(kActive)

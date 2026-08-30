@@ -1,4 +1,4 @@
-import type { Ctor, Key } from '@caffeinejs/di'
+import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { RouteValidationSchema } from '../../route.js'
 import type { ErrorHandlerRef } from '../../error/error.js'
@@ -20,7 +20,7 @@ export interface RouterSpec<R> {
   extras?: Map<symbol, unknown>
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
-  guards?: Key<Guard>[]
+  guards?: InjectionToken<Guard>[]
   guardOptions?: Record<string | symbol, unknown>
 }
 
@@ -41,7 +41,7 @@ export interface RouteSpec<R> {
   options?: Map<string, unknown>
   extras?: Map<symbol, unknown>
   catchBy?: ErrorHandlerRef[]
-  guards?: Key<Guard>[]
+  guards?: InjectionToken<Guard>[]
   guardOptions?: Record<string | symbol, unknown>
 }
 
@@ -67,7 +67,7 @@ export class RouterBuilder {
   #extras?: Map<symbol, unknown>
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
-  #guards?: Key<Guard>[]
+  #guards?: InjectionToken<Guard>[]
   #guardOptions?: Record<string | symbol, unknown>
 
   path(path: string) {
@@ -129,7 +129,7 @@ export class RouterBuilder {
     return this
   }
 
-  guards(guards: Key<Guard>[]) {
+  guards(guards: InjectionToken<Guard>[]) {
     this.#guards ??= []
     this.#guards.push(...guards)
     return this
@@ -235,7 +235,7 @@ export class RouteBuilder {
   #options?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
   #catchBy?: ErrorHandlerRef[]
-  #guards?: Key<Guard>[]
+  #guards?: InjectionToken<Guard>[]
   #guardOptions?: Record<string | symbol, unknown>
 
   header(name: string, value: string | string[]) {
@@ -308,7 +308,7 @@ export class RouteBuilder {
     return this
   }
 
-  guards(guards: Key<Guard>[]): this {
+  guards(guards: InjectionToken<Guard>[]): this {
     this.#guards ??= []
     this.#guards.push(...guards)
     return this

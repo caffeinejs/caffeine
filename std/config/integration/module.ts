@@ -1,4 +1,4 @@
-import { Keys, mod, type Module, Scopes } from '@caffeinejs/di'
+import { Keys, mod, token, type Module, type NamedToken, Scopes } from '@caffeinejs/di'
 import type { BootstrapOptions } from '../bootstrap.js'
 import type { ConfigHandle } from '../accessor.js'
 import type { ConfigDefinition } from '../definition.js'
@@ -12,7 +12,7 @@ import { ConfigShard } from './shard.js'
 export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:refresh-label')
 
 export interface ConfigModuleOptions<T> {
-  token: symbol | string
+  token: NamedToken<any>
   schema: ConfigSchema<T>
   /** The live source registry. Preferred — late registrations are picked up because it is read at init. */
   sources?: ConfigSources
@@ -38,7 +38,7 @@ export interface ConfigModuleOptions<T> {
  */
 export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefinition): Module {
   const definition = isDefinition(options) ? options : undefined
-  const token = options.token
+  const tokenName = options.token
 
   // A definition resolves itself, so the fields it holds are read when *it* bootstraps rather than captured
   // here. Only the options-object form needs its arguments assembled up front.
@@ -61,9 +61,9 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
       ? await definition.bootstrap() as ConfigShard<T>
       : await ConfigShard.bootstrap<T>(bootstrapOpts!)
 
-    const shardKey = Symbol('@caffeinejs/config:shard')
+    const shardKey = token<ConfigShard<T>>(Symbol('@caffeinejs/config:shard'))
 
-    container.bind<ConfigHandle<T>>(token as symbol).toValue(shard.handle)
+    container.bind<ConfigHandle<T>>(tokenName).toValue(shard.handle)
 
     // The same handle, under the container's well-known values key, so `$i.value(c => c.database.host)` reads
     // the application configuration. The handle is live and the config resolver calls the binding's factory on

@@ -1,6 +1,6 @@
-import { Configuration, Provides } from '@caffeinejs/di'
+import { Configuration, Provides, token } from '@caffeinejs/di'
 
-export const kDenoMessage = Symbol('kDenoMessage')
+export const kDenoMessage = token<string>(Symbol('kDenoMessage'))
 
 @Configuration()
 export class DenoAutoloadConfig {

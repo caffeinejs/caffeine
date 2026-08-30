@@ -34,7 +34,14 @@ export {
   type InjectionResolverFactoryContext,
   unbindResolver,
 } from './injection_resolver.js'
-export type { Identifier, Key } from './key.js'
+export {
+  type Identifier,
+  type InjectionToken,
+  type NamedToken,
+  token,
+  type TokenBrand,
+  type TypedKey,
+} from './key.js'
 export type { MetadataReader } from './metadata_reader.js'
 export { kModule, mod, type Module, type ModuleFn } from './module.js'
 export type { PostProcessor } from './post_processor.js'

@@ -81,7 +81,7 @@ constructor to pick up all `@Injectable` classes registered so far.
 ### get
 
 ```ts
-get<T>(key: Key<T>): T
+get<T>(key: InjectionToken<T>): T
 ```
 
 Resolves the binding for `key` and returns the instance.
@@ -92,13 +92,13 @@ none is marked `@Primary`.
 
 ```ts
 const svc = di.get(UserService)
-const logger = di.get<Logger>(Symbol.for('logger'))
+const logger = di.get(token<Logger>(Symbol.for('logger')))
 ```
 
 ### getOptional
 
 ```ts
-getOptional<T>(key: Key<T>): T | undefined
+getOptional<T>(key: InjectionToken<T>): T | undefined
 ```
 
 Like `get()` but returns `undefined` instead of throwing when the key is not
@@ -111,7 +111,7 @@ const cache = di.getOptional(CacheService) // undefined if not registered
 ### getMany
 
 ```ts
-getMany<T>(key: Key<T>): T[]
+getMany<T>(key: InjectionToken<T>): T[]
 ```
 
 Returns all instances bound to `key`. Throws `ErrNoResolutionForKey` if no
@@ -124,7 +124,7 @@ const plugins = di.getMany<Plugin>(kPlugin)
 ### wrap
 
 ```ts
-wrap<T>(key: Key<T>): Provider<T>
+wrap<T>(key: InjectionToken<T>): Provider<T>
 ```
 
 Returns a `Provider<T>` that lazily resolves `key` on every call to
@@ -139,7 +139,7 @@ const instance = provider.get() // resolved lazily each time
 ### wrapMany
 
 ```ts
-wrapMany<T>(key: Key<T>): Provider<T[]>
+wrapMany<T>(key: InjectionToken<T>): Provider<T[]>
 ```
 
 Like `wrap()` but resolves all bindings for `key` on each `provider.get()`.
@@ -151,7 +151,7 @@ Like `wrap()` but resolves all bindings for `key` on each `provider.get()`.
 ### bind
 
 ```ts
-bind<T>(key: Key<T>): Binder<T>
+bind<T>(key: InjectionToken<T>): Binder<T>
 ```
 
 Opens a new binding for `key` and returns a `Binder` to configure it. See the
@@ -160,13 +160,13 @@ Opens a new binding for `key` and returns a `Binder` to configure it. See the
 ```ts
 di.bind(UserService).toSelf()
 di.bind(Logger).toClass(ConsoleLogger)
-di.bind('version').toValue('1.0.0')
+di.bind(token<string>('version')).toValue('1.0.0')
 ```
 
 ### rebind
 
 ```ts
-rebind<T>(key: Key<T>): Binder<T>
+rebind<T>(key: InjectionToken<T>): Binder<T>
 ```
 
 Removes any existing binding for `key`, then opens a new binding. The
@@ -211,7 +211,7 @@ await di.init()
 ### getBinding
 
 ```ts
-getBinding<T>(key: Key<T>): Binding<T> | undefined
+getBinding<T>(key: InjectionToken<T>): Binding<T> | undefined
 ```
 
 Returns the `Binding` descriptor for `key`, or `undefined` if not found.
@@ -219,7 +219,7 @@ Returns the `Binding` descriptor for `key`, or `undefined` if not found.
 ### getBindings
 
 ```ts
-getBindings<T>(key: Key<T>): Binding<T>[]
+getBindings<T>(key: InjectionToken<T>): Binding<T>[]
 ```
 
 Returns all `Binding` descriptors for `key`. Returns an empty array if none
@@ -252,7 +252,7 @@ const controllers = di.getBindingsByLabel(Symbol.for('controller'))
 ### has
 
 ```ts
-has<T>(key: Key<T>): boolean
+has<T>(key: InjectionToken<T>): boolean
 ```
 
 Returns `true` if a binding is registered for `key`.
@@ -260,7 +260,7 @@ Returns `true` if a binding is registered for `key`.
 ### hasScopeInGraph
 
 ```ts
-hasScopeInGraph(key: Key, scopeId: Identifier): boolean
+hasScopeInGraph(key: InjectionToken, scopeId: Identifier): boolean
 ```
 
 Returns `true` if any binding in the transitive dependency graph of `key` uses
@@ -269,7 +269,7 @@ the given scope.
 ### entries
 
 ```ts
-entries(): IterableIterator<[Key, Binding]>
+entries(): IterableIterator<[InjectionToken, Binding]>
 ```
 
 Returns an iterator over all `[key, binding]` pairs in the container. Use this
@@ -326,7 +326,7 @@ instances are created.
 ### resetInstance
 
 ```ts
-resetInstance(key: Key): Promise<void>
+resetInstance(key: InjectionToken): Promise<void>
 ```
 
 Resets the bindings associated with the given key.  

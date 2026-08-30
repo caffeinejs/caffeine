@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { token } from '@caffeinejs/di'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { $t } from '@caffeinejs/std'
@@ -152,11 +153,11 @@ describe('authentication configuration', () => {
     await app.ready()
 
     const res = await app.fetch('/protected')
-    expect(res.headers.get('www-authenticate')).toContain('realm="From Config"')
+    expect(res.headers.get(token<any>('www-authenticate'))).toContain('realm="From Config"')
 
     // The descriptor is computed from the merged options too, so the document describes the real cookie.
     const descriptors = app.container.get<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
-    expect(descriptors.get('Cookie')).toMatchObject({ kind: 'apiKey', in: 'cookie', name: 'configured.session' })
+    expect(descriptors.get(token<any>('Cookie'))).toMatchObject({ kind: 'apiKey', in: 'cookie', name: 'configured.session' })
 
     await app.close()
   })

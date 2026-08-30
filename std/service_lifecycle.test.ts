@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { $t } from './schema/t.js'
 import { InlineConfigProvider, type ConfigSlice } from './config/index.js'
@@ -30,7 +30,7 @@ class WidgetService implements Service {
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     this.steps.push('configure')
     this.bound = this.slice!.config.size
-    kit.container.bind('widget.size').toValue(this.bound)
+    kit.container.bind(token<any>('widget.size')).toValue(this.bound)
     return Promise.resolve()
   }
 }
@@ -59,7 +59,7 @@ describe('service lifecycle', () => {
     await app.ready()
 
     expect(service.bound).toBe(42)
-    expect(app.container.get('widget.size')).toBe(42)
+    expect(app.container.get(token<any>('widget.size'))).toBe(42)
   })
 
   it('refuses a slice read from the declare step, where nothing has resolved yet', async () => {

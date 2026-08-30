@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Order } from '../decorators/order.js'
@@ -7,7 +8,7 @@ import { mod } from '../module.js'
 
 describe('$i.ordered() injection', function () {
   describe('given multiple bindings with @Order — resolves in ascending order', function () {
-    const kHandler = Symbol('handler-ordered-asc')
+    const kHandler = token<any>(Symbol('handler-ordered-asc'))
 
     interface Handler {
       name(): string
@@ -46,7 +47,7 @@ describe('$i.ordered() injection', function () {
   })
 
   describe('given bindings with equal order values', function () {
-    const kTied = Symbol('handler-ordered-tied')
+    const kTied = token<any>(Symbol('handler-ordered-tied'))
 
     interface Tied {
       label(): string
@@ -80,7 +81,7 @@ describe('$i.ordered() injection', function () {
   })
 
   describe('given a mix of ordered and unordered bindings', function () {
-    const kStep = Symbol('handler-ordered-mixed')
+    const kStep = token<any>(Symbol('handler-ordered-mixed'))
 
     interface Step {
       label(): string
@@ -121,7 +122,7 @@ describe('$i.ordered() injection', function () {
   })
 
   describe('given no bindings registered for the key', function () {
-    const kEmpty = Symbol('handler-ordered-empty')
+    const kEmpty = token<any>(Symbol('handler-ordered-empty'))
 
     @Injectable([$i.ordered(kEmpty)])
     class Consumer {

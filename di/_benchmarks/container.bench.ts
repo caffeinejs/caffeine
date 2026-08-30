@@ -1,4 +1,5 @@
 import { bench, group, run } from 'mitata'
+import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Provides } from '../decorators/provides.js'
@@ -12,7 +13,7 @@ import { Scopes } from '../scope.js'
 import { Inject } from '../decorators/inject.js'
 import { Extends } from '../decorators/extends.js'
 
-const kDbURL = Symbol('db_url')
+const kDbURL = token<any>(Symbol('db_url'))
 
 @Configuration()
 class DbConf {
@@ -44,7 +45,7 @@ interface Notification {
   send(): void
 }
 
-const kNotification = Symbol('notification')
+const kNotification = token<any>(Symbol('notification'))
 
 @Injectable(kNotification)
 @Primary()
@@ -71,7 +72,7 @@ class Act1 extends Act {
 @ConditionalOn(() => false)
 class Maybe {}
 
-const kLog = Symbol('log')
+const kLog = token<any>(Symbol('log'))
 
 interface Logger {
   info(): void
@@ -164,7 +165,7 @@ class RepoDbT implements Repo {
   }
 }
 
-const kNotificationT = Symbol('notification_t')
+const kNotificationT = token<any>(Symbol('notification_t'))
 
 @Injectable(kNotificationT)
 @Primary()
@@ -190,7 +191,7 @@ class Act1T extends ActT {
   act(): void {}
 }
 
-const kLogT = Symbol('log_t')
+const kLogT = token<any>(Symbol('log_t'))
 
 @Injectable()
 @Named(kLogT)
@@ -278,7 +279,7 @@ class Undecorated {}
 const di = new CaffeineIoC()
 await di.init()
 
-const kBindSym = Symbol('bind_sym')
+const kBindSym = token<any>(Symbol('bind_sym'))
 const diForBindings = new CaffeineIoC()
 let bindSeq = 0
 
@@ -299,10 +300,10 @@ group('resolutions', () => {
 })
 
 group('bindings', () => {
-  bench('toValue str key', () => diForBindings.bind(`bk_${bindSeq++}`).toValue(bindSeq))
+  bench('toValue str key', () => diForBindings.bind(token<number>(`bk_${bindSeq++}`)).toValue(bindSeq))
   bench('toValue sym key', () => diForBindings.bind(kBindSym).toValue(bindSeq))
   bench('toSelf', () => diForBindings.bind(Undecorated).toSelf())
-  bench('toFactory', () => diForBindings.bind(`bf_${bindSeq++}`).toFactory(() => bindSeq))
+  bench('toFactory', () => diForBindings.bind(token<number>(`bf_${bindSeq++}`)).toFactory(() => bindSeq))
 })
 
 const { benchmarks } = await run()

@@ -1,4 +1,4 @@
-import type { Container, Ctor, Key } from '@caffeinejs/di'
+import type { Container, Ctor, InjectionToken } from '@caffeinejs/di'
 import type { FastifyInstance } from 'fastify'
 import type { Context } from '../context.js'
 import type { ActionResult } from '../response.js'
@@ -82,7 +82,7 @@ export const MIDDLEWARE_HOOKS: readonly MiddlewareHook[] = [
 ]
 
 /** Anything `use()` accepts: a function, an instance, a class, or a container key. */
-export type MiddlewareRef = MiddlewareFn | Middleware | Ctor<Middleware> | Key
+export type MiddlewareRef = MiddlewareFn | Middleware | Ctor<Middleware> | InjectionToken
 
 /** Whether `ref` is a middleware class rather than a plain middleware function. */
 export function isMiddlewareClass(ref: unknown): ref is Ctor<Middleware> {

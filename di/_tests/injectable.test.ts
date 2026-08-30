@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token, type NamedToken } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { CaffeineIoC } from '../container.js'
 
@@ -14,7 +15,7 @@ describe('@Injectable overloads', function () {
   })
 
   it('should register with a symbol qualifier key only', async function () {
-    const kSvc = Symbol('svc')
+    const kSvc = token<any>(Symbol('svc'))
 
     @Injectable(kSvc)
     class KeyOnly {}
@@ -26,12 +27,12 @@ describe('@Injectable overloads', function () {
   })
 
   it('should register with a string qualifier key only', async function () {
-    @Injectable('myService')
+    @Injectable(token<any>('myService'))
     class StringKey {}
 
     const di = new CaffeineIoC()
     await di.init()
-    expect(di.get('myService'))
+    expect(di.get(token<any>('myService')))
       .toBeInstanceOf(StringKey)
   })
 
@@ -56,7 +57,7 @@ describe('@Injectable overloads', function () {
   })
 
   it('should register with a symbol key and dependencies', async function () {
-    const kNamed = Symbol('named-with-deps')
+    const kNamed = token<any>(Symbol('named-with-deps'))
 
     @Injectable()
     class Dependency {
@@ -79,7 +80,7 @@ describe('@Injectable overloads', function () {
 
   it('should throw when a function type is passed as key', function () {
     expect(() => {
-      @Injectable(class AbstractBase {} as unknown as symbol)
+      @Injectable(class AbstractBase {} as unknown as NamedToken<any>)
       class Wrong {}
     })
       .toThrow()

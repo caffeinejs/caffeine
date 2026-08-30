@@ -1,4 +1,4 @@
-import { keyStr, Key, Identifier } from './key.js'
+import { keyStr, InjectionToken, Identifier } from './key.js'
 import { Named } from './decorators/named.js'
 import { Primary } from './decorators/primary.js'
 import { ConditionalOn } from './decorators/conditional_on.js'
@@ -27,7 +27,7 @@ export class CaffeineIoCError extends Error {
  * that has more than one injectable bound to it, without a disambiguation strategy.
  */
 export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
-  constructor(key: Key, message?: string) {
+  constructor(key: InjectionToken, message?: string) {
     super(
       (message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`)
       + solutions(
@@ -133,7 +133,7 @@ export class ErrInjectableBase extends CaffeineIoCError {
  * ErrOrphanedBindingConfig is an error that is thrown when a binding configuration is found for a key that is not decorated with an {@link Injectable} decorator.
  */
 export class ErrOrphanedBindingConfig extends CaffeineIoCError {
-  constructor(key: Key) {
+  constructor(key: InjectionToken) {
     super(
       `Found binding configuration for "${keyStr(key)}" but the type is not decorated with one of: @${Injectable.name}, @${Extends.name}`,
       'ERR_ORPHANED_BINDING_CONFIG',
@@ -146,7 +146,7 @@ export class ErrOrphanedBindingConfig extends CaffeineIoCError {
  * ErrMultiplePrimary is an error that is thrown when a key has multiple primary bindings.
  */
 export class ErrMultiplePrimary extends CaffeineIoCError {
-  constructor(key: Key) {
+  constructor(key: InjectionToken | Identifier) {
     super(
       `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditionals reduce the candidates to exactly one`
       + solutions(

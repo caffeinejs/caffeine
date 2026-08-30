@@ -12,7 +12,7 @@ import {
 } from './internal/core/resolver/index.js'
 import { InjectionDescriptor } from './injection.js'
 import { notNil } from './internal/util/assert/index.js'
-import { Identifier, Key } from './key.js'
+import { Identifier, InjectionToken } from './key.js'
 
 /**
  * InjectionResolver is used to resolve components injections.
@@ -41,11 +41,11 @@ export type InjectionResolverFactoryContext<T = unknown> = {
   readonly descriptor: InjectionDescriptor<T>
 
   /**
-   * The {@link Key} of the component asking for the injection being described.
+   * The {@link InjectionToken} of the component asking for the injection being described.
    *
    * @readonly
    */
-  readonly key?: Key<T>
+  readonly key?: InjectionToken<T>
 
   /**
    * The kind of the injection being described.

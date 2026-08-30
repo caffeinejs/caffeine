@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { Container } from '@caffeinejs/di'
 import { $t, createApplication, kAppConfig } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
 import type { ConsumerClient, KafkaClients, ProducerClient, ResolvedKafkaConfig } from './config.js'
@@ -18,7 +19,7 @@ function noopClients(): KafkaClients {
   return { createProducer: () => producer, createConsumer: () => consumer }
 }
 
-function configOf(container: { get: (key: symbol) => unknown }, instance: string): ResolvedKafkaConfig {
+function configOf(container: Container, instance: string): ResolvedKafkaConfig {
   return (container.get(runtimeKey(instance)) as KafkaRuntime).config
 }
 

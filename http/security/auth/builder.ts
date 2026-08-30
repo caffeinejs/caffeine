@@ -1,4 +1,4 @@
-import { Provider, type Ctor, type Key } from '@caffeinejs/di'
+import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
@@ -81,7 +81,7 @@ interface SchemeRegistration {
 }
 
 export class AuthenticationBuilder<C = unknown> implements Service {
-  readonly #schemes: Map<string, Key<AuthenticationHandler> | AuthenticationHandler> = new Map()
+  readonly #schemes: Map<string, InjectionToken<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
   readonly #oidcHandlers: OAuthCallbackHandler[] = []
   // How each scheme expects credentials, recorded here because this is the one place that knows: `addStrategy`
@@ -92,7 +92,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
   readonly #registrations: SchemeRegistration[] = []
   readonly #slices: Map<string, ConfigSlice<Record<string, unknown>>> = new Map()
 
-  #mapper: PrincipalMapper | string | symbol | undefined
+  #mapper: PrincipalMapper | InjectionToken<PrincipalMapper> | undefined
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
   #refresh: RefreshTokenOptions | undefined
@@ -110,8 +110,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
   }
 
   addStrategy(name: string, handler: AuthenticationHandler): ServiceAPI<this>
-  addStrategy(name: string, key: Key<AuthenticationHandler>): ServiceAPI<this>
-  addStrategy(name: string, keyOrHandler: Key<AuthenticationHandler> | AuthenticationHandler): ServiceAPI<this> {
+  addStrategy(name: string, key: InjectionToken<AuthenticationHandler>): ServiceAPI<this>
+  addStrategy(name: string, keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler): ServiceAPI<this> {
     this.#schemes.set(name, keyOrHandler)
     return this
   }
@@ -283,7 +283,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this
   }
 
-  mapUser(mapper: PrincipalMapper | string | symbol): ServiceAPI<this> {
+  mapUser(mapper: PrincipalMapper | InjectionToken<PrincipalMapper>): ServiceAPI<this> {
     this.#mapper = mapper
     return this
   }
@@ -505,7 +505,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     const mapper = this.#mapper === undefined
       ? undefined
       : typeof this.#mapper === 'string' || typeof this.#mapper === 'symbol'
-        ? kit.container.wrap<PrincipalMapper>(this.#mapper)
+        ? kit.container.wrap(this.#mapper as InjectionToken<PrincipalMapper>)
         : { get: () => this.#mapper as PrincipalMapper }
     const schemeProvider = new AuthenticationSchemeProvider(schemes, options)
     const service = new AuthenticationService(schemeProvider, mapper)
@@ -712,7 +712,7 @@ function isConstructable<T>(value: unknown): value is Ctor<T> {
   return typeof value === 'function' && value.prototype !== undefined && value.prototype.constructor === value
 }
 
-function isKey<T>(value: Key<T> | T): value is Key<T> {
+function isKey<T>(value: InjectionToken<T> | T): value is InjectionToken<T> {
   return typeof value === 'string' || typeof value === 'symbol' || isConstructable(value)
 }
 

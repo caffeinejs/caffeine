@@ -1,4 +1,4 @@
-import { Key } from './key.js'
+import { InjectionToken } from './key.js'
 import { Binding } from './binding.js'
 
 /**
@@ -9,9 +9,9 @@ export interface ConditionContext {
     /**
      * Checks if a binding is registered for the given key.
      */
-    has: (key: Key) => boolean
+    has: (key: InjectionToken) => boolean
   }
-  readonly key: Key
+  readonly key: InjectionToken
   readonly binding: Binding
 }
 

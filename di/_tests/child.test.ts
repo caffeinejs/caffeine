@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 
 describe('Named bindings visible in child containers', function () {
@@ -7,18 +8,18 @@ describe('Named bindings visible in child containers', function () {
     const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
 
-    child.bind('child-key')
+    child.bind(token<any>('child-key'))
       .toValue('hello')
     await child.init()
 
-    expect(child.get<string>('child-key'))
+    expect(child.get(token<string>('child-key')))
       .toEqual('hello')
   })
 
   it('should resolve a named symbol key registered only in the child', async function () {
     const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
-    const k = Symbol('sym-child')
+    const k = token<any>(Symbol('sym-child'))
 
     child.bind(k)
       .toValue(42)
@@ -30,30 +31,30 @@ describe('Named bindings visible in child containers', function () {
 
   it('should fall through to parent for a named key not in the child', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind('parent-key')
+    parent.bind(token<any>('parent-key'))
       .toValue('from-parent')
 
     const child = parent.newChild()
     await child.init()
 
-    expect(child.get<string>('parent-key'))
+    expect(child.get(token<string>('parent-key')))
       .toEqual('from-parent')
   })
 
   it('should prefer child over parent when both have the same named key', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind('shared')
+    parent.bind(token<any>('shared'))
       .toValue('parent-value')
 
     const child = parent.newChild()
-    child.bind('shared')
+    child.bind(token<any>('shared'))
       .toValue('child-value')
     await parent.init()
     await child.init()
 
-    expect(child.get<string>('shared'))
+    expect(child.get(token<string>('shared')))
       .toEqual('child-value')
-    expect(parent.get<string>('shared'))
+    expect(parent.get(token<string>('shared')))
       .toEqual('parent-value')
   })
 })

@@ -1,5 +1,5 @@
 import { Injection } from '../injection.js'
-import { Key, Identifier, isNamedKey } from '../key.js'
+import { InjectionToken, NamedToken, isNamedKey } from '../key.js'
 import { isNil } from '../internal/util/assert/index.js'
 import { ErrInvalidDecorator } from '../errors.js'
 import { extendMemberInjectableAttributes } from './registrar/index.js'
@@ -23,17 +23,17 @@ import { Configuration } from './configuration.js'
  * }
  * ```
  */
-export function Provides(key: Key): (target: Function, context: ClassMethodDecoratorContext) => void
+export function Provides(key: InjectionToken): (target: Function, context: ClassMethodDecoratorContext) => void
 export function Provides(
-  key: Key,
+  key: InjectionToken,
   dependencies?: Injection[],
 ): (target: Function, context: ClassMethodDecoratorContext) => void
 export function Provides(
-  key: Key,
-  name?: Identifier,
+  key: InjectionToken,
+  name?: NamedToken<any>,
   dependencies?: Injection[],
 ): (target: Function, context: ClassMethodDecoratorContext) => void
-export function Provides(key: Key, nameOrDependencies?: Injection[] | Identifier) {
+export function Provides(key: InjectionToken, nameOrDependencies?: Injection[] | NamedToken<any>) {
   return function (target: Function, context: DecoratorContext) {
     if (context.kind === 'class') {
       throw new ErrInvalidDecorator(
@@ -45,7 +45,7 @@ export function Provides(key: Key, nameOrDependencies?: Injection[] | Identifier
     const name = isNil(nameOrDependencies)
       ? undefined
       : isNamedKey(nameOrDependencies)
-        ? (nameOrDependencies as Key)
+        ? (nameOrDependencies as InjectionToken)
         : undefined
 
     if (isNil(key)) {

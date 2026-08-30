@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { isNamedKey, isValidKey, Key, keyStr } from '../../key.js'
+import { isNamedKey, isValidKey, InjectionToken, keyStr } from '../../key.js'
 
 describe('key utilities (property)', function () {
   it.prop([fc.string({ minLength: 1 })])('isNamedKey returns true for non-empty strings', key => {
@@ -30,7 +30,7 @@ describe('key utilities (property)', function () {
   it.prop([fc.func(fc.anything())])('isValidKey returns true for functions', fn => {
     expect(isValidKey(fn))
       .toBe(true)
-    expect(keyStr(fn as unknown as Key))
+    expect(keyStr(fn as unknown as InjectionToken))
       .toBe((fn as unknown as Function).name)
   })
 

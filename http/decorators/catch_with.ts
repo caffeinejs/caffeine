@@ -12,14 +12,14 @@ import { configureRoute, configureRouter } from './registrar/registrar.js'
  * method on the controller, then the global handler. A handler declared `@Catch(E, { global: false })`
  * is reachable only this way.
  *
- * @param handlers - Error handler classes, or `@Named` identifiers of error handler classes.
+ * @param handlers - Error handler classes, or named tokens of error handler classes.
  *
  * @example
  * ```ts
  * @CatchWith(PetsNotFoundHandler)
  * @Controller('/pets')
  * class PetsController {
- *   @CatchWith('strictValidation')
+ *   @CatchWith(token<ErrorHandler>('strictValidation'))
  *   @Post('/')
  *   create() { ... }
  * }

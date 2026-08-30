@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { $t } from '../../../schema/t.js'
@@ -10,7 +10,7 @@ import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { MutableConfigProvider } from '../../providers/mutable_provider.js'
 
-const APP_CONFIG = Symbol('app.config')
+const APP_CONFIG = token<any>(Symbol('app.config'))
 
 interface ServerSlice { port: number, host: string }
 

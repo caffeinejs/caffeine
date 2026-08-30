@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
+import { token } from '../../../key.js'
 import { Scopes } from '../../../scope.js'
 import { CaffeineIoC } from '../../../container.js'
 import { kSelfRefresh, SelfRefreshable } from '../../../refresher.js'
@@ -110,7 +111,7 @@ describe('Refresh Scope', function () {
 
   describe('when refreshing by label', function () {
     it('only resets bindings tagged with the given label', async function () {
-      const kLabel = Symbol('refresh-label-a')
+      const kLabel = token<any>(Symbol('refresh-label-a'))
 
       class LabeledA {
         readonly id = Math.random()
@@ -135,7 +136,7 @@ describe('Refresh Scope', function () {
     })
 
     it('leaves all bindings untouched when label matches nothing', async function () {
-      const kLabel = Symbol('refresh-label-unused')
+      const kLabel = token<any>(Symbol('refresh-label-unused'))
 
       class StableA {
         readonly id = Math.random()

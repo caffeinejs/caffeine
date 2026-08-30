@@ -1,7 +1,7 @@
-import { CaffeineIoC, type Container } from '@caffeinejs/di'
-import { CatsInMemoryRepository } from './cats/cats.repository.js'
+import { CaffeineIoC, type Container, token } from '@caffeinejs/di'
+import { CatsInMemoryRepository, type CatsRepository } from './cats/cats.repository.js'
 
-export const CATS_REPOSITORY = Symbol.for('cats.repository')
+export const CATS_REPOSITORY = token<CatsRepository>(Symbol.for('cats.repository'))
 
 export function createContainer(): Container {
   const di = new CaffeineIoC()

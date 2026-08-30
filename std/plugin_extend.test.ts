@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '@caffeinejs/di'
 import { z } from 'zod'
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider } from './config/index.js'
@@ -7,7 +8,7 @@ import type { Plugin } from './plugin.js'
 
 // A sentinel the plugin's service binds, so a test can prove `.extend()` rides the same
 // `configure()` path a built-in service does rather than merely copying methods onto the builder.
-const kSentinel = Symbol('extend-sentinel')
+const kSentinel = token<any>(Symbol('extend-sentinel'))
 
 function tracker<const Name extends string = 'track'>(
   name: Name = 'track' as Name,

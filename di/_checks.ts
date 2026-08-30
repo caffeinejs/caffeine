@@ -4,22 +4,25 @@ import { DeferredCtor } from './deferred_ctor.js'
 import { ErrCircularDependency, ErrInvalidAspect, ErrUnresolvableDependencies } from './errors.js'
 import { InjectionDescriptor, ObjectInjections } from './injection.js'
 import { BuiltInResolvers } from './injection_resolver.js'
-import { keyStr, Key, TypedKey } from './key.js'
+import { keyStr, InjectionToken, Identifier, TypedKey } from './key.js'
 import { Scopes } from './scope.js'
 
 /**
  * Check if the container's dependency graph contains any wrongly
  * configured circular references.
  */
-export function checkCircularReferences(registry: Map<Key, Binding>, bindings: Map<Key, Binding[]>): void {
-  const bindingIDToKey = new Map<number, Key>()
+export function checkCircularReferences(
+  registry: Map<InjectionToken, Binding>,
+  bindings: Map<InjectionToken | Identifier, Binding[]>,
+): void {
+  const bindingIDToKey = new Map<number, InjectionToken>()
   for (const [key, binding] of registry.entries()) {
     bindingIDToKey.set(binding.id, key)
   }
 
-  const adj = new Map<Key, Key[]>()
+  const adj = new Map<InjectionToken, InjectionToken[]>()
   for (const [key, binding] of registry.entries()) {
-    const deps: Key[] = []
+    const deps: InjectionToken[] = []
     for (const desc of binding.injections) {
       if (desc.optional || desc.multiple) {
         continue
@@ -29,7 +32,7 @@ export function checkCircularReferences(registry: Map<Key, Binding>, bindings: M
         continue
       }
 
-      const depKey = desc.key as Key
+      const depKey = desc.key as InjectionToken
       if (depKey == null) {
         continue
       }
@@ -56,12 +59,12 @@ export function checkCircularReferences(registry: Map<Key, Binding>, bindings: M
   const GRAY = 1
   const BLACK = 2
 
-  const color = new Map<Key, 0 | 1 | 2>()
+  const color = new Map<InjectionToken, 0 | 1 | 2>()
   for (const key of adj.keys()) {
     color.set(key, WHITE)
   }
 
-  const dfs = (key: Key, path: Key[]): void => {
+  const dfs = (key: InjectionToken, path: InjectionToken[]): void => {
     color.set(key, GRAY)
     path.push(key)
     for (const dep of adj.get(key)!) {
@@ -92,7 +95,7 @@ export function checkCircularReferences(registry: Map<Key, Binding>, bindings: M
  * Check if the container's entire dependency graph is resolvable.
  */
 export function checkIfContainerIsResolvable(
-  registry: Map<Key, Binding>,
+  registry: Map<InjectionToken, Binding>,
   getBindings: <T>(key: TypedKey<T>) => Binding<T>[],
 ): void {
   const issues: string[] = []
@@ -172,7 +175,7 @@ function checkObjectInjections(
   }
 }
 
-export function checkAspects(bindings: Iterable<[Key, Binding]>): void {
+export function checkAspects(bindings: Iterable<[InjectionToken, Binding]>): void {
   for (const [key, binding] of bindings) {
     if (!binding.labels.includes(kAspectLabel)) {
       continue

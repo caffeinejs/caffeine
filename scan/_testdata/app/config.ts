@@ -1,6 +1,6 @@
-import { Configuration, Provides } from '@caffeinejs/di'
+import { Configuration, Provides, token } from '@caffeinejs/di'
 
-export const kAppMessage = Symbol('kAppMessage')
+export const kAppMessage = token<string>(Symbol('kAppMessage'))
 
 @Configuration()
 export class AppConfig {

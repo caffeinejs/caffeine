@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { KafkaHealthIndicator } from './health.js'
 import type { KafkaContainerStatus } from './listener_container.js'
 import { Keys } from './symbols.js'
@@ -8,7 +8,7 @@ function containerWith(statuses: Record<string, KafkaContainerStatus>): Caffeine
   const ioc = new CaffeineIoC()
 
   for (const [name, status] of Object.entries(statuses)) {
-    ioc.bind(Symbol(name))
+    ioc.bind(token<any>(Symbol(name)))
       .toValue({ name, status: () => status })
       .labels(Keys.KAFKA_CONTAINER)
   }

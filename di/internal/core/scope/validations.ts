@@ -4,7 +4,7 @@ import { DeferredCtor } from '../../../deferred_ctor.js'
 import { ErrScopeMismatch } from '../../../errors.js'
 import { InjectionDescriptor, ObjectInjections } from '../../../injection.js'
 import { BuiltInResolvers } from '../../../injection_resolver.js'
-import { Key, keyStr, Identifier, TypedKey } from '../../../key.js'
+import { InjectionToken, keyStr, Identifier, TypedKey } from '../../../key.js'
 import { Scope, Scopes, scopeLabel } from '../../../scope.js'
 
 interface ScopeValidationContext {
@@ -13,7 +13,7 @@ interface ScopeValidationContext {
   getBindings<T>(key: TypedKey<T>): Binding<T>[]
 }
 
-export function checkScopes(ctx: ScopeValidationContext, entries: IterableIterator<[Key, Binding]>): void {
+export function checkScopes(ctx: ScopeValidationContext, entries: IterableIterator<[InjectionToken, Binding]>): void {
   if (ctx.mode === 'off') {
     return
   }
@@ -25,11 +25,11 @@ export function checkScopes(ctx: ScopeValidationContext, entries: IterableIterat
   }
 }
 
-function checkNoMix(ctx: ScopeValidationContext, entries: IterableIterator<[Key, Binding]>): void {
+function checkNoMix(ctx: ScopeValidationContext, entries: IterableIterator<[InjectionToken, Binding]>): void {
   runCheck(entries, ctx, (ownerScopeID, depScopeID) => ownerScopeID !== depScopeID)
 }
 
-function checkCompatibleScopes(ctx: ScopeValidationContext, entries: IterableIterator<[Key, Binding]>): void {
+function checkCompatibleScopes(ctx: ScopeValidationContext, entries: IterableIterator<[InjectionToken, Binding]>): void {
   runCheck(entries, ctx, (ownerScopeID, depScopeID) => isDurable(ownerScopeID, ctx) && !isDurable(depScopeID, ctx))
 }
 
@@ -42,7 +42,7 @@ function isDurable(scopeID: Identifier, ctx: ScopeValidationContext): boolean {
 }
 
 function runCheck(
-  entries: IterableIterator<[Key, Binding]>,
+  entries: IterableIterator<[InjectionToken, Binding]>,
   ctx: ScopeValidationContext,
   isViolation: (ownerScopeID: Identifier, depScopeID: Identifier) => boolean,
 ): void {
@@ -94,7 +94,7 @@ function runCheck(
 }
 
 function checkInjection(
-  ownerKey: Key,
+  ownerKey: InjectionToken,
   ownerScopeID: Identifier,
   inj: InjectionDescriptor,
   location: string,
@@ -128,7 +128,7 @@ function checkInjection(
 }
 
 function checkObjectInjection(
-  ownerKey: Key,
+  ownerKey: InjectionToken,
   ownerScopeID: Identifier,
   obj: ObjectInjections,
   location: string,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { token } from '../key.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -7,7 +8,7 @@ import { $i } from '../injection.js'
 
 describe('given multiple named injectables sharing the same name', function () {
   describe('and one of them asking to inject all others via that shared name', function () {
-    const kProcessor = Symbol('processor')
+    const kProcessor = token<any>(Symbol('processor'))
 
     interface Processor {
       process(): string

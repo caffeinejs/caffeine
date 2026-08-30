@@ -1,13 +1,13 @@
 import { DeferredCtor } from '@caffeinejs/di'
-import type { Key, Snapshot } from '@caffeinejs/di'
+import type { InjectionToken, Snapshot } from '@caffeinejs/di'
 
-export function resolveKey(key: Key): Key {
+export function resolveKey(key: InjectionToken): InjectionToken {
   return key instanceof DeferredCtor ? key.unwrap() : key
 }
 
-export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<Key>): Set<Key> {
+export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<InjectionToken>): Set<InjectionToken> {
   const forward = buildForwardMap(snap)
-  const reverse = new Map<Key, Set<Key>>()
+  const reverse = new Map<InjectionToken, Set<InjectionToken>>()
 
   for (const [k, deps] of forward) {
     for (const dep of deps) {
@@ -18,8 +18,8 @@ export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<Key>): Set<Key> 
     }
   }
 
-  const candidates = new Set<Key>()
-  const queue: Key[] = [...isolatedKeys].flatMap(k => [...(forward.get(k) ?? [])])
+  const candidates = new Set<InjectionToken>()
+  const queue: InjectionToken[] = [...isolatedKeys].flatMap(k => [...(forward.get(k) ?? [])])
   for (let i = 0; i < queue.length; i++) {
     const k = queue[i]!
     if (!candidates.has(k) && !isolatedKeys.has(k)) {
@@ -34,7 +34,7 @@ export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<Key>): Set<Key> 
   while (changed) {
     changed = false
     for (const k of [...candidates]) {
-      const dependents = reverse.get(k) ?? new Set<Key>()
+      const dependents = reverse.get(k) ?? new Set<InjectionToken>()
       const hasExternalDependent = [...dependents].some(d => !candidates.has(d) && !isolatedKeys.has(d))
       if (hasExternalDependent) {
         candidates.delete(k)
@@ -46,10 +46,10 @@ export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<Key>): Set<Key> 
   return candidates
 }
 
-export function allTransitiveDeps(snap: Snapshot, roots: Set<Key>): Set<Key> {
+export function allTransitiveDeps(snap: Snapshot, roots: Set<InjectionToken>): Set<InjectionToken> {
   const forward = buildForwardMap(snap)
-  const result = new Set<Key>()
-  const queue: Key[] = [...roots].flatMap(k => [...(forward.get(k) ?? [])])
+  const result = new Set<InjectionToken>()
+  const queue: InjectionToken[] = [...roots].flatMap(k => [...(forward.get(k) ?? [])])
   for (let i = 0; i < queue.length; i++) {
     const k = queue[i]!
     if (!result.has(k) && !roots.has(k)) {
@@ -62,11 +62,11 @@ export function allTransitiveDeps(snap: Snapshot, roots: Set<Key>): Set<Key> {
   return result
 }
 
-function buildForwardMap(snap: Snapshot): Map<Key, Set<Key>> {
-  const forward = new Map<Key, Set<Key>>()
+function buildForwardMap(snap: Snapshot): Map<InjectionToken, Set<InjectionToken>> {
+  const forward = new Map<InjectionToken, Set<InjectionToken>>()
 
   for (const [k, b] of snap.entries()) {
-    const deps = new Set<Key>()
+    const deps = new Set<InjectionToken>()
     for (const d of b.injections) {
       if (d.key) {
         deps.add(resolveKey(d.key))

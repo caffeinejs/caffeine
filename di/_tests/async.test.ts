@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Async } from '../decorators/async.js'
 import { Provides } from '../decorators/provides.js'
@@ -37,7 +38,7 @@ describe('Async bindings via decorators', function () {
   })
 
   it('should support a mix of sync and async dependencies', async function () {
-    const kConnectionString = Symbol('connection-string')
+    const kConnectionString = token<any>(Symbol('connection-string'))
 
     class ConfigValue {
       constructor(readonly url: string) {}
@@ -96,7 +97,7 @@ describe('Async bindings via decorators', function () {
   })
 
   it('should support async dependencies regardless of @Provides declaration order', async function () {
-    const kConnStr = Symbol('conn-str')
+    const kConnStr = token<any>(Symbol('conn-str'))
 
     class Cfg {
       constructor(readonly url: string) {}
@@ -677,7 +678,7 @@ describe('resetBinding() — async path', function () {
 
 describe('resetInstance() — mixed async + sync bindings under the same key', function () {
   it('should reset both async and non-async bindings sharing a named key', async function () {
-    const kShared = Symbol('async-sync-shared')
+    const kShared = token<any>(Symbol('async-sync-shared'))
     let asyncCallCount = 0
     let syncCallCount = 0
 

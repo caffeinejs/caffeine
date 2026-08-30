@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { defineMetadata, getMetadata, getMetadataOverride, reflect } from '../reflect.js'
 
-const kRoles = Symbol('roles')
-const kTitle = Symbol('title')
+const kRoles = token<any>(Symbol('roles'))
+const kTitle = token<any>(Symbol('title'))
 
 function Roles(...roles: string[]) {
   return (_target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => {
@@ -37,7 +38,7 @@ describe('defineMetadata / getMetadata', function () {
   })
 
   it('returns undefined when the key is absent', function () {
-    const kMissing = Symbol('missing')
+    const kMissing = token<any>(Symbol('missing'))
     expect(getMetadata(Users, kMissing)).toBeUndefined()
     expect(getMetadata(Users, kMissing, 'edit')).toBeUndefined()
   })

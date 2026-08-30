@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { Named } from '../decorators/named.js'
 import { Provides } from '../decorators/provides.js'
 import { Lifetime } from '../decorators/lifetime.js'
@@ -26,7 +27,7 @@ describe('Orphaned binding config validation', function () {
   })
 
   it('should throw when @Provides is used at class level', function () {
-    const kSvc = Symbol('svc')
+    const kSvc = token<any>(Symbol('svc'))
 
     expect(() => {
       // @ts-expect-error intentional: testing runtime guard for class-level misuse

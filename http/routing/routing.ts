@@ -1,4 +1,4 @@
-import { Container, Ctor, Key } from '@caffeinejs/di'
+import { Container, Ctor, InjectionToken } from '@caffeinejs/di'
 import { CatchMetadata, ErrCaffeineWebApplication, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
 import { solutions } from '../error/util.js'
 import { Keys } from '../symbols.js'
@@ -39,7 +39,7 @@ export function buildRouting<REQ>(container: Container): Router<REQ>[] {
       prefix: router.prefix,
       key,
       binding,
-      controller: container.wrap(key),
+      controller: container.wrap(key as InjectionToken<Record<string | symbol, (...args: unknown[]) => unknown>>),
       errorHandlers: buildErrorHandlerMap(router.errorHandlers, key, new Set(router.routes.map(r => r.handler))),
       catchBy: buildCatchByMap(container, router.catchBy, refName(key)),
       // Kept on the router rather than merged down: class-level metadata describes the controller, and
@@ -186,8 +186,8 @@ function compileRouteGuardChain(
   container: Container,
   compiledGuards: Map<GuardRef, CompiledGuard>,
   globalGuards: CompiledGuard[],
-  routerGuards: Key<Guard>[] | undefined,
-  routeGuards: Key<Guard>[] | undefined,
+  routerGuards: InjectionToken<Guard>[] | undefined,
+  routeGuards: InjectionToken<Guard>[] | undefined,
   owner: string,
 ): CompiledGuard[] | undefined {
   const routerKeys = routerGuards ?? []

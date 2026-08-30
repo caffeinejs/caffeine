@@ -1,6 +1,6 @@
 import { BinderOptions } from './binder_options.js'
 import { AsyncFactory, Factory } from './factory.js'
-import { Key, TypedKey, isNamedKey, keyStr } from './key.js'
+import { InjectionToken, TypedKey, isNamedKey, keyStr } from './key.js'
 import { Injection, InjectionDescriptor } from './injection.js'
 import { Binding } from './binding.js'
 import { check } from './internal/util/assert/index.js'
@@ -13,21 +13,21 @@ import { functionFactory } from './internal/core/factory/function_closure.js'
  * Fluent builder for configuring how a key resolves in the container.
  */
 export class Binder<TValue> {
-  private readonly key: Key<TValue> | undefined
+  private readonly key: InjectionToken<TValue> | undefined
   private readonly binding: Binding<any>
   protected readonly register: ((binding: Binding<any>) => void) | undefined
 
-  constructor(key: Key<TValue>, binding: Binding<TValue>, register?: (binding: Binding<any>) => void)
+  constructor(key: InjectionToken<TValue>, binding: Binding<TValue>, register?: (binding: Binding<any>) => void)
   constructor(binding: Binding<TValue>)
   constructor(
-    keyOrBinding: Key<TValue> | Binding<TValue>,
+    keyOrBinding: InjectionToken<TValue> | Binding<TValue>,
     binding?: Binding<TValue>,
     register?: (binding: Binding<any>) => void,
   ) {
     if (binding === undefined) {
       this.binding = keyOrBinding as Binding<TValue>
     } else {
-      this.key = keyOrBinding as Key<TValue>
+      this.key = keyOrBinding as InjectionToken<TValue>
       this.binding = binding
       this.register = register
     }
@@ -223,7 +223,7 @@ export class Binder<TValue> {
    * container.get(AbstractRepo) === container.get(ConcreteRepo) // true (singleton)
    * ```
    */
-  aliasOf(targetKey: Key<TValue>): BinderOptions<TValue> {
+  aliasOf(targetKey: InjectionToken<TValue>): BinderOptions<TValue> {
     this.binding.factoryCreator = (_k, _b, container): Factory<TValue> => {
       const other = container.getBinding(targetKey as TypedKey<TValue>)
       if (!other) {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { DeferredCtor } from '../deferred_ctor.js'
-import { isNamedKey, isValidKey, keyStr } from '../key.js'
+import { isNamedKey, isValidKey, keyStr, token } from '../key.js'
+import { CaffeineIoC } from '../container.js'
 
 describe('keyStr()', function () {
   it('should return "(undefined)" when key is undefined', function () {
@@ -29,13 +30,13 @@ describe('keyStr()', function () {
     })
 
     it('should recursively resolve a DeferredCtor wrapping a string key', function () {
-      const deferred = new DeferredCtor(() => 'stringToken')
+      const deferred = new DeferredCtor(() => token<any>('stringToken'))
       expect(keyStr(deferred)).toBe('stringToken')
     })
 
     it('should recursively resolve a DeferredCtor wrapping a symbol key', function () {
       const sym = Symbol('deferredSym')
-      const deferred = new DeferredCtor(() => sym)
+      const deferred = new DeferredCtor(() => token<any>(sym))
       expect(keyStr(deferred)).toBe('Symbol(deferredSym)')
     })
 
@@ -101,3 +102,31 @@ describe('isValidKey()', function () {
     expect(isValidKey(42)).toBe(false)
   })
 })
+
+describe('token()', function () {
+  it('returns the same primitive', function () {
+    const sym = Symbol('db')
+    expect(token<string>(sym)).toBe(sym)
+    expect(token<number>('port')).toBe('port')
+  })
+})
+
+function injectionTokenTypeChecks(di: CaffeineIoC): void {
+  // @ts-expect-error bare string is not an InjectionToken
+  di.bind('foo')
+  // @ts-expect-error bare string is not an InjectionToken
+  di.get('foo')
+  // @ts-expect-error bare symbol is not an InjectionToken
+  di.bind(Symbol('x'))
+
+  const kPort = token<string>('port')
+  di.bind(kPort).toValue('8080')
+  // @ts-expect-error value type must match the token
+  di.bind(kPort).toValue(42)
+  const port: string = di.get(kPort)
+  void port
+
+  // @ts-expect-error token() requires a type argument
+  di.bind(token(Symbol('x')))
+}
+void injectionTokenTypeChecks

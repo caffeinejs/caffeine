@@ -1,4 +1,5 @@
 import { CaffeineIoC } from '../../../container.js'
+import { token } from '../../../key.js'
 
 export type ChildScenario = {
   parentOnly: string[]
@@ -10,24 +11,24 @@ export function buildChildScenario(scenario: ChildScenario): { parent: CaffeineI
   const parent = new CaffeineIoC({ decorators: false })
 
   for (const key of scenario.parentOnly) {
-    parent.bind(key)
+    parent.bind(token<any>(key))
       .toValue(`parent-${key}`)
   }
 
   for (const entry of scenario.shared) {
-    parent.bind(entry.key)
+    parent.bind(token<any>(entry.key))
       .toValue(entry.parentValue)
   }
 
   const child = parent.newChild()
 
   for (const key of scenario.childOnly) {
-    child.bind(key)
+    child.bind(token<any>(key))
       .toValue(`child-${key}`)
   }
 
   for (const entry of scenario.shared) {
-    child.bind(entry.key)
+    child.bind(token<any>(entry.key))
       .toValue(entry.childValue)
   }
 

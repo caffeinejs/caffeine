@@ -1,7 +1,7 @@
 import { ErrInvalidDecorator } from '../errors.js'
 import { notNil } from '../internal/util/assert/index.js'
 import { DeferredCtor } from '../deferred_ctor.js'
-import { Key } from '../key.js'
+import { InjectionToken } from '../key.js'
 import { Injection, InjectionDescriptor } from '../injection.js'
 import { defineMemberInjection } from './registrar/index.js'
 
@@ -11,7 +11,7 @@ import { defineMemberInjection } from './registrar/index.js'
  * On methods, pass an `Injection[]` matching parameter order.
  * On fields/getters/setters, pass a key or `InjectionDescriptor`.
  *
- * @param key - Injection key: class reference, string, symbol, or `InjectionDescriptor`.
+ * @param key - Injection token: class reference, named token, or `InjectionDescriptor`.
  *
  * @example
  * ```ts
@@ -22,7 +22,9 @@ import { defineMemberInjection } from './registrar/index.js'
  * }
  * ```
  */
-export function Inject(key: Key): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void
+export function Inject(
+  key: InjectionToken,
+): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void
 export function Inject(
   descriptor: InjectionDescriptor,
 ): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void
@@ -30,7 +32,7 @@ export function Inject(
   dependencies: Injection[],
 ): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void
 export function Inject(
-  keyOrDependencies: Key | InjectionDescriptor | Injection[],
+  keyOrDependencies: InjectionToken | InjectionDescriptor | Injection[],
 ): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void {
   notNil(keyOrDependencies, `@${Inject.name} parameter key or dependencies is required.`)
 
@@ -57,7 +59,7 @@ export function Inject(
         if (typeof keyOrDependencies === 'object' && !(keyOrDependencies instanceof DeferredCtor)) {
           defineMemberInjection(context, context.name, context.kind, keyOrDependencies)
         } else {
-          defineMemberInjection(context, context.name, context.kind, { key: keyOrDependencies as Key })
+          defineMemberInjection(context, context.name, context.kind, { key: keyOrDependencies as InjectionToken })
         }
 
         break

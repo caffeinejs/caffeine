@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { type Plugin, type Service } from '@caffeinejs/std'
 import { Controller, Get, createWebApplication } from '../index.js'
 
@@ -46,7 +46,7 @@ describe('createWebApplication default Fastify form', () => {
   })
 
   it('accepts plugins after the options argument', async () => {
-    const kProbe = Symbol('probe-sentinel')
+    const kProbe = token<any>(Symbol('probe-sentinel'))
 
     function probe(): Plugin<{ probe: (value: string) => void }> {
       const state: { value: string | undefined } = { value: undefined }

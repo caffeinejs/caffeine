@@ -1,4 +1,5 @@
 import { describe, it, beforeEach, expect, vi } from 'vitest'
+import { token } from '../key.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Provides } from '../decorators/provides.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -203,7 +204,7 @@ describe('Conditionals', function () {
 
   describe('conditional @Configuration cascade', function () {
     it('should skip all provides of a configuration class that fails its conditional', async function () {
-      const kCascadedProvide = Symbol('cascadedProvide')
+      const kCascadedProvide = token<any>(Symbol('cascadedProvide'))
 
       @Configuration()
       @ConditionalOn(() => false)
@@ -225,7 +226,7 @@ describe('Conditionals', function () {
     })
 
     it('should register all provides of a configuration class that passes its conditional', async function () {
-      const kPassingProvide = Symbol('passingProvide')
+      const kPassingProvide = token<any>(Symbol('passingProvide'))
 
       @Configuration()
       @ConditionalOn(() => true)
@@ -254,10 +255,10 @@ describe('Conditionals', function () {
       const spy1 = vi.fn()
       const spy2 = vi.fn()
 
-      const kTxt = Symbol('txt')
-      const kVal = Symbol('val')
-      const kJSON = Symbol('json')
-      const kXML = Symbol('xml')
+      const kTxt = token<any>(Symbol('txt'))
+      const kVal = token<any>(Symbol('val'))
+      const kJSON = token<any>(Symbol('json'))
+      const kXML = token<any>(Symbol('xml'))
 
       @Configuration()
       @ConditionalOn(() => {

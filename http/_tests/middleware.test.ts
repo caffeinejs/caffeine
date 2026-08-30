@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CaffeineIoC, Scopes } from '@caffeinejs/di'
+import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import fastify from 'fastify'
 import {
   type ActionResult,
@@ -60,7 +60,7 @@ class MiddlewareController {
 }
 void [MiddlewareController]
 
-const kTagger = Symbol('tagger')
+const kTagger = token<any>(Symbol('tagger'))
 
 class Tag {
   constructor(readonly value: string) {}

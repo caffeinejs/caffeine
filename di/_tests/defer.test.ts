@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
 import { $i } from '../injection.js'
 import { ErrScopeMismatch } from '../errors.js'
@@ -53,7 +54,7 @@ describe('$i.defer() composition', function () {
 
   describe('$i.allOf($i.defer())', function () {
     it('injects all bindings for the deferred key', async function () {
-      const kPlugin = Symbol('plugin')
+      const kPlugin = token<any>(Symbol('plugin'))
 
       class PluginA {
         name() {
@@ -91,7 +92,7 @@ describe('$i.defer() composition', function () {
     })
 
     it('injects empty array when no bindings are registered for the deferred key', async function () {
-      const kAbsent = Symbol('absent')
+      const kAbsent = token<any>(Symbol('absent'))
 
       class Host {
         constructor(readonly items: unknown[]) {}

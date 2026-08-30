@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Injectable, Named } from '@caffeinejs/di'
+import { Injectable, Named, token } from '@caffeinejs/di'
 import { CatchWith, Controller, ErrConfiguration, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
 // Isolated: the invalid reference poisons every app build in its module, so it must be the only
@@ -11,7 +11,7 @@ import { CatchWith, Controller, ErrConfiguration, Get, createWebApplication, fas
 class NotAHandler {}
 void [NotAHandler]
 
-@CatchWith('notAHandler')
+@CatchWith(token<any>('notAHandler'))
 @Controller('/undeclared')
 class UndeclaredController {
   @Get('/')

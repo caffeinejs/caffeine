@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import fastify, { FastifyRequest } from 'fastify'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { scan } from '@caffeinejs/scan'
 import { RouteParam } from './util/decorators/params.js'
 
@@ -17,13 +17,13 @@ container.assertResolvable()
 
 await container.init()
 
-const controllers = container.getBindingsByLabel(Symbol.for('controller'))
+const controllers = container.getBindingsByLabel(token<any>(Symbol.for('controller')))
 
 for (const controller of controllers) {
   const tags = controller.binding.tags
-  const path = tags.get(Symbol.for('controller:base')) as string
-  const routes = tags.get(Symbol.for('controller:routes')) as { handler: string, path: string, method: string }[]
-  const routeParams = tags.get(Symbol.for('controller:params')) as Map<string, RouteParam[]>
+  const path = tags.get(token<any>(Symbol.for('controller:base'))) as string
+  const routes = tags.get(token<any>(Symbol.for('controller:routes'))) as { handler: string, path: string, method: string }[]
+  const routeParams = tags.get(token<any>(Symbol.for('controller:params'))) as Map<string, RouteParam[]>
 
   for (const route of routes) {
     const params = (routeParams.get(route.handler) || []) as RouteParam[]
