@@ -7,11 +7,12 @@ import {
   Keys,
   type RouteAuthzOptions,
   type ServiceKit,
+  RouteBuilder,
   WebApplication,
   createWebApplication,
   fastifyAdapterFactory,
 } from '../index.js'
-import { RouteBuilder, registerRouter } from '../decorators/registrar/index.js'
+import { registerRouter } from '../decorators/registrar/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -55,7 +56,7 @@ class ProgrammaticService implements Service {
       const route = new RouteBuilder()
         .path('/programmatic.json')
         .method('GET')
-        .handler('json')
+        .name('json')
         .parameters([$p.context()])
 
       // Only when protection is actually wanted: `buildRouting` reads *any* defined authz — `{}` included — as

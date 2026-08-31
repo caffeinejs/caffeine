@@ -5,7 +5,8 @@ import type { Router } from './route.js'
 import { Feats } from './feats.js'
 import type { ServiceKit, Services } from './service.js'
 import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
-import { buildRouting } from './routing/index.js'
+import { buildRouting, type RouteSource } from './routing/index.js'
+import { ControllerRouteSource } from './decorators/registrar/source.js'
 import { Authentication } from './security/auth/authentication_middleware.js'
 import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
 import { AuthenticationService } from './security/auth/service.js'
@@ -140,8 +141,16 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     ]
   }
 
+  /**
+   * Where routes come from. One source per way of declaring them; a route declared any of those ways is
+   * compiled the same and registered the same.
+   */
+  protected routeSources(): RouteSource<R>[] {
+    return [new ControllerRouteSource<R>()]
+  }
+
   protected override async setup(): Promise<void> {
-    this.#routers = buildRouting<R>(this.container)
+    this.#routers = buildRouting<R>(this.routeSources(), this.container)
 
     // Copy into a fresh object: the adapter's `listen()` mutates what it receives.
     const server: ServerOptions = { ...this.container.get<ServerOptions>(kServerOptions) }

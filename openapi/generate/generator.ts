@@ -17,7 +17,7 @@ import type {
   TagObject,
 } from '../spec/spec.js'
 import { ComponentRegistry } from './components.js'
-import { controllerBaseName, defaultOperationId, operationSite } from './naming.js'
+import { defaultOperationId, operationSite, routerBaseName } from './naming.js'
 import { deriveParameters } from './parameters.js'
 import { routeURL, translatePath } from './paths.js'
 import { deriveRequestBody } from './request_body.js'
@@ -64,7 +64,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
       continue
     }
 
-    const tagName = options.tagFor?.(router) ?? group?.name ?? controllerBaseName(router.key)
+    const tagName = options.tagFor?.(router) ?? group?.name ?? routerBaseName(router)
     if (group !== undefined && !tags.has(tagName)) {
       tags.set(tagName, tagObject(tagName, group, options))
     }

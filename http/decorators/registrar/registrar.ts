@@ -1,5 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
-import { RouteBuilder, RouterBuilder } from './routing.js'
+import { RouteBuilder, RouterBuilder } from '../../routing/builder.js'
 
 const RouterRegistry = new WeakMap<Function, RouterBuilder>()
 const RouteRegistry = new WeakMap<object, Map<string | symbol, RouteBuilder>>()

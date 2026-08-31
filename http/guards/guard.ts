@@ -22,7 +22,8 @@ export type GuardContext<C extends Context = Context> = Omit<C, 'req'> & {
 export type GuardOptions<T = unknown> = T
 
 export interface GuardTarget {
-  clazz: Ctor<unknown>
+  /** The class that declared the route, when a class did. A route declared without one leaves it undefined. */
+  clazz?: Ctor<unknown>
   handler: string | symbol
 }
 

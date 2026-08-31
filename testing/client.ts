@@ -20,7 +20,7 @@ export function testClient<ROUTER extends RouterCtor>(
   const origin = isRemote ? target.toString() : 'http://localhost'
   const fetcher = isRemote ? fetch : target.fetch.bind(target)
 
-  const router = descriptor.describe()
+  const router = descriptor.toRouter()
   const client: Record<string | symbol, (input: Request | RequestInit) => Promise<Response>> = {}
 
   for (const route of router.routes) {
@@ -28,7 +28,7 @@ export function testClient<ROUTER extends RouterCtor>(
     // HTTP method can still be overridden by passing a new RequestInit parameter.
     const defaultMethod = route.method[0].toUpperCase()
 
-    client[route.handler] = async (input?: Request | RequestInit) => {
+    client[route.name] = async (input?: Request | RequestInit) => {
       // A Request carries its own concrete path (e.g. built via newURL for a param route): honor it,
       // rebasing path + query onto the client's origin so remote/in-process targeting is preserved.
       // A RequestInit has no URL, so resolve the route's template path (parameterless routes).

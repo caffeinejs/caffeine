@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RouterBuilder, RouteBuilder } from './routing.js'
+import { RouterBuilder, RouteBuilder } from './builder.js'
 
 const kSym = Symbol('test')
 

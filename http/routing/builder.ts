@@ -1,56 +1,11 @@
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
-import type { RouteValidationSchema } from '../../route.js'
-import type { ErrorHandlerRef } from '../../error/error.js'
-import { Guard } from '../../guards/guard.js'
+import type { RouteValidationSchema } from '../route.js'
+import type { ErrorHandlerRef } from '../error/error.js'
+import { Guard } from '../guards/guard.js'
+import type { RouteInvoker } from './dispatch.js'
+import type { RouteAuthzOptions, RouteSpec, RouterSpec } from './spec.js'
 import { mergeValue } from './_merge.js'
-
-export interface RouterSpec<R> {
-  path: string
-  prefix?: string
-  routes: RouteSpec<R>[]
-  accept: string[]
-  contentType: string
-  header?: Map<string, string | string[]>
-  bodyLimit?: number
-  timeout?: number
-  authz?: RouteAuthzOptions
-  config?: Map<string, unknown>
-  options?: Map<string, unknown>
-  extras?: Map<symbol, unknown>
-  errorHandlers?: Array<[Ctor<Error>, string | symbol]>
-  catchBy?: ErrorHandlerRef[]
-  guards?: InjectionToken<Guard>[]
-  guardOptions?: Record<string | symbol, unknown>
-}
-
-export interface RouteSpec<R> {
-  path: string
-  method: string[]
-  accept: string[]
-  contentType: string
-  parameters: ParameterPickOptions<R>[]
-  handler: string | symbol
-  schema?: RouteValidationSchema
-  bodyLimit?: number
-  timeout?: number
-  header?: Map<string, string | string[]>
-  statusCode?: number
-  authz?: RouteAuthzOptions
-  config?: Map<string, unknown>
-  options?: Map<string, unknown>
-  extras?: Map<symbol, unknown>
-  catchBy?: ErrorHandlerRef[]
-  guards?: InjectionToken<Guard>[]
-  guardOptions?: Record<string | symbol, unknown>
-}
-
-export interface RouteAuthzOptions {
-  allowAnonymous?: boolean
-  policy?: string | string[]
-  schemes?: string[]
-  roles?: string[]
-}
 
 export class RouterBuilder {
   #path?: string
@@ -191,11 +146,6 @@ export class RouterBuilder {
     return this
   }
 
-  // TODO: remove this
-  describe<R = unknown>(): RouterSpec<R> {
-    return this.toRouter()
-  }
-
   toRouter<R>(): RouterSpec<R> {
     return {
       path: normalizePrefix(this.#path ?? ''),
@@ -222,7 +172,8 @@ export class RouteBuilder {
   #header?: Map<string, string | string[]>
   #path?: string
   #method?: string[]
-  #handler?: string | symbol
+  #name?: string | symbol
+  #handle?: RouteInvoker
   #parameters?: ParameterPickOptions<unknown>[]
   #consumes?: string[]
   #produces: string = ''
@@ -255,8 +206,13 @@ export class RouteBuilder {
     return this
   }
 
-  handler(handler: string | symbol): this {
-    this.#handler = handler
+  name(name: string | symbol): this {
+    this.#name = name
+    return this
+  }
+
+  handle(fn: RouteInvoker): this {
+    this.#handle = fn
     return this
   }
 
@@ -377,7 +333,8 @@ export class RouteBuilder {
       accept: [...(this.#consumes ?? [])],
       contentType: this.#produces ?? '',
       parameters: [...(this.#parameters ?? [])],
-      handler: this.#handler ?? '',
+      name: this.#name ?? '',
+      handle: this.#handle,
       schema: this.#schema,
       bodyLimit: this.#bodyLimit,
       timeout: this.#timeout,

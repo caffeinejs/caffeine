@@ -1,13 +1,14 @@
 import './_fastify.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
-import { Container, Scopes } from '@caffeinejs/di'
+import { Container, Ctor, Scopes } from '@caffeinejs/di'
 import { type FastifyInstance, type FastifyReply, type FastifyRequest, type RawReplyDefaultExpression, type RawRequestDefaultExpression, type RawServerBase } from 'fastify'
 import fp from 'fastify-plugin'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import type { Router } from './route.js'
 import type { Principal } from './security/index.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
+import type { RouteCompilers } from './routing/dispatch.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
 import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
@@ -28,11 +29,25 @@ import { type AdapterRouteOptions } from './internal/route_hooks.js'
 import { attachGuardHook } from './guards/attach.js'
 import { kGuardOptions } from './guards/keys.js'
 
+/** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
+type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error) => void) => void
+
 export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
 > implements Adapter<SERVER, REQ> {
+  /**
+   * The parameter compilers handed to every route's dispatch, built once for the whole server. The reply type
+   * a source sees is opaque, so the two are re-typed here rather than in the neutral contract.
+   */
+  readonly #compilers: RouteCompilers<REQ> = {
+    handler: (parameters, fn) =>
+      compileHandler<REQ, RES>(parameters, fn) as (req: REQ, res: unknown) => unknown,
+    args: parameters =>
+      compileArgs<REQ, RES>(parameters) as (req: REQ, res: unknown) => unknown[] | Promise<unknown[]>,
+  }
+
   #fastify: SERVER
   #container: Container
   #serverOptions: ServerOptions = DEFAULT_SERVER_OPTIONS
@@ -65,7 +80,7 @@ export class FastifyAdapter<
 
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
-    fastify.decorateRequest('controller', null)
+    fastify.decorateRequest('routeTarget', null)
     fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
 
     // Resolved here, ahead of everything else, because whether a middleware comes from request scope
@@ -144,48 +159,30 @@ export class FastifyAdapter<
     // Resolved once, not per route and never per request. Unconditional, as the cache configurer's server
     // phase was: an application that binds a store gets it constructed at start-up either way.
     const cacheDeps: CacheDeps = resolveCacheDeps(container)
+    const compilers = this.#compilers
 
     for (const router of routers) {
       const basePath = router.path
       const routes = router.routes
 
       fastify.register(async server => {
-        const controller = router.controller
-        const isSingleton = router.binding.scopeID === Scopes.SINGLETON
-
         server.decorateRequest('responseCached', false)
 
         installRouterErrorHandler(server, router, globalErrorHandler)
 
+        // Whatever preparation the source that built this group needs — resolving the instance a `@Catch`
+        // method will run on, for one. Registered as given, so it costs what the hook it replaces cost.
+        if (router.onRequest !== undefined) {
+          server.addHook('onRequest', router.onRequest as OnRequestHook)
+        }
+
         for (const route of routes) {
-          let handle: (req: REQ, res: RES) => unknown
-
-          if (router.errorHandlers?.size) {
-            const pickArgs = compileArgs(route.parameters)
-            const handlerKey = route.handler
-
-            handle = async (req, res) => {
-              const instance = req.controller!
-              const args = await pickArgs(req, res)
-
-              return (instance[handlerKey] as (...args: unknown[]) => unknown).apply(instance, args)
-            }
-          } else if (isSingleton) {
-            const ref = controller.get()
-            const refFn = (ref[route.handler] as (...args: unknown[]) => unknown).bind(ref)
-
-            handle = compileHandler(route.parameters, refFn)
-          } else {
-            const handlerKey = route.handler
-
-            handle = compileHandler(route.parameters, (...args) => {
-              const ctrl = controller.get()
-              return (ctrl[handlerKey] as (...args: unknown[]) => unknown).apply(ctrl, args)
-            })
-          }
+          // Built here, once. The source decides *how* the route is invoked — a method on a singleton, one
+          // resolved per request, a plain function — and hands back the function to install.
+          const handle = route.dispatch(compilers) as (req: REQ, res: RES) => unknown
 
           // The `handler` middleware group wraps the dispatch, so `next()` hands the middleware whatever
-          // the controller returned. Returns the dispatch unchanged when nothing is registered there.
+          // the handler returned. Returns the dispatch unchanged when nothing is registered there.
           const dispatch = middlewares.wrapHandler(handle)
 
           // Route Config
@@ -242,8 +239,8 @@ export class FastifyAdapter<
               allowAnonymous: route.authorization.options?.allowAnonymous === true,
               authorizer: route.authorization.authorizer,
             },
-            controller: typeof router.key === 'function' ? router.key : undefined,
-            handler: route.handler,
+            target: router.target,
+            handler: route.name,
           }
 
           const url = joinPaths(basePath, route.path)
@@ -309,7 +306,11 @@ export class FastifyAdapter<
           }
 
           if (route.guards !== undefined && route.guards.length > 0) {
-            attachGuardHook(routeDef, route.guards)
+            // Built here rather than in the hook: it is the same object for every request on this route.
+            attachGuardHook(routeDef, route.guards, {
+              clazz: router.target as Ctor<unknown> | undefined,
+              handler: route.name,
+            })
           }
 
           // BodyAsBuffer

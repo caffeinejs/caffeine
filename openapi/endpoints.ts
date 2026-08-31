@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
-import { Keys, type RouteAuthzOptions } from '@caffeinejs/http'
-import { RouteBuilder, registerRouter } from '@caffeinejs/http/decorators/registrar'
+import { Keys, RouteBuilder, type RouteAuthzOptions } from '@caffeinejs/http'
+import { registerRouter } from '@caffeinejs/http/decorators/registrar'
 import type { OpenAPIDocumentStore } from './document_store.js'
 import { kOpenAPISelf } from './keys.js'
 import type { OpenAPIOptions } from './options.js'
@@ -92,14 +92,14 @@ export function registerEndpoints(
 function route(
   method: string,
   path: string,
-  handler: string,
+  name: string,
   contentType: string,
   authz: RouteAuthzOptions | undefined,
 ): RouteBuilder {
   const builder = new RouteBuilder()
     .method(method)
     .path(path)
-    .handler(handler)
+    .name(name)
     .produces(contentType)
 
   if (authz !== undefined) {

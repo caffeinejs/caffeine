@@ -1,5 +1,5 @@
-import type { Route, Router } from '@caffeinejs/http'
-import { RouteBuilder, type RouterBuilder, getRouter, registerRouter } from '@caffeinejs/http/decorators/registrar'
+import { RouteBuilder, type Route, type Router, type RouterBuilder } from '@caffeinejs/http'
+import { getRouter, registerRouter } from '@caffeinejs/http/decorators/registrar'
 import type { OpenAPIOptions } from '../options.js'
 import { defaultOpenAPIOptions } from '../options.js'
 
@@ -30,9 +30,8 @@ export function fixtureRouter(
   return {
     path: spec.path,
     prefix: options.prefix ?? spec.prefix,
-    key: key as never,
-    binding: undefined as never,
-    controller: { get: () => ({}) } as never,
+    name: name,
+    target: key,
     extras: spec.extras,
     routes: spec.routes.map((route): Route<unknown> => {
       // Mirrors buildRouting: any authz declared at either level is protection unless something opted out.
@@ -45,7 +44,8 @@ export function fixtureRouter(
         accept: route.accept.length > 0 ? route.accept : spec.accept,
         contentType: route.contentType !== '' ? route.contentType : spec.contentType,
         parameters: route.parameters,
-        handler: route.handler,
+        name: route.name,
+        dispatch: () => () => undefined,
         schema: route.schema,
         statusCode: route.statusCode,
         extras: route.extras,
@@ -58,9 +58,9 @@ export function fixtureRouter(
   }
 }
 
-/** A route builder with the method, path and handler already set. */
-export function fixtureRoute(method: string, path: string, handler: string): RouteBuilder {
-  return new RouteBuilder().method(method).path(path).handler(handler)
+/** A route builder with the method, path and name already set. */
+export function fixtureRoute(method: string, path: string, name: string): RouteBuilder {
+  return new RouteBuilder().method(method).path(path).name(name)
 }
 
 export function fixtureOptions(overrides: Partial<OpenAPIOptions> = {}): OpenAPIOptions {

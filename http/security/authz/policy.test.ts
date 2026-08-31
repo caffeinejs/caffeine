@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '../../context.js'
-import type { RouteAuthzOptions } from '../../decorators/registrar/routing.js'
+import type { RouteAuthzOptions } from '../../routing/spec.js'
 import { Claim, Identity, Principal, newAnonymousUser } from '../identity.js'
 import type { AuthorizationOptions } from './authz.js'
 import {

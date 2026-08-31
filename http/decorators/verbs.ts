@@ -42,7 +42,7 @@ function configureMethod(
   params?: Picks,
 ) {
   configureRoute(context, spec => {
-    spec.method(method).handler(context.name).path(path)
+    spec.method(method).name(context.name).path(path)
     if (params !== undefined) {
       spec.parameters(params)
     }

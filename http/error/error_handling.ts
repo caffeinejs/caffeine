@@ -1,8 +1,7 @@
-import { Scopes } from '@caffeinejs/di'
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { FastifyContext } from '../context.js'
 import { Responder } from '../response.js'
-import type { Router } from '../route.js'
+import { kErrorUnhandled, type Router } from '../route.js'
 import type { ErrorHandlerProvider } from './error.js'
 import { resolveByErrorChain } from './error.js'
 import { ErrHTTP, httpErrorBody } from './http.js'
@@ -55,9 +54,9 @@ export function installGlobalErrorHandler(
 }
 
 /**
- * Installs a controller's encapsulated error handler, when it declares one.
+ * Installs a route group's encapsulated error handler, when it declares one.
  *
- * Called from inside the controller's `register()` context, so the handler it sets covers every phase of
+ * Called from inside the group's `register()` context, so the handler it sets covers every phase of
  * that plugin — validation, hooks, and the handler itself — and nothing outside it.
  */
 export function installRouterErrorHandler(
@@ -66,18 +65,12 @@ export function installRouterErrorHandler(
   globalErrorHandler: GlobalErrorHandler,
 ): void {
   const routes = router.routes
-  const controller = router.controller
-  const isSingleton = router.binding.scopeID === Scopes.SINGLETON
 
   // A single encapsulated setErrorHandler covers every phase in the plugin (validation, hooks,
-  // handler) and resolves, most specific first: the route's @CatchWith, the controller's @CatchWith, a
-  // @Catch method on the controller, then the app-wide globalErrorHandler.
-  //
-  // The @Catch method form needs the controller instance that threw, so when it is in play the
-  // instance is resolved once per request in an onRequest hook (inside the live request scope) and
-  // reused by the route dispatch — correct for transient scope (no second get()).
-  const hasControllerMethodHandlers = !!router.errorHandlers?.size
-  const hasScopedHandlers = hasControllerMethodHandlers
+  // handler) and resolves, most specific first: the route's @CatchWith, the group's @CatchWith, the
+  // group's own handler, then the app-wide globalErrorHandler.
+  const groupHandler = router.handleError
+  const hasScopedHandlers = groupHandler !== undefined
     || !!router.catchBy?.size
     || routes.some(route => route.catchBy?.size)
 
@@ -85,17 +78,7 @@ export function installRouterErrorHandler(
     return
   }
 
-  const errorHandlers = router.errorHandlers
   const routerCatchBy = router.catchBy
-
-  if (hasControllerMethodHandlers) {
-    const ref = isSingleton ? controller.get() : null
-
-    server.addHook('onRequest', (req, _res, done) => {
-      req.controller = (ref ?? controller.get()) as Record<string | symbol, unknown>
-      done()
-    })
-  }
 
   server.setErrorHandler(async (error: FastifyError, req: FastifyRequest, reply: FastifyReply) => {
     const err = error instanceof Error ? error : new Error(String(error))
@@ -109,12 +92,12 @@ export function installRouterErrorHandler(
       return respond(req.httpContext, await handler.get().handle(req.httpContext, err))
     }
 
-    const instance = req.controller
-    const methodKey = instance && errorHandlers ? resolveByErrorChain(errorHandlers, err) : undefined
+    if (groupHandler !== undefined) {
+      const result = await groupHandler(req, req.httpContext, err)
 
-    if (instance && methodKey) {
-      const handle = instance[methodKey] as (...args: unknown[]) => unknown
-      return respond(req.httpContext, await handle.apply(instance, [req.httpContext, err]))
+      if (result !== kErrorUnhandled) {
+        return respond(req.httpContext, result)
+      }
     }
 
     return globalErrorHandler(error, req, reply)

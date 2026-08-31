@@ -7,7 +7,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     httpContext: FastifyContext
     responseCached: boolean
-    controller: Record<string | symbol, unknown> | null
+    routeTarget: Record<string | symbol, (...args: unknown[]) => unknown> | null
     user: Principal
   }
 
@@ -31,10 +31,10 @@ declare module 'fastify' {
         authorizer?: AuthzRouteService
       }
       /**
-       * The controller constructor and handler name, so a Guard can read `Symbol.metadata` without
-       * a Nest-style ExecutionContext.
+       * The class that declared the route and the handler's name, so a Guard can read `Symbol.metadata`
+       * without a Nest-style ExecutionContext. A route declared without a class carries no `target`.
        */
-      controller?: Function
+      target?: Function
       handler?: string | symbol
     }
   }

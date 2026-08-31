@@ -494,6 +494,39 @@ describe('on_request', () => {
   })
 })
 
+describe('target', () => {
+  let seen: GuardInput<unknown>['target'] | undefined
+
+  @Injectable()
+  class RecordingGuard extends Guard {
+    canActivate(input: GuardInput<unknown>): boolean {
+      seen = input.target
+      return true
+    }
+  }
+
+  @Controller('/target')
+  class TargetController {
+    @UseGuards(RecordingGuard)
+    @Get('/one')
+    one() { return { ok: true } }
+  }
+
+  void [RecordingGuard, TargetController]
+
+  it('names the class and the handler the guard is running for', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const res = await app.fetch('/target/one')
+    expect(res.status).toBe(200)
+    expect(seen?.clazz).toBe(TargetController)
+    expect(seen?.handler).toBe('one')
+
+    await app.close()
+  })
+})
+
 describe('authorization', () => {
   enum Role {
     User = 'user',
@@ -540,7 +573,7 @@ describe('authorization', () => {
     canActivate(input: GuardInput<unknown>): boolean {
       const cfg = input.context.routeConfig as FastifyContextConfig
       const required = getMetadataOverride<Role[]>(
-        cfg.caffeine?.controller as Function,
+        cfg.caffeine?.target as Function,
         kRoles,
         cfg.caffeine?.handler as string | symbol,
       )

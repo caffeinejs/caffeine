@@ -2,7 +2,7 @@ import { STATUS_CODES } from 'http'
 import type { FastifyRequest } from 'fastify'
 import { addRouteHook, type AdapterRouteOptions } from '../internal/route_hooks.js'
 import { ErrHTTPForbidden } from '../error/http.js'
-import type { Guard, GuardContext, GuardInput, GuardResult, GuardReturn } from './guard.js'
+import type { Guard, GuardContext, GuardInput, GuardResult, GuardReturn, GuardTarget } from './guard.js'
 import type { CompiledGuard } from './compile.js'
 import { kGuardOptions } from './keys.js'
 
@@ -12,7 +12,14 @@ const RESOURCE_FORBIDDEN = 'Resource forbidden'
  * Attaches a callback-style route `onRequest` hook that runs `chain`. The hook is not `async`:
  * sync `canActivate` results call `done()` without a microtask.
  */
-export function attachGuardHook(routeDef: AdapterRouteOptions, chain: CompiledGuard[]): void {
+export function attachGuardHook(
+  routeDef: AdapterRouteOptions,
+  chain: CompiledGuard[],
+  target: GuardTarget,
+): void {
+  // Read here rather than per request: both are fixed for the route by the time it is registered.
+  const opts = routeDef.config?.[kGuardOptions]
+
   addRouteHook(routeDef, 'onRequest', (request, _reply, done) => {
     const ctx = (request as FastifyRequest).httpContext as GuardContext | undefined
     if (ctx == null) {
@@ -20,11 +27,7 @@ export function attachGuardHook(routeDef: AdapterRouteOptions, chain: CompiledGu
       return
     }
 
-    const input: GuardInput<unknown> = {
-      context: ctx,
-      target: { clazz: routeDef.config?.caffeine?.controller, handler: routeDef.handler.name },
-      opts: routeDef.config?.[kGuardOptions],
-    }
+    const input: GuardInput<unknown> = { context: ctx, target, opts }
 
     runGuards(input, chain, 0, done)
   })
