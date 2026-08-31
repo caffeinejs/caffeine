@@ -55,7 +55,7 @@ export class Authentication extends Middleware {
     const schemes = route?.schemes
     const named = schemes !== undefined && schemes.length > 0 && route?.allowAnonymous !== true
 
-    ctx.setUser(named ? await this.#authenticateNamed(ctx, schemes) : await this.#authenticateDefault(ctx))
+    ctx.user = named ? await this.#authenticateNamed(ctx, schemes) : await this.#authenticateDefault(ctx)
 
     const authorizer = route?.authorizer
     if (authorizer == null) {

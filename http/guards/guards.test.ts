@@ -527,10 +527,9 @@ describe('authorization', () => {
         throw new ErrHTTPUnauthorized()
       }
 
-      input.context.setUser(
-        new Principal(true,
-          new Identity('test', true, [
-            new Claim('roles', roles, 'test')])))
+      input.context.user = new Principal(true,
+        new Identity('test', true, [
+          new Claim('roles', roles, 'test')]))
 
       return true
     }

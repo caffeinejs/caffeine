@@ -198,8 +198,8 @@ describe('Fastify Adapter', () => {
 
       expect(r1.status).toBe(200)
       expect(r2.status).toBe(200)
-      expect((await r1.json()).id).toBe(1)
-      expect((await r2.json()).id).toBe(2)
+      expect(await r1.json()).toEqual({ id: 1 })
+      expect(await r2.json()).toEqual({ id: 2 })
     })
 
     it('gives a fresh request-scoped service instance per request when injected into a transient controller', async () => {
@@ -232,8 +232,8 @@ describe('Fastify Adapter', () => {
 
       expect(r1.status).toBe(200)
       expect(r2.status).toBe(200)
-      expect((await r1.json()).id).toBe(1)
-      expect((await r2.json()).id).toBe(2)
+      expect(await r1.json()).toEqual({ id: 1 })
+      expect(await r2.json()).toEqual({ id: 2 })
     })
   })
 

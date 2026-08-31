@@ -53,16 +53,14 @@ export interface Context<
 
   get signal(): AbortSignal
 
-  get user(): Principal
+  /**
+   * The request's principal. The authentication middleware is the expected writer; a handler that needs a
+   * different identity for a downstream call should pass it explicitly rather than reassign this.
+   */
+  user: Principal
 
   /** Whether the response has already been written. A middleware checks it before answering itself. */
   get sent(): boolean
-
-  /**
-   * Replaces the request's principal. The authentication middleware is the expected caller; a handler that
-   * needs a different identity for a downstream call should pass it explicitly rather than mutate this.
-   */
-  setUser(user: Principal): this
 
   /**
    * What the route declared, as the adapter recorded it. The shape belongs to the adapter — the Fastify one
@@ -150,9 +148,8 @@ export class FastifyContext<
     return this.#fastifyRequest.user
   }
 
-  setUser(user: Principal): this {
+  set user(user: Principal) {
     this.#fastifyRequest.user = user
-    return this
   }
 
   get sent(): boolean {
@@ -216,17 +213,6 @@ export class FastifyContext<
     return this.#fail(500, 'ERR_HTTP_INTERNAL_SERVER_ERROR', body)
   }
 
-  /**
-   * Sends an error status, defaulting the body to the same envelope a thrown `ErrHTTP` renders to.
-   *
-   * Without the default these shorthands answer with an empty body, which leaves an application emitting one
-   * error shape from `@Catch` and a different one from `ctx.notFound()`.
-   */
-  #fail(statusCode: number, code: string, body?: unknown): this {
-    this.#reply.code(statusCode).send(body ?? statusErrorBody(statusCode, code))
-    return this
-  }
-
   redirect(url: string, status?: number): this {
     this.#reply.redirect(url, status)
     return this
@@ -239,6 +225,17 @@ export class FastifyContext<
 
   deleteCookie(name: string, opts?: CookieSerializeOptions): this {
     this.#reply.clearCookie(name, opts)
+    return this
+  }
+
+  /**
+   * Sends an error status, defaulting the body to the same envelope a thrown `ErrHTTP` renders to.
+   *
+   * Without the default these shorthands answer with an empty body, which leaves an application emitting one
+   * error shape from `@Catch` and a different one from `ctx.notFound()`.
+   */
+  #fail(statusCode: number, code: string, body?: unknown): this {
+    this.#reply.code(statusCode).send(body ?? statusErrorBody(statusCode, code))
     return this
   }
 }
