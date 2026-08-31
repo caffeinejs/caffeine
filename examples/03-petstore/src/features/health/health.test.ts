@@ -38,7 +38,7 @@ async function start(fake: HealthIndicator): Promise<WebApplication> {
 }
 
 const probe = (app: WebApplication, url: string) =>
-  app.instance.inject({ method: "GET", url });
+  app.fetch(url, { method: "GET" });
 
 describe("health probes", () => {
   let app: WebApplication | undefined;
@@ -53,18 +53,18 @@ describe("health probes", () => {
   it("reports ready once the database answers", async () => {
     app = await start(new FakeDatabaseHealth(true));
 
-    expect((await probe(app, "/readyz")).statusCode).toBe(200);
-    expect((await probe(app, "/livez")).statusCode).toBe(200);
-    expect((await probe(app, "/startupz")).statusCode).toBe(200);
+    expect((await probe(app, "/readyz")).status).toBe(200);
+    expect((await probe(app, "/livez")).status).toBe(200);
+    expect((await probe(app, "/startupz")).status).toBe(200);
   });
 
   it("fails readiness but never liveness when the database is unreachable", async () => {
     app = await start(new FakeDatabaseHealth(false));
 
-    expect((await probe(app, "/readyz")).statusCode).toBe(503);
+    expect((await probe(app, "/readyz")).status).toBe(503);
     // The pod must not be restarted because Postgres blinked — restarting repairs nothing.
-    expect((await probe(app, "/livez")).statusCode).toBe(200);
-    expect((await probe(app, "/startupz")).statusCode).toBe(200);
+    expect((await probe(app, "/livez")).status).toBe(200);
+    expect((await probe(app, "/startupz")).status).toBe(200);
   });
 
   it("refuses readiness as soon as shutdown begins, without touching the database", async () => {
@@ -84,7 +84,7 @@ describe("health probes", () => {
 
     const closing = started.close();
 
-    expect((await probe(started, "/readyz")).statusCode).toBe(503);
+    expect((await probe(started, "/readyz")).status).toBe(503);
     // A draining pod answers from its own state; hammering the database on the way out helps nobody.
     expect(checks).toBe(before);
 
@@ -95,7 +95,7 @@ describe("health probes", () => {
     app = await start(new FakeDatabaseHealth(true));
 
     // Every other route in this application sits behind an authentication scheme.
-    expect((await probe(app, "/readyz")).statusCode).toBe(200);
-    expect((await probe(app, "/api/v1/pets")).statusCode).not.toBe(200);
+    expect((await probe(app, "/readyz")).status).toBe(200);
+    expect((await probe(app, "/api/v1/pets")).status).not.toBe(200);
   });
 });

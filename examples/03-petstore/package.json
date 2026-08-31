@@ -7,6 +7,7 @@
     "generate": "prisma generate && caffeine generate",
     "prisma:generate": "prisma generate",
     "start": "tsx src/main.ts",
+    "test": "vitest run",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",

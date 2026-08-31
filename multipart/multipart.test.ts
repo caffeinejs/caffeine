@@ -16,7 +16,7 @@ function multipartApp() {
 }
 
 function multipartBody(
-  entries: Array<ME>): Buffer {
+  entries: Array<ME>): Uint8Array {
   const parts: string[] = []
   for (const entry of entries) {
     if ('filename' in entry) {
@@ -36,7 +36,7 @@ function multipartBody(
       )
     }
   }
-  return Buffer.from(parts.join('') + `--${BOUNDARY}--\r\n`)
+  return new TextEncoder().encode(parts.join('') + `--${BOUNDARY}--\r\n`)
 }
 
 function multipartHeaders() {
@@ -89,12 +89,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/up1/upload', {
       method: 'POST',
-      url: '/up1/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
+      body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toBeDefined()
     expect(received!.fieldname).toBe('avatar')
@@ -123,12 +124,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/up2/upload', {
       method: 'POST',
-      url: '/up2/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'document', filename: 'report.pdf', content: 'pdf-content', mime: 'application/pdf' }]),
+      body: multipartBody([{ name: 'document', filename: 'report.pdf', content: 'pdf-content', mime: 'application/pdf' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received!.fieldname).toBe('document')
     expect(received!.filename).toBe('report.pdf')
@@ -153,12 +155,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/up3/upload', {
       method: 'POST',
-      url: '/up3/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'other', filename: 'other.txt', content: 'data' }]),
+      body: multipartBody([{ name: 'other', filename: 'other.txt', content: 'data' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(items).toHaveLength(0)
   })
@@ -183,12 +186,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/up4/upload', {
       method: 'POST',
-      url: '/up4/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'file', filename: 'data.txt', content, mime: 'text/plain' }]),
+      body: multipartBody([{ name: 'file', filename: 'data.txt', content, mime: 'text/plain' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(bytes!.toString()).toBe(content)
   })
@@ -214,12 +218,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/up5/upload?userID=user-42', {
       method: 'POST',
-      url: '/up5/upload?userID=user-42',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'avatar', filename: 'pic.png', content: 'png', mime: 'image/png' }]),
+      body: multipartBody([{ name: 'avatar', filename: 'pic.png', content: 'png', mime: 'image/png' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(receivedFile!.filename).toBe('pic.png')
     expect(receivedUserID).toBe('user-42')
@@ -243,15 +248,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/up6/upload', {
       method: 'POST',
-      url: '/up6/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'a', filename: 'a.txt', content: 'aaa' },
         { name: 'b', filename: 'b.txt', content: 'bbb' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toHaveLength(2)
     expect(received[0].filename).toBe('a.txt')
@@ -276,15 +282,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/up7/upload', {
       method: 'POST',
-      url: '/up7/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'description', value: 'a test upload' },
         { name: 'document', filename: 'doc.txt', content: 'doc-content', mime: 'text/plain' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toHaveLength(2)
     expect(received[0].type).toBe('field')
@@ -311,12 +318,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/wf1/upload', {
       method: 'POST',
-      url: '/wf1/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
+      body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toBeInstanceOf(File)
     expect(received!.name).toBe('photo.jpg')
@@ -342,12 +350,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/wf1b/upload', {
       method: 'POST',
-      url: '/wf1b/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
+      body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toBeInstanceOf(File)
     expect(received!.name).toBe('photo.jpg')
@@ -372,15 +381,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/wf2/upload', {
       method: 'POST',
-      url: '/wf2/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'other', filename: 'other.txt', content: 'other' },
         { name: 'document', filename: 'report.pdf', content: 'pdf-content', mime: 'application/pdf' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toBeInstanceOf(File)
     expect(received!.name).toBe('report.pdf')
@@ -405,12 +415,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/wf3/upload', {
       method: 'POST',
-      url: '/wf3/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'other', filename: 'other.txt', content: 'data' }]),
+      body: multipartBody([{ name: 'other', filename: 'other.txt', content: 'data' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toBeUndefined()
   })
@@ -433,15 +444,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/wf4/upload', {
       method: 'POST',
-      url: '/wf4/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'a', filename: 'a.txt', content: 'aaa', mime: 'text/plain' },
         { name: 'b', filename: 'b.txt', content: 'bbb', mime: 'text/plain' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toHaveLength(2)
     expect(received[0]).toBeInstanceOf(File)
@@ -467,15 +479,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/wf5/upload', {
       method: 'POST',
-      url: '/wf5/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'description', value: 'hello world' },
         { name: 'avatar', filename: 'pic.png', content: 'png-data', mime: 'image/png' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toBeInstanceOf(FormData)
     expect(received!.get('description')).toBe('hello world')
@@ -505,12 +518,13 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/nf1/upload', {
       method: 'POST',
-      url: '/nf1/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
+      body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg-bytes', mime: 'image/jpeg' }]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toBeDefined()
     expect(received!.type).toBe('file')
@@ -539,15 +553,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/nf2/upload', {
       method: 'POST',
-      url: '/nf2/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'other', filename: 'other.txt', content: 'skip-me' },
         { name: 'document', filename: 'report.pdf', content: 'pdf-bytes', mime: 'application/pdf' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received!.fieldname).toBe('document')
     expect(received!.filename).toBe('report.pdf')
@@ -575,15 +590,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/nf3/upload', {
       method: 'POST',
-      url: '/nf3/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'a', filename: 'a.txt', content: 'aaa', mime: 'text/plain' },
         { name: 'b', filename: 'b.txt', content: 'bbb', mime: 'text/plain' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toHaveLength(2)
     expect(received[0].filename).toBe('a.txt')
@@ -614,15 +630,16 @@ describe('Multipart file upload', () => {
     const app = multipartApp().build()
     await app.ready()
 
-    await app.instance.inject({
+    const res = await app.fetch('/nf4/upload', {
       method: 'POST',
-      url: '/nf4/upload',
       headers: multipartHeaders(),
-      payload: multipartBody([
+      body: multipartBody([
         { name: 'description', value: 'hello' },
         { name: 'doc', filename: 'doc.txt', content: 'bytes', mime: 'text/plain' },
       ]),
     })
+
+    expect(res.status).toBe(200)
 
     expect(received).toHaveLength(2)
     expect(received[0].type).toBe('field')
