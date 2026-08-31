@@ -10,6 +10,22 @@ export interface ServerOptions {
 
 export const DEFAULT_SERVER_OPTIONS: ServerOptions = { port: 0, host: '0.0.0.0' }
 
+/**
+ * Where the server ended up listening, as reported by the bound socket — which is not what was asked for:
+ * port `0` becomes an OS-assigned port, and a wildcard host stays a wildcard.
+ */
+export interface ServerAddress {
+  /** The bound host, verbatim — a wildcard bind reports `0.0.0.0` or `::`. */
+  readonly host: string
+  /** The bound port. Never `0`. */
+  readonly port: number
+  /**
+   * An origin that can be connected to. A wildcard {@link host} is rendered as the matching loopback address,
+   * since `0.0.0.0` is an address to accept on, not one to dial.
+   */
+  readonly origin: string
+}
+
 /** The default location of the server settings in the configuration tree. */
 export const SERVER_CONFIG_NAMESPACE: readonly string[] = ['server']
 

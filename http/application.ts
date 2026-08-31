@@ -13,7 +13,7 @@ import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
 import type { OIDCMeta } from './security/auth/oidc/index.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
-import { ServerOptions, kServerOptions } from './server/index.js'
+import { ServerOptions, kServerOptions, type ServerAddress } from './server/index.js'
 import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, loadHealthIndicators, type HealthOptions } from './health/index.js'
 import type { HealthServices } from './health/services.js'
 
@@ -26,6 +26,9 @@ export interface AdapterIn<R> {
 
 export interface Adapter<I, R> {
   get instance(): I
+
+  /** Where the server is listening, or `undefined` before {@link run} and after {@link teardown}. */
+  get address(): ServerAddress | undefined
 
   setup(input: AdapterIn<R>): Promise<void>
   teardown(): Promise<void>
@@ -66,6 +69,14 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
 
   get instance(): I {
     return this.#adapter.instance
+  }
+
+  /**
+   * Where the server is listening, or `undefined` until {@link run} has bound a socket. Reports what the
+   * socket actually got, so it is the way to reach an application started on port `0`.
+   */
+  get address(): ServerAddress | undefined {
+    return this.#adapter.address
   }
 
   get routers(): Router<R>[] {

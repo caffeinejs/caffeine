@@ -20,7 +20,7 @@ import { type CacheDeps, type CacheOptions, attachCacheHooks, resolveCacheDeps }
 import { type CacheInvalidateOptions, attachCacheInvalidateHook } from './cache/cache_invalidate.js'
 import { installHealthProbes } from './health/index.js'
 import { FastifyContext } from './context.js'
-import { DEFAULT_SERVER_OPTIONS, ServerOptions } from './server/index.js'
+import { DEFAULT_SERVER_OPTIONS, ServerOptions, type ServerAddress } from './server/index.js'
 import { Responder } from './response.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { joinPaths } from './internal/paths/index.js'
@@ -368,6 +368,18 @@ export class FastifyAdapter<
     return this.#fastify
   }
 
+  get address(): ServerAddress | undefined {
+    const bound = this.#fastify.server.address()
+
+    // `null` when nothing is listening; a string when bound to a unix socket or a named pipe, which has no
+    // host/port to report.
+    if (bound === null || typeof bound === 'string') {
+      return undefined
+    }
+
+    return { host: bound.address, port: bound.port, origin: originOf(bound.address, bound.port) }
+  }
+
   async fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
     let request: Request
 
@@ -435,4 +447,20 @@ export class FastifyAdapter<
       )
     })
   }
+}
+
+/**
+ * `0.0.0.0` and `::` are addresses to accept connections on, not addresses to dial, so an origin built from
+ * them is not reliably reachable. Both map to their loopback equivalent; IPv6 is bracketed.
+ */
+function originOf(host: string, port: number): string {
+  if (host === '0.0.0.0') {
+    return `http://127.0.0.1:${port}`
+  }
+
+  if (host === '::' || host === '::1') {
+    return `http://[::1]:${port}`
+  }
+
+  return host.includes(':') ? `http://[${host}]:${port}` : `http://${host}:${port}`
 }

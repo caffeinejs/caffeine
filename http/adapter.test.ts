@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import supertest from 'supertest'
 import Fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
 import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
@@ -7,19 +6,28 @@ import { $p } from './route_picker.js'
 import { Controller, Get, Method, createWebApplication, Args, fastifyAdapterFactory, FastifyContext } from './index.js'
 
 describe('Fastify Adapter', () => {
-  // Opens a real ephemeral socket via Supertest (unlike the app.fetch() tests below), so it can hang up
-  // under parallel-suite port/event-loop contention. Retry keeps the real-socket smoke test without
-  // making it flaky.
-  it('exposes the underlying server as a Supertest-compatible listener', { retry: 2 }, async () => {
+  // Binds a real ephemeral socket (unlike the app.fetch() tests below), so it can hang up under
+  // parallel-suite port/event-loop contention. Retry keeps the real-socket smoke test without making it
+  // flaky.
+  it('binds a real listener and serves it over the network', { retry: 2 }, async () => {
     const server = Fastify()
     server.get('/', () => ({ ok: true }))
 
     const app = createWebApplication(fastifyAdapterFactory(server)).build()
-    await app.ready()
+    await app.run()
 
-    expect(app.instance).toBe(server)
-    await supertest(app.instance.server).get('/')
-      .expect(200, { ok: true })
+    try {
+      expect(app.instance).toBe(server)
+      expect(app.address!.port).toBeGreaterThan(0)
+
+      // Native fetch, not app.fetch(): the point is that traffic reaches the process through a socket.
+      const res = await fetch(`${app.address!.origin}/`)
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true })
+    } finally {
+      await app.close()
+    }
   })
 
   it('exposes the underlying fastify instance and can be tested with app.fetch()', async () => {
@@ -50,10 +58,10 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
       await app.ready()
 
-      await supertest(app.instance.server)
-        .get('/users/1?filter=test')
-        .set('x-test', 'test')
-        .expect(200, { ok: true, id: '1', filter: 'test', test: 'test' })
+      const res = await app.fetch('/users/1?filter=test', { headers: { 'x-test': 'test' } })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true, id: '1', filter: 'test', test: 'test' })
     })
   })
 
