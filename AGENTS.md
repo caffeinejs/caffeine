@@ -7,6 +7,11 @@ Before any edit, read [`CONVENTIONS.md`](CONVENTIONS.md). When editing a first-p
 These rules apply to every task unless explicitly overridden.
 Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
 
+## Output
+
+Chat in short, plain English. Lead with the answer. No filler.
+Keep code names, paths, and error text exact. Do not simplify those.
+
 ## Rule 1 — Think Before Coding
 
 State assumptions explicitly. If uncertain, ask rather than guess.
