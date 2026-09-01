@@ -6,5 +6,5 @@
  */
 export const kOperation = Symbol.for('@caffeinejs/openapi:operation')
 
-/** Router-level key under which `@APIGroup` stores its {@link APIGroupDetail} in `RouterSpec.extras`. */
+/** RouteGroup-level key under which `@APIGroup` stores its {@link APIGroupDetail} in `RouteGroupSpec.extras`. */
 export const kAPIGroup = Symbol.for('@caffeinejs/openapi:api_group')

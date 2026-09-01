@@ -11,7 +11,7 @@ import {
   isServerOwned,
 } from '../index.js'
 import type { NotFoundContext } from '../index.js'
-import type { Route, Router } from '../route.js'
+import type { Route, RouteGroup } from '../route.js'
 
 @Controller('/pets')
 class PetsController {
@@ -94,8 +94,8 @@ describe('unmatched routes', () => {
 
 describe('deriveServerOwnedPaths', () => {
   const route = (path: string): Route<any> => ({ path }) as Route<any>
-  const router = (path: string, routes: string[], prefix?: string): Router<any> =>
-    ({ path, prefix, routes: routes.map(route) }) as Router<any>
+  const router = (path: string, routes: string[], prefix?: string): RouteGroup<any> =>
+    ({ path, prefix, routes: routes.map(route) }) as RouteGroup<any>
 
   it('takes the controller base, so a sibling miss stays owned', () => {
     // `@Controller('/api')` with only `@Get('/')` still owns all of /api — otherwise /api/typo escapes.

@@ -317,7 +317,7 @@ describe('middleware pipeline', () => {
     await app.fetch('/mw/echo')
 
     expect(calls).toHaveLength(1)
-    expect(calls[0].routers.length).toBeGreaterThan(0)
+    expect(calls[0].routeGroups.length).toBeGreaterThan(0)
     await app.close()
   })
 

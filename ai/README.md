@@ -1,6 +1,6 @@
 # Caffeine agent pack
 
-User-facing files for coding agents that **write Caffeine apps**. Not contributor rules for this repository — those stay in the root `CLAUDE.md`.
+User-facing files for coding agents that **write Caffeine apps**. Not contributor rules for this repository — those stay in the root [`AGENTS.md`](../AGENTS.md) and [`CONVENTIONS.md`](../CONVENTIONS.md).
 
 | Path | Role |
 |---|---|

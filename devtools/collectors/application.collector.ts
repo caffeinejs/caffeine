@@ -9,7 +9,7 @@ export class HTTPCollector {
   attach(app: WebApplication<any, any, any>): void {
     const snapshots: RouteSnapshot[] = []
 
-    for (const router of app.routers) {
+    for (const router of app.routeGroups) {
       // Only a group declared by a class has a binding to report a scope for. One declared any other way
       // has no instance behind it, and says so rather than inventing a lifetime.
       const target = router.target

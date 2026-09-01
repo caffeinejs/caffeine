@@ -14,10 +14,20 @@ export interface Req<
   TQuery = Record<string, string>,
   THeaders = Record<string, string>,
   TAsync extends boolean = false,
+  TBody = unknown,
 > {
   get raw(): RAW
   get url(): string
   get method(): string
+
+  /**
+   * The parsed request body, as the adapter's content-type parser produced it, typed by the route's `body`
+   * schema when it declares one.
+   *
+   * A handler that takes its arguments through pickers reaches the body with `$p.body()` instead; this is the
+   * accessor for one that receives only the context.
+   */
+  body(): TBody
 
   query(): TQuery
   query(key: string): string | undefined
@@ -46,8 +56,9 @@ export interface Context<
   TParams = Record<string, string>,
   TQuery = Record<string, string>,
   THeaders = Record<string, string>,
+  TBody = unknown,
 > {
-  get req(): Req<REQ, TParams, TQuery, THeaders, TAsync>
+  get req(): Req<REQ, TParams, TQuery, THeaders, TAsync, TBody>
 
   get statusCode(): number
 
@@ -121,7 +132,8 @@ export class FastifyContext<
   false,
   InferParams<SCHEMA>,
   InferQuery<SCHEMA>,
-  InferHeaders<SCHEMA>
+  InferHeaders<SCHEMA>,
+  InferBody<SCHEMA>
 > {
   #req!: FastifyContextRequest<SCHEMA>
   #fastifyRequest: FastifyRequest
@@ -241,7 +253,12 @@ export class FastifyContext<
 }
 
 export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteValidationSchema> implements Req<
-  RawRequestDefaultExpression<RawServerDefault>, InferParams<SCHEMA>, InferQuery<SCHEMA>, InferHeaders<SCHEMA>
+  RawRequestDefaultExpression<RawServerDefault>,
+  InferParams<SCHEMA>,
+  InferQuery<SCHEMA>,
+  InferHeaders<SCHEMA>,
+  false,
+  InferBody<SCHEMA>
 > {
   constructor(private readonly request: FastifyRequest) { }
 
@@ -255,6 +272,10 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
 
   get method(): string {
     return this.request.method
+  }
+
+  body(): InferBody<SCHEMA> {
+    return this.request.body as InferBody<SCHEMA>
   }
 
   header(): InferHeaders<SCHEMA>

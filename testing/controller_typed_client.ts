@@ -1,18 +1,18 @@
-import { testClient } from './client.js'
+import { controllerClient } from './controller_client.js'
 import { ErrFetchFailed } from './error.js'
 import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
 
-export type TypedTestClient<C extends RouterCtor> = {
+export type ControllerTypedTestClient<C extends RouterCtor> = {
   [H in RouteMethods<C>]: (input?: Request | RequestInit) => Promise<
     InstanceType<C>[H] extends (...args: never[]) => infer R ? Awaited<R> : never
   >
 }
 
-export function typedClient<C extends RouterCtor>(
+export function controllerTypedClient<C extends RouterCtor>(
   routerRef: C,
   target: string | URL | Fetchable,
-): TypedTestClient<C> {
-  const raw = testClient(routerRef, target)
+): ControllerTypedTestClient<C> {
+  const raw = controllerClient(routerRef, target)
   const typed: Record<string | symbol, (input?: Request | RequestInit) => Promise<unknown>> = {}
 
   for (const key of Object.keys(raw as object)) {
@@ -41,5 +41,5 @@ export function typedClient<C extends RouterCtor>(
     }
   }
 
-  return typed as TypedTestClient<C>
+  return typed as ControllerTypedTestClient<C>
 }

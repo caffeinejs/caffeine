@@ -30,7 +30,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // Test the working-tree source, not a built dist. Everything that touches the router registry must be
-      // source, so the client, the controllers, @APIGroup/@Operation and getRouter all share one instance of
+      // source, so the client, the controllers, @APIGroup/@Operation and getRouteGroup all share one instance of
       // it — the registry is a module-level WeakMap, and a second copy silently loses every registration made
       // against the first.
       //

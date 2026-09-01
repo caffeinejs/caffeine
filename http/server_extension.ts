@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import type { FastifyInstance } from 'fastify'
-import type { Router } from './route.js'
+import type { RouteGroup } from './route.js'
 import type { Services } from './service.js'
 
 /** The resolved application, handed to an extension at start-up. */
@@ -10,7 +10,7 @@ export interface ServerExtensionContext {
   container: Container
   services: Services
   /** Every route the application resolved, already built — read it, do not expect to add to it. */
-  routers: Router<any>[]
+  routeGroups: RouteGroup<any>[]
 }
 
 /**

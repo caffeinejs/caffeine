@@ -74,6 +74,14 @@ const servers: ServerConfig[] = [
     args: [resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine', 'caffeine.js')],
     builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine', 'caffeine.js'),
   },
+  // The same route declared programmatically. Paired with the one above it is the only honest read on what the
+  // fluent router costs: everything else about the two processes is identical.
+  {
+    name: 'caffeine-router',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine-router', 'caffeine-router.js')],
+    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine-router', 'caffeine-router.js'),
+  },
 ]
 
 const READY_TIMEOUT = process.env.CI === 'true' ? 60_000 : 10_000

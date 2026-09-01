@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
-import type { Router } from '../route.js'
-import type { RouterCompiler } from './compile.js'
+import type { RouteGroup } from '../route.js'
+import type { RouteGroupCompiler } from './compile.js'
 
 /**
  * Where routes come from.
@@ -14,7 +14,7 @@ export interface RouteSource<R = unknown> {
   /** Identifies the source in diagnostics. */
   readonly name: string
 
-  build(ctx: RouteBuildContext): Router<R>[]
+  build(ctx: RouteBuildContext): RouteGroup<R>[]
 }
 
 export interface RouteBuildContext {
@@ -24,5 +24,5 @@ export interface RouteBuildContext {
    * Compiles a spec into a registrable router: merges group-level declarations into each route, compiles the
    * authorization policy and the guard chain, and resolves the `@CatchWith` references.
    */
-  compileRouter: RouterCompiler
+  compileRouteGroup: RouteGroupCompiler
 }

@@ -1,6 +1,8 @@
 # Contributing
 
-Agent instructions for this repository live in [`AGENTS.md`](AGENTS.md).
+- Agent behavior: [`AGENTS.md`](AGENTS.md)
+- Coding conventions: [`CONVENTIONS.md`](CONVENTIONS.md)
+- AI-assisted contributions: [`AI_POLICY.md`](AI_POLICY.md)
 
 ## Prerequisites
 
@@ -18,17 +20,14 @@ npm install
 ## Running checks
 
 ```sh
-make test        # run tests
-make testtypes   # run type checks
-make lint        # check lint errors
-make build       # compile
+make test           # run tests
+make lint           # eslint, with fixes
+make lint-markdown  # markdownlint (docs-only changes)
+make build          # compile
+make check          # full quality gate
 ```
 
-Run everything at once:
-
-```sh
-make all
-```
+Docs-only changes (`*.md` and nothing else) need `make lint-markdown`, not `make check`.
 
 ## Commit conventions
 
@@ -54,5 +53,6 @@ Keep the description short (under 72 characters), imperative mood, no trailing p
 
 - Keep PRs focused — one concern per PR
 - Add or update tests for any changed behaviour
-- All checks must pass before requesting review (`make check`)
+- All checks must pass before requesting review (`make check`, or `make lint-markdown` when every changed file is `*.md`)
+- AI-assisted PRs must follow [`AI_POLICY.md`](AI_POLICY.md) (human review and the disclosure block)
 - Link to a related issue when one exists

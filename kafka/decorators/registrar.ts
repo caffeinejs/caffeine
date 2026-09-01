@@ -111,7 +111,7 @@ export class ListenerBuilder {
 const ListenerRegistry = new WeakMap<object, Map<string | symbol, ListenerBuilder>>()
 
 // Keyed by the class constructor: the frozen specs harvested when `@KafkaHandler` runs. The runtime container
-// reads this by the binding's `type` (ctor), exactly as HTTP's `getRouter(key)` does.
+// reads this by the binding's `type` (ctor), exactly as HTTP's `getRouteGroup(key)` does.
 const HandlerRegistry = new WeakMap<Function, ListenerSpec[]>()
 
 /** Records/merges a listener's config for a decorated method. Called by `@KafkaListener`/`@KafkaParams`/… */

@@ -1,6 +1,23 @@
+import type { RouteExtension } from '@caffeinejs/http'
 import { configureRoute } from '@caffeinejs/http/decorators/registrar'
 import type { OperationDetail } from './detail.js'
 import { kOperation } from './keys.js'
+
+/**
+ * Documents a route declared with a `Router`. The programmatic form of {@link Operation}, and what it is
+ * implemented with — see it for what belongs here and what the generator already reads elsewhere.
+ *
+ * ```ts
+ * pets
+ *   .get('/:id')
+ *   .with(operation({ summary: 'Get a pet by ID', operationId: 'getPet' }))
+ *   .schema({ params: petIdParamSchema, response: { 200: petSchema } })
+ *   .handler(...)
+ * ```
+ */
+export function operation(detail: OperationDetail): RouteExtension {
+  return route => route.extras(kOperation, detail)
+}
 
 /**
  * Documents a route: the prose, the operationId, and any response detail the schema cannot carry.
@@ -23,6 +40,6 @@ import { kOperation } from './keys.js'
  */
 export function Operation(detail: OperationDetail) {
   return function (_target: unknown, context: ClassMethodDecoratorContext): void {
-    configureRoute(context, spec => spec.extras(kOperation, detail))
+    configureRoute(context, operation(detail))
   }
 }

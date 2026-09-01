@@ -178,4 +178,23 @@ describe('hasScopeWithinGraph through a polymorphic dependency', function () {
 
     expect(di.hasScopeInGraph(GhsConsumer, Scopes.TRANSIENT)).toBe(false)
   })
+  it('leaves the container bindings intact', async function () {
+    class GhsProbeDep {}
+    class GhsProbe {
+      constructor(readonly dep: GhsProbeDep) {}
+    }
+
+    const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
+    di.bind(GhsProbeDep).toSelf()
+    di.bind(GhsProbe).toClass(GhsProbe, [GhsProbeDep])
+    await di.init()
+
+    di.hasScopeInGraph(GhsProbe, Scopes.REQUEST)
+
+    // The walk consumes its queue. Asking a question about the graph must not empty it.
+    expect(di.getBinding(GhsProbe)).toBeDefined()
+    expect(di.getBinding(GhsProbeDep)).toBeDefined()
+    expect(di.get(GhsProbe)).toBeInstanceOf(GhsProbe)
+    expect(di.hasScopeInGraph(GhsProbe, Scopes.REQUEST)).toBe(false)
+  })
 })

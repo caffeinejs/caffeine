@@ -49,3 +49,15 @@ expect(di.get(Svc)).toBeInstanceOf(Svc)
 ```
 
 The only tests that are safe to skip `init()` are those that inspect container metadata without resolving instances (e.g. `di.has()`, `di.size`, `di.getBinding()`).
+
+## Object injection resolves through the registry
+
+A field of an `$i.object` spec is compiled by the factory its descriptor names, looked up with `resolverFor` — the same path a constructor parameter takes. `compileObjectNode` (`internal/core/resolver/object.ts`) does **not** reimplement any helper, and a new helper needs nothing added there. It used to, which is why `just`, `value`, `provide`, `ordered`, `mapped` and a nested `$i.object` all typed correctly and resolved to something else.
+
+`object.ts` importing `resolverFor` closes a module cycle with `injection_resolver.ts`. It is safe because the lookup happens when a field is compiled, long after both module bodies have run — do not move it to module scope.
+
+Two things the leaf still decides for itself: a descriptor naming no resolver defaults to `DEFAULT`, or to `DEFER` when its key is a `DeferredCtor`, since `isValidKey` accepts one written straight into a spec.
+
+`parseObjectSpec` tells a descriptor from a nested spec with `'key' in value || 'resolver' in value` — `just` and `value` set only a resolver. It is a heuristic: a sub-bag with a field literally named `key` or `resolver` is misread. `InjectedField` tests the same thing, so the type and the runtime agree on what they get wrong.
+
+Fields are lazy getters that resolve through the binding on every read. That is what makes one cached bag correct for singleton, transient and request scope alike — never make a field resolve eagerly.

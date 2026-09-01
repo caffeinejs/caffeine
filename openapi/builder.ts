@@ -1,6 +1,6 @@
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, AnySchema, ServiceBootstrapIn } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
-import type { Route, Router } from '@caffeinejs/http'
+import type { Route, RouteGroup } from '@caffeinejs/http'
 import {
   OPENAPI_CONFIG_KEYS,
   OPENAPI_CONFIG_NAMESPACE,
@@ -215,13 +215,13 @@ export class OpenAPIBuilder<C = unknown> implements Service {
   }
 
   /** Overrides the derived `operationId`. */
-  operationId(fn: (router: Router<unknown>, route: Route<unknown>) => string): ServiceAPI<this> {
+  operationId(fn: (router: RouteGroup<unknown>, route: Route<unknown>) => string): ServiceAPI<this> {
     this.#options.operationId = fn
     return this
   }
 
   /** Overrides the derived tag for a controller. */
-  tagFor(fn: (router: Router<unknown>) => string): ServiceAPI<this> {
+  tagFor(fn: (router: RouteGroup<unknown>) => string): ServiceAPI<this> {
     this.#options.tagFor = fn
     return this
   }

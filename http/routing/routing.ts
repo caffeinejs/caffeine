@@ -1,6 +1,6 @@
 import { Container } from '@caffeinejs/di'
-import type { Router } from '../route.js'
-import { createRouterCompiler } from './compile.js'
+import type { RouteGroup } from '../route.js'
+import { createRouteGroupCompiler } from './compile.js'
 import type { RouteBuildContext, RouteSource } from './source.js'
 
 /**
@@ -11,20 +11,20 @@ import type { RouteBuildContext, RouteSource } from './source.js'
  * policies. Two sources claiming the same path is left to the server to reject at registration, which it does
  * with the path in the message.
  */
-export function buildRouting<R>(sources: readonly RouteSource<R>[], container: Container): Router<R>[] {
+export function buildRouting<R>(sources: readonly RouteSource<R>[], container: Container): RouteGroup<R>[] {
   const ctx: RouteBuildContext = {
     container,
-    compileRouter: createRouterCompiler(container),
+    compileRouteGroup: createRouteGroupCompiler(container),
   }
 
   if (sources.length === 1) {
     return sources[0].build(ctx)
   }
 
-  const routers: Router<R>[] = []
+  const routeGroups: RouteGroup<R>[] = []
   for (const source of sources) {
-    routers.push(...source.build(ctx))
+    routeGroups.push(...source.build(ctx))
   }
 
-  return routers
+  return routeGroups
 }

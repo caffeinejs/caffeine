@@ -18,7 +18,7 @@ export function installOIDCRoutes(ctx: ServerExtensionContext): void {
 
   const server = ctx.server
   const compiledPaths = new Set(
-    ctx.routers.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))),
+    ctx.routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))),
   )
 
   for (const { callbackPath } of oidc.handlers) {
@@ -37,7 +37,7 @@ export function installOIDCRoutes(ctx: ServerExtensionContext): void {
   // `/login/google` and `/login/github`, each naming its own scheme. Only the resolved routing carries
   // those names, which is why the decision lands here rather than in the builder.
   const namedByRoutes = new Set(
-    ctx.routers.flatMap(r => r.routes.flatMap(rt => rt.authorization.options?.schemes ?? [])),
+    ctx.routeGroups.flatMap(r => r.routes.flatMap(rt => rt.authorization.options?.schemes ?? [])),
   )
   const unreachable = oidc.unreachableCandidates.filter(name => !namedByRoutes.has(name))
   if (unreachable.length > 0) {

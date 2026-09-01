@@ -5,7 +5,7 @@ import {
   type AuthSchemeDescriptor,
   AuthenticationSchemeProvider,
   ServerExtension,
-  type Router,
+  type RouteGroup,
   type ServerExtensionContext,
   kAuthSchemeDescriptors,
   solutions,
@@ -56,7 +56,7 @@ export class OpenAPIExtension extends ServerExtension {
     const warnings: string[] = []
     const generated = options.source === undefined
       ? generateDocument({
-          routers: ctx.routers as Array<Router<unknown>>,
+          routeGroups: ctx.routeGroups as Array<RouteGroup<unknown>>,
           options,
           schemes: descriptors,
           defaultScheme: ctx.services.auth.options?.defaultAuthenticateScheme,

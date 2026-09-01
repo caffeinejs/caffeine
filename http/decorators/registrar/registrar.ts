@@ -1,7 +1,7 @@
 import type { Ctor } from '@caffeinejs/di'
-import { RouteBuilder, RouterBuilder } from '../../routing/builder.js'
+import { RouteBuilder, RouteGroupBuilder } from '../../routing/builder.js'
 
-const RouterRegistry = new WeakMap<Function, RouterBuilder>()
+const RouteGroupRegistry = new WeakMap<Function, RouteGroupBuilder>()
 const RouteRegistry = new WeakMap<object, Map<string | symbol, RouteBuilder>>()
 const ControllerErrorHandlerRegistry = new WeakMap<object, Array<[Ctor<Error>, string | symbol]>>()
 
@@ -46,30 +46,30 @@ export function configureRoute(ctx: ClassMemberDecoratorContext, mut: (spec: Rou
  *
  * Must run before `buildRouting`, i.e. no later than a service's `configure()`.
  */
-export function registerRouter(key: Function, mut: (spec: RouterBuilder) => void): void {
-  let cur = RouterRegistry.get(key)
+export function registerRouteGroup(key: Function, mut: (spec: RouteGroupBuilder) => void): void {
+  let cur = RouteGroupRegistry.get(key)
   if (!cur) {
-    cur = new RouterBuilder()
-    RouterRegistry.set(key, cur)
+    cur = new RouteGroupBuilder()
+    RouteGroupRegistry.set(key, cur)
   }
 
   mut(cur)
 }
 
-export function configureRouter(
+export function configureRouteGroup(
   _ctx: ClassDecoratorContext,
   key: Function,
-  mut: (spec: RouterBuilder) => void,
+  mut: (spec: RouteGroupBuilder) => void,
 ): void {
-  registerRouter(key, mut)
+  registerRouteGroup(key, mut)
 }
 
-export function configureRouterAndRegisterRoutes(
+export function configureRouteGroupAndRegisterRoutes(
   ctx: ClassDecoratorContext,
   key: Function,
-  mut: (spec: RouterBuilder) => void,
+  mut: (spec: RouteGroupBuilder) => void,
 ): void {
-  registerRouter(key, cur => {
+  registerRouteGroup(key, cur => {
     cur.routes(Array.from(RouteRegistry.get(ctx.metadata)?.values() ?? []) as RouteBuilder[])
 
     const errorHandlers = ControllerErrorHandlerRegistry.get(ctx.metadata)
@@ -81,6 +81,6 @@ export function configureRouterAndRegisterRoutes(
   })
 }
 
-export function getRouter(key: Function): RouterBuilder | undefined {
-  return RouterRegistry.get(key)
+export function getRouteGroup(key: Function): RouteGroupBuilder | undefined {
+  return RouteGroupRegistry.get(key)
 }

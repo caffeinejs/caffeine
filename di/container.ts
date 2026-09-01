@@ -21,13 +21,13 @@ import {
   ErrInvalidContainerState,
   ErrInjectableBase,
 } from './errors.js'
-import { Injection, InjectionDescriptor } from './injection.js'
+import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
 import { InjectionResolver } from './injection_resolver.js'
 import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scope/index.js'
 import { Scopes, scopeEntries, Scope } from './scope.js'
 import { checkScopes } from './internal/core/scope/validations.js'
 import { PostProcessor } from './post_processor.js'
-import { keyStr, InjectionToken, Identifier } from './key.js'
+import { keyStr, token, InjectionToken, Identifier } from './key.js'
 import { notNil } from './internal/util/assert/index.js'
 import { MetadataReader } from './metadata_reader.js'
 import { Ctor } from './types.js'
@@ -70,6 +70,9 @@ interface PendingBinding {
  *
  * @sealed
  */
+/** Stands in for the consumer of an injection compiled by {@link CaffeineIoC.resolver}, which has none. */
+const kStandalone = token<unknown>(Symbol('@caffeinejs/di:standalone'))
+
 export class CaffeineIoC implements Container {
   private readonly modules: Array<Module | ModuleFn>
   private readonly registry = new Map<InjectionToken, Binding>()
@@ -500,7 +503,47 @@ export class CaffeineIoC implements Container {
       return true
     }
 
-    return this.walkScopeGraph(new Set(), this.getBindings(key), scopeID)
+    // A copy: the walk consumes its queue with `shift()`, and `getBindings` hands back the container's own
+    // array — walking it directly leaves the key with no bindings at all.
+    return this.walkScopeGraph(new Set(), [...this.getBindings(key)], scopeID)
+  }
+
+  /**
+   * Compiles an injection into a function that resolves it, honouring the binding's scope on every call.
+   *
+   * This is the same compilation an `@Injectable` constructor parameter goes through, exposed for callers that
+   * hold an injection as data rather than as a decorated dependency — a route declaring what its handler needs,
+   * for one. Compile once, call per use: a singleton returns the cached instance, a transient a new one, and a
+   * request-scoped binding the instance of the scope that is live at call time.
+   *
+   * @param injection - The key or descriptor to resolve. Any `$i` helper is accepted.
+   *
+   * @example
+   * ```ts
+   * const deps = container.resolver($i.object({ svc: PetService, audit: $i.optional(Audit) }))
+   *
+   * deps() // { svc: PetService, audit: Audit | undefined }
+   * ```
+   */
+  resolver<I extends Injection>(injection: I): () => ResolveInjection<I> {
+    if (!this._ready && !this._initializing) {
+      throw new ErrInvalidContainerState('Cannot compile resolver: container has not been initialized — call init() first')
+    }
+
+    const descriptor: InjectionDescriptor
+      = typeof injection === 'object' ? injection as InjectionDescriptor : { key: injection }
+
+    // There is no consumer: the injection stands on its own rather than being a component's dependency. The
+    // placeholder key says so, and keeps the "do not inject a component into itself" filter — which reads the
+    // consumer's own bindings — from matching anything.
+    return compileDescriptorResolver(
+      this,
+      kStandalone,
+      descriptor,
+      'constructor',
+      '',
+      -1,
+    ) as () => ResolveInjection<I>
   }
 
   /**

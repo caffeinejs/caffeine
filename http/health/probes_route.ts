@@ -73,7 +73,7 @@ function probeQuery(query: ProbeRequestQuery): ProbeQuery {
 function assertNoCollision(ctx: ServerExtensionContext, probePaths: readonly string[]): void {
   const taken = new Set(probePaths)
 
-  for (const router of ctx.routers) {
+  for (const router of ctx.routeGroups) {
     for (const route of router.routes) {
       const path = `${router.prefix ?? ''}${joinPaths(router.path, route.path)}`
 

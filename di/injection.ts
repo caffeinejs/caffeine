@@ -337,13 +337,22 @@ function optional<K extends InjectionToken<any> | InjectionDescriptor<any>>(
 /**
  * object creates an injection descriptor that injects an object in which the properties are injected using the provided keys.
  *
+ * Every property is resolved the way the same injection would be resolved anywhere else, so any helper in this
+ * module may be used as a value, nested specs included. Properties are lazy: each resolves through its binding when
+ * it is read, which is what lets one injected object hold dependencies of differing scopes.
+ *
  * @param spec - The object injection plan. The object properties are the injection keys/descriptors.
  *
  * @example
  * ```ts
- * @Injectable([$i.object({ movieService: MovieService, userService: $i.optional(UserService) })])
+ * @Injectable([$i.object({
+ *   movieService: MovieService,
+ *   userService: $i.optional(UserService),
+ *   validators: $i.ordered(Validator),
+ *   region: $i.value<AppConfig>('aws.region'),
+ * })])
  * class MovieController {
- *   constructor({ movieService, userService }) {}
+ *   constructor({ movieService, userService, validators, region }) {}
  * }
  * ```
  */
@@ -465,6 +474,12 @@ function compose(
   return fns.reduce((acc, fn) => ({ ...acc, ...fn(key) }), {} as InjectionDescriptor)
 }
 
+// A descriptor names a key, a resolver, or both: `just` and `value` set only a resolver, and reading them as
+// nested specs would walk `resolver` and `args` as if they were fields. Matches how `InjectedField` types them.
+function isDescriptor(value: unknown): value is InjectionDescriptor {
+  return typeof value === 'object' && value !== null && ('key' in value || 'resolver' in value)
+}
+
 function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
   const children: Record<string | symbol, ObjectInjection> = {}
   const props: (string | symbol)[] = [...Object.keys(spec), ...Object.getOwnPropertySymbols(spec)]
@@ -474,11 +489,11 @@ function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
 
     if (isValidKey(value)) {
       children[prop] = { key: value as InjectionToken } satisfies ObjectInjection
-    } else if (typeof value === 'object' && value !== null && 'key' in value) {
+    } else if (isDescriptor(value)) {
       const desc = value as InjectionDescriptor
 
       children[prop] = {
-        key: desc.key!,
+        key: desc.key,
         optional: desc.optional,
         multiple: desc.multiple,
         resolver: desc.resolver,

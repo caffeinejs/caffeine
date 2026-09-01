@@ -2,7 +2,7 @@ import type { Container, Ctor, InjectionToken } from '@caffeinejs/di'
 import type { FastifyInstance } from 'fastify'
 import type { Context } from '../context.js'
 import type { ActionResult } from '../response.js'
-import type { Router } from '../route.js'
+import type { RouteGroup } from '../route.js'
 import type { Services } from '../service.js'
 
 /**
@@ -55,7 +55,7 @@ export interface MiddlewareSetupContext {
   server: FastifyInstance
   container: Container
   services: Services
-  routers: Router<any>[]
+  routeGroups: RouteGroup<any>[]
 }
 
 /**

@@ -1,22 +1,23 @@
 import { Container, Ctor, InjectionToken } from '@caffeinejs/di'
 import { CatchMetadata, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
 import { solutions } from '../error/util.js'
-import { CatchByMap, Route, Router, RouterErrorHandler } from '../route.js'
+import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
 import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
 import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
 import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
 import { Guard } from '../guards/index.js'
-import type { RouteAuthzOptions, RouteSpec, RouterSpec } from './spec.js'
+import type { RouteSpec, RouteGroupSpec } from './spec.js'
 import type { RouteDispatch, RouteGroupHook } from './dispatch.js'
+import { mergeAuthz } from './inherit.js'
 
 /** What a route source contributes on top of the spec: identity, and how the routes are invoked. */
-export interface RouterMeta<R> {
+export interface RouteGroupMeta<R> {
   /** The group's display name, used in diagnostics and by the documentation generator. */
   name: string
   /** The class that declared the group, when one did. */
   target?: Function
   onRequest?: RouteGroupHook<R, unknown>
-  handleError?: RouterErrorHandler<R>
+  handleError?: RouteGroupErrorHandler<R>
   /**
    * The dispatch for one route. A source that leaves it undefined gets the spec's own `handle` called with the
    * picked arguments, which is all a plain function needs.
@@ -24,8 +25,8 @@ export interface RouterMeta<R> {
   dispatch?(route: RouteSpec<R>): RouteDispatch<R, unknown>
 }
 
-/** Compiles a spec into a registrable {@link Router}. See {@link createRouterCompiler}. */
-export type RouterCompiler = <R>(spec: RouterSpec<R>, meta: RouterMeta<R>) => Router<R>
+/** Compiles a spec into a registrable {@link RouteGroup}. See {@link createRouteGroupCompiler}. */
+export type RouteGroupCompiler = <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>) => RouteGroup<R>
 
 /**
  * Builds the compiler every route source shares.
@@ -33,7 +34,7 @@ export type RouterCompiler = <R>(spec: RouterSpec<R>, meta: RouterMeta<R>) => Ro
  * The guard cache and the authorization configuration are resolved once here rather than per group, so two
  * sources compiling routes into the same application see one guard instance per key and one set of policies.
  */
-export function createRouterCompiler(container: Container): RouterCompiler {
+export function createRouteGroupCompiler(container: Container): RouteGroupCompiler {
   // Authorization is always configured, so its evaluators/handlers/options are always bound.
   const authzEvaluators: Map<string, PolicyEvaluator> = container.get(kAuthzEvaluators)
   const authzHandlers: Map<string, AuthzRequirementHandler<AuthzRequirement>> = container.get(kAuthzHandlers)
@@ -43,7 +44,7 @@ export function createRouterCompiler(container: Container): RouterCompiler {
   const globalGuardKeys = container.get<readonly GuardRef[]>(kGlobalGuards)
   const globalGuards = compileGuardKeys(container, globalGuardKeys, 'application', compiledGuards)
 
-  return function compileRouter<R>(spec: RouterSpec<R>, meta: RouterMeta<R>): Router<R> {
+  return function compileRouteGroup<R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): RouteGroup<R> {
     const compileRoute = (route: RouteSpec<R>): Route<R> => {
       const config = new Map<string, unknown>()
       if (spec.config) {
@@ -176,47 +177,6 @@ function defaultDispatch<R>(route: RouteSpec<R>): RouteDispatch<R, unknown> {
   return compilers => compilers.handler(route.parameters, handle)
 }
 
-/**
- * The authorization options actually in force on a route, combining what the group declared with what the
- * route declared.
- *
- * Previously only the route's own options were surfaced, so `@Authorize({ schemes })` or `@Roles` on a
- * *controller* was invisible to everything reading `Route.authorization.options` — per-route scheme selection
- * and the OpenAPI generator's security block among them — even though `compileRoutePolicy` was enforcing it
- * all along from the raw group/route pair.
- *
- * Merge follows what `compileRoutePolicy` does with the same inputs: single-valued fields take the route's
- * value when it has one, and `roles`/`policy` are unioned, because the compiled policy requires *both* sets.
- */
-function mergeAuthz(
-  router: RouteAuthzOptions | undefined,
-  route: RouteAuthzOptions | undefined,
-): RouteAuthzOptions | undefined {
-  if (router === undefined) {
-    return route
-  }
-  if (route === undefined) {
-    return router
-  }
-
-  const roles = [...new Set([...(router.roles ?? []), ...(route.roles ?? [])])]
-  const policy = [...new Set([...normalizeList(router.policy), ...normalizeList(route.policy)])]
-
-  return {
-    allowAnonymous: route.allowAnonymous ?? router.allowAnonymous,
-    schemes: route.schemes ?? router.schemes,
-    ...(roles.length > 0 ? { roles } : {}),
-    ...(policy.length > 0 ? { policy } : {}),
-  }
-}
-
-function normalizeList(value: string | string[] | undefined): string[] {
-  if (value == null) {
-    return []
-  }
-  return Array.isArray(value) ? value : [value]
-}
-
 function compileRouteGuardChain(
   container: Container,
   compiledGuards: Map<GuardRef, CompiledGuard>,
@@ -299,7 +259,7 @@ function buildCatchByMap(
 }
 
 function compileGuardOptions<R>(
-  router: RouterSpec<R>,
+  router: RouteGroupSpec<R>,
   route: RouteSpec<R>,
 ): Record<string | symbol, unknown> {
   const guardOptions: Record<string | symbol, unknown> = {}

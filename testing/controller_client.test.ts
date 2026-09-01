@@ -2,7 +2,7 @@ import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Injectable } from '@caffeinejs/di'
 import { WebApplication, Controller, Delete, Get, Post, Args, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
-import { ErrNoRoutesForController, newURL, testClient } from './index.js'
+import { ErrNoRoutesForController, newURL, controllerClient } from './index.js'
 
 @Injectable()
 class TaskStore {
@@ -65,7 +65,7 @@ void [TaskStore, TaskController]
 
 class NoRouteController {}
 
-describe('testClient()', () => {
+describe('controllerClient()', () => {
   let app: WebApplication<any, any, any>
   let baseURL: string
 
@@ -80,7 +80,7 @@ describe('testClient()', () => {
   })
 
   it('calls registered handlers via fetch Request', async () => {
-    const client = testClient(TaskController, baseURL)
+    const client = controllerClient(TaskController, baseURL)
 
     expect(client.list).toBeTypeOf('function')
     expect(client.create).toBeTypeOf('function')
@@ -99,7 +99,7 @@ describe('testClient()', () => {
   })
 
   it('calls handler via in-process adapter', async () => {
-    const client = testClient(TaskController, app)
+    const client = controllerClient(TaskController, app)
 
     const listRes = await client.list()
     expect(listRes.status).toBe(200)
@@ -114,7 +114,7 @@ describe('testClient()', () => {
   })
 
   it('calls registered handlers via URL instance', async () => {
-    const client = testClient(TaskController, new URL(baseURL))
+    const client = controllerClient(TaskController, new URL(baseURL))
 
     const listRes = await client.list(new Request(`${baseURL}/tasks`))
     expect(listRes.status).toBe(200)
@@ -129,12 +129,12 @@ describe('testClient()', () => {
   })
 
   it('throws when controller has no routes', () => {
-    expect(() => testClient(NoRouteController, baseURL)).toThrow(ErrNoRoutesForController)
+    expect(() => controllerClient(NoRouteController, baseURL)).toThrow(ErrNoRoutesForController)
   })
 
   it('returns independent clients for same controller with different targets', async () => {
-    const remote = testClient(TaskController, baseURL)
-    const inProcess = testClient(TaskController, app)
+    const remote = controllerClient(TaskController, baseURL)
+    const inProcess = controllerClient(TaskController, app)
 
     const [remoteRes, inProcessRes] = await Promise.all([remote.list(), inProcess.list()])
 
@@ -143,7 +143,7 @@ describe('testClient()', () => {
   })
 
   it('reaches a path-param route via a newURL-built Request', async () => {
-    const client = testClient(TaskController, app)
+    const client = controllerClient(TaskController, app)
     const created = await (await client.create({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'findme' }),

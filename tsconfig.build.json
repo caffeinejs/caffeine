@@ -50,6 +50,9 @@
       "path": "./testing/tsconfig.build.json"
     },
     {
+      "path": "./brewer/tsconfig.build.json"
+    },
+    {
       "path": "./plugins/esbuild/tsconfig.build.json"
     },
     {

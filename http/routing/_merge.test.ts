@@ -1,41 +1,41 @@
 import { describe, it, expect } from 'vitest'
-import { RouterBuilder, RouteBuilder } from './builder.js'
+import { RouteGroupBuilder, RouteBuilder } from './builder.js'
 
 const kSym = Symbol('test')
 
-describe('RouterBuilder cumulative merge', () => {
+describe('RouteGroupBuilder cumulative merge', () => {
   it('merges objects on the same config key', () => {
-    const router = new RouterBuilder()
+    const router = new RouteGroupBuilder()
       .config('cors', { origin: 'http://a.com' })
       .config('cors', { methods: ['GET'] })
-      .toRouter()
+      .toRouteGroup()
 
     expect(router.config?.get('cors')).toEqual({ origin: 'http://a.com', methods: ['GET'] })
   })
 
   it('merges objects on the same options key', () => {
-    const router = new RouterBuilder()
+    const router = new RouteGroupBuilder()
       .options('compress', { threshold: 100 })
       .options('compress', { encodings: ['gzip'] })
-      .toRouter()
+      .toRouteGroup()
 
     expect(router.options?.get('compress')).toEqual({ threshold: 100, encodings: ['gzip'] })
   })
 
   it('overwrites on primitive config key', () => {
-    const router = new RouterBuilder()
+    const router = new RouteGroupBuilder()
       .config('x', 1)
       .config('x', 2)
-      .toRouter()
+      .toRouteGroup()
 
     expect(router.config?.get('x')).toBe(2)
   })
 
   it('overwrites on type mismatch', () => {
-    const router = new RouterBuilder()
+    const router = new RouteGroupBuilder()
       .options('compress', { threshold: 100 })
       .options('compress', false as any)
-      .toRouter()
+      .toRouteGroup()
 
     expect(router.options?.get('compress')).toBe(false)
   })

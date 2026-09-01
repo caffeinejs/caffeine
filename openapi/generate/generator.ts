@@ -1,4 +1,4 @@
-import { type AuthSchemeDescriptor, type Route, type Router, solutions } from '@caffeinejs/http'
+import { type AuthSchemeDescriptor, type Route, type RouteGroup, solutions } from '@caffeinejs/http'
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
 import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { ErrOpenAPIConfiguration, ErrOpenAPIOperationConflict } from '../errors.js'
@@ -28,7 +28,7 @@ import { authorizationNote, buildSecuritySchemes, deriveSecurity } from './secur
 const FIXED_METHODS = new Set<string>(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'])
 
 export interface GenerateInput {
-  routers: Array<Router<unknown>>
+  routeGroups: Array<RouteGroup<unknown>>
   options: OpenAPIOptions
   /** How each registered authentication scheme expects credentials, when the application configured any. */
   schemes?: Map<string, AuthSchemeDescriptor>
@@ -41,7 +41,7 @@ export interface GenerateInput {
 /**
  * Builds the OpenAPI document from the routes the application already declared.
  *
- * Pure: no Fastify, no container, no I/O. That keeps it testable against hand-built `Router[]` fixtures and
+ * Pure: no Fastify, no container, no I/O. That keeps it testable against hand-built `RouteGroup[]` fixtures and
  * leaves the door open for a CLI that emits the document without starting a server.
  */
 export function generateDocument(input: GenerateInput): OpenAPIDocument {
@@ -54,7 +54,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
   const tags = new Map<string, TagObject>(options.tags.map(tag => [tag.name, tag]))
   const operationIds = new Map<string, string>()
 
-  for (const router of input.routers) {
+  for (const router of input.routeGroups) {
     if (!options.exposeSelf && router.extras?.get(kOpenAPISelf) === true) {
       continue
     }
@@ -97,7 +97,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
 }
 
 interface AddRouteInput {
-  router: Router<unknown>
+  router: RouteGroup<unknown>
   route: Route<unknown>
   group: APIGroupDetail | undefined
   detail: OperationDetail | undefined

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Get } from '../decorators/verbs.js'
 import { Controller } from '../decorators/controller.js'
-import { getRouter } from '../decorators/registrar/registrar.js'
+import { getRouteGroup } from '../decorators/registrar/registrar.js'
 
 describe('HTTPAdapter', () => {
   it('should be defined', () => {
@@ -27,7 +27,7 @@ describe('HTTPAdapter', () => {
 
     void RegistrarExportController
 
-    expect(getRouter(RegistrarExportController)).toBeDefined()
+    expect(getRouteGroup(RegistrarExportController)).toBeDefined()
   })
 })
 
@@ -39,7 +39,7 @@ describe('path normalization', () => {
       get() { return {} }
     }
     void C1
-    const r = getRouter(C1)!.toRouter()
+    const r = getRouteGroup(C1)!.toRouteGroup()
     expect(r.path).toBe('')
     expect(r.routes[0].path).toBe('/action')
   })
@@ -51,7 +51,7 @@ describe('path normalization', () => {
       get() { return {} }
     }
     void C2
-    const r = getRouter(C2)!.toRouter()
+    const r = getRouteGroup(C2)!.toRouteGroup()
     expect(r.path).toBe('/api')
     expect(r.routes[0].path).toBe('/users')
   })
@@ -63,7 +63,7 @@ describe('path normalization', () => {
       get() { return {} }
     }
     void C3
-    const r = getRouter(C3)!.toRouter()
+    const r = getRouteGroup(C3)!.toRouteGroup()
     expect(r.routes[0].path).toBe('/action')
   })
 
@@ -74,7 +74,7 @@ describe('path normalization', () => {
       get() { return {} }
     }
     void C4
-    const r = getRouter(C4)!.toRouter()
+    const r = getRouteGroup(C4)!.toRouteGroup()
     expect(r.routes[0].path).toBe('/double')
   })
 
@@ -85,7 +85,7 @@ describe('path normalization', () => {
       get() { return {} }
     }
     void C5
-    const r = getRouter(C5)!.toRouter()
+    const r = getRouteGroup(C5)!.toRouteGroup()
     expect(r.path).toBe('')
     expect(r.routes[0].path).toBe('/')
   })
@@ -97,7 +97,7 @@ describe('path normalization', () => {
       go() { return {} }
     }
     void C6
-    const r = getRouter(C6)!.toRouter()
+    const r = getRouteGroup(C6)!.toRouteGroup()
     expect(`${r.path}${r.routes[0].path}`).toBe('/action')
   })
 })

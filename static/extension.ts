@@ -107,7 +107,7 @@ export class StaticExtension extends ServerExtension {
    */
   #report(ctx: ServerExtensionContext, spa: SPASettings, otherMountPrefixes: readonly string[]): void {
     const derived = spa.derive
-      ? deriveServerOwnedPaths(ctx.routers, Object.values(ctx.services.health.options.paths))
+      ? deriveServerOwnedPaths(ctx.routeGroups, Object.values(ctx.services.health.options.paths))
       : []
     const neverShell = [...new Set([...derived, ...spa.exclude, ...otherMountPrefixes.filter(p => p !== '')])]
       .filter(prefix => !spa.include.some(included => underPrefix(prefix, included)))

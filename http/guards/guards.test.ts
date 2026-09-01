@@ -455,7 +455,10 @@ describe('on_request', () => {
   @Injectable()
   class HeaderGuard extends Guard {
     canActivate(input: GuardInput<unknown>): boolean {
-      return (input.context.req as { body?: unknown }).body === undefined && input.context.req.header('x-token') === 'ok'
+      // `body` is off the guard's view of the request by type; reached through a cast, it answers undefined,
+      // which is the point: the guard runs before the body has been parsed.
+      return (input.context.req as { body?: () => unknown }).body!() === undefined
+        && input.context.req.header('x-token') === 'ok'
     }
   }
 

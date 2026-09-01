@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { Keys, RouteBuilder, type RouteAuthzOptions } from '@caffeinejs/http'
-import { registerRouter } from '@caffeinejs/http/decorators/registrar'
+import { registerRouteGroup } from '@caffeinejs/http/decorators/registrar'
 import type { OpenAPIDocumentStore } from './document_store.js'
 import { kOpenAPISelf } from './keys.js'
 import type { OpenAPIOptions } from './options.js'
@@ -38,7 +38,7 @@ export function registerEndpoints(
 ): EndpointPaths {
   const paths = resolvePaths(options)
 
-  // A fresh class per builder, never a module-level one. `registerRouter` is get-or-create and `routes()`
+  // A fresh class per builder, never a module-level one. `registerRouteGroup` is get-or-create and `routes()`
   // appends, so a shared identity would accumulate a duplicate route for every application built in the
   // process, and Fastify rejects the second registration outright.
   const endpoints = class OpenAPIEndpoints {
@@ -61,7 +61,7 @@ export function registerEndpoints(
 
   container.bind(endpoints).toValue(new endpoints()).labels(Keys.CONTROLLER)
 
-  registerRouter(endpoints, router => {
+  registerRouteGroup(endpoints, router => {
     router.path(options.routes.base)
     router.extras(kOpenAPISelf, true)
 

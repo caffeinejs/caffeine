@@ -2,7 +2,7 @@ import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 import { Injectable } from '@caffeinejs/di'
 import { WebApplication, Controller, Get, Post, Args, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
-import { ErrFetchFailed, typedClient } from './index.js'
+import { ErrFetchFailed, controllerTypedClient } from './index.js'
 import type { Fetchable } from './index.js'
 
 interface Pet { id: number, species: string, name: string }
@@ -51,7 +51,7 @@ class PetsRouter {
 
 void [PetStore, PetsRouter]
 
-describe('typedClient()', () => {
+describe('controllerTypedClient()', () => {
   let app: WebApplication<any, any, any>
   let baseURL: string
 
@@ -66,7 +66,7 @@ describe('typedClient()', () => {
   })
 
   it('resolves all() to controller return type and parses JSON array', async () => {
-    const client = typedClient(PetsRouter, baseURL)
+    const client = controllerTypedClient(PetsRouter, baseURL)
     const pets = await client.all()
 
     expectTypeOf(pets).toEqualTypeOf<PetSummary[]>()
@@ -74,7 +74,7 @@ describe('typedClient()', () => {
   })
 
   it('resolves adopt() to controller return type and parses JSON object', async () => {
-    const client = typedClient(PetsRouter, baseURL)
+    const client = controllerTypedClient(PetsRouter, baseURL)
     const pet = await client.adopt({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ species: 'cat', name: 'Luna' }),
@@ -85,7 +85,7 @@ describe('typedClient()', () => {
   })
 
   it('resolves status() to string and returns plain text', async () => {
-    const client = typedClient(PetsRouter, baseURL)
+    const client = controllerTypedClient(PetsRouter, baseURL)
     const result = await client.status()
 
     expectTypeOf(result).toEqualTypeOf<string>()
@@ -93,15 +93,15 @@ describe('typedClient()', () => {
   })
 
   it('works with in-process adapter', async () => {
-    const client = typedClient(PetsRouter, app)
+    const client = controllerTypedClient(PetsRouter, app)
     const pets = await client.all()
     expectTypeOf(pets).toEqualTypeOf<PetSummary[]>()
     expect(pets).toBeInstanceOf(Array)
   })
 
   it('returns independent clients for same controller with different targets', async () => {
-    const remote = typedClient(PetsRouter, baseURL)
-    const inProcess = typedClient(PetsRouter, app)
+    const remote = controllerTypedClient(PetsRouter, baseURL)
+    const inProcess = controllerTypedClient(PetsRouter, app)
     const [remoteResult, inProcessResult] = await Promise.all([remote.all(), inProcess.all()])
 
     expect(remoteResult).toBeInstanceOf(Array)
@@ -116,7 +116,7 @@ describe('typedClient()', () => {
       }),
     }
 
-    const client = typedClient(PetsRouter, mockAdapter)
+    const client = controllerTypedClient(PetsRouter, mockAdapter)
 
     await expect(client.all()).rejects.toThrow(ErrFetchFailed)
   })
@@ -129,7 +129,7 @@ describe('typedClient()', () => {
       }),
     }
 
-    const client = typedClient(PetsRouter, mockAdapter)
+    const client = controllerTypedClient(PetsRouter, mockAdapter)
 
     let err!: ErrFetchFailed
     try {
@@ -154,7 +154,7 @@ describe('typedClient()', () => {
       }),
     }
 
-    const client = typedClient(PetsRouter, mockAdapter)
+    const client = controllerTypedClient(PetsRouter, mockAdapter)
 
     let err!: ErrFetchFailed
     try {

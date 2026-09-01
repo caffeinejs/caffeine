@@ -1,0 +1,31 @@
+{
+  "name": "@caffeinejs/brewer",
+  "version": "0.0.0",
+  "description": "CaffeineJS end-to-end typed HTTP client",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@caffeinejs/di": "*",
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
+    "fastify": "^5.8.5"
+  }
+}

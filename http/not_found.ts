@@ -4,7 +4,7 @@ import { ErrCaffeineWebApplication } from './error/common.js'
 import { ErrHTTPNotFound } from './error/http.js'
 import { solutions } from './error/util.js'
 import { joinPaths } from './internal/paths/paths.js'
-import type { Router } from './route.js'
+import type { RouteGroup } from './route.js'
 import type { ServerExtensionContext } from './server_extension.js'
 
 /**
@@ -61,12 +61,12 @@ export abstract class NotFoundFallback {
  * Paths are truncated at the first dynamic segment, since `/users/:id` tells us the server owns `/users`.
  */
 export function deriveServerOwnedPaths(
-  routers: readonly Router<any>[],
+  routeGroups: readonly RouteGroup<any>[],
   healthPaths: readonly string[] = [],
 ): string[] {
   const owned = new Set<string>()
 
-  for (const router of routers) {
+  for (const router of routeGroups) {
     const base = staticPrefix(`${router.prefix ?? ''}${router.path}`)
 
     if (base !== '' && base !== '/') {
@@ -114,7 +114,7 @@ export function installNotFoundHandler(
   ctx: ServerExtensionContext,
   fallbacks: readonly NotFoundFallback[],
 ): void {
-  const owned = deriveServerOwnedPaths(ctx.routers, Object.values(ctx.services.health.options.paths))
+  const owned = deriveServerOwnedPaths(ctx.routeGroups, Object.values(ctx.services.health.options.paths))
 
   const handler = async (req: FastifyRequest, reply: FastifyReply): Promise<never | FastifyReply> => {
     const path = req.url.split('?')[0] ?? ''

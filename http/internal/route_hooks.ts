@@ -32,7 +32,7 @@ export type RouteHookKey = 'onRequest' | 'onSend'
  * array up front — allocated one array per hook key per route, which for an application with many routes and
  * few hooks is almost all waste.
  *
- * A hook the route itself declared (through `@Options`) is preserved and stays first.
+ * A hook the route itself declared (through `fst`) is preserved and stays first.
  */
 export function addRouteHook<K extends RouteHookKey>(
   routeDef: AdapterRouteOptions,

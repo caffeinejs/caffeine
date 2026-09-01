@@ -1,7 +1,7 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { FastifyContext } from '../context.js'
 import { Responder } from '../response.js'
-import { kErrorUnhandled, type Router } from '../route.js'
+import { kErrorUnhandled, type RouteGroup } from '../route.js'
 import type { ErrorHandlerProvider } from './error.js'
 import { resolveByErrorChain } from './error.js'
 import { ErrHTTP, httpErrorBody } from './http.js'
@@ -59,9 +59,9 @@ export function installGlobalErrorHandler(
  * Called from inside the group's `register()` context, so the handler it sets covers every phase of
  * that plugin — validation, hooks, and the handler itself — and nothing outside it.
  */
-export function installRouterErrorHandler(
+export function installRouteGroupErrorHandler(
   server: FastifyInstance,
-  router: Router<any>,
+  router: RouteGroup<any>,
   globalErrorHandler: GlobalErrorHandler,
 ): void {
   const routes = router.routes

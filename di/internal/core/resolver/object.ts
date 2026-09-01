@@ -1,11 +1,8 @@
-import { InjectionResolver, InjectionResolverFactory } from '../../../injection_resolver.js'
-import { ObjectInjection, ObjectInjections } from '../../../injection.js'
+import { BuiltInResolvers, InjectionResolver, InjectionResolverFactory, resolverFor } from '../../../injection_resolver.js'
+import { InjectionDescriptor, ObjectInjection, ObjectInjections } from '../../../injection.js'
 import { ContainerOps } from '../../../container_interface.js'
 import { DeferredCtor } from '../../../deferred_ctor.js'
-import { ErrNoResolutionForKey } from '../../../errors.js'
-import { InjectionToken, TypedKey, keyStr } from '../../../key.js'
-import { solutions } from '../../util/errutil/errutil.js'
-import { excludeSelf } from './_binding_util.js'
+import { InjectionToken } from '../../../key.js'
 
 export const objectFactory: InjectionResolverFactory = ctx =>
   compileObjectNode(ctx.container, ctx.key!, ctx.descriptor.args as ObjectInjections, '')
@@ -16,69 +13,17 @@ function compileObjectNode(
   node: ObjectInjection | ObjectInjections,
   fieldPath: string,
 ): InjectionResolver {
+  // A field is resolved by the same factory the injection would get anywhere else, so every helper works here
+  // and a new one needs nothing added. The field path travels as the member, which is what names it in failures.
   if (!('children' in node)) {
-    if (node.multiple) {
-      if (node.key instanceof DeferredCtor) {
-        const deferredKey = node.key
-        return () => {
-          const realKey = deferredKey.unwrap() as TypedKey<unknown>
-          const bindings = excludeSelf(container.getBindings(realKey), key, deferredKey, container)
-          const results = new Array<unknown>(bindings.length)
-          for (let i = 0; i < bindings.length; i++) {
-            results[i] = bindings[i].factory(bindings[i].ctx!)
-          }
-          return results
-        }
-      }
-      const bindings = excludeSelf(
-        container.getBindings(node.key! as TypedKey<unknown>),
-        key,
-        node.key!,
-        container,
-      )
-
-      return () => {
-        const results = new Array<unknown>(bindings.length)
-        for (let i = 0; i < bindings.length; i++) {
-          results[i] = bindings[i].factory(bindings[i].ctx!)
-        }
-        return results
-      }
-    }
-
-    if (node.key instanceof DeferredCtor) {
-      const deferredKey = node.key
-      if (node.optional) {
-        const realKey = deferredKey.unwrap() as TypedKey<unknown>
-        const binding = container.getBinding(realKey)
-        if (!binding) {
-          return () => undefined as any
-        }
-
-        return () => binding.factory(binding.ctx!)
-      }
-
-      return () => deferredKey.createProxy(target => container.get(target as TypedKey<unknown>))
-    }
-
-    const binding = container.getBinding(node.key! as TypedKey<unknown>)
-
-    if (!binding) {
-      if (node.optional) {
-        return () => undefined as any
-      }
-
-      throw new ErrNoResolutionForKey(
-        `Cannot resolve "${keyStr(key)}" object field "${fieldPath}": no binding registered for key "${keyStr(node.key)}"`
-        + solutions(
-          `Register a binding for key "${keyStr(node.key)}"`,
-          `For multiple injections, use allOf(key)`,
-          `If the dependency is optional, use optional(key)`,
-        ),
-      )
-    }
-
-    return () => binding.factory(binding.ctx!)
+    return resolverFor(resolverOf(node))({
+      container,
+      descriptor: node,
+      key,
+      kind: 'property',
+      member: fieldPath,
+      index: -1,
+    })
   }
 
   const props: (string | symbol)[] = [...Object.keys(node.children), ...Object.getOwnPropertySymbols(node.children)]
@@ -100,4 +45,18 @@ function compileObjectNode(
   }
 
   return () => result
+}
+
+/**
+ * The resolver a field is compiled with.
+ *
+ * A helper names its own. A bare key names none, and a `DeferredCtor` written directly into a spec is a valid key,
+ * so it has to be recognised here rather than left to the default.
+ */
+function resolverOf(node: InjectionDescriptor): symbol {
+  if (node.resolver !== undefined) {
+    return node.resolver
+  }
+
+  return node.key instanceof DeferredCtor ? BuiltInResolvers.DEFER : BuiltInResolvers.DEFAULT
 }

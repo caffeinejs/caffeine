@@ -10,6 +10,7 @@
     "incremental": true,
     "tsBuildInfoFile": "./.cache/tsconfig.test.colocated.tsbuildinfo",
     "paths": {
+      "@caffeinejs/brewer": ["./brewer/index.ts"],
       "@caffeinejs/di": ["./di/index.ts"],
       "@caffeinejs/http": ["./http/index.ts"],
       "@caffeinejs/multipart": ["./multipart/index.ts"],
@@ -18,6 +19,8 @@
     }
   },
   "include": [
+    "brewer/**/*.test.ts",
+    "brewer/**/*.spec.ts",
     "di/**/*.test.ts",
     "di/**/*.spec.ts",
     "http/**/*.test.ts",

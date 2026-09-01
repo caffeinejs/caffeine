@@ -18,6 +18,7 @@ export default defineConfig({
       './fetchy/fetchy-logging-interceptor/vitest.config.ts',
       './fetchy/fetchy-undici/vitest.config.ts',
       './testing/vitest.config.ts',
+      './brewer/vitest.config.ts',
       './plugins/eslint/vitest.config.ts',
       './examples/03-petstore/vitest.config.ts',
       './test/vitest.config.ts',

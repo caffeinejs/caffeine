@@ -21,6 +21,7 @@ export interface HTTPPickers {
   cookie<R = unknown>(name?: string): ParameterPickOptions<R>
   signedCookie<R = unknown>(name?: string): ParameterPickOptions<R>
   pick<R = unknown>(fn: (req: R) => unknown | Promise<unknown>, opts?: { async?: boolean }): ParameterPickOptions<R>
+  just<R = unknown>(value: unknown): ParameterPickOptions<R>
   map<In, Out, R = unknown>(
     pick: ParameterPickOptions<R>,
     fn: (value: In) => Out | Promise<Out>,
@@ -96,6 +97,10 @@ function pick<R = unknown>(
   return { type: 'custom', picker: fn as ParameterPicker<R>, async: opts?.async }
 }
 
+function just<R = unknown>(value: unknown): ParameterPickOptions<R> {
+  return { type: 'custom', picker: () => value }
+}
+
 function map<In, Out, R>(
   pick: ParameterPickOptions<R>,
   fn: (value: In) => Out | Promise<Out>,
@@ -152,6 +157,7 @@ export const $p = {
   cookie,
   signedCookie,
   pick,
+  just,
   map,
   mapAsync,
   async,

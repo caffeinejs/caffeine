@@ -1,17 +1,17 @@
-import { getRouter } from '@caffeinejs/http'
+import { getRouteGroup } from '@caffeinejs/http'
 import { ErrNoRouter } from './error.js'
 import { mergeRequest, resolveRouteURL } from './_util.js'
 import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
 
-export type TestClient<C extends RouterCtor> = {
+export type ControllerTestClient<C extends RouterCtor> = {
   [H in RouteMethods<C>]: HandlerClient
 }
 
-export function testClient<ROUTER extends RouterCtor>(
+export function controllerClient<ROUTER extends RouterCtor>(
   routerRef: ROUTER,
   target: string | URL | Fetchable,
-): TestClient<ROUTER> {
-  const descriptor = getRouter(routerRef)
+): ControllerTestClient<ROUTER> {
+  const descriptor = getRouteGroup(routerRef)
   if (!descriptor) {
     throw new ErrNoRouter(String(routerRef))
   }
@@ -20,7 +20,7 @@ export function testClient<ROUTER extends RouterCtor>(
   const origin = isRemote ? target.toString() : 'http://localhost'
   const fetcher = isRemote ? fetch : target.fetch.bind(target)
 
-  const router = descriptor.toRouter()
+  const router = descriptor.toRouteGroup()
   const client: Record<string | symbol, (input: Request | RequestInit) => Promise<Response>> = {}
 
   for (const route of router.routes) {
@@ -47,5 +47,5 @@ export function testClient<ROUTER extends RouterCtor>(
     }
   }
 
-  return client as TestClient<ROUTER>
+  return client as ControllerTestClient<ROUTER>
 }

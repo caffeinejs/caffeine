@@ -11,7 +11,7 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '../index.js'
-import { registerRouter } from '../decorators/registrar/index.js'
+import { registerRouteGroup } from '../decorators/registrar/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -29,7 +29,7 @@ function signToken(payload: Record<string, unknown>): Promise<string> {
  */
 class ProgrammaticService implements Service {
   readonly #authz: RouteAuthzOptions | undefined
-  // A fresh class per service, not a module-level one. `registerRouter` is get-or-create and `routes()` appends,
+  // A fresh class per service, not a module-level one. `registerRouteGroup` is get-or-create and `routes()` appends,
   // so a shared constructor identity would accumulate a duplicate route for every application built in the
   // process — Fastify then rejects the second registration outright.
   readonly #endpoints = class ProgrammaticEndpoints {
@@ -51,7 +51,7 @@ class ProgrammaticService implements Service {
     kit.container.bind(endpoints).toValue(new endpoints()).labels(Keys.CONTROLLER)
 
     const authz = this.#authz
-    registerRouter(endpoints, router => {
+    registerRouteGroup(endpoints, router => {
       const route = new RouteBuilder()
         .path('/programmatic.json')
         .method('GET')
@@ -71,7 +71,7 @@ class ProgrammaticService implements Service {
   }
 }
 
-describe('registerRouter', () => {
+describe('registerRouteGroup', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {

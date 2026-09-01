@@ -1,13 +1,13 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
 import { solutions } from '../../error/util.js'
-import { kErrorUnhandled, type Router, type RouterErrorHandler } from '../../route.js'
-import type { RouteDispatch } from '../../routing/dispatch.js'
-import type { RouterMeta } from '../../routing/compile.js'
-import type { RouteBuildContext, RouteSource } from '../../routing/source.js'
-import type { RouteSpec, RouterSpec } from '../../routing/spec.js'
+import { kErrorUnhandled, type RouteGroup, type RouteGroupErrorHandler } from '../../route.js'
+import type { RouteDispatch } from '../dispatch.js'
+import type { RouteGroupMeta } from '../compile.js'
+import type { RouteBuildContext, RouteSource } from '../source.js'
+import type { RouteSpec, RouteGroupSpec } from '../spec.js'
 import { Keys } from '../../symbols.js'
-import { getRouter } from './registrar.js'
+import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 
 /** The instance a route is dispatched on, as the adapter stashes it for the request. */
 interface RequestWithTarget {
@@ -26,14 +26,14 @@ type ControllerInstance = Record<string | symbol, (...args: unknown[]) => unknow
 export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'controller'
 
-  build(ctx: RouteBuildContext): Router<R>[] {
+  build(ctx: RouteBuildContext): RouteGroup<R>[] {
     const container = ctx.container
     const controllers = container.getBindingsByLabel(Keys.CONTROLLER)
-    const routers = new Array<Router<R>>(controllers.length)
+    const routeGroups = new Array<RouteGroup<R>>(controllers.length)
 
     for (let i = 0; i < controllers.length; i++) {
       const { key, binding } = controllers[i]
-      const rd = getRouter(key as Function)
+      const rd = getRouteGroup(key as Function)
       if (!rd) {
         throw new ErrCaffeineWebApplication(
           `Cannot build router: no route definition found for router "${String(key)}"`,
@@ -41,22 +41,22 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
         )
       }
 
-      const spec = rd.toRouter<R>()
+      const spec = rd.toRouteGroup<R>()
       const provider = container.wrap(key as InjectionToken<ControllerInstance>)
 
-      routers[i] = ctx.compileRouter(spec, meta<R>(spec, key, binding.scopeID === Scopes.SINGLETON, provider))
+      routeGroups[i] = ctx.compileRouteGroup(spec, meta<R>(spec, key, binding.scopeID === Scopes.SINGLETON, provider))
     }
 
-    return routers
+    return routeGroups
   }
 }
 
 function meta<R>(
-  spec: RouterSpec<R>,
+  spec: RouteGroupSpec<R>,
   key: InjectionToken,
   isSingleton: boolean,
   provider: Provider<ControllerInstance>,
-): RouterMeta<R> {
+): RouteGroupMeta<R> {
   const name = typeof key === 'function' ? key.name : String(key)
   const errorHandlers = buildErrorHandlerMap(
     spec.errorHandlers,
@@ -130,7 +130,7 @@ function sharedTargetDispatch<R>(route: RouteSpec<R>): RouteDispatch<R, unknown>
 
 function sharedTargetErrorHandler<R>(
   errorHandlers: Map<Ctor<Error>, string | symbol>,
-): RouterErrorHandler<R> {
+): RouteGroupErrorHandler<R> {
   return (req, ctx, err) => {
     // Null when the error came from a hook that ran before the group's own — a rejected authentication, say.
     // There is no instance to dispatch on, so the error belongs to the application-wide handler.

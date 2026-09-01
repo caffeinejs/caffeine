@@ -9,7 +9,7 @@ import { HookListener } from './hooks.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
 import { PostProcessor } from './post_processor.js'
-import { Injection } from './injection.js'
+import { Injection, ResolveInjection } from './injection.js'
 import { Ctor } from './types.js'
 import { Provider } from './provider.js'
 import type { Module, ModuleFn } from './module.js'
@@ -160,6 +160,8 @@ export interface Container {
   build<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections?: (Injection | undefined | null)[]): T
 
   builder<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections?: (Injection | undefined | null)[]): () => T
+
+  resolver<I extends Injection>(injection: I): () => ResolveInjection<I>
 
   bind<T>(key: InjectionToken<T>): Binder<T>
 

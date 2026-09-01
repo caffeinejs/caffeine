@@ -4,10 +4,10 @@ import type { RouteValidationSchema } from '../route.js'
 import type { ErrorHandlerRef } from '../error/error.js'
 import { Guard } from '../guards/guard.js'
 import type { RouteInvoker } from './dispatch.js'
-import type { RouteAuthzOptions, RouteSpec, RouterSpec } from './spec.js'
+import type { RouteAuthzOptions, RouteSpec, RouteGroupSpec } from './spec.js'
 import { mergeValue } from './_merge.js'
 
-export class RouterBuilder {
+export class RouteGroupBuilder {
   #path?: string
   #prefix?: string
   #header?: Map<string, string | string[]>
@@ -146,9 +146,9 @@ export class RouterBuilder {
     return this
   }
 
-  toRouter<R>(): RouterSpec<R> {
+  toRouteGroup<R>(): RouteGroupSpec<R> {
     return {
-      path: normalizePrefix(this.#path ?? ''),
+      path: normalizeGroupPath(this.#path ?? ''),
       prefix: this.#prefix,
       routes: (this.#routes ?? []).map(route => route.toRoute<R>()),
       header: this.#header,
@@ -328,7 +328,7 @@ export class RouteBuilder {
 
   toRoute<R>(): RouteSpec<R> {
     return {
-      path: normalizePath(this.#path ?? ''),
+      path: normalizeRoutePath(this.#path ?? ''),
       method: [...(this.#method ?? [])],
       accept: [...(this.#consumes ?? [])],
       contentType: this.#produces ?? '',
@@ -351,11 +351,11 @@ export class RouteBuilder {
   }
 }
 
-function normalizePrefix(prefix: string): string {
+export function normalizeGroupPath(prefix: string): string {
   return prefix.replace(/\/+$/, '')
 }
 
-function normalizePath(path: string): string {
+export function normalizeRoutePath(path: string): string {
   const withLeading = path.startsWith('/') ? path : `/${path}`
   const collapsed = withLeading.replace(/\/+/g, '/')
   return collapsed.length > 1 ? collapsed.replace(/\/$/, '') : collapsed

@@ -1,5 +1,5 @@
 import type { AnySchema } from '@caffeinejs/std'
-import type { Route, RouteAuthzOptions, Router } from '@caffeinejs/http'
+import type { Route, RouteAuthzOptions, RouteGroup } from '@caffeinejs/http'
 import type {
   ComponentsObject,
   ExternalDocumentationObject,
@@ -96,9 +96,9 @@ export interface OpenAPIOptions {
   dedupeComponents: boolean
 
   /** Overrides the derived `operationId`. */
-  operationId?: (router: Router<unknown>, route: Route<unknown>) => string
+  operationId?: (router: RouteGroup<unknown>, route: Route<unknown>) => string
   /** Overrides the derived tag for a controller. */
-  tagFor?: (router: Router<unknown>) => string
+  tagFor?: (router: RouteGroup<unknown>) => string
   /** Overrides the component name a schema is hoisted under. */
   schemaName?: (schema: SchemaObject) => string | undefined
 

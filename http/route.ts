@@ -18,7 +18,7 @@ export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
  * Nothing here says where the routes came from. A controller class, a programmatic registration and — later — a
  * functional route definition all produce this same shape, and the adapter cannot tell them apart.
  */
-export interface Router<R = FastifyRequest> {
+export interface RouteGroup<R = FastifyRequest> {
   path: string
   prefix?: string
   /** The controller's class name, or the name the group was given. Used for diagnostics and documentation. */
@@ -41,7 +41,7 @@ export interface Router<R = FastifyRequest> {
    * equivalent is for the source that built the group. Runs after the `@CatchWith` handlers of the route and
    * of the group, and returns {@link kErrorUnhandled} to pass the error on to the application-wide handler.
    */
-  handleError?: RouterErrorHandler<R>
+  handleError?: RouteGroupErrorHandler<R>
   catchBy?: CatchByMap
   extras?: Map<symbol, unknown>
 }
@@ -50,10 +50,10 @@ export interface Router<R = FastifyRequest> {
  * A group's own error handling. Returns {@link kErrorUnhandled} — not `undefined`, which is a legitimate
  * result meaning "responded, with no body" — when it declines the error.
  */
-export type RouterErrorHandler<R = FastifyRequest>
+export type RouteGroupErrorHandler<R = FastifyRequest>
   = (req: R, ctx: Context, err: Error) => unknown | Promise<unknown>
 
-/** Returned by a {@link RouterErrorHandler} that does not handle the error. */
+/** Returned by a {@link RouteGroupErrorHandler} that does not handle the error. */
 export const kErrorUnhandled: unique symbol = Symbol('caffeine.http.errorUnhandled')
 
 export interface Route<R = FastifyRequest> {

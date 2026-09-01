@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest'
-import type { TestClient } from './client.js'
+import type { ControllerTestClient } from './controller_client.js'
 import type { RouteMethods } from './types.js'
 
 class _Fixture {
@@ -23,9 +23,9 @@ describe('testing core types', () => {
     })
   })
 
-  describe('when using TestClient', () => {
+  describe('when using ControllerTestClient', () => {
     it('it narrows keys to handler names', () => {
-      expectTypeOf<keyof TestClient<typeof _Fixture>>().toEqualTypeOf<'list' | 'create' | 'remove'>()
+      expectTypeOf<keyof ControllerTestClient<typeof _Fixture>>().toEqualTypeOf<'list' | 'create' | 'remove'>()
     })
   })
 })

@@ -44,7 +44,7 @@ describe('ServerExtension discovery', () => {
     await app.ready()
 
     expect(recorder.seen).toBeDefined()
-    expect(recorder.seen!.routers.length).toBeGreaterThan(0)
+    expect(recorder.seen!.routeGroups.length).toBeGreaterThan(0)
     expect(recorder.seen!.container).toBeDefined()
     expect(recorder.seen!.services.errorHandling).toBeDefined()
 

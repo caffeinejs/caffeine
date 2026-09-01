@@ -36,7 +36,7 @@ export class Authentication extends Middleware {
     // throws on the same condition — start-up is where a fixed, known-ahead-of-time reference belongs.
     const registered = auth.schemes
     if (registered !== undefined) {
-      for (const router of ctx.routers) {
+      for (const router of ctx.routeGroups) {
         for (const route of router.routes) {
           for (const scheme of route.authorization.options?.schemes ?? []) {
             if (!registered.schemeNames.includes(scheme)) {

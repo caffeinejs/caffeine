@@ -1,23 +1,27 @@
 import type { Container } from '@caffeinejs/di'
 import { BaseApplication, type ApplicationInit, type Service, type ShutdownOptions } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import type { Router } from './route.js'
+import type { RouteGroup } from './route.js'
 import type { Services } from './service.js'
 import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
-import { ControllerRouteSource } from './decorators/registrar/source.js'
+import { ControllerRouteSource } from './routing/decorated/source.js'
+import { FluentRouteSource } from './routing/programmatic/source.js'
+import type { Router } from './routing/programmatic/router.js'
 import { Authentication } from './security/auth/authentication_middleware.js'
 import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
 import { AuthenticationService } from './security/auth/service.js'
 import { kAuthContribution, kOIDCContribution } from './security/auth/keys.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
+import { ErrConfiguration } from './error/common.js'
+import { solutions } from './error/util.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
 import { ServerOptions, kServerContribution, type ServerAddress } from './server/index.js'
 import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthContribution, loadHealthIndicators } from './health/index.js'
 import type { HealthServices } from './health/services.js'
 
 export interface AdapterIn<R> {
-  routers: Router<R>[]
+  routeGroups: RouteGroup<R>[]
   services: Services
   middlewares: MiddlewarePipeline
 }
@@ -53,10 +57,20 @@ export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
  * `setup()` builds routing + the resolved {@link Services} and sets the adapter up; `start()` runs it;
  * `stop()` tears it down. Base handles the container, services, and lifecycle hooks.
  */
-export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> extends BaseApplication {
+export abstract class AbstractWebApplication<
+  I,
+  R,
+  A extends Adapter<I, R> = Adapter<I, R>,
+  ROUTES = never,
+> extends BaseApplication {
+  /** Phantom — names the routes mounted on this application, for `RoutesOf`. Never assigned, never read. */
+  declare readonly __routes?: ROUTES
+
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
-  #routers: Router<R>[] = []
+  #routeGroups: RouteGroup<R>[] = []
+  #mounted: Router<any, any>[] = []
+  #built = false
   #health: HealthServices | undefined
 
   constructor(init: ApplicationInit, adapter: A) {
@@ -76,12 +90,12 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     return this.#adapter.address
   }
 
-  get routers(): Router<R>[] {
+  get routeGroups(): RouteGroup<R>[] {
     if (!this.started) {
       throw new Error('Application is not ready')
     }
 
-    return this.#routers
+    return this.#routeGroups
   }
 
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
@@ -134,15 +148,54 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   }
 
   /**
+   * Mounts programmatic routers, whose routes are then compiled and registered exactly like a controller's.
+   *
+   * Routing is built once, during start-up, so this has to be called before the application is ready.
+   *
+   * ```ts
+   * app.mount(pets, orders)
+   * await app.ready()
+   * ```
+   *
+   * The application comes back carrying the mounted routers' routes in its type, so `RoutesOf<typeof app>` is the
+   * whole surface a generated client would call.
+   */
+  mount<const RS extends ReadonlyArray<Router<any, any, any>>>(
+    ...routers: RS
+  ): WebApplication<I, R, A, ROUTES | RoutesOfRouter<RS[number]>>
+  mount(...routers: Router<any, any, any>[]): this {
+    if (this.#built) {
+      throw new ErrConfiguration(
+        'Cannot mount a router: routing has already been built'
+        + solutions('Call "mount()" before the application is started'),
+      )
+    }
+
+    this.#mounted.push(...routers)
+
+    return this
+  }
+
+  /**
    * Where routes come from. One source per way of declaring them; a route declared any of those ways is
    * compiled the same and registered the same.
+   *
+   * The programmatic source is added only when something was mounted, so an application declaring every route
+   * with decorators builds exactly what it built before there was a second way.
    */
   protected routeSources(): RouteSource<R>[] {
-    return [new ControllerRouteSource<R>()]
+    const sources: RouteSource<R>[] = [new ControllerRouteSource<R>()]
+
+    if (this.#mounted.length > 0) {
+      sources.push(new FluentRouteSource<R>(this.#mounted))
+    }
+
+    return sources
   }
 
   protected override async setup(): Promise<void> {
-    this.#routers = buildRouting<R>(this.routeSources(), this.container)
+    this.#routeGroups = buildRouting<R>(this.routeSources(), this.container)
+    this.#built = true
 
     // Copy into a fresh object: the adapter's `listen()` mutates what it receives.
     const server: ServerOptions = { ...this.contributions.get(kServerContribution) }
@@ -168,7 +221,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     }
 
     await this.#adapter.setup({
-      routers: this.#routers,
+      routeGroups: this.#routeGroups,
       services,
       middlewares: this.#middlewares,
     })
@@ -250,4 +303,8 @@ export class WebApplication<
   I = FastifyInstance,
   R = FastifyRequest,
   A extends Adapter<I, R> = Adapter<I, R>,
-> extends AbstractWebApplication<I, R, A> {}
+  ROUTES = never,
+> extends AbstractWebApplication<I, R, A, ROUTES> {}
+
+/** The routes one router declares, distributed so a union of routers folds into a union of their routes. */
+type RoutesOfRouter<T> = T extends Router<any, any, infer R> ? R : never

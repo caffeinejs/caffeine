@@ -1,5 +1,5 @@
-export { type TestClient, testClient } from './client.js'
-export { typedClient, type TypedTestClient } from './client_typed.js'
+export { controllerClient, type ControllerTestClient } from './controller_client.js'
+export { controllerTypedClient, type ControllerTypedTestClient } from './controller_typed_client.js'
 export { ErrFetchFailed, ErrMissingRouteParam, ErrNoRouter as ErrNoRoutesForController } from './error.js'
 export { TestOIDCTicketStore, type TestOIDCTicketStoreOptions } from './oidc_ticket_store.js'
 export { newReq, RequestInitBuilder } from './request_builder.js'

@@ -1,0 +1,158 @@
+import type { CookieSerializeOptions } from '@fastify/cookie'
+import type { FastifyReply, RawRequestDefaultExpression, RawServerDefault } from 'fastify'
+import type { AnySchema, InferSchema } from '@caffeinejs/std'
+import type { Context, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
+import type { RouteValidationSchema } from '../../route.js'
+
+/** Flattens an intersection so editors show one object rather than a chain of `&`. */
+export type Simplify<T> = { [K in keyof T]: T[K] } & {}
+
+/**
+ * The path parameters a route path declares, as `{ id: string }`.
+ *
+ * Reads the path the way the router matches it: `:name` is a parameter, `:name?` an optional one, a trailing
+ * `(...)` on a parameter is a matching constraint rather than part of the name, and `*` is the wildcard. A path
+ * that is not a literal type — one built at runtime — yields the open `Record<string, string>`.
+ */
+export type PathParams<P extends string> = string extends P ? Record<string, string> : ParamsOfPath<P>
+
+type ParamsOfPath<P extends string>
+  = P extends `${string}:${infer Tail}`
+    ? Tail extends `${infer Segment}/${infer Rest}`
+      ? ParamEntry<Segment> & ParamsOfPath<`/${Rest}`>
+      : ParamEntry<Tail>
+    : P extends `${string}*${string}`
+      ? { '*': string }
+      : Record<never, never>
+
+type ParamEntry<Segment extends string>
+  = Segment extends `${infer Name}?`
+    ? { [K in ParamName<Name>]?: string }
+    : { [K in ParamName<Segment>]: string }
+
+type ParamName<Segment extends string> = Segment extends `${infer Name}(${string}` ? Name : Segment
+
+/**
+ * The type of `ctx.req.param()`: what the `params` schema declares when the route has one, and what the path
+ * itself says when it does not.
+ */
+export type ParamsOf<S extends RouteValidationSchema, P extends string>
+  = S extends { params: AnySchema } ? InferParams<S> : Simplify<PathParams<P>>
+
+/**
+ * The context a programmatic handler receives, typed by the route's schema and path.
+ *
+ * Structurally the `FastifyContext` the adapter constructs — the same object a decorated handler gets from
+ * `$p.context()` — with the request slots narrowed to what this route declared.
+ */
+export interface RouteContext<S extends RouteValidationSchema, P extends string> extends Context<
+  RawRequestDefaultExpression<RawServerDefault>,
+  CookieSerializeOptions,
+  false,
+  ParamsOf<S, P>,
+  InferQuery<S>,
+  InferHeaders<S>,
+  InferBody<S>
+> {
+  /** The underlying Fastify reply. The escape hatch for platform-specific consumers. */
+  get reply(): FastifyReply
+}
+
+/**
+ * What a route's handler is called with: the context, then the dependencies the route and its enclosing groups
+ * injected — `undefined` when none did.
+ *
+ * The return value is whatever a decorated handler may return: a body to serialize, a `Responder`, a stream, or
+ * nothing at all when the handler answered through the context. It is a type parameter so that a route can carry
+ * what its handler answers with — see {@link DeclaredRoute}.
+ */
+export type RouteHandler<S extends RouteValidationSchema, P extends string, D, O = unknown>
+  = (ctx: RouteContext<S, P>, deps: D) => O
+
+/**
+ * The dependencies visible to a route: what its groups injected, with anything the route injected under the same
+ * name taking over.
+ */
+export type MergeDeps<OUTER, INNER>
+  = [OUTER] extends [undefined]
+    ? INNER
+    : [INNER] extends [undefined]
+        ? OUTER
+        : Simplify<Omit<OUTER, keyof INNER> & INNER>
+
+/** Concatenates a group path with a route path, keeping both literal so parameters stay inferable. */
+export type JoinPath<A extends string, B extends string>
+  = A extends '' ? B : B extends '' | '/' ? A : `${A}${B}`
+
+/**
+ * One route, as a type: everything a client generated from the router needs to call it.
+ *
+ * Accumulated on the {@link Router} as routes are declared, so a router's type carries its whole surface. That is
+ * the groundwork an end-to-end typed client is built from — it reads the union, and nothing at runtime has to
+ * describe the API a second time.
+ */
+export interface RouteDef<
+  M extends string = string,
+  P extends string = string,
+  Params = unknown,
+  Query = unknown,
+  Headers = unknown,
+  Body = unknown,
+  Output = unknown,
+> {
+  method: M
+  path: P
+  params: Params
+  query: Query
+  headers: Headers
+  body: Body
+  output: Output
+}
+
+/**
+ * The descriptor a router accumulates for one route it declared: everything {@link RouteDef} holds, worked out
+ * from the route's method, its full path, the schema it validates against and what its handler returns.
+ */
+export type DeclaredRoute<M extends string, P extends string, S extends RouteValidationSchema, O>
+  = RouteDef<M, P, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>, OutputOf<S, O>>
+
+/**
+ * What a route answers with.
+ *
+ * The declared response schema wins: it is the contract, and it is what the serializer actually enforces. Without
+ * one the handler's own return type is used — unless the handler answered through the context, in which case there
+ * is nothing to read and `unknown` is the honest answer.
+ */
+export type OutputOf<S extends RouteValidationSchema, O>
+  = S extends { response: infer R }
+    ? [SuccessBody<R>] extends [never] ? HandlerOutput<O> : SuccessBody<R>
+    : HandlerOutput<O>
+
+type SuccessBody<R>
+  = R extends { 200: infer S extends AnySchema }
+    ? InferSchema<S>
+    : R extends { 201: infer S extends AnySchema }
+      ? InferSchema<S>
+      : never
+
+type HandlerOutput<O>
+  = Awaited<O> extends { readonly req: unknown, status: (code: number) => unknown } ? unknown : Awaited<O>
+
+/** Re-bases a set of route descriptors under a prefix, for a router mounted inside another. */
+export type PrefixRoutePaths<R, Prefix extends string>
+  = R extends RouteDef<infer M, infer P, infer Params, infer Query, infer Headers, infer Body, infer Output>
+    ? RouteDef<M, JoinPath<Prefix, P>, Params, Query, Headers, Body, Output>
+    : never
+
+/**
+ * The routes a `Router` or an application declares, as a union of {@link RouteDef}.
+ *
+ * ```ts
+ * type API = RoutesOf<typeof app>
+ * ```
+ *
+ * What carries the routes is the value `.handler()` returns, so a chain accumulates them all —
+ * `router.get('/a').handler(f).get('/b').handler(g)`. Declaring routes as separate statements leaves one such
+ * value per statement; `blend` unions them. The variable the routes were opened from carries none of them.
+ */
+export type RoutesOf<T> = T extends { readonly __routes?: infer R } ? NonNullable<R> : never

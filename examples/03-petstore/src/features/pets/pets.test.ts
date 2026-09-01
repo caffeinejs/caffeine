@@ -6,7 +6,7 @@ import {
   newReq,
   newURL,
   TestContainer,
-  typedClient,
+  controllerTypedClient,
 } from "@caffeinejs/testing";
 import { buildApp } from "../../app.js";
 import {
@@ -126,7 +126,7 @@ const validPet: CreatePetDTO = {
 describe("pets feature (via @caffeinejs/testing)", () => {
   const fake = new FakePetsRepository();
   let app: WebApplication<any, any, any>;
-  let client: ReturnType<typeof typedClient<typeof PetsController>>;
+  let client: ReturnType<typeof controllerTypedClient<typeof PetsController>>;
   // A GitHub session cookie. GitHub is the application's default authentication scheme, so this is what a
   // write now needs — the claim mapper grants every signed-in user the write:pets role.
   let session: string;
@@ -143,7 +143,7 @@ describe("pets feature (via @caffeinejs/testing)", () => {
     stubGithub();
     session = await signInWithGithub(app);
 
-    client = typedClient(PetsController, app);
+    client = controllerTypedClient(PetsController, app);
   });
 
   afterAll(async () => {

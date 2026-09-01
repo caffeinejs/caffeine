@@ -1,5 +1,5 @@
 import type { ErrorHandlerRef } from '../error/index.js'
-import { configureRoute, configureRouter } from './registrar/registrar.js'
+import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 
 /**
  * Attaches error handler classes to a controller or to a single route.
@@ -28,7 +28,7 @@ import { configureRoute, configureRouter } from './registrar/registrar.js'
 export function CatchWith(...handlers: ErrorHandlerRef[]) {
   return (fn: Function, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {
     if (context.kind === 'class') {
-      configureRouter(context, fn, spec => spec.catchBy(handlers))
+      configureRouteGroup(context, fn, spec => spec.catchBy(handlers))
     } else {
       configureRoute(context, spec => spec.catchBy(handlers))
     }

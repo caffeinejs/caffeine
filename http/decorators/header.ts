@@ -1,11 +1,11 @@
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
-import { configureRoute, configureRouter } from './registrar/registrar.js'
+import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 
 export function Header(name: string, value: string | string[], charset?: string) {
   const finalValue = charset === undefined ? value : appendCharset(value, charset)
 
   return defineClassOrMemberDecorator(
-    (target, ctx) => configureRouter(ctx, target, spec => spec.header(name, finalValue)),
+    (target, ctx) => configureRouteGroup(ctx, target, spec => spec.header(name, finalValue)),
     context => configureRoute(context, spec => spec.header(name, finalValue)),
   )
 }

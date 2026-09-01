@@ -8,9 +8,9 @@ import type { RouteInvoker } from './dispatch.js'
 /**
  * A group of routes, as authored. Inert: it describes routes, it does not know how any of them is called.
  * Whatever produced it — the `@Controller` decorators, a programmatic registration — compiles it into a
- * {@link ../route.js#Router} through `compileRouter`.
+ * {@link ../route.js#RouteGroup} through `compileRouteGroup`.
  */
-export interface RouterSpec<R> {
+export interface RouteGroupSpec<R> {
   path: string
   prefix?: string
   routes: RouteSpec<R>[]

@@ -3,7 +3,7 @@ import { ErrMissingRouteParam } from './error.js'
 /**
  * Builds a concrete URL string from a path template. Decoupled from the router — it takes a plain
  * `/pets/:id` template, never a controller. Fill `:name` segments with {@link URLBuilder.param}; the
- * result feeds `new Request(url, ...)` or {@link testClient}/{@link typedClient} (the client honors a
+ * result feeds `new Request(url, ...)` or {@link controllerClient}/{@link controllerTypedClient} (the client honors a
  * Request's URL, so this is how `/pets/:id` becomes `/pets/123`).
  */
 export function newURL(path: string): URLBuilder {

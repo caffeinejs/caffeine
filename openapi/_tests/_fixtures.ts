@@ -1,31 +1,31 @@
-import { RouteBuilder, type Route, type Router, type RouterBuilder } from '@caffeinejs/http'
-import { getRouter, registerRouter } from '@caffeinejs/http/decorators/registrar'
+import { RouteBuilder, type Route, type RouteGroup, type RouteGroupBuilder } from '@caffeinejs/http'
+import { getRouteGroup, registerRouteGroup } from '@caffeinejs/http/decorators/registrar'
 import type { OpenAPIOptions } from '../options.js'
 import { defaultOpenAPIOptions } from '../options.js'
 
 /**
- * Builds a `Router` the way `buildRouting` would, without a container or a running application.
+ * Builds a `RouteGroup` the way `buildRouting` would, without a container or a running application.
  *
- * The generator only ever reads `Router`/`Route`, so a fixture producing that shape exercises it honestly and
+ * The generator only ever reads `RouteGroup`/`Route`, so a fixture producing that shape exercises it honestly and
  * keeps a unit test to milliseconds. The integration tests drive a real application instead, which is what
  * proves the fixture and the real thing agree.
  */
 export function fixtureRouter(
   path: string,
-  configure: (router: RouterBuilder) => void,
+  configure: (router: RouteGroupBuilder) => void,
   options: { prefix?: string, name?: string } = {},
-): Router<unknown> {
-  // A fresh class per call: `registerRouter` is get-or-create and `routes()` appends, so a shared key would
+): RouteGroup<unknown> {
+  // A fresh class per call: `registerRouteGroup` is get-or-create and `routes()` appends, so a shared key would
   // accumulate the routes of every previous fixture.
   const name = options.name ?? 'FixtureController'
   const key = { [name]: class {} }[name] as unknown as Function
 
-  registerRouter(key, router => {
+  registerRouteGroup(key, router => {
     router.path(path)
     configure(router)
   })
 
-  const spec = getRouter(key)!.toRouter<unknown>()
+  const spec = getRouteGroup(key)!.toRouteGroup<unknown>()
 
   return {
     path: spec.path,

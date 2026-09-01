@@ -5,7 +5,7 @@ import { Container, Ctor, Scopes } from '@caffeinejs/di'
 import { type FastifyInstance, type FastifyReply, type FastifyRequest, type RawReplyDefaultExpression, type RawRequestDefaultExpression, type RawServerBase } from 'fastify'
 import fp from 'fastify-plugin'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
-import type { Router } from './route.js'
+import type { RouteGroup } from './route.js'
 import type { Principal } from './security/index.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { RouteCompilers } from './routing/dispatch.js'
@@ -15,7 +15,7 @@ import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
 import { Authentication } from './security/auth/authentication_middleware.js'
 import { installOIDCRoutes } from './security/auth/oidc/oidc_routes.js'
 import { installFormBodyParser } from './form/index.js'
-import { installGlobalErrorHandler, installRouterErrorHandler } from './error/error_handling.js'
+import { installGlobalErrorHandler, installRouteGroupErrorHandler } from './error/error_handling.js'
 import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
 import { type CacheDeps, type CacheOptions, attachCacheHooks, resolveCacheDeps } from './cache/cache.js'
 import { type CacheInvalidateOptions, attachCacheInvalidateHook } from './cache/cache_invalidate.js'
@@ -72,7 +72,7 @@ export class FastifyAdapter<
 
   async setup(input: AdapterIn<REQ>): Promise<void> {
     const container = this.#container
-    const routers = input.routers as Router<REQ>[]
+    const routeGroups = input.routeGroups as RouteGroup<REQ>[]
     const fastify = this.#fastify
     const services = input.services
 
@@ -107,7 +107,7 @@ export class FastifyAdapter<
       server: fastify,
       container,
       services,
-      routers,
+      routeGroups,
     }
 
     // The built-in features. Plain calls in a stated order rather than a discovered list: they are this
@@ -148,7 +148,7 @@ export class FastifyAdapter<
     // The pipeline is explicit, which leaves exactly one way to disable every guard in the application:
     // forget to register the authentication middleware. An application that protects routes and then
     // serves them to anonymous callers must not start.
-    const anyRouteNeedsAuthz = routers.some(r => r.routes.some(rt => rt.authorization.hasProtection))
+    const anyRouteNeedsAuthz = routeGroups.some(r => r.routes.some(rt => rt.authorization.hasProtection))
     if (anyRouteNeedsAuthz && !middlewares.has(Authentication)) {
       throw new ErrAuthenticationMiddlewareMissing()
     }
@@ -161,14 +161,14 @@ export class FastifyAdapter<
     const cacheDeps: CacheDeps = resolveCacheDeps(container)
     const compilers = this.#compilers
 
-    for (const router of routers) {
+    for (const router of routeGroups) {
       const basePath = router.path
       const routes = router.routes
 
       fastify.register(async server => {
         server.decorateRequest('responseCached', false)
 
-        installRouterErrorHandler(server, router, globalErrorHandler)
+        installRouteGroupErrorHandler(server, router, globalErrorHandler)
 
         // Whatever preparation the source that built this group needs — resolving the instance a `@Catch`
         // method will run on, for one. Registered as given, so it costs what the hook it replaces cost.

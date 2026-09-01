@@ -166,7 +166,7 @@ describe('compose', () => {
 })
 
 describe('MiddlewarePipeline', () => {
-  const setupContext = { server: {}, container: {}, services: {}, routers: [] } as never
+  const setupContext = { server: {}, container: {}, services: {}, routeGroups: [] } as never
 
   it('returns the dispatch untouched when the handler group is empty', async () => {
     const pipeline = new MiddlewarePipeline()

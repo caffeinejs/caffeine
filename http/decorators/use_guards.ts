@@ -1,7 +1,7 @@
 import { ErrInvalidDecorator, type InjectionToken } from '@caffeinejs/di'
 import type { Guard } from '../guards/guard.js'
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
-import { configureRoute, configureRouter } from './registrar/registrar.js'
+import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 
 /**
  * Attaches one or more container-managed {@link Guard} classes to a controller or a single route.
@@ -18,7 +18,7 @@ export function UseGuards(...guards: InjectionToken<Guard>[]) {
   }
 
   return defineClassOrMemberDecorator(
-    (target, context) => configureRouter(context, target, spec => spec.guards(guards)),
+    (target, context) => configureRouteGroup(context, target, spec => spec.guards(guards)),
     context => configureRoute(context, spec => spec.guards(guards)),
   )
 }

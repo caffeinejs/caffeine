@@ -51,6 +51,10 @@ fmt\:%: ## format a single package (e.g. fmt:http)
 lint: ## check lint and fix errors
 	@npm run lint:fix
 
+.PHONY: lint-markdown
+lint-markdown: ## lint markdown
+	@npm run lint:markdown
+
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 	@npm run lint:fix -w $*
 
