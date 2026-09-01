@@ -11,6 +11,9 @@
       "path": "./http/tsconfig.build.json"
     },
     {
+      "path": "./cors/tsconfig.build.json"
+    },
+    {
       "path": "./multipart/tsconfig.build.json"
     },
     {

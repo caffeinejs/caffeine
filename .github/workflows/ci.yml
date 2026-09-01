@@ -78,6 +78,7 @@ jobs:
             di/dist \
             std/dist \
             http/dist \
+            cors/dist \
             multipart/dist \
             view/dist \
             static/dist \
@@ -111,6 +112,7 @@ jobs:
             di/dist/
             std/dist/
             http/dist/
+            cors/dist/
             multipart/dist/
             view/dist/
             static/dist/

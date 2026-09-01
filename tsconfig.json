@@ -45,6 +45,9 @@
       "path": "./http"
     },
     {
+      "path": "./cors"
+    },
+    {
       "path": "./multipart"
     },
     {

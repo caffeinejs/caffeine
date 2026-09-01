@@ -8,6 +8,7 @@ export default defineConfig({
       './scan/vitest.config.ts',
       './std/vitest.config.ts',
       './http/vitest.config.ts',
+      './cors/vitest.config.ts',
       './multipart/vitest.config.ts',
       './view/vitest.config.ts',
       './static/vitest.config.ts',

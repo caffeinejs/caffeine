@@ -22,6 +22,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 |---|---|
 | [`di/`](di/AGENTS.md) | `@caffeinejs/di` |
 | [`http/`](http/AGENTS.md) | `@caffeinejs/http` |
+| [`cors/`](cors/AGENTS.md) | `@caffeinejs/cors` |
 | [`kafka/`](kafka/AGENTS.md) | `@caffeinejs/kafka` |
 | [`openapi/`](openapi/AGENTS.md) | `@caffeinejs/openapi` |
 | [`messaging/`](messaging/AGENTS.md) | `@caffeinejs/messaging` |

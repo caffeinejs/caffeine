@@ -11,6 +11,7 @@
     "tsBuildInfoFile": "./.cache/tsconfig.test.colocated.tsbuildinfo",
     "paths": {
       "@caffeinejs/brewer": ["./brewer/index.ts"],
+      "@caffeinejs/cors": ["./cors/index.ts"],
       "@caffeinejs/di": ["./di/index.ts"],
       "@caffeinejs/http": ["./http/index.ts"],
       "@caffeinejs/multipart": ["./multipart/index.ts"],
@@ -25,6 +26,8 @@
     "di/**/*.spec.ts",
     "http/**/*.test.ts",
     "http/**/*.spec.ts",
+    "cors/**/*.test.ts",
+    "cors/**/*.spec.ts",
     "multipart/**/*.test.ts",
     "multipart/**/*.spec.ts",
     "static/**/*.test.ts",
