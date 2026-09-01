@@ -2343,6 +2343,24 @@ describe('MemoryCacheStore maxBytes budget', () => {
 })
 
 describe('default CacheStore', () => {
+  // `bind(X).toSelf().extends(CacheStore)` is one of the two documented ways to supply a store
+  // (http/cache/store.ts), and the default used to be installed over it: the configurer guards with
+  // `container.has(CacheStore)`, which read an index that polymorphic bindings never reach.
+  it('loses to a store bound polymorphically with .extends()', async () => {
+    class ExtendingStore extends MemoryCacheStore {}
+
+    const container = new CaffeineIoC()
+    container.bind(ExtendingStore).toSelf().extends(CacheStore)
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
+      .build()
+    await app.ready()
+
+    expect(app.container.get(CacheStore)).toBeInstanceOf(ExtendingStore)
+
+    await app.close()
+  })
+
   it('is used when nothing else bound a store', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .build()

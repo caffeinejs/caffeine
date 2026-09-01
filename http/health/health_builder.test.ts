@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
-import { type InferSchema, type SignalDispatcher, $t, detectSignalDispatcher } from '@caffeinejs/std'
+import {
+  ApplicationAvailability,
+  type InferSchema,
+  type SignalDispatcher,
+  $t,
+  detectSignalDispatcher,
+} from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   ConfigPriority,
@@ -243,6 +249,18 @@ describe('HealthBuilder', () => {
     expect(options.shutdownTimeoutMs).toBe(12_000)
     // A value nothing overrode still comes from the builder.
     expect(options.cacheTTLMs).toBe(1_000)
+  })
+
+  // The configurer installs this default behind `!container.has(ApplicationAvailability)`, and `has` now also
+  // answers for keys reachable through `.extends()`. The ordinary path must still bind the application's own
+  // instance: the lifecycle writes to that object, and a container-constructed one reports a state nothing
+  // ever updates.
+  it('binds the application\'s own availability, not a container-constructed one', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify())).health().build()
+
+    await app.ready()
+
+    expect(app.container.get(ApplicationAvailability)).toBe(app.availability)
   })
 
   it('clamps a shutdown timeout that would outlive the grace period', async () => {

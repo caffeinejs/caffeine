@@ -558,3 +558,47 @@ describe('Abstract Classes', function () {
     })
   })
 })
+
+// `has` and `get` used to read different indexes: `has` looked at the registry, which only holds directly
+// bound keys, while `get` resolves through the binding index that `.extends()` also writes to. So a base
+// key answered `false` to `has` and still resolved — which is how a framework default installed on
+// `if (!container.has(Base))` got registered over a store the application had supplied.
+describe('has() and a polymorphic binding', function () {
+  abstract class HasBase {
+    abstract id(): string
+  }
+
+  class HasChild extends HasBase {
+    id(): string { return 'child' }
+  }
+
+  abstract class HasUnextended {
+    abstract id(): string
+  }
+
+  it('reports a base key bound only through .extends() as present', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(HasChild).toSelf().extends(HasBase)
+    await di.init()
+
+    expect(di.has(HasBase)).toBe(true)
+    expect(di.get(HasBase)).toBeInstanceOf(HasChild)
+  })
+
+  it('agrees with get() before the container is initialized', function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(HasChild).toSelf().extends(HasBase)
+
+    // `.extends()` maps the base while the chain is built, so the answer does not wait for init().
+    expect(di.has(HasBase)).toBe(true)
+  })
+
+  it('still reports a base nothing extends as absent', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(HasChild).toSelf()
+    await di.init()
+
+    expect(di.has(HasUnextended)).toBe(false)
+    expect(di.has(HasChild)).toBe(true)
+  })
+})

@@ -4,14 +4,18 @@ sidebar_label: Object Injection
 
 # Object Injection
 
-`object()` injects a set of dependencies as a plain object, where each property is
+`$i.object()` injects a set of dependencies as a plain object, where each property is
 resolved from the container using the key or descriptor you provide. This is useful
 when a constructor receives a single configuration-style parameter instead of multiple
 positional arguments.
 
 ```ts
-import { object } from '@caffeinejs/di'
+import { $i } from '@caffeinejs/di'
 ```
+
+The spec is a valid TypeScript value: a class is the token, and helpers such as
+`$i.optional` encode the resolved field type. `InjectedOf<typeof spec>` is that
+bag type; `$i.object(spec)` returns `InjectionDescriptor<InjectedOf<typeof spec>>`.
 
 ---
 
@@ -19,14 +23,16 @@ import { object } from '@caffeinejs/di'
 
 ```ts
 import { Injectable } from '@caffeinejs/di/decorators'
-import { object } from '@caffeinejs/di'
+import { $i, type InjectedOf } from '@caffeinejs/di'
 
 class UserRepository { /* ... */ }
 class EmailService { /* ... */ }
 
-@Injectable([object({ repository: UserRepository, email: EmailService })])
+const spec = { repository: UserRepository, email: EmailService }
+
+@Injectable([$i.object(spec)])
 class UserService {
-  constructor(private readonly deps: { repository: UserRepository; email: EmailService }) {}
+  constructor(private readonly deps: InjectedOf<typeof spec>) {}
 
   register(name: string) {
     this.deps.repository.save(name)
@@ -43,25 +49,28 @@ The container resolves `UserRepository` and `EmailService`, then passes
 ## Combining with other injection functions
 
 Each property value in the spec can be a plain key, or any injection descriptor
-returned by `optional()`, `allOf()`, `provide()`, and so on.
+returned by `$i.optional()`, `$i.allOf()`, `$i.provide()`, and so on.
 
 ```ts
-import { object, optional, allOf } from '@caffeinejs/di'
+import { $i, type InjectedOf } from '@caffeinejs/di'
 
-@Injectable([
-  object({
-    cache: optional(CacheService),     // undefined if not registered
-    validators: allOf(Validator),      // array of all Validator bindings
-    db: DatabaseService,               // required, plain key
-  }),
-])
-class OrderService {
-  constructor(private readonly deps: {
-    cache?: CacheService
-    validators: Validator[]
-    db: DatabaseService
-  }) {}
+const spec = {
+  cache: $i.optional(CacheService),
+  validators: $i.allOf(Validator),
+  db: DatabaseService,
 }
+
+@Injectable([$i.object(spec)])
+class OrderService {
+  constructor(private readonly deps: InjectedOf<typeof spec>) {}
+}
+
+type OrderDeps = InjectedOf<typeof spec>
+// {
+//   cache: CacheService | undefined
+//   validators: Validator[]
+//   db: DatabaseService
+// }
 ```
 
 ---
@@ -72,20 +81,17 @@ The spec supports nesting: a property value can itself be a nested spec object,
 letting you group related dependencies under a sub-key.
 
 ```ts
-@Injectable([
-  object({
-    services: {
-      user: UserService,
-      order: OrderService,
-    },
-    config: AppConfig,
-  }),
-])
+const spec = {
+  services: {
+    user: UserService,
+    order: OrderService,
+  },
+  config: AppConfig,
+}
+
+@Injectable([$i.object(spec)])
 class AppFacade {
-  constructor(private readonly deps: {
-    services: { user: UserService; order: OrderService }
-    config: AppConfig
-  }) {}
+  constructor(private readonly deps: InjectedOf<typeof spec>) {}
 }
 ```
 
@@ -93,14 +99,14 @@ class AppFacade {
 
 ## Plain configuration
 
-`object()` works identically without decorators.
+`$i.object()` works identically without decorators.
 
 ```ts
 const di = new CaffeineIoC()
 
 di.bind(UserRepository).toSelf()
 di.bind(EmailService).toSelf()
-di.bind(UserService).toSelf([object({ repository: UserRepository, email: EmailService })])
+di.bind(UserService).toSelf([$i.object({ repository: UserRepository, email: EmailService })])
 
 await di.init()
 
@@ -111,7 +117,7 @@ const svc = di.get(UserService)
 
 ## When to use object injection
 
-Use `object()` when:
+Use `$i.object()` when:
 
 - A class already uses a single "deps bag" parameter as a pattern (common in
   functional-style or options-object codebases).
@@ -119,5 +125,5 @@ Use `object()` when:
 - You want to make optional dependencies explicit by name rather than by position.
 
 For standard multi-argument constructors, plain positional injection is simpler and
-preferred. Reserve `object()` for cases where the object shape is already part of
+preferred. Reserve `$i.object()` for cases where the object shape is already part of
 the component's interface.

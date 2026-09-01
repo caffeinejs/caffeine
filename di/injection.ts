@@ -3,15 +3,24 @@ import { ErrMissingInjectionKey } from './errors.js'
 import { solutions } from './internal/util/errutil/index.js'
 import { BuiltInResolvers } from './injection_resolver.js'
 import { InjectionToken, isValidKey } from './key.js'
+import type { Provider } from './provider.js'
+
+declare const kInjectionResult: unique symbol
 
 /**
  * InjectionDescriptor describes an injection for a component dependency.
+ *
+ * `T` is the **resolved** value (what the consumer receives), not necessarily the
+ * lookup key. Helpers such as `$i.optional` and `$i.allOf` encode that
+ * result in `T` (`U | undefined`, `U[]`, {@link Provider}, and so on).
  */
-export type InjectionDescriptor<T = any> = {
+export type InjectionDescriptor<T = unknown> = {
   /**
    * The key of the desired dependency.
+   * The lookup token is independent of {@link T} when a helper wraps the result
+   * (optional, allOf, provide, …).
    */
-  key?: InjectionToken<T>
+  key?: InjectionToken<any>
 
   /**
    * Whether to inject multiple bindings associated with the same key.
@@ -42,6 +51,8 @@ export type InjectionDescriptor<T = any> = {
    * The arguments to pass to the resolver.
    */
   args?: unknown
+
+  readonly [kInjectionResult]?: T
 }
 
 /**
@@ -71,11 +82,57 @@ export type ObjectInjection = InjectionDescriptor | ObjectInjections
  */
 export type Injection<T = unknown> = InjectionToken<T> | InjectionDescriptor<T>
 
-type SpecValue = InjectionToken | InjectionDescriptor | ObjectInjectionSpec
+/**
+ * The value produced when `I` is resolved: the instance of a token, or the
+ * encoded result type of an {@link InjectionDescriptor}.
+ */
+export type ResolveInjection<I> = I extends InjectionToken<infer T>
+  ? T
+  : I extends { readonly [kInjectionResult]: infer T }
+    ? T
+    : I extends InjectionDescriptor<infer T>
+      ? T
+      : never
 
-type ObjectInjectionSpec = {
-  [prop: string | symbol]: SpecValue
+/**
+ * Authoring shape for `$i.object`: property values are tokens, descriptors,
+ * or nested specs. Matches runtime object-spec parsing.
+ */
+export type ObjectInjectionSpec = {
+  [prop: string | symbol]: InjectionToken<any> | InjectionDescriptor<any> | ObjectInjectionSpec
 }
+
+/**
+ * Instance bag inferred from an {@link ObjectInjectionSpec}.
+ *
+ * Tokens resolve to their instance type; descriptors use the type encoded in
+ * {@link InjectionDescriptor} (`T`); nested objects recurse. A value with a
+ * `key` or `resolver` field is treated as a descriptor, matching runtime
+ * `parseObjectSpec` (`'key' in value`) and helpers such as `$i.just`
+ * that set only `resolver`.
+ */
+export type InjectedOf<S> = { [K in keyof S]: InjectedField<S[K]> }
+
+/**
+ * Helper return type: an {@link InjectionDescriptor} branded with its resolved value `T`.
+ */
+type InjectionResult<T> = InjectionDescriptor<T> & { readonly [kInjectionResult]: T }
+
+function encode<T>(descriptor: InjectionDescriptor<any>): InjectionResult<T> {
+  return descriptor as InjectionResult<T>
+}
+
+type InjectedField<V> = V extends InjectionToken<infer T>
+  ? T
+  : V extends { readonly [kInjectionResult]: infer T }
+    ? T
+    : V extends { resolver: symbol }
+      ? V extends InjectionDescriptor<infer T> ? T : never
+      : V extends { key: infer K }
+        ? ResolveInjection<K>
+        : V extends object
+          ? InjectedOf<V>
+          : never
 
 /**
  * allOf creates an injection descriptor that injects all bindings associated with given key.
@@ -106,7 +163,9 @@ type ObjectInjectionSpec = {
  * }
  * ```
  */
-function allOf(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
+function allOf<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+  keyOrDescriptor: K,
+): InjectionResult<ResolveInjection<K>[]> {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
@@ -120,14 +179,14 @@ function allOf(keyOrDescriptor: InjectionToken | InjectionDescriptor): Injection
       )
     }
 
-    return { ...descriptor, multiple: true }
+    return encode({ ...descriptor, multiple: true })
   }
 
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(`Cannot call 'allOf': key is null or undefined`)
   }
 
-  return { key: keyOrDescriptor as InjectionToken, multiple: true, resolver: BuiltInResolvers.DEFAULT }
+  return encode({ key: keyOrDescriptor as InjectionToken, multiple: true, resolver: BuiltInResolvers.DEFAULT })
 }
 
 /**
@@ -157,7 +216,9 @@ function allOf(keyOrDescriptor: InjectionToken | InjectionDescriptor): Injection
  * }
  * ```
  */
-function ordered(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
+function ordered<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+  keyOrDescriptor: K,
+): InjectionResult<ResolveInjection<K>[]> {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
@@ -171,14 +232,14 @@ function ordered(keyOrDescriptor: InjectionToken | InjectionDescriptor): Injecti
       )
     }
 
-    return { ...descriptor, resolver: BuiltInResolvers.ORDERED }
+    return encode({ ...descriptor, resolver: BuiltInResolvers.ORDERED })
   }
 
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(`Cannot call 'ordered': key is null or undefined`)
   }
 
-  return { key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.ORDERED }
+  return encode({ key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.ORDERED })
 }
 
 /**
@@ -210,7 +271,7 @@ function ordered(keyOrDescriptor: InjectionToken | InjectionDescriptor): Injecti
  *
  * ```
  */
-function mapped(key: InjectionToken): InjectionDescriptor {
+function mapped<K extends InjectionToken<any>>(key: K): InjectionResult<Map<string, ResolveInjection<K>>> {
   if (key == null) {
     throw new ErrMissingInjectionKey(
       `Cannot call 'mapped': key is null or undefined`
@@ -221,7 +282,7 @@ function mapped(key: InjectionToken): InjectionDescriptor {
     )
   }
 
-  return { key, resolver: BuiltInResolvers.MAP }
+  return encode({ key, resolver: BuiltInResolvers.MAP })
 }
 
 /**
@@ -238,8 +299,8 @@ function mapped(key: InjectionToken): InjectionDescriptor {
  * }
  * ```
  */
-function defer(keyFn: () => InjectionToken): InjectionDescriptor {
-  return { key: new DeferredCtor(keyFn), resolver: BuiltInResolvers.DEFER }
+function defer<K extends InjectionToken<any>>(keyFn: () => K): InjectionResult<ResolveInjection<K>> {
+  return encode({ key: new DeferredCtor(keyFn), resolver: BuiltInResolvers.DEFER })
 }
 
 /**
@@ -255,9 +316,11 @@ function defer(keyFn: () => InjectionToken): InjectionDescriptor {
  * }
  * ```
  */
-function optional(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
+function optional<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+  keyOrDescriptor: K,
+): InjectionResult<ResolveInjection<K> | undefined> {
   if (isValidKey(keyOrDescriptor)) {
-    return { key: keyOrDescriptor as InjectionToken, optional: true }
+    return encode({ key: keyOrDescriptor as InjectionToken, optional: true })
   }
 
   const descriptor = keyOrDescriptor as InjectionDescriptor
@@ -268,7 +331,7 @@ function optional(keyOrDescriptor: InjectionToken | InjectionDescriptor): Inject
     )
   }
 
-  return { ...descriptor, optional: true }
+  return encode({ ...descriptor, optional: true })
 }
 
 /**
@@ -284,8 +347,8 @@ function optional(keyOrDescriptor: InjectionToken | InjectionDescriptor): Inject
  * }
  * ```
  */
-function object(spec: ObjectInjectionSpec): InjectionDescriptor {
-  return { resolver: BuiltInResolvers.OBJECT, args: parseObjectSpec(spec) }
+function object<const S extends ObjectInjectionSpec>(spec: S): InjectionResult<InjectedOf<S>> {
+  return encode({ resolver: BuiltInResolvers.OBJECT, args: parseObjectSpec(spec) })
 }
 
 /**
@@ -304,7 +367,9 @@ function object(spec: ObjectInjectionSpec): InjectionDescriptor {
  * }
  * ```
  */
-function provide(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor {
+function provide<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+  keyOrDescriptor: K,
+): InjectionResult<Provider<ResolveInjection<K>>> {
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(
       `Cannot call 'provide': key is null or undefined`
@@ -316,7 +381,7 @@ function provide(keyOrDescriptor: InjectionToken | InjectionDescriptor): Injecti
   }
 
   if (isValidKey(keyOrDescriptor)) {
-    return { key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.PROVIDER }
+    return encode({ key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.PROVIDER })
   }
 
   const descriptor = keyOrDescriptor as InjectionDescriptor
@@ -327,7 +392,7 @@ function provide(keyOrDescriptor: InjectionToken | InjectionDescriptor): Injecti
     )
   }
 
-  return { ...descriptor, resolver: BuiltInResolvers.PROVIDER }
+  return encode({ ...descriptor, resolver: BuiltInResolvers.PROVIDER })
 }
 
 /**
@@ -344,8 +409,8 @@ function provide(keyOrDescriptor: InjectionToken | InjectionDescriptor): Injecti
  * }
  * ```
  */
-function just<T = unknown>(value: T): InjectionDescriptor {
-  return { resolver: BuiltInResolvers.VALUE, args: value }
+function just<T>(value: T): InjectionResult<T> {
+  return encode({ resolver: BuiltInResolvers.VALUE, args: value })
 }
 
 /**
@@ -380,11 +445,11 @@ function just<T = unknown>(value: T): InjectionDescriptor {
 function value<T = unknown, R = unknown>(
   access: ((provider: T) => R) | string,
   defaultValue?: R,
-): InjectionDescriptor<R> {
-  return {
+): InjectionResult<R> {
+  return encode({
     resolver: BuiltInResolvers.CONFIG,
     args: { access, defaultValue },
-  }
+  })
 }
 
 /**
@@ -393,7 +458,10 @@ function value<T = unknown, R = unknown>(
  * @param key - The key to compose the injection descriptors for.
  * @param fns - The injection functions to compose.
  */
-function compose(key: InjectionToken, ...fns: Array<(key: InjectionToken) => InjectionDescriptor>): InjectionDescriptor {
+function compose(
+  key: InjectionToken<any>,
+  ...fns: Array<(key: InjectionToken<any>) => InjectionDescriptor<any>>
+): InjectionDescriptor<any> {
   return fns.reduce((acc, fn) => ({ ...acc, ...fn(key) }), {} as InjectionDescriptor)
 }
 

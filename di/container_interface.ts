@@ -149,6 +149,10 @@ export interface Container {
 
   getBindingsByLabel(label: symbol): BindingDescriptor[]
 
+  /**
+   * Whether the key can be resolved — including through a name it aliases or a subclass bound with
+   * `.extends(key)`. True exactly when {@link get} would resolve.
+   */
   has<T>(key: InjectionToken<T>): boolean
 
   hasScopeInGraph(key: InjectionToken, scopeID: Identifier): boolean

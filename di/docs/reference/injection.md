@@ -2,6 +2,7 @@
 
 - [Injection type](#injection-type)
 - [InjectionDescriptor](#injectiondescriptor)
+- [ResolveInjection and InjectedOf](#resolveinjection-and-injectedof)
 - [Helpers](#helpers)
   - [allOf](#allof)
   - [optional](#optional)
@@ -9,24 +10,18 @@
   - [mapped](#mapped)
   - [object](#object)
   - [defer](#defer)
-  - [useValue](#usevalue)
+  - [just](#just)
   - [compose](#compose)
 
-Prefer the helper functions over building an `InjectionDescriptor` manually — they are
+Prefer the `$i` helpers over building an `InjectionDescriptor` manually — they are
 more concise, composable, and less error-prone.
 
-All helpers are exported individually or through the `inject` namespace:
-
 ```ts
-// named imports
-import { allOf, optional, provide, mapped, object, defer, useValue } from '@caffeinejs/di'
+import { $i } from '@caffeinejs/di'
 
-// namespace import — all helpers available as inject.*
-import { inject } from '@caffeinejs/di'
-
-inject.allOf(Plugin)
-inject.optional(Logger)
-inject.provide(EmailSender)
+$i.allOf(Plugin)
+$i.optional(Logger)
+$i.provide(EmailSender)
 ```
 
 ---
@@ -38,11 +33,11 @@ type Injection<T = unknown> = InjectionToken<T> | InjectionDescriptor<T>
 ```
 
 Every place that accepts a dependency specification accepts either a bare `InjectionToken`
-or a full `InjectionDescriptor`. Helpers like `optional()` and `allOf()` return
+or a full `InjectionDescriptor`. Helpers like `$i.optional()` and `$i.allOf()` return
 `InjectionDescriptor` values that you pass in the same position.
 
 ```ts
-@Injectable([Logger, optional(Database), allOf(Plugin)])
+@Injectable([Logger, $i.optional(Database), $i.allOf(Plugin)])
 class App { ... }
 ```
 
@@ -51,13 +46,51 @@ class App { ... }
 ## InjectionDescriptor
 
 ```ts
-type InjectionDescriptor<T = any> = {
-  key?: InjectionToken<T>       // the dependency key
-  multiple?: boolean // inject all bindings for the key (returns T[])
-  optional?: boolean // ok if missing — injects undefined instead of throwing
-  resolver?: symbol  // custom resolver (overrides the default)
-  args?: unknown     // extra arguments passed to the resolver
+type InjectionDescriptor<T = unknown> = {
+  key?: InjectionToken<any>  // lookup token (independent of T when a helper wraps the result)
+  multiple?: boolean         // inject all bindings for the key
+  optional?: boolean         // ok if missing — injects undefined instead of throwing
+  resolver?: symbol          // custom resolver (overrides the default)
+  args?: unknown             // extra arguments passed to the resolver
 }
+```
+
+`T` is the **resolved** value the consumer receives, not necessarily the lookup
+key. `$i.optional(K)` encodes `U | undefined`, `$i.allOf(K)` encodes `U[]`,
+`$i.provide(K)` encodes `Provider<U>`, and so on.
+
+---
+
+## ResolveInjection and InjectedOf
+
+```ts
+type ResolveInjection<I> = I extends InjectionToken<infer T>
+  ? T
+  : I extends InjectionDescriptor<infer T>
+    ? T
+    : never
+
+type ObjectInjectionSpec = {
+  [prop: string | symbol]: InjectionToken<any> | InjectionDescriptor<any> | ObjectInjectionSpec
+}
+
+type InjectedOf<S> = { [K in keyof S]: /* token → instance, descriptor → T, nested spec → recurse */ }
+```
+
+`InjectedOf<typeof spec>` turns an `$i.object` spec into the instance bag type.
+A class is the token — do not wrap it in `token()`.
+
+```ts
+class UserService {}
+class OrderService {}
+
+const spec = {
+  us: UserService,
+  os: $i.optional(OrderService),
+}
+
+type Bag = InjectedOf<typeof spec>
+// { us: UserService, os: OrderService | undefined }
 ```
 
 ---
@@ -67,7 +100,7 @@ type InjectionDescriptor<T = any> = {
 ### allOf
 
 ```ts
-allOf(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor
+$i.allOf<K>(keyOrDescriptor: K): InjectionDescriptor<ResolveInjection<K>[]>
 ```
 
 Injects all bindings registered for a key as an array. This is the injection
@@ -84,7 +117,7 @@ class RequiredValidator extends Validator { ... }
 @Injectable()
 class MaxLengthValidator extends Validator { ... }
 
-@Injectable([allOf(Validator)])
+@Injectable([$i.allOf(Validator)])
 class Pipeline {
   constructor(readonly validators: Validator[]) {}
 }
@@ -93,14 +126,14 @@ class Pipeline {
 ### optional
 
 ```ts
-optional(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor
+$i.optional<K>(keyOrDescriptor: K): InjectionDescriptor<ResolveInjection<K> | undefined>
 ```
 
 Marks a dependency as optional. If no binding is registered for the key, the
 container injects `undefined` instead of throwing.
 
 ```ts
-@Injectable([optional(FeatureFlags)])
+@Injectable([$i.optional(FeatureFlags)])
 class UserService {
   constructor(private readonly flags?: FeatureFlags) {}
 }
@@ -109,13 +142,13 @@ class UserService {
 Can be combined with other helpers:
 
 ```ts
-@Injectable([optional(allOf(Plugin))])
+@Injectable([$i.optional($i.allOf(Plugin))])
 ```
 
 ### provide
 
 ```ts
-provide(keyOrDescriptor: InjectionToken | InjectionDescriptor): InjectionDescriptor
+$i.provide<K>(keyOrDescriptor: K): InjectionDescriptor<Provider<ResolveInjection<K>>>
 ```
 
 Wraps the resolved dependency in a `Provider<T>`. The provider's `get()` method
@@ -128,7 +161,7 @@ interface Provider<T> {
   get(): T
 }
 
-@Injectable([provide(TransientEmailSender)])
+@Injectable([$i.provide(TransientEmailSender)])
 @Lifetime(Scopes.SINGLETON)
 class NotificationService {
   constructor(private readonly sender: Provider<TransientEmailSender>) {}
@@ -142,7 +175,7 @@ class NotificationService {
 ### mapped
 
 ```ts
-mapped(key: InjectionToken): InjectionDescriptor
+$i.mapped<K>(key: K): InjectionDescriptor<Map<string, ResolveInjection<K>>>
 ```
 
 Injects all bindings for `key` as a `Map<string, T>`, where the map key is
@@ -160,7 +193,7 @@ class HorrorMovie implements Movie { ... }
 @Named('comedy')
 class ComedyMovie implements Movie { ... }
 
-@Injectable([mapped(kMovie)])
+@Injectable([$i.mapped(kMovie)])
 class MovieService {
   constructor(readonly movies: Map<string, Movie>) {}
   // movies.get('horror') → HorrorMovie instance
@@ -170,30 +203,27 @@ class MovieService {
 ### object
 
 ```ts
-object(spec: ObjectInjectionSpec): InjectionDescriptor
+$i.object<const S extends ObjectInjectionSpec>(spec: S): InjectionDescriptor<InjectedOf<S>>
 ```
 
 Injects multiple dependencies into a single constructor parameter as an object.
 The `spec` argument maps property names to injection keys or
-descriptors.
+descriptors. Use `InjectedOf<typeof spec>` when you want the bag type without
+repeating it by hand.
 
 ```ts
-type ObjectInjectionSpec = {
-  [prop: string | symbol]: InjectionToken | InjectionDescriptor | ObjectInjectionSpec
-}
-```
+const spec = { db: Database, logger: $i.optional(Logger) }
 
-```ts
-@Injectable([object({ db: Database, logger: optional(Logger) })])
+@Injectable([$i.object(spec)])
 class UserService {
-  constructor(readonly deps: { db: Database; logger?: Logger }) {}
+  constructor(readonly deps: InjectedOf<typeof spec>) {}
 }
 ```
 
 ### defer
 
 ```ts
-defer(keyFn: () => InjectionToken): InjectionDescriptor
+$i.defer<K>(keyFn: () => K): InjectionDescriptor<ResolveInjection<K>>
 ```
 
 Defers key resolution until the container constructs the instance. Use this
@@ -201,9 +231,9 @@ when a circular module import would cause the key to be `undefined` at class
 declaration time.
 
 ```ts
-import { defer } from '@caffeinejs/di'
+import { $i } from '@caffeinejs/di'
 
-@Injectable([defer(() => B)])
+@Injectable([$i.defer(() => B)])
 class A {
   constructor(private readonly b: B) {}
 }
@@ -214,16 +244,16 @@ class B {
 }
 ```
 
-### useValue
+### just
 
 ```ts
-useValue<T>(value: T): InjectionDescriptor
+$i.just<T>(value: T): InjectionDescriptor<T>
 ```
 
 Injects a constant value directly, without a container binding.
 
 ```ts
-@Injectable([useValue('localhost'), useValue(5432)])
+@Injectable([$i.just('localhost'), $i.just(5432)])
 class DatabaseClient {
   constructor(readonly host: string, readonly port: number) {}
 }
@@ -232,12 +262,12 @@ class DatabaseClient {
 ### compose
 
 ```ts
-compose(key: InjectionToken, ...fns: Array<(key: InjectionToken) => InjectionDescriptor>): InjectionDescriptor
+$i.compose(key: InjectionToken, ...fns: Array<(key: InjectionToken) => InjectionDescriptor>): InjectionDescriptor
 ```
 
 Composes multiple injection modifier functions around a single key. Applies
 each function's result to the descriptor from left to right.
 
 ```ts
-const injectOptionalMany = (key: InjectionToken) => compose(key, optional, allOf)
+const injectOptionalMany = (key: InjectionToken) => $i.compose(key, $i.optional, $i.allOf)
 ```

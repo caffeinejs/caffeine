@@ -276,3 +276,23 @@ describe('Named Dependencies', function () {
     })
   })
 })
+
+describe('has() and a named binding', function () {
+  it('reports a name the binding was registered under as present', async function () {
+    const kAlias = token<any>(Symbol('has-named-alias'))
+    const kUnused = token<any>(Symbol('has-named-unused'))
+
+    class NamedSvc {
+      tag(): string { return 'named' }
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(NamedSvc).toSelf().names(kAlias)
+    await di.init()
+
+    // The same index `get` resolves from, so the two cannot disagree.
+    expect(di.has(kAlias)).toBe(true)
+    expect((di.get(kAlias) as NamedSvc).tag()).toBe('named')
+    expect(di.has(kUnused)).toBe(false)
+  })
+})

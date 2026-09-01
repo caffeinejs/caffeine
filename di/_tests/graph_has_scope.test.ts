@@ -138,3 +138,44 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
     expect(di.hasScopeInGraph(kController, Scopes.TRANSIENT)).toBe(false)
   })
 })
+
+// The graph walk guarded each dependency with `has(injKey)` before iterating `getBindings(injKey)`. `has`
+// read the registry, which never holds a base key, so a dependency injected through an abstract base was
+// not walked and its scope did not count. That decides whether a request scope is started around a
+// middleware, a guard or a Kafka listener.
+describe('hasScopeWithinGraph through a polymorphic dependency', function () {
+  abstract class GhsStore {
+    abstract read(): string
+  }
+
+  class GhsRequestStore extends GhsStore {
+    read(): string { return 'scoped' }
+  }
+
+  class GhsConsumer {
+    constructor(readonly store: GhsStore) {}
+  }
+
+  it('counts the scope of a dependency injected through an abstract base key', async function () {
+    const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
+    di.bind(GhsRequestStore).toSelf().extends(GhsStore)
+      .lifetime(Scopes.TRANSIENT)
+    di.bind(GhsConsumer).toClass(GhsConsumer, [GhsStore])
+      .lifetime(Scopes.SINGLETON)
+    await di.init()
+
+    // Only reachable through GhsStore, which is a key nothing is bound directly under.
+    expect(di.hasScopeInGraph(GhsConsumer, Scopes.TRANSIENT)).toBe(true)
+  })
+
+  it('still reports false when the polymorphic dependency is not in that scope', async function () {
+    const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
+    di.bind(GhsRequestStore).toSelf().extends(GhsStore)
+      .lifetime(Scopes.SINGLETON)
+    di.bind(GhsConsumer).toClass(GhsConsumer, [GhsStore])
+      .lifetime(Scopes.SINGLETON)
+    await di.init()
+
+    expect(di.hasScopeInGraph(GhsConsumer, Scopes.TRANSIENT)).toBe(false)
+  })
+})

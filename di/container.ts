@@ -473,13 +473,14 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Checks if a binding is registered for the given key.
-   * It will automatically check the parent container if the binding is not registered in this one.
+   * Checks whether the given key can be resolved: by a binding registered under it, by one bound under a
+   * name it aliases, or by a subclass bound with `.extends(key)`. Falls through to the parent container.
    *
-   * @param key - The key to check for.
+   * True exactly when {@link get} would resolve, so a key that resolves is never reported absent. Whether a
+   * binding is registered *directly* under the key is a different question this does not answer.
    */
   has<T>(key: InjectionToken<T>): boolean {
-    return this.registry.has(key) || (this.parent?.has(key) ?? false)
+    return this.getBindings(key).length > 0
   }
 
   /**
@@ -1930,11 +1931,13 @@ export class CaffeineIoC implements Container {
       ]
 
       for (const injKey of injKeys) {
-        if (injKey != null && this.has(injKey)) {
-          for (const dep of this.getBindings(injKey)) {
-            if (!visited.has(dep.id)) {
-              queue.push(dep)
-            }
+        if (injKey == null) {
+          continue
+        }
+
+        for (const dep of this.getBindings(injKey)) {
+          if (!visited.has(dep.id)) {
+            queue.push(dep)
           }
         }
       }
@@ -1968,11 +1971,13 @@ export class CaffeineIoC implements Container {
         ]
 
         for (const injKey of injKeys) {
-          if (injKey != null && this.has(injKey)) {
-            for (const dep of this.getBindings(injKey)) {
-              if (!visited.has(dep.id)) {
-                q.push(dep)
-              }
+          if (injKey == null) {
+            continue
+          }
+
+          for (const dep of this.getBindings(injKey)) {
+            if (!visited.has(dep.id)) {
+              q.push(dep)
             }
           }
         }

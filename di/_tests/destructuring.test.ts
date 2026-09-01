@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, expectTypeOf } from 'vitest'
 import { token } from '../key.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
-import { $i } from '../injection.js'
+import { $i, type InjectedOf } from '../injection.js'
 import { CaffeineIoC } from '../container.js'
 
 describe('Destructuring', function () {
@@ -80,6 +80,14 @@ describe('Destructuring', function () {
   class SymbolKeyed {
     constructor(readonly args: { [kSymbolField]: Dep1 }) {}
   }
+
+  it('infers the deps bag from an object spec', function () {
+    const spec = {
+      dep1: Dep1,
+      dep2: $i.optional(Dep2),
+    }
+    expectTypeOf<InjectedOf<typeof spec>>().toEqualTypeOf<{ dep1: Dep1, dep2: Dep2 | undefined }>()
+  })
 
   it('should resolve argument bag in same well it would resolve normal args', async function () {
     const di = new CaffeineIoC()
