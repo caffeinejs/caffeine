@@ -2,8 +2,20 @@ import { createGzip, createBrotliCompress } from 'node:zlib'
 import { Readable } from 'node:stream'
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import compress from '@fastify/compress'
-import { Controller, Post, createWebApplication, fastifyAdapterFactory, Encoding } from '../index.js'
+import {
+  Controller,
+  Post,
+  RouteBuilder,
+  createWebApplication,
+  fastifyAdapterFactory,
+} from '@caffeinejs/http'
+import { Encoding, encoding, compressPlugin } from '../index.js'
+
+function encodingApp() {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .extend(compressPlugin())
+    .compress()
+}
 
 async function gzip(data: string): Promise<Buffer> {
   const chunks: Buffer[] = []
@@ -38,10 +50,7 @@ describe('Encoding', () => {
 
     void [SingleEncodingController]
 
-    const server = fastify()
-    await server.register(compress, { global: true })
-
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = encodingApp().build()
     await app.ready()
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
@@ -63,10 +72,7 @@ describe('Encoding', () => {
 
     void [MultiEncodingController]
 
-    const server = fastify()
-    await server.register(compress, { global: true })
-
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = encodingApp().build()
     await app.ready()
 
     const gzipPayload = await gzip(JSON.stringify({ msg: 'hello' }))
@@ -97,10 +103,7 @@ describe('Encoding', () => {
 
     void [ClassEncodingController]
 
-    const server = fastify()
-    await server.register(compress, { global: true })
-
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = encodingApp().build()
     await app.ready()
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
@@ -111,5 +114,17 @@ describe('Encoding', () => {
 
     expect(resA.status).toBe(415)
     expect(resB.status).toBe(415)
+  })
+
+  describe('encoding() extension', () => {
+    it('writes the same spec as an equivalent options.decompress assignment', () => {
+      const viaExtension = new RouteBuilder()
+      encoding('gzip')(viaExtension)
+
+      const viaOptions = new RouteBuilder()
+      viaOptions.options('decompress', { requestEncodings: ['gzip'] })
+
+      expect(viaExtension.toRoute().options).toEqual(viaOptions.toRoute().options)
+    })
   })
 })

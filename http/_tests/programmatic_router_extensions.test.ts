@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import fastify from 'fastify'
-import fastifyCompress from '@fastify/compress'
 import { $t } from '@caffeinejs/std'
 import {
   Args,
@@ -10,14 +9,12 @@ import {
   Router,
   bodyAsBuffer,
   bodyAsStream,
-  compress,
   createWebApplication,
-  encoding,
   fastifyAdapterFactory,
   fst,
   type RouteExtension,
 } from '../index.js'
-import { RouteBuilder, RouteGroupBuilder } from '../routing/builder.js'
+import { RouteBuilder } from '../routing/builder.js'
 import { kBodyBuffer } from '../decorators/keys/keys.js'
 import { $p } from '../route_picker.js'
 
@@ -93,32 +90,6 @@ describe('route extensions', () => {
     })
   })
 
-  describe('given an extension applied at group level', () => {
-    it('should reach every route of the group', async () => {
-      const server = fastify()
-      await server.register(fastifyCompress, { global: true })
-
-      const router = new Router('/ext-compress').with(compress(false))
-      router.get('/a').handler(() => ({ message: 'hello world'.repeat(100) }))
-      router.get('/b').handler(() => ({ message: 'hello world'.repeat(100) }))
-
-      const compressed = new Router('/ext-compressed')
-      compressed.get('/a').handler(() => ({ message: 'hello world'.repeat(100) }))
-
-      const app = createWebApplication(fastifyAdapterFactory(server)).build().mount(router, compressed)
-      await app.ready()
-
-      const headers = { 'accept-encoding': 'br, gzip, deflate' }
-
-      expect((await app.fetch('/ext-compress/a', { headers })).headers.get('content-encoding')).toBeNull()
-      expect((await app.fetch('/ext-compress/b', { headers })).headers.get('content-encoding')).toBeNull()
-      expect((await app.fetch('/ext-compressed/a', { headers })).headers.get('content-encoding'))
-        .toMatch(/br|gzip|deflate/)
-
-      await app.close()
-    })
-  })
-
   describe('given several extensions in one call', () => {
     it('should apply them in argument order', () => {
       const seen: string[] = []
@@ -137,27 +108,12 @@ describe('route extensions', () => {
   describe('given a decorator and its extension', () => {
     it('should write the same spec', () => {
       const viaExtension = new RouteBuilder()
-      compress(false)(viaExtension)
-      encoding('gzip')(viaExtension)
       bodyAsBuffer()(viaExtension)
 
       const viaDecoratorEquivalent = new RouteBuilder()
-      viaDecoratorEquivalent.options('compress', false)
-      viaDecoratorEquivalent.options('decompress', { requestEncodings: ['gzip'] })
       viaDecoratorEquivalent.extras(kBodyBuffer, true)
 
-      const a = viaExtension.toRoute()
-      const b = viaDecoratorEquivalent.toRoute()
-
-      expect(a.options).toEqual(b.options)
-      expect(a.extras).toEqual(b.extras)
-    })
-
-    it('should apply at group level too', () => {
-      const group = new RouteGroupBuilder()
-      compress({ threshold: 1024 })(group)
-
-      expect(group.toRouteGroup().options?.get('compress')).toEqual({ threshold: 1024 })
+      expect(viaExtension.toRoute().extras).toEqual(viaDecoratorEquivalent.toRoute().extras)
     })
   })
 })

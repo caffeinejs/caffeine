@@ -455,7 +455,6 @@ describe('fst options', () => {
   it('accepts what Fastify accepts', () => {
     expectTypeOf(fst).toBeCallableWith({ attachValidation: true })
     expectTypeOf(fst).toBeCallableWith({ logLevel: 'debug' })
-    expectTypeOf(fst).toBeCallableWith({ compress: false })
   })
 
   it('rejects the keys the router owns', () => {

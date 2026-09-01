@@ -48,6 +48,9 @@
       "path": "./cors"
     },
     {
+      "path": "./compress"
+    },
+    {
       "path": "./multipart"
     },
     {

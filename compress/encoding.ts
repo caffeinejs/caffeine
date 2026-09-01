@@ -1,5 +1,4 @@
-import type { AnyRouteExtension } from '../routing/programmatic/extension.js'
-import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
+import { configureRoute, configureRouteGroup, type AnyRouteExtension } from '@caffeinejs/http'
 
 type EncodingToken = 'zstd' | 'br' | 'deflate' | 'gzip' | 'identity'
 
@@ -12,6 +11,11 @@ export function encoding(encodings: EncodingToken | EncodingToken[]): AnyRouteEx
   }
 }
 
+/**
+ * The request content encodings a controller or a single route decompresses.
+ *
+ * The programmatic form is {@link encoding}.
+ */
 export function Encoding(encodings: EncodingToken | EncodingToken[]) {
   return (fn: Function, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {
     if (context.kind === 'class') {

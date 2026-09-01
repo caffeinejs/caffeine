@@ -1,0 +1,5 @@
+export { CompressBuilder } from './builder.js'
+export { Compress, compress } from './compress.js'
+export { Encoding, encoding } from './encoding.js'
+export { CompressExtension, type CompressOptions } from './extension.js'
+export { compressPlugin, type CompressPluginExt } from './plugin.js'

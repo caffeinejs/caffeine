@@ -12,6 +12,7 @@
     "std",
     "http",
     "cors",
+    "compress",
     "multipart",
     "view",
     "static",

@@ -6,7 +6,7 @@ import type { AnyRouteExtension } from './routing/programmatic/extension.js'
  *
  * What is left is the whole of what Fastify accepts and this package does not decide: every lifecycle hook,
  * `errorHandler`, the validator and serializer compilers, `attachValidation`, `logLevel`, `constraints`, `version`,
- * `exposeHeadRoute`, `prefixTrailingSlash` — and `compress` / `decompress` where `@fastify/compress` is installed.
+ * `exposeHeadRoute`, `prefixTrailingSlash`.
  *
  * The omissions are the keys the adapter writes for itself: `method` and `url` come from the verb and the path,
  * `schema` from `.schema()`, `bodyLimit` from `.bodyLimit()`, `handlerTimeout` from `.timeout()`, and `config`

@@ -74,8 +74,8 @@ app.mount(pets)                         // before app.ready()
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
 - `.with(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
-  `bodyAsBuffer()`, `bodyAsStream()`, `compress(opts)`, `encoding(tokens)` and `fst(options)`; openapi ships
-  `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
+  `bodyAsBuffer()`, `bodyAsStream()` and `fst(options)`; compress ships `compress(opts)` and `encoding(tokens)`;
+  openapi ships `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
 - `fst({ ... })` is the Fastify escape hatch: lifecycle hooks, `attachValidation`, `logLevel`, custom compilers —
   everything Fastify takes except what the router already decides (`method`, `url`, `schema`, `config`, `handler`,
   `bodyLimit`, `handlerTimeout`).
