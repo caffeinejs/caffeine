@@ -157,6 +157,35 @@ first. Keys are made with `contributionKey<T>('namespace:name')`; the type argum
 - `.name` and `code` align: `ErrFoo` → `this.name = 'ErrFoo'`, `code = 'ERR_FOO'`
 - Fixed, context-free solutions may call `solutions()` in the constructor. Contextual errors call `solutions()` at the throw site.
 
+## Documentation
+
+TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write for the caller. Summary sentence first; details after a blank line. Do not document every export.
+
+Write it when behavior surprises, sibling APIs look alike, callers must handle a specific `Err*` (`@throws`), a parameter’s meaning is not its name, or a generic/overload is non-obvious.
+
+Do not restate the type, narrate the implementation, or TSDoc tests and obvious getters. Private `_` modules: a short `//` if a maintainer will get hurt, not a public block.
+
+No design history in hover (“we rejected Nest”). Do document observable why when it **is** the contract (headers stay open because Ajv `removeAdditional` would strip `host`).
+
+Do not analogize to Nest, Spring, ASP.NET, or Express in docs or TSDoc. Naming this package’s real peer (Fastify in `@caffeinejs/http`) is allowed when the reader must know it.
+
+Tags: `{@link Symbol}`; `@param name -` only when the name is insufficient; `@throws`; `@example` only for call shapes types hide. Skip `@returns` unless the meaning is not the type. No `@class`, `@function`, or `@type`.
+
+Voice: sentence case; complete sentences; same acronym rules as identifiers. No `NOTE:`, `IMPORTANT:`, or changelogs.
+
+```ts
+// correct — contract + why it surprises
+/**
+ * Compiles an authored schema to Fastify JSON Schema.
+ *
+ * `headers` stays open: Ajv `removeAdditional` would strip `host`.
+ * @param context - Route id in failures, e.g. `POST /pets`
+ */
+
+// wrong — restates types / ADR / Nest
+/** Takes a schema and returns FastifySchema like Nest ValidationPipe. */
+```
+
 ## Acronym casing
 
 One consistent case — never JS Title-case. Go convention: `URL`, `ID`, `OIDC`, `HTTP`, `JSON`.
