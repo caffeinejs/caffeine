@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CaffeineIoC } from '../container.js'
+import { DeferredCtor } from '../deferred_ctor.js'
 import { ErrNoResolutionForKey } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
@@ -149,6 +150,44 @@ describe('$i.object', function () {
 
       expect(bag.singleton).toBe(bag.singleton)
       expect(bag.transient).not.toBe(bag.transient)
+    })
+  })
+
+  describe('given a raw key as a field value', function () {
+    it('should resolve it as an injection, in every form a key takes', async function () {
+      const kNamed = token<Singleton>(Symbol('object-named-key'))
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Singleton).toSelf().names(kNamed)
+      await di.init()
+
+      const bag = di.resolver($i.object({
+        byClass: Singleton,
+        byToken: kNamed,
+        byDeferred: new DeferredCtor(() => Singleton),
+      }))()
+
+      expect(bag.byClass).toBeInstanceOf(Singleton)
+      expect(bag.byToken).toBeInstanceOf(Singleton)
+      expect(bag.byDeferred).toBeInstanceOf(Singleton)
+    })
+  })
+
+  describe('given a hand-written descriptor literal', function () {
+    it('should read it as a nested bag, since only a helper marks a descriptor', async function () {
+      const di = await container()
+      const bag = di.resolver($i.object({ cfg: { key: Singleton } }))()
+
+      expect(bag.cfg.key).toBeInstanceOf(Singleton)
+    })
+  })
+
+  describe('given a composed descriptor', function () {
+    it('should still be recognised as one, not walked as a bag', async function () {
+      const di = await container()
+      const composed = $i.compose(Absent, k => $i.optional(k))
+      const bag = di.resolver($i.object({ absent: composed }))()
+
+      expect(bag.absent).toBeUndefined()
     })
   })
 

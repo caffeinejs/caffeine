@@ -50,14 +50,38 @@ expect(di.get(Svc)).toBeInstanceOf(Svc)
 
 The only tests that are safe to skip `init()` are those that inspect container metadata without resolving instances (e.g. `di.has()`, `di.size`, `di.getBinding()`).
 
-## Object injection resolves through the registry
+## Three modules own resolution, and the split is load-bearing
 
-A field of an `$i.object` spec is compiled by the factory its descriptor names, looked up with `resolverFor` — the same path a constructor parameter takes. `compileObjectNode` (`internal/core/resolver/object.ts`) does **not** reimplement any helper, and a new helper needs nothing added there. It used to, which is why `just`, `value`, `provide`, `ordered`, `mapped` and a nested `$i.object` all typed correctly and resolved to something else.
+`injection_resolver_registry.ts` is a leaf: the `InjectionResolver` / `InjectionResolverFactory` /
+`InjectionResolverFactoryContext` types, `BuiltInResolvers`, the registry `Map`, `bindResolver`, `unbindResolver`,
+`hasResolver`, `resolverFor`, and `defaultResolverFor` (the shared rule for a descriptor naming no resolver:
+`DEFER` for a `DeferredCtor` key, `DEFAULT` otherwise). It imports no factory, so it can be imported from anywhere
+— including `internal/core/resolver/*`, which is where its types are consumed. **This is the module to import
+from.** There is no re-export barrel in front of it, and adding one would violate `CONVENTIONS.md`.
 
-`object.ts` importing `resolverFor` closes a module cycle with `injection_resolver.ts`. It is safe because the lookup happens when a field is compiled, long after both module bodies have run — do not move it to module scope.
+`BuiltInResolvers` lives in the registry, not beside the factories, because `defaultResolverFor` reads two of its
+symbols. Moving them out would make the registry import `built_in_resolvers.ts`, which imports the factories, one
+of which (`object.ts`) imports the registry.
 
-Two things the leaf still decides for itself: a descriptor naming no resolver defaults to `DEFAULT`, or to `DEFER` when its key is a `DeferredCtor`, since `isValidKey` accepts one written straight into a spec.
+`built_in_resolvers.ts` exports one table pairing each built-in name with its factory. It performs no registration
+and has no side effect. **Nothing under `internal/core/resolver/` may import it** — that import is the cycle the
+split exists to avoid.
 
-`parseObjectSpec` tells a descriptor from a nested spec with `'key' in value || 'resolver' in value` — `just` and `value` set only a resolver. It is a heuristic: a sub-bag with a field literally named `key` or `resolver` is misread. `InjectedField` tests the same thing, so the type and the runtime agree on what they get wrong.
+`container.ts` is what wires them, looping the table through `bindResolver` at module scope. That is a real value
+dependency, so the built-ins cannot be silently dropped by tidying an unused import, and module scope gives
+run-once semantics that make `bindResolver`'s duplicate-name throw a non-issue. A resolution before that loop runs
+fails loudly with `ErrUnknownResolver`, which every test in the suite would catch.
+
+`InjectionResolverFactoryContext` carries no compilation hook — it is the same shape a custom resolver registered
+with `bindResolver` has always seen. Do not widen it for one factory's internal need; route that factory to the
+registry instead, the way `object.ts` does.
+
+## A descriptor is what `encode()` marked
+
+`encode()` stamps `kInjectionDescriptor`, and every `$i` helper returns through it. That one mark is what both sides read: `InjectedField` tests it at the type level, `isDescriptor` tests it at run time. There is no heuristic left to drift — which matters, because the type and the runtime each guessing separately is precisely how `$i.just` came to typecheck and then throw.
+
+So inside an object spec a descriptor **must** come from a helper. A raw key still works in every form (`isValidKey` is tested first: a class, a `token(...)`, a bare string or symbol, a `DeferredCtor`), and every other object is a nested bag — including a hand-written `{ key: X }` literal, which is a bag and not an injection.
+
+The mark is non-enumerable, so it stays out of deep-equality and any dump of a descriptor. A spread therefore drops it: a helper that builds on another must end by calling `encode` rather than by spreading, and `compose` does exactly that.
 
 Fields are lazy getters that resolve through the binding on every read. That is what makes one cached bag correct for singleton, transient and request scope alike — never make a field resolve eagerly.

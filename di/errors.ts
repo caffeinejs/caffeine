@@ -1,13 +1,5 @@
 import { keyStr, InjectionToken, Identifier } from './key.js'
-import { Named } from './decorators/named.js'
-import { Primary } from './decorators/primary.js'
-import { ConditionalOn } from './decorators/conditional_on.js'
-import { Lifetime } from './decorators/lifetime.js'
-import { Injectable } from './decorators/injectable.js'
-import { Configuration } from './decorators/configuration.js'
-import { Provides } from './decorators/provides.js'
 import { Ctor } from './types.js'
-import { Extends } from './decorators/extends.js'
 import { solutions } from './internal/util/errutil/index.js'
 
 /**
@@ -32,9 +24,9 @@ export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
       (message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`)
       + solutions(
         `Use allOf(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
-        `Use @${Named.name} providing a name to differentiate injectables and inject the dependency using it`,
-        `Use @${Primary.name} to specify an unique injectable`,
-        `Use @${ConditionalOn.name} to conditionally register injectables, leaving only one for the given key`,
+        `Use @Named providing a name to differentiate injectables and inject the dependency using it`,
+        `Use @Primary to specify an unique injectable`,
+        `Use @ConditionalOn to conditionally register injectables, leaving only one for the given key`,
       ),
       'ERR_NO_UNIQUE_INJECTION',
     )
@@ -135,7 +127,7 @@ export class ErrInjectableBase extends CaffeineIoCError {
 export class ErrOrphanedBindingConfig extends CaffeineIoCError {
   constructor(key: InjectionToken) {
     super(
-      `Found binding configuration for "${keyStr(key)}" but the type is not decorated with one of: @${Injectable.name}, @${Extends.name}`,
+      `Found binding configuration for "${keyStr(key)}" but the type is not decorated with one of: @Injectable, @Extends`,
       'ERR_ORPHANED_BINDING_CONFIG',
     )
     this.name = 'ErrOrphanedBindingConfig'
@@ -150,8 +142,8 @@ export class ErrMultiplePrimary extends CaffeineIoCError {
     super(
       `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditionals reduce the candidates to exactly one`
       + solutions(
-        `Use @${ConditionalOn.name}(condition) to ensure only one primary injectable is active at a time`,
-        `Leave only one injectable decorated with @${Primary.name}()`,
+        `Use @ConditionalOn(condition) to ensure only one primary injectable is active at a time`,
+        `Leave only one injectable decorated with @Primary()`,
       ),
       'ERR_MULTIPLE_PRIMARY_SAME_COMPONENT',
     )
@@ -187,10 +179,10 @@ export class ErrOutOfScope extends CaffeineIoCError {
 export class ErrScopeMismatchInConfiguration extends CaffeineIoCError {
   constructor(className: string, methodName: string, configScopeID: Identifier, methodScopeID: Identifier) {
     super(
-      `Cannot configure provider "${methodName}" in "${className}": the @${Configuration.name} class declares scope "${String(configScopeID)}" but the method declares scope "${String(methodScopeID)}"`
+      `Cannot configure provider "${methodName}" in "${className}": the @Configuration class declares scope "${String(configScopeID)}" but the method declares scope "${String(methodScopeID)}"`
       + solutions(
-        `Remove the scope configuration from the "${methodName}" method and let the @${Configuration.name} class scope apply to all provided components`,
-        `Remove the scope from @${Configuration.name} and decorate each @${Provides.name} method individually with @${Lifetime.name}()`,
+        `Remove the scope configuration from the "${methodName}" method and let the @Configuration class scope apply to all provided components`,
+        `Remove the scope from @Configuration and decorate each @Provides method individually with @Lifetime()`,
       ),
       'ERR_SCOPE_MISMATCH_IN_CONFIGURATION',
     )

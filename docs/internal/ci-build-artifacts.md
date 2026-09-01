@@ -1,6 +1,6 @@
 # CI build artifacts and package-specific setup
 
-Contributor notes that are too rare for every agent turn. Root [`AGENTS.md`](../../AGENTS.md) links here.
+Contributor notes that are too rare for every agent turn. Root [`CONVENTIONS.md`](../../CONVENTIONS.md) links here.
 
 ## CI build outputs
 

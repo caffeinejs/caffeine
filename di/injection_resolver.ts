@@ -1,15 +1,6 @@
 import { ContainerOps } from './container_interface.js'
+import { DeferredCtor } from './deferred_ctor.js'
 import { ErrResolverAlreadyRegistered, ErrUnknownResolver } from './errors.js'
-import {
-  configFactory,
-  deferredFactory,
-  standardFactory,
-  objectFactory,
-  mappedFactory,
-  orderedFactory,
-  providerFactory,
-  valueFactory,
-} from './internal/core/resolver/index.js'
 import { InjectionDescriptor } from './injection.js'
 import { notNil } from './internal/util/assert/index.js'
 import { Identifier, InjectionToken } from './key.js'
@@ -82,7 +73,10 @@ export type InjectionResolverFactoryContext<T = unknown> = {
 export type InjectionResolverFactory<T = unknown> = (ctx: InjectionResolverFactoryContext<T>) => InjectionResolver<T>
 
 /**
- * Built-in injection resolver factories.
+ * The names the built-in injection resolvers answer to.
+ *
+ * They live here rather than beside the factories because {@link defaultResolverFor} reads two of them: moving
+ * them would make this module import the built-ins, which import the factories, one of which imports this module.
  */
 export const BuiltInResolvers = {
   CONFIG: Symbol('@caffeinejs/di:resolver.config'),
@@ -96,14 +90,7 @@ export const BuiltInResolvers = {
 } as const
 
 const registry = new Map<symbol, InjectionResolverFactory>()
-  .set(BuiltInResolvers.CONFIG, configFactory)
-  .set(BuiltInResolvers.DEFAULT, standardFactory)
-  .set(BuiltInResolvers.MAP, mappedFactory)
-  .set(BuiltInResolvers.DEFER, deferredFactory)
-  .set(BuiltInResolvers.OBJECT, objectFactory)
-  .set(BuiltInResolvers.ORDERED, orderedFactory)
-  .set(BuiltInResolvers.PROVIDER, providerFactory)
-  .set(BuiltInResolvers.VALUE, valueFactory)
+
 /**
  * Binds a new {@link InjectionResolverFactory} to the given name.
  *
@@ -165,4 +152,15 @@ export function resolverFor(name: symbol): InjectionResolverFactory {
   }
 
   return factory
+}
+
+/**
+ * The resolver an unmarked descriptor gets: its own `resolver`, or a default picked from its `key`.
+ *
+ * The one place this rule lives. `_compile.ts` and `object.ts` both read it, so a descriptor that named no
+ * resolver is treated identically wherever it is compiled.
+ */
+export function defaultResolverFor(descriptor: InjectionDescriptor): symbol {
+  return descriptor.resolver
+    ?? (descriptor.key instanceof DeferredCtor ? BuiltInResolvers.DEFER : BuiltInResolvers.DEFAULT)
 }

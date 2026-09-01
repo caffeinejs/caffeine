@@ -69,12 +69,14 @@ describe('InjectedOf', function () {
     }>()
   })
 
-  it('treats a nested object with a key field as a descriptor', function () {
+  // Only a value an `$i` helper produced is a descriptor. A literal that merely looks like one is a nested bag,
+  // here and at run time alike — which is the point: the two cannot disagree about it any more.
+  it('treats a nested object with a key field as a bag, not a descriptor', function () {
     const spec = {
       wrapped: { key: UserService },
     }
 
-    expectTypeOf<InjectedOf<typeof spec>>().toEqualTypeOf<{ wrapped: UserService }>()
+    expectTypeOf<InjectedOf<typeof spec>>().toEqualTypeOf<{ wrapped: { key: UserService } }>()
   })
 
   it('maps just, defer, and ordered helpers', function () {

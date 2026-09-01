@@ -8,6 +8,15 @@ import type { Provider } from './provider.js'
 declare const kInjectionResult: unique symbol
 
 /**
+ * Marks a value as an injection descriptor rather than a plain object.
+ *
+ * Stamped by {@link encode}, which every helper in this module returns through, and read by both the type level
+ * ({@link InjectedField}) and the runtime ({@link isDescriptor}) — so the two cannot disagree about what a value in
+ * an object spec is. Non-enumerable, so it never shows up as data.
+ */
+export const kInjectionDescriptor: unique symbol = Symbol('@caffeinejs/di:injection-descriptor')
+
+/**
  * InjectionDescriptor describes an injection for a component dependency.
  *
  * `T` is the **resolved** value (what the consumer receives), not necessarily the
@@ -105,34 +114,33 @@ export type ObjectInjectionSpec = {
 /**
  * Instance bag inferred from an {@link ObjectInjectionSpec}.
  *
- * Tokens resolve to their instance type; descriptors use the type encoded in
- * {@link InjectionDescriptor} (`T`); nested objects recurse. A value with a
- * `key` or `resolver` field is treated as a descriptor, matching runtime
- * `parseObjectSpec` (`'key' in value`) and helpers such as `$i.just`
- * that set only `resolver`.
+ * Tokens resolve to their instance type; anything carrying {@link kInjectionDescriptor} resolves to the type that
+ * helper produces; every other object recurses as a nested bag. A descriptor therefore has to come from an `$i`
+ * helper — a hand-written `{ key: … }` literal is a nested bag, here and at run time alike.
  */
 export type InjectedOf<S> = { [K in keyof S]: InjectedField<S[K]> }
 
 /**
  * Helper return type: an {@link InjectionDescriptor} branded with its resolved value `T`.
  */
-type InjectionResult<T> = InjectionDescriptor<T> & { readonly [kInjectionResult]: T }
+type InjectionResult<T> = InjectionDescriptor<T> & {
+  readonly [kInjectionResult]: T
+  readonly [kInjectionDescriptor]: true
+}
 
 function encode<T>(descriptor: InjectionDescriptor<any>): InjectionResult<T> {
-  return descriptor as InjectionResult<T>
+  // Non-enumerable: the mark is not data, so it stays out of deep-equality, `Object.entries` and any dump of a
+  // descriptor. A spread therefore drops it, which is why every helper ends by encoding rather than by spreading.
+  return Object.defineProperty(descriptor, kInjectionDescriptor, { value: true }) as InjectionResult<T>
 }
 
 type InjectedField<V> = V extends InjectionToken<infer T>
   ? T
-  : V extends { readonly [kInjectionResult]: infer T }
+  : V extends { readonly [kInjectionDescriptor]: true, readonly [kInjectionResult]: infer T }
     ? T
-    : V extends { resolver: symbol }
-      ? V extends InjectionDescriptor<infer T> ? T : never
-      : V extends { key: infer K }
-        ? ResolveInjection<K>
-        : V extends object
-          ? InjectedOf<V>
-          : never
+    : V extends object
+      ? InjectedOf<V>
+      : never
 
 /**
  * allOf creates an injection descriptor that injects all bindings associated with given key.
@@ -337,9 +345,12 @@ function optional<K extends InjectionToken<any> | InjectionDescriptor<any>>(
 /**
  * object creates an injection descriptor that injects an object in which the properties are injected using the provided keys.
  *
- * Every property is resolved the way the same injection would be resolved anywhere else, so any helper in this
- * module may be used as a value, nested specs included. Properties are lazy: each resolves through its binding when
- * it is read, which is what lets one injected object hold dependencies of differing scopes.
+ * A property value is a key, a helper from this module, or a nested spec. Every helper works, and each is resolved
+ * the way the same injection would be resolved anywhere else. Properties are lazy: each resolves through its
+ * binding when it is read, which is what lets one injected object hold dependencies of differing scopes.
+ *
+ * A descriptor has to come from a helper. An object that is not one is a nested spec — `{ svc: { key: Service } }`
+ * injects nothing and yields `{ svc: { key: Service } }`; write `{ svc: Service }`.
  *
  * @param spec - The object injection plan. The object properties are the injection keys/descriptors.
  *
@@ -470,14 +481,14 @@ function value<T = unknown, R = unknown>(
 function compose(
   key: InjectionToken<any>,
   ...fns: Array<(key: InjectionToken<any>) => InjectionDescriptor<any>>
-): InjectionDescriptor<any> {
-  return fns.reduce((acc, fn) => ({ ...acc, ...fn(key) }), {} as InjectionDescriptor)
+): InjectionResult<any> {
+  return encode(fns.reduce((acc, fn) => ({ ...acc, ...fn(key) }), {} as InjectionDescriptor))
 }
 
-// A descriptor names a key, a resolver, or both: `just` and `value` set only a resolver, and reading them as
-// nested specs would walk `resolver` and `args` as if they were fields. Matches how `InjectedField` types them.
+// The mark `encode` stamps, which is also the one `InjectedField` tests — so a value in a spec cannot be a
+// descriptor to the compiler and a nested bag at run time, which is exactly how `just` came to throw.
 function isDescriptor(value: unknown): value is InjectionDescriptor {
-  return typeof value === 'object' && value !== null && ('key' in value || 'resolver' in value)
+  return typeof value === 'object' && value !== null && kInjectionDescriptor in value
 }
 
 function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {

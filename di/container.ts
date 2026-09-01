@@ -22,12 +22,13 @@ import {
   ErrInjectableBase,
 } from './errors.js'
 import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
-import { InjectionResolver } from './injection_resolver.js'
+import { bindResolver, InjectionResolver } from './injection_resolver.js'
+import { builtInResolvers } from './injection_builtin_resolvers.js'
 import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scope/index.js'
 import { Scopes, scopeEntries, Scope } from './scope.js'
 import { checkScopes } from './internal/core/scope/validations.js'
 import { PostProcessor } from './post_processor.js'
-import { keyStr, token, InjectionToken, Identifier } from './key.js'
+import { keyStr, InjectionToken, Identifier, token } from './key.js'
 import { notNil } from './internal/util/assert/index.js'
 import { MetadataReader } from './metadata_reader.js'
 import { Ctor } from './types.js'
@@ -43,6 +44,12 @@ import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } 
 import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { Provider } from './provider.js'
 import { Keys } from './symbols.js'
+
+// Wiring the built-ins is a real dependency rather than a module side effect, so nothing here reads as removable.
+// Module scope runs once, which is what makes bindResolver's duplicate-name throw a non-issue.
+for (const [name, factory] of builtInResolvers) {
+  bindResolver(name, factory)
+}
 
 const DEFAULT_OPTIONS: Partial<Options> = {
   defaultScopeID: Scopes.SINGLETON,
@@ -70,9 +77,6 @@ interface PendingBinding {
  *
  * @sealed
  */
-/** Stands in for the consumer of an injection compiled by {@link CaffeineIoC.resolver}, which has none. */
-const kStandalone = token<unknown>(Symbol('@caffeinejs/di:standalone'))
-
 export class CaffeineIoC implements Container {
   private readonly modules: Array<Module | ModuleFn>
   private readonly registry = new Map<InjectionToken, Binding>()
@@ -538,7 +542,7 @@ export class CaffeineIoC implements Container {
     // consumer's own bindings — from matching anything.
     return compileDescriptorResolver(
       this,
-      kStandalone,
+      token<unknown>(Symbol.for('@caffeinejs/di:standalone')),
       descriptor,
       'constructor',
       '',

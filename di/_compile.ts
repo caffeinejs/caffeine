@@ -1,6 +1,5 @@
 import { Binding } from './binding.js'
 import { Container } from './container_interface.js'
-import { DeferredCtor } from './deferred_ctor.js'
 import { ErrConfigurationBindingNotFound, ErrInvalidBinding } from './errors.js'
 import { Factory, AsyncFactory } from './factory.js'
 import { chainedFactory, scopedFactory, classFactory, configurationClassFactory } from './internal/core/factory/index.js'
@@ -12,7 +11,7 @@ import {
   afterInitInterceptor,
 } from './internal/core/interceptor/index.js'
 import { InjectionDescriptor } from './injection.js'
-import { BuiltInResolvers, InjectionResolver, resolverFor } from './injection_resolver.js'
+import { defaultResolverFor, InjectionResolver, resolverFor } from './injection_resolver.js'
 import { keyStr, InjectionToken, Identifier } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { Scope, Scopes } from './scope.js'
@@ -26,13 +25,7 @@ export function compileDescriptorResolver(
   member: Identifier,
   index: number,
 ): InjectionResolver {
-  const resolverName
-    = injection.resolver
-      ?? (injection.key instanceof DeferredCtor
-        ? BuiltInResolvers.DEFER
-        : BuiltInResolvers.DEFAULT)
-
-  return resolverFor(resolverName)({ container, key, descriptor: injection, kind, member, index })
+  return resolverFor(defaultResolverFor(injection))({ container, key, descriptor: injection, kind, member, index })
 }
 
 export function compileInjectionResolvers(container: Container, key: InjectionToken, binding: Binding): void {
