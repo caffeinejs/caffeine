@@ -18,8 +18,7 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '../../../index.js'
-import { kAuthOpts, kAuthSchemeDescriptors } from '../keys.js'
-import type { AuthenticationOptions } from '../builder.js'
+import { kAuthContribution, kAuthSchemeDescriptors } from '../keys.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
@@ -173,7 +172,7 @@ describe('authentication configuration', () => {
 
     await app.ready()
 
-    expect(app.container.get<AuthenticationOptions>(kAuthOpts).defaultAuthenticateScheme).toBe('Bearer')
+    expect(app.contributions.get(kAuthContribution).defaultAuthenticateScheme).toBe('Bearer')
 
     await app.close()
   })

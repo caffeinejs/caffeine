@@ -1,7 +1,6 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
-import { type Service } from '@caffeinejs/std'
+import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { Context } from '../context.js'
-import type { ServiceKit } from '../service.js'
 import { ActionResult } from '../response.js'
 import { ErrConfiguration } from './common.js'
 import { solutions } from './util.js'
@@ -81,7 +80,7 @@ export class ErrorHandlingServiceConfigurer implements Service {
     return 'error-handling'
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const handlerBinding = kit.container.getBindings(ErrorHandler)
     const handlers = new Map<Ctor<Error>, Provider<ErrorHandler<Error>>>()
 

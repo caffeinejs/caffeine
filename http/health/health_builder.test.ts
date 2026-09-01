@@ -9,7 +9,7 @@ import {
   type ConfigProvider,
 } from '@caffeinejs/std/config'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
-import { kHealthOptions, type HealthOptions } from './index.js'
+import { kHealthContribution } from './index.js'
 
 const schema = $t.Object({
   health: $t.Object({
@@ -38,7 +38,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions).enabled).toBe(true)
+    expect(app.contributions.get(kHealthContribution).enabled).toBe(true)
   })
 
   it('leaves the probes to the environment when it is never called', async () => {
@@ -47,7 +47,7 @@ describe('HealthBuilder', () => {
     await app.ready()
 
     // No KUBERNETES_SERVICE_HOST under the test runner.
-    expect(app.container.get<HealthOptions>(kHealthOptions).enabled).toBe(false)
+    expect(app.contributions.get(kHealthContribution).enabled).toBe(false)
   })
 
   it('normalizes every duration to milliseconds', async () => {
@@ -63,7 +63,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions)).toMatchObject({
+    expect(app.contributions.get(kHealthContribution)).toMatchObject({
       drainDelayMs: 2_000,
       shutdownTimeoutMs: 10_000,
       terminationGracePeriodMs: 45_000,
@@ -81,7 +81,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions)).toMatchObject({
+    expect(app.contributions.get(kHealthContribution)).toMatchObject({
       enabled: true,
       drainDelayMs: 30,
       shutdownTimeoutMs: 9_000,
@@ -98,7 +98,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions)).toMatchObject({
+    expect(app.contributions.get(kHealthContribution)).toMatchObject({
       // The higher-priority source wins for what it declares...
       drainDelayMs: 30,
       shutdownTimeoutMs: 9_000,
@@ -123,7 +123,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions).drainDelayMs).toBe(30)
+    expect(app.contributions.get(kHealthContribution).drainDelayMs).toBe(30)
   })
 
   it('lets the environment switch the probes off even though .health() opted in', async () => {
@@ -141,7 +141,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions).enabled).toBe(false)
+    expect(app.contributions.get(kHealthContribution).enabled).toBe(false)
   })
 
   it('reads the shutdown signals from the environment as a list', async () => {
@@ -160,7 +160,7 @@ describe('HealthBuilder', () => {
 
     // `signals` is declared `$t.List`, so this is two signals. A plain `$t.Array` would have produced one
     // signal named "SIGTERM,SIGINT", which no runtime would ever deliver.
-    expect(app.container.get<HealthOptions>(kHealthOptions).signals).toEqual(['SIGTERM', 'SIGINT'])
+    expect(app.contributions.get(kHealthContribution).signals).toEqual(['SIGTERM', 'SIGINT'])
   })
 
   it('still accepts false from the environment, the union branch that installs no handlers', async () => {
@@ -177,7 +177,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions).signals).toBe(false)
+    expect(app.contributions.get(kHealthContribution).signals).toBe(false)
   })
 
   it('reads the drain policy from the environment when .health() was never called', async () => {
@@ -194,7 +194,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions).drainDelayMs).toBe(40)
+    expect(app.contributions.get(kHealthContribution).drainDelayMs).toBe(40)
   })
 
   it('keeps the code-only members alongside the config-driven ones', async () => {
@@ -212,7 +212,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    const options = app.container.get<HealthOptions>(kHealthOptions)
+    const options = app.contributions.get(kHealthContribution)
     // A function cannot travel through the config tree, so it comes off the builder instead.
     expect(options.dispatcher).toBe(dispatcher)
     expect(options.drainDelayMs).toBe(30)
@@ -230,7 +230,7 @@ describe('HealthBuilder', () => {
     await app.ready()
 
     // The reference a collaborator holds — the registry and the probe endpoint are both handed this object.
-    const options = app.container.get<HealthOptions>(kHealthOptions)
+    const options = app.contributions.get(kHealthContribution)
     expect(options.verbose).toBe(false)
     expect(options.shutdownTimeoutMs).toBe(9_000)
 
@@ -238,7 +238,7 @@ describe('HealthBuilder', () => {
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // Same object, refreshed values: nothing had to be re-resolved or re-registered.
-    expect(app.container.get<HealthOptions>(kHealthOptions)).toBe(options)
+    expect(app.contributions.get(kHealthContribution)).toBe(options)
     expect(options.verbose).toBe(true)
     expect(options.shutdownTimeoutMs).toBe(12_000)
     // A value nothing overrode still comes from the builder.
@@ -252,6 +252,6 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.container.get<HealthOptions>(kHealthOptions).shutdownTimeoutMs).toBe(27_950)
+    expect(app.contributions.get(kHealthContribution).shutdownTimeoutMs).toBe(27_950)
   })
 })

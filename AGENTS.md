@@ -2,6 +2,18 @@
 
 Rules for changing **this** monorepo. User-app and framework-usage agent files live in [`ai/`](ai/). Do not copy this file into application repos.
 
+## Glossary
+
+In this repository these names mean **this project**, not a third-party library:
+
+| You say | It means |
+|---|---|
+| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`. |
+| CaffeineIoC | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`. |
+| Caffeine HTTP, the HTTP package | `@caffeinejs/http` (Fastify adapter). |
+
+Package names (`@caffeinejs/kafka`, …) are the npm names. Workspace dirs are in the table below.
+
 This is not NestJS, Express, or Spring Boot. Do not use `experimentalDecorators`, `emitDecoratorMetadata`, `reflect-metadata`, Nest `@Module` / `forRoot`.
 
 When editing a first-party package, also read that package’s `AGENTS.md`:
@@ -111,10 +123,29 @@ export { kServiceConfigure, type Service } from '@caffeinejs/std'
 
 // correct
 import { kServiceConfigure, type Service } from '@caffeinejs/std'
-import type { ServiceKit } from './service.js'
+import type { Services } from './service.js'
 ```
 
 A package’s `index.ts` barrel aggregating that package’s **own** modules is not a passthrough and is fine.
+
+## Where a feature puts what it produces
+
+Where a value goes depends on who reads it, not on what is convenient:
+
+| The value is… | Goes to | Read with |
+|---|---|---|
+| a setting a user tunes from the environment or a file | a config slice, in `beforeBootstrap` | `defineFeatureConfig(...)` → `slice.config` |
+| something user code injects | a container binding, in `bootstrap` | `container.get` / constructor injection |
+| one of many providers a single consumer collects | a container binding with `.extends()` | `container.getManyOptional(Base)` |
+| an extension's own data | that extension's **constructor** | the field |
+| a framework value the application needs once everything is up | a contribution, in `bootstrap` | `app.contributions.get(key)` |
+
+Do not route an extension's own configuration through a container key it reads back at server setup: the
+builder is holding the value when it constructs the extension. `bind(X).toValue(new X(data)).extends()`.
+
+Contributions are write-only while services bootstrap and sealed the moment they finish, because services
+bootstrap concurrently — a read before the seal would be answered by whichever service the scheduler reached
+first. Keys are made with `contributionKey<T>('namespace:name')`; the type argument is required.
 
 ## Error messages
 

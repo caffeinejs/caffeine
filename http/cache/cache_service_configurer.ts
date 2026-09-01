@@ -1,6 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { type Service } from '@caffeinejs/std'
-import type { ServiceKit } from '../service.js'
+import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { CacheStore, MemoryCacheStore } from './store.js'
 
 export class CacheServiceConfigurer implements Service {
@@ -8,7 +7,7 @@ export class CacheServiceConfigurer implements Service {
     return 'cache'
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     if (!kit.container.has(CacheStore)) {
       kit.container.bind(CacheStore)
         .toClass(MemoryCacheStore)

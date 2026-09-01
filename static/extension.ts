@@ -3,7 +3,6 @@ import { join, sep } from 'node:path'
 import fastifyStatic from '@fastify/static'
 import { deriveServerOwnedPaths, ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
 import { ErrSPAIndexMissing } from './errors.js'
-import { kSPASettings, kStaticMounts } from './keys.js'
 import { normalizePrefix, underPrefix, type SPASettings } from './spa.js'
 import { SPAFallback } from './spa_fallback.js'
 import type { StaticMount } from './static.js'
@@ -14,7 +13,7 @@ interface HeaderCapableReply {
 }
 
 /**
- * Registers each configured static mount with `@fastify/static`; inert when none were configured.
+ * Registers each configured static mount with `@fastify/static`.
  *
  * `@fastify/static` decorates `reply.sendFile` and throws if a second registration tries to decorate it
  * again — so only the first mount may decorate (unless a mount opts out explicitly); the rest register with
@@ -23,9 +22,21 @@ interface HeaderCapableReply {
 export class StaticExtension extends ServerExtension {
   readonly name = 'static'
 
+  /** The resolved mounts, in registration order. The SPA's own mount, when there is one, is last. */
+  readonly mounts: readonly StaticMount[]
+
+  /** The resolved SPA settings, or `undefined` when `.spa(...)` was never called. */
+  readonly spa: SPASettings | undefined
+
+  constructor(mounts: readonly StaticMount[], spa: SPASettings | undefined) {
+    super()
+    this.mounts = mounts
+    this.spa = spa
+  }
+
   configure = async (ctx: ServerExtensionContext): Promise<void> => {
-    const mounts = ctx.container.getOptional<StaticMount[]>(kStaticMounts) ?? []
-    const spa = ctx.container.getOptional<SPASettings>(kSPASettings)
+    const mounts = this.mounts
+    const spa = this.spa
     const serveSPA = spa === undefined ? false : this.#checkShell(ctx, spa)
 
     for (let i = 0; i < mounts.length; i++) {

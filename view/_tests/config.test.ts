@@ -5,8 +5,7 @@ import handlebars from 'handlebars'
 import { $t } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import { kViewOptionsProvider } from '../keys.js'
-import type { ViewOptionsProvider } from '../options_provider.js'
+import { ViewExtension } from '../extension.js'
 import { viewPlugin } from '../plugin.js'
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
@@ -15,7 +14,7 @@ const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.u
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
 
 const optionsOf = (app: WebApplication): Array<Record<string, unknown>> =>
-  (app.container.get(kViewOptionsProvider) as ViewOptionsProvider).all() as unknown as Array<Record<string, unknown>>
+  app.container.get(ViewExtension).provider.all() as unknown as Array<Record<string, unknown>>
 
 describe('view configuration', () => {
   let app: WebApplication | undefined

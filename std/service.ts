@@ -1,5 +1,6 @@
 import type { Container, ContainerBindingOps } from '@caffeinejs/di'
 import type { ConfigDefinition } from './config/index.js'
+import type { Contributions } from './contributions.js'
 import type { ApplicationAvailability } from './health/availability.js'
 
 /**
@@ -43,6 +44,12 @@ export interface ServiceBootstrapIn {
    * lifecycle writes to the application's, and a second instance would report a state nothing ever updates.
    */
   availability: ApplicationAvailability
+
+  /**
+   * Where a feature leaves what the application needs from it once everything is up. Write-only here: it is
+   * sealed the moment every service has bootstrapped, and reads before that throw.
+   */
+  contributions: Contributions
 }
 
 /**
@@ -75,23 +82,3 @@ export interface Service {
  * appear in autocomplete on `.server(s => ...)`, `.kafka(k => ...)`, and similar.
  */
 export type ServiceAPI<T extends Service> = Omit<T, keyof Service>
-
-/**
- * Contributions keeps track of the contributions made by {@link Service}s.
- * Service contributions can any arbitrary type and are used to configure application features.
- */
-export class Contributions {
-  #contributions: Map<symbol, unknown> = new Map()
-
-  contribute<T>(key: symbol, value: T): void {
-    if (this.#contributions.has(key)) {
-      throw new Error(`Contribution ${key.toString()} already contributed`)
-    }
-
-    this.#contributions.set(key, value)
-  }
-
-  contribution<T>(key: symbol): T {
-    return this.#contributions.get(key) as T
-  }
-}

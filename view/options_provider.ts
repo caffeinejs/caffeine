@@ -1,15 +1,14 @@
 import { type ServiceBeforeBootstrapIn, type Service, ServiceBootstrapIn } from '@caffeinejs/std'
 import { ErrConfiguration } from '@caffeinejs/http'
-import { kViewOptionsProvider } from './keys.js'
 import { ViewBuilder } from './builder.js'
 import { ViewExtension } from './extension.js'
 import type { ViewOptions } from './view.js'
 
 /**
  * Groups every configured view engine — the default one (`reply.view`) plus any named ones
- * (`reply.<name>`) — behind a single DI binding. `app.view(name?, configure)` routes each call here to
- * get-or-create the matching {@link ViewBuilder}; {@link ViewExtension} reads the provider back and
- * registers `@fastify/view` once per {@link all} entry.
+ * (`reply.<name>`) — behind a single object. `app.view(name?, configure)` routes each call here to
+ * get-or-create the matching {@link ViewBuilder}; the {@link ViewExtension} it hands itself to registers
+ * `@fastify/view` once per {@link all} entry.
  */
 export class ViewOptionsProvider implements Service {
   // Keyed by engine name; the `undefined` key is the default engine.
@@ -70,10 +69,10 @@ export class ViewOptionsProvider implements Service {
   }
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    kit.container.bind(kViewOptionsProvider).toValue(this).internal()
     // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
-    // and registers it as a Fastify plugin — http no longer hardcodes it.
-    kit.container.bind(ViewExtension).toClass(ViewExtension).extends()
+    // and registers it as a Fastify plugin — http no longer hardcodes it. The provider goes in directly
+    // rather than through a container key it would only be read back out of at server setup.
+    kit.container.bind(ViewExtension).toValue(new ViewExtension(this)).extends()
 
     return Promise.resolve()
   }

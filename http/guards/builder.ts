@@ -1,6 +1,5 @@
 import { Scopes, type InjectionToken } from '@caffeinejs/di'
-import { type Service, type ServiceAPI } from '@caffeinejs/std'
-import type { ServiceKit } from '../service.js'
+import { type Service, type ServiceAPI, type ServiceBootstrapIn } from '@caffeinejs/std'
 import type { Guard } from './guard.js'
 import { kGlobalGuards } from './keys.js'
 
@@ -22,7 +21,7 @@ export class GuardsBuilder implements Service {
     return this
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     kit.container
       .bind(kGlobalGuards)
       .toValue(this.#keys)

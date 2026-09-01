@@ -1,11 +1,9 @@
 import fastifyView from '@fastify/view'
 import { ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
-import { kViewOptionsProvider } from './keys.js'
 import type { ViewOptionsProvider } from './options_provider.js'
 
 /**
- * Registers `@fastify/view` on the root server once per configured engine; inert when the view feature
- * was never configured.
+ * Registers `@fastify/view` on the root server once per configured engine.
  *
  * `@fastify/view` is `fastify-plugin`-wrapped, so registering on the root decorates `reply.<engine>`
  * globally — it reaches the encapsulated controller `register()` contexts where routes are declared. Each
@@ -14,13 +12,16 @@ import type { ViewOptionsProvider } from './options_provider.js'
 export class ViewExtension extends ServerExtension {
   readonly name = 'view'
 
-  configure = async (ctx: ServerExtensionContext): Promise<void> => {
-    const provider = ctx.container.getOptional<ViewOptionsProvider>(kViewOptionsProvider)
-    if (provider === undefined) {
-      return
-    }
+  /** The engines to register, grouped by the provider that assembled them. */
+  readonly provider: ViewOptionsProvider
 
-    await Promise.all(provider
+  constructor(provider: ViewOptionsProvider) {
+    super()
+    this.provider = provider
+  }
+
+  configure = async (ctx: ServerExtensionContext): Promise<void> => {
+    await Promise.all(this.provider
       .all()
       .map(options =>
         ctx.server.register(fastifyView, options),

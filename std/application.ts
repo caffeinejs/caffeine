@@ -7,6 +7,7 @@ import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
 import { $t } from './schema/t.js'
+import { Contributions } from './contributions.js'
 import { type Service, ServiceBootstrapIn } from './service.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
@@ -60,6 +61,7 @@ export abstract class BaseApplication {
   readonly #hooks: ApplicationHooks<BaseApplication>
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #availability = new ApplicationAvailability()
+  readonly #contributions = new Contributions()
   readonly #shutdownInit: ShutdownOptions | undefined
   readonly #config: ConfigDefinition
 
@@ -102,6 +104,15 @@ export abstract class BaseApplication {
     return this.#availability
   }
 
+  /**
+   * What the services left for the application: values a feature assembled while bootstrapping. Sealed once
+   * every service has bootstrapped, so reading before {@link ready} has got that far throws rather than
+   * reporting a feature as absent because its service had not run yet.
+   */
+  get contributions(): Contributions {
+    return this.#contributions
+  }
+
   /** Registers a lifecycle listener. Throws if the same listener is already registered for the event. */
   on(event: ApplicationEvent, listener: (app: this) => void | Promise<void>): this {
     this.#hooks.on(event, listener as (app: BaseApplication) => void | Promise<void>)
@@ -136,8 +147,9 @@ export abstract class BaseApplication {
    * 1. the always-on `caffeine` slice is registered, then every service **declares**;
    * 2. configuration **resolves**, and every slice publishes;
    * 3. `caffeine.name` and `caffeine.profiles` are applied;
-   * 4. every service **configures** — binding into the container, now able to read its own settings;
-   * 5. the container initializes and the platform is set up.
+   * 4. every service **configures** — binding into the container and contributing what the application needs
+   *    from it, now able to read its own settings;
+   * 5. the contributions are sealed, the container initializes, and the platform is set up.
    *
    * Declare and resolve are separate so a feature can read its resolved configuration while it is still able
    * to bind. Resolving inside `container.init()` — after every service had configured — is what used to make
@@ -176,6 +188,9 @@ export abstract class BaseApplication {
     await Promise
       .all(services
         .map(service => service.bootstrap(kit)))
+    // Every service has had its turn, so what they contributed is now complete — and closing the step is what
+    // lets the rest of the boot read it without the answer depending on which service happened to finish first.
+    this.#contributions.seal()
     await this.#container.init()
     await this.setup()
 
@@ -283,7 +298,12 @@ export abstract class BaseApplication {
 
   /** The kit passed to each {@link Service}. Subclasses may widen it (e.g. add platform handles). */
   protected serviceKit(): ServiceBootstrapIn {
-    return { container: this.#container, availability: this.#availability, config: this.#config }
+    return {
+      container: this.#container,
+      availability: this.#availability,
+      config: this.#config,
+      contributions: this.#contributions,
+    }
   }
 
   /** The services configured before `container.init()`. Subclasses may prepend framework configurers. */

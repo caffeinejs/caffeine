@@ -1,5 +1,5 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
-import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/std'
+import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, type ServiceBootstrapIn } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   type ConfigAccessors,
@@ -9,7 +9,6 @@ import {
 } from '@caffeinejs/std/config'
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
-import { ServiceKit } from '../../service.js'
 import {
   AUTH_CONFIG_NAMESPACE,
   CREDENTIALS_CONFIG_SEGMENT,
@@ -36,7 +35,7 @@ import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { JWTService } from './jwt/jwt_service.js'
 import { jwtServiceKey } from './jwt/keys.js'
 import { ErrAuthConfiguration } from './errors.js'
-import { kAuthOpts, kAuthSchemeDescriptors, kOIDCMeta } from './keys.js'
+import { kAuthContribution, kAuthSchemeDescriptors, kOIDCContribution } from './keys.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
 import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
@@ -472,7 +471,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     }
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     this.#buildSchemes()
 
     const configuredDefaults = this.#authSlice?.config ?? {}
@@ -545,7 +544,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
 
     kit.container.bind(AuthenticationService).toValue(service).internal()
     kit.container.bind(AuthenticationSchemeProvider).toValue(schemeProvider).internal()
-    kit.container.bind(kAuthOpts).toValue(options).internal()
+    kit.contributions.contribute(kAuthContribution, options)
     kit.container.bind(kAuthSchemeDescriptors).toValue(this.#descriptors).internal()
 
     // Share each JWT scheme's service (verify + sign) for injection into token-issuing controllers.
@@ -597,10 +596,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
         handlers: this.#oidcHandlers.map(h => ({ callbackPath: h.callbackPath, handler: h })),
         unreachableCandidates: this.#unreachableCandidates(defaultScheme),
       }
-      kit.container.bind(kOIDCMeta).toValue(meta).internal()
+      kit.contributions.contribute(kOIDCContribution, meta)
     }
-
-    kit.feats.toggleAuthentication(true)
 
     return Promise.resolve()
   }

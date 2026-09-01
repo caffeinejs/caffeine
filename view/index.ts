@@ -1,6 +1,5 @@
 export * from './builder.js'
 export * from './extension.js'
-export * from './keys.js'
 export * from './options_provider.js'
 export * from './plugin.js'
 export * from './render_view.js'

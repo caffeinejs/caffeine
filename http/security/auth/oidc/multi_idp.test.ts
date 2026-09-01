@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
+import { Contributions, type ServiceBootstrapIn } from '@caffeinejs/std'
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
-import { kOIDCMeta } from '../keys.js'
-import type { ServiceKit } from '../../../service.js'
+import { kOIDCContribution } from '../keys.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import { OIDCAuthenticationHandler } from './handler.js'
@@ -42,24 +42,21 @@ function makeCtx(cookies: Record<string, string> = {}) {
   } as unknown as Context
 }
 
-/** Minimal ServiceKit double — configure only touches the container and the feature flags. */
-function makeKit(): { kit: ServiceKit, bindings: Map<unknown, unknown> } {
-  const bindings = new Map<unknown, unknown>()
-  const binding = (key: unknown) => ({
-    toValue: (v: unknown) => {
-      bindings.set(key, v)
-      return { internal: () => undefined }
-    },
+/** Minimal service kit double — bootstrap only touches the container and the contributions. */
+function makeKit(): { kit: ServiceBootstrapIn, contributions: Contributions } {
+  const contributions = new Contributions()
+  const binding = () => ({
+    toValue: () => ({ internal: () => undefined }),
   })
   const kit = {
     container: {
       bind: binding,
       wrap: (v: unknown) => ({ get: () => v }),
     },
-    feats: { toggleAuthentication: () => undefined },
-  } as unknown as ServiceKit
+    contributions,
+  } as unknown as ServiceBootstrapIn
 
-  return { kit, bindings }
+  return { kit, contributions }
 }
 
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
@@ -71,9 +68,10 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
 async function configureAndReadOIDCMeta(build: (b: AuthenticationBuilder) => void): Promise<OIDCMeta> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  const { kit, bindings } = makeKit()
+  const { kit, contributions } = makeKit()
   await builder.bootstrap(kit)
-  return bindings.get(kOIDCMeta) as OIDCMeta
+  contributions.seal()
+  return contributions.get(kOIDCContribution)
 }
 
 /**

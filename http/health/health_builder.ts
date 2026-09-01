@@ -5,10 +5,10 @@ import {
   type SignalDispatcher,
   Service,
   type ServiceAPI,
+  type ServiceBootstrapIn,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
-import { ServiceKit } from '../service.js'
-import { kHealthOptions } from './keys.js'
+import { kHealthContribution } from './keys.js'
 import {
   HEALTH_CONFIG_NAMESPACE,
   finalizeHealthOptions,
@@ -35,8 +35,8 @@ import {
  * builder and is merged in afterwards. Health indicators are not configured here — they are container-managed
  * beans discovered through `HealthIndicator`.
  *
- * A {@link Service}: its {@link Service.configure} binds {@link HealthOptions} under {@link kHealthOptions}. The
- * bound object is live, like every other configuration in the framework — the probe budgets and the
+ * A {@link Service}: its `bootstrap` contributes {@link HealthOptions} under {@link kHealthContribution}. The
+ * contributed object is live, like every other configuration in the framework — the probe budgets and the
  * response-shaping flags are read per request, so a refresh reaches them. The fields consumed once at boot, the
  * probe routes and the installed signals, simply stop mattering afterwards: nothing re-registers a route because
  * a value moved underneath it.
@@ -162,17 +162,12 @@ export class HealthBuilder<C = unknown> implements Service {
       finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })))
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
-    kit.feats.toggleHealth()
-
-    kit.container
-      .bind<HealthOptions>(kHealthOptions)
-      // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags —
-      // which are read per request — follow a refresh. The fields consumed once at boot, the probe routes and
-      // the installed signals, simply stop mattering afterwards; nothing re-registers a route because a value
-      // changed underneath it.
-      .toValue(this.#options!.config)
-      .internal()
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+    // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags —
+    // which are read per request — follow a refresh. The fields consumed once at boot, the probe routes and
+    // the installed signals, simply stop mattering afterwards; nothing re-registers a route because a value
+    // changed underneath it.
+    kit.contributions.contribute(kHealthContribution, this.#options!.config)
 
     return Promise.resolve()
   }

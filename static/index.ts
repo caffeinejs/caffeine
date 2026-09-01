@@ -1,7 +1,6 @@
 export * from './builder.js'
 export * from './errors.js'
 export * from './extension.js'
-export * from './keys.js'
 export * from './plugin.js'
 export * from './spa.js'
 export * from './spa_fallback.js'

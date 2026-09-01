@@ -11,7 +11,7 @@ import {
   type ConfigProvider,
 } from '@caffeinejs/std/config'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../../index.js'
-import { DEFAULT_SERVER_OPTIONS, kServerOptions, type ServerOptions } from '../index.js'
+import { DEFAULT_SERVER_OPTIONS, kServerContribution } from '../index.js'
 
 const schema = $t.Object({
   server: $t.Object({ host: $t.String(), port: $t.Number() }),
@@ -59,7 +59,7 @@ describe('server builder + config', () => {
     await app.ready()
 
     // The environment wins: a port compiled into the image is a default, not an override.
-    expect(app.container.get<ServerOptions>(kServerOptions)).toEqual({ host: '127.0.0.1', port: 8080 })
+    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 8080 })
   })
 
   it('falls back to the code-set port when the environment says nothing', async () => {
@@ -70,7 +70,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.container.get<ServerOptions>(kServerOptions)).toEqual({ host: '127.0.0.1', port: 3000 })
+    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 3000 })
   })
 
   it('falls back to the framework defaults when neither says anything', async () => {
@@ -78,7 +78,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.container.get<ServerOptions>(kServerOptions)).toEqual(DEFAULT_SERVER_OPTIONS)
+    expect(app.contributions.get(kServerContribution)).toEqual(DEFAULT_SERVER_OPTIONS)
   })
 
   it('configures the server from the environment with no .server() call at all', async () => {
@@ -89,7 +89,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.container.get<ServerOptions>(kServerOptions)).toEqual({ host: '127.0.0.1', port: 8081 })
+    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 8081 })
   })
 
   it('lets command-line arguments beat both the environment and the code', async () => {
@@ -103,7 +103,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.container.get<ServerOptions>(kServerOptions)).toEqual({ host: '127.0.0.1', port: 9090 })
+    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 9090 })
   })
 
   it('re-points the whole feature — reads and code-set defaults — through the selector', async () => {
@@ -119,7 +119,7 @@ describe('server builder + config', () => {
     await app.ready()
 
     // `port` came from the builder at the re-pointed namespace, `host` from the environment at the same one.
-    expect(app.container.get<ServerOptions>(kServerOptions)).toEqual({ host: '127.0.0.1', port: 4567 })
+    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 4567 })
   })
 
   it('lets the environment override a re-pointed namespace', async () => {
@@ -134,7 +134,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.container.get<ServerOptions>(kServerOptions).port).toBe(8082)
+    expect(app.contributions.get(kServerContribution).port).toBe(8082)
   })
 
   it('resolves against the defaults when a selector is used without an application config', async () => {
@@ -145,7 +145,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.container.get<ServerOptions>(kServerOptions))
+    expect(app.contributions.get(kServerContribution))
       .toEqual({ host: DEFAULT_SERVER_OPTIONS.host, port: 4444 })
   })
 
@@ -172,7 +172,7 @@ describe('server builder + config', () => {
 
     // The options are configuration like any other, so they report what configuration now says.
     expect(app.container.get<ConfigHandle<AppConfig>>(kAppConfig).server.port).toBe(1234)
-    expect(app.container.get<ServerOptions>(kServerOptions)).toEqual({ host: '0.0.0.0', port: 1234 })
+    expect(app.contributions.get(kServerContribution)).toEqual({ host: '0.0.0.0', port: 1234 })
 
     // The socket does not move: the address was fixed when the adapter took these values and listened. That is
     // the server's business, not a property of the configuration layer.

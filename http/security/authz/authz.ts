@@ -1,6 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { type Service, type ServiceAPI } from '@caffeinejs/std'
-import type { ServiceKit } from '../../service.js'
+import { type Service, type ServiceAPI, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
@@ -103,7 +102,7 @@ export class AuthorizationBuilder implements Service {
     return this.fallbackPolicy(p => p.requireAuthenticated())
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     kit.container.bind(AuthenticatedUserHandler)
       .toSelf()
       .lifetime(Scopes.SINGLETON)

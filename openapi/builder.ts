@@ -10,7 +10,7 @@ import {
 import { OpenAPIExtension } from './extension.js'
 import { OpenAPIDocumentStore } from './document_store.js'
 import { registerEndpoints } from './endpoints.js'
-import { kOpenAPIOptions } from './keys.js'
+
 import {
   type ErrorStatusOptions,
   type InferenceOptions,
@@ -319,7 +319,6 @@ export class OpenAPIBuilder<C = unknown> implements Service {
     const resolved = this.#resolved!
     const options = resolved.config
 
-    kit.container.bind(kOpenAPIOptions).toValue(options).internal()
     // The store, not the document: bindings must all be registered before `container.init()`, which runs long
     // before the server phase that generates the document. Resolving the store and reading `.document` off it
     // is the supported way to reach the document without an HTTP request.

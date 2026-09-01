@@ -3,8 +3,7 @@ import fastify from 'fastify'
 import { $t } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
 import { AllowAnonymous, Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import { kOpenAPIOptions } from '../keys.js'
-import type { OpenAPIOptions } from '../options.js'
+import { OpenAPIExtension } from '../extension.js'
 import { openapiPlugin } from '../plugin.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
 
@@ -77,7 +76,7 @@ describe('openapi configuration', () => {
     await app.ready()
 
     // 422 came from configuration; 401/403 are still the defaults the builder started from.
-    const options = app.container.get<OpenAPIOptions>(kOpenAPIOptions)
+    const options = app.container.get(OpenAPIExtension).options
     expect(options.errors).toEqual({ validation: 422, unauthorized: 401, forbidden: 403 })
     // `routes` was not configured here, so it is still what the builder started from.
     expect(options.routes.json).toBe('/openapi.json')
@@ -108,7 +107,7 @@ describe('openapi configuration', () => {
 
     await app.ready()
 
-    expect(app.container.get<OpenAPIOptions>(kOpenAPIOptions).routes.yaml).toBeUndefined()
+    expect(app.container.get(OpenAPIExtension).options.routes.yaml).toBeUndefined()
     expect((await app.fetch('/openapi.yaml')).status).toBe(404)
   })
 

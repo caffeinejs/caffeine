@@ -4,7 +4,6 @@ import { NotFoundFallback } from '@caffeinejs/http'
 import { STATIC_CONFIG_NAMESPACE, staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
 import { StaticExtension } from './extension.js'
-import { kSPASettings, kStaticMounts } from './keys.js'
 import { resolveSPASettings, type SPAOptions, type SPASettings } from './spa.js'
 import { SPAFallback } from './spa_fallback.js'
 import type { StaticMount } from './static.js'
@@ -13,10 +12,9 @@ import type { StaticMount } from './static.js'
  * Configures static file serving over `@fastify/static`. Bound via
  * `app.static(s => s.serve(dir, { prefix: '/static' }))`.
  *
- * A {@link Service}, like `ViewBuilder`/`ServerBuilder` — its {@link Service.configure} binds the assembled
- * mounts into the container under {@link kStaticMounts}. Each `.serve(...)` call adds one mount; multiple
- * mounts serve multiple directories (the {@link StaticExtension} handles `@fastify/static`'s single-decorate
- * constraint).
+ * A {@link Service}, like `ViewBuilder`/`ServerBuilder` — its `bootstrap` hands the assembled mounts to the
+ * {@link StaticExtension} it binds. Each `.serve(...)` call adds one mount; multiple mounts serve multiple
+ * directories (the {@link StaticExtension} handles `@fastify/static`'s single-decorate constraint).
  *
  * There is one read path. A builder method does not hold its value — it writes into the configuration tree in
  * the `CODE` band, and the feature reads the merged result. So `s.serve('public')` is a **default**: a
@@ -112,17 +110,21 @@ export class StaticBuilder<C = unknown> implements Service {
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const resolved = this.#resolved!
+    const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
 
-    kit.container.bind(kStaticMounts).toValue(resolved.config.mounts).internal()
     // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
-    // and registers it as a Fastify plugin — http no longer hardcodes it.
-    kit.container.bind(StaticExtension).toClass(StaticExtension).extends()
+    // and registers it as a Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings
+    // are handed to it directly: the builder is holding them right here, and routing them through a container
+    // key only to read them back at server setup adds a lookup and a key without adding a decision.
+    kit.container
+      .bind(StaticExtension)
+      .toValue(new StaticExtension(resolved.config.mounts, spa))
+      .extends()
 
-    if (this.#spa !== undefined) {
-      kit.container.bind(kSPASettings).toValue(settingsOf(resolved.config)).internal()
+    if (spa !== undefined) {
       kit.container
         .bind(SPAFallback)
-        .toValue(new SPAFallback(settingsOf(resolved.config)))
+        .toValue(new SPAFallback(spa))
         .extends(NotFoundFallback)
     }
 

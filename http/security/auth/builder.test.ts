@@ -1,13 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
-import { ApplicationAvailability } from '@caffeinejs/std'
+import { ApplicationAvailability, Contributions, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
-import type { ServiceKit } from '../../service.js'
-import type { Feats } from '../../feats.js'
 import { AuthenticationBuilder } from './builder.js'
 
-function makeKit(): ServiceKit {
+function makeKit(): ServiceBootstrapIn {
   const internal = vi.fn()
   const toValue = vi.fn().mockReturnValue({ internal })
   const bind = vi.fn().mockReturnValue({ toValue })
@@ -15,7 +13,7 @@ function makeKit(): ServiceKit {
   return {
     container: { bind, wrap } as unknown as Container,
     availability: new ApplicationAvailability(),
-    feats: { toggleAuthentication: vi.fn().mockReturnThis() } as unknown as Feats,
+    contributions: new Contributions(),
     config: new ConfigDefinition(token<any>(Symbol('app.config'))),
   }
 }
@@ -23,7 +21,7 @@ function makeKit(): ServiceKit {
 describe('AuthenticationBuilder[kConfigure]()', () => {
   it('throws when no strategies are registered and no default scheme is set', () => {
     const builder = new AuthenticationBuilder()
-    expect(() => builder.bootstrap(null as unknown as ServiceKit)).toThrow(
+    expect(() => builder.bootstrap(null as unknown as ServiceBootstrapIn)).toThrow(
       'Cannot configure authentication: no strategies are registered',
     )
   })
@@ -35,7 +33,7 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
       .addBasic(o => o.validate(validate))
       .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
 
-    expect(() => builder.bootstrap(null as unknown as ServiceKit)).toThrow(
+    expect(() => builder.bootstrap(null as unknown as ServiceBootstrapIn)).toThrow(
       'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
     )
   })

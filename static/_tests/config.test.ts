@@ -4,8 +4,7 @@ import fastify from 'fastify'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
-import { kSPASettings, kStaticMounts, staticPlugin } from '../index.js'
-import type { SPASettings } from '../spa.js'
+import { StaticExtension, staticPlugin } from '../index.js'
 import type { StaticMount } from '../static.js'
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
@@ -21,8 +20,8 @@ describe('static configuration', () => {
     app = undefined
   })
 
-  const mountsOf = (built: WebApplication): StaticMount[] =>
-    built.container.get(kStaticMounts) as StaticMount[]
+  const mountsOf = (built: WebApplication): readonly StaticMount[] =>
+    built.container.get(StaticExtension).mounts
 
   it('reads mounts from the configuration tree with no serve() call at all', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
@@ -79,7 +78,7 @@ describe('static configuration', () => {
 
     await app.ready()
 
-    const settings = app.container.get(kSPASettings) as SPASettings
+    const settings = app.container.get(StaticExtension).spa!
     expect(settings.root).toBe(dist)
     expect(settings.navigationOnly).toBe(false)
   })
@@ -96,7 +95,7 @@ describe('static configuration', () => {
 
     await app.ready()
 
-    expect(app.container.getOptional(kSPASettings)).toBeUndefined()
+    expect(app.container.get(StaticExtension).spa).toBeUndefined()
   })
 
   it('re-points reads and code-set defaults together via .config()', async () => {

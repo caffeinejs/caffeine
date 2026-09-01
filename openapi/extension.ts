@@ -33,19 +33,21 @@ import { readScalarBundle, scalarPage } from './ui/scalar.js'
 export class OpenAPIExtension extends ServerExtension {
   readonly name = 'openapi'
 
+  /** The resolved options the document is generated from. */
+  readonly options: OpenAPIOptions
+
   readonly #store: OpenAPIDocumentStore
-  readonly #options: OpenAPIOptions
   readonly #paths: EndpointPaths
 
   constructor(store: OpenAPIDocumentStore, options: OpenAPIOptions, paths: EndpointPaths) {
     super()
     this.#store = store
-    this.#options = options
+    this.options = options
     this.#paths = paths
   }
 
   configure = (ctx: ServerExtensionContext): void => {
-    const options = this.#options
+    const options = this.options
 
     const descriptors = ctx.container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
     this.#assertSchemesExist(ctx)
@@ -92,14 +94,14 @@ export class OpenAPIExtension extends ServerExtension {
       return {}
     }
 
-    const base = this.#options.routes.base
+    const base = this.options.routes.base
 
     return {
       docsPage: scalarPage({
-        title: this.#options.info.title,
+        title: this.options.info.title,
         specURL: publicURL(base, json),
         assetURL: publicURL(base, asset),
-        configuration: this.#options.ui,
+        configuration: this.options.ui,
       }),
       asset: readScalarBundle(),
     }
@@ -112,7 +114,7 @@ export class OpenAPIExtension extends ServerExtension {
    * requirement alone — quieter than intended, and invisible until someone tests it.
    */
   #assertSchemesExist(ctx: ServerExtensionContext): void {
-    const wanted = this.#options.secure?.schemes ?? []
+    const wanted = this.options.secure?.schemes ?? []
     if (wanted.length === 0) {
       return
     }
@@ -142,7 +144,7 @@ export class OpenAPIExtension extends ServerExtension {
    * output when nobody stated it was intended, and `.public()` silences it.
    */
   #warnIfUnprotected(ctx: ServerExtensionContext): void {
-    if (this.#options.secureExplicit || this.#options.secure !== undefined) {
+    if (this.options.secureExplicit || this.options.secure !== undefined) {
       return
     }
 

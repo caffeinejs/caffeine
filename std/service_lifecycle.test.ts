@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from './schema/t.js'
 import { InlineConfigProvider, type ConfigSlice } from './config/index.js'
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceBootstrapIn } from './service.js'
+import { ErrContributionPhase, contributionKey } from './contributions.js'
 import { createApplication } from './index.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
@@ -134,5 +135,60 @@ describe('service lifecycle', () => {
 
     await expect(appWith(service, 42).ready()).rejects.toMatchObject({ code: 'ERR_CONFIG_SLICES' })
     expect(service.configured).toBe(false)
+  })
+})
+
+describe('contributions in the lifecycle', () => {
+  const kWidget = contributionKey<number>('test:widget.size')
+
+  class ContributingService implements Service {
+    get name(): string {
+      return 'contributor'
+    }
+
+    bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+      kit.contributions.contribute(kWidget, 7)
+      return Promise.resolve()
+    }
+  }
+
+  it('seals what services contributed, and the application can read it', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .addService(new ContributingService())
+      .build()
+
+    await app.ready()
+
+    expect(app.contributions.sealed).toBe(true)
+    expect(app.contributions.get(kWidget)).toBe(7)
+  })
+
+  // Services bootstrap concurrently, so answering this would mean answering it by scheduling order.
+  it('refuses a read from inside bootstrap, where the answer would be a race', async () => {
+    let caught: unknown
+
+    class ReadingService implements Service {
+      get name(): string {
+        return 'reader'
+      }
+
+      bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+        try {
+          kit.contributions.get(kWidget)
+        } catch (error) {
+          caught = error
+        }
+        return Promise.resolve()
+      }
+    }
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .addService(new ContributingService())
+      .addService(new ReadingService())
+      .build()
+
+    await app.ready()
+
+    expect(caught).toBeInstanceOf(ErrContributionPhase)
   })
 })

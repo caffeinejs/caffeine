@@ -1,11 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
-import { ApplicationAvailability } from '@caffeinejs/std'
+import { ApplicationAvailability, Contributions, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
 import type { Context } from '../../../context.js'
-import type { Feats } from '../../../feats.js'
-import type { ServiceKit } from '../../../service.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque.js'
@@ -172,14 +170,14 @@ describe('OpaqueTokenAuthenticationHandler', () => {
   })
 
   describe('DI store resolution via configure()', () => {
-    function makeKit(wrap: ReturnType<typeof vi.fn>): ServiceKit {
+    function makeKit(wrap: ReturnType<typeof vi.fn>): ServiceBootstrapIn {
       const internal = vi.fn()
       const toValue = vi.fn().mockReturnValue({ internal })
       const bind = vi.fn().mockReturnValue({ toValue })
       return {
         container: { bind, wrap } as unknown as Container,
         availability: new ApplicationAvailability(),
-        feats: { toggleAuthentication: vi.fn().mockReturnThis() } as unknown as Feats,
+        contributions: new Contributions(),
         config: new ConfigDefinition(token<any>(Symbol('app.config'))),
       }
     }

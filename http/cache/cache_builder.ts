@@ -1,6 +1,5 @@
-import { $t, ServiceBeforeBootstrapIn, Service, type ServiceAPI } from '@caffeinejs/std'
+import { $t, ServiceBeforeBootstrapIn, ServiceBootstrapIn, Service, type ServiceAPI } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
-import type { ServiceKit } from '../service.js'
 import { ETagGenerator } from './cache.js'
 import { CacheStore } from './store.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
@@ -83,7 +82,7 @@ export class CacheBuilder<C = unknown> implements Service {
     })
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     if (this.#store !== undefined) {
       kit.container.bind(CacheStore).toValue(this.#store).internal()
     }

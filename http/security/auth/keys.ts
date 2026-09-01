@@ -1,10 +1,14 @@
 import { token } from '@caffeinejs/di'
+import { contributionKey } from '@caffeinejs/std'
 import type { AuthenticationOptions } from './builder.js'
 import type { AuthSchemeDescriptor } from './descriptor.js'
 import type { OIDCMeta } from './oidc/index.js'
 
-export const kAuthOpts = token<AuthenticationOptions>(Symbol('caffeinejs.authentication.options'))
-export const kOIDCMeta = token<OIDCMeta>(Symbol('caffeinejs.oidc.meta'))
+/** The resolved {@link AuthenticationOptions}, absent when the application configured no authentication. */
+export const kAuthContribution = contributionKey<AuthenticationOptions>('http:auth.options')
+
+/** The OIDC handlers and their reachability, absent unless an OIDC strategy was registered. */
+export const kOIDCContribution = contributionKey<OIDCMeta>('http:auth.oidc')
 
 /**
  * DI key for the `Map<string, AuthSchemeDescriptor>` describing how each registered scheme expects credentials.

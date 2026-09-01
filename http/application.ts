@@ -2,25 +2,22 @@ import type { Container } from '@caffeinejs/di'
 import { BaseApplication, type ApplicationInit, type Service, type ShutdownOptions } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { Router } from './route.js'
-import { Feats } from './feats.js'
-import type { ServiceKit, Services } from './service.js'
+import type { Services } from './service.js'
 import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import { ControllerRouteSource } from './decorators/registrar/source.js'
 import { Authentication } from './security/auth/authentication_middleware.js'
 import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
 import { AuthenticationService } from './security/auth/service.js'
-import { kAuthOpts, kOIDCMeta } from './security/auth/keys.js'
-import type { OIDCMeta } from './security/auth/oidc/index.js'
+import { kAuthContribution, kOIDCContribution } from './security/auth/keys.js'
 import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
-import { ServerOptions, kServerOptions, type ServerAddress } from './server/index.js'
-import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthOptions, loadHealthIndicators, type HealthOptions } from './health/index.js'
+import { ServerOptions, kServerContribution, type ServerAddress } from './server/index.js'
+import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthContribution, loadHealthIndicators } from './health/index.js'
 import type { HealthServices } from './health/services.js'
 
 export interface AdapterIn<R> {
   routers: Router<R>[]
-  feats: Feats
   services: Services
   middlewares: MiddlewarePipeline
 }
@@ -58,7 +55,6 @@ export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
  */
 export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Adapter<I, R>> extends BaseApplication {
   readonly #adapter: A
-  readonly #feats = new Feats()
   readonly #middlewares = new MiddlewarePipeline()
   #routers: Router<R>[] = []
   #health: HealthServices | undefined
@@ -128,10 +124,6 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     return this.use(new Authentication(), 'onRequest')
   }
 
-  protected override serviceKit(): ServiceKit {
-    return { ...super.serviceKit(), feats: this.#feats }
-  }
-
   protected override configurers(): Service[] {
     return [
       ...this.services,
@@ -153,19 +145,23 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
     this.#routers = buildRouting<R>(this.routeSources(), this.container)
 
     // Copy into a fresh object: the adapter's `listen()` mutates what it receives.
-    const server: ServerOptions = { ...this.container.get<ServerOptions>(kServerOptions) }
+    const server: ServerOptions = { ...this.contributions.get(kServerContribution) }
 
     const health = this.#buildHealth()
     this.#health = health
 
+    // Configuring authentication binds the coordinator, and nothing else does — so its presence *is* the
+    // feature being on, with no separate flag to be written and then read out of sync with it.
+    const coordinator = this.container.getOptional(AuthenticationService)
+
     const services: Services = {
       auth: {
-        enabled: this.#feats.authentication,
-        coordinator: this.container.getOptional(AuthenticationService),
-        options: this.container.getOptional(kAuthOpts),
+        enabled: coordinator !== undefined,
+        coordinator,
+        options: this.contributions.find(kAuthContribution),
         schemes: this.container.getOptional(AuthenticationSchemeProvider),
       },
-      oidc: this.container.getOptional<OIDCMeta>(kOIDCMeta),
+      oidc: this.contributions.find(kOIDCContribution),
       errorHandling: this.container.get(ErrorHandlerProvider),
       server,
       health,
@@ -173,7 +169,6 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
 
     await this.#adapter.setup({
       routers: this.#routers,
-      feats: this.#feats,
       services,
       middlewares: this.#middlewares,
     })
@@ -243,7 +238,7 @@ export abstract class AbstractWebApplication<I, R, A extends Adapter<I, R> = Ada
   }
 
   #buildHealth(): HealthServices {
-    const options = this.container.get<HealthOptions>(kHealthOptions)
+    const options = this.contributions.get(kHealthContribution)
     const availability = this.availability
     const registry = new HealthRegistry(loadHealthIndicators(this.container), options)
 

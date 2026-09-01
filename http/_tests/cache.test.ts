@@ -2341,3 +2341,15 @@ describe('MemoryCacheStore maxBytes budget', () => {
     expect(await store.get('b', 'seg')).toBeDefined()
   })
 })
+
+describe('default CacheStore', () => {
+  it('is used when nothing else bound a store', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .build()
+    await app.ready()
+
+    expect(app.container.get(CacheStore)).toBeInstanceOf(MemoryCacheStore)
+
+    await app.close()
+  })
+})

@@ -1,7 +1,6 @@
-import { $t, type Service, type ServiceAPI, ServiceBeforeBootstrapIn } from '@caffeinejs/std'
+import { $t, type Service, type ServiceAPI, ServiceBeforeBootstrapIn, ServiceBootstrapIn } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
-import type { ServiceKit } from '../service.js'
-import { kServerOptions } from './keys.js'
+import { kServerContribution } from './keys.js'
 
 export interface ServerOptions {
   port: number
@@ -46,9 +45,9 @@ const serverConfigSchema = $t.Object({
  * By default the settings live at `server.*`. {@link config} re-points them — `s.config(c => c.app.server)`
  * moves both the reads and the code-set defaults to `app.server.*`, checked against the application schema.
  *
- * A {@link Service}: its {@link Service.configure} binds a fixed {@link ServerOptions} under
- * {@link kServerOptions}. That snapshot is deliberate — the listen address cannot change while the server runs,
- * so a config refresh does not move it.
+ * A {@link Service}: its `bootstrap` contributes the live {@link ServerOptions} under
+ * {@link kServerContribution}. The listen address still stops moving once the socket is bound — the
+ * application copies these options immediately before binding, and that copy is what the server runs on.
  *
  * `C` is the application config type (flows from the builder once `.config(...)` is declared), so the selector
  * argument `c` is `ConfigHandle<C>`.
@@ -94,19 +93,16 @@ export class ServerBuilder<C = unknown> implements Service {
     })
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const slice = this.#slice!
 
-    kit.container
-      .bind<ServerOptions>(kServerOptions)
-      // The slice's own object, not a copy: it is live, so its fields keep following refreshes like every
-      // other configuration in the framework.
-      //
-      // The listen address still stops moving where it always did: the application spreads these options
-      // immediately before the adapter binds the socket, and that copy is what the server runs on. Freezing
-      // the whole object here instead would only mean nobody could ever see what configuration now says.
-      .toValue(slice.config)
-      .internal()
+    // The slice's own object, not a copy: it is live, so its fields keep following refreshes like every
+    // other configuration in the framework.
+    //
+    // The listen address still stops moving where it always did: the application spreads these options
+    // immediately before the adapter binds the socket, and that copy is what the server runs on. Freezing
+    // the whole object here instead would only mean nobody could ever see what configuration now says.
+    kit.contributions.contribute(kServerContribution, slice.config)
 
     return Promise.resolve()
   }

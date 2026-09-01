@@ -1,12 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
-import { type Service } from '@caffeinejs/std'
+import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
 import {
   $p,
   Keys,
   type RouteAuthzOptions,
-  type ServiceKit,
   RouteBuilder,
   WebApplication,
   createWebApplication,
@@ -47,7 +46,7 @@ class ProgrammaticService implements Service {
     return 'programmatic'
   }
 
-  bootstrap(kit: ServiceKit): Promise<void> {
+  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const endpoints = this.#endpoints
     kit.container.bind(endpoints).toValue(new endpoints()).labels(Keys.CONTROLLER)
 

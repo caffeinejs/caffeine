@@ -1,6 +1,6 @@
 import { ApplicationAvailability, type ServiceBeforeBootstrapIn, type Service, ServiceBootstrapIn } from '@caffeinejs/std'
 import type { ConfigSlice } from '@caffeinejs/std/config'
-import { kHealthOptions } from './keys.js'
+import { kHealthContribution } from './keys.js'
 import {
   HEALTH_CONFIG_NAMESPACE,
   finalizeHealthOptions,
@@ -60,11 +60,10 @@ export class HealthServiceConfigurer implements Service {
         .internal()
     }
 
-    if (this.#options !== undefined && !kit.container.has(kHealthOptions)) {
-      kit.container
-        .bind<HealthOptions>(kHealthOptions)
-        .toValue(this.#options.config)
-        .internal()
+    // Only ever set when no `HealthBuilder` is registered — `beforeBootstrap` returns early otherwise — so
+    // this is the whole of "nobody configured health", with no need to ask whether the builder got there first.
+    if (this.#options !== undefined) {
+      kit.contributions.contribute(kHealthContribution, this.#options.config)
     }
 
     return Promise.resolve()
