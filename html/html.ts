@@ -8,13 +8,14 @@ import { HTML_DEFAULTS, kHTMLDefaults, type HTMLDefaults } from './extension.js'
 export type HTMLNode = string | Promise<string>
 
 /**
- * Per-response overrides of the application's {@link HTMLDefaults}.
+ * Per-response override of the application's {@link HTMLDefaults.autoDoctype}. Content-Type cannot be
+ * set here — see {@link HTML}.
  */
 export interface HTMLOptions {
-  contentType?: string
   doctype?: boolean
 }
 
+const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 const DOCTYPE = '<!doctype html>'
 
 function isThenable(value: HTMLNode): value is Promise<string> {
@@ -56,10 +57,14 @@ export class HTMLResult extends Responder {
   }
 
   respond(ctx: Context): ActionResult {
-    const defaults = defaultsOf(ctx)
-    const autoDoctype = this.options?.doctype ?? defaults.autoDoctype
+    const autoDoctype = this.options?.doctype ?? defaultsOf(ctx).autoDoctype
 
-    ctx.header('content-type', this.options?.contentType ?? defaults.contentType)
+    // Leave whatever Content-Type the reply already carries — from `@Produces`, which runs before the
+    // handler, or the handler's own `ctx.header('content-type', ...)` call — and only fall back to the
+    // default when neither set one.
+    if (!ctx.hasHeader('content-type')) {
+      ctx.header('content-type', DEFAULT_CONTENT_TYPE)
+    }
 
     return isThenable(this.node)
       ? this.node.then(markup => applyDoctype(markup, autoDoctype))
@@ -77,9 +82,12 @@ export class HTMLResult extends Responder {
  * }
  * ```
  *
- * Content-Type and the `<!doctype html>` prefix come from the application's `.extend(HTMLExt, …)` settings, or
- * from framework defaults when the application never installed the plugin. `options` overrides both for
- * this response.
+ * Content-Type defaults to `text/html; charset=utf-8`, applied only when the response does not already
+ * carry one — a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call, both
+ * survive undisturbed. There is no way to set Content-Type through this function; use `@Produces` or
+ * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the application's
+ * `.extend(HTMLExt, …)` setting, or the framework default when the application never installed the
+ * feature; `options.doctype` overrides it for this response.
  *
  * `@kitajs/html` escapes nothing on its own: interpolated values need the `safe` attribute, and the
  * `@kitajs/ts-html-plugin` language-service plugin is what reports the ones that do not have it.

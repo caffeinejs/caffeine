@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import {
+  $p,
+  Args,
   Catch,
   Controller,
   ErrorHandler,
   Get,
+  Produces,
   createWebApplication,
   fastifyAdapterFactory,
   type ActionResult,
@@ -70,10 +73,20 @@ class HTMLController {
 
   @Get('/overridden')
   overridden() {
-    return HTML(<Document title="hello" />, {
-      contentType: 'application/xhtml+xml',
-      doctype: false,
-    })
+    return HTML(<Document title="hello" />, { doctype: false })
+  }
+
+  @Get('/produces')
+  @Produces('application/xhtml+xml')
+  produces() {
+    return HTML(<Document title="hello" />)
+  }
+
+  @Get('/header-set')
+  @Args([$p.context()])
+  headerSet(ctx: Context) {
+    ctx.header('content-type', 'application/xhtml+xml')
+    return HTML(<Document title="hello" />)
   }
 }
 
@@ -166,27 +179,50 @@ describe('HTML', () => {
     })
   })
 
-  // The builder's settings only matter if they survive the trip through HTMLExtension's Fastify
-  // decoration and back out through ctx.fst in respond() — the only route a Responder has to app state.
+  // The builder's autoDoctype setting only matters if it survives the trip through HTMLExtension's
+  // Fastify decoration and back out through ctx.fst in respond() — the only route a Responder has to
+  // app state. Content-Type has no app-level default any more, so it stays the hardcoded one here.
   it('applies the application defaults', async () => {
-    const app = htmlApp(h => h.contentType('application/xhtml+xml').autoDoctype(false))
+    const app = htmlApp(h => h.autoDoctype(false))
     await app.ready()
 
     const res = await app.fetch('/html/document')
 
-    expect(res.headers.get('content-type')).toMatch(/^application\/xhtml\+xml/)
+    expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
     expect(await res.text()).toBe('<html><body><h1>hello</h1></body></html>')
   })
 
   // One route answering differently must not require reconfiguring the application.
-  it('lets a response override the application defaults', async () => {
-    const app = htmlApp(h => h.contentType('text/html; charset=utf-8').autoDoctype(true))
+  it('lets a per-call doctype option override the application default', async () => {
+    const app = htmlApp(h => h.autoDoctype(true))
     await app.ready()
 
     const res = await app.fetch('/html/overridden')
 
-    expect(res.headers.get('content-type')).toMatch(/^application\/xhtml\+xml/)
+    expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
     expect(await res.text()).toBe('<html><body><h1>hello</h1></body></html>')
+  })
+
+  describe('content type', () => {
+    // The default must not clobber a Content-Type the route already declared before the handler ran.
+    it('does not override a route-declared Content-Type from @Produces', async () => {
+      const app = htmlApp()
+      await app.ready()
+
+      const res = await app.fetch('/html/produces')
+
+      expect(res.headers.get('content-type')).toMatch(/^application\/xhtml\+xml/)
+    })
+
+    // The handler's own header call is just as much "already set" as a route-level @Produces.
+    it('does not override a Content-Type the handler set itself', async () => {
+      const app = htmlApp()
+      await app.ready()
+
+      const res = await app.fetch('/html/header-set')
+
+      expect(res.headers.get('content-type')).toMatch(/^application\/xhtml\+xml/)
+    })
   })
 
   describe('escaping', () => {

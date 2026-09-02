@@ -92,6 +92,7 @@ export interface Context<
 
   header(key: string, value: string): this
   headers(headers: Record<string, string>): this
+  hasHeader(key: string): boolean
 
   cookie(name: string, value: string, opts?: CO): this
 
@@ -207,6 +208,10 @@ export class FastifyContext<
   headers(headers: Record<string, string>): this {
     this.#reply.headers(headers)
     return this
+  }
+
+  hasHeader(key: string): boolean {
+    return this.#reply.hasHeader(key)
   }
 
   removeHeader(key: string): this {

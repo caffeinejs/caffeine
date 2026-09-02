@@ -37,13 +37,19 @@ records the requirement for consumers while letting npm skip it here. Do not dro
 do not add it to `devDependencies`. It is a language-service plugin — it changes no emit and runs only in
 an editor using the workspace TypeScript — so nothing in this package needs it present.
 
-## Defaults reach a response through Fastify
+## `autoDoctype` reaches a response through Fastify; Content-Type does not
 
 `Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLExtension` decorates
-the Fastify instance under the `kHTMLDefaults` symbol and `respond` reads it back through
+the Fastify instance under the `kHTMLDefaults` symbol and `respond` reads `autoDoctype` back through
 `(ctx as FastifyContext).fst` — the escape hatch `http/context.ts` documents. When the application never
 installed `HTMLExt` there is no decoration and `HTML_DEFAULTS` applies, which is what keeps `HTML(...)`
-working with no setup. Do not route these through a config slice or a container key.
+working with no setup. Do not route this through a config slice or a container key.
+
+Content-Type has no app-level default and no per-call override — `HTMLOptions` carries no `contentType`
+field. `respond` sets the hardcoded `text/html; charset=utf-8` only when the reply carries no Content-Type
+yet; a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call before returning
+`HTML(...)`, both survive untouched. Those two are the only ways to get a different Content-Type — do not
+add a `contentType` option back onto `HTML(...)`, and do not reintroduce an app-wide setting.
 
 ## `respond` returns, it does not send
 

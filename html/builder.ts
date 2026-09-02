@@ -16,14 +16,6 @@ export class HTMLBuilder implements Service {
   }
 
   /**
-   * The Content-Type every response carries, e.g. `application/xhtml+xml`.
-   */
-  contentType(value: string): ServiceAPI<this> {
-    this.#defaults = { ...this.#defaults, contentType: value }
-    return this
-  }
-
-  /**
    * Whether a document starting with `<html>` gains a `<!doctype html>` prefix. On by default; turn it
    * off for an application answering with fragments a client splices into a page.
    */

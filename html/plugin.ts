@@ -3,8 +3,8 @@ import { HTMLBuilder } from './builder.js'
 
 /**
  * The `@caffeinejs/html` application feature. `.extend(HTMLExt)` publishes application-wide
- * `HTML(...)` response defaults; pass a callback to change them through {@link HTMLBuilder.contentType}
- * and {@link HTMLBuilder.autoDoctype}. Installing it is optional: `HTML(...)` renders without it.
+ * `HTML(...)` response defaults; pass a callback to change them through {@link HTMLBuilder.autoDoctype}.
+ * Installing it is optional: `HTML(...)` renders without it.
  */
 export const HTMLExt: Feature<ServiceAPI<HTMLBuilder>> = defineFeature({
   name: 'html',

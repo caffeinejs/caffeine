@@ -4,7 +4,6 @@ import { ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
  * Response settings every {@link HTMLResult} starts from.
  */
 export interface HTMLDefaults {
-  contentType: string
   /** Whether a document starting with `<html>` gains a `<!doctype html>` prefix. */
   autoDoctype: boolean
 }
@@ -13,7 +12,6 @@ export interface HTMLDefaults {
  * What an application that never installed `HTMLExt` renders with, so `HTML(...)` works on its own.
  */
 export const HTML_DEFAULTS: HTMLDefaults = {
-  contentType: 'text/html; charset=utf-8',
   autoDoctype: true,
 }
 
