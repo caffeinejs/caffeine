@@ -48,7 +48,8 @@
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "fmt": "eslint --fix",
-    "lint:markdown": "markdownlint-cli2"
+    "lint:markdown": "markdownlint-cli2",
+    "license:check": "node tools/check-licenses.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

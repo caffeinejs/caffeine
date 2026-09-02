@@ -18,3 +18,7 @@ Keep package-specific setup out of the root scripts. The petstore example has tw
 ## CLI binary
 
 `@caffeinejs/cli` ships a bun-compiled binary at `cli/dist/caffeine`. Root `npm run build` (`tsc`) does not produce it — run `npm run build:cli` (or `make build:cli`) after clone/clean so `node_modules/.bin/caffeine` exists before any example `caffeine generate`. `build:examples` and CI already call `build:cli` first.
+
+## License allowlist and dependency review
+
+`.github/workflows/license-check.yml` runs on pull requests and on pushes to `main` / `[0-9]+.x`. On PRs it also runs GitHub Dependency Review (`fail-on-severity: high`). The license job runs `npm run license:check`, which walks production dependency trees of first-party workspace packages (examples, benchmarks, scaffold templates, and `di/_tests/deno` are excluded) and fails if any third-party SPDX license is outside the allowlist in `tools/check-licenses.mjs`.

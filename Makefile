@@ -55,6 +55,10 @@ lint: ## check lint and fix errors
 lint-markdown: ## lint markdown
 	@npm run lint:markdown
 
+.PHONY: licensecheck
+licensecheck: ## check production dependency licenses against the allowlist
+	@npm run license:check
+
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 	@npm run lint:fix -w $*
 
