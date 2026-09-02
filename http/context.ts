@@ -49,6 +49,15 @@ export interface Req<
   signedCookie(name: string): TAsync extends true ? Promise<UnsignedCookie> : UnsignedCookie
 }
 
+/**
+ * The Fastify objects behind a context: the escape hatch for platform-specific consumers, such as view rendering
+ * reaching `reply.view` or `@caffeinejs/multipart` reading `request.parts()`.
+ */
+export interface Fst<REPLY extends FastifyReply = FastifyReply> {
+  get request(): FastifyRequest
+  get reply(): REPLY
+}
+
 export interface Context<
   REQ = unknown,
   CO = unknown,
@@ -136,6 +145,7 @@ export class FastifyContext<
   InferBody<SCHEMA>
 > {
   #req!: FastifyContextRequest<SCHEMA>
+  #fst!: Fst<REPLY>
   #fastifyRequest: FastifyRequest
   #reply: REPLY
 
@@ -151,9 +161,9 @@ export class FastifyContext<
     return this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest)
   }
 
-  /** The underlying Fastify reply. The escape hatch for platform-specific consumers (e.g. view rendering). */
-  get reply(): REPLY {
-    return this.#reply
+  /** The underlying Fastify request and reply. The escape hatch for platform-specific consumers. */
+  get fst(): Fst<REPLY> {
+    return this.#fst ??= { request: this.#fastifyRequest, reply: this.#reply }
   }
 
   get user(): Principal {

@@ -26,6 +26,46 @@ export function isSecretSchema(schema: unknown): boolean {
     && (schema as Record<string, unknown>)[SECRET_KEYWORD] === true
 }
 
+/**
+ * Whether a schema node is an uploaded file — `{@link caffeineT.File}` or the items of
+ * {@link caffeineT.Files}.
+ */
+export function isFileSchema(schema: unknown): boolean {
+  return typeof schema === 'object'
+    && schema !== null
+    && (schema as Record<string, unknown>).format === 'binary'
+}
+
+/**
+ * Whether a schema describes an upload: a file, an array of files, or an object with a file among its
+ * properties.
+ *
+ * This is what tells a route apart as a `multipart/form-data` upload — HTTP leaves such a body slot
+ * unvalidated because its parts are streamed rather than parsed, and OpenAPI documents it as multipart.
+ */
+export function hasFileSchema(schema: unknown): boolean {
+  if (isFileSchema(schema)) {
+    return true
+  }
+
+  if (typeof schema !== 'object' || schema === null) {
+    return false
+  }
+
+  const { items, properties } = schema as { items?: unknown, properties?: unknown }
+
+  if (isFileSchema(items)) {
+    return true
+  }
+
+  if (typeof properties !== 'object' || properties === null) {
+    return false
+  }
+
+  return Object.values(properties)
+    .some(property => isFileSchema(property) || isFileSchema((property as { items?: unknown }).items))
+}
+
 /** Options for {@link caffeineT.List}. */
 export interface ListOptions extends SchemaOptions {
   /** The delimiter between elements. Default `,`. */
@@ -137,6 +177,27 @@ const caffeineT = {
    */
   Secret: <T extends TSchema>(schema: T, options?: SchemaOptions): T =>
     ({ ...schema, ...options, [SECRET_KEYWORD]: true }) as T,
+
+  /**
+   * An uploaded file, in the body of a `multipart/form-data` route.
+   *
+   * ```ts
+   * .schema({ body: $t.Object({ avatar: $t.File(), caption: $t.String() }) })
+   * ```
+   *
+   * Declaring the upload is what documents it: `{ type: 'string', format: 'binary' }` is how JSON Schema and
+   * OpenAPI spell a file, and a consumer reading the document renders a file picker rather than a text box.
+   *
+   * **The declaration does not parse the request.** A body holding a file is left unvalidated and
+   * `ctx.req.body()` stays empty, because the parts are streamed rather than buffered; read them with
+   * `multipart(ctx)` from `@caffeinejs/multipart`. The other slots — `params`, `querystring`, `headers` —
+   * still validate.
+   */
+  File: (options: SchemaOptions = {}) => Type.Unsafe<File>({ ...options, type: 'string', format: 'binary' }),
+
+  /** Several uploaded files sent under one field name. See {@link caffeineT.File}. */
+  Files: (options: SchemaOptions = {}) =>
+    Type.Unsafe<File[]>({ ...options, type: 'array', items: { type: 'string', format: 'binary' } }),
 
   /**
    * A value that may be written as JSON text — `DB={"host":"h","port":5432}` — as well as as itself.

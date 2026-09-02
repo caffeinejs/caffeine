@@ -1,7 +1,7 @@
 import type { CookieSerializeOptions } from '@fastify/cookie'
-import type { FastifyReply, RawRequestDefaultExpression, RawServerDefault } from 'fastify'
+import type { RawRequestDefaultExpression, RawServerDefault } from 'fastify'
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
-import type { Context, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
+import type { Context, Fst, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
 import type { RouteValidationSchema } from '../../route.js'
 
 /** Flattens an intersection so editors show one object rather than a chain of `&`. */
@@ -54,8 +54,8 @@ export interface RouteContext<S extends RouteValidationSchema, P extends string>
   InferHeaders<S>,
   InferBody<S>
 > {
-  /** The underlying Fastify reply. The escape hatch for platform-specific consumers. */
-  get reply(): FastifyReply
+  /** The underlying Fastify request and reply. The escape hatch for platform-specific consumers. */
+  get fst(): Fst
 }
 
 /**

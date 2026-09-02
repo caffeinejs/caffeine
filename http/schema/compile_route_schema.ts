@@ -1,4 +1,4 @@
-import { type AnySchema, type JSONSchema, toJSONSchema } from '@caffeinejs/std/schema'
+import { type AnySchema, type JSONSchema, hasFileSchema, toJSONSchema } from '@caffeinejs/std/schema'
 import type { FastifySchema } from 'fastify'
 import type { RouteValidationSchema } from '../route.js'
 import { normalizeForAjv } from './_normalize.js'
@@ -28,6 +28,12 @@ export function compileRouteSchema(
   for (const slot of REQUEST_SLOTS) {
     const authored = schema[slot]
     if (authored !== undefined) {
+      // A file body is streamed, not parsed: `request.body` is never populated, so a validator built from it
+      // would answer 400 to every valid upload. The slot is documentation for OpenAPI, not a validator.
+      if (slot === 'body' && hasFileSchema(authored)) {
+        continue
+      }
+
       const converted = normalizeForAjv(toJSONSchema(authored, 'input', `${context} ${slot}`))
       compiled[slot] = applySlotPolicy(converted, slot)
     }

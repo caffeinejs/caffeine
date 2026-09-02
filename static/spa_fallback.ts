@@ -39,7 +39,7 @@ export class SPAFallback extends NotFoundFallback {
 
     // Through `sendFile`, not a raw stream, so the shell gets the same ETag, range and cache-header handling
     // as every other file the mount serves.
-    const reply = (ctx.http as FastifyContext).reply as SendFileCapableReply
+    const reply = (ctx.http as FastifyContext).fst.reply as SendFileCapableReply
     reply.sendFile(this.settings.index, this.settings.root)
 
     return true

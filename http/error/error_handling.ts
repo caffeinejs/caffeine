@@ -105,7 +105,7 @@ export function installRouteGroupErrorHandler(
 }
 
 function respond(ctx: FastifyContext, result: unknown): unknown {
-  const reply = ctx.reply
+  const reply = ctx.fst.reply
 
   if (reply.sent) {
     return

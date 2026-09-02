@@ -1,4 +1,5 @@
 import type { Route } from '@caffeinejs/http'
+import { hasFileSchema } from '@caffeinejs/std/schema'
 import type { RequestBodyObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
 
@@ -27,6 +28,9 @@ const NAMED_FILE_PICKERS = new Set(['multipart:file', 'multipart:streamfile', 'm
  * Two sources, in order: the authored `@Schema({ body })`, and — when there is no body schema but the handler
  * takes file pickers — a synthesized `multipart/form-data` schema built from the field names those pickers
  * ask for. The synthesis is the point: an upload route is fully described by `@Args([$p.file('file')])`.
+ *
+ * A body schema declaring `$t.File()` is the other way to write an upload, and the only one available to a
+ * handler that takes no pickers: it is documented as `multipart/form-data` from the schema alone.
  */
 export function deriveRequestBody(
   route: Route<unknown>,
@@ -37,8 +41,8 @@ export function deriveRequestBody(
     return undefined
   }
 
-  const multipart = route.parameters.some(picker => MULTIPART_PICKERS.has(picker.type))
   const authored = route.schema?.body
+  const multipart = route.parameters.some(picker => MULTIPART_PICKERS.has(picker.type)) || hasFileSchema(authored)
 
   if (authored !== undefined) {
     const schema = registry.register(authored, 'input', `${context} body`)
@@ -70,7 +74,7 @@ export function deriveRequestBody(
 
 /**
  * The media types a request body may arrive as: everything `@Consumes` declared, else multipart when file
- * pickers say so, else JSON.
+ * pickers or a file body schema say so, else JSON.
  *
  * All of them, not just the first — `@Consumes('application/json', 'application/xml')` means the route really
  * does accept both, and documenting one silently narrows the published contract.

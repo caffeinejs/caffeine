@@ -95,6 +95,18 @@ describe('response slot', () => {
     expect((compiled?.response as Record<string, unknown>)[200]).toMatchObject({ type: 'object' })
   })
 
+  it('leaves a file body uncompiled, since its parts are streamed and never reach request.body', () => {
+    const compiled = compileRouteSchema({
+      params: $t.Object({ id: $t.String() }),
+      body: $t.Object({ avatar: $t.File(), caption: $t.String() }),
+    }, 'POST /pets/:id/images')
+
+    // An Ajv validator built from this body would answer 400 to every valid upload.
+    expect(compiled?.body).toBeUndefined()
+    // The other slots still validate, which is the point of leaving only `body` out.
+    expect(compiled?.params).toMatchObject({ type: 'object' })
+  })
+
   it('projects a Standard Schema response from its output side', () => {
     const compiled = compileRouteSchema({
       body: z.object({ limit: z.number().default(10) }),

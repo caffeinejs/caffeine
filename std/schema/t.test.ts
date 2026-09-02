@@ -1,7 +1,7 @@
 import { Value } from '@sinclair/typebox/value'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { InferSchema } from './schema.js'
-import { $t } from './t.js'
+import { $t, hasFileSchema } from './t.js'
 
 describe('$t', () => {
   it('produces plain JSON Schema, with TypeBox markers hidden behind symbols', () => {
@@ -185,5 +185,51 @@ describe('$t.JSON', () => {
     const schema = $t.Object({ db: $t.JSON($t.Object({ host: $t.String() })) })
 
     expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ db: { host: string } }>()
+  })
+})
+
+describe('$t.File', () => {
+  it('emits the JSON Schema spelling of an upload', () => {
+    expect(JSON.parse(JSON.stringify($t.File()))).toEqual({ type: 'string', format: 'binary' })
+  })
+
+  it('emits an array of uploads for several files under one field', () => {
+    expect(JSON.parse(JSON.stringify($t.Files()))).toEqual({
+      type: 'array',
+      items: { type: 'string', format: 'binary' },
+    })
+  })
+
+  it('types as the file the handler reads back', () => {
+    const schema = $t.Object({ avatar: $t.File(), gallery: $t.Files() })
+
+    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ avatar: File, gallery: File[] }>()
+  })
+
+  it('carries annotations through, so an upload can be described', () => {
+    expect(JSON.parse(JSON.stringify($t.File({ description: 'The avatar' })))).toMatchObject({
+      description: 'The avatar',
+      format: 'binary',
+    })
+  })
+})
+
+describe('hasFileSchema', () => {
+  it('recognizes a file, an array of files, and an object holding either', () => {
+    expect(hasFileSchema($t.File())).toBe(true)
+    expect(hasFileSchema($t.Files())).toBe(true)
+    expect(hasFileSchema($t.Object({ caption: $t.String(), avatar: $t.File() }))).toBe(true)
+    expect(hasFileSchema($t.Object({ gallery: $t.Files() }))).toBe(true)
+  })
+
+  it('is false for a body that carries no upload', () => {
+    expect(hasFileSchema($t.Object({ name: $t.String() }))).toBe(false)
+    expect(hasFileSchema($t.String())).toBe(false)
+    expect(hasFileSchema($t.Array($t.String()))).toBe(false)
+    expect(hasFileSchema(undefined)).toBe(false)
+  })
+
+  it('does not confuse a binary-formatted field with the format keyword elsewhere', () => {
+    expect(hasFileSchema($t.Object({ when: $t.String({ format: 'date-time' }) }))).toBe(false)
   })
 })

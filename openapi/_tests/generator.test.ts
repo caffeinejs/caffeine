@@ -167,6 +167,25 @@ describe('generateDocument', () => {
     })
   })
 
+  it('documents a $t.File body as multipart, which is all a handler taking no pickers can declare', () => {
+    const router = fixtureRouter('/pets', r => r.routes([
+      fixtureRoute('POST', '/:id/images', 'upload')
+        .schema({ body: $t.Object({ file: $t.File(), caption: $t.String() }) }),
+    ]))
+
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
+    const body = operationAt(document, '/pets/{id}/images', 'post')?.requestBody
+
+    expect(body?.required).toBe(true)
+    expect(body?.content['application/json']).toBeUndefined()
+    expect(body?.content['multipart/form-data'].schema).toMatchObject({
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        caption: { type: 'string' },
+      },
+    })
+  })
+
   it('omits a request body on a GET', () => {
     const router = fixtureRouter('/pets', r => r.routes([
       fixtureRoute('GET', '/', 'list').parameters([$p.body()]),

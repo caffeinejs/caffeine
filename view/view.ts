@@ -32,7 +32,7 @@ export class ViewResult extends Responder {
   }
 
   respond(ctx: Context): ActionResult {
-    return renderView(this, (ctx as FastifyContext).reply as ViewCapableReply)
+    return renderView(this, (ctx as FastifyContext).fst.reply as ViewCapableReply)
   }
 }
 
