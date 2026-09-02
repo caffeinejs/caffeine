@@ -17,6 +17,9 @@
       "path": "./compress/tsconfig.build.json"
     },
     {
+      "path": "./html/tsconfig.build.json"
+    },
+    {
       "path": "./multipart/tsconfig.build.json"
     },
     {

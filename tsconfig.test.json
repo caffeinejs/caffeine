@@ -22,6 +22,7 @@
     "http/**",
     "cors/**",
     "compress/**",
+    "html/**",
     "multipart/**",
     "static/**",
     "view/**",

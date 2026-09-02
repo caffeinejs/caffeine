@@ -51,6 +51,9 @@
       "path": "./compress"
     },
     {
+      "path": "./html"
+    },
+    {
       "path": "./multipart"
     },
     {

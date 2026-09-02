@@ -24,6 +24,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`http/`](http/AGENTS.md) | `@caffeinejs/http` |
 | [`cors/`](cors/AGENTS.md) | `@caffeinejs/cors` |
 | [`compress/`](compress/AGENTS.md) | `@caffeinejs/compress` |
+| [`html/`](html/AGENTS.md) | `@caffeinejs/html` |
 | [`kafka/`](kafka/AGENTS.md) | `@caffeinejs/kafka` |
 | [`openapi/`](openapi/AGENTS.md) | `@caffeinejs/openapi` |
 | [`messaging/`](messaging/AGENTS.md) | `@caffeinejs/messaging` |
@@ -58,7 +59,7 @@ Run checks in this order and fix failures before considering the task complete. 
   2. `npm run test:typecheck -w <pkg> --if-present` (no-op when the package has no such script; vitest typecheck in `npm test` still covers test files)
   3. `npm test -w <pkg>`
   4. `npm run lint:fix -- <pkg-path>` — zero errors (warnings are pre-existing and acceptable)
-- **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `eslint.config.js`, root `package.json`, `vitest.workspace.ts`, `.github/**`):
+- **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `eslint.config.js`, root `package.json`, `vitest.config.ts`, `.github/**`):
   1. `npm run build`
   2. `npm run test:typecheck`
   3. `npm test`

@@ -4,7 +4,7 @@ Contributor notes that are too rare for every agent turn. Root [`CONVENTIONS.md`
 
 ## CI build outputs
 
-`.github/workflows/ci.yml` has one `build` job producing `dist/` for each package, then a separate `test` job that only receives the dists explicitly listed — it does not rebuild. Whenever a **new workspace package** is added that has its own `dist/` (declares `"types": "dist/..."` or `"exports"` pointing into `dist/`) **and** is imported by another package's tests (i.e. it has an entry in the root `vitest.workspace.ts` `projects` list, directly or via a dependent project), add its dist path to **both**:
+`.github/workflows/ci.yml` has one `build` job producing `dist/` for each package, then a separate `test` job that only receives the dists explicitly listed — it does not rebuild. Whenever a **new workspace package** is added that has its own `dist/` (declares `"types": "dist/..."` or `"exports"` pointing into `dist/`) **and** is imported by another package's tests (i.e. it has an entry in the root `vitest.config.ts` `test.projects` list, directly or via a dependent project), add its dist path to **both**:
 
 1. The `for d in ...` list in the `Verify Build Outputs` step
 2. The `path:` list in the `Upload Build Artifacts` step

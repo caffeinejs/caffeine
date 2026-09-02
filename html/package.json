@@ -1,0 +1,43 @@
+{
+  "name": "@caffeinejs/html",
+  "version": "0.0.0",
+  "description": "Caffeine html plugin",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build --force tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*"
+  },
+  "peerDependencies": {
+    "@kitajs/html": "^4.2.13",
+    "@kitajs/ts-html-plugin": "^4.1.4",
+    "fastify": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@kitajs/ts-html-plugin": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@kitajs/html": "^4.2.13",
+    "fastify": "^5.8.5"
+  }
+}

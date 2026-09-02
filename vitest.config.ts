@@ -10,6 +10,7 @@ export default defineConfig({
       './http/vitest.config.ts',
       './cors/vitest.config.ts',
       './compress/vitest.config.ts',
+      './html/vitest.config.ts',
       './multipart/vitest.config.ts',
       './view/vitest.config.ts',
       './static/vitest.config.ts',

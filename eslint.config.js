@@ -49,6 +49,7 @@ export default defineConfig(
             './http/tsconfig.json',
             './cors/tsconfig.json',
             './compress/tsconfig.json',
+            './html/tsconfig.json',
             './multipart/tsconfig.json',
             './view/tsconfig.json',
             './static/tsconfig.json',
@@ -136,7 +137,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -150,10 +151,13 @@ export default defineConfig(
   {
     files: [
       '**/_tests/**/*.ts',
+      '**/_tests/**/*.tsx',
       '**/_testdata/**/*.ts',
       '**/_benchmarks/**/*.ts',
       '**/*.test.ts',
+      '**/*.test.tsx',
       '**/*.spec.ts',
+      '**/*.spec.tsx',
       '**/*.bench.ts',
     ],
     languageOptions: {
@@ -167,7 +171,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['**/*.test.ts', '**/*.spec.ts'],
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
     rules: {
       'import-x/extensions': 'off',
       'import-x/no-unresolved': ['error', { ignore: ['^bun:'] }],
