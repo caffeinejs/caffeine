@@ -10,16 +10,16 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import type { ServiceAPI } from '@caffeinejs/std'
-import { CORS, CorsBuilder, cors, corsPlugin } from '../index.js'
+import { CORS, CorsBuilder, cors, CORSExt } from '../index.js'
 
 function corsApp(configure: (c: ServiceAPI<CorsBuilder>) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(corsPlugin())
+    .extend(CORSExt())
     .cors(configure)
 }
 
 describe('CORS', () => {
-  describe('global corsPlugin registration', () => {
+  describe('global CORSExt registration', () => {
     it('adds CORS headers to responses when CORS is activated with a wildcard origin', async () => {
       @Controller('/cors-global')
       class GlobalCorsController {
@@ -58,7 +58,7 @@ describe('CORS', () => {
       expect(res.headers.get('access-control-allow-methods')).toMatch(/GET/)
     })
 
-    it('does not add CORS headers when corsPlugin is not activated', async () => {
+    it('does not add CORS headers when CORSExt is not activated', async () => {
       @Controller('/no-cors')
       class NoCorsController {
         @Get('/resource')

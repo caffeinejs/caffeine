@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import type { ServiceAPI } from '@caffeinejs/std'
-import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticBuilder, staticPlugin } from '../index.js'
+import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticBuilder, StaticExt } from '../index.js'
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
 const empty = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
@@ -24,7 +24,7 @@ describe('SPA fallback', () => {
 
   const start = async (configure: (builder: ServiceAPI<StaticBuilder>) => void) => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(staticPlugin())
+      .extend(StaticExt())
       .static(configure)
       .build()
     await app.ready()
@@ -153,7 +153,7 @@ describe('SPA fallback', () => {
 
   it('refuses to start when the shell is missing', async () => {
     const failing = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(staticPlugin())
+      .extend(StaticExt())
       .static(s => s.spa(empty))
       .build()
 
@@ -164,7 +164,7 @@ describe('SPA fallback', () => {
   it('refuses a second SPA mount', () => {
     expect(() =>
       createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-        .extend(staticPlugin())
+        .extend(StaticExt())
         .static(s => s.spa(dist).spa(dist))
         .build(),
     ).toThrow(ErrDuplicateSPAMount)

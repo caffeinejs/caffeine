@@ -17,7 +17,7 @@ import {
   fastifyAdapterFactory,
 } from "@caffeinejs/http";
 import { $t } from "@caffeinejs/std";
-import { viewPlugin } from "@caffeinejs/view";
+import { ViewExt } from "@caffeinejs/view";
 // Side-effect import: registers HTTPErrorHandler / FallbackErrorHandler as global @Catch handlers.
 import "./error.handlers.js";
 import type { ErrorBody } from "./error.handlers.js";
@@ -86,7 +86,7 @@ const viewsRoot = fileURLToPath(new URL("../../views", import.meta.url));
 
 async function buildApp() {
   const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(viewPlugin())
+    .extend(ViewExt())
     .view((v) =>
       v.engine({ handlebars })
         .root(viewsRoot)

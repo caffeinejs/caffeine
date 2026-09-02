@@ -26,7 +26,7 @@ Plugins and builders, not Nest modules:
 
 ```ts
 createWebApplication(fastifyAdapterFactory(server), { container })
-  .extend(staticPlugin(), kafka())
+  .extend(StaticExt(), kafka())
   .static(s => s.serve(dir, { prefix: '/static' }))
   .kafka(k => k.brokers('localhost:9092').groupId('svc'))
 ```

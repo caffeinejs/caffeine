@@ -2,9 +2,9 @@ import type { Plugin, ServiceAPI } from '@caffeinejs/std'
 import { CompressBuilder } from './builder.js'
 
 /**
- * Builder methods contributed by {@link compressPlugin}.
+ * Builder methods contributed by {@link CompressExt}.
  */
-export interface CompressPluginExt {
+export interface CompressExt {
   /**
    * Activates compression with `@fastify/compress` defaults.
    */
@@ -17,13 +17,13 @@ export interface CompressPluginExt {
 
 /**
  * The `@caffeinejs/compress` application plugin. Pass it to
- * `createWebApplication(...).extend(compressPlugin())` then call `.compress()` so the adapter registers
+ * `createWebApplication(...).extend(CompressExt())` then call `.compress()` so the adapter registers
  * `@fastify/compress`. Per-route overrides use the `compress()` extension or the `@Compress` decorator.
  *
  * On the first `.compress(...)` call it lazily creates a single {@link CompressBuilder} and registers it as
  * a service; the builder's `bootstrap()` binds the compress server extension.
  */
-export function compressPlugin(): Plugin<CompressPluginExt> {
+export function CompressExt(): Plugin<CompressExt> {
   let builder: CompressBuilder | undefined
 
   return {
@@ -40,7 +40,7 @@ export function compressPlugin(): Plugin<CompressPluginExt> {
 
           return this
         },
-      } as unknown as CompressPluginExt
+      } as unknown as CompressExt
     },
   }
 }

@@ -11,11 +11,11 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from "@caffeinejs/http";
-import { multipartPlugin } from "@caffeinejs/multipart";
-import { openapiPlugin } from "@caffeinejs/openapi";
-import { staticPlugin } from "@caffeinejs/static";
+import { MultipartExt } from "@caffeinejs/multipart";
+import { OpenAPIExt } from "@caffeinejs/openapi";
+import { StaticExt } from "@caffeinejs/static";
 import { EnvConfigProvider } from "@caffeinejs/std/config";
-import { viewPlugin } from "@caffeinejs/view";
+import { ViewExt } from "@caffeinejs/view";
 import { apiErrorSchema } from "./util/errors/index.js";
 import { GITHUB_SESSION_COOKIE, githubConfig } from "./features/auth/index.js";
 import { appConfigSchema } from "./config.js";
@@ -47,7 +47,7 @@ export function buildApp(
   const builder = createWebApplication(fastifyAdapterFactory(server), {
     container,
   })
-    .extend(viewPlugin(), staticPlugin(), openapiPlugin(), multipartPlugin())
+    .extend(ViewExt(), StaticExt(), OpenAPIExt(), MultipartExt())
     .multipart()
     .view((v) =>
       v.engine({ handlebars })

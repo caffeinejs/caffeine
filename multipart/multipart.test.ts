@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
-import { $multipart, multipartPlugin } from './index.js'
+import { $multipart, MultipartExt } from './index.js'
 
 const BOUNDARY = '----TestBoundary123'
 
@@ -11,7 +11,7 @@ type ME = { name: string, value: string } | { name: string, filename: string, co
 
 function multipartApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(multipartPlugin())
+    .extend(MultipartExt())
     .multipart()
 }
 

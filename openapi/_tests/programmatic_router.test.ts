@@ -3,7 +3,7 @@ import fastify from 'fastify'
 import { $t } from '@caffeinejs/std'
 import { Router, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { apiGroup, operation } from '../decorators/index.js'
-import { openapiPlugin } from '../plugin.js'
+import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 const petSchema = $t.Object({ id: $t.String(), name: $t.String() }, { $id: 'ProgrammaticPet' })
@@ -39,7 +39,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => ({}))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(openapiPlugin())
+      .extend(OpenAPIExt())
       .openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public())
       .build()
       .mount(pets) as WebApplication
@@ -77,7 +77,7 @@ describe('openapi from a programmatic router', () => {
       .handler(ctx => ctx.body(ctx.req.body()))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(openapiPlugin())
+      .extend(OpenAPIExt())
       .openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public())
       .build()
       .mount(pets) as WebApplication

@@ -9,11 +9,11 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import { Encoding, encoding, compressPlugin } from '../index.js'
+import { Encoding, encoding, CompressExt } from '../index.js'
 
 function encodingApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(compressPlugin())
+    .extend(CompressExt())
     .compress()
 }
 

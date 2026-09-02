@@ -1,8 +1,8 @@
 import type { ConfigTypeOf, Plugin, ServiceAPI } from '@caffeinejs/std'
 import { OpenAPIBuilder } from './builder.js'
 
-/** The builder method {@link openapiPlugin} contributes. */
-export interface OpenAPIPluginExt {
+/** The builder method {@link OpenAPIExt} contributes. */
+export interface OpenAPIExt {
   /**
    * The config type is recovered from the builder this was reached through, so `o.config(c => c.app.docs)`
    * is typed against the application's own schema. An explicit `Self` type parameter rather than the
@@ -12,14 +12,14 @@ export interface OpenAPIPluginExt {
 }
 
 /**
- * The `@caffeinejs/openapi` application plugin. Pass it to `createWebApplication(..., openapiPlugin())` to
+ * The `@caffeinejs/openapi` application plugin. Pass it to `createWebApplication(..., OpenAPIExt())` to
  * generate and serve an OpenAPI document without http depending on this package.
  *
  * On the first `.openapi(...)` call it lazily creates one {@link OpenAPIBuilder} and registers it as a
  * service. The builder's `configure()` binds the resolved options, registers the document endpoints
  * as ordinary routes, and registers the extension that generates the document at start-up.
  */
-export function openapiPlugin(): Plugin<OpenAPIPluginExt> {
+export function OpenAPIExt(): Plugin<OpenAPIExt> {
   let builder: OpenAPIBuilder | undefined
 
   return {
@@ -37,7 +37,7 @@ export function openapiPlugin(): Plugin<OpenAPIPluginExt> {
 
           return this
         },
-      } as unknown as OpenAPIPluginExt
+      } as unknown as OpenAPIExt
     },
   }
 }

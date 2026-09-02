@@ -2,9 +2,9 @@ import type { Plugin, ServiceAPI } from '@caffeinejs/std'
 import { MultipartBuilder } from './builder.js'
 
 /**
- * Builder methods contributed by {@link multipartPlugin}.
+ * Builder methods contributed by {@link MultipartExt}.
  */
-export interface MultipartPluginExt {
+export interface MultipartExt {
   /**
    * Activates multipart uploads with `@fastify/multipart` defaults.
    */
@@ -17,7 +17,7 @@ export interface MultipartPluginExt {
 
 /**
  * The `@caffeinejs/multipart` application plugin. Pass it to
- * `createWebApplication(...).extend(multipartPlugin())` then call `.multipart()` so the adapter registers
+ * `createWebApplication(...).extend(MultipartExt())` then call `.multipart()` so the adapter registers
  * `@fastify/multipart` and `$multipart.*` pickers can read the request.
  *
  * Import `$multipart` from `@caffeinejs/multipart` at the controller (or any module that builds
@@ -26,7 +26,7 @@ export interface MultipartPluginExt {
  * On the first `.multipart(...)` call it lazily creates a single {@link MultipartBuilder} and registers it as
  * a service; the builder's `configure()` binds the multipart server extension.
  */
-export function multipartPlugin(): Plugin<MultipartPluginExt> {
+export function MultipartExt(): Plugin<MultipartExt> {
   let builder: MultipartBuilder | undefined
 
   return {
@@ -43,7 +43,7 @@ export function multipartPlugin(): Plugin<MultipartPluginExt> {
 
           return this
         },
-      } as unknown as MultipartPluginExt
+      } as unknown as MultipartExt
     },
   }
 }

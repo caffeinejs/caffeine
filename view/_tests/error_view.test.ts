@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { Catch, type ActionResult, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import { View, viewPlugin } from '../index.js'
+import { View, ViewExt } from '../index.js'
 
 // An error handler, like a controller handler, may RETURN a View() which the framework renders as HTML.
 // This exercises the view plugin on the error-handling path.
@@ -31,7 +31,7 @@ void [ReturnViewHandler, ErrReturnController]
 describe('error handler returning a View()', () => {
   it('renders a returned View() as HTML', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
     await app.ready()

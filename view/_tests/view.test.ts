@@ -4,14 +4,14 @@ import fastify from 'fastify'
 import handlebars from 'handlebars'
 import * as ejs from 'ejs'
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import { View, ViewBuilder, ViewOptionsProvider, viewPlugin } from '../index.js'
+import { View, ViewBuilder, ViewOptionsProvider, ViewExt } from '../index.js'
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
 
 function viewApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(viewPlugin())
+    .extend(ViewExt())
     .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
 }
 
@@ -72,7 +72,7 @@ describe('view feature', () => {
     void [ContextController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }))
       .build()
     await app.ready()
@@ -92,7 +92,7 @@ describe('view feature', () => {
     void [NamespacedController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
     await app.ready()
@@ -209,7 +209,7 @@ describe('view feature', () => {
     void [MultiController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .view('ejs', v => v.engine({ ejs }).root(ejsRoot).extension('ejs'))
       .build()
@@ -240,7 +240,7 @@ describe('view feature', () => {
     void [SameEngineController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .view('alt', v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
       .build()
@@ -280,7 +280,7 @@ describe('view feature', () => {
   it('rejects registering an engine named "view" (reserved for the default engine)', () => {
     expect(() =>
       createWebApplication(fastifyAdapterFactory(fastify()), {})
-        .extend(viewPlugin())
+        .extend(ViewExt())
         .view('view', v => v.engine({ handlebars }).root(templatesRoot).extension('hbs')),
     ).toThrow(/reserved for the default engine/)
   })

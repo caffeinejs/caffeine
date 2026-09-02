@@ -154,7 +154,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
    *
    * ```ts
    * createWebApplication(fastifyAdapterFactory(server))
-   *   .extend(viewPlugin(), staticPlugin())
+   *   .extend(ViewExt(), StaticExt())
    *   .view(v => v.engine({ handlebars }))
    * ```
    */

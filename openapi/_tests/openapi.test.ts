@@ -19,7 +19,7 @@ import {
 import { $multipart } from '@caffeinejs/multipart'
 import { APIGroup, Operation } from '../decorators/index.js'
 import { ErrOpenAPIConfiguration } from '../errors.js'
-import { openapiPlugin } from '../plugin.js'
+import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
@@ -83,7 +83,7 @@ function buildApp(configure: (app: ReturnType<typeof newBuilder>) => void = () =
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(openapiPlugin())
+    .extend(OpenAPIExt())
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }
 

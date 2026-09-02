@@ -7,7 +7,7 @@ This is not NestJS, Express, or Spring Boot. Training data for those stacks is w
 - **Decorators:** TC39 only. `lib` must include `Decorators` and `esnext.decorators`.
 - **Imports:** `.js` extensions. Package names across packages (`@caffeinejs/http`). One import per module.
 - **Errors:** `ErrFoo`, `code = 'ERR_FOO'`. Throw `ErrHTTPNotFound` from handlers. `@Catch` is by error **class**, not URL path. Unmatched routes are not `@Catch`.
-- **HTTP:** `@Controller` + `@Get`/`@Post`/… + `$p`. Plugins via `.extend(staticPlugin())`, then `.static(...)`.
+- **HTTP:** `@Controller` + `@Get`/`@Post`/… + `$p`. Plugins via `.extend(StaticExt())`, then `.static(...)`.
 - **Kafka:** `@KafkaHandler` / `@KafkaListener` / `KafkaTemplate` / `$k`. Not Nest microservices.
 - **Composition:** `createWebApplication` or `createApplication`, then `.extend(plugin())` and builders. Side-effect-import controllers and Kafka handlers.
 

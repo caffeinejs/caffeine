@@ -157,7 +157,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
  *
  * ```ts
  * createWebApplication()
- *   .extend(viewPlugin(), staticPlugin())
+ *   .extend(ViewExt(), StaticExt())
  *   .view(v => v.engine({ handlebars }))
  * ```
  */

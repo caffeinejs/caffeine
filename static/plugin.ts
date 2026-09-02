@@ -2,10 +2,10 @@ import type { ConfigTypeOf, Plugin, ServiceAPI } from '@caffeinejs/std'
 import { StaticBuilder } from './builder.js'
 
 /**
- * Builder methods contributed by {@link staticPlugin}. Mirrors the fluent `app.static(...)` surface the http
+ * Builder methods contributed by {@link StaticExt}. Mirrors the fluent `app.static(...)` surface the http
  * builder used to expose directly.
  */
-export interface StaticPluginExt {
+export interface StaticExt {
   /**
    * The config type is recovered from the builder this was reached through, so `s.config(c => c.app.assets)`
    * is typed against the application's own schema without the caller naming it again.
@@ -18,14 +18,14 @@ export interface StaticPluginExt {
 }
 
 /**
- * The `@caffeinejs/static` application plugin. Pass it to `createWebApplication(..., staticPlugin())` to add
+ * The `@caffeinejs/static` application plugin. Pass it to `createWebApplication(..., StaticExt())` to add
  * static file serving (`@fastify/static`) without http depending on this package.
  *
  * On the first `.static(...)` call it lazily creates a single {@link StaticBuilder} and registers it as a
  * service; the builder's `configure()` binds the assembled mounts and the `StaticExtension` into the
  * container, which the adapter then discovers via `getManyOptional(ServerExtension)`.
  */
-export function staticPlugin(): Plugin<StaticPluginExt> {
+export function StaticExt(): Plugin<StaticExt> {
   let builder: StaticBuilder | undefined
 
   return {
@@ -43,7 +43,7 @@ export function staticPlugin(): Plugin<StaticPluginExt> {
 
           return this
         },
-      } as unknown as StaticPluginExt
+      } as unknown as StaticExt
     },
   }
 }

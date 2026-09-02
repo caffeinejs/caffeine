@@ -6,7 +6,7 @@ import { $t } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { ViewExtension } from '../extension.js'
-import { viewPlugin } from '../plugin.js'
+import { ViewExt } from '../plugin.js'
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
@@ -26,7 +26,7 @@ describe('view configuration', () => {
 
   it('lets the environment override a builder-set root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .config(c => c.source(env({ VIEW__DEFAULT__ROOT: ejsRoot }), ConfigPriority.ENV))
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
@@ -42,7 +42,7 @@ describe('view configuration', () => {
   // The engine is a module object full of functions and cannot travel through the tree at all.
   it('keeps the code-only engine after configuration is applied', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .config(c => c.source(new InlineConfigProvider({
         view: { default: { root: templatesRoot, production: true } },
       })))
@@ -58,7 +58,7 @@ describe('view configuration', () => {
 
   it('keeps named engines apart, the unnamed one at view.default', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .config(c => c.source(new InlineConfigProvider({
         view: { mail: { viewExt: 'from-config' } },
       })))
@@ -83,7 +83,7 @@ describe('view configuration', () => {
     })
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(viewPlugin())
+      .extend(ViewExt())
       .config(schema, c => c.source(new InlineConfigProvider({
         app: { templates: { viewExt: 'moved' } },
       })))

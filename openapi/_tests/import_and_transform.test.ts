@@ -15,7 +15,7 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import { openapiPlugin } from '../plugin.js'
+import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 @Controller('/widgets')
@@ -52,7 +52,7 @@ function build(configure: (o: Parameters<Parameters<ReturnType<typeof newBuilder
 
 function newBuilder() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(openapiPlugin())
+    .extend(OpenAPIExt())
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {

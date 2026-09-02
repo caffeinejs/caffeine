@@ -3,11 +3,11 @@ import { ViewBuilder } from './builder.js'
 import { ViewOptionsProvider } from './options_provider.js'
 
 /**
- * Builder methods contributed by {@link viewPlugin}. Mirrors the fluent `app.view(...)` surface the http
+ * Builder methods contributed by {@link ViewExt}. Mirrors the fluent `app.view(...)` surface the http
  * builder used to expose directly: a default engine (`.view(configure)`) plus named engines
  * (`.view(name, configure)`).
  */
-export interface ViewPluginExt {
+export interface ViewExt {
   /**
    * The config type is recovered from the builder this was reached through, so `v.config(c => c.app.views)`
    * is typed against the application's own schema. An explicit `Self` type parameter rather than the
@@ -19,14 +19,14 @@ export interface ViewPluginExt {
 }
 
 /**
- * The `@caffeinejs/view` application plugin. Pass it to `createWebApplication(..., viewPlugin())` to add
+ * The `@caffeinejs/view` application plugin. Pass it to `createWebApplication(..., ViewExt())` to add
  * server-side rendering (`@fastify/view`) without http depending on this package.
  *
  * On the first `.view(...)` call it lazily creates a single {@link ViewOptionsProvider} and registers it as
  * a service; the provider's `configure()` binds itself and the `ViewConfigurer` into the container,
  * which the adapter then discovers via `getManyOptional(FeatureConfigurer)`.
  */
-export function viewPlugin(): Plugin<ViewPluginExt> {
+export function ViewExt(): Plugin<ViewExt> {
   let provider: ViewOptionsProvider | undefined
 
   return {
@@ -47,7 +47,7 @@ export function viewPlugin(): Plugin<ViewPluginExt> {
 
           return this
         },
-      } as unknown as ViewPluginExt
+      } as unknown as ViewExt
     },
   }
 }

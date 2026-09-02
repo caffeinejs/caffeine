@@ -10,16 +10,16 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import type { ServiceAPI } from '@caffeinejs/std'
-import { Compress, CompressBuilder, compress, compressPlugin } from '../index.js'
+import { Compress, CompressBuilder, compress, CompressExt } from '../index.js'
 
 function compressApp(configure?: (c: ServiceAPI<CompressBuilder>) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(compressPlugin())
+    .extend(CompressExt())
     .compress(configure ?? (() => undefined))
 }
 
 describe('Compress', () => {
-  describe('global compressPlugin registration', () => {
+  describe('global CompressExt registration', () => {
     it('compresses responses when compression is activated', async () => {
       @Controller('/compress-global')
       class GlobalCompressController {
@@ -40,7 +40,7 @@ describe('Compress', () => {
       expect(res.headers.get('content-encoding')).toMatch(/br|gzip|deflate/)
     })
 
-    it('does not compress responses when compressPlugin is not activated', async () => {
+    it('does not compress responses when CompressExt is not activated', async () => {
       @Controller('/no-compress')
       class NoCompressController {
         @Get('/data')
