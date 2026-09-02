@@ -14,7 +14,7 @@ Do not implement Nest microservices RPC (reply topics, `@MessagePattern`).
 
 ## Steps
 
-1. `.extend(kafka())` then `app.kafka(k => k.brokers(...).groupId(...))`. Named instance: `app.kafka('orders', k => ...)`.
+1. `.extend(kafka())` then `app.kafka(k => k.brokers(...).groupId(...))`. Named instance: `app.kafka(k => k.named('orders').…)`.
 2. Class `@KafkaHandler()` (or `{ instance: 'orders' }`). Methods `@KafkaListener({ topic: 'orders' })`.
 3. Optional `@KafkaParams(k => [k.value(), k.key()])`. Without it, the argument is `KafkaMessage`.
 4. Produce with injected `KafkaTemplate.send(topic, value)`.

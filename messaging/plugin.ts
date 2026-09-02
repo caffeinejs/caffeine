@@ -2,18 +2,17 @@ import type { Container } from '@caffeinejs/di'
 import type { ConfigTypeOf, Plugin, Service, ServiceAPI } from '@caffeinejs/std'
 import { MessagingBuilder } from './builder.js'
 import type { MessagingContainer } from './engine.js'
-import { DEFAULT_BINDER, Keys } from './symbols.js'
+import { Keys } from './symbols.js'
 
 /** The builder callback that configures one messaging integration, over an application config type `C`. */
 export type MessagingConfigure<C = unknown> = (m: ServiceAPI<MessagingBuilder<C>>) => void
 
 /**
- * The `messaging` builder method contributed by the plugin. Pass a builder callback, optionally preceded by an
- * integration name, and get the builder back for chaining.
+ * The `messaging` builder method contributed by the plugin. Pass a builder callback and get the application
+ * builder back for chaining. Name a second integration with {@link MessagingBuilder.named} inside the callback.
  */
 export interface MessagingMethod {
   <Self>(this: Self, configure: MessagingConfigure<ConfigTypeOf<Self>>): Self
-  <Self>(this: Self, name: string, configure: MessagingConfigure<ConfigTypeOf<Self>>): Self
 }
 
 // What the method needs from the builder it is invoked on (`this`). `.bind()` in a Service does not emit the
@@ -67,18 +66,8 @@ export function messaging<const Name extends string = 'messaging'>(
   }
 
   // A regular function so `this` binds to the builder at the `app.messaging(...)` call site.
-  function messagingMethod(
-    this: MessagingBuilderHost,
-    nameOrConfigure: string | MessagingConfigure<never>,
-    maybeConfigure?: MessagingConfigure<never>,
-  ): unknown {
-    const instance = typeof nameOrConfigure === 'string' ? nameOrConfigure : DEFAULT_BINDER
-    const configure = typeof nameOrConfigure === 'string' ? maybeConfigure : nameOrConfigure
-    if (configure === undefined) {
-      throw new TypeError('messaging(): a configure callback is required')
-    }
-
-    const builder = new MessagingBuilder(instance)
+  function messagingMethod(this: MessagingBuilderHost, configure: MessagingConfigure<never>): unknown {
+    const builder = new MessagingBuilder()
     // The config type is a compile-time affair only; the runtime builder is the same object either way.
     configure(builder as MessagingBuilder<never>)
     this.addService(builder)

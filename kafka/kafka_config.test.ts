@@ -65,7 +65,7 @@ describe('kafka configuration', () => {
     // all-uppercase run has no word boundary to find and `GROUPID` would resolve to `groupid`.
     app.config(c => c.source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV))
     app.kafka(k => k.brokers('b1:9092').groupId('svc'))
-    app.kafka('orders', k => k.brokers('b2:9092').groupId('orders'))
+    app.kafka(k => k.named('orders').brokers('b2:9092').groupId('orders'))
 
     const built = app.build()
     await built.ready()

@@ -26,7 +26,7 @@ describe('kafka() plugin', () => {
     const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
     expect(typeof app.kafka).toBe('function')
     // chaining returns the builder
-    const chained = app.kafka(k => k.brokers('localhost:9092')).kafka('orders', k => k.brokers('localhost:9092'))
+    const chained = app.kafka(k => k.brokers('localhost:9092')).kafka(k => k.named('orders').brokers('localhost:9092'))
     expect(chained).toBe(app)
   })
 
@@ -50,7 +50,7 @@ describe('kafka() plugin', () => {
   it('binds distinct templates for multiple named instances', async () => {
     const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
     app.kafka(k => k.brokers('b1').groupId('g'))
-    app.kafka('orders', k => k.brokers('b2').groupId('g'))
+    app.kafka(k => k.named('orders').brokers('b2').groupId('g'))
 
     const built = app.build()
     await built.ready()

@@ -23,7 +23,7 @@ class Orders {
 }
 ```
 
-- Named instances: `app.kafka('orders', k => ...)` and `@KafkaHandler({ instance: 'orders' })`.
+- Named instances: `app.kafka(k => k.named('orders').…)` and `@KafkaHandler({ instance: 'orders' })`.
 - Without `@KafkaParams`, the method receives the whole `KafkaMessage`.
 - Retry / DLT: builder `retry`, `retryTopics`, `deadLetter`, `classifier` — not Nest `KafkaRetriableException`.
 - `createWebApplication(...).extend(kafka())` works the same if the process is already an HTTP app.

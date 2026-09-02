@@ -11,7 +11,7 @@ export const DEFAULT_INSTANCE = 'default'
  * Where one instance of a multi-instance feature keeps its settings.
  *
  * Every instance is addressed by name, the unnamed one as {@link DEFAULT_INSTANCE} — so `app.kafka(...)` reads
- * `kafka.default.*` and `app.kafka('orders', ...)` reads `kafka.orders.*`. Uniform on purpose: letting the
+ * `kafka.default.*` and `app.kafka(k => k.named('orders'))` reads `kafka.orders.*`. Uniform on purpose: letting the
  * unnamed instance sit flat at `kafka.*` would put settings and instance names in one object, where `kafka.orders`
  * is a setting or an instance depending on nothing the schema can express.
  */

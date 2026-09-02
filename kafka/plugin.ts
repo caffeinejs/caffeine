@@ -17,7 +17,8 @@ export type KafkaConfigure<C = unknown> = (k: ServiceAPI<KafkaBuilder<C>>) => vo
 
 /**
  * The `kafka` builder method contributed by the plugin. Follows the feature-builder convention: pass a builder
- * callback, optionally preceded by an instance name, and get the builder back for chaining.
+ * callback and get the application builder back for chaining. Name a second integration with
+ * {@link KafkaBuilder.named} inside the callback.
  *
  * The config type is recovered from `this` with {@link ConfigTypeOf}, so `k.config(c => c.app.events)` is
  * typed against the application's own schema exactly as the built-in `s.config(c => c.app.server)` is —
@@ -26,7 +27,6 @@ export type KafkaConfigure<C = unknown> = (k: ServiceAPI<KafkaBuilder<C>>) => vo
  */
 export interface KafkaMethod {
   <Self>(this: Self, configure: KafkaConfigure<ConfigTypeOf<Self>>): Self
-  <Self>(this: Self, name: string, configure: KafkaConfigure<ConfigTypeOf<Self>>): Self
 }
 
 // What the method needs from the builder it is invoked on (`this`). `.bind()` in a Service does not emit the
@@ -48,8 +48,8 @@ interface KafkaBuilderHost {
  *
  * ```ts
  * const app = createApplication().extend(kafka())
- * app.kafka(k => k.brokers('localhost:9092').groupId('svc'))          // default instance
- * app.kafka('orders', k => k.brokers('localhost:9092').groupId('orders'))  // named instance
+ * app.kafka(k => k.brokers('localhost:9092').groupId('svc'))
+ * app.kafka(k => k.named('orders').brokers('localhost:9092').groupId('orders'))
  * await app.build().run()
  * ```
  *
@@ -96,18 +96,8 @@ export function kafka<const Name extends string = 'kafka'>(
   }
 
   // A regular function so `this` binds to the builder at the `app.kafka(...)` call site.
-  function kafkaMethod(
-    this: KafkaBuilderHost,
-    nameOrConfigure: string | KafkaConfigure<never>,
-    maybeConfigure?: KafkaConfigure<never>,
-  ): unknown {
-    const instance = typeof nameOrConfigure === 'string' ? nameOrConfigure : DEFAULT_INSTANCE
-    const configure = typeof nameOrConfigure === 'string' ? maybeConfigure : nameOrConfigure
-    if (configure === undefined) {
-      throw new TypeError('kafka(): a configure callback is required')
-    }
-
-    const builder = new KafkaBuilder(instance, clients)
+  function kafkaMethod(this: KafkaBuilderHost, configure: KafkaConfigure<never>): unknown {
+    const builder = new KafkaBuilder(clients)
     // The config type is a compile-time affair only; the runtime builder is the same object either way.
     configure(builder as KafkaBuilder<never>)
     this.addService(builder)

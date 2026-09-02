@@ -4,8 +4,7 @@ import { ViewOptionsProvider } from './options_provider.js'
 
 /**
  * Builder methods contributed by {@link ViewExt}. Mirrors the fluent `app.view(...)` surface the http
- * builder used to expose directly: a default engine (`.view(configure)`) plus named engines
- * (`.view(name, configure)`).
+ * builder used to expose directly. Name a second engine with {@link ViewBuilder.named} inside the callback.
  */
 export interface ViewExt {
   /**
@@ -15,7 +14,6 @@ export interface ViewExt {
    * would freeze the config type to whatever it was before `.config(schema)` re-typed the builder.
    */
   view<Self>(this: Self, configure: (view: ViewBuilder<ConfigTypeOf<Self>>) => void): Self
-  view<Self>(this: Self, name: string, configure: (view: ViewBuilder<ConfigTypeOf<Self>>) => void): Self
 }
 
 /**
@@ -33,17 +31,16 @@ export function ViewExt(): Plugin<ViewExt> {
     name: 'view',
     install(ctx) {
       return {
-        view(a: string | ((view: ViewBuilder<never>) => void), b?: (view: ViewBuilder<never>) => void) {
-          const name = typeof a === 'string' ? a : undefined
-          const configure = (typeof a === 'string' ? b : a)!
-
+        view(configure: (view: ViewBuilder<never>) => void) {
           if (provider == null) {
             provider = new ViewOptionsProvider()
             ctx.addService(provider)
           }
 
+          const builder = new ViewBuilder()
           // The config type is a compile-time affair only; the runtime builder is the same object either way.
-          configure(provider.builder(name) as ViewBuilder<never>)
+          configure(builder as ViewBuilder<never>)
+          provider.add(builder)
 
           return this
         },

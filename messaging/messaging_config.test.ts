@@ -61,7 +61,7 @@ describe('messaging configuration', () => {
       messaging: { audit: { out: { log: { destination: 'audit.v2' } } } },
     })))
     app.messaging(m => m.use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }))
-    app.messaging('audit', m => m.use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }))
+    app.messaging(m => m.named('audit').use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }))
 
     const built = app.build()
     await built.ready()

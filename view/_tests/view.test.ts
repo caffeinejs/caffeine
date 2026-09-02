@@ -211,7 +211,7 @@ describe('view feature', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .extend(ViewExt())
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .view('ejs', v => v.engine({ ejs }).root(ejsRoot).extension('ejs'))
+      .view(v => v.named('ejs').engine({ ejs }).root(ejsRoot).extension('ejs'))
       .build()
     await app.ready()
 
@@ -242,7 +242,7 @@ describe('view feature', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .extend(ViewExt())
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .view('alt', v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
+      .view(v => v.named('alt').engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
       .build()
     await app.ready()
 
@@ -281,7 +281,7 @@ describe('view feature', () => {
     expect(() =>
       createWebApplication(fastifyAdapterFactory(fastify()), {})
         .extend(ViewExt())
-        .view('view', v => v.engine({ handlebars }).root(templatesRoot).extension('hbs')),
+        .view(v => v.named('view').engine({ handlebars }).root(templatesRoot).extension('hbs')),
     ).toThrow(/reserved for the default engine/)
   })
 })
@@ -300,7 +300,8 @@ describe('ViewBuilder', () => {
   })
 
   it('build() stamps propertyName for a named engine', () => {
-    const options = new ViewBuilder('mobile')
+    const options = new ViewBuilder()
+      .named('mobile')
       .engine({ handlebars }).root(templatesRoot).extension('hbs')
       .build() as { propertyName?: string }
 
@@ -332,8 +333,8 @@ describe('ViewBuilder', () => {
 describe('ViewOptionsProvider', () => {
   it('groups the default and named engines, default first, stamping propertyName', () => {
     const provider = new ViewOptionsProvider()
-    provider.builder(undefined).engine({ handlebars }).root(templatesRoot).extension('hbs')
-    provider.builder('ejs').engine({ ejs }).root(ejsRoot).extension('ejs')
+    provider.add(new ViewBuilder().engine({ handlebars }).root(templatesRoot).extension('hbs'))
+    provider.add(new ViewBuilder().named('ejs').engine({ ejs }).root(ejsRoot).extension('ejs'))
 
     const all = provider.all() as Array<{ propertyName?: string }>
 
@@ -342,15 +343,16 @@ describe('ViewOptionsProvider', () => {
     expect(all[1].propertyName).toBe('ejs')
   })
 
-  it('returns the same builder for repeated calls with the same name (config merges)', () => {
+  it('rejects a second engine with the same name', () => {
     const provider = new ViewOptionsProvider()
-    const first = provider.builder('mobile')
-    const second = provider.builder('mobile')
+    provider.add(new ViewBuilder().named('mobile').engine({ handlebars }).root(templatesRoot).extension('hbs'))
 
-    expect(first).toBe(second)
+    expect(() =>
+      provider.add(new ViewBuilder().named('mobile').engine({ handlebars }).root(templatesRoot).extension('hbs')),
+    ).toThrow(/already configured/)
   })
 
   it('rejects the reserved "view" name', () => {
-    expect(() => new ViewOptionsProvider().builder('view')).toThrow(/reserved for the default engine/)
+    expect(() => new ViewBuilder().named('view')).toThrow(/reserved for the default engine/)
   })
 })

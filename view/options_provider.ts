@@ -6,31 +6,26 @@ import type { ViewOptions } from './view.js'
 
 /**
  * Groups every configured view engine — the default one (`reply.view`) plus any named ones
- * (`reply.<name>`) — behind a single object. `app.view(name?, configure)` routes each call here to
- * get-or-create the matching {@link ViewBuilder}; the {@link ViewExtension} it hands itself to registers
- * `@fastify/view` once per {@link all} entry.
+ * (`reply.<name>`) — behind a single object. Each `app.view(...)` call adds one {@link ViewBuilder};
+ * the {@link ViewExtension} it hands itself to registers `@fastify/view` once per {@link all} entry.
  */
 export class ViewOptionsProvider implements Service {
   // Keyed by engine name; the `undefined` key is the default engine.
   readonly #builders = new Map<string | undefined, ViewBuilder>()
 
   /**
-   * Returns the {@link ViewBuilder} for the given engine name, creating it on first use. Repeated calls
-   * for the same name return the same builder, so configuration merges (mirrors the single-engine
-   * "call `app.view` twice" behavior). The name `"view"` is reserved for the default engine.
+   * Records a configured engine. Duplicate identities (two unnamed, or two `.named('mail')`) throw
+   * rather than overwrite. The name `"view"` is rejected by {@link ViewBuilder.named}.
    */
-  builder(name: string | undefined): ViewBuilder {
-    if (name === 'view') {
-      throw new ErrConfiguration('Cannot register a view engine named "view": it is reserved for the default engine')
+  add(builder: ViewBuilder): void {
+    const name = builder.engineName
+    if (this.#builders.has(name)) {
+      throw new ErrConfiguration(
+        `Cannot register view engine "${name ?? 'default'}": an engine with that name is already configured`,
+      )
     }
 
-    let builder = this.#builders.get(name)
-    if (builder == null) {
-      builder = new ViewBuilder(name)
-      this.#builders.set(name, builder)
-    }
-
-    return builder
+    this.#builders.set(name, builder)
   }
 
   /** The assembled options for the default engine, or `undefined` when only named engines are configured. */

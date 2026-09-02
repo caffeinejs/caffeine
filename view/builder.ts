@@ -17,8 +17,8 @@ import type { ViewOptions } from './view.js'
  * set any option supported by the `@fastify/view` plugin.
  *
  * One builder assembles one engine registration. Multiple engines are declared by calling
- * `app.view(name, ...)` once per engine; the {@link ViewOptionsProvider} owns them and reads each via
- * {@link build}.
+ * `app.view(...)` once per engine, naming extras with {@link named}; the {@link ViewOptionsProvider}
+ * owns them and reads each via {@link build}.
  *
  * Everything `@fastify/view` takes as data — `root`, `viewExt`, `layout`, the production cache — is read
  * from the configuration tree at `view.<name>.*`, the unnamed engine at `view.default.*`. So `v.root('src')`
@@ -29,17 +29,27 @@ import type { ViewOptions } from './view.js'
  * @see https://github.com/fastify/point-of-view
  */
 export class ViewBuilder<C = unknown> {
-  readonly #name: string | undefined
+  #name: string | undefined
   #options: Partial<ViewOptions> = {}
   #selector?: (c: ConfigHandle<C>) => ConfigAccessors<ViewConfig>
   #resolved: ConfigSlice<ViewOptions> | undefined
 
   /**
-   * @param name - The engine registration name (`@fastify/view`'s `propertyName`), decorating
-   *   `reply.<name>`. `undefined` is the default engine, decorating `reply.view`.
+   * Names this engine. The unnamed call is the default (`reply.view`, `view.default.*`);
+   * `v.named('mail')` decorates `reply.mail` and reads `view.mail.*`. `"view"` is reserved for the default.
    */
-  constructor(name?: string) {
+  named(name: string): this {
+    if (name === 'view') {
+      throw new ErrConfiguration('Cannot register a view engine named "view": it is reserved for the default engine')
+    }
+
     this.#name = name
+    return this
+  }
+
+  /** Engine registration name; `undefined` is the default `reply.view`. */
+  get engineName(): string | undefined {
+    return this.#name
   }
 
   /**

@@ -63,7 +63,7 @@ describe('view configuration', () => {
         view: { mail: { viewExt: 'from-config' } },
       })))
       .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .view('mail', v => v.engine({ handlebars }).root(templatesRoot).extension('ejs'))
+      .view(v => v.named('mail').engine({ handlebars }).root(templatesRoot).extension('ejs'))
       .build()
 
     await app.ready()
