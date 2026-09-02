@@ -15,7 +15,7 @@ export type ViewCapableReply = {
 /**
  * Renders a {@link ViewResult} through the selected engine's `@fastify/view` reply decorator, forwarding
  * the per-render `layout` override. The engine is chosen by `view.options.engine` (the name passed to
- * `v.named(...)`); when unset the default `reply.view` is used. Shared by the route-handler path
+ * `ViewExt('mail')`); when unset the default `reply.view` is used. Shared by the route-handler path
  * and the error-handler path. When the selected engine was never configured the decorator is absent —
  * guarded here rather than crashing with a cryptic "not a function".
  */
@@ -24,9 +24,11 @@ export function renderView(view: ViewResult, res: ViewCapableReply): ActionResul
   const render = (res as Record<string, ViewRenderFn | undefined>)[engine]
 
   if (typeof render !== 'function') {
-    const named = engine === 'view' ? 'v => v.engine(...)' : `v => v.named("${engine}").engine(...)`
+    const named = engine === 'view'
+      ? '.extend(ViewExt, v => v.engine(...))'
+      : `.extend(ViewExt("${engine}"), v => v.engine(...))`
     throw new ErrConfiguration(
-      `Cannot render view: engine "${engine}" is not configured. Call app.view(${named})`,
+      `Cannot render view: engine "${engine}" is not configured. Call ${named}`,
     )
   }
 

@@ -47,8 +47,7 @@ describe('non-blocking retry topics (end to end)', () => {
   it('walks a failing record through the retry topics until it succeeds', async () => {
     flowState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k.brokers('b').groupId(GROUP))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP))
     const built = app.build()
     await built.run()
 
@@ -66,8 +65,7 @@ describe('non-blocking retry topics (end to end)', () => {
     poisonSeen = deferred()
     const dltReceived = deferred<Record<string, string>>()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k.brokers('b').groupId(GROUP).deadLetter())
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP).deadLetter())
     const built = app.build()
     await built.run()
 

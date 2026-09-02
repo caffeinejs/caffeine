@@ -10,7 +10,7 @@ import type { StaticMount } from './static.js'
 
 /**
  * Configures static file serving over `@fastify/static`. Bound via
- * `app.static(s => s.serve(dir, { prefix: '/static' }))`.
+ * `.extend(StaticExt, s => s.serve(dir, { prefix: '/static' }))`.
  *
  * A {@link Service}, like `ViewBuilder`/`ServerBuilder` — its `bootstrap` hands the assembled mounts to the
  * {@link StaticExtension} it binds. Each `.serve(...)` call adds one mount; multiple mounts serve multiple
@@ -20,7 +20,7 @@ import type { StaticMount } from './static.js'
  * the `CODE` band, and the feature reads the merged result. So `s.serve('public')` is a **default**: a
  * `static.mounts` in a config file replaces it. Settings live at `static.*`; {@link config} re-points them.
  *
- * `C` is the application config type, recovered from the builder `app.static(...)` was reached through.
+ * `C` is the application config type, recovered from the builder `.extend(StaticExt, …)` was reached through.
  */
 export class StaticBuilder<C = unknown> implements Service {
   #mounts: StaticMount[] = []
@@ -56,7 +56,7 @@ export class StaticBuilder<C = unknown> implements Service {
    * being listed anywhere. `exclude`/`include` are there for what routing cannot know.
    *
    * ```ts
-   * app.static(s => s.spa('site/dist'))
+   * .extend(StaticExt, s => s.spa('site/dist'))
    * ```
    */
   spa(root: string, options?: SPAOptions): ServiceAPI<this> {

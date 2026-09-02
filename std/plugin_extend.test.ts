@@ -4,46 +4,38 @@ import { z } from 'zod'
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider } from './config/index.js'
 import { type Service } from './service.js'
-import type { Plugin } from './plugin.js'
+import { defineFeature, defineKeyedFeature, ErrFeatureAlreadyInstalled } from './plugin.js'
 
-// A sentinel the plugin's service binds, so a test can prove `.extend()` rides the same
-// `configure()` path a built-in service does rather than merely copying methods onto the builder.
 const kSentinel = token<any>(Symbol('extend-sentinel'))
 
-function tracker<const Name extends string = 'track'>(
-  name: Name = 'track' as Name,
-): Plugin<Record<Name, (value: string) => void>> {
-  const state: { value: string | undefined } = { value: undefined }
-  const service: Service = {
-    get name() {
-      return 'track'
-    },
-    bootstrap(kit) {
-      kit.container.bind(kSentinel).toValue({ value: state.value })
-      return Promise.resolve()
-    },
-  }
-
-  return {
+function tracker(name = 'track') {
+  return defineFeature<{ capture(value: string): void }>({
     name,
-    install(ctx) {
-      ctx.addService(service)
-
-      const capture = (value: string): void => {
-        state.value = value
+    singleton: true,
+    install(ctx, configure) {
+      const state: { value: string | undefined } = { value: undefined }
+      const service: Service = {
+        get name() {
+          return 'track'
+        },
+        bootstrap(kit) {
+          kit.container.bind(kSentinel).toValue({ value: state.value })
+          return Promise.resolve()
+        },
       }
-
-      return { [name]: capture } as Record<Name, (value: string) => void>
+      ctx.addService(service)
+      configure?.({
+        capture(value: string) {
+          state.value = value
+        },
+      })
     },
-  }
+  })
 }
 
 describe('BaseApplicationBuilder.extend', () => {
-  it('installs the plugin method and registers its service', async () => {
-    const builder = createApplication().extend(tracker())
-
-    expect(typeof builder.track).toBe('function')
-    builder.track('recorded')
+  it('installs the feature and registers its service', async () => {
+    const builder = createApplication().extend(tracker(), t => t.capture('recorded'))
 
     const app = builder.build()
     await app.ready()
@@ -52,37 +44,21 @@ describe('BaseApplicationBuilder.extend', () => {
     await app.close()
   })
 
-  it('composes several plugins in one call', () => {
-    const builder = createApplication().extend(tracker('a'), tracker('b'))
-
-    expect(typeof builder.a).toBe('function')
-    expect(typeof builder.b).toBe('function')
-  })
-
-  it('accumulates across separate calls', () => {
-    const builder = createApplication()
-      .extend(tracker('first'))
-      .extend(tracker('second'))
-
-    expect(typeof builder.first).toBe('function')
-    expect(typeof builder.second).toBe('function')
-  })
-
   it('returns the same builder instance it was called on', () => {
     const builder = createApplication()
 
     expect(builder.extend(tracker())).toBe(builder)
   })
 
-  it('leaves a builder that was never extended unaugmented (type-level)', () => {
-    const builder = createApplication()
+  it('does not add methods to the builder', () => {
+    const builder = createApplication().extend(tracker())
 
-    // @ts-expect-error no plugin contributed `track`
+    // @ts-expect-error features no longer contribute methods
     const missing: unknown = builder.track
     expect(missing).toBeUndefined()
   })
 
-  it('keeps the plugin methods across .config(), in either order', () => {
+  it('keeps .extend available across .config(), in either order', () => {
     const schema = z.object({ server: z.object({ port: z.coerce.number() }) })
 
     const afterConfig = createApplication()
@@ -93,18 +69,54 @@ describe('BaseApplicationBuilder.extend', () => {
       .config(schema, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
       .extend(tracker())
 
-    // Declaring configuration re-parameterises the builder. It must not cost the plugin's methods along the
-    // way, or the order of an otherwise commutative chain would start to matter.
-    expect(typeof afterConfig.track).toBe('function')
-    expect(typeof beforeConfig.track).toBe('function')
+    expect(typeof afterConfig.extend).toBe('function')
+    expect(typeof beforeConfig.extend).toBe('function')
   })
 
-  it('still refuses a plugin method nobody contributed, after .config() (type-level)', () => {
-    const builder = createApplication()
-      .config(z.object({}), c => c.source(new InlineConfigProvider({})))
+  it('throws when a singleton feature is installed twice', () => {
+    const feature = tracker()
 
-    // @ts-expect-error no plugin contributed `track`
-    const missing: unknown = builder.track
-    expect(missing).toBeUndefined()
+    expect(() => createApplication().extend(feature).extend(feature)).toThrow(ErrFeatureAlreadyInstalled)
+  })
+
+  it('throws when a keyed instance is installed twice', () => {
+    const feature = defineKeyedFeature({
+      name: 'keyed',
+      defaultInstance: 'default',
+      install(ctx) {
+        ctx.addService({
+          get name() {
+            return 'keyed'
+          },
+          bootstrap() {
+            return Promise.resolve()
+          },
+        })
+      },
+    })
+
+    expect(() => createApplication().extend(feature).extend(feature)).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().extend(feature('orders')).extend(feature('orders')))
+      .toThrow(ErrFeatureAlreadyInstalled)
+  })
+
+  it('allows distinct keyed instances', () => {
+    const feature = defineKeyedFeature({
+      name: 'keyed',
+      defaultInstance: 'default',
+      install(ctx) {
+        ctx.addService({
+          get name() {
+            return 'keyed'
+          },
+          bootstrap() {
+            return Promise.resolve()
+          },
+        })
+      },
+    })
+
+    const builder = createApplication().extend(feature).extend(feature('orders'))
+    expect(builder).toBeDefined()
   })
 })

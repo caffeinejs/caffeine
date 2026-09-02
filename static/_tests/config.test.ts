@@ -25,11 +25,10 @@ describe('static configuration', () => {
 
   it('reads mounts from the configuration tree with no serve() call at all', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
       .config(c => c.source(new InlineConfigProvider({
         static: { mounts: [{ root: fixtures, prefix: '/from-config/' }] },
       })))
-      .static(() => undefined)
+      .extend(StaticExt, () => undefined)
       .build()
 
     await app.ready()
@@ -40,9 +39,8 @@ describe('static configuration', () => {
   // The regression the whole mechanism exists for: a builder method is a default, not a setting.
   it('lets the environment override a builder-set mount root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
       .config(c => c.source(env({ STATIC__MOUNTS__0__ROOT: fixtures }), ConfigPriority.ENV))
-      .static(s => s.serve(dist, { prefix: '/assets/' }))
+      .extend(StaticExt, s => s.serve(dist, { prefix: '/assets/' }))
       .build()
 
     await app.ready()
@@ -56,8 +54,7 @@ describe('static configuration', () => {
     const setHeaders = (): void => undefined
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
-      .static(s => s.serve(fixtures, { prefix: '/assets/', setHeaders }))
+      .extend(StaticExt, s => s.serve(fixtures, { prefix: '/assets/', setHeaders }))
       .build()
 
     await app.ready()
@@ -69,11 +66,10 @@ describe('static configuration', () => {
 
   it('lets configuration retune a SPA the application switched on', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
       .config(c => c.source(new InlineConfigProvider({
         static: { spa: { index: 'index.html', navigationOnly: false } },
       })))
-      .static(s => s.spa(dist))
+      .extend(StaticExt, s => s.spa(dist))
       .build()
 
     await app.ready()
@@ -86,11 +82,10 @@ describe('static configuration', () => {
   // Activation is the builder call, never the tree.
   it('does not switch a SPA on from configuration alone', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
       .config(c => c.source(new InlineConfigProvider({
         static: { spa: { root: dist } },
       })))
-      .static(s => s.serve(fixtures))
+      .extend(StaticExt, s => s.serve(fixtures))
       .build()
 
     await app.ready()
@@ -106,10 +101,9 @@ describe('static configuration', () => {
     })
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
       .config(schema, c => c.source(new InlineConfigProvider({ app: { assets: {} } })))
       // No annotation on the selector: the config type is recovered from the builder.
-      .static(s => s.config(c => c.app.assets).serve(fixtures, { prefix: '/moved/' }))
+      .extend(StaticExt, s => s.config(c => c.app.assets).serve(fixtures, { prefix: '/moved/' }))
       .build()
 
     await app.ready()

@@ -2,9 +2,9 @@ import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/s
 import { MultipartExtension, type MultipartOptions } from './extension.js'
 
 /**
- * Configures `@fastify/multipart`. Bound via `app.multipart(...)`.
+ * Configures `@fastify/multipart`. Bound via `.extend(MultipartExt)`.
  *
- * Reaching `.multipart()` is the activating act: it binds {@link MultipartExtension}, which the adapter
+ * Installing the feature is the activating act: it binds {@link MultipartExtension}, which the adapter
  * discovers via `getManyOptional(ServerExtension)` and registers as a Fastify plugin.
  */
 export class MultipartBuilder implements Service {

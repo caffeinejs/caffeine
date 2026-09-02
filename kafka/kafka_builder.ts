@@ -15,10 +15,9 @@ import { KafkaTemplate } from './template.js'
 
 /**
  * Fluent configuration for one (optionally named) Kafka integration. Follows the repo feature-builder
- * convention (`app.kafka(k => k.brokers(...).groupId(...))`): it accumulates settings, then at `ready()` time
- * its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
- * the container under per-instance keys. A second integration is another `.kafka()` call whose builder
- * is named with {@link named}.
+ * convention (`.extend(kafka, k => k.brokers(...).groupId(...))`): it accumulates settings, then at `ready()`
+ * time its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
+ * the container under per-instance keys. A second integration is `.extend(kafka('orders'), k => ...)`.
  *
  * There is one read path for everything a configuration tree can carry. A builder method does not hold its
  * value — it writes into the tree in the `CODE` band, and the instance reads the merged result. So
@@ -28,11 +27,11 @@ import { KafkaTemplate } from './template.js'
  *
  * Settings live at `kafka.<name>.*`, the unnamed instance at `kafka.default.*`. {@link config} re-points them.
  *
- * `C` is the application config type, recovered from the builder `app.kafka(...)` was reached through, so the
+ * `C` is the application config type, recovered from the builder `.extend(kafka, …)` was reached through, so the
  * selector argument is a `ConfigHandle<C>`.
  */
 export class KafkaBuilder<C = unknown> implements Service {
-  #name: string = DEFAULT_INSTANCE
+  readonly #name: string
   readonly #clients: KafkaClients
   #selector?: (c: ConfigHandle<C>) => ConfigAccessors<KafkaConfigSlice>
   #brokers?: string | string[]
@@ -54,21 +53,13 @@ export class KafkaBuilder<C = unknown> implements Service {
   #onError?: (error: unknown, message: KafkaMessage) => void
   #resolved?: ConfigSlice<ResolvedKafkaConfig>
 
-  constructor(clients: KafkaClients) {
+  constructor(clients: KafkaClients, name: string = DEFAULT_INSTANCE) {
     this.#clients = clients
+    this.#name = name
   }
 
   get name(): string {
     return 'kafka'
-  }
-
-  /**
-   * Names this integration. The unnamed call is the default instance (`kafka.default.*`);
-   * `k.named('orders')` reads `kafka.orders.*` and is what `@KafkaHandler({ instance: 'orders' })` selects.
-   */
-  named(name: string): ServiceAPI<this> {
-    this.#name = name
-    return this
   }
 
   /** One or more `host:port` bootstrap brokers. Required. */

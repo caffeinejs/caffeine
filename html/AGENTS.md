@@ -42,7 +42,7 @@ an editor using the workspace TypeScript — so nothing in this package needs it
 `Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLExtension` decorates
 the Fastify instance under the `kHTMLDefaults` symbol and `respond` reads it back through
 `(ctx as FastifyContext).fst` — the escape hatch `http/context.ts` documents. When the application never
-installed `HTMLExt()` there is no decoration and `HTML_DEFAULTS` applies, which is what keeps `HTML(...)`
+installed `HTMLExt` there is no decoration and `HTML_DEFAULTS` applies, which is what keeps `HTML(...)`
 working with no setup. Do not route these through a config slice or a container key.
 
 ## `respond` returns, it does not send

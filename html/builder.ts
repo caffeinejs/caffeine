@@ -2,9 +2,9 @@ import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/s
 import { HTMLExtension, HTML_DEFAULTS, type HTMLDefaults } from './extension.js'
 
 /**
- * Sets what every `HTML(...)` response starts from. Bound via `app.html(...)`.
+ * Sets what every `HTML(...)` response starts from. Bound via `.extend(HTMLExt, h => …)`.
  *
- * Reaching `.html()` is the activating act: it binds {@link HTMLExtension}, which the adapter discovers
+ * Installing the feature is the activating act: it binds {@link HTMLExtension}, which the adapter discovers
  * via `getManyOptional(ServerExtension)` and registers as a Fastify plugin. An application that never
  * calls it still renders — {@link HTML_DEFAULTS} applies.
  */

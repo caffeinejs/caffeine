@@ -11,8 +11,7 @@ type ME = { name: string, value: string } | { name: string, filename: string, co
 
 function multipartApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(MultipartExt())
-    .multipart()
+    .extend(MultipartExt)
 }
 
 function multipartBody(

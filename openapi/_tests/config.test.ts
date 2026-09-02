@@ -35,9 +35,8 @@ describe('openapi configuration', () => {
   // The plan's headline case: redirect the documented server URL per environment, no rebuild.
   it('lets the environment override a builder-set server URL', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(OpenAPIExt())
       .config(c => c.source(env({ OPENAPI__SERVERS__0__URL: 'https://api.prod.example.com' }), ConfigPriority.ENV))
-      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).server('http://localhost:3000').public())
+      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).server('http://localhost:3000').public())
       .build()
 
     await app.ready()
@@ -49,11 +48,10 @@ describe('openapi configuration', () => {
 
   it('reads the info block from the configuration tree', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(OpenAPIExt())
       .config(c => c.source(new InlineConfigProvider({
         openapi: { info: { title: 'From Config', version: '9.9.9' } },
       })))
-      .openapi(o => o.info({ title: 'From Code', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o => o.info({ title: 'From Code', version: '1.0.0' }).public())
       .build()
 
     await app.ready()
@@ -66,11 +64,10 @@ describe('openapi configuration', () => {
   // A partial nested override must not wipe the sibling defaults.
   it('merges a partial errors block over the defaults', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(OpenAPIExt())
       .config(c => c.source(new InlineConfigProvider({
         openapi: { errors: { validation: 422 } },
       })))
-      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
       .build()
 
     await app.ready()
@@ -85,9 +82,8 @@ describe('openapi configuration', () => {
   // The endpoints are registered while the feature configures, which now happens after configuration resolves.
   it('serves the documentation page at a configured route', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(OpenAPIExt())
       .config(c => c.source(env({ OPENAPI__ROUTES__DOCS: '/reference' }), ConfigPriority.ENV))
-      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
       .build()
 
     await app.ready()
@@ -100,9 +96,8 @@ describe('openapi configuration', () => {
 
   it('switches an endpoint off when configuration says false', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(OpenAPIExt())
       .config(c => c.source(env({ OPENAPI__ROUTES__YAML: 'false' }), ConfigPriority.ENV))
-      .openapi(o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
       .build()
 
     await app.ready()
@@ -123,12 +118,11 @@ describe('openapi configuration', () => {
     })
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(OpenAPIExt())
       .config(schema, c => c.source(new InlineConfigProvider({
         app: { docs: { info: { title: 'Moved', version: '2.0.0' } } },
       })))
       // No annotation on the selector: the config type is recovered from the builder.
-      .openapi(o => o.config(c => c.app.docs).info({ title: 'Code', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o => o.config(c => c.app.docs).info({ title: 'Code', version: '1.0.0' }).public())
       .build()
 
     await app.ready()
@@ -140,11 +134,10 @@ describe('openapi configuration', () => {
   // `transformDocument` edits the document in place, and the values now come from a deep-frozen tree.
   it('still lets transformDocument mutate a config-sourced info block', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(OpenAPIExt())
       .config(c => c.source(new InlineConfigProvider({
         openapi: { info: { title: 'From Config', version: '1.0.0' } },
       })))
-      .openapi(o => o.public().transformDocument(document => {
+      .extend(OpenAPIExt, o => o.public().transformDocument(document => {
         document.info.title = 'Renamed'
       }))
       .build()

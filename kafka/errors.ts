@@ -26,7 +26,7 @@ export class ErrKafkaMissingGroupID extends ErrKafka {
   constructor(handler: string) {
     super(
       `Cannot register Kafka listener "${handler}": no group id resolved`
-      + '\n  - Set a per-listener groupId on @KafkaListener, or a default groupId on the kafka() plugin config',
+      + '\n  - Set a per-listener groupId on @KafkaListener, or a default groupId on the kafka feature config',
       'ERR_KAFKA_MISSING_GROUP_ID',
     )
     this.name = 'ErrKafkaMissingGroupID'
@@ -39,7 +39,7 @@ export class ErrKafkaUnknownInstance extends ErrKafka {
     const known = configured.length > 0 ? configured.map(name => `"${name}"`).join(', ') : '(none)'
     super(
       `Cannot start Kafka handler "${handler}": no integration named "${instance}" is configured`
-      + `\n  - Declare the instance with app.kafka(k => k.named("${instance}").brokers(...))`
+      + `\n  - Declare the instance with .extend(kafka("${instance}"), k => k.brokers(...))`
       + '\n  - Or reassign the handler to a configured instance with @KafkaHandler({ instance: "..." })'
       + `\n  - Configured instances: ${known}`,
       'ERR_KAFKA_UNKNOWN_INSTANCE',

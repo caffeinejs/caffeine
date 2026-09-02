@@ -118,8 +118,7 @@ class IntegrationConsumer {
 const up = await brokerUp()
 
 describe.skipIf(!up)('kafka integration (real broker)', () => {
-  const app = createApplication({}).extend(kafka())
-  app.kafka(k => k
+  const app = createApplication({}).extend(kafka, k => k
     .brokers(BROKER)
     .clientId('caffeine-kafka-it')
     // Fresh group per run so the consumer reads messages produced after it joins.

@@ -39,8 +39,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => ({}))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(OpenAPIExt())
-      .openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public())
+      .extend(OpenAPIExt, o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public())
       .build()
       .mount(pets) as WebApplication
 
@@ -77,8 +76,7 @@ describe('openapi from a programmatic router', () => {
       .handler(ctx => ctx.body(ctx.req.body()))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(OpenAPIExt())
-      .openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public())
+      .extend(OpenAPIExt, o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public())
       .build()
       .mount(pets) as WebApplication
 

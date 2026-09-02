@@ -151,14 +151,12 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 /**
  * Creates a web application builder.
  *
- * Install plugins with `.extend(...)` rather than here: it is typed the same way, and it can be called at
- * any point in the chain — including after `.config()`, which re-types the builder and would otherwise drop
- * the plugins' methods.
+ * Install features with `.extend(feature, configure)` rather than here: it can be called at any point in
+ * the chain, including after `.config()`.
  *
  * ```ts
  * createWebApplication()
- *   .extend(ViewExt(), StaticExt())
- *   .view(v => v.engine({ handlebars }))
+ *   .extend(ViewExt, v => v.engine({ handlebars }))
  * ```
  */
 // Default Fastify — no adapter factory or Fastify instance required.

@@ -79,6 +79,6 @@ export interface Service {
 
 /**
  * The fluent configuration surface of a {@link Service}, with the lifecycle hooks omitted so they do not
- * appear in autocomplete on `.server(s => ...)`, `.kafka(k => ...)`, and similar.
+ * appear in autocomplete on `.server(s => ...)`, `.extend(kafka, k => ...)`, and similar.
  */
 export type ServiceAPI<T extends Service> = Omit<T, keyof Service>

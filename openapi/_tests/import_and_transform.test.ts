@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
-import { $t } from '@caffeinejs/std'
+import { $t, type ServiceAPI } from '@caffeinejs/std'
 import {
   AllowAnonymous,
   Controller,
@@ -15,6 +15,7 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
+import { OpenAPIBuilder } from '../builder.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
@@ -41,18 +42,13 @@ const HAND_WRITTEN: OpenAPIDocument = {
   },
 }
 
-function build(configure: (o: Parameters<Parameters<ReturnType<typeof newBuilder>['openapi']>[0]>[0]) => void): WebApplication {
-  const builder = newBuilder()
-  builder.openapi(o => {
-    o.docs(false).public()
-    configure(o)
-  })
-  return builder.build() as WebApplication
-}
-
-function newBuilder() {
+function build(configure: (o: ServiceAPI<OpenAPIBuilder>) => void): WebApplication {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt())
+    .extend(OpenAPIExt, o => {
+      o.docs(false).public()
+      configure(o)
+    })
+    .build() as WebApplication
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {

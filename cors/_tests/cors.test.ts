@@ -14,8 +14,7 @@ import { CORS, CorsBuilder, cors, CORSExt } from '../index.js'
 
 function corsApp(configure: (c: ServiceAPI<CorsBuilder>) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(CORSExt())
-    .cors(configure)
+    .extend(CORSExt, configure)
 }
 
 describe('CORS', () => {

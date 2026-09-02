@@ -4,7 +4,7 @@ import type { CompressOptions } from './extension.js'
 /**
  * Compresses the response, or turns compression off for the route with `false`.
  *
- * Needs `@fastify/compress` registered on the server (via `CompressExt()`); this is the per-route half of it.
+ * Needs `@fastify/compress` registered on the server (via `.extend(CompressExt)`); this is the per-route half of it.
  */
 export function compress(options: CompressOptions | false): AnyRouteExtension {
   return (target: { options(key: string, value: unknown): unknown }) => {

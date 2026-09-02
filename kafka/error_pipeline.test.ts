@@ -98,8 +98,7 @@ describe('error pipeline', () => {
   it('retries a retryable failure until it succeeds', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k.brokers('b').groupId(GROUP).retry({ attempts: 3, backoff: { type: 'fixed', delay: 1 } }))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP).retry({ attempts: 3, backoff: { type: 'fixed', delay: 1 } }))
     const built = app.build()
     await built.run()
 
@@ -114,8 +113,7 @@ describe('error pipeline', () => {
     dltReceived = deferred()
     const observed = deferred<unknown>()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k
       .brokers('b')
       .groupId(GROUP)
       .retry({ attempts: 2, backoff: { type: 'fixed', delay: 1 } })
@@ -139,8 +137,7 @@ describe('error pipeline', () => {
   it('does not retry a not-retryable exception', async () => {
     notRetryState = { attempts: 0, onError: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k
       .brokers('b')
       .groupId(GROUP)
       .retry({ attempts: 5, backoff: { type: 'fixed', delay: 1 } })
@@ -160,8 +157,7 @@ describe('error pipeline', () => {
   it('commits after each success in record ack mode', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k.brokers('b').groupId(GROUP).ackMode('record').retry({ attempts: 3, backoff: { type: 'fixed', delay: 1 } }))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP).ackMode('record').retry({ attempts: 3, backoff: { type: 'fixed', delay: 1 } }))
     const built = app.build()
     await built.run()
 
@@ -179,8 +175,7 @@ describe('error pipeline', () => {
   it('commits when the handler calls ctx.ack() in manual mode', async () => {
     manualDone = deferred()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k.brokers('b').groupId(GROUP).ackMode('manual'))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP).ackMode('manual'))
     const built = app.build()
     await built.run()
 
@@ -195,8 +190,7 @@ describe('error pipeline', () => {
   it('re-delivers in-process on ctx.nack()', async () => {
     nackState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k.brokers('b').groupId(GROUP).ackMode('manual').retry({ attempts: 3, backoff: { type: 'fixed', delay: 1 } }))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP).ackMode('manual').retry({ attempts: 3, backoff: { type: 'fixed', delay: 1 } }))
     const built = app.build()
     await built.run()
 

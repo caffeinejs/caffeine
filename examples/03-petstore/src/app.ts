@@ -47,19 +47,17 @@ export function buildApp(
   const builder = createWebApplication(fastifyAdapterFactory(server), {
     container,
   })
-    .extend(ViewExt(), StaticExt(), OpenAPIExt(), MultipartExt())
-    .multipart()
-    .view((v) =>
+    .extend(ViewExt, (v) =>
       v.engine({ handlebars })
         .root(viewsRoot)
         .extension("hbs")
         .layout("layout"),
     )
-    .static((s) => s.serve(publicRoot, { prefix: "/static" }))
+    .extend(StaticExt, (s) => s.serve(publicRoot, { prefix: "/static" }))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
     // $p pickers are the source, and @APIGroup/@Operation add only what those cannot say. 3.2.0 because
     // QUERY /pets needs it: a 3.1 path item has no field for a non-standard method.
-    .openapi((o) =>
+    .extend(OpenAPIExt, (o) =>
       o.version("3.2.0")
         .info({
           title: "Modern Petstore",
@@ -83,6 +81,7 @@ export function buildApp(
         .errors({ validation: 422 })
         .errorSchema(apiErrorSchema),
     )
+    .extend(MultipartExt)
     .authentication((auth) =>
       auth
         // Basic, for the API documentation only. Demo credentials, overridable from the environment.
@@ -142,9 +141,7 @@ export function buildApp(
         // a browser-first demo, and the documentation (Basic) is the one place that differs.
         .default("GitHub"),
     )
-    // .config() re-types the builder and drops the plugin augments, so anything using a plugin method comes
-    // before it — or after another .extend(), which restores them. Server host/port come from
-    // PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
+    // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
     .config(appConfigSchema, (c) =>
       c.source(new EnvConfigProvider({ prefix: "PETSTORE_" })),
     )

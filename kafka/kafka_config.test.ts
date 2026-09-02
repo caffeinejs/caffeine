@@ -28,11 +28,12 @@ const env = (values: Record<string, string>) =>
 
 describe('kafka configuration', () => {
   it('reads brokers from the configuration tree with no builder call at all', async () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.config(c => c.source(new InlineConfigProvider({
-      kafka: { default: { brokers: ['from-config:9092'], groupId: 'from-config' } },
-    })))
-    app.kafka(() => undefined)
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .config(c => c.source(new InlineConfigProvider({
+        kafka: { default: { brokers: ['from-config:9092'], groupId: 'from-config' } },
+      })))
+      .extend(kfk)
 
     const built = app.build()
     await built.ready()
@@ -45,9 +46,10 @@ describe('kafka configuration', () => {
 
   // The regression the whole mechanism exists for: a builder method is a default, not a setting.
   it('lets the environment override a builder-set broker list', async () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.config(c => c.source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }), ConfigPriority.ENV))
-    app.kafka(k => k.brokers('localhost:9092').groupId('svc'))
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .config(c => c.source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }), ConfigPriority.ENV))
+      .extend(kfk, k => k.brokers('localhost:9092').groupId('svc'))
 
     const built = app.build()
     await built.ready()
@@ -60,12 +62,13 @@ describe('kafka configuration', () => {
   })
 
   it('keeps named instances apart, the unnamed one at kafka.default', async () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
+    const kfk = kafka.with({ clients: noopClients() })
     // `GROUP_ID`, not `GROUPID`: the env provider folds underscores *within* a segment into camelCase, so an
     // all-uppercase run has no word boundary to find and `GROUPID` would resolve to `groupid`.
-    app.config(c => c.source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV))
-    app.kafka(k => k.brokers('b1:9092').groupId('svc'))
-    app.kafka(k => k.named('orders').brokers('b2:9092').groupId('orders'))
+    const app = createApplication({})
+      .config(c => c.source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV))
+      .extend(kfk, k => k.brokers('b1:9092').groupId('svc'))
+      .extend(kfk('orders'), k => k.brokers('b2:9092').groupId('orders'))
 
     const built = app.build()
     await built.ready()
@@ -88,14 +91,13 @@ describe('kafka configuration', () => {
       }),
     })
 
+    const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .extend(kafka('kafka', { clients: noopClients() }))
       .config(schema, c => c.source(new InlineConfigProvider({
         app: { events: { groupId: 'from-moved-path' } },
       })))
-
-    // No annotation on the selector: the config type is recovered from the builder.
-    app.kafka(k => k.brokers('moved:9092').config(c => c.app.events))
+      // No annotation on the selector: the config type is recovered from the builder.
+      .extend(kfk, k => k.brokers('moved:9092').config(c => c.app.events))
 
     const built = app.build()
     await built.ready()
@@ -113,9 +115,10 @@ describe('kafka configuration', () => {
     const serializers = { key: () => Buffer.from('k') }
     const onError = (): void => undefined
 
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.config(c => c.source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }), ConfigPriority.ENV))
-    app.kafka(k => k.serializers(serializers).onError(onError))
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .config(c => c.source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }), ConfigPriority.ENV))
+      .extend(kfk, k => k.serializers(serializers).onError(onError))
 
     const built = app.build()
     await built.ready()
@@ -132,11 +135,12 @@ describe('kafka configuration', () => {
   it('prefers the code-set dead-letter options over the configured boolean', async () => {
     const topic = (): string => 'custom.DLT'
 
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.config(c => c.source(new InlineConfigProvider({
-      kafka: { default: { brokers: ['b:9092'], deadLetter: true } },
-    })))
-    app.kafka(k => k.deadLetter({ topic }))
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .config(c => c.source(new InlineConfigProvider({
+        kafka: { default: { brokers: ['b:9092'], deadLetter: true } },
+      })))
+      .extend(kfk, k => k.deadLetter({ topic }))
 
     const built = app.build()
     await built.ready()
@@ -147,11 +151,12 @@ describe('kafka configuration', () => {
   })
 
   it('honours a configured deadLetter: false when code set no object', async () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.config(c => c.source(new InlineConfigProvider({
-      kafka: { default: { brokers: ['b:9092'], deadLetter: false } },
-    })))
-    app.kafka(k => k.brokers('b:9092'))
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .config(c => c.source(new InlineConfigProvider({
+        kafka: { default: { brokers: ['b:9092'], deadLetter: false } },
+      })))
+      .extend(kfk, k => k.brokers('b:9092'))
 
     const built = app.build()
     await built.ready()
@@ -163,11 +168,12 @@ describe('kafka configuration', () => {
 
   // Activation is the builder call, never the tree.
   it('configures nothing for an instance the application never declared', async () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.config(c => c.source(new InlineConfigProvider({
-      kafka: { ghost: { brokers: ['nobody:9092'] } },
-    })))
-    app.kafka(k => k.brokers('real:9092'))
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .config(c => c.source(new InlineConfigProvider({
+        kafka: { ghost: { brokers: ['nobody:9092'] } },
+      })))
+      .extend(kfk, k => k.brokers('real:9092'))
 
     const built = app.build()
     await built.ready()

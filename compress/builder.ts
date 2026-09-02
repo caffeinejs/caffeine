@@ -2,9 +2,9 @@ import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/s
 import { CompressExtension, type CompressOptions } from './extension.js'
 
 /**
- * Configures `@fastify/compress`. Bound via `app.compress(...)`.
+ * Configures `@fastify/compress`. Bound via `.extend(CompressExt, c => …)`.
  *
- * Reaching `.compress()` is the activating act: it binds {@link CompressExtension}, which the adapter
+ * Installing the feature is the activating act: it binds {@link CompressExtension}, which the adapter
  * discovers via `getManyOptional(ServerExtension)` and registers as a Fastify plugin.
  */
 export class CompressBuilder implements Service {

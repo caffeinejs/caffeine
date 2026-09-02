@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createApplication } from '@caffeinejs/std'
+import { createApplication, ErrFeatureAlreadyInstalled } from '@caffeinejs/std'
 import type { ErrConfigSlices } from '@caffeinejs/std/config'
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
@@ -21,20 +21,18 @@ function noopClients(): KafkaClients {
   return { createProducer: () => producer, createConsumer: () => consumer }
 }
 
-describe('kafka() plugin', () => {
-  it('installs the kafka() method and returns the builder for chaining', () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    expect(typeof app.kafka).toBe('function')
-    // chaining returns the builder
-    const chained = app.kafka(k => k.brokers('localhost:9092')).kafka(k => k.named('orders').brokers('localhost:9092'))
-    expect(chained).toBe(app)
+describe('kafka feature', () => {
+  it('returns the same builder from .extend()', () => {
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+    expect(app.extend(kfk, k => k.brokers('localhost:9092'))).toBe(app)
   })
 
   it('binds the default template and a labelled engine through configure()', async () => {
     const container = new CaffeineIoC()
-    const app = createApplication({ container }).extend(kafka('kafka', { clients: noopClients() }))
-
-    app.kafka(k => k.brokers('localhost:9092').groupId('g'))
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({ container })
+      .extend(kfk, k => k.brokers('localhost:9092').groupId('g'))
 
     const built = app.build()
     await built.ready()
@@ -48,9 +46,10 @@ describe('kafka() plugin', () => {
   })
 
   it('binds distinct templates for multiple named instances', async () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.kafka(k => k.brokers('b1').groupId('g'))
-    app.kafka(k => k.named('orders').brokers('b2').groupId('g'))
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .extend(kfk, k => k.brokers('b1').groupId('g'))
+      .extend(kfk('orders'), k => k.brokers('b2').groupId('g'))
 
     const built = app.build()
     await built.ready()
@@ -68,8 +67,9 @@ describe('kafka() plugin', () => {
   // Brokers may arrive from any source now, so the check runs once the whole chain has merged — which makes
   // it the slice's failure, naming the instance that could not be configured.
   it('rejects at ready() when an instance has no brokers', async () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    app.kafka(k => k.groupId('g')) // no brokers
+    const kfk = kafka.with({ clients: noopClients() })
+    const app = createApplication({})
+      .extend(kfk, k => k.groupId('g')) // no brokers
 
     const error = await app.build().ready().then(() => undefined, (e: unknown) => e)
 
@@ -79,25 +79,10 @@ describe('kafka() plugin', () => {
     expect((error as ErrConfigSlices).failures[0].error).toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 
-  it('honours a caller-supplied method name', () => {
-    const app = createApplication({}).extend(kafka('kafkaB', { clients: noopClients() }))
-    expect(typeof app.kafkaB).toBe('function')
-    // @ts-expect-error the default `kafka` name is gone once renamed
-    const gone: unknown = app.kafka
-    expect(gone).toBeUndefined()
-  })
-
-  it('does not expose undeclared methods (type-level)', () => {
-    const app = createApplication({}).extend(kafka('kafka', { clients: noopClients() }))
-    // @ts-expect-error `nope` is not contributed by any plugin
-    const bad: unknown = app.nope
-    expect(bad).toBeUndefined()
-  })
-
-  it('types a plugin-less builder as a plain builder (no augmentation)', () => {
-    const app = createApplication({})
-    // @ts-expect-error no plugin was supplied, so `kafka` is absent
-    const bad: unknown = app.kafka
-    expect(bad).toBeUndefined()
+  it('throws when the same instance is installed twice', () => {
+    const kfk = kafka.with({ clients: noopClients() })
+    expect(() => createApplication({}).extend(kfk).extend(kfk)).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication({}).extend(kfk('orders')).extend(kfk('orders')))
+      .toThrow(ErrFeatureAlreadyInstalled)
   })
 })

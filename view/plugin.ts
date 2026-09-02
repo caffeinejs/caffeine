@@ -1,50 +1,44 @@
-import type { ConfigTypeOf, Plugin } from '@caffeinejs/std'
+import { defineKeyedFeature, type KeyedFeature, type TypeLambda } from '@caffeinejs/std'
+import { ErrConfiguration } from '@caffeinejs/http'
 import { ViewBuilder } from './builder.js'
 import { ViewOptionsProvider } from './options_provider.js'
 
-/**
- * Builder methods contributed by {@link ViewExt}. Mirrors the fluent `app.view(...)` surface the http
- * builder used to expose directly. Name a second engine with {@link ViewBuilder.named} inside the callback.
- */
-export interface ViewExt {
-  /**
-   * The config type is recovered from the builder this was reached through, so `v.config(c => c.app.views)`
-   * is typed against the application's own schema. An explicit `Self` type parameter rather than the
-   * polymorphic `this` type: `Reconfigured` is `Omit`-based, and a mapped type instantiates `this` — which
-   * would freeze the config type to whatever it was before `.config(schema)` re-typed the builder.
-   */
-  view<Self>(this: Self, configure: (view: ViewBuilder<ConfigTypeOf<Self>>) => void): Self
+const PROVIDER = 'view:provider'
+const DEFAULT_ENGINE = 'default'
+
+interface ViewBuilderF extends TypeLambda {
+  readonly Out: ViewBuilder<this['In']>
+}
+
+export interface ViewFeature extends KeyedFeature<ViewBuilder> {
+  readonly _F: ViewBuilderF
 }
 
 /**
- * The `@caffeinejs/view` application plugin. Pass it to `createWebApplication(..., ViewExt())` to add
- * server-side rendering (`@fastify/view`) without http depending on this package.
+ * The `@caffeinejs/view` application feature. `.extend(ViewExt, v => …)` registers the default engine
+ * (`reply.view`); `.extend(ViewExt('mail'), v => …)` registers a named one. `"view"` is reserved for the
+ * default engine.
  *
- * On the first `.view(...)` call it lazily creates a single {@link ViewOptionsProvider} and registers it as
- * a service; the provider's `configure()` binds itself and the `ViewConfigurer` into the container,
- * which the adapter then discovers via `getManyOptional(FeatureConfigurer)`.
+ * The first install creates a {@link ViewOptionsProvider} and registers it as a service; later named
+ * installs add engines to that provider.
  */
-export function ViewExt(): Plugin<ViewExt> {
-  let provider: ViewOptionsProvider | undefined
+export const ViewExt: ViewFeature = defineKeyedFeature({
+  name: 'view',
+  defaultInstance: DEFAULT_ENGINE,
+  install(ctx, instance, configure) {
+    if (instance === 'view') {
+      throw new ErrConfiguration('Cannot register a view engine named "view": it is reserved for the default engine')
+    }
 
-  return {
-    name: 'view',
-    install(ctx) {
-      return {
-        view(configure: (view: ViewBuilder<never>) => void) {
-          if (provider == null) {
-            provider = new ViewOptionsProvider()
-            ctx.addService(provider)
-          }
+    let provider = ctx.state.get(PROVIDER) as ViewOptionsProvider | undefined
+    if (provider == null) {
+      provider = new ViewOptionsProvider()
+      ctx.state.set(PROVIDER, provider)
+      ctx.addService(provider)
+    }
 
-          const builder = new ViewBuilder()
-          // The config type is a compile-time affair only; the runtime builder is the same object either way.
-          configure(builder as ViewBuilder<never>)
-          provider.add(builder)
-
-          return this
-        },
-      } as unknown as ViewExt
-    },
-  }
-}
+    const builder = new ViewBuilder(instance === DEFAULT_ENGINE ? undefined : instance)
+    configure?.(builder)
+    provider.add(builder)
+  },
+}) as ViewFeature

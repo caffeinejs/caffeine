@@ -53,10 +53,10 @@ export interface OutBindingOptions {
  * Fluent configuration for one messaging integration: register binder instances with {@link use}, then declare
  * inbound ({@link in}) and outbound ({@link out}) bindings that map logical names onto binder destinations. At
  * `ready()` its `configure()` builds the runtime and binds the engine + `MessageBus` into the container.
- * A second integration is another `.messaging()` call whose builder is named with {@link named}.
+ * A second integration is `.extend(messaging('audit'), m => ...)`.
  */
 export class MessagingBuilder<C = unknown> implements Service {
-  #name: string = DEFAULT_BINDER
+  readonly #name: string
   #selector?: (c: ConfigHandle<C>) => ConfigAccessors<MessagingConfigSlice>
   readonly #binders = new Map<string, Binder | BinderFactory>()
   readonly #inbound = new Map<string, InBindingOptions>()
@@ -66,17 +66,12 @@ export class MessagingBuilder<C = unknown> implements Service {
   #recoverer?: Recoverer
   #resolved?: ConfigSlice<{ inbound: Map<string, ConsumerBinding>, outbound: Map<string, ProducerBinding> }>
 
-  get name(): string {
-    return 'messaging'
+  constructor(name: string = DEFAULT_BINDER) {
+    this.#name = name
   }
 
-  /**
-   * Names this integration. The unnamed call is the default instance (`messaging.default.*`);
-   * `m.named('audit')` reads `messaging.audit.*`.
-   */
-  named(name: string): ServiceAPI<this> {
-    this.#name = name
-    return this
+  get name(): string {
+    return 'messaging'
   }
 
   /** Handles inbound messages that fail their binding's schema (runs instead of the handler; skips + advances). */

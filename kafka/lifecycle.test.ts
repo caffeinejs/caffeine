@@ -17,8 +17,7 @@ class LifecycleConsumer {
 describe('consumer lifecycle events + status', () => {
   it('re-emits normalized events and tracks status', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka('kafka', { clients: broker.clients() }))
-    app.kafka(k => k.brokers('b').groupId('lc-group'))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId('lc-group'))
     const built = app.build()
     await built.run()
 

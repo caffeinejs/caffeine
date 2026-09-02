@@ -10,7 +10,7 @@ import {
 } from './config/index.js'
 import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
-import type { Augment, Plugin, PluginContext } from './plugin.js'
+import type { BuilderOf, Feature, PluginContext } from './plugin.js'
 import type { Service } from './service.js'
 import { type ShutdownConfig, resolveShutdownOptions } from './health/shutdown_options.js'
 import { detectSignalDispatcher } from './health/signals.js'
@@ -26,7 +26,7 @@ export interface ApplicationBuilderOptions {
 }
 
 /**
- * Platform-neutral builder foundation: owns container creation, the {@link Service} list, the plugin
+ * Platform-neutral builder foundation: owns container creation, the {@link Service} list, the feature
  * install surface, and the programmatic lifecycle hooks. Concrete builders (headless
  * {@link ApplicationBuilder}, the HTTP `WebApplicationBuilder`) extend it and implement {@link build}.
  *
@@ -41,6 +41,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #shutdown: ShutdownConfig | undefined
   readonly #config = new ConfigDefinition(kAppConfig)
+  readonly #featureState = new Map<string, unknown>()
 
   constructor(options: ApplicationBuilderOptions = {}) {
     this.#shutdown = options.shutdown
@@ -145,22 +146,33 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   }
 
   /**
-   * Installs plugins, merging each one's contributed methods onto this builder and re-typing it so they are
-   * visible with autocomplete.
+   * Installs a feature, running `configure` against its builder in the same call. Callable at any point,
+   * and more than once — once per singleton feature, once per keyed instance (`kafka('orders')`).
    *
-   * Callable at any point, and more than once. Order does not matter: a builder that re-parameterises itself
-   * (as the HTTP builder's `config()` does) carries the augments across, so `.extend(...).config(...)` and
-   * `.config(...).extend(...)` are equally valid.
+   * The config type is recovered from this builder, so `k.config(c => c.app.events)` is typed against a
+   * schema declared by `.config(...)` without naming it again. Declare the schema first so the selector sees it.
    *
    * ```ts
-   * createWebApplication(fastifyAdapterFactory(server))
-   *   .extend(ViewExt(), StaticExt())
-   *   .view(v => v.engine({ handlebars }))
+   * createWebApplication()
+   *   .extend(ViewExt, v => v.engine({ handlebars }))
+   *   .extend(StaticExt, s => s.serve(root))
    * ```
    */
-  extend<const S extends readonly Plugin[]>(...plugins: S): this & Augment<S> {
-    installPlugins(this, plugins)
-    return this as this & Augment<S>
+  extend<F>(
+    this: this,
+    feature: F & Feature,
+    configure?: (b: BuilderOf<NoInfer<F>, ConfigTypeOf<this>>) => void,
+  ): this {
+    const ctx: PluginContext = {
+      addService: service => { this.addService(service) },
+      container: this.container,
+      on: (event, listener) => {
+        this.on(event, listener as (app: App) => void | Promise<void>)
+      },
+      state: this.#featureState,
+    }
+    feature.install(ctx, configure as never)
+    return this
   }
 
   /** The construction input shared by every application kind. Subclasses pass it to their app constructor. */
@@ -179,22 +191,21 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
 }
 
 /**
- * Re-parameterises the builder half of `Self` while keeping whatever a plugin merged onto it.
+ * Re-parameterises the builder half of `Self`.
  *
  * A builder that changes one of its own type arguments — `config()` declaring the application config type —
- * cannot just name its own class as the return type: that discards the `& Augment<S>` an earlier `.extend()`
- * contributed, and the plugin's methods vanish from the chain. `Omit` strips the class's own keys, leaving
- * only the plugin-contributed ones, and intersecting with the re-parameterised class puts the full instance
- * type back — private fields included, so the result stays assignable wherever the builder is expected.
+ * cannot just name its own class as the return type when `Self` may already be a subclass or a previous
+ * re-parameterisation. `Omit` strips the class's own keys, and intersecting with the next class puts the
+ * full instance type back — private fields included.
  */
 export type Reconfigured<Self, Base, Next> = Omit<Self, keyof Base> & Next
 
 /**
  * Recovers the application config type from whatever builder a method was invoked on.
  *
- * A plugin's method only ever sees `this` as an opaque `Self`, so a feature contributed by a plugin has no
- * other way to type `f.config(c => c.app.thing)` the way the built-in `server(s => s.config(...))` is typed.
- * The builders carry {@link ApplicationConfigMarker.__config} purely so this can read it back.
+ * `.extend`'s configure callback, and built-in methods such as `.server(s => s.config(...))`, read the
+ * schema off this phantom rather than asking the caller to name it again. The builders carry
+ * {@link ApplicationConfigMarker.__config} purely so this can read it back.
  *
  * The marker is optional, so a `Self` that carries none matches with `C` inferred as `unknown` — which is
  * exactly right: an application that never declared a schema has no shape to select from.
@@ -207,21 +218,6 @@ export type ConfigTypeOf<Self> = Self extends { readonly __config?: infer C } ? 
  */
 export interface ApplicationConfigMarker<T> {
   readonly __config?: T
-}
-
-/** Merges each plugin's contributed methods onto the builder and registers its configurer. */
-export function installPlugins(
-  builder: { readonly container: Container, addService(service: Service): void },
-  plugins: readonly Plugin[],
-): void {
-  const ctx: PluginContext = {
-    addService: service => { builder.addService(service) },
-    container: builder.container,
-  }
-
-  for (const plugin of plugins) {
-    Object.assign(builder, plugin.install(ctx))
-  }
 }
 
 /** A headless application builder. */
@@ -239,10 +235,9 @@ export class ApplicationBuilder<TConfig = unknown>
    * Declares the application configuration, bound under `kAppConfig`, and re-types the builder to carry the
    * config type `T` inferred from `schema`.
    *
-   * Re-typed for the same reason the HTTP builder is: a plugin feature's `.config(c => c.app.thing)` selector
-   * reads the config type off the builder it was reached through, and a headless application configures kafka
-   * and messaging exactly the way an HTTP one does. Read the root config itself via
-   * `container.get<ConfigHandle<T>>(kAppConfig)`.
+   * Re-typed so a feature's `.config(c => c.app.thing)` selector reads the config type off the builder it
+   * was reached through, and a headless application configures kafka and messaging exactly the way an HTTP
+   * one does. Read the root config itself via `container.get<ConfigHandle<T>>(kAppConfig)`.
    *
    * Runtime returns the same instance; only the declared type changes.
    */
@@ -263,8 +258,8 @@ export class ApplicationBuilder<TConfig = unknown>
 /**
  * Creates a headless {@link Application} builder. Mirrors the HTTP `createWebApplication`.
  *
- * Install plugins with `.extend(...)` — it is fully typed the same way, and unlike a factory argument it can
- * be called at any point in the chain.
+ * Install features with `.extend(feature, configure)` — unlike a factory argument it can be called at any
+ * point in the chain.
  */
 export function createApplication(options?: ApplicationBuilderOptions): ApplicationBuilder {
   return new ApplicationBuilder(options)

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { type Plugin, type Service } from '@caffeinejs/std'
+import { defineFeature, type Service } from '@caffeinejs/std'
 import { Controller, Get, createWebApplication } from '../index.js'
 
 describe('createWebApplication default Fastify form', () => {
@@ -45,38 +45,34 @@ describe('createWebApplication default Fastify form', () => {
     expect(await res.json()).toEqual({ via: 'container' })
   })
 
-  it('accepts plugins after the options argument', async () => {
+  it('accepts features after the options argument', async () => {
     const kProbe = token<any>(Symbol('probe-sentinel'))
 
-    function probe(): Plugin<{ probe: (value: string) => void }> {
-      const state: { value: string | undefined } = { value: undefined }
-      const service: Service = {
-        bootstrap(kit) {
-          kit.container.bind(kProbe).toValue({ value: state.value })
-          return Promise.resolve()
-        },
+    const probe = defineFeature<{ capture(value: string): void }>({
+      name: 'probe',
+      singleton: true,
+      install(ctx, configure) {
+        const state: { value: string | undefined } = { value: undefined }
+        const service: Service = {
+          bootstrap(kit) {
+            kit.container.bind(kProbe).toValue({ value: state.value })
+            return Promise.resolve()
+          },
 
-        get name(): string {
-          return 'probe'
-        },
-      }
+          get name(): string {
+            return 'probe'
+          },
+        }
+        ctx.addService(service)
+        configure?.({
+          capture(value: string) {
+            state.value = value
+          },
+        })
+      },
+    })
 
-      return {
-        name: 'probe',
-        install(ctx) {
-          ctx.addService(service)
-          return {
-            probe: (value: string) => {
-              state.value = value
-            },
-          }
-        },
-      }
-    }
-
-    const app = createWebApplication().extend(probe())
-    expect(typeof app.probe).toBe('function')
-    app.probe('hello')
+    const app = createWebApplication().extend(probe, t => t.capture('hello'))
 
     const built = app.build()
     await built.ready()

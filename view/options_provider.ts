@@ -6,16 +6,17 @@ import type { ViewOptions } from './view.js'
 
 /**
  * Groups every configured view engine — the default one (`reply.view`) plus any named ones
- * (`reply.<name>`) — behind a single object. Each `app.view(...)` call adds one {@link ViewBuilder};
- * the {@link ViewExtension} it hands itself to registers `@fastify/view` once per {@link all} entry.
+ * (`reply.<name>`) — behind a single object. Each `.extend(ViewExt, …)` / `.extend(ViewExt('mail'), …)`
+ * adds one {@link ViewBuilder}; the {@link ViewExtension} it hands itself to registers `@fastify/view`
+ * once per {@link all} entry.
  */
 export class ViewOptionsProvider implements Service {
   // Keyed by engine name; the `undefined` key is the default engine.
   readonly #builders = new Map<string | undefined, ViewBuilder>()
 
   /**
-   * Records a configured engine. Duplicate identities (two unnamed, or two `.named('mail')`) throw
-   * rather than overwrite. The name `"view"` is rejected by {@link ViewBuilder.named}.
+   * Records a configured engine. Duplicate identities throw rather than overwrite. The name `"view"` is
+   * rejected by {@link ViewExt}.
    */
   add(builder: ViewBuilder): void {
     const name = builder.engineName

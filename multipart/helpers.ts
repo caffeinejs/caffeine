@@ -77,7 +77,7 @@ export interface MultipartHelpers {
  *
  * Each call starts from wherever the parser currently stands, so one request is read once: a `file()` after a
  * `files()` finds nothing left. The request must have been routed through `@fastify/multipart` — the plugin's
- * `.multipart()` — and the route must not also declare a body picker, which would consume the same bytes.
+ * `.extend(MultipartExt)` — and the route must not also declare a body picker, which would consume the same bytes.
  */
 export function multipart(ctx: MultipartContext): MultipartHelpers {
   const request = ctx.fst.request

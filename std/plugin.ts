@@ -1,35 +1,131 @@
 import type { Container } from '@caffeinejs/di'
+import type { ApplicationEvent } from './decorators/lifecycle_registry.js'
+import { ErrCaffeine } from './error.js'
 import type { Service } from './service.js'
 
 /**
- * Runtime seam handed to a plugin at install time. A plugin registers its configurer via
- * {@link addService} (it rides the same `configure()` path as the built-in services) and may read
- * the DI {@link container} to bind eagerly if it needs to.
+ * Runtime seam handed to a feature at install time. A feature registers its configurer via
+ * {@link addService} (it rides the same `bootstrap()` path as the built-in services), may read the DI
+ * {@link container}, and may register programmatic lifecycle listeners via {@link on}.
+ *
+ * {@link state} is per application builder. A feature const must not keep install flags on itself —
+ * two `createApplication()` calls in one process would share them.
  */
 export interface PluginContext {
   addService(service: Service): void
   readonly container: Container
+  on(
+    event: ApplicationEvent,
+    listener: (app: { readonly container: Container }) => void | Promise<void>,
+  ): void
+  readonly state: Map<string, unknown>
 }
 
 /**
- * A builder plugin augments the application builder with extra, fully-typed methods. `Ext` is the record of
- * methods the plugin contributes to the builder surface; the factory merges every plugin's `Ext` into the
- * returned builder's type so the methods are visible with autocomplete.
+ * A feature installed with `.extend(feature, configure?)`. `B` is the builder handed to `configure`.
+ *
+ * Features that select from application config declare a phantom {@link TypeLambda} as `_F`
+ * so {@link BuilderOf} can rebind the builder against the application config type.
  */
-export interface Plugin<Ext extends object = object> {
+export interface Feature<B = unknown> {
   readonly name: string
-  install(ctx: PluginContext): Ext
+  install(ctx: PluginContext, configure?: (builder: B) => void): void
 }
 
-type UnionToIntersection<U>
-  = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never
-
-type ExtOf<P> = P extends Plugin<infer E> ? E : never
+/**
+ * A {@link Feature} that is also callable to name an instance: `kafka` is the default,
+ * `kafka('orders')` is a distinct install.
+ *
+ * Declared as an interface (call signature plus methods) so TypeScript does not collapse it to a
+ * function type and drop phantoms such as `__builder`.
+ */
+export interface KeyedFeature<B = unknown> extends Feature<B> {
+  (instance: string): Feature<B>
+}
 
 /**
- * Accumulates the method records of every plugin in `S` into a single intersection. The empty-tuple guard
- * maps "no plugins" to `object` (a no-op intersection) instead of `never`, so a plugin-less builder still
- * types as a plain builder.
+ * Higher-kinded placeholder so a feature can name `Builder<C>` without knowing `C` yet.
+ * {@link BuilderOf} instantiates it against the application config type.
  */
-export type Augment<S extends readonly Plugin[]>
-  = [S[number]] extends [never] ? object : UnionToIntersection<ExtOf<S[number]>>
+export interface TypeLambda {
+  readonly In: unknown
+  readonly Out: unknown
+}
+
+/**
+ * Recovers the builder type a feature hands to `.extend`'s callback, rebound to config type `C`.
+ */
+export type BuilderOf<F, C>
+  = F extends { readonly _F: infer L }
+    ? L extends TypeLambda
+      ? (L & { readonly In: C })['Out']
+      : F extends Feature<infer B> ? B : never
+    : F extends Feature<infer B> ? B : never
+
+/** Thrown when `.extend` installs the same singleton feature, or the same keyed instance, twice. */
+export class ErrFeatureAlreadyInstalled extends ErrCaffeine {
+  constructor(feature: string, instance?: string) {
+    super(
+      instance === undefined
+        ? `Cannot install feature "${feature}": it is already installed`
+        : `Cannot install feature "${feature}" instance "${instance}": it is already installed`,
+      'ERR_FEATURE_ALREADY_INSTALLED',
+    )
+  }
+}
+
+function claim(ctx: PluginContext, feature: string, instance?: string): void {
+  const key = instance === undefined ? feature : `${feature}:${instance}`
+  if (ctx.state.has(key)) {
+    throw new ErrFeatureAlreadyInstalled(feature, instance)
+  }
+  ctx.state.set(key, true)
+}
+
+/**
+ * Declares a feature that `.extend` installs at most once. `install` creates the builder, runs
+ * `configure` if given, and registers the service.
+ */
+export function defineFeature<B>(options: {
+  readonly name: string
+  readonly singleton?: boolean
+  install(ctx: PluginContext, configure?: (builder: B) => void): void
+}): Feature<B> {
+  return {
+    name: options.name,
+    install(ctx, configure) {
+      if (options.singleton) {
+        claim(ctx, options.name)
+      }
+      options.install(ctx, configure)
+    },
+  }
+}
+
+/**
+ * Declares a feature that may be installed once per instance name. The returned value is the default
+ * instance; calling it with a name produces another {@link Feature} for that instance.
+ */
+export function defineKeyedFeature<B>(options: {
+  readonly name: string
+  readonly defaultInstance: string
+  install(ctx: PluginContext, instance: string, configure?: (builder: B) => void): void
+}): KeyedFeature<B> {
+  function make(instance: string): Feature<B> {
+    return {
+      name: options.name,
+      install(ctx, configure) {
+        claim(ctx, options.name, instance)
+        options.install(ctx, instance, configure)
+      },
+    }
+  }
+
+  const def = make(options.defaultInstance)
+  const keyed = Object.assign(
+    (instance: string) => make(instance),
+    { install: def.install },
+  ) as KeyedFeature<B>
+  Object.defineProperty(keyed, 'name', { value: options.name })
+  return keyed
+}

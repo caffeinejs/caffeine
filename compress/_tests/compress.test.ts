@@ -14,8 +14,7 @@ import { Compress, CompressBuilder, compress, CompressExt } from '../index.js'
 
 function compressApp(configure?: (c: ServiceAPI<CompressBuilder>) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(CompressExt())
-    .compress(configure ?? (() => undefined))
+    .extend(CompressExt, configure ?? (() => undefined))
 }
 
 describe('Compress', () => {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
-import { $t } from '@caffeinejs/std'
+import { $t, type ServiceAPI } from '@caffeinejs/std'
 import {
   $p,
   AllowAnonymous,
@@ -19,6 +19,7 @@ import {
 import { $multipart } from '@caffeinejs/multipart'
 import { APIGroup, Operation } from '../decorators/index.js'
 import { ErrOpenAPIConfiguration } from '../errors.js'
+import { OpenAPIBuilder } from '../builder.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
@@ -72,18 +73,16 @@ class PetsController {
 }
 void [PetsController]
 
-function buildApp(configure: (app: ReturnType<typeof newBuilder>) => void = () => {}): WebApplication {
-  const builder = newBuilder()
-  configure(builder)
-  return builder.build().useAuthenticationAndAuthorization() as WebApplication
+function buildApp(configure: (o: ServiceAPI<OpenAPIBuilder>) => void = () => {}): WebApplication {
+  return newBuilder(configure).build().useAuthenticationAndAuthorization() as WebApplication
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an
 // application declaring authorization without authentication refuses to start. It also means every test
 // exercises the securityScheme derivation rather than only the unauthenticated path.
-function newBuilder() {
+function newBuilder(configure?: (o: ServiceAPI<OpenAPIBuilder>) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt())
+    .extend(OpenAPIExt, configure)
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }
 
@@ -102,10 +101,10 @@ describe('openapi endpoints', () => {
   })
 
   it('serves the document as JSON', async () => {
-    app = buildApp(b => b.openapi(o => o
+    app = buildApp(o => o
       .info({ title: 'Petstore', version: '1.0.0' })
       .docs(false)
-      .public()))
+      .public())
     await app.ready()
 
     const res = await app.fetch('/openapi.json')
@@ -119,7 +118,7 @@ describe('openapi endpoints', () => {
   })
 
   it('describes the application\'s real routes', async () => {
-    app = buildApp(b => b.openapi(o => o.docs(false).public()))
+    app = buildApp(o => o.docs(false).public())
     await app.ready()
 
     const document = await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
@@ -132,7 +131,7 @@ describe('openapi endpoints', () => {
   })
 
   it('hoists $id schemas into components', async () => {
-    app = buildApp(b => b.openapi(o => o.docs(false).public()))
+    app = buildApp(o => o.docs(false).public())
     await app.ready()
 
     const document = await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
@@ -143,7 +142,7 @@ describe('openapi endpoints', () => {
   })
 
   it('synthesizes a multipart body from the file picker', async () => {
-    app = buildApp(b => b.openapi(o => o.docs(false).public()))
+    app = buildApp(o => o.docs(false).public())
     await app.ready()
 
     const document = await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
@@ -155,7 +154,7 @@ describe('openapi endpoints', () => {
   })
 
   it('does not describe its own endpoints', async () => {
-    app = buildApp(b => b.openapi(o => o.docs(false).public()))
+    app = buildApp(o => o.docs(false).public())
     await app.ready()
 
     const document = await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
@@ -164,7 +163,7 @@ describe('openapi endpoints', () => {
   })
 
   it('describes its own endpoints when asked', async () => {
-    app = buildApp(b => b.openapi(o => o.docs(false).exposeSelf().public()))
+    app = buildApp(o => o.docs(false).exposeSelf().public())
     await app.ready()
 
     const document = await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
@@ -173,7 +172,7 @@ describe('openapi endpoints', () => {
   })
 
   it('serves the document as YAML', async () => {
-    app = buildApp(b => b.openapi(o => o.info({ title: 'Petstore', version: '1.0.0' }).docs(false).public()))
+    app = buildApp(o => o.info({ title: 'Petstore', version: '1.0.0' }).docs(false).public())
     await app.ready()
 
     const res = await app.fetch('/openapi.yaml')
@@ -184,14 +183,14 @@ describe('openapi endpoints', () => {
   })
 
   it('disables the YAML endpoint on request', async () => {
-    app = buildApp(b => b.openapi(o => o.yaml(false).docs(false).public()))
+    app = buildApp(o => o.yaml(false).docs(false).public())
     await app.ready()
 
     expect((await app.fetch('/openapi.yaml')).status).toBe(404)
   })
 
   it('mounts everything under a configured base', async () => {
-    app = buildApp(b => b.openapi(o => o.base('/internal').docs(false).public()))
+    app = buildApp(o => o.base('/internal').docs(false).public())
     await app.ready()
 
     expect((await app.fetch('/internal/openapi.json')).status).toBe(200)
@@ -199,7 +198,7 @@ describe('openapi endpoints', () => {
   })
 
   it('serves the documentation page and its bundle from the same origin', async () => {
-    app = buildApp(b => b.openapi(o => o.info({ title: 'Petstore', version: '1.0.0' }).public()))
+    app = buildApp(o => o.info({ title: 'Petstore', version: '1.0.0' }).public())
     await app.ready()
 
     const page = await app.fetch('/docs')
@@ -223,7 +222,7 @@ describe('openapi endpoints', () => {
    * carries none of the caller's cookies.
    */
   it('pins the UI proxy off so requests go straight from the browser', async () => {
-    app = buildApp(b => b.openapi(o => o.public()))
+    app = buildApp(o => o.public())
     await app.ready()
 
     const html = await (await app.fetch('/docs')).text()
@@ -233,7 +232,7 @@ describe('openapi endpoints', () => {
   })
 
   it('merges .ui() configuration over the defaults', async () => {
-    app = buildApp(b => b.openapi(o => o.public().ui({ layout: 'classic', darkMode: true })))
+    app = buildApp(o => o.public().ui({ layout: 'classic', darkMode: true }))
     await app.ready()
 
     const html = await (await app.fetch('/docs')).text()
@@ -246,7 +245,7 @@ describe('openapi endpoints', () => {
 
   // The default is a default, not a decree: an application behind a corporate relay has to be able to name it.
   it('lets .ui() override the proxy the page pins', async () => {
-    app = buildApp(b => b.openapi(o => o.public().ui({ proxyUrl: 'https://relay.internal' })))
+    app = buildApp(o => o.public().ui({ proxyUrl: 'https://relay.internal' }))
     await app.ready()
 
     const html = await (await app.fetch('/docs')).text()
@@ -266,16 +265,14 @@ describe('openapi endpoint protection', () => {
   })
 
   it('is public by default', async () => {
-    app = buildApp(b => b.openapi(o => o.docs(false).public()))
+    app = buildApp(o => o.docs(false).public())
     await app.ready()
 
     expect((await app.fetch('/openapi.json')).status).toBe(200)
   })
 
   it('requires authentication once secured, even naming only a scheme', async () => {
-    app = buildApp(b => b
-      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-      .openapi(o => o.docs(false).secure(s => s.schemes('Bearer'))))
+    app = buildApp(o => o.docs(false).secure(s => s.schemes('Bearer')))
     await app.ready()
 
     expect((await app.fetch('/openapi.json')).status).toBe(401)
@@ -288,9 +285,7 @@ describe('openapi endpoint protection', () => {
   })
 
   it('enforces roles on the document endpoints', async () => {
-    app = buildApp(b => b
-      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-      .openapi(o => o.docs(false).secure(s => s.schemes('Bearer').roles('ops'))))
+    app = buildApp(o => o.docs(false).secure(s => s.schemes('Bearer').roles('ops')))
     await app.ready()
 
     const withoutRole = await signToken({ sub: 'reader' })
@@ -312,7 +307,7 @@ describe('openapi endpoint protection', () => {
     process.on('warning', capture)
 
     try {
-      app = buildApp(b => b.openapi(o => o.docs(false)))
+      app = buildApp(o => o.docs(false))
       await app.ready()
       // process warnings are delivered on the next tick.
       await new Promise(resolve => setImmediate(resolve))
@@ -331,7 +326,7 @@ describe('openapi endpoint protection', () => {
     process.on('warning', capture)
 
     try {
-      app = buildApp(b => b.openapi(o => o.docs(false).public()))
+      app = buildApp(o => o.docs(false).public())
       await app.ready()
       await new Promise(resolve => setImmediate(resolve))
     } finally {
@@ -342,9 +337,7 @@ describe('openapi endpoint protection', () => {
   })
 
   it('rejects a scheme name that was never registered', async () => {
-    app = buildApp(b => b
-      .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-      .openapi(o => o.docs(false).secure(s => s.schemes('Nope'))))
+    app = buildApp(o => o.docs(false).secure(s => s.schemes('Nope')))
 
     await expect(app.ready()).rejects.toThrow(ErrOpenAPIConfiguration)
     app = undefined
@@ -355,8 +348,8 @@ describe('multiple applications in one process', () => {
   // The endpoints class is minted per builder precisely so this works: a module-level class would accumulate
   // a duplicate route per application and Fastify would reject the second registration.
   it('both serve their own document', async () => {
-    const first = buildApp(b => b.openapi(o => o.info({ title: 'First', version: '1.0.0' }).docs(false).public()))
-    const second = buildApp(b => b.openapi(o => o.info({ title: 'Second', version: '1.0.0' }).docs(false).public()))
+    const first = buildApp(o => o.info({ title: 'First', version: '1.0.0' }).docs(false).public())
+    const second = buildApp(o => o.info({ title: 'Second', version: '1.0.0' }).docs(false).public())
 
     await first.ready()
     await second.ready()

@@ -2,9 +2,9 @@ import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/s
 import { CorsExtension, type CorsOptions } from './extension.js'
 
 /**
- * Configures `@fastify/cors`. Bound via `app.cors(...)`.
+ * Configures `@fastify/cors`. Bound via `.extend(CORSExt, c => …)`.
  *
- * Reaching `.cors()` is the activating act: it binds {@link CorsExtension}, which the adapter
+ * Installing the feature is the activating act: it binds {@link CorsExtension}, which the adapter
  * discovers via `getManyOptional(ServerExtension)` and registers as a Fastify plugin.
  */
 export class CorsBuilder implements Service {

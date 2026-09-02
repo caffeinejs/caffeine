@@ -142,4 +142,4 @@ await client.pets.post({ body: { name: 'Rex' } })
   resolve the `App` type — `import type` is erased, so nothing ships.
 - Escape hatch for a path built at run time, or a segment named after a verb:
   `client.$request('GET', '/pets/:id', { params: { id: 1 } })`.
-- Static: `.extend(StaticExt()).static(s => s.serve(root, { prefix: '/static' }))`. That serves files. It is not SPA history fallback. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.
+- Static: `.extend(StaticExt, s => s.serve(root, { prefix: '/static' }))`. That serves files. It is not SPA history fallback. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.

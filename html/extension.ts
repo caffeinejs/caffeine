@@ -10,7 +10,7 @@ export interface HTMLDefaults {
 }
 
 /**
- * What an application that never installed `HTMLExt()` renders with, so `HTML(...)` works on its own.
+ * What an application that never installed `HTMLExt` renders with, so `HTML(...)` works on its own.
  */
 export const HTML_DEFAULTS: HTMLDefaults = {
   contentType: 'text/html; charset=utf-8',

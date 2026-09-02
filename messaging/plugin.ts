@@ -1,85 +1,61 @@
-import type { Container } from '@caffeinejs/di'
-import type { ConfigTypeOf, Plugin, Service, ServiceAPI } from '@caffeinejs/std'
+import { defineKeyedFeature, type KeyedFeature, type PluginContext, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
 import { MessagingBuilder } from './builder.js'
 import type { MessagingContainer } from './engine.js'
-import { Keys } from './symbols.js'
+import { DEFAULT_BINDER, Keys } from './symbols.js'
 
 /** The builder callback that configures one messaging integration, over an application config type `C`. */
 export type MessagingConfigure<C = unknown> = (m: ServiceAPI<MessagingBuilder<C>>) => void
 
-/**
- * The `messaging` builder method contributed by the plugin. Pass a builder callback and get the application
- * builder back for chaining. Name a second integration with {@link MessagingBuilder.named} inside the callback.
- */
-export interface MessagingMethod {
-  <Self>(this: Self, configure: MessagingConfigure<ConfigTypeOf<Self>>): Self
+interface MessagingBuilderF extends TypeLambda {
+  readonly Out: ServiceAPI<MessagingBuilder<this['In']>>
 }
 
-// What the method needs from the builder it is invoked on (`this`). `.bind()` in a Service does not emit the
-// hook events, so the engine is started/stopped through programmatic lifecycle listeners registered here.
-interface MessagingBuilderHost {
-  addService(service: Service): unknown
-  on(
-    event: 'application:run' | 'application:pre-shutdown',
-    listener: (app: { readonly container: Container }) => void | Promise<void>,
-  ): unknown
+export interface MessagingFeature extends KeyedFeature<ServiceAPI<MessagingBuilder>> {
+  readonly _F: MessagingBuilderF
+}
+
+const LIFECYCLE = 'messaging:lifecycle'
+
+function registerLifecycle(ctx: PluginContext): void {
+  if (ctx.state.has(LIFECYCLE)) {
+    return
+  }
+  ctx.state.set(LIFECYCLE, true)
+
+  ctx.on('application:run', async app => {
+    for (const { binding } of app.container.getBindingsByLabel(Keys.MESSAGING_CONTAINER)) {
+      await app.container.wrapBinding<MessagingContainer>(binding).get().start()
+    }
+  })
+  ctx.on('application:pre-shutdown', async app => {
+    for (const { binding } of app.container.getBindingsByLabel(Keys.MESSAGING_CONTAINER)) {
+      await app.container.wrapBinding<MessagingContainer>(binding).get().stop()
+    }
+  })
 }
 
 /**
- * The portable messaging plugin. Adds a `messaging(...)` method to the application builder that registers binder
- * instances and declares bindings; the engine starts on `application:run` and stops on
- * `application:pre-shutdown`. Additive — a single-binder app that only uses a binder package's own sugar (e.g.
- * `app.kafka(...)`) does not need this plugin.
+ * The portable messaging feature. `.extend(messaging, m => …)` registers binder instances and bindings;
+ * the engine starts on `application:run` and stops on `application:pre-shutdown`. Additive — a
+ * single-binder app that only uses a binder package's own sugar (e.g. `.extend(kafka, …)`) does not need
+ * this feature.
  *
  * ```ts
- * const app = createApplication().extend(messaging())
- * app.messaging(m => m
- *   .use('primary', inMemoryBinder())
- *   .in('orders', { destination: 'orders', via: 'primary' })
- *   .out('notify', { destination: 'notify', via: 'primary' }))
+ * const app = createApplication()
+ *   .extend(messaging, m => m
+ *     .use('primary', inMemoryBinder())
+ *     .in('orders', { destination: 'orders', via: 'primary' })
+ *     .out('notify', { destination: 'notify', via: 'primary' }))
  * await app.build().run()
  * ```
- *
- * @param name - The builder method name (default `messaging`); rename to install the plugin more than once.
  */
-export function messaging<const Name extends string = 'messaging'>(
-  name: Name = 'messaging' as Name,
-): Plugin<Record<Name, MessagingMethod>> {
-  let lifecycleRegistered = false
-
-  function registerLifecycle(host: MessagingBuilderHost): void {
-    if (lifecycleRegistered) {
-      return
-    }
-    lifecycleRegistered = true
-
-    host.on('application:run', async app => {
-      for (const { binding } of app.container.getBindingsByLabel(Keys.MESSAGING_CONTAINER)) {
-        await app.container.wrapBinding<MessagingContainer>(binding).get().start()
-      }
-    })
-    host.on('application:pre-shutdown', async app => {
-      for (const { binding } of app.container.getBindingsByLabel(Keys.MESSAGING_CONTAINER)) {
-        await app.container.wrapBinding<MessagingContainer>(binding).get().stop()
-      }
-    })
-  }
-
-  // A regular function so `this` binds to the builder at the `app.messaging(...)` call site.
-  function messagingMethod(this: MessagingBuilderHost, configure: MessagingConfigure<never>): unknown {
-    const builder = new MessagingBuilder()
-    // The config type is a compile-time affair only; the runtime builder is the same object either way.
-    configure(builder as MessagingBuilder<never>)
-    this.addService(builder)
-    registerLifecycle(this)
-
-    return this
-  }
-
-  return {
-    name,
-    install() {
-      return { [name]: messagingMethod } as unknown as Record<Name, MessagingMethod>
-    },
-  }
-}
+export const messaging: MessagingFeature = defineKeyedFeature({
+  name: 'messaging',
+  defaultInstance: DEFAULT_BINDER,
+  install(ctx, instance, configure) {
+    const builder = new MessagingBuilder(instance)
+    configure?.(builder)
+    ctx.addService(builder)
+    registerLifecycle(ctx)
+  },
+}) as MessagingFeature

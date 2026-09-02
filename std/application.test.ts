@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import { InlineConfigProvider } from './config/index.js'
 import {
-  type Plugin,
+  defineFeature,
   OnApplicationReady,
   OnApplicationRun,
   OnApplicationShutdown,
@@ -161,35 +161,31 @@ describe('Application lifecycle', () => {
     expect(warmups).toContain('warm')
   })
 
-  it('installs a plugin method and rides the configure() path', async () => {
+  it('installs a feature and rides the configure() path', async () => {
     const kSentinel = token<any>(Symbol('sentinel'))
     const state: { value: string | undefined } = { value: undefined }
 
-    function probe(): Plugin<{ probe: (value: string) => void }> {
-      return {
-        name: 'probe',
-        install(ctx) {
-          ctx.addService({
-            get name() {
-              return 'probe'
-            },
-            bootstrap(kit) {
-              kit.container.bind(kSentinel).toValue({ value: state.value })
-              return Promise.resolve()
-            },
-          })
-          return {
-            probe: (value: string) => {
-              state.value = value
-            },
-          }
-        },
-      }
-    }
+    const probe = defineFeature<{ probe(value: string): void }>({
+      name: 'probe',
+      install(ctx, configure) {
+        ctx.addService({
+          get name() {
+            return 'probe'
+          },
+          bootstrap(kit) {
+            kit.container.bind(kSentinel).toValue({ value: state.value })
+            return Promise.resolve()
+          },
+        })
+        configure?.({
+          probe: (value: string) => {
+            state.value = value
+          },
+        })
+      },
+    })
 
-    const app = createApplication({}).extend(probe())
-    expect(typeof app.probe).toBe('function')
-    app.probe('hello')
+    const app = createApplication({}).extend(probe, p => p.probe('hello'))
 
     const built = app.build()
     await built.ready()

@@ -26,9 +26,8 @@ describe('view configuration', () => {
 
   it('lets the environment override a builder-set root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(ViewExt())
       .config(c => c.source(env({ VIEW__DEFAULT__ROOT: ejsRoot }), ConfigPriority.ENV))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
 
     await app.ready()
@@ -42,11 +41,10 @@ describe('view configuration', () => {
   // The engine is a module object full of functions and cannot travel through the tree at all.
   it('keeps the code-only engine after configuration is applied', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(ViewExt())
       .config(c => c.source(new InlineConfigProvider({
         view: { default: { root: templatesRoot, production: true } },
       })))
-      .view(v => v.engine({ handlebars }).extension('hbs'))
+      .extend(ViewExt, v => v.engine({ handlebars }).extension('hbs'))
       .build()
 
     await app.ready()
@@ -58,12 +56,11 @@ describe('view configuration', () => {
 
   it('keeps named engines apart, the unnamed one at view.default', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(ViewExt())
       .config(c => c.source(new InlineConfigProvider({
         view: { mail: { viewExt: 'from-config' } },
       })))
-      .view(v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .view(v => v.named('mail').engine({ handlebars }).root(templatesRoot).extension('ejs'))
+      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .extend(ViewExt('mail'), v => v.engine({ handlebars }).root(templatesRoot).extension('ejs'))
       .build()
 
     await app.ready()
@@ -83,12 +80,11 @@ describe('view configuration', () => {
     })
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(ViewExt())
       .config(schema, c => c.source(new InlineConfigProvider({
         app: { templates: { viewExt: 'moved' } },
       })))
       // No annotation on the selector: the config type is recovered from the builder.
-      .view(v => v.config(c => c.app.templates).engine({ handlebars }).root(templatesRoot))
+      .extend(ViewExt, v => v.config(c => c.app.templates).engine({ handlebars }).root(templatesRoot))
       .build()
 
     await app.ready()

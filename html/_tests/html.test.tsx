@@ -99,8 +99,7 @@ void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
 function htmlApp(configure?: (h: ServiceAPI<HTMLBuilder>) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(HTMLExt())
-    .html(configure ?? (() => undefined))
+    .extend(HTMLExt, configure)
     .build()
 }
 

@@ -74,8 +74,7 @@ describe('kafka messaging binder', () => {
   it('consumes a produced record through the messaging engine', async () => {
     got = deferred()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(messaging())
-    app.messaging(m => m
+    const app = createApplication({}).extend(messaging, m => m
       .use('kafka', kafkaBinder({ brokers: 'b', groupId: 'g', clients: broker.clients() }))
       .in('kb-orders', { destination: 'orders', via: 'kafka' })
       .out('kb-inject', { destination: 'orders', via: 'kafka' }))
@@ -92,8 +91,7 @@ describe('kafka messaging binder', () => {
     bridged = deferred()
     const brokerA = new FakeBroker()
     const brokerB = new FakeBroker()
-    const app = createApplication({}).extend(messaging())
-    app.messaging(m => m
+    const app = createApplication({}).extend(messaging, m => m
       .use('a', kafkaBinder({ brokers: 'a', groupId: 'ga', clients: brokerA.clients() }))
       .use('b', kafkaBinder({ brokers: 'b', groupId: 'gb', clients: brokerB.clients() }))
       .in('kb-orders2', { destination: 'orders', via: 'a' })
@@ -112,8 +110,7 @@ describe('kafka messaging binder', () => {
   it('retries a failing handler with the binding blocking-retry policy', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(messaging())
-    app.messaging(m => m
+    const app = createApplication({}).extend(messaging, m => m
       .use('kafka', kafkaBinder({ brokers: 'b', groupId: 'g', clients: broker.clients() }))
       .in('kb-orders3', { destination: 'orders', via: 'kafka', retry: { attempts: 3, backoff: { type: 'fixed', delay: 1 } } })
       .out('kb-inject3', { destination: 'orders', via: 'kafka' }))
@@ -129,8 +126,7 @@ describe('kafka messaging binder', () => {
   it('commits after success in record ack mode', async () => {
     ackDone = deferred()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(messaging())
-    app.messaging(m => m
+    const app = createApplication({}).extend(messaging, m => m
       .use('kafka', kafkaBinder({ brokers: 'b', groupId: 'g', ackMode: 'record', clients: broker.clients() }))
       .in('kb-orders4', { destination: 'orders', via: 'kafka' })
       .out('kb-inject4', { destination: 'orders', via: 'kafka' }))
@@ -149,8 +145,7 @@ describe('kafka messaging binder', () => {
     secondGot = deferred()
     const pumpErr = deferred<unknown>()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(messaging())
-    app.messaging(m => m
+    const app = createApplication({}).extend(messaging, m => m
       .use('kafka', kafkaBinder({ brokers: 'b', groupId: 'g', clients: broker.clients(), onError: e => pumpErr.resolve(e) }))
       .recoverer(() => {
         throw new Error('recoverer failed')

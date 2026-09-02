@@ -13,8 +13,7 @@ import { Encoding, encoding, CompressExt } from '../index.js'
 
 function encodingApp() {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(CompressExt())
-    .compress()
+    .extend(CompressExt)
 }
 
 async function gzip(data: string): Promise<Buffer> {

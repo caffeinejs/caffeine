@@ -24,8 +24,7 @@ describe('SPA fallback', () => {
 
   const start = async (configure: (builder: ServiceAPI<StaticBuilder>) => void) => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
-      .static(configure)
+      .extend(StaticExt, configure)
       .build()
     await app.ready()
 
@@ -153,8 +152,7 @@ describe('SPA fallback', () => {
 
   it('refuses to start when the shell is missing', async () => {
     const failing = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt())
-      .static(s => s.spa(empty))
+      .extend(StaticExt, s => s.spa(empty))
       .build()
 
     await expect(failing.ready()).rejects.toThrow(ErrSPAIndexMissing)
@@ -164,8 +162,7 @@ describe('SPA fallback', () => {
   it('refuses a second SPA mount', () => {
     expect(() =>
       createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-        .extend(StaticExt())
-        .static(s => s.spa(dist).spa(dist))
+        .extend(StaticExt, s => s.spa(dist).spa(dist))
         .build(),
     ).toThrow(ErrDuplicateSPAMount)
   })

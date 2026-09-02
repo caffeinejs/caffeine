@@ -77,7 +77,7 @@ export class HTMLResult extends Responder {
  * }
  * ```
  *
- * Content-Type and the `<!doctype html>` prefix come from the application's `.html(...)` settings, or
+ * Content-Type and the `<!doctype html>` prefix come from the application's `.extend(HTMLExt, …)` settings, or
  * from framework defaults when the application never installed the plugin. `options` overrides both for
  * this response.
  *
