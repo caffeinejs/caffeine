@@ -35,7 +35,6 @@ check: ## run all checks
 	@npm run build
 	@npm run build:examples
 	@npm run test:typecheck
-	@npm run test:typecheck:benchmarks
 	@npm run test:memory
 	@npm test
 

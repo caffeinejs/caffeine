@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "target": "esnext",
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": [
+    "aspect/**/*.ts",
+    "helloworld/caffeine/**/*.ts",
+    "helloworld/caffeine-router/**/*.ts",
+    "request/caffeine/**/*.ts",
+    "request/caffeine-middleware/**/*.ts",
+    "request/caffeine-request-scope/**/*.ts",
+    "mixedscopes/caffeine/**/*.ts",
+    "startup/caffeine/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

@@ -23,7 +23,7 @@
     "bench:di-compare": "node --expose-gc --import=tsx di/compare_third_parties.bench.ts",
     "bench:di-perf": "node --expose-gc --import=tsx di/perf_compare.bench.ts",
     "bench:di:compile-legacy": "tsc -p di/testdata/third_party_legacy/tsconfig.json",
-    "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit && tsc -p runtimes/bun/tsconfig.json --noEmit && tsc -p di/tsconfig.json --noEmit",
+    "test:typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.caffeine.json --noEmit && tsc -p tsconfig.nestjs.json --noEmit && tsc -p startup/nestjs/tsconfig.json --noEmit && tsc -p runtimes/bun/tsconfig.json --noEmit && tsc -p di/tsconfig.json --noEmit",
     "test:request": "node --import=tsx request/test.ts",
     "test:request:bun": "node --import=tsx runtimes/bun/request/test.ts",
     "bench:profile": "node --import=tsx profiling/run.ts"

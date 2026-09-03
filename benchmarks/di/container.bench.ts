@@ -19,7 +19,7 @@ import {
 } from '@caffeinejs/di'
 import { bench, do_not_optimize, group, run } from 'mitata'
 
-const kDbURL = token<Record<string, unknown>>(Symbol('db_url'))
+const kDbURL = token<string>(Symbol('db_url'))
 
 @Configuration()
 class DbConf {
@@ -51,7 +51,7 @@ interface Notification {
   send(): void
 }
 
-const kNotification = token<Record<string, unknown>>(Symbol('notification'))
+const kNotification = token<Notification>(Symbol('notification'))
 
 @Injectable(kNotification)
 @Primary()
@@ -78,7 +78,7 @@ class Act1 extends Act {
 @ConditionalOn(() => false)
 class Maybe {}
 
-const kLog = token<Record<string, unknown>>(Symbol('log'))
+const kLog = token<Logger>(Symbol('log'))
 
 interface Logger {
   info(): void
@@ -171,7 +171,7 @@ class RepoDbT implements Repo {
   }
 }
 
-const kNotificationT = token<Record<string, unknown>>(Symbol('notification_t'))
+const kNotificationT = token<Notification>(Symbol('notification_t'))
 
 @Injectable(kNotificationT)
 @Primary()
@@ -197,7 +197,7 @@ class Act1T extends ActT {
   act(): void {}
 }
 
-const kLogT = token<Record<string, unknown>>(Symbol('log_t'))
+const kLogT = token<Logger>(Symbol('log_t'))
 
 @Injectable()
 @Named(kLogT)
@@ -271,7 +271,7 @@ class RootWith2Props {
   notification!: Notification
 
   @Inject(RepoDb)
-  repo!: Repo
+  repo!: RepoDb
 
   constructor(
     readonly act: Act,
@@ -360,7 +360,7 @@ await di.init()
 
 const provideHolder = di.get(ProvideHolder)
 
-const kBindSym = token<Record<string, unknown>>(Symbol('bind_sym'))
+const kBindSym = token<number>(Symbol('bind_sym'))
 const diForBindings = new CaffeineIoC()
 let bindSeq = 0
 
