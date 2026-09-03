@@ -31,11 +31,16 @@ An application authoring `.tsx` needs all three:
 unescaped `{userInput}` is reported nowhere. Its `xss-scan` bin is the CI equivalent.
 
 It is an **optional** peer dependency, and that is load-bearing. Its own `typescript` peer is `^5.9.3`
-against this repo's `^6.0.3`; npm resolves a workspace package's peers, so a plain `peerDependencies`
+against this repo's TypeScript 7; npm resolves a workspace package's peers, so a plain `peerDependencies`
 entry fails `npm install` at the root with `ERESOLVE`. Marking it optional in `peerDependenciesMeta`
 records the requirement for consumers while letting npm skip it here. Do not drop the `optional` flag, and
 do not add it to `devDependencies`. It is a language-service plugin — it changes no emit and runs only in
 an editor using the workspace TypeScript — so nothing in this package needs it present.
+
+TypeScript 7's editor is LSP-based and does not load `tsconfig` `plugins`. Under the TypeScript 7 language
+service, `@kitajs/ts-html-plugin` does not run; unescaped `{userInput}` is not reported in the editor.
+Use the plugin's `xss-scan` CLI for that check, or keep the TypeScript 6 language service in the editor
+until a TypeScript 7.1 API exists that the plugin can use.
 
 ## `autoDoctype` reaches a response through Fastify; Content-Type does not
 

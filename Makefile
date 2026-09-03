@@ -142,24 +142,6 @@ test-kafka: kafka-up ## run the kafka integration tests against a real broker
 	@npx vitest run --project kafka; status=$$?; docker compose -f kafka/docker-compose.yml down; exit $$status
 
 # .
-# Build Toolchain
-# Auxiliary build tasks to support the project build process
-# .
-
-TS7_IMAGE ?= caffeine-ts7
-TS7_VERSION ?= 7.0.2
-
-.PHONY: ts7
-ts7: clean ## clean, then build all packages with TypeScript 7 in Docker (host tsc stays 6.x)
-	@docker build --build-arg TS_VERSION=$(TS7_VERSION) -t $(TS7_IMAGE) -f tools/ts7/Dockerfile tools/ts7
-	@docker run --rm \
-		--user "$(shell id -u):$(shell id -g)" \
-		-e HOME=/tmp \
-		-v "$(CURDIR)":/work \
-		-w /work \
-		$(TS7_IMAGE) --build --force tsconfig.build.json
-
-# .
 # Miscellaneous
 # General purpose tasks
 # .

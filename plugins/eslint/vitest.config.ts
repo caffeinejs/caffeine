@@ -9,5 +9,6 @@ export default defineConfig({
     exclude: ['node_modules/**', 'dist/**'],
     environment: 'node',
     passWithNoTests: true,
+    setupFiles: ['./vitest.setup.ts'],
   },
 })
