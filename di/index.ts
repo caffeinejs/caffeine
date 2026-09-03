@@ -4,8 +4,6 @@
  * @packageDocumentation
  */
 
-import './_polyfill.js'
-
 export { annotate, createAnnotation } from './annotations.js'
 export type { JoinPoint, MethodAspect, Pointcut, PointcutClassPredicate, PointcutMethodPredicate } from './aop.js'
 export { $aop } from './aop.js'

@@ -1,3 +1,4 @@
+import './_polyfill.js'
 import { AspectSpec } from './aspect_spec.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
 import { newBinding, Binding } from './binding.js'

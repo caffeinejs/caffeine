@@ -24,6 +24,12 @@
     "dist",
     "package.json"
   ],
+  "sideEffects": [
+    "./dist/_polyfill.js",
+    "./dist/container.js",
+    "./dist/scope.js",
+    "./dist/index.nodejs.js"
+  ],
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "test": "vitest run",

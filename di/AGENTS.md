@@ -64,6 +64,14 @@ dependency, so the built-ins cannot be silently dropped by tidying an unused imp
 run-once semantics that make `bindResolver`'s duplicate-name throw a non-issue. A resolution before that loop runs
 fails loudly with `ErrUnknownResolver`, which every test in the suite would catch.
 
+## Process-wide registration and `"sideEffects"`
+
+`package.json` `"sideEffects"` lists the published files that register at load (`_polyfill.js`, `container.js`,
+`scope.js`, `index.nodejs.js`). New process-wide registration must live in one of those files, or be a live use
+of an exported binding. Do not add a stray `import './foo.js'` to `index.ts`: the barrel is not on the allowlist,
+so bundlers treat it as side-effect-free and will drop unused re-exports (and a bare polyfill import there).
+`CaffeineIoC` always loads `container.js`, which is why `_polyfill.js` is imported from there.
+
 `InjectionResolverFactoryContext` carries no compilation hook — it is the same shape a custom resolver registered
 with `bindResolver` has always seen. Do not widen it for one factory's internal need; route that factory to the
 registry instead, the way `object.ts` does.
