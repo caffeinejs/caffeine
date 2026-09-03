@@ -31,6 +31,15 @@ describe('ResolveInjection', function () {
     expectTypeOf<ResolveInjection<typeof allUsers>>().toEqualTypeOf<UserService[]>()
     expectTypeOf<ResolveInjection<typeof provided>>().toEqualTypeOf<Provider<UserService>>()
   })
+
+  // Composing over `$i.provide` keeps the wrapper outermost, matching the single `Provider` the resolver builds.
+  it('keeps the provider on the outside when composed', function () {
+    const allProvided = $i.allOf($i.provide(UserService))
+    const optionalProvided = $i.optional($i.provide(UserService))
+
+    expectTypeOf<ResolveInjection<typeof allProvided>>().toEqualTypeOf<Provider<UserService[]>>()
+    expectTypeOf<ResolveInjection<typeof optionalProvided>>().toEqualTypeOf<Provider<UserService | undefined>>()
+  })
 })
 
 describe('InjectedOf', function () {

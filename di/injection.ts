@@ -123,6 +123,23 @@ export type ResolveInjection<I> =
         : never
 
 /**
+ * What `T` becomes once it is collected under a multi-binding injection.
+ *
+ * A {@link Provider} keeps its wrapper on the outside: `$i.allOf($i.provide(key))` resolves to one provider whose
+ * `get()` returns the whole array, because the runtime dispatches the multiple flag inside the provider resolver
+ * rather than around it.
+ */
+type CollectedInjection<T> = T extends Provider<infer U> ? Provider<U[]> : T[]
+
+/**
+ * What `T` becomes once its injection is marked optional.
+ *
+ * A {@link Provider} is always delivered, so the absence moves inside the wrapper: `$i.optional($i.provide(key))`
+ * resolves to a provider whose `get()` returns `undefined` while the dependency is unregistered.
+ */
+type OptionalInjection<T> = T extends Provider<infer U> ? Provider<U | undefined> : T | undefined
+
+/**
  * Authoring shape for `$i.object`: property values are tokens, descriptors,
  * or nested specs. Matches runtime object-spec parsing.
  */
@@ -185,7 +202,7 @@ type InjectedField<V> =
  */
 function allOf<K extends InjectionToken<any> | InjectionDescriptor<any>>(
   keyOrDescriptor: K,
-): InjectionResult<ResolveInjection<K>[]> {
+): InjectionResult<CollectedInjection<ResolveInjection<K>>> {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
@@ -338,7 +355,7 @@ function defer<K extends InjectionToken<any>>(keyFn: () => K): InjectionResult<R
  */
 function optional<K extends InjectionToken<any> | InjectionDescriptor<any>>(
   keyOrDescriptor: K,
-): InjectionResult<ResolveInjection<K> | undefined> {
+): InjectionResult<OptionalInjection<ResolveInjection<K>>> {
   if (isValidKey(keyOrDescriptor)) {
     return encode({ key: keyOrDescriptor as InjectionToken, optional: true })
   }
