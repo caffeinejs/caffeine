@@ -169,7 +169,8 @@ replay_pid*
 # Project
 
 .todo/
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 
 dist/
 out/
