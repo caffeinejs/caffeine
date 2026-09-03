@@ -89,11 +89,11 @@ module functions. No decorators, no `reflect-metadata`, no TypeScript flags.
 import { CaffeineIoC, type ModuleFn } from '@caffeinejs/di'
 
 const appModule: ModuleFn = di => {
-  di.bind(Logger).toSelf()
-  di.bind(Database).toAsyncFactory(async () => {
+  di.bind(Logger, t => t.toSelf())
+  di.bind(Database, t => t.toAsyncFactory(async () => {
     return connectToDatabase(process.env.DATABASE_URL)
-  })
-  di.bind(UserService).toClass(UserService, [Logger, Database])
+  }))
+  di.bind(UserService, t => t.toClass(UserService, [Logger, Database]))
 }
 
 const di = new CaffeineIoC({ decorators: false, modules: [appModule] })

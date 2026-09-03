@@ -25,7 +25,7 @@ export class HTMLBuilder implements Service {
   }
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    kit.container.bind(HTMLExtension).toValue(new HTMLExtension(this.#defaults)).extends()
+    kit.container.bind(HTMLExtension, t => t.toValue(new HTMLExtension(this.#defaults)).extends())
     return Promise.resolve()
   }
 }

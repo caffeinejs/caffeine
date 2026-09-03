@@ -25,7 +25,7 @@ A predicate evaluated once during `init()`. When it returns `false`, the
 binding is skipped — it is not registered in the container for that run.
 
 Used by:
-- [`binder.conditional()`](./binder.md#conditional) — fluent API
+- [`BindingSpec.conditional()`](./binding-spec.md#conditional) — fluent API
 - [`@ConditionalOn`](./decorators.md#conditionalon) — decorator API
 
 ```ts
@@ -66,12 +66,12 @@ Passed to every `Conditional` predicate at evaluation time.
 
 ```ts
 // guard on another binding being present
-di.bind(RedisCacheService)
+di.bind(RedisCacheService, t => t
   .toSelf()
-  .conditional(ctx => ctx.container.has(RedisClient))
+  .conditional(ctx => ctx.container.has(RedisClient)))
 
 // inspect the binding's own key
-di.bind(MetricsReporter)
+di.bind(MetricsReporter, t => t
   .toSelf()
-  .conditional(ctx => ctx.key !== Symbol.for('noop'))
+  .conditional(ctx => ctx.key !== Symbol.for('noop')))
 ```

@@ -106,7 +106,7 @@ const parent = new CaffeineIoC({ modules: [sharedModule] })
 await parent.init()
 
 const child = parent.newChild()
-child.bind(TenantConfig).toValue(tenantCfg)
+child.bind(TenantConfig, t => t.toValue(tenantCfg))
 await child.init()
 
 // child.get(UserService) — resolved against parent bindings

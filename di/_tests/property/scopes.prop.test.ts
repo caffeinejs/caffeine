@@ -17,9 +17,9 @@ describe('scope semantics (property)', function () {
     'singleton returns the same instance on repeated get',
     async runs => {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(SingletonSvc)
+      di.bind(SingletonSvc, t => t
         .toSelf()
-        .lifetime(Scopes.SINGLETON)
+        .lifetime(Scopes.SINGLETON))
       await di.init()
 
       let first: SingletonSvc | undefined
@@ -39,9 +39,9 @@ describe('scope semantics (property)', function () {
     'transient returns distinct instances on repeated get',
     async runs => {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(TransientSvc)
+      di.bind(TransientSvc, t => t
         .toSelf()
-        .lifetime(Scopes.TRANSIENT)
+        .lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const instances = new Set<string>()
@@ -61,9 +61,9 @@ describe('scope semantics (property)', function () {
 
       for (let i = 0; i < containerCount; i++) {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(SingletonSvc)
+        di.bind(SingletonSvc, t => t
           .toSelf()
-          .lifetime(Scopes.SINGLETON)
+          .lifetime(Scopes.SINGLETON))
         await di.init()
         ids.push(di.get(SingletonSvc).id)
       }

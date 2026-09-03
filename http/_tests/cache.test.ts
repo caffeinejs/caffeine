@@ -487,7 +487,7 @@ describe('304 Not Modified', () => {
 
     const store = new MemoryCacheStore()
     const container = new CaffeineIoC()
-    container.bind(CacheStore).toValue(store)
+    container.bind(CacheStore, t => t.toValue(store))
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server), { container })
       .build()
@@ -681,7 +681,7 @@ describe('Cache store', () => {
 
     const store = new MemoryCacheStore()
     const container = new CaffeineIoC()
-    container.bind(CacheStore).toValue(store)
+    container.bind(CacheStore, t => t.toValue(store))
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server), { container })
       .build()
@@ -1316,7 +1316,7 @@ describe('Bug fixes', () => {
       // The container snapshots the global controller registry at construction, so it must be created
       // after the controller above is declared.
       const container = new CaffeineIoC()
-      container.bind(CacheStore).toValue(spyStore)
+      container.bind(CacheStore, t => t.toValue(spyStore))
       const server = fastify()
       const app = createWebApplication(fastifyAdapterFactory(server), { container })
         .build()
@@ -1415,7 +1415,7 @@ describe('Bug fixes', () => {
       // The container snapshots the global controller registry at construction, so it must be created
       // after the controller above is declared.
       const container = new CaffeineIoC()
-      container.bind(CacheStore).toValue(spyStore)
+      container.bind(CacheStore, t => t.toValue(spyStore))
       const server = fastify()
       const app = createWebApplication(fastifyAdapterFactory(server), { container })
         .build()
@@ -1580,7 +1580,7 @@ describe('Bug fixes', () => {
       // The container snapshots the global controller registry at construction, so it must be created
       // after the controllers above are declared.
       const container = new CaffeineIoC()
-      container.bind(CacheStore).toValue(store)
+      container.bind(CacheStore, t => t.toValue(store))
       const server = fastify()
       const app = createWebApplication(fastifyAdapterFactory(server), { container })
         .build()
@@ -1966,7 +1966,7 @@ describe('Cache builder & container-managed store', () => {
     void [CustomStoreController]
 
     const container = new CaffeineIoC()
-    container.bind(CacheStore).toClass(MapStore)
+    container.bind(CacheStore, t => t.toClass(MapStore))
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
@@ -2073,7 +2073,7 @@ describe('Cache builder & container-managed store', () => {
     void [ETagGenController]
 
     const container = new CaffeineIoC()
-    container.bind(kETagGenerator).toValue(() => '"sentinel-etag"')
+    container.bind(kETagGenerator, t => t.toValue(() => '"sentinel-etag"'))
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
@@ -2092,7 +2092,7 @@ describe('Cache builder & container-managed store', () => {
     void [ETagOverrideController]
 
     const container = new CaffeineIoC()
-    container.bind(kETagGenerator).toValue(() => '"sentinel-etag"')
+    container.bind(kETagGenerator, t => t.toValue(() => '"sentinel-etag"'))
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
@@ -2350,7 +2350,7 @@ describe('default CacheStore', () => {
     class ExtendingStore extends MemoryCacheStore {}
 
     const container = new CaffeineIoC()
-    container.bind(ExtendingStore).toSelf().extends(CacheStore)
+    container.bind(ExtendingStore, t => t.toSelf().extends(CacheStore))
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
       .build()

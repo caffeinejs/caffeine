@@ -46,9 +46,9 @@ describe('Manual Binding', function () {
       const di = new CaffeineIoC()
       const before = di.has(Late)
 
-      di.bind(Late)
+      di.bind(Late, t => t
         .toClass(Late)
-        .lifetime(Scopes.SINGLETON)
+        .lifetime(Scopes.SINGLETON))
       await di.init()
 
       const after = di.has(Late)
@@ -65,8 +65,8 @@ describe('Manual Binding', function () {
     it('should bind to class by name', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('test'))
-        .toClass(Late)
+      di.bind(token<any>('test'), t => t
+        .toClass(Late))
       await di.init()
 
       const r = di.get<Late>(token<any>('test'))
@@ -80,9 +80,9 @@ describe('Manual Binding', function () {
     it('should bind abstract class to concrete implementation', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(Abs)
+      di.bind(Abs, t => t
         .toClass(Impl)
-        .lifetime(Scopes.SINGLETON)
+        .lifetime(Scopes.SINGLETON))
       await di.init()
 
       const impl = di.get(Abs)
@@ -94,10 +94,10 @@ describe('Manual Binding', function () {
     it('should bind value', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('val'))
-        .toValue('test')
-      di.bind(StrValue)
-        .toSelf([token<any>('val')])
+      di.bind(token<any>('val'), t => t
+        .toValue('test'))
+      di.bind(StrValue, t => t
+        .toSelf([token<any>('val')]))
       await di.init()
 
       const r = di.get(StrValue)
@@ -112,12 +112,12 @@ describe('Manual Binding', function () {
     it('should bind factory', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('val'))
-        .toValue('test')
-      di.bind(sy)
-        .toFactory(({ container }) => `factory-${container.get(token<any>('val'))}`)
-      di.bind(FromFactory)
-        .toSelf([sy])
+      di.bind(token<any>('val'), t => t
+        .toValue('test'))
+      di.bind(sy, t => t
+        .toFactory(({ container }) => `factory-${container.get(token<any>('val'))}`))
+      di.bind(FromFactory, t => t
+        .toSelf([sy]))
       await di.init()
 
       const r = di.get(FromFactory)
@@ -152,12 +152,12 @@ describe('Manual Binding', function () {
       it('should resolve when multiple injections are provided', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepA)
-          .toSelf()
-        di.bind(DepB)
-          .toSelf()
-        di.bind(TwoParam)
-          .toClass(TwoParam, [DepA, DepB])
+        di.bind(DepA, t => t
+          .toSelf())
+        di.bind(DepB, t => t
+          .toSelf())
+        di.bind(TwoParam, t => t
+          .toClass(TwoParam, [DepA, DepB]))
         await di.init()
 
         const svc = di.get(TwoParam)
@@ -171,10 +171,10 @@ describe('Manual Binding', function () {
       it('should resolve when a single injection is provided without wrapping array', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepA)
-          .toSelf()
-        di.bind(OneParam)
-          .toClass(OneParam, [DepA])
+        di.bind(DepA, t => t
+          .toSelf())
+        di.bind(OneParam, t => t
+          .toClass(OneParam, [DepA]))
         await di.init()
 
         const svc = di.get(OneParam)
@@ -186,10 +186,10 @@ describe('Manual Binding', function () {
       it('should accept an InjectionDescriptor', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepA)
-          .toSelf()
-        di.bind(OneParam)
-          .toClass(OneParam, [{ key: DepA }])
+        di.bind(DepA, t => t
+          .toSelf())
+        di.bind(OneParam, t => t
+          .toClass(OneParam, [{ key: DepA }]))
         await di.init()
 
         const svc = di.get(OneParam)
@@ -222,12 +222,12 @@ describe('Manual Binding', function () {
       it('should resolve when multiple injections are provided', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepC)
-          .toSelf()
-        di.bind(DepD)
-          .toSelf()
-        di.bind(TwoParamSelf)
-          .toSelf([DepC, DepD])
+        di.bind(DepC, t => t
+          .toSelf())
+        di.bind(DepD, t => t
+          .toSelf())
+        di.bind(TwoParamSelf, t => t
+          .toSelf([DepC, DepD]))
         await di.init()
 
         const svc = di.get(TwoParamSelf)
@@ -241,10 +241,10 @@ describe('Manual Binding', function () {
       it('should resolve when a single injection is provided without wrapping array', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepC)
-          .toSelf()
-        di.bind(OneParamSelf)
-          .toSelf([DepC])
+        di.bind(DepC, t => t
+          .toSelf())
+        di.bind(OneParamSelf, t => t
+          .toSelf([DepC]))
         await di.init()
 
         const svc = di.get(OneParamSelf)
@@ -258,9 +258,9 @@ describe('Manual Binding', function () {
       it('should bind dependency as transient when using .transient()', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(Late)
+        di.bind(Late, t => t
           .toSelf()
-          .lifetime(Scopes.TRANSIENT)
+          .lifetime(Scopes.TRANSIENT))
         await di.init()
 
         const r1 = di.get(Late)
@@ -274,10 +274,10 @@ describe('Manual Binding', function () {
       it('should apply the new factory after rebind', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(Late)
-          .toSelf()
-        di.rebind(Late)
-          .toFactory(() => new Late())
+        di.bind(Late, t => t
+          .toSelf())
+        di.rebind(Late, t => t
+          .toFactory(() => new Late()))
         await di.init()
 
         const dep = di.get(Late)
@@ -294,7 +294,7 @@ describe('Manual Binding', function () {
         class Replacement {}
 
         const di = new CaffeineIoC()
-        di.rebind(Original).toClass(Replacement)
+        di.rebind(Original, t => t.toClass(Replacement))
         await di.init()
 
         expect(di.get(Original)).toBeInstanceOf(Replacement)
@@ -315,15 +315,15 @@ describe('Manual Binding', function () {
       it('should resolve all functions', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(kQry1)
+        di.bind(kQry1, t => t
           .toValue(qry1)
-          .names(kQry)
-        di.bind(kQry2)
+          .names(kQry))
+        di.bind(kQry2, t => t
           .toValue(qry2)
-          .names(kQry)
-        di.bind(kQry3)
+          .names(kQry))
+        di.bind(kQry3, t => t
           .toValue(qry3)
-          .names(kQry)
+          .names(kQry))
         await di.init()
 
         const queries = di.getMany(kQry)
@@ -348,12 +348,12 @@ describe('Manual Binding', function () {
       it('should use the custom factory to build the instance', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(Dep)
+        di.bind(Dep, t => t
           .toFactory(() => {
             const instance = new Dep()
             instance.value = 'test'
             return instance
-          })
+          }))
         await di.init()
 
         const dep = di.get(Dep)
@@ -385,9 +385,9 @@ describe('Manual Binding', function () {
       it('should bind component as transient scoped', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(TransientDep)
+        di.bind(TransientDep, t => t
           .toSelf()
-          .lifetime(Scopes.TRANSIENT)
+          .lifetime(Scopes.TRANSIENT))
         await di.init()
 
         const one = di.get(TransientDep)
@@ -398,9 +398,9 @@ describe('Manual Binding', function () {
 
       it('should bind component as request scoped', async function () {
         const di = new CaffeineIoC()
-        di.bind(ReqDep)
+        di.bind(ReqDep, t => t
           .toSelf()
-          .lifetime(Scopes.REQUEST)
+          .lifetime(Scopes.REQUEST))
 
         await di.init()
 
@@ -411,9 +411,9 @@ describe('Manual Binding', function () {
       it('should bind component as refresh scoped', function () {
         const di = new CaffeineIoC()
 
-        di.bind(RefreshDep)
+        di.bind(RefreshDep, t => t
           .toSelf()
-          .lifetime(Scopes.REFRESH)
+          .lifetime(Scopes.REFRESH))
 
         expect(di.getBindings(RefreshDep)[0].scopeID)
           .toEqual(Scopes.REFRESH)
@@ -424,16 +424,17 @@ describe('Manual Binding', function () {
   describe('invalid bindings scenarios', function () {
     it('should only accept self binding with class types', function () {
       const di = new CaffeineIoC()
-      expect(() => di.bind(token<any>('test'))
-        .toSelf())
+      expect(() => di.bind(token<any>('test'), t => t
+        // @ts-expect-error toSelf() requires a class key
+        .toSelf()))
         .toThrow(ErrInvalidBinding)
     })
 
     it('should only accept previously registered scopes', function () {
       const di = new CaffeineIoC()
-      expect(() => di.bind(token<any>('test'))
+      expect(() => di.bind(token<any>('test'), t => t
         .toValue('value')
-        .lifetime('nonexistent-scope'))
+        .lifetime('nonexistent-scope')))
         .toThrow(ErrInvalidBinding)
     })
 
@@ -449,15 +450,17 @@ describe('Manual Binding', function () {
 
       it('should throw when fewer injections than constructor parameters are provided', function () {
         const di = new CaffeineIoC()
-        expect(() => di.bind(TwoParam)
-          .toClass(TwoParam, [Dep]))
+        expect(() => di.bind(TwoParam, t => t
+          // @ts-expect-error one injection for a two-parameter constructor
+          .toClass(TwoParam, [Dep])))
           .toThrow(ErrInvalidBinding)
       })
 
       it('should throw when more injections than constructor parameters are provided', function () {
         const di = new CaffeineIoC()
-        expect(() => di.bind(TwoParam)
-          .toClass(TwoParam, [Dep, Dep, Dep]))
+        expect(() => di.bind(TwoParam, t => t
+          // @ts-expect-error three injections for a two-parameter constructor
+          .toClass(TwoParam, [Dep, Dep, Dep])))
           .toThrow(ErrInvalidBinding)
       })
     })
@@ -474,8 +477,9 @@ describe('Manual Binding', function () {
 
       it('should throw when the injection count does not match the constructor parameter count', function () {
         const di = new CaffeineIoC()
-        expect(() => di.bind(TwoParam)
-          .toSelf([Dep]))
+        expect(() => di.bind(TwoParam, t => t
+          // @ts-expect-error one injection for a two-parameter constructor
+          .toSelf([Dep])))
           .toThrow(ErrInvalidBinding)
       })
     })
@@ -486,9 +490,9 @@ describe('Manual Binding', function () {
       const kSvc = token<any>(Symbol('svc'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
-        .labels(kSvc)
+        .labels(kSvc))
 
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kSvc)))
         .toHaveLength(1)
@@ -499,10 +503,10 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .labels(kA)
-        .labels(kB)
+        .labels(kB))
 
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA)))
         .toHaveLength(1)
@@ -514,10 +518,10 @@ describe('Manual Binding', function () {
       const kSvc = token<any>(Symbol('svc'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .labels(kSvc)
-        .labels(kSvc)
+        .labels(kSvc))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -530,9 +534,9 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
-        .labels(kA, kB)
+        .labels(kA, kB))
 
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA)))
         .toHaveLength(1)
@@ -545,10 +549,10 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .labels(kA)
-        .labels(kB)
+        .labels(kB))
 
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA)))
         .toHaveLength(1)
@@ -560,10 +564,10 @@ describe('Manual Binding', function () {
       const kSvc = token<any>(Symbol('svc'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .labels(kSvc)
-        .labels(kSvc)
+        .labels(kSvc))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -576,9 +580,9 @@ describe('Manual Binding', function () {
     it('should deduplicate names when the same name is added twice', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue('ok')
-        .names('alpha', 'alpha')
+        .names('alpha', 'alpha'))
 
       expect(di.getBinding(token<any>('svc')).names)
         .toEqual(['alpha'])
@@ -591,9 +595,9 @@ describe('Manual Binding', function () {
 
       class Svc {}
 
-      di.bind(Svc)
+      di.bind(Svc, t => t
         .toSelf()
-        .primary()
+        .primary())
 
       expect(di.getBinding(Svc).primary)
         .toBe(true)
@@ -605,9 +609,9 @@ describe('Manual Binding', function () {
       const kRoute = token<any>(Symbol('route'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
-        .tags(kRoute, '/users')
+        .tags(kRoute, '/users'))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -620,10 +624,10 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .tags(kA, 1)
-        .tags(kB, 2)
+        .tags(kB, 2))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -637,10 +641,10 @@ describe('Manual Binding', function () {
       const kSlot = token<any>(Symbol('slot'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .tags(kSlot, 'first')
-        .tags(kSlot, 'second')
+        .tags(kSlot, 'second'))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -653,14 +657,14 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .tags(
           new Map([
             [kA, 'alpha'],
             [kB, 'beta'],
           ]),
-        )
+        ))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -675,10 +679,10 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .tags(kA, 'from-single')
-        .tags(new Map([[kB, 'from-map']]))
+        .tags(new Map([[kB, 'from-map']])))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -692,10 +696,10 @@ describe('Manual Binding', function () {
       const kSlot = token<any>(Symbol('slot'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'))
+      di.bind(token<any>('svc'), t => t
         .toValue({})
         .tags(kSlot, 'first')
-        .tags(new Map([[kSlot, 'second']]))
+        .tags(new Map([[kSlot, 'second']])))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
@@ -715,9 +719,9 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC()
-      di.bind(SvcWithInit)
+      di.bind(SvcWithInit, t => t
         .toSelf()
-        .postConstruct(v => v.init())
+        .postConstruct(v => v.init()))
       await di.init()
       di.get(SvcWithInit)
 
@@ -735,9 +739,9 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC()
-      di.bind(SvcWithInit)
+      di.bind(SvcWithInit, t => t
         .toSelf()
-        .postConstruct(v => v.init())
+        .postConstruct(v => v.init()))
       await di.init()
       di.get(SvcWithInit)
       di.get(SvcWithInit)
@@ -766,12 +770,12 @@ describe('Manual Binding', function () {
     it('should not init component on bootstrap when it is configured as lazy', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(Laziest)
+      di.bind(Laziest, t => t
         .toSelf()
-        .lazy()
-      di.bind(NonLazy)
+        .lazy())
+      di.bind(NonLazy, t => t
         .toSelf()
-        .lazy(false)
+        .lazy(false))
       await di.init()
 
       expect(lazySpy).not.toHaveBeenCalled()
@@ -825,8 +829,8 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(StringParam)
-        .toSelf([$i.just('hello')])
+      di.bind(StringParam, t => t
+        .toSelf([$i.just('hello')]))
       await di.init()
 
       expect(di.get(StringParam).val)
@@ -839,8 +843,8 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(NumParam)
-        .toSelf([$i.just(42)])
+      di.bind(NumParam, t => t
+        .toSelf([$i.just(42)]))
       await di.init()
 
       expect(di.get(NumParam).val)
@@ -856,8 +860,8 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ConfigConsumer)
-        .toSelf([$i.just(config)])
+      di.bind(ConfigConsumer, t => t
+        .toSelf([$i.just(config)]))
       await di.init()
 
       expect(di.get(ConfigConsumer).config)
@@ -870,8 +874,8 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(NullParam)
-        .toSelf([$i.just(null)])
+      di.bind(NullParam, t => t
+        .toSelf([$i.just(null)]))
       await di.init()
 
       expect(di.get(NullParam).val)
@@ -884,8 +888,8 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(UndefinedParam)
-        .toSelf([$i.just(undefined)])
+      di.bind(UndefinedParam, t => t
+        .toSelf([$i.just(undefined)]))
       await di.init()
 
       expect(di.get(UndefinedParam).val)
@@ -901,8 +905,8 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(MultiParam)
-        .toSelf([$i.just('localhost'), $i.just(3000)])
+      di.bind(MultiParam, t => t
+        .toSelf([$i.just('localhost'), $i.just(3000)]))
       await di.init()
 
       expect(di.get(MultiParam).host)
@@ -918,8 +922,8 @@ describe('Manual Binding', function () {
       const key1 = token<any>(Symbol('key1'))
       const key2 = token<any>(Symbol('key2'))
 
-      di.bind(key2).toValue('hello')
-      di.bind(key1).aliasOf(key2)
+      di.bind(key2, t => t.toValue('hello'))
+      di.bind(key1, t => t.aliasOf(key2))
       await di.init()
 
       expect(di.get(key1)).toEqual('hello')
@@ -932,8 +936,8 @@ describe('Manual Binding', function () {
       const key = token<any>(Symbol('alias'))
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Svc).toSelf()
-      di.bind(key).aliasOf(Svc)
+      di.bind(Svc, t => t.toSelf())
+      di.bind(key, t => t.aliasOf(Svc))
       await di.init()
 
       expect(di.get(key)).toBeInstanceOf(Svc)
@@ -947,9 +951,9 @@ describe('Manual Binding', function () {
       const alias = token<any>(Symbol('alias'))
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Svc).toSelf()
-        .lifetime(Scopes.SINGLETON)
-      di.bind(alias).aliasOf(Svc)
+      di.bind(Svc, t => t.toSelf()
+        .lifetime(Scopes.SINGLETON))
+      di.bind(alias, t => t.aliasOf(Svc))
       await di.init()
 
       expect(di.get(alias)).toBe(di.get(Svc))
@@ -961,9 +965,9 @@ describe('Manual Binding', function () {
       const alias = token<any>(Symbol('alias'))
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(alias).aliasOf(Svc)
-      di.bind(Svc).toSelf()
-        .lifetime(Scopes.SINGLETON)
+      di.bind(alias, t => t.aliasOf(Svc))
+      di.bind(Svc, t => t.toSelf()
+        .lifetime(Scopes.SINGLETON))
       await di.init()
 
       expect(di.get(alias)).toBe(di.get(Svc))
@@ -973,9 +977,9 @@ describe('Manual Binding', function () {
       const key2 = token<any>(Symbol('key2'))
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(key2).toValue(42)
-      di.bind(token<any>(Symbol('key1'))).aliasOf(key2)
-        .names('named-alias')
+      di.bind(key2, t => t.toValue(42))
+      di.bind(token<any>(Symbol('key1')), t => t.aliasOf(key2)
+        .names('named-alias'))
       await di.init()
 
       expect(di.get(token<number>('named-alias'))).toEqual(42)
@@ -987,7 +991,7 @@ describe('Manual Binding', function () {
       const alias = token<any>(Symbol('alias'))
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(alias).aliasOf(Unregistered)
+      di.bind(alias, t => t.aliasOf(Unregistered))
 
       await expect(di.init()).rejects.toThrow(ErrNoResolutionForKey)
     })
@@ -1018,7 +1022,7 @@ describe('Manual Binding', function () {
 describe('wrap()', function () {
   it('should return a Provider that resolves the binding on each get()', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc')).toValue({ name: 'service' })
+    di.bind(token<any>('svc'), t => t.toValue({ name: 'service' }))
     await di.init()
 
     const provider: Provider<{ name: string }> = di.wrap(token<any>('svc'))
@@ -1039,10 +1043,10 @@ describe('wrapMany()', function () {
     const kSvc = token<any>(Symbol('wrap-many-svc'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('alpha')).toValue('alpha')
-      .names(kSvc)
-    di.bind(token<any>('bravo')).toValue('bravo')
-      .names(kSvc)
+    di.bind(token<any>('alpha'), t => t.toValue('alpha')
+      .names(kSvc))
+    di.bind(token<any>('bravo'), t => t.toValue('bravo')
+      .names(kSvc))
     await di.init()
 
     const provider: Provider<string[]> = di.wrapMany(kSvc)
@@ -1064,8 +1068,8 @@ describe('wrapMany()', function () {
     const kSingle = token<any>(Symbol('wrap-many-single'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('solo')).toValue('only-one')
-      .names(kSingle)
+    di.bind(token<any>('solo'), t => t.toValue('only-one')
+      .names(kSingle))
     await di.init()
 
     const provider: Provider<string[]> = di.wrapMany(kSingle)
@@ -1078,7 +1082,7 @@ describe('wrapMany()', function () {
 describe('wrapBinding()', function () {
   it('should return a Provider that resolves the binding on each get()', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc')).toValue({ name: 'service' })
+    di.bind(token<any>('svc'), t => t.toValue({ name: 'service' }))
     await di.init()
 
     const binding = di.getBinding<{ name: string }>(token<any>('svc'))
@@ -1092,8 +1096,8 @@ describe('wrapBinding()', function () {
     class Dep {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Dep).toSelf()
-      .lifetime(Scopes.TRANSIENT)
+    di.bind(Dep, t => t.toSelf()
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
 
     const binding = di.getBinding(Dep)
@@ -1107,7 +1111,7 @@ describe('wrapBinding()', function () {
 describe('wrapBindings()', function () {
   it('should return a Provider<T[]> wrapping a single binding (fast path)', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('solo')).toValue('only-one')
+    di.bind(token<any>('solo'), t => t.toValue('only-one'))
     await di.init()
 
     const bindings = di.getBindings<string>(token<any>('solo'))
@@ -1120,10 +1124,10 @@ describe('wrapBindings()', function () {
     const kShared = token<any>(Symbol('wrap-bindings-shared'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('alpha')).toValue('alpha')
-      .names(kShared)
-    di.bind(token<any>('bravo')).toValue('bravo')
-      .names(kShared)
+    di.bind(token<any>('alpha'), t => t.toValue('alpha')
+      .names(kShared))
+    di.bind(token<any>('bravo'), t => t.toValue('bravo')
+      .names(kShared))
     await di.init()
 
     const bindings = di.getBindings<string>(kShared)

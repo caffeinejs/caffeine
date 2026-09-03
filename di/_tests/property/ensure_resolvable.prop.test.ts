@@ -32,8 +32,8 @@ describe('ensureResolvable (property)', function () {
     'missing required dependency produces an issue mentioning the key',
     missingKey => {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(token<any>('svc'))
-        .toFunction((_: unknown) => ({}), [token<any>(missingKey)])
+      di.bind(token<any>('svc'), t => t
+        .toFunction((_: unknown) => ({}), [token<any>(missingKey)]))
 
       let caught: ErrUnresolvableDependencies | undefined
       try {
@@ -53,8 +53,8 @@ describe('ensureResolvable (property)', function () {
 
   it('optional missing dependency does not throw', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc'))
-      .toFunction((_: unknown) => ({}), [{ key: token<any>('missing'), optional: true }])
+    di.bind(token<any>('svc'), t => t
+      .toFunction((_: unknown) => ({}), [{ key: token<any>('missing'), optional: true }]))
 
     expect(() => di.assertResolvable()).not.toThrow()
   })

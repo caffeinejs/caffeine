@@ -96,7 +96,7 @@ describe('Optional Injections', function () {
 describe('container.getOptional()', function () {
   it('should return the instance when the key is registered', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc')).toValue('hello')
+    di.bind(token<any>('svc'), t => t.toValue('hello'))
     await di.init()
 
     expect(di.getOptional(token<any>('svc'))).toBe('hello')
@@ -113,11 +113,11 @@ describe('container.getOptional()', function () {
     const kSvc = token<any>(Symbol('opt-primary'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('primary-val')).toValue('primary')
+    di.bind(token<any>('primary-val'), t => t.toValue('primary')
       .names(kSvc)
-      .primary()
-    di.bind(token<any>('secondary-val')).toValue('secondary')
-      .names(kSvc)
+      .primary())
+    di.bind(token<any>('secondary-val'), t => t.toValue('secondary')
+      .names(kSvc))
     await di.init()
 
     expect(di.getOptional(kSvc)).toBe('primary')
@@ -127,10 +127,10 @@ describe('container.getOptional()', function () {
     const kSvc = token<any>(Symbol('opt-ambig'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('val-a')).toValue('alpha')
-      .names(kSvc)
-    di.bind(token<any>('val-b')).toValue('bravo')
-      .names(kSvc)
+    di.bind(token<any>('val-a'), t => t.toValue('alpha')
+      .names(kSvc))
+    di.bind(token<any>('val-b'), t => t.toValue('bravo')
+      .names(kSvc))
     await di.init()
 
     expect(() => di.getOptional(kSvc)).toThrow(ErrNoUniqueInjectionForKey)

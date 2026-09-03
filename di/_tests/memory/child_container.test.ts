@@ -14,8 +14,8 @@ describe('Child container memory', function () {
 
     const runChild = async () => {
       const child = parent.newChild()
-      child.bind(ChildOnlySvc)
-        .toSelf()
+      child.bind(ChildOnlySvc, t => t
+        .toSelf())
       await child.init()
       isCollected = trackForCollection(child.get(ChildOnlySvc)!)
       await child.dispose()
@@ -54,8 +54,8 @@ describe('Child container memory', function () {
     class SharedSvc {}
 
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(SharedSvc)
-      .toSelf()
+    parent.bind(SharedSvc, t => t
+      .toSelf())
     await parent.init()
 
     const parentInstance = parent.get(SharedSvc)!
@@ -84,8 +84,8 @@ describe('Child container memory', function () {
 
     for (let i = 0; i < 20; i++) {
       const child = parent.newChild()
-      child.bind(Svc)
-        .toSelf()
+      child.bind(Svc, t => t
+        .toSelf())
       await child.init()
       refs.push(trackForCollection(child.get(Svc)!))
       await child.dispose()

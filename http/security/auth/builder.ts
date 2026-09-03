@@ -542,10 +542,10 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       }
     }
 
-    kit.container.bind(AuthenticationService).toValue(service).internal()
-    kit.container.bind(AuthenticationSchemeProvider).toValue(schemeProvider).internal()
+    kit.container.bind(AuthenticationService, t => t.toValue(service).internal())
+    kit.container.bind(AuthenticationSchemeProvider, t => t.toValue(schemeProvider).internal())
     kit.contributions.contribute(kAuthContribution, options)
-    kit.container.bind(kAuthSchemeDescriptors).toValue(this.#descriptors).internal()
+    kit.container.bind(kAuthSchemeDescriptors, t => t.toValue(this.#descriptors).internal())
 
     // Share each JWT scheme's service (verify + sign) for injection into token-issuing controllers.
     // Every JWT scheme is reachable via its keyed token; the default JWT scheme (or the first, if the
@@ -553,11 +553,11 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     const jwtSchemes = [...this.#schemes]
       .filter((entry): entry is [string, JWTAuthenticationHandler] => entry[1] instanceof JWTAuthenticationHandler)
     for (const [name, handler] of jwtSchemes) {
-      kit.container.bind(jwtServiceKey(name)).toValue(handler.service)
+      kit.container.bind(jwtServiceKey(name), t => t.toValue(handler.service))
     }
     if (jwtSchemes.length > 0) {
       const preferred = jwtSchemes.find(([name]) => name === defaultScheme) ?? jwtSchemes[0]
-      kit.container.bind(JWTService).toValue(preferred[1].service)
+      kit.container.bind(JWTService, t => t.toValue(preferred[1].service))
     }
 
     if (this.#credentials !== undefined) {
@@ -566,11 +566,11 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       // PasswordHasher, and the configured options ride along in the closure (a value that is not a
       // container key, so a plain DI injection cannot carry it).
       const options = this.#credentials
-      kit.container.bind(PasswordHasher).toClass(ScryptPasswordHasher).fallback()
-      kit.container.bind(CredentialsService).toFunction(
+      kit.container.bind(PasswordHasher, t => t.toClass(ScryptPasswordHasher).fallback())
+      kit.container.bind(CredentialsService, t => t.toFunction(
         (provider: UserProvider, hasher: PasswordHasher) => new CredentialsService(provider, hasher, options),
         [UserProvider, PasswordHasher],
-      )
+      ))
     }
 
     if (this.#refresh !== undefined) {
@@ -583,10 +583,10 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       // Signs with the shared (default) JWTService bound above and persists in the user-bound
       // RefreshTokenStore; the resolver/TTLs ride along in the closure (not container keys).
       const options = this.#refresh
-      kit.container.bind(RefreshTokenService).toFunction(
+      kit.container.bind(RefreshTokenService, t => t.toFunction(
         (jwt: JWTService, store: RefreshTokenStore) => new RefreshTokenService(jwt, store, options),
         [JWTService, RefreshTokenStore],
-      )
+      ))
     }
 
     if (this.#oidcHandlers.length > 0) {

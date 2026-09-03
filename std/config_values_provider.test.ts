@@ -35,7 +35,7 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({
       provider: new InlineConfigProvider({ database: { host: 'db.local', port: 5432 } }),
     })
-    container.bind(Repository).toSelf()
+    container.bind(Repository, t => t.toSelf())
 
     await builder.build().ready()
 
@@ -54,7 +54,7 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({
       provider: new InlineConfigProvider({ database: { host: 'h', port: 5432 } }),
     })
-    container.bind(Repository).toSelf()
+    container.bind(Repository, t => t.toSelf())
 
     await builder.build().ready()
 
@@ -75,7 +75,7 @@ describe('configuration as the DI values provider', () => {
       .set(['database'], { host: 'first', port: 5432 })
 
     const { builder, container } = appWith({ provider: mutable, priority: ConfigPriority.ENV })
-    container.bind(Holder).toSelf().lifetime(Scopes.TRANSIENT)
+    container.bind(Holder, t => t.toSelf().lifetime(Scopes.TRANSIENT))
 
     await builder.build().ready()
 
@@ -97,8 +97,8 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({
       provider: new InlineConfigProvider({ database: { host: 'h', port: 1 } }),
     })
-    container.bindValuesProvider<{ own: string }>().toValue({ own: 'mine' })
-    container.bind(Holder).toSelf()
+    container.bindValuesProvider<{ own: string }>(t => t.toValue({ own: 'mine' }))
+    container.bind(Holder, t => t.toSelf())
 
     await builder.build().ready()
 

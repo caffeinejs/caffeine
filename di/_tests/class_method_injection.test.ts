@@ -129,11 +129,11 @@ describe('Method Injections', function () {
 
     it('should resolve and inject all parameters', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['method-injections-comp'] })
-      di.bind(TransientDep).toSelf()
-      di.bind(B1).toSelf().names(kBs)
-      di.bind(B2).toSelf().names(kBs, kBase)
-      di.bind(kVal).toValue('test')
-      di.bind(Comp).toSelf().injectMethod('setDiff', $i.provide(TransientDep), kVal, $i.allOf(kBs))
+      di.bind(TransientDep, t => t.toSelf())
+      di.bind(B1, t => t.toSelf().names(kBs))
+      di.bind(B2, t => t.toSelf().names(kBs, kBase))
+      di.bind(kVal, t => t.toValue('test'))
+      di.bind(Comp, t => t.toSelf().injectMethod('setDiff', $i.provide(TransientDep), kVal, $i.allOf(kBs)))
 
       await di.init()
 
@@ -175,14 +175,14 @@ describe('Method Injections', function () {
 
     it('should inject dependencies in all setter methods', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['method-injections-test'] })
-      di.bind(TransientDep).toSelf().lifetime(Scopes.TRANSIENT)
-      di.bind(B1).toSelf().names(kBs)
-      di.bind(B2).toSelf().names(kBs, kBase)
-      di.bind(kVal).toValue('test')
-      di.bind(Test).toSelf()
+      di.bind(TransientDep, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+      di.bind(B1, t => t.toSelf().names(kBs))
+      di.bind(B2, t => t.toSelf().names(kBs, kBase))
+      di.bind(kVal, t => t.toValue('test'))
+      di.bind(Test, t => t.toSelf()
         .injectMethod('setTransient', $i.provide(TransientDep))
         .injectMethod('setValue', kVal)
-        .injectMethod('setBase', $i.allOf(kBs), kBase)
+        .injectMethod('setBase', $i.allOf(kBs), kBase))
 
       await di.init()
 
@@ -225,11 +225,11 @@ describe('Method Injections', function () {
 
     it('should inject dependencies on setter methods after property injections', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['method-injections-dep'] })
-      di.bind(kValue).toValue('test')
-      di.bind(kMethodValue).toValue('method_test')
-      di.bind(Dep).toSelf()
+      di.bind(kValue, t => t.toValue('test'))
+      di.bind(kMethodValue, t => t.toValue('method_test'))
+      di.bind(Dep, t => t.toSelf()
         .injectProperty('value', kValue)
-        .injectMethod('setMethodValue', kMethodValue)
+        .injectMethod('setMethodValue', kMethodValue))
 
       await di.init()
 
@@ -240,7 +240,7 @@ describe('Method Injections', function () {
     })
   })
 
-  describe('BinderOptions.injectMethod() — happy paths', function () {
+  describe('BindingSpec.injectMethod() — happy paths', function () {
     it('should inject a single dep into a method', async function () {
       const kVal = token<any>(Symbol('val'))
 
@@ -252,8 +252,8 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kVal).toValue('hello')
-      di.bind(Svc).toSelf().injectMethod('setVal', kVal)
+      di.bind(kVal, t => t.toValue('hello'))
+      di.bind(Svc, t => t.toSelf().injectMethod('setVal', kVal))
 
       await di.init()
 
@@ -274,13 +274,13 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kA)
-        .toValue('foo')
-      di.bind(kB)
-        .toValue(42)
-      di.bind(Svc)
+      di.bind(kA, t => t
+        .toValue('foo'))
+      di.bind(kB, t => t
+        .toValue(42))
+      di.bind(Svc, t => t
         .toSelf()
-        .injectMethod('setDeps', kA, kB)
+        .injectMethod('setDeps', kA, kB))
       await di.init()
 
       const instance = di.get(Svc)
@@ -307,14 +307,14 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kA)
-        .toValue('foo')
-      di.bind(kB)
-        .toValue(42)
-      di.bind(Svc)
+      di.bind(kA, t => t
+        .toValue('foo'))
+      di.bind(kB, t => t
+        .toValue(42))
+      di.bind(Svc, t => t
         .toSelf()
         .injectMethod('setA', kA)
-        .injectMethod('setB', kB)
+        .injectMethod('setB', kB))
       await di.init()
 
       const instance = di.get(Svc)
@@ -337,13 +337,13 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA)
-        .toSelf()
-      di.bind(DepB)
-        .toSelf()
-      di.bind(Svc)
+      di.bind(DepA, t => t
+        .toSelf())
+      di.bind(DepB, t => t
+        .toSelf())
+      di.bind(Svc, t => t
         .toSelf([DepA])
-        .injectMethod('setDepB', DepB)
+        .injectMethod('setDepB', DepB))
       await di.init()
 
       const instance = di.get(Svc)
@@ -364,9 +364,9 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc)
+      di.bind(Svc, t => t
         .toSelf()
-        .injectMethod('setOpt', $i.optional(kOpt))
+        .injectMethod('setOpt', $i.optional(kOpt)))
       await di.init()
 
       expect(di.get(Svc).opt)
@@ -374,21 +374,21 @@ describe('Method Injections', function () {
     })
   })
 
-  describe('BinderOptions.injectMethod() — validation', function () {
+  describe('BindingSpec.injectMethod() — validation', function () {
     it('should throw ErrInvalidBinding for a symbol key', function () {
       const k = token<any>(Symbol('x'))
       const di = new CaffeineIoC({ decorators: false })
-      expect(() => di.bind(k)
+      expect(() => di.bind(k, t => t
         .toValue('v')
-        .injectMethod('setVal', k))
+        .injectMethod('setVal', k)))
         .toThrow(ErrInvalidBinding)
     })
 
     it('should throw ErrInvalidBinding for a string key', function () {
       const di = new CaffeineIoC({ decorators: false })
-      expect(() => di.bind(token<any>('key'))
+      expect(() => di.bind(token<any>('key'), t => t
         .toValue('v')
-        .injectMethod('setVal', token<any>('key')))
+        .injectMethod('setVal', token<any>('key'))))
         .toThrow(ErrInvalidBinding)
     })
   })

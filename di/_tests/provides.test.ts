@@ -109,8 +109,8 @@ describe('Configuration', function () {
       const di = new CaffeineIoC({ profiles: ['provides-named'] })
       const msg = 'hello world'
 
-      di.bind(token<any>('msg'))
-        .toValue(msg)
+      di.bind(token<any>('msg'), t => t
+        .toValue(msg))
       await di.init()
 
       const service = di.get<Service>(kTest)

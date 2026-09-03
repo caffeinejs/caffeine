@@ -23,7 +23,7 @@ export class CompressBuilder implements Service {
   }
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    kit.container.bind(CompressExtension).toValue(new CompressExtension(this.#options)).extends()
+    kit.container.bind(CompressExtension, t => t.toValue(new CompressExtension(this.#options)).extends())
     return Promise.resolve()
   }
 }

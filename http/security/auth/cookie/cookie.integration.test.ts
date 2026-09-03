@@ -122,9 +122,9 @@ async function buildApp() {
   const f = fastify()
   f.register(FastifyCookie)
   const container = new CaffeineIoC()
-  container.bind(TestUserProvider).toSelf().extends()
+  container.bind(TestUserProvider, t => t.toSelf().extends())
   // Fast hasher keeps the test snappy; overrides the fallback ScryptPasswordHasher from addCredentials.
-  container.bind(PasswordHasher).toValue(new ScryptPasswordHasher({ N: 1024 }))
+  container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
   builder.authentication(auth => auth
     .addCookie(o => o.sessionSecret(SECRET).secure(false))
@@ -220,10 +220,10 @@ async function buildDurableApp(graceSeconds?: number) {
   const f = fastify()
   f.register(FastifyCookie)
   const container = new CaffeineIoC()
-  container.bind(TestUserProvider).toSelf().extends()
+  container.bind(TestUserProvider, t => t.toSelf().extends())
   const store = new InMemoryRememberStore()
-  container.bind(RememberMeTokenStore).toValue(store)
-  container.bind(PasswordHasher).toValue(new ScryptPasswordHasher({ N: 1024 }))
+  container.bind(RememberMeTokenStore, t => t.toValue(store))
+  container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
   builder.authentication(auth => auth
     .addCookie(o => {

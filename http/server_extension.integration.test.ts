@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, type Ctor } from '@caffeinejs/di'
 import fastify from 'fastify'
 import fp from 'fastify-plugin'
 import {
@@ -32,7 +32,7 @@ class Recorder extends ServerExtension {
 
 function newApp(extension: ServerExtension) {
   const container = new CaffeineIoC()
-  container.bind(extension.constructor as never).toValue(extension).extends()
+  container.bind(extension.constructor as Ctor<ServerExtension>, t => t.toValue(extension).extends())
 
   return createWebApplication(fastifyAdapterFactory(fastify()), { container }).build()
 }
@@ -123,7 +123,7 @@ describe('ServerExtension metadata (enforced by Fastify)', () => {
     }
 
     const container = new CaffeineIoC()
-    container.bind(NeedsCookieLike).toValue(new NeedsCookieLike()).extends()
+    container.bind(NeedsCookieLike, t => t.toValue(new NeedsCookieLike()).extends())
 
     const server = fastify()
     // Registered before the application boots, so avvio has loaded it by the time the extension registers.

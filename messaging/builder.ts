@@ -153,27 +153,27 @@ export class MessagingBuilder<C = unknown> implements Service {
     const container = kit.container
 
     kit.container
-      .bind(rKey)
-      .toValue<MessagingRuntime>({
-        container,
-        binders,
-        inbound: resolved.config.inbound,
-        outbound: resolved.config.outbound,
-        ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
-        ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
-        ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
-      })
+      .bind(rKey, t => t
+        .toValue<MessagingRuntime>({
+          container,
+          binders,
+          inbound: resolved.config.inbound,
+          outbound: resolved.config.outbound,
+          ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
+          ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
+          ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
+        }))
 
     if (this.#name === DEFAULT_BINDER) {
-      kit.container.bind(MessageBus).toClass(MessageBus, [rKey]).names(bKey)
+      kit.container.bind(MessageBus, t => t.toClass(MessageBus, [rKey]).names(bKey))
     } else {
-      kit.container.bind(bKey).toClass(MessageBus, [rKey])
+      kit.container.bind(bKey, t => t.toClass(MessageBus, [rKey]))
     }
 
     kit.container
-      .bind(containerKey(this.#name))
-      .toClass(MessagingContainer, [rKey, bKey])
-      .labels(Keys.MESSAGING_CONTAINER)
+      .bind(containerKey(this.#name), t => t
+        .toClass(MessagingContainer, [rKey, bKey])
+        .labels(Keys.MESSAGING_CONTAINER))
 
     return Promise.resolve()
   }

@@ -163,8 +163,8 @@ The same binding done manually with `bind()`:
 ```ts
 const di = new CaffeineIoC()
 
-di.bind(kLogger).toClass(ConsoleLogger)
-di.bind(UserService).toClass(UserService, [kLogger])
+di.bind(kLogger, t => t.toClass(ConsoleLogger))
+di.bind(UserService, t => t.toClass(UserService, [kLogger]))
 
 await di.init()
 
@@ -318,8 +318,8 @@ class UserService {
 
 const di = new CaffeineIoC()
 
-di.bind(Logger).toSelf()
-di.bind(UserService).toClass(UserService, [Logger])
+di.bind(Logger, t => t.toSelf())
+di.bind(UserService, t => t.toClass(UserService, [Logger]))
 
 await di.init()
 

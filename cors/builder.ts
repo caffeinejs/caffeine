@@ -23,7 +23,7 @@ export class CorsBuilder implements Service {
   }
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    kit.container.bind(CorsExtension).toValue(new CorsExtension(this.#options)).extends()
+    kit.container.bind(CorsExtension, t => t.toValue(new CorsExtension(this.#options)).extends())
     return Promise.resolve()
   }
 }

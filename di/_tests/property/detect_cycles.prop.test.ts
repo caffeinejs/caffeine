@@ -55,25 +55,25 @@ describe('detectCycles via init (property)', function () {
 
   it('optional closing edge does not trigger ErrCircularDependency at init', async function () {
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(token<any>('a'))
+    di.bind(token<any>('a'), t => t
       .toFunction((_b: unknown) => ({}), [$i.optional(token<any>('b'))])
-      .lazy()
-    di.bind(token<any>('b'))
+      .lazy())
+    di.bind(token<any>('b'), t => t
       .toFunction((_a: unknown) => ({}), [token<any>('a')])
-      .lazy()
+      .lazy())
 
     await expect(di.init()).resolves.toBeUndefined()
   })
 
   it('defer closing edge does not trigger ErrCircularDependency at init', async function () {
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(token<any>('a'))
+    di.bind(token<any>('a'), t => t
       .toFunction(
         (_b: unknown) => ({}),
         [$i.defer(() => token<any>('b'))],
-      )
-    di.bind(token<any>('b'))
-      .toFunction((_a: unknown) => ({}), [token<any>('a')])
+      ))
+    di.bind(token<any>('b'), t => t
+      .toFunction((_a: unknown) => ({}), [token<any>('a')]))
 
     await expect(di.init()).resolves.toBeUndefined()
   })

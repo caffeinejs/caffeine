@@ -54,7 +54,7 @@ describe('Refresh Scope', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(WithCustomDestroy).toSelf()
+      di.bind(WithCustomDestroy, t => t.toSelf())
       await di.init()
 
       di.get(WithCustomDestroy)
@@ -83,8 +83,8 @@ describe('Refresh Scope', function () {
 
     it('calls [kSelfRefresh] instead of recreating the instance', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(WithSelfRefresh).toSelf()
-        .lifetime(Scopes.REFRESH)
+      di.bind(WithSelfRefresh, t => t.toSelf()
+        .lifetime(Scopes.REFRESH))
       await di.init()
 
       const before = di.get(WithSelfRefresh)
@@ -122,8 +122,8 @@ describe('Refresh Scope', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(LabeledA).toSelf().lifetime(Scopes.REFRESH).labels(kLabel)
-      di.bind(LabeledB).toSelf().lifetime(Scopes.REFRESH)
+      di.bind(LabeledA, t => t.toSelf().lifetime(Scopes.REFRESH).labels(kLabel))
+      di.bind(LabeledB, t => t.toSelf().lifetime(Scopes.REFRESH))
       await di.init()
 
       const a1 = di.get(LabeledA)
@@ -147,8 +147,8 @@ describe('Refresh Scope', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(StableA).toSelf().lifetime(Scopes.REFRESH)
-      di.bind(StableB).toSelf().lifetime(Scopes.REFRESH)
+      di.bind(StableA, t => t.toSelf().lifetime(Scopes.REFRESH))
+      di.bind(StableB, t => t.toSelf().lifetime(Scopes.REFRESH))
       await di.init()
 
       const a1 = di.get(StableA)

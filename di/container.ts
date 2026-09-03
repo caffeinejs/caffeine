@@ -1,5 +1,5 @@
-import { AOPBinder } from './aop_binder.js'
-import { Binder } from './binder.js'
+import { AspectSpec } from './aspect_spec.js'
+import { BindingSpec, kBuildBinding } from './binding_spec.js'
 import { newBinding, Binding } from './binding.js'
 import { Snapshot } from './snapshot.js'
 import {
@@ -28,7 +28,7 @@ import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scop
 import { Scopes, scopeEntries, Scope } from './scope.js'
 import { checkScopes } from './internal/core/scope/validations.js'
 import { PostProcessor } from './post_processor.js'
-import { keyStr, InjectionToken, Identifier, token } from './key.js'
+import { keyStr, InjectionToken, Identifier, token, TokenValue } from './key.js'
 import { notNil } from './internal/util/assert/index.js'
 import { MetadataReader } from './metadata_reader.js'
 import { Ctor } from './types.js'
@@ -143,9 +143,9 @@ export class CaffeineIoC implements Container {
       const refresher = { refresh: this.refresh.bind(this) }
 
       this.refresher = refresher
-      this.bind(Keys.kRefresher).toValue(refresher)
+      this.bind(Keys.kRefresher, t => t.toValue(refresher)
         .byPassPostProcessors()
-        .internal()
+        .internal())
     }
 
     if (this.scopes.has(Scopes.REQUEST)) {
@@ -156,9 +156,9 @@ export class CaffeineIoC implements Container {
       }
 
       this.requestScopeManager = requestScopeManager
-      this.bind(Keys.kRequestScopeManager).toValue(requestScopeManager)
+      this.bind(Keys.kRequestScopeManager, t => t.toValue(requestScopeManager)
         .byPassPostProcessors()
-        .internal()
+        .internal())
     }
   }
 
@@ -641,10 +641,16 @@ export class CaffeineIoC implements Container {
    * Binds a new type to given key, making it managed by the container.
    *
    * @param key - The key to bind the type to.
+   * @param configure - Describes the binding on the {@link BindingSpec} it receives.
    *
-   * @returns A {@link Binder} to configure the binding.
+   * @example
+   * ```ts
+   * container
+   *   .bind(Repository, t => t.toSelf())
+   *   .bind(kPort, t => t.toValue(8080))
+   * ```
    */
-  bind<T>(key: InjectionToken<T>): Binder<T> {
+  bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this {
     notNil(key)
 
     if (this._ready) {
@@ -652,9 +658,14 @@ export class CaffeineIoC implements Container {
     }
 
     const type = getBindingConfiguration(key)
-    const binding = newBinding<T>(type ? decoratorConfigToBinding(type) : {})
+    const binding = newBinding<TokenValue<K>>(type ? decoratorConfigToBinding(type) : {})
+    const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, binding)
 
-    return new Binder<T>(key, binding, b => this.configureBinding(key as InjectionToken, b))
+    configure(spec)
+
+    this.configureBinding(key as InjectionToken, spec[kBuildBinding]())
+
+    return this
   }
 
   /**
@@ -666,12 +677,15 @@ export class CaffeineIoC implements Container {
    *
    * @example
    * ```ts
-   * di.bindValuesProvider<AppConfig>().toValue(configHandle)
-   * di.bindValuesProvider<AppConfig>().toClass(MyConfigProvider).lifetime(Scopes.Singleton)
+   * di.bindValuesProvider<AppConfig>(t => t.toValue(configHandle))
+   * di.bindValuesProvider<AppConfig>(t => t.toClass(MyConfigProvider).lifetime(Scopes.SINGLETON))
    * ```
    */
-  bindValuesProvider<T = unknown>(): Binder<T> {
-    return this.bind(Keys.kValuesProvider as InjectionToken<T>)
+  bindValuesProvider<T = unknown>(configure: (spec: BindingSpec<T>) => void): this {
+    return this.bind(
+      Keys.kValuesProvider as InjectionToken<T>,
+      configure as unknown as (spec: BindingSpec<unknown, InjectionToken<T>>) => void,
+    )
   }
 
   /**
@@ -680,10 +694,9 @@ export class CaffeineIoC implements Container {
    * For testing purposes.
    *
    * @param key - The key to rebind.
-   *
-   * @returns A {@link Binder} to configure the binding.
+   * @param configure - Describes the replacement binding on the {@link BindingSpec} it receives.
    */
-  rebind<T>(key: InjectionToken<T>): Binder<T> {
+  rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this {
     notNil(key)
 
     if (this._ready) {
@@ -700,7 +713,7 @@ export class CaffeineIoC implements Container {
     this._pendingManualProfileKeys.delete(key)
     this._pendingConfigKeys.delete(key)
 
-    return this.bind(key)
+    return this.bind(key, configure)
   }
 
   /**
@@ -713,26 +726,29 @@ export class CaffeineIoC implements Container {
    * @example
    * ```ts
    * container
-   *   .aspect(LoggingAspect)
-   *   .toSelf()
-   *   .pointcuts($aop.forClass(UserService, 'findUser'))
-   *
-   * container
-   *   .aspect(MetricsAspect)
-   *   .toAsyncFactory(async () => new MetricsAspect(await buildClient()))
-   *   .pointcuts($aop.forClass(OrderService, $aop.matchMethodPattern(/^find/)))
+   *   .aspect(LoggingAspect, t => t
+   *     .toSelf()
+   *     .pointcuts($aop.forClass(UserService, 'findUser')))
+   *   .aspect(MetricsAspect, t => t
+   *     .toAsyncFactory(async () => new MetricsAspect(await buildClient()))
+   *     .pointcuts($aop.forClass(OrderService, $aop.matchMethodPattern(/^find/))))
    * ```
    */
-  aspect<T extends MethodAspect<any>>(cls: Ctor<T>): AOPBinder<T> {
+  aspect<C extends Ctor<MethodAspect<any>>>(cls: C, configure: (spec: AspectSpec<InstanceType<C>, C>) => void): this {
     notNil(cls)
 
     if (this._ready) {
       throw new ErrInvalidContainerState('Cannot bind: container is already initialized — call init() first')
     }
 
-    const binding = newBinding<T>({ type: cls, labels: [kAspectLabel] })
+    const binding = newBinding<InstanceType<C>>({ type: cls, labels: [kAspectLabel] })
+    const spec = new AspectSpec<InstanceType<C>, C>(cls as unknown as InjectionToken<InstanceType<C>>, binding)
 
-    return new AOPBinder<T>(cls, binding, b => this.configureBinding(cls, b))
+    configure(spec)
+
+    this.configureBinding(cls as InjectionToken, spec[kBuildBinding]())
+
+    return this
   }
 
   /**

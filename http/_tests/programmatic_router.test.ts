@@ -127,7 +127,7 @@ describe('programmatic router', () => {
         .inject({ greeter: Greeter })
         .get('/:name', (ctx, deps) => ctx.body({ message: deps.greeter.greet(ctx.req.param().name) }))
 
-      const app = newApp(c => c.bind(Greeter).toSelf()).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
       await app.ready()
 
       expect(await (await app.fetch('/greet/ada')).json()).toEqual({ message: 'hello ada' })
@@ -179,7 +179,7 @@ describe('programmatic router', () => {
           missing: deps.missing === undefined,
         }))
 
-      const app = newApp(c => c.bind(Greeter).toSelf()).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
       await app.ready()
 
       expect(await (await app.fetch('/greet/ada')).json())
@@ -199,7 +199,7 @@ describe('programmatic router', () => {
           label: deps.label,
         }))
 
-      const app = newApp(c => c.bind(Greeter).toSelf()).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
       await app.ready()
 
       expect(await (await app.fetch('/greet/ada')).json())
@@ -217,7 +217,7 @@ describe('programmatic router', () => {
         second: deps.counter.get().id,
       }))
 
-      const app = newApp(c => c.bind(Counter).toSelf().lifetime(Scopes.REQUEST)).build().mount(router)
+      const app = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST))).build().mount(router)
       await app.ready()
 
       const one = await (await app.fetch('/provided')).json() as { first: number, second: number }
@@ -247,7 +247,7 @@ describe('programmatic router', () => {
       const scopedRouter = new Router('/scoped')
       scopedRouter.get('/').inject({ counter: Counter }).handler((_ctx, deps) => ({ id: deps.counter.id }))
 
-      const scoped = newApp(c => c.bind(Counter).toSelf().lifetime(Scopes.REQUEST)).build().mount(scopedRouter)
+      const scoped = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST))).build().mount(scopedRouter)
       await scoped.ready()
 
       const first = await (await scoped.fetch('/scoped')).json() as { id: number }
@@ -258,7 +258,7 @@ describe('programmatic router', () => {
       const singletonRouter = new Router('/singleton')
       singletonRouter.get('/').inject({ counter: Counter }).handler((_ctx, deps) => ({ id: deps.counter.id }))
 
-      const singleton = newApp(c => c.bind(Counter).toSelf()).build().mount(singletonRouter)
+      const singleton = newApp(c => c.bind(Counter, t => t.toSelf())).build().mount(singletonRouter)
       await singleton.ready()
 
       const third = await (await singleton.fetch('/singleton')).json() as { id: number }
@@ -286,7 +286,7 @@ describe('programmatic router', () => {
         })
       })
 
-      const app = newApp(c => c.bind(Greeter).toSelf()).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
       await app.ready()
 
       const root = await app.fetch('/api/root')

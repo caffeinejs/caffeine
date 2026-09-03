@@ -43,6 +43,11 @@ export type TypedKey<T> = Ctor<T> | DeferredCtor<T> | AbstractCtor<T>
  */
 export type InjectionToken<T = unknown> = TypedKey<T> | NamedToken<T>
 
+/**
+ * The value the key `K` resolves to.
+ */
+export type TokenValue<K> = K extends InjectionToken<infer T> ? T : never
+
 export function isNamedKey(dep: unknown): dep is NamedToken<unknown> {
   return (typeof dep === 'string' && dep.length > 0) || typeof dep === 'symbol'
 }

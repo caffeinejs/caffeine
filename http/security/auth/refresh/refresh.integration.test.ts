@@ -98,7 +98,7 @@ void [AuthController, MeController]
 async function buildApp() {
   const container = new CaffeineIoC()
   const store = new InMemoryRefreshStore()
-  container.bind(RefreshTokenStore).toValue(store)
+  container.bind(RefreshTokenStore, t => t.toValue(store))
   const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
   builder.authentication(a => a
     .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())

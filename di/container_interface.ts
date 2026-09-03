@@ -1,7 +1,7 @@
-import { Identifier, InjectionToken } from './key.js'
+import { Identifier, InjectionToken, TokenValue } from './key.js'
 import { Binding } from './binding.js'
-import { Binder } from './binder.js'
-import type { AOPBinder } from './aop_binder.js'
+import { BindingSpec } from './binding_spec.js'
+import type { AspectSpec } from './aspect_spec.js'
 import type { MethodAspect } from './aop.js'
 import type { Snapshot } from './snapshot.js'
 import { MetadataReader } from './metadata_reader.js'
@@ -163,13 +163,13 @@ export interface Container {
 
   resolver<I extends Injection>(injection: I): () => ResolveInjection<I>
 
-  bind<T>(key: InjectionToken<T>): Binder<T>
+  bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 
-  bindValuesProvider<T = unknown>(): Binder<T>
+  bindValuesProvider<T = unknown>(configure: (spec: BindingSpec<T>) => void): this
 
-  rebind<T>(key: InjectionToken<T>): Binder<T>
+  rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 
-  aspect<T extends MethodAspect<any>>(cls: Ctor<T>): AOPBinder<T>
+  aspect<C extends Ctor<MethodAspect<any>>>(cls: C, configure: (spec: AspectSpec<InstanceType<C>, C>) => void): this
 
   addModules(module: Module | ModuleFn, ...rest: Array<Module | ModuleFn>): void
 

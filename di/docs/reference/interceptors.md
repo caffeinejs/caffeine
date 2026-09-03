@@ -24,9 +24,9 @@ Applied per-binding via `@Interceptor` or `.intercept()`:
 class PaymentService { ... }
 
 // Fluent API
-di.bind(PaymentService)
+di.bind(PaymentService, t => t
   .toSelf()
-  .intercept((ctx, instance) => new LoggingProxy(instance))
+  .intercept((ctx, instance) => new LoggingProxy(instance)))
 ```
 
 Multiple interceptors on the same binding are chained — each receives the

@@ -9,9 +9,9 @@ describe('Refresh scope memory', function () {
     class RefSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(RefSvc)
+    di.bind(RefSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REFRESH)
+      .lifetime(Scopes.REFRESH))
     await di.init()
     const isCollected = trackForCollection(di.get(RefSvc)!)
 
@@ -27,9 +27,9 @@ describe('Refresh scope memory', function () {
     class RefSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(RefSvc)
+    di.bind(RefSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REFRESH)
+      .lifetime(Scopes.REFRESH))
     await di.init()
     const isCollected = trackForCollection(di.get(RefSvc)!)
 
@@ -44,9 +44,9 @@ describe('Refresh scope memory', function () {
     class RefSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(RefSvc)
+    di.bind(RefSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REFRESH)
+      .lifetime(Scopes.REFRESH))
     await di.init()
 
     const oldRef = trackForCollection(di.get(RefSvc)!)

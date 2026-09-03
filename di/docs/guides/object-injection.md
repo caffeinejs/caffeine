@@ -104,9 +104,9 @@ class AppFacade {
 ```ts
 const di = new CaffeineIoC()
 
-di.bind(UserRepository).toSelf()
-di.bind(EmailService).toSelf()
-di.bind(UserService).toSelf([$i.object({ repository: UserRepository, email: EmailService })])
+di.bind(UserRepository, t => t.toSelf())
+di.bind(EmailService, t => t.toSelf())
+di.bind(UserService, t => t.toSelf([$i.object({ repository: UserRepository, email: EmailService })]))
 
 await di.init()
 

@@ -30,8 +30,8 @@ describe('getting-started: manual bindings', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(GsLogger).toSelf()
-    di.bind(GsUserService).toClass(GsUserService, [GsLogger])
+    di.bind(GsLogger, t => t.toSelf())
+    di.bind(GsUserService, t => t.toClass(GsUserService, [GsLogger]))
     await di.init()
 
     const svc = di.get(GsUserService)
@@ -45,7 +45,7 @@ describe('getting-started: manual bindings', function () {
     }
     const kGsLogger = token<any>(Symbol.for('gs.logger'))
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(kGsLogger).toClass(GsLoggerSym)
+    di.bind(kGsLogger, t => t.toClass(GsLoggerSym))
     await di.init()
 
     const logger = di.get<GsLoggerSym>(kGsLogger)
@@ -326,7 +326,7 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
   let di: CaffeineIoC
   beforeAll(async function () {
     di = new CaffeineIoC()
-    di.bind(AcRedisClientB).toValue(new AcRedisClientB())
+    di.bind(AcRedisClientB, t => t.toValue(new AcRedisClientB()))
     await di.init()
   })
 
@@ -369,7 +369,7 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
   let di: CaffeineIoC
   beforeAll(async function () {
     di = new CaffeineIoC()
-    di.bind(AcRedisClientB).toValue(new AcRedisClientB())
+    di.bind(AcRedisClientB, t => t.toValue(new AcRedisClientB()))
     await di.init()
   })
 
@@ -399,29 +399,29 @@ describe('abstract-classes: manual .extends() API', function () {
 
   it('resolves via fluent extends chain', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AcManualMemCache).toSelf()
-      .extends()
+    di.bind(AcManualMemCache, t => t.toSelf()
+      .extends())
     await di.init()
     expect(di.get(AcManualCache)).toBeInstanceOf(AcManualMemCache)
   })
 
   it('primary() wins over non-primary', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AcManualMemCache).toSelf()
+    di.bind(AcManualMemCache, t => t.toSelf()
+      .extends())
+    di.bind(AcManualRedisCache, t => t.toSelf()
       .extends()
-    di.bind(AcManualRedisCache).toSelf()
-      .extends()
-      .primary()
+      .primary())
     await di.init()
     expect(di.get(AcManualCache)).toBeInstanceOf(AcManualRedisCache)
   })
 
   it('getMany returns all implementations', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AcManualMemCache).toSelf()
-      .extends()
-    di.bind(AcManualRedisCache).toSelf()
-      .extends()
+    di.bind(AcManualMemCache, t => t.toSelf()
+      .extends())
+    di.bind(AcManualRedisCache, t => t.toSelf()
+      .extends())
     await di.init()
     const all = di.getMany(AcManualCache)
     expect(all).toHaveLength(2)
@@ -613,7 +613,7 @@ describe('interfaces: manual bind with interface symbol', function () {
 
   it('binds class to symbol key and resolves it', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(kIfCache).toClass(IfMemCache)
+    di.bind(kIfCache, t => t.toClass(IfMemCache))
     await di.init()
 
     const cache = di.get<IfCache>(kIfCache)
@@ -1212,7 +1212,7 @@ describe('profiles: @Profile + @ConditionalOn — both pass', function () {
 
   it('registers bean when both profile active and condition true', async function () {
     const di = new CaffeineIoC({ profiles: ['prCondEuB'] })
-    di.bind(PrCondRedisClientB).toValue(new PrCondRedisClientB())
+    di.bind(PrCondRedisClientB, t => t.toValue(new PrCondRedisClientB()))
     await di.init()
     expect(di.has(PrCondRedisEuCacheB)).toBe(true)
     expect(di.get(PrCondCacheB)).toBeInstanceOf(PrCondRedisEuCacheB)
@@ -1295,7 +1295,7 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — all pass', func
   it('registers only when all conditions pass', async function () {
     process.env.CB_AND_A = 'eu'
     const di = new CaffeineIoC()
-    di.bind(CbAndRedisClientA).toValue(new CbAndRedisClientA())
+    di.bind(CbAndRedisClientA, t => t.toValue(new CbAndRedisClientA()))
     await di.init()
     expect(di.has(CbRedisEuCacheA)).toBe(true)
     expect(di.get(CbRedisEuCacheA).type()).toBe('redis-eu')
@@ -1329,7 +1329,7 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — partial fail', 
   it('skips when region condition fails but container condition passes', async function () {
     process.env.CB_AND_B = 'us'
     const di = new CaffeineIoC()
-    di.bind(CbAndRedisClientB).toValue(new CbAndRedisClientB())
+    di.bind(CbAndRedisClientB, t => t.toValue(new CbAndRedisClientB()))
     await di.init()
     expect(di.has(CbRedisEuCacheB)).toBe(false)
   })
@@ -1491,7 +1491,7 @@ describe('conditional-bindings: conditional @Configuration — method gate', fun
   it('method-level condition activates @Provides when dep bound', async function () {
     process.env.CB_CFG_B = 'eu'
     const di = new CaffeineIoC()
-    di.bind(CbCfgRedisDepB).toValue(new CbCfgRedisDepB())
+    di.bind(CbCfgRedisDepB, t => t.toValue(new CbCfgRedisDepB()))
     await di.init()
     expect(di.get(CbCfgTaxCalc)).toBeInstanceOf(CbCfgTaxCalcImpl)
     expect(di.get(CbCfgTaxCalc).calculate(100)).toBe(20)
@@ -1528,12 +1528,12 @@ describe('conditional-bindings: fluent .conditional() API', function () {
   it('conditional() registers matching bean and skips others', async function () {
     process.env.CB_FLUENT_REGION = 'eu'
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(CbFluentEuGateway).toSelf()
+    di.bind(CbFluentEuGateway, t => t.toSelf()
       .extends(CbFluentGateway)
       .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
-      .primary()
-    di.bind(CbFluentMockGateway).toSelf()
-      .extends(CbFluentGateway)
+      .primary())
+    di.bind(CbFluentMockGateway, t => t.toSelf()
+      .extends(CbFluentGateway))
     await di.init()
     expect(di.get(CbFluentGateway)).toBeInstanceOf(CbFluentEuGateway)
   })
@@ -1541,12 +1541,12 @@ describe('conditional-bindings: fluent .conditional() API', function () {
   it('falls back when condition fails', async function () {
     process.env.CB_FLUENT_REGION = 'other'
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(CbFluentEuGateway).toSelf()
+    di.bind(CbFluentEuGateway, t => t.toSelf()
       .extends(CbFluentGateway)
       .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
-      .primary()
-    di.bind(CbFluentMockGateway).toSelf()
-      .extends(CbFluentGateway)
+      .primary())
+    di.bind(CbFluentMockGateway, t => t.toSelf()
+      .extends(CbFluentGateway))
     await di.init()
     expect(di.get(CbFluentGateway)).toBeInstanceOf(CbFluentMockGateway)
   })
@@ -1812,17 +1812,17 @@ describe('fallback-bindings: fluent .fallback() API', function () {
 
   it('.fallback() used when no non-fallback binding exists', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(FbFluentCache).toClass(FbFluentInMemoryCache)
-      .fallback()
+    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache)
+      .fallback())
     await di.init()
     expect(di.get(FbFluentCache)).toBeInstanceOf(FbFluentInMemoryCache)
   })
 
   it('.fallback() skipped when non-fallback binding exists', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(FbFluentCache).toClass(FbFluentInMemoryCache)
-      .fallback()
-    di.bind(FbFluentCache).toClass(FbFluentRedisCache)
+    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache)
+      .fallback())
+    di.bind(FbFluentCache, t => t.toClass(FbFluentRedisCache))
     await di.init()
     expect(di.get(FbFluentCache)).toBeInstanceOf(FbFluentRedisCache)
   })
@@ -1938,8 +1938,8 @@ describe('lazy-bindings: manual .lazy() API', function () {
       constructor() { constructed = true }
     }
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(LbDeferredService).toSelf()
-      .lazy()
+    di.bind(LbDeferredService, t => t.toSelf()
+      .lazy())
     await di.init()
     expect(constructed).toBe(false)
     di.get(LbDeferredService)
@@ -1952,8 +1952,8 @@ describe('lazy-bindings: manual .lazy() API', function () {
       constructor() { eagerConstructed = true }
     }
     const di = new CaffeineIoC({ decorators: false, lazy: true })
-    di.bind(LbEagerService).toSelf()
-      .lazy(false)
+    di.bind(LbEagerService, t => t.toSelf()
+      .lazy(false))
     await di.init()
     expect(eagerConstructed).toBe(true)
   })

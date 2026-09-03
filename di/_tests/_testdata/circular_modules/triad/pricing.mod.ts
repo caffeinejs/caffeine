@@ -9,6 +9,6 @@ export const pricingModule: Module = mod({
   provides: () => [Pricing],
   fn: container => {
     moduleFnCalls.push('pricing')
-    container.bind(Pricing).toSelf()
+    container.bind(Pricing, t => t.toSelf())
   },
 })

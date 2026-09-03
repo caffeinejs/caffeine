@@ -59,11 +59,11 @@ export class FastifyAdapter<
   ) {
     this.#fastify = fastify
     this.#container = kit.container
-    this.#container.bind(FastifyContext)
+    this.#container.bind(FastifyContext, t => t
       .toFactory(() => this.#fastifyCtxAls.getStore()!)
       .lifetime(Scopes.REQUEST)
       .byPassPostProcessors()
-      .internal()
+      .internal())
   }
 
   async run(): Promise<void> {

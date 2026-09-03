@@ -150,10 +150,10 @@ describe('Async bindings via manual binding', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(Connection)
+    di.bind(Connection, t => t
       .toAsyncFactory(async () => {
         return new Promise<Connection>(resolve => setTimeout(() => resolve(new Connection('localhost')), 10))
-      })
+      }))
 
     await di.init()
 
@@ -175,14 +175,14 @@ describe('Async bindings via manual binding', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(SyncDep)
+    di.bind(SyncDep, t => t
       .toSelf()
-      .lifetime(Scopes.SINGLETON)
-    di.bind(AsyncSvc)
+      .lifetime(Scopes.SINGLETON))
+    di.bind(AsyncSvc, t => t
       .toAsyncFactory(async ctx => {
         const dep = ctx.container.get(SyncDep)
         return new AsyncSvc(dep)
-      })
+      }))
 
     await di.init()
 
@@ -200,9 +200,9 @@ describe('Async bindings via manual binding', function () {
     di.autoWire()
 
     expect(() => {
-      di.bind(MyService)
+      di.bind(MyService, t => t
         .toAsyncFactory(async () => new MyService())
-        .lifetime(Scopes.TRANSIENT)
+        .lifetime(Scopes.TRANSIENT))
     })
       .toThrow(ErrInvalidBinding)
   })
@@ -214,16 +214,16 @@ describe('Async bindings via manual binding', function () {
     di.autoWire()
 
     expect(() => {
-      di.bind(MyService)
+      di.bind(MyService, t => t
         .toAsyncFactory(async () => new MyService())
-        .lazy()
+        .lazy())
     })
       .toThrow(ErrInvalidBinding)
 
     expect(() => {
-      di.bind(MyService)
+      di.bind(MyService, t => t
         .toAsyncFactory(async () => new MyService())
-        .lazy(false)
+        .lazy(false))
     }).not.toThrow()
   })
 })
@@ -236,9 +236,9 @@ describe('Async bindings with RefreshScope', function () {
     di.autoWire()
 
     expect(() => {
-      di.bind(MyService)
+      di.bind(MyService, t => t
         .toAsyncFactory(async () => new MyService())
-        .lifetime(Scopes.REFRESH)
+        .lifetime(Scopes.REFRESH))
     }).not.toThrow()
   })
 
@@ -249,9 +249,9 @@ describe('Async bindings with RefreshScope', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(APIToken)
+    di.bind(APIToken, t => t
       .toAsyncFactory(async () => new APIToken('token-v1'))
-      .lifetime(Scopes.REFRESH)
+      .lifetime(Scopes.REFRESH))
 
     await di.init()
 
@@ -271,9 +271,9 @@ describe('Async bindings with RefreshScope', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(APIToken)
+    di.bind(APIToken, t => t
       .toAsyncFactory(async () => new APIToken(`token-v${++counter}`))
-      .lifetime(Scopes.REFRESH)
+      .lifetime(Scopes.REFRESH))
 
     await di.init()
     const t1 = di.get(APIToken)
@@ -304,11 +304,11 @@ describe('Async bindings with RefreshScope', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(DbConn)
-      .toAsyncFactory(async () => new DbConn(++singletonCount))
-    di.bind(RefreshedToken)
+    di.bind(DbConn, t => t
+      .toAsyncFactory(async () => new DbConn(++singletonCount)))
+    di.bind(RefreshedToken, t => t
       .toAsyncFactory(async () => new RefreshedToken(++refreshCount))
-      .lifetime(Scopes.REFRESH)
+      .lifetime(Scopes.REFRESH))
 
     await di.init()
 
@@ -335,8 +335,8 @@ describe('resetInstance() with async bindings', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(Token)
-      .toAsyncFactory(async () => new Token(++counter))
+    di.bind(Token, t => t
+      .toAsyncFactory(async () => new Token(++counter)))
 
     await di.init()
 
@@ -364,9 +364,9 @@ describe('resetInstance() with async bindings', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(RefreshToken)
+    di.bind(RefreshToken, t => t
       .toAsyncFactory(async () => new RefreshToken(++counter))
-      .lifetime(Scopes.REFRESH)
+      .lifetime(Scopes.REFRESH))
 
     await di.init()
 
@@ -396,12 +396,12 @@ describe('resetInstance() with async bindings', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(Conn)
+    di.bind(Conn, t => t
       .toAsyncFactory(async () => {
         order.push(`init-${++counter}`)
         return new Conn()
       })
-      .preDestroy(v => v.close())
+      .preDestroy(v => v.close()))
 
     await di.init()
     expect(order)
@@ -519,8 +519,8 @@ describe('async bindings with post-processors', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
-    di.bind(Token)
-      .toAsyncFactory(async () => new Token('hello'))
+    di.bind(Token, t => t
+      .toAsyncFactory(async () => new Token('hello')))
 
     await di.init()
 
@@ -559,8 +559,8 @@ describe('async bindings with post-processors', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
-    di.bind(Svc)
-      .toAsyncFactory(async () => new Svc(99))
+    di.bind(Svc, t => t
+      .toAsyncFactory(async () => new Svc(99)))
 
     await di.init()
 
@@ -581,9 +581,9 @@ describe('async bindings with post-processors', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AsyncBean)
+    di.bind(AsyncBean, t => t
       .toAsyncFactory(async () => new AsyncBean())
-      .postConstruct(v => v.onInit())
+      .postConstruct(v => v.onInit()))
 
     await di.init()
 
@@ -615,13 +615,13 @@ describe('async bindings with post-processors', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
-    di.bind(Ordered)
+    di.bind(Ordered, t => t
       .toAsyncFactory(async () => new Ordered())
       .intercept((_ctx, instance) => {
         order.push('interceptor')
         return instance
       })
-      .postConstruct(v => v.onInit())
+      .postConstruct(v => v.onInit()))
 
     await di.init()
 
@@ -640,7 +640,7 @@ describe('resolveAsyncBindings() — cached skip on repeated init()', function (
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(DbConn).toAsyncFactory(async () => new DbConn())
+    di.bind(DbConn, t => t.toAsyncFactory(async () => new DbConn()))
 
     await di.init()
     expect(callCount).toBe(1)
@@ -660,7 +660,7 @@ describe('resetBinding() — async path', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Cache).toAsyncFactory(async () => new Cache())
+    di.bind(Cache, t => t.toAsyncFactory(async () => new Cache()))
     await di.init()
 
     expect(callCount).toBe(1)
@@ -693,10 +693,10 @@ describe('resetInstance() — mixed async + sync bindings under the same key', f
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AsyncSvc).toAsyncFactory(async () => new AsyncSvc())
-      .names(kShared)
-    di.bind(SyncSvc).toSelf()
-      .names(kShared)
+    di.bind(AsyncSvc, t => t.toAsyncFactory(async () => new AsyncSvc())
+      .names(kShared))
+    di.bind(SyncSvc, t => t.toSelf()
+      .names(kShared))
     await di.init()
 
     di.get(AsyncSvc)

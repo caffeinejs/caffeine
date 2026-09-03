@@ -147,13 +147,13 @@ import { CaffeineIoC } from '@caffeinejs/di'
 const di = new CaffeineIoC({ decorators: false })
 
 // Library registers its default
-di.bind(Cache)
+di.bind(Cache, t => t
   .toClass(InMemoryCache)
-  .fallback()
+  .fallback())
 
 // Application optionally registers an override — wins over fallback
-di.bind(Cache)
-  .toClass(RedisCache)
+di.bind(Cache, t => t
+  .toClass(RedisCache))
 
 await di.init()
 

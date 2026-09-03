@@ -15,10 +15,10 @@ type Factory<T> = (ctx: ResolutionContext) => T
 A synchronous factory function. Used with `toFactory()` and `@UseFactory`.
 
 ```ts
-di.bind(Logger).toFactory(ctx => {
+di.bind(Logger, t => t.toFactory(ctx => {
   const config = ctx.container.get(AppConfig)
   return new ConsoleLogger(config.logLevel)
-})
+}))
 ```
 
 ```ts
@@ -48,10 +48,10 @@ called, the instance is already resolved.
 
 ```ts
 // Fluent API
-di.bind(DatabasePool).toAsyncFactory(async ctx => {
+di.bind(DatabasePool, t => t.toAsyncFactory(async ctx => {
   const cfg = ctx.container.get(AppConfig)
   return createPool(cfg.databaseUrl)
-})
+}))
 ```
 
 ```ts
@@ -93,9 +93,9 @@ Passed to every factory and interceptor. Gives access to the container and the b
 | `binding` | The full `Binding` descriptor for the current resolution. |
 
 ```ts
-di.bind(Greeter).toFactory(ctx => {
+di.bind(Greeter, t => t.toFactory(ctx => {
   const name = ctx.container.get<string>('app.name')
   const binding = ctx.binding
   return new Greeter(name)
-})
+}))
 ```

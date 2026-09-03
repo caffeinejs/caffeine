@@ -11,7 +11,7 @@ export const usersModule: Module = mod({
   provides: () => [UserRepository, UserNotifier],
   fn: container => {
     moduleFnCalls.push('users')
-    container.bind(UserRepository).toSelf()
-    container.bind(UserNotifier).toClass(UserNotifier, [OrderService])
+    container.bind(UserRepository, t => t.toSelf())
+    container.bind(UserNotifier, t => t.toClass(UserNotifier, [OrderService]))
   },
 })

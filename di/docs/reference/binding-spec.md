@@ -1,6 +1,6 @@
-# Binder
+# BindingSpec
 
-- [Binder](#binder-1)
+- [Factory methods](#factory-methods)
   - [toClass](#toclass)
   - [toSelf](#toself)
   - [toValue](#tovalue)
@@ -8,7 +8,7 @@
   - [toAsyncFactory](#toasyncfactory)
   - [toFunction](#tofunction)
   - [aliasOf](#aliasof)
-- [BinderOptions](#binderoptions)
+- [Modifiers](#modifiers)
   - [lifetime](#lifetime)
   - [names](#names)
   - [lazy](#lazy)
@@ -29,11 +29,24 @@
 
 ---
 
-## Binder
+## Factory methods
 
-`Binder<TValue>` is obtained from `di.bind(key)` or `di.rebind(key)`. Its
-methods select *how* the key is resolved. Each method returns a
-`BinderOptions<TValue>` for further configuration.
+`BindingSpec<TValue, TKey>` is the object handed to the callback of `di.bind(key, …)`,
+`di.rebind(key, …)` and `di.bindValuesProvider(…)`. These methods select *how* the key is
+resolved.
+
+Every method returns the same instance, so one chain describes the whole binding. The
+container registers it once, when the callback returns — which is why `di.bind()` itself
+returns the container and can be chained:
+
+```ts
+di.bind(Repository, t => t.toSelf())
+  .bind(kPort, t => t.toValue(8080))
+```
+
+`injections` is checked against the target: one entry per constructor (or function)
+parameter, in declaration order, each resolving to that parameter's type. A list of the
+wrong length or with a dependency in the wrong position does not compile.
 
 ### toClass
 
@@ -45,11 +58,22 @@ Resolves the key by instantiating `constructor`. Dependencies in `injections`
 are resolved from the container and passed to the constructor in order.
 
 ```ts
-di.bind(UserService).toClass(UserService, [Logger, Database])
+di.bind(UserService, t => t.toClass(UserService, [Logger, Database]))
 ```
 
 When `injections` is omitted the container injects nothing. Use decorator
 metadata or an explicit injection array.
+
+A component cannot be its own dependency. Listing the constructor being bound —
+or the key it is bound under — throws `ErrInvalidBinding` from the `bind()` call:
+
+```ts
+di.bind(UserService, t => t.toClass(UserService, [UserService]))
+// ErrInvalidBinding: Cannot bind "UserService": a component cannot be its own dependency
+
+di.bind(UserService, t => t.toClass(UserService, [$i.defer(() => UserService)]))
+// fine — the deferred key resolves after construction
+```
 
 ### toSelf
 
@@ -57,10 +81,12 @@ metadata or an explicit injection array.
 toSelf(injections?)
 ```
 
-Shorthand for `toClass(key, injections)` when the key is a class reference.
+Shorthand for `toClass(key, injections)` when the key is a class reference. The
+same self-dependency rule applies. Calling it on a key that is not a class — a
+named token, an abstract class — is a compile error.
 
 ```ts
-di.bind(UserService).toSelf([Logger])
+di.bind(UserService, t => t.toSelf([Logger]))
 ```
 
 ### toValue
@@ -74,8 +100,8 @@ resolution.
 
 ```ts
 const kAppVersion = token<string>('app.version')
-di.bind(kAppVersion).toValue('1.0.0')
-di.bind(AppConfig).toValue(config)
+di.bind(kAppVersion, t => t.toValue('1.0.0'))
+di.bind(AppConfig, t => t.toValue(config))
 ```
 
 ### toFactory
@@ -88,7 +114,7 @@ Binds the key to a synchronous factory function. The factory receives a
 `ResolutionContext` and must return the instance synchronously.
 
 ```ts
-di.bind(Logger).toFactory(ctx => new ConsoleLogger(ctx.container.get(AppConfig)))
+di.bind(Logger, t => t.toFactory(ctx => new ConsoleLogger(ctx.container.get(AppConfig))))
 ```
 
 ### toAsyncFactory
@@ -101,10 +127,10 @@ Binds the key to an async factory function that returns a `Promise`. The
 container awaits the promise during `init()`.
 
 ```ts
-di.bind(DatabasePool).toAsyncFactory(async ctx => {
+di.bind(DatabasePool, t => t.toAsyncFactory(async ctx => {
   const cfg = ctx.container.get(AppConfig)
   return connectToDatabase(cfg.databaseUrl)
-})
+}))
 ```
 
 ### toFunction
@@ -118,10 +144,10 @@ Unlike `toFactory`, the function does not receive a `ResolutionContext` — it
 receives the resolved dependency values directly.
 
 ```ts
-di.bind(Greeter).toFunction(
+di.bind(Greeter, t => t.toFunction(
   (name: string) => `Hello, ${name}!`,
   ['app.name'],
-)
+))
 ```
 
 ### aliasOf
@@ -134,16 +160,15 @@ Registers the key as an alias for another key. Resolving the key is identical
 to resolving the target.
 
 ```ts
-di.bind(IUserService).aliasOf(UserServiceImpl)
+di.bind(IUserService, t => t.aliasOf(UserServiceImpl))
 ```
 
 ---
 
-## BinderOptions
+## Modifiers
 
-`BinderOptions<TValue>` is returned by every `Binder` terminal method. Its
-methods are chainable and configure the binding's metadata. Calling any method
-returns the same `BinderOptions` instance.
+These methods configure the binding's metadata. They are chainable in any order, before or
+after a factory method, and all return the same `BindingSpec`.
 
 ### lifetime
 
@@ -155,8 +180,8 @@ Sets the lifecycle scope for the binding. See [Scopes](./scopes.md) for
 available scope identifiers.
 
 ```ts
-di.bind(CacheService).toSelf().lifetime(Scopes.SINGLETON)
-di.bind(RequestLogger).toSelf().lifetime(Scopes.REQUEST)
+di.bind(CacheService, t => t.toSelf().lifetime(Scopes.SINGLETON))
+di.bind(RequestLogger, t => t.toSelf().lifetime(Scopes.REQUEST))
 ```
 
 ### names
@@ -169,9 +194,9 @@ Registers additional string or symbol keys for the binding. The binding is
 accessible under the primary key and all named keys.
 
 ```ts
-di.bind(Logger)
+di.bind(Logger, t => t
   .toClass(ConsoleLogger)
-  .names('default-logger', Symbol.for('logger'))
+  .names('default-logger', Symbol.for('logger')))
 ```
 
 ### lazy
@@ -184,7 +209,7 @@ When `true`, defers instantiation until first resolution instead of during
 `init()`. Default: `false`.
 
 ```ts
-di.bind(HeavyService).toSelf().lazy()
+di.bind(HeavyService, t => t.toSelf().lazy())
 ```
 
 ### primary
@@ -198,7 +223,7 @@ same key. `di.get()` returns this binding instead of throwing
 `ErrNoUniqueInjectionForKey`.
 
 ```ts
-di.bind(Logger).toClass(FileLogger).primary()
+di.bind(Logger, t => t.toClass(FileLogger).primary())
 ```
 
 ### fallback
@@ -211,7 +236,7 @@ Marks this binding as a fallback. It is only used when no non-fallback binding
 exists for the same key.
 
 ```ts
-di.bind(Metrics).toClass(NoOpMetrics).fallback()
+di.bind(Metrics, t => t.toClass(NoOpMetrics).fallback())
 ```
 
 ### byPassPostProcessors
@@ -232,7 +257,7 @@ Injects a dependency into a property of the resolved instance after
 construction.
 
 ```ts
-di.bind(Service).toSelf().injectProperty('logger', Logger)
+di.bind(Service, t => t.toSelf().injectProperty('logger', Logger))
 ```
 
 ### injectMethod
@@ -245,7 +270,7 @@ Calls `method` on the resolved instance after construction, passing resolved
 dependencies as arguments.
 
 ```ts
-di.bind(Service).toSelf().injectMethod('setLogger', Logger)
+di.bind(Service, t => t.toSelf().injectMethod('setLogger', Logger))
 ```
 
 ### labels
@@ -259,7 +284,7 @@ Attaches symbol labels to the binding. Labels enable grouped retrieval via
 
 ```ts
 const kPlugin = Symbol.for('plugin')
-di.bind(AuthPlugin).toSelf().labels(kPlugin)
+di.bind(AuthPlugin, t => t.toSelf().labels(kPlugin))
 ```
 
 ### tags
@@ -272,7 +297,7 @@ tags(map)
 Attaches symbol-keyed metadata to the binding. Useful for runtime introspection.
 
 ```ts
-di.bind(UserController).toSelf().tags(Symbol.for('route'), '/api/users')
+di.bind(UserController, t => t.toSelf().tags(Symbol.for('route'), '/api/users'))
 ```
 
 ### postConstruct
@@ -284,9 +309,9 @@ postConstruct(fn)
 Runs `fn` immediately after the instance is created. Must be synchronous; the container does not await a returned promise.
 
 ```ts
-di.bind(DatabasePool)
+di.bind(DatabasePool, t => t
   .toSelf()
-  .postConstruct(pool => pool.connect())
+  .postConstruct(pool => pool.connect()))
 ```
 
 ### preDestroy
@@ -298,9 +323,9 @@ preDestroy(fn)
 Runs `fn` before the instance is destroyed during `dispose()`.
 
 ```ts
-di.bind(DatabasePool)
+di.bind(DatabasePool, t => t
   .toSelf()
-  .preDestroy(pool => pool.end())
+  .preDestroy(pool => pool.end()))
 ```
 
 ### intercept
@@ -314,9 +339,9 @@ Wraps every resolved instance with `interceptor`. The interceptor receives the
 instance.
 
 ```ts
-di.bind(PaymentService)
+di.bind(PaymentService, t => t
   .toSelf()
-  .intercept((ctx, instance) => withMetrics(instance))
+  .intercept((ctx, instance) => withMetrics(instance)))
 ```
 
 ### conditional
@@ -329,9 +354,9 @@ Activates the binding only when all predicates in `fn` return `true`.
 Predicates receive a `ConditionContext` with `container.has()`.
 
 ```ts
-di.bind(RedisCacheService)
+di.bind(RedisCacheService, t => t
   .toSelf()
-  .conditional(ctx => ctx.container.has(RedisClient))
+  .conditional(ctx => ctx.container.has(RedisClient)))
 ```
 
 ### profiles
@@ -344,7 +369,7 @@ Restricts this binding to the given profiles. The binding is only active when
 one of them is enabled on the container.
 
 ```ts
-di.bind(MockEmailService).toSelf().profiles('test', 'development')
+di.bind(MockEmailService, t => t.toSelf().profiles('test', 'development'))
 ```
 
 ### extends
@@ -358,7 +383,7 @@ key. When no `constructor` is given, the base is inferred from the class's
 prototype chain.
 
 ```ts
-di.bind(ConsoleLogger).toSelf().extends(Logger)
+di.bind(ConsoleLogger, t => t.toSelf().extends(Logger))
 di.get(Logger) // ConsoleLogger
 ```
 

@@ -54,11 +54,11 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Repo)
-        .toSelf()
+      di.bind(Repo, t => t
+        .toSelf())
 
-      di.bind(token<any>('env'))
-        .toValue('production')
+      di.bind(token<any>('env'), t => t
+        .toValue('production'))
       await di.init()
 
       const uc = di.build(Usecase, [Repo, token<any>('env')])
@@ -94,11 +94,11 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Config)
-        .toSelf()
+      di.bind(Config, t => t
+        .toSelf())
 
-      di.bind(token<any>('port'))
-        .toValue(3000)
+      di.bind(token<any>('port'), t => t
+        .toValue(3000))
       await di.init()
 
       expect(di.build(fn, [Config, token<any>('port')]))
@@ -116,8 +116,8 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Logger)
-        .toSelf()
+      di.bind(Logger, t => t
+        .toSelf())
       await di.init()
 
       const svc = di.build(Service, [$i.optional(Logger)])
@@ -155,13 +155,13 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(HandlerA)
+      di.bind(HandlerA, t => t
         .toSelf()
-        .extends(Handler)
+        .extends(Handler))
 
-      di.bind(HandlerB)
+      di.bind(HandlerB, t => t
         .toSelf()
-        .extends(Handler)
+        .extends(Handler))
       await di.init()
 
       const dispatcher = di.build(Dispatcher, [$i.allOf(Handler)])
@@ -201,8 +201,8 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Connection)
-        .toSelf()
+      di.bind(Connection, t => t
+        .toSelf())
       await di.init()
 
       const worker = di.build(Worker, [$i.provide(Connection)])
@@ -220,9 +220,9 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Request)
+      di.bind(Request, t => t
         .toSelf()
-        .lifetime(Scopes.TRANSIENT)
+        .lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const handler = di.build(Handler, [$i.provide(Request)])
@@ -248,13 +248,13 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(ValidatorA)
+      di.bind(ValidatorA, t => t
         .toSelf()
-        .extends(Validator)
+        .extends(Validator))
 
-      di.bind(ValidatorB)
+      di.bind(ValidatorB, t => t
         .toSelf()
-        .extends(Validator)
+        .extends(Validator))
       await di.init()
 
       const pipeline = di.build(Pipeline, [$i.allOf($i.provide(Validator))])
@@ -272,8 +272,8 @@ describe('when target type is registered in the container', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(Service)
-      .toSelf()
+    di.bind(Service, t => t
+      .toSelf())
     await di.init()
 
     const singleton = di.get(Service)
@@ -297,17 +297,17 @@ describe('when target type is registered in the container', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(HandlerA)
+    di.bind(HandlerA, t => t
       .toSelf()
-      .extends(Handler)
+      .extends(Handler))
 
-    di.bind(HandlerB)
+    di.bind(HandlerB, t => t
       .toSelf()
-      .extends(Handler)
+      .extends(Handler))
 
-    di.bind(Dispatcher)
+    di.bind(Dispatcher, t => t
       .toSelf()
-      .extends(Handler)
+      .extends(Handler))
     await di.init()
 
     const dispatcher = di.build(Dispatcher, [$i.allOf(Handler)])
@@ -332,8 +332,8 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('name'))
-        .toValue('worker')
+      di.bind(token<any>('name'), t => t
+        .toValue('worker'))
       await di.init()
 
       const factory = di.builder(Task, [token<any>('name')])
@@ -357,8 +357,8 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Config)
-        .toSelf()
+      di.bind(Config, t => t
+        .toSelf())
       await di.init()
 
       const factory = di.builder(Service, [Config])
@@ -380,9 +380,9 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Tracker)
+      di.bind(Tracker, t => t
         .toSelf()
-        .lifetime(Scopes.TRANSIENT)
+        .lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const factory = di.builder(Consumer, [Tracker])
@@ -403,9 +403,9 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Session)
+      di.bind(Session, t => t
         .toSelf()
-        .lifetime(Scopes.TRANSIENT)
+        .lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const factory = di.builder(Controller, [$i.provide(Session)])
@@ -436,8 +436,8 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'))
-        .toValue('hello')
+      di.bind(token<any>('a'), t => t
+        .toValue('hello'))
       await di.init()
 
       const factory = di.builder(Service, [token<any>('a'), null])
@@ -459,8 +459,8 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'))
-        .toValue('hello')
+      di.bind(token<any>('a'), t => t
+        .toValue('hello'))
       await di.init()
 
       const factory = di.builder(Service, [token<any>('a'), undefined])
@@ -482,8 +482,8 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'))
-        .toValue('hello')
+      di.bind(token<any>('a'), t => t
+        .toValue('hello'))
       await di.init()
 
       const factory = di.builder(Service, [token<any>('a')])
@@ -505,8 +505,8 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('second'))
-        .toValue('world')
+      di.bind(token<any>('second'), t => t
+        .toValue('world'))
       await di.init()
 
       const factory = di.builder(Service, [null, token<any>('second')])
@@ -525,8 +525,8 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'))
-        .toValue('x')
+      di.bind(token<any>('a'), t => t
+        .toValue('x'))
       await di.init()
 
       expect(() => di.builder(fn, [token<any>('a')])).not.toThrow()
@@ -565,7 +565,7 @@ describe('builder()', function () {
 describe('builder() before init()', function () {
   it('should throw ErrInvalidContainerState when called before init()', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc')).toValue('hello')
+    di.bind(token<any>('svc'), t => t.toValue('hello'))
 
     expect(() => di.builder(class Svc {}, [])).toThrow(ErrInvalidContainerState)
   })

@@ -7,19 +7,20 @@ so it does not do what its name suggests:
 
 ```ts
 // This does NOT keep the first binding. The fallback overwrites it.
-container.bind(CacheStore).toValue(userStore)
-container.bind(CacheStore).toClass(MemoryCacheStore).fallback()
+container.bind(CacheStore, t => t.toValue(userStore))
+container.bind(CacheStore, t => t.toClass(MemoryCacheStore).fallback())
 ```
 
-`fallback()` lives on `BinderOptions`, so `.toClass()` / `.toValue()` has already called `configureBinding`
-by the time the flag is set, and `registerBinding` merges the second chain into the first. Only the decorator
-path defers fallbacks (`pendingFallbacks` in `container.ts`), which is why `_tests/fallback.test.ts` passes
-while the imperative equivalent does not.
+A `bind()` call registers as soon as its callback returns, so the second call reaches `registerBinding`, which
+merges it into the first with `Object.assign`. Nothing reads the flag in between. Only the decorator path
+defers fallbacks (`pendingFallbacks` in `container.ts`), which is why `_tests/fallback.test.ts` passes while
+the imperative equivalent does not.
 
 Do not reach for `.fallback()` to replace a `has()` probe — it makes the problem worse, silently. Fixing it
-means the imperative path deferring registration the way the decorator path does, and `configureBinding`
-currently throws eagerly with tests depending on that (`_tests/extending_classes.test.ts`,
-`_tests/manual_bind.test.ts`).
+means the imperative path deferring registration the way the decorator path does. That is a smaller change
+than it used to be: the whole chain is now materialised before `configureBinding` runs, so `fallback` is known
+at registration time. `configureBinding` still throws eagerly, with tests depending on that
+(`_tests/extending_classes.test.ts`, `_tests/manual_bind.test.ts`).
 
 ## `has()` means resolvable, not directly bound
 

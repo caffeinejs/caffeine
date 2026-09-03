@@ -16,12 +16,12 @@ describe.skip('cycle detection beyond required constructor edges', function () {
     }
 
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(PropA)
+    di.bind(PropA, t => t
       .toSelf()
-      .injectProperty('b', PropB)
-    di.bind(PropB)
+      .injectProperty('b', PropB))
+    di.bind(PropB, t => t
       .toSelf()
-      .injectProperty('a', PropA)
+      .injectProperty('a', PropA))
 
     await expect(di.init())
       .rejects
@@ -46,12 +46,12 @@ describe.skip('cycle detection beyond required constructor edges', function () {
     }
 
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(MethodA)
+    di.bind(MethodA, t => t
       .toSelf()
-      .injectMethod('setB', MethodB)
-    di.bind(MethodB)
+      .injectMethod('setB', MethodB))
+    di.bind(MethodB, t => t
       .toSelf()
-      .injectMethod('setA', MethodA)
+      .injectMethod('setA', MethodA))
 
     await expect(di.init())
       .rejects
@@ -74,12 +74,12 @@ describe.skip('cycle detection beyond required constructor edges', function () {
     }
 
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(HandlerA)
+    di.bind(HandlerA, t => t
       .toSelf([$i.allOf(Handler)])
-      .extends(Handler)
-    di.bind(HandlerB)
+      .extends(Handler))
+    di.bind(HandlerB, t => t
       .toSelf([HandlerA])
-      .extends(Handler)
+      .extends(Handler))
 
     await expect(di.init())
       .rejects
@@ -96,10 +96,10 @@ describe.skip('cycle detection beyond required constructor edges', function () {
     }
 
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(OptA)
-      .toSelf([$i.optional(OptB)])
-    di.bind(OptB)
-      .toSelf([OptA])
+    di.bind(OptA, t => t
+      .toSelf([$i.optional(OptB)]))
+    di.bind(OptB, t => t
+      .toSelf([OptA]))
 
     await expect(di.init())
       .rejects
@@ -118,10 +118,10 @@ describe.skip('partial checks must not drop circularReferences default', functio
     }
 
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-    di.bind(CycleA)
-      .toSelf([CycleB])
-    di.bind(CycleB)
-      .toSelf([CycleA])
+    di.bind(CycleA, t => t
+      .toSelf([CycleB]))
+    di.bind(CycleB, t => t
+      .toSelf([CycleA]))
 
     await expect(di.init())
       .rejects
@@ -144,12 +144,12 @@ describe.skip('singleton must not retain a destroyed refresh collaborator', func
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Token)
+    di.bind(Token, t => t
       .toSelf()
       .lifetime(Scopes.REFRESH)
-      .preDestroy(token => token.die())
-    di.bind(App)
-      .toSelf([Token])
+      .preDestroy(token => token.die()))
+    di.bind(App, t => t
+      .toSelf([Token]))
     await di.init()
 
     const app = di.get(App)
@@ -174,9 +174,9 @@ describe.skip('builder() request-scoped dependencies', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Sess)
+    di.bind(Sess, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
     await di.init()
 
     let builder!: () => Use
@@ -206,10 +206,10 @@ describe.skip('preDestroy on request-scoped beans', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(RequestSvc)
+    di.bind(RequestSvc, t => t
       .toSelf()
       .lifetime(Scopes.REQUEST)
-      .preDestroy(svc => svc.die())
+      .preDestroy(svc => svc.die()))
     await di.init()
 
     await di.requestScopeManager.run(async function () {

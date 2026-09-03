@@ -10,9 +10,9 @@ describe('Request scope memory', function () {
     class ReqSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ReqSvc)
+    di.bind(ReqSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
 
     await di.init()
 
@@ -34,9 +34,9 @@ describe('Request scope memory', function () {
     class ReqSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ReqSvc)
+    di.bind(ReqSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
 
     await di.init()
 
@@ -59,9 +59,9 @@ describe('Request scope memory', function () {
     class ReqSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ReqSvc)
+    di.bind(ReqSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
 
     await di.init()
 

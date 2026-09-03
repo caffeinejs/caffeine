@@ -37,12 +37,12 @@ describe('$i.object', function () {
   async function container() {
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(Alpha).toSelf().extends(Plugin).order(1)
-    di.bind(Beta).toSelf().extends(Plugin).order(2)
-    di.bind(Singleton).toSelf()
-    di.bind(Transient).toSelf().lifetime(Scopes.TRANSIENT)
-    di.bindValuesProvider<{ database: { host: string, port: number } }>()
-      .toValue({ database: { host: 'localhost', port: 5432 } })
+    di.bind(Alpha, t => t.toSelf().extends(Plugin).order(1))
+    di.bind(Beta, t => t.toSelf().extends(Plugin).order(2))
+    di.bind(Singleton, t => t.toSelf())
+    di.bind(Transient, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+    di.bindValuesProvider<{ database: { host: string, port: number } }>(t => t
+      .toValue({ database: { host: 'localhost', port: 5432 } }))
 
     await di.init()
 
@@ -98,7 +98,7 @@ describe('$i.object', function () {
   describe('given a mapped injection', function () {
     it('should deliver a Map keyed by the binding name', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Alpha).toSelf().names(kMovie)
+      di.bind(Alpha, t => t.toSelf().names(kMovie))
       await di.init()
 
       const bag = di.resolver($i.object({ movies: $i.mapped(kMovie) }))()
@@ -157,7 +157,7 @@ describe('$i.object', function () {
     it('should resolve it as an injection, in every form a key takes', async function () {
       const kNamed = token<Singleton>(Symbol('object-named-key'))
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Singleton).toSelf().names(kNamed)
+      di.bind(Singleton, t => t.toSelf().names(kNamed))
       await di.init()
 
       const bag = di.resolver($i.object({

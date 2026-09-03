@@ -119,10 +119,10 @@ export class ErrorHandlingServiceConfigurer implements Service {
       }
     }
 
-    kit.container.bind(ErrorHandlerProvider)
+    kit.container.bind(ErrorHandlerProvider, t => t
       .toValue(new ErrorHandlerProvider(handlers))
       .lifetime(Scopes.SINGLETON)
-      .internal()
+      .internal())
 
     return Promise.resolve()
   }

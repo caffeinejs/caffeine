@@ -1,21 +1,20 @@
 import { kAspectPointcuts, type Pointcut } from './aop.js'
-import { BinderOptions } from './binder_options.js'
+import { BindingSpec } from './binding_spec.js'
 
 /**
- * Fluent builder returned by {@link AOPBinder} factory methods for configuring an AOP aspect binding.
- * Extends {@link BinderOptions} with a `.pointcuts()` method to declare which targets this aspect intercepts.
+ * Configures a manually registered AOP aspect. Extends {@link BindingSpec} with `.pointcuts()`, which declares
+ * the targets the aspect intercepts.
  *
  * @example
  * ```ts
- * container
- *   .aspect(LoggingAspect)
+ * container.aspect(LoggingAspect, t => t
  *   .toSelf()
  *   .pointcuts($aop.forClass(UserService, 'findUser'))
  *   .conditional(ctx => process.env.NODE_ENV === 'production')
- *   .order(1)
+ *   .order(1))
  * ```
  */
-export class AOPBinderOptions<T> extends BinderOptions<T> {
+export class AspectSpec<TValue, K = unknown> extends BindingSpec<TValue, K> {
   /**
    * Sets the pointcuts this aspect intercepts.
    *
@@ -24,7 +23,6 @@ export class AOPBinderOptions<T> extends BinderOptions<T> {
    */
   pointcuts(first: Pointcut, ...rest: Pointcut[]): this {
     this.binding.tags.set(kAspectPointcuts, [first, ...rest])
-    this.sync()
 
     return this
   }

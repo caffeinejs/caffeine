@@ -29,10 +29,10 @@ class Absent { }
 describe('resolver()', function () {
   async function container() {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(A).toSelf().extends(Validator)
-    di.bind(B).toSelf().extends(Validator)
-    di.bind(Singleton).toSelf()
-    di.bind(Transient).toSelf().lifetime(Scopes.TRANSIENT)
+    di.bind(A, t => t.toSelf().extends(Validator))
+    di.bind(B, t => t.toSelf().extends(Validator))
+    di.bind(Singleton, t => t.toSelf())
+    di.bind(Transient, t => t.toSelf().lifetime(Scopes.TRANSIENT))
     await di.init()
     return di
   }

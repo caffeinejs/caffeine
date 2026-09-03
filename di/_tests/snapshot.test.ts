@@ -18,7 +18,7 @@ describe('ContainerSnapshot', function () {
   describe('snapshot()', function () {
     it('captures pre-init value bindings — new container resolves correctly', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('db-url')
+      di.bind(kDb, t => t.toValue('db-url'))
 
       const snap = di.snapshot()
 
@@ -32,7 +32,7 @@ describe('ContainerSnapshot', function () {
 
     it('captures post-init value bindings — new container resolves correctly', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('db-url')
+      di.bind(kDb, t => t.toValue('db-url'))
       await di.init()
 
       const snap = di.snapshot()
@@ -47,7 +47,7 @@ describe('ContainerSnapshot', function () {
 
     it('excludes internal bindings from snapshot', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('db-url')
+      di.bind(kDb, t => t.toValue('db-url'))
       await di.init()
 
       const snap = di.snapshot()
@@ -59,7 +59,7 @@ describe('ContainerSnapshot', function () {
       class Svc {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc).toClass(Svc)
+      di.bind(Svc, t => t.toClass(Svc))
       await di.init()
 
       const original = di.get(Svc)
@@ -80,7 +80,7 @@ describe('ContainerSnapshot', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kSvc).toFactory(() => new Svc())
+      di.bind(kSvc, t => t.toFactory(() => new Svc()))
       await di.init()
 
       const testDi = newContainerFromSnapshot(di.snapshot())
@@ -91,8 +91,8 @@ describe('ContainerSnapshot', function () {
 
     it('multiple bindings are all captured', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('db-url')
-      di.bind(kAPI).toValue('api-url')
+      di.bind(kDb, t => t.toValue('db-url'))
+      di.bind(kAPI, t => t.toValue('api-url'))
       await di.init()
 
       const snap = di.snapshot()
@@ -110,11 +110,11 @@ describe('ContainerSnapshot', function () {
   describe('test doubles via snapshot', function () {
     it('override replaces snapshot binding in new container', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('real-db')
+      di.bind(kDb, t => t.toValue('real-db'))
       await di.init()
 
       const testDi = newContainerFromSnapshot(di.snapshot())
-      testDi.bind(kDb).toValue('mock-db')
+      testDi.bind(kDb, t => t.toValue('mock-db'))
       await testDi.init()
 
       expect(testDi.get(kDb)).toBe('mock-db')
@@ -122,11 +122,11 @@ describe('ContainerSnapshot', function () {
 
     it('snapshot container is independent — overrides do not affect original', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('real-db')
+      di.bind(kDb, t => t.toValue('real-db'))
       await di.init()
 
       const testDi = newContainerFromSnapshot(di.snapshot())
-      testDi.bind(kDb).toValue('mock-db')
+      testDi.bind(kDb, t => t.toValue('mock-db'))
       await testDi.init()
 
       expect(di.get(kDb)).toBe('real-db')
@@ -137,8 +137,8 @@ describe('ContainerSnapshot', function () {
   describe('filter() and exclude()', function () {
     it('exclude() removes specified keys', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('db-url')
-      di.bind(kAPI).toValue('api-url')
+      di.bind(kDb, t => t.toValue('db-url'))
+      di.bind(kAPI, t => t.toValue('api-url'))
       await di.init()
 
       const snap = di.snapshot().exclude(kDb)
@@ -154,9 +154,9 @@ describe('ContainerSnapshot', function () {
 
     it('filter() keeps only matching bindings', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('db-url')
-        .labels(kLabel)
-      di.bind(kAPI).toValue('api-url')
+      di.bind(kDb, t => t.toValue('db-url')
+        .labels(kLabel))
+      di.bind(kAPI, t => t.toValue('api-url'))
       await di.init()
 
       const snap = di.snapshot().filter((_, binding) => binding.labels.includes(kLabel))
@@ -172,7 +172,7 @@ describe('ContainerSnapshot', function () {
 
     it('filter() returning false for all produces empty snapshot', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb).toValue('db-url')
+      di.bind(kDb, t => t.toValue('db-url'))
       await di.init()
 
       const snap = di.snapshot().filter(() => false)
@@ -184,7 +184,7 @@ describe('ContainerSnapshot', function () {
   describe('newContainerFromSnapshot()', function () {
     it('accepts options that merge with snapshot', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['prod'] })
-      di.bind(kDb).toValue('prod-db')
+      di.bind(kDb, t => t.toValue('prod-db'))
       await di.init()
 
       const testDi = newContainerFromSnapshot(di.snapshot(), { profiles: ['test'] })

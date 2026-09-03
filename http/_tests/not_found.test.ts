@@ -59,7 +59,7 @@ describe('unmatched routes', () => {
     }
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
-    app.container.bind(RecordingFallback).toClass(RecordingFallback).extends(NotFoundFallback)
+    app.container.bind(RecordingFallback, t => t.toClass(RecordingFallback).extends(NotFoundFallback))
     await app.ready()
 
     await app.fetch('/nope?q=1')
@@ -80,7 +80,7 @@ describe('unmatched routes', () => {
     }
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
-    app.container.bind(ShellFallback).toClass(ShellFallback).extends(NotFoundFallback)
+    app.container.bind(ShellFallback, t => t.toClass(ShellFallback).extends(NotFoundFallback))
     await app.ready()
 
     const res = await app.fetch('/client/route?a=b')

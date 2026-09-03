@@ -209,7 +209,7 @@ describe('Named Dependencies', function () {
       it('should return array with one instance for class key', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
-          c.bind(LocalSvc).toSelf()
+          c.bind(LocalSvc, t => t.toSelf())
         })
         await di.init()
 
@@ -222,7 +222,7 @@ describe('Named Dependencies', function () {
         const kSymbol = token<any>(Symbol('getManyOptional-single'))
         const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
-          c.bind(kSymbol).toValue(42)
+          c.bind(kSymbol, t => t.toValue(42))
         })
         await di.init()
 
@@ -234,7 +234,7 @@ describe('Named Dependencies', function () {
       it('should return array with one instance for string key', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
-          c.bind(token<any>('str-key')).toValue('hello')
+          c.bind(token<any>('str-key'), t => t.toValue('hello'))
         })
         await di.init()
 
@@ -287,7 +287,7 @@ describe('has() and a named binding', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(NamedSvc).toSelf().names(kAlias)
+    di.bind(NamedSvc, t => t.toSelf().names(kAlias))
     await di.init()
 
     // The same index `get` resolves from, so the two cannot disagree.

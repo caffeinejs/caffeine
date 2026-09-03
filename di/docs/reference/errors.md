@@ -84,8 +84,9 @@ Thrown when `@Injectable` is applied to the same class more than once.
 
 **Code:** `ERR_INVALID_BINDING`
 
-Thrown when the `Binder` or `BinderOptions` fluent API is used incorrectly —
-for example, calling `toSelf()` on a non-class key.
+Thrown when the `BindingSpec` fluent API is used incorrectly — an injection
+count that does not match the constructor, a scope that was never registered, or
+a component listed among its own dependencies.
 
 **Fix:** Read the error message for the specific constraint that was violated.
 

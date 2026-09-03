@@ -9,10 +9,10 @@ export class CacheServiceConfigurer implements Service {
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     if (!kit.container.has(CacheStore)) {
-      kit.container.bind(CacheStore)
+      kit.container.bind(CacheStore, t => t
         .toClass(MemoryCacheStore)
         .lifetime(Scopes.SINGLETON)
-        .internal()
+        .internal())
     }
 
     return Promise.resolve()

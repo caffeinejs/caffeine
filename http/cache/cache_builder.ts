@@ -83,20 +83,22 @@ export class CacheBuilder<C = unknown> implements Service {
   }
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    if (this.#store !== undefined) {
-      kit.container.bind(CacheStore).toValue(this.#store).internal()
+    const store = this.#store
+    if (store !== undefined) {
+      kit.container.bind(CacheStore, t => t.toValue(store).internal())
     }
 
-    if (this.#etagGenerator !== undefined) {
-      kit.container.bind(kETagGenerator).toValue(this.#etagGenerator).internal()
+    const etagGenerator = this.#etagGenerator
+    if (etagGenerator !== undefined) {
+      kit.container.bind(kETagGenerator, t => t.toValue(etagGenerator).internal())
     }
 
     kit.container
-      .bind(kCacheStatusHeader)
+      .bind(kCacheStatusHeader, t => t
       // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but a
       // header name that followed a refresh is the behaviour every other config value has.
-      .toFactory(() => this.#slice!.config.statusHeader)
-      .internal()
+        .toFactory(() => this.#slice!.config.statusHeader)
+        .internal())
 
     return Promise.resolve()
   }

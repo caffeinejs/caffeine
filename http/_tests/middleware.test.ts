@@ -188,8 +188,8 @@ describe('middleware pipeline', () => {
 
   it('resolves a middleware class from the container, with its dependencies injected', async () => {
     const app = newApp(container => {
-      container.bind(Tag).toValue(new Tag('injected'))
-      container.bind(Tagger).toClass(Tagger, [Tag])
+      container.bind(Tag, t => t.toValue(new Tag('injected')))
+      container.bind(Tagger, t => t.toClass(Tagger, [Tag]))
     }).build()
     app.use(Tagger)
     await app.ready()
@@ -202,8 +202,8 @@ describe('middleware pipeline', () => {
 
   it('resolves a middleware registered by container key', async () => {
     const app = newApp(container => {
-      container.bind(Tag).toValue(new Tag('by-key'))
-      container.bind(kTagger).toClass(Tagger, [Tag])
+      container.bind(Tag, t => t.toValue(new Tag('by-key')))
+      container.bind(kTagger, t => t.toClass(Tagger, [Tag]))
     }).build()
     app.use(kTagger)
     await app.ready()
@@ -218,7 +218,7 @@ describe('middleware pipeline', () => {
     counterInstances = 0
 
     const scoped = newApp(container => {
-      container.bind(Counter).toClass(Counter).lifetime(Scopes.REQUEST)
+      container.bind(Counter, t => t.toClass(Counter).lifetime(Scopes.REQUEST))
     }).build()
     scoped.use(Counter)
     await scoped.ready()
@@ -229,7 +229,7 @@ describe('middleware pipeline', () => {
     await scoped.close()
 
     const singleton = newApp(container => {
-      container.bind(Counter).toClass(Counter)
+      container.bind(Counter, t => t.toClass(Counter))
     }).build()
     singleton.use(Counter)
     await singleton.ready()

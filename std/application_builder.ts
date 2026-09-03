@@ -76,7 +76,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     // dependency: a refresh that fails for one feature is contained rather than thrown, so it needs somewhere
     // to be heard.
     this.#config.warn = message => detectSignalDispatcher().warn(message)
-    this.#container.bind(kConfigDefinition).toValue(this.#config)
+    this.#container.bind(kConfigDefinition, t => t.toValue(this.#config))
     this.#container.addModules(ConfigModule(this.#config))
   }
 

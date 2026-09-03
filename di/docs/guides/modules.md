@@ -9,12 +9,12 @@ registers extra bindings. Pass modules through `Options.modules` or
 import { CaffeineIoC, mod, type ContainerBindingOps } from '@caffeinejs/di'
 
 const databaseModule = mod('database', (di: ContainerBindingOps) => {
-  di.bind(Database).toClass(PostgresDatabase)
-  di.bind(UserRepository).toClass(UserRepository, [Database])
+  di.bind(Database, t => t.toClass(PostgresDatabase))
+  di.bind(UserRepository, t => t.toClass(UserRepository, [Database]))
 })
 
 const emailModule = mod('email', (di: ContainerBindingOps) => {
-  di.bind(Mailer).toClass(SmtpMailer)
+  di.bind(Mailer, t => t.toClass(SmtpMailer))
 })
 
 const di = new CaffeineIoC({ modules: [databaseModule, emailModule] })
@@ -31,7 +31,7 @@ export const orderModule = mod({
   needs: () => [userModule],
   provides: () => [OrderController],
   fn: di => {
-    di.bind(OrderProcessor).toSelf()
+    di.bind(OrderProcessor, t => t.toSelf())
   },
 })
 ```
@@ -47,7 +47,7 @@ Use `mod(name, fn)` to attach a debug name. The name appears in hook events.
 import { mod } from '@caffeinejs/di'
 
 const databaseModule = mod('database', (di) => {
-  di.bind(Database).toClass(PostgresDatabase)
+  di.bind(Database, t => t.toClass(PostgresDatabase))
 })
 ```
 
@@ -60,7 +60,7 @@ Modules can be async. The container awaits each async `fn` during `init()`.
 ```ts
 const configModule = mod('config', async (di) => {
   const config = await loadConfigFromRemote()
-  di.bind(AppConfig).toValue(config)
+  di.bind(AppConfig, t => t.toValue(config))
 })
 
 const di = new CaffeineIoC({ modules: [configModule] })
@@ -78,21 +78,21 @@ evaluated once during `init()`, so the container is partially available:
 import { type ContainerBindingOps } from '@caffeinejs/di'
 
 function storageModule(di: ContainerBindingOps) {
-  di.bind(BlobStorage)
+  di.bind(BlobStorage, t => t
     .toClass(S3BlobStorage)
-    .conditional(ctx => ctx.container.has(AppConfig))
+    .conditional(ctx => ctx.container.has(AppConfig)))
 }
 ```
 
 Conditionals can be async:
 
 ```ts
-di.bind(FeatureFlags)
+di.bind(FeatureFlags, t => t
   .toClass(RemoteFeatureFlags)
   .conditional(async ctx => {
     const cfg = ctx.container.has(AppConfig)
     return cfg && process.env.NODE_ENV === 'production'
-  })
+  }))
 ```
 
 Plain `if`/`else` also works when the condition is known at module-registration
@@ -101,9 +101,9 @@ time (before `init()`):
 ```ts
 function storageModule(di: ContainerBindingOps) {
   if (process.env.NODE_ENV === 'test') {
-    di.bind(BlobStorage).toClass(InMemoryBlobStorage)
+    di.bind(BlobStorage, t => t.toClass(InMemoryBlobStorage))
   } else {
-    di.bind(BlobStorage).toClass(S3BlobStorage)
+    di.bind(BlobStorage, t => t.toClass(S3BlobStorage))
   }
 }
 ```
@@ -124,7 +124,7 @@ const parent = new CaffeineIoC({ modules: [commonModule] })
 await parent.init()
 
 const child = parent.newChild()
-child.bind(TenantConfig).toValue(tenantConfig)
+child.bind(TenantConfig, t => t.toValue(tenantConfig))
 await child.init()
 
 const svc = child.get(UserService) // resolved from parent

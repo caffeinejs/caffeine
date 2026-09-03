@@ -29,10 +29,10 @@ import { CaffeineIoC } from '@caffeinejs/di'
 
 const di = new CaffeineIoC({
   modules: [mod => {
-    mod.bind(DatabasePool).toAsyncFactory(async ctx => {
+    mod.bind(DatabasePool, t => t.toAsyncFactory(async ctx => {
       const config = ctx.container.get(AppConfig)
       return createPool(config.databaseUrl)
-    })
+    }))
   }],
 })
 

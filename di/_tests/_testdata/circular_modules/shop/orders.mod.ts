@@ -10,6 +10,6 @@ export const ordersModule: Module = mod({
   provides: () => [OrderService],
   fn: container => {
     moduleFnCalls.push('orders')
-    container.bind(OrderService).toClass(OrderService, [UserRepository])
+    container.bind(OrderService, t => t.toClass(OrderService, [UserRepository]))
   },
 })

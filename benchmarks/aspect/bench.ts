@@ -56,10 +56,10 @@ class StackedAspect2 implements MethodAspect<WithStackedAspects> {
 void StackedAspect2
 
 const di = new CaffeineIoC()
-di.bind(Plain).toSelf()
-di.bind(WithBeforeAspect).toSelf()
-di.bind(WithAroundAspect).toSelf()
-di.bind(WithStackedAspects).toSelf()
+di.bind(Plain, t => t.toSelf())
+di.bind(WithBeforeAspect, t => t.toSelf())
+di.bind(WithAroundAspect, t => t.toSelf())
+di.bind(WithStackedAspects, t => t.toSelf())
 await di.init()
 
 const plain = di.get(Plain)

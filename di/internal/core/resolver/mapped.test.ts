@@ -57,12 +57,12 @@ describe('mappedFactory', function () {
       class InputWidget extends Widget {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ButtonWidget).toSelf()
+      di.bind(ButtonWidget, t => t.toSelf()
         .extends(Widget)
-        .names('button')
-      di.bind(InputWidget).toSelf()
+        .names('button'))
+      di.bind(InputWidget, t => t.toSelf()
         .extends(Widget)
-        .names('input')
+        .names('input'))
       await di.init()
 
       const resolver = mappedFactory(ctx(di, $i.mapped(Widget)))
@@ -80,10 +80,10 @@ describe('mappedFactory', function () {
       class StoreB extends Store {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(StoreA).toSelf()
-        .extends(Store)
-      di.bind(StoreB).toSelf()
-        .extends(Store)
+      di.bind(StoreA, t => t.toSelf()
+        .extends(Store))
+      di.bind(StoreB, t => t.toSelf()
+        .extends(Store))
       await di.init()
 
       const resolver = mappedFactory(ctx(di, $i.mapped(Store)))
@@ -99,11 +99,11 @@ describe('mappedFactory', function () {
       class PluginB extends Plugin {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(PluginA).toSelf()
+      di.bind(PluginA, t => t.toSelf()
         .extends(Plugin)
-        .names('alpha')
-      di.bind(PluginB).toSelf()
-        .extends(Plugin)
+        .names('alpha'))
+      di.bind(PluginB, t => t.toSelf()
+        .extends(Plugin))
       await di.init()
 
       const resolver = mappedFactory(ctx(di, $i.mapped(Plugin)))

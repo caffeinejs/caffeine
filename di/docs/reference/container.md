@@ -151,29 +151,35 @@ Like `wrap()` but resolves all bindings for `key` on each `provider.get()`.
 ### bind
 
 ```ts
-bind<T>(key: InjectionToken<T>): Binder<T>
+bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 ```
 
-Opens a new binding for `key` and returns a `Binder` to configure it. See the
-[Binder reference](./binder.md) for the full fluent API.
+Describes a binding for `key` through the `BindingSpec` handed to `configure`, and registers
+it once, when `configure` returns. See the [BindingSpec reference](./binding-spec.md) for the
+full fluent API.
+
+Returns the container, so bindings chain:
 
 ```ts
-di.bind(UserService).toSelf()
-di.bind(Logger).toClass(ConsoleLogger)
-di.bind(token<string>('version')).toValue('1.0.0')
+di.bind(UserService, t => t.toSelf())
+  .bind(Logger, t => t.toClass(ConsoleLogger))
+  .bind(token<string>('version'), t => t.toValue('1.0.0'))
 ```
+
+The binding is registered by the time `bind()` returns, so `has()`, `getBindings()` and
+`entries()` see it immediately — no `init()` required.
 
 ### rebind
 
 ```ts
-rebind<T>(key: InjectionToken<T>): Binder<T>
+rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 ```
 
-Removes any existing binding for `key`, then opens a new binding. The
-resulting `Binder` is identical to the one returned by `bind()`.
+Removes any existing binding for `key`, then describes a new one. `configure` receives the
+same `BindingSpec` that `bind()` provides.
 
 ```ts
-di.rebind(Logger).toClass(StructuredLogger)
+di.rebind(Logger, t => t.toClass(StructuredLogger))
 ```
 
 ### autoWire
@@ -401,7 +407,7 @@ const parent = new CaffeineIoC({ modules: [sharedModule] })
 await parent.init()
 
 const child = parent.newChild()
-child.bind(TenantConfig).toValue(config)
+child.bind(TenantConfig, t => t.toValue(config))
 await child.init()
 ```
 

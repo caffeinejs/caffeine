@@ -64,13 +64,13 @@ describe('Custom Binding Metadata', function () {
     it('should resolve dependencies based on the return of the Symbols.injections function', async function () {
       const di = new CaffeineIoC({ metadataReader: builtInMetadataReader })
 
-      di.bind(Dep)
+      di.bind(Dep, t => t
+        .toSelf())
+      di.bind(Nm, t => t
         .toSelf()
-      di.bind(Nm)
-        .toSelf()
-        .names(kNm)
-      di.bind(Root)
-        .toSelf()
+        .names(kNm))
+      di.bind(Root, t => t
+        .toSelf())
       await di.init()
 
       const root = di.get(Root)
@@ -97,8 +97,8 @@ describe('Custom Binding Metadata', function () {
 
       class Svc {}
       const di = new CaffeineIoC({ metadataReader: custom, decorators: false })
-      di.bind(Svc)
-        .toSelf()
+      di.bind(Svc, t => t
+        .toSelf())
 
       expect(spy)
         .toHaveBeenCalled()

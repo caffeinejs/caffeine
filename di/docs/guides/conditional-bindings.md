@@ -265,20 +265,20 @@ import { CaffeineIoC } from '@caffeinejs/di'
 
 const di = new CaffeineIoC({ decorators: false })
 
-di.bind(StripeEUGateway)
+di.bind(StripeEUGateway, t => t
   .toSelf()
   .extends(PaymentGateway)
-  .conditional(() => process.env.REGION === 'eu')
+  .conditional(() => process.env.REGION === 'eu'))
 
-di.bind(BraintreeUSGateway)
+di.bind(BraintreeUSGateway, t => t
   .toSelf()
   .extends(PaymentGateway)
-  .conditional(() => process.env.REGION === 'us')
+  .conditional(() => process.env.REGION === 'us'))
 
-di.bind(MockPaymentGateway)
+di.bind(MockPaymentGateway, t => t
   .toSelf()
   .extends(PaymentGateway)
-  .fallback()
+  .fallback())
 
 await di.init()
 ```

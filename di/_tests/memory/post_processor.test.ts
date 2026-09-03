@@ -20,8 +20,8 @@ describe('PostProcessor memory', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(postProcessor)
-    di.bind(Svc)
-      .toSelf()
+    di.bind(Svc, t => t
+      .toSelf())
     await di.init()
 
     const isCollected = trackForCollection(di.get(Svc)!)
@@ -50,8 +50,8 @@ describe('PostProcessor memory', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(postProcessor)
-    di.bind(Svc)
-      .toSelf()
+    di.bind(Svc, t => t
+      .toSelf())
     await di.init()
     di.get(Svc)
 

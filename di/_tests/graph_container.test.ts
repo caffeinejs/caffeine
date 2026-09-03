@@ -18,9 +18,9 @@ class ServiceD {
 describe('graph functions with container as iterable', function () {
   it('buildBindingGraph includes user-registered bindings', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceA).toClass(ServiceA, [ServiceB, ServiceC])
-    di.bind(ServiceB).toSelf()
-    di.bind(ServiceC).toSelf()
+    di.bind(ServiceA, t => t.toClass(ServiceA, [ServiceB, ServiceC]))
+    di.bind(ServiceB, t => t.toSelf())
+    di.bind(ServiceC, t => t.toSelf())
 
     const graph = buildBindingGraph(di)
     const labels = graph.nodes.map(n => n.label)
@@ -32,8 +32,8 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToText shows node label and scope for single binding', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceB).toSelf()
-      .lifetime(Scopes.TRANSIENT)
+    di.bind(ServiceB, t => t.toSelf()
+      .lifetime(Scopes.TRANSIENT))
 
     const output = graphToText(di)
 
@@ -43,10 +43,10 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToMarkdown shows injection edge when dependency registered', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceD).toClass(ServiceD, [ServiceA])
-    di.bind(ServiceA).toClass(ServiceA, [ServiceB, ServiceC])
-    di.bind(ServiceB).toSelf()
-    di.bind(ServiceC).toSelf()
+    di.bind(ServiceD, t => t.toClass(ServiceD, [ServiceA]))
+    di.bind(ServiceA, t => t.toClass(ServiceA, [ServiceB, ServiceC]))
+    di.bind(ServiceB, t => t.toSelf())
+    di.bind(ServiceC, t => t.toSelf())
 
     const output = graphToMarkdown(di)
 
@@ -60,11 +60,11 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToMermaid shows named-group edge for shared qualifier', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceA).toClass(ServiceA, [ServiceB, ServiceC])
-      .names('handler')
-    di.bind(ServiceB).toSelf()
-      .names('handler')
-    di.bind(ServiceC).toSelf()
+    di.bind(ServiceA, t => t.toClass(ServiceA, [ServiceB, ServiceC])
+      .names('handler'))
+    di.bind(ServiceB, t => t.toSelf()
+      .names('handler'))
+    di.bind(ServiceC, t => t.toSelf())
 
     const output = graphToMermaid(di)
 
@@ -75,8 +75,8 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToDot marks primary binding', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceB).toSelf()
-      .primary()
+    di.bind(ServiceB, t => t.toSelf()
+      .primary())
 
     const output = graphToDot(di)
 
@@ -87,9 +87,9 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToJSON serializes injection edges from container', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceA).toClass(ServiceA, [ServiceB, ServiceC])
-    di.bind(ServiceB).toSelf()
-    di.bind(ServiceC).toSelf()
+    di.bind(ServiceA, t => t.toClass(ServiceA, [ServiceB, ServiceC]))
+    di.bind(ServiceB, t => t.toSelf())
+    di.bind(ServiceC, t => t.toSelf())
 
     const parsed = JSON.parse(graphToJSON(di))
     const labels = parsed.nodes.map((n: { label: string }) => n.label)
@@ -106,9 +106,9 @@ describe('graph functions with container as iterable', function () {
 
   it('container Symbol.iterator and entries() produce same graph', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceA).toClass(ServiceA, [ServiceB, ServiceC])
-    di.bind(ServiceB).toSelf()
-    di.bind(ServiceC).toSelf()
+    di.bind(ServiceA, t => t.toClass(ServiceA, [ServiceB, ServiceC]))
+    di.bind(ServiceB, t => t.toSelf())
+    di.bind(ServiceC, t => t.toSelf())
 
     const fromIterator = buildBindingGraph(di)
     const fromEntries = buildBindingGraph(di.entries())

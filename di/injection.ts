@@ -92,6 +92,14 @@ export type ObjectInjection = InjectionDescriptor | ObjectInjections
 export type Injection<T = unknown> = InjectionToken<T> | InjectionDescriptor<T>
 
 /**
+ * One {@link Injection} per element of the parameter tuple `A`, in order.
+ *
+ * Mapping over a tuple preserves its length, so a dependency list is checked both positionally and by arity:
+ * a list shorter or longer than the constructor it is bound to does not typecheck.
+ */
+export type InjectionsFor<A extends readonly unknown[]> = { [K in keyof A]: Injection<A[K]> }
+
+/**
  * The value produced when `I` is resolved: the instance of a token, or the
  * encoded result type of an {@link InjectionDescriptor}.
  */
@@ -450,7 +458,7 @@ function just<T>(value: T): InjectionResult<T> {
  * ```ts
  * type AppConfig = { database: { host: string; port: number } }
  *
- * di.bindValuesProvider<AppConfig>().toValue({ database: { host: 'localhost', port: 5432 } })
+ * di.bindValuesProvider<AppConfig>(t => t.toValue({ database: { host: 'localhost', port: 5432 } }))
  *
  * @Injectable([
  *   $i.value<AppConfig>(cfg => cfg.database.host),
@@ -462,7 +470,7 @@ function just<T>(value: T): InjectionResult<T> {
  * }
  * ```
  */
-function value<T = unknown, R = unknown>(
+function value<T = unknown, R = any>(
   access: ((provider: T) => R) | string,
   defaultValue?: R,
 ): InjectionResult<R> {

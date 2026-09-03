@@ -130,9 +130,9 @@ descriptor in the `deps` array when calling `bind().toSelf()` or `bind().toClass
 ```ts
 const di = new CaffeineIoC()
 
-di.bind(RequiredValidator).toSelf().extends(Validator)
-di.bind(LengthValidator).toSelf().extends(Validator)
-di.bind(ValidationPipeline).toSelf([allOf(Validator)])
+di.bind(RequiredValidator, t => t.toSelf().extends(Validator))
+di.bind(LengthValidator, t => t.toSelf().extends(Validator))
+di.bind(ValidationPipeline, t => t.toSelf([allOf(Validator)]))
 
 await di.init()
 

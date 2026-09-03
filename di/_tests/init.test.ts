@@ -15,10 +15,10 @@ describe('init() ready state', function () {
       }
     }
 
-    di.bind(EagerBean)
+    di.bind(EagerBean, t => t
       .toSelf()
       .lifetime(Scopes.SINGLETON)
-      .lazy(false)
+      .lazy(false))
     await di.init()
 
     expect(readyDuringConstruction)
@@ -36,10 +36,10 @@ describe('init() ready state', function () {
       }
     }
 
-    di.bind(BrokenBean)
+    di.bind(BrokenBean, t => t
       .toSelf()
       .lifetime(Scopes.SINGLETON)
-      .lazy(false)
+      .lazy(false))
 
     await expect(di.init()).rejects.toThrow('init failed')
     expect(di.ready)
@@ -52,18 +52,18 @@ describe('Binding registration after init()', function () {
 
   it('should throw when calling bind() after init()', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc).toSelf()
+    di.bind(Svc, t => t.toSelf())
     await di.init()
 
-    expect(() => di.bind(Svc).toSelf()).toThrow(ErrInvalidContainerState)
+    expect(() => di.bind(Svc, t => t.toSelf())).toThrow(ErrInvalidContainerState)
   })
 
   it('should throw when calling rebind() after init()', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc).toSelf()
+    di.bind(Svc, t => t.toSelf())
     await di.init()
 
-    expect(() => di.rebind(Svc).toSelf()).toThrow(ErrInvalidContainerState)
+    expect(() => di.rebind(Svc, t => t.toSelf())).toThrow(ErrInvalidContainerState)
   })
 
   it('should throw when calling autoWire() after init()', async function () {

@@ -19,10 +19,10 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Dep)
-        .toSelf()
-      di.bind(Owner)
-        .toSelf([$i.optional($i.defer(() => Dep))])
+      di.bind(Dep, t => t
+        .toSelf())
+      di.bind(Owner, t => t
+        .toSelf([$i.optional($i.defer(() => Dep))]))
       await di.init()
 
       const owner = di.get(Owner)
@@ -41,8 +41,8 @@ describe('$i.defer() composition', function () {
         }
 
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(Owner)
-          .toSelf([$i.optional($i.defer(() => MissingDep))])
+        di.bind(Owner, t => t
+          .toSelf([$i.optional($i.defer(() => MissingDep))]))
         await di.init()
 
         const owner = di.get(Owner)
@@ -73,14 +73,14 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(PluginA)
+      di.bind(PluginA, t => t
         .toSelf()
-        .names(kPlugin)
-      di.bind(PluginB)
+        .names(kPlugin))
+      di.bind(PluginB, t => t
         .toSelf()
-        .names(kPlugin)
-      di.bind(Host)
-        .toSelf([$i.allOf($i.defer(() => kPlugin))])
+        .names(kPlugin))
+      di.bind(Host, t => t
+        .toSelf([$i.allOf($i.defer(() => kPlugin))]))
       await di.init()
 
       const host = di.get(Host)
@@ -99,8 +99,8 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Host)
-        .toSelf([$i.allOf($i.defer(() => kAbsent))])
+      di.bind(Host, t => t
+        .toSelf([$i.allOf($i.defer(() => kAbsent))]))
       await di.init()
 
       const host = di.get(Host)
@@ -116,12 +116,12 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
-      di.bind(TransientDep)
+      di.bind(TransientDep, t => t
         .toSelf()
-        .lifetime(Scopes.TRANSIENT)
-      di.bind(SingletonOwner)
+        .lifetime(Scopes.TRANSIENT))
+      di.bind(SingletonOwner, t => t
         .toSelf([$i.allOf($i.defer(() => TransientDep))])
-        .lifetime(Scopes.SINGLETON)
+        .lifetime(Scopes.SINGLETON))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })

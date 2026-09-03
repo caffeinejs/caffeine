@@ -19,7 +19,7 @@ function tracker(name = 'track') {
           return 'track'
         },
         bootstrap(kit) {
-          kit.container.bind(kSentinel).toValue({ value: state.value })
+          kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
           return Promise.resolve()
         },
       }

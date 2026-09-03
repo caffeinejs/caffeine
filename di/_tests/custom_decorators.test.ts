@@ -59,8 +59,8 @@ describe('Custom decorator primitives', function () {
 
     it('should expose injectableProperties from metadata in the factory', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDep).toClass(FieldDep)
-      di.bind(FieldConsumer).toSelf()
+      di.bind(kDep, t => t.toClass(FieldDep))
+      di.bind(FieldConsumer, t => t.toSelf())
 
       await di.init()
 
@@ -102,8 +102,8 @@ describe('Custom decorator primitives', function () {
 
     it('should compose Injectable + Scoped into a single decorator', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(TransientSvc)
-        .toSelf()
+      di.bind(TransientSvc, t => t
+        .toSelf())
       await di.init()
       const a = di.get(TransientSvc)
       const b = di.get(TransientSvc)
@@ -151,10 +151,10 @@ describe('Custom decorator primitives', function () {
 
     it('should build a custom field injection decorator that resolves correctly', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kCustomDep)
-        .toClass(TargetService)
-      di.bind(TargetConsumer)
-        .toSelf()
+      di.bind(kCustomDep, t => t
+        .toClass(TargetService))
+      di.bind(TargetConsumer, t => t
+        .toSelf())
       await di.init()
       const consumer = di.get(TargetConsumer) as TargetConsumer
       expect(consumer.dep)

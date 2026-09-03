@@ -39,8 +39,8 @@ describe('@Fallback() on a class', function () {
       }
     }
 
-    di.bind(DefaultService)
-      .toClass(OverrideService)
+    di.bind(DefaultService, t => t
+      .toClass(OverrideService))
     await di.init()
 
     expect((di.get(DefaultService) as OverrideService).value())
@@ -119,7 +119,7 @@ describe('@Fallback() on a @Provides method', function () {
 
 // ----- .fallback() fluent API ------------------------------------------------
 
-describe('.fallback() on BinderOptions', function () {
+describe('.fallback() on BindingSpec', function () {
   it('should register the binding when no other binding exists for the key', async function () {
     const kFlu = token<any>(Symbol('flu-only'))
 
@@ -131,9 +131,9 @@ describe('.fallback() on BinderOptions', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu)
+    di.bind(kFlu, t => t
       .toClass(FluLib)
-      .fallback()
+      .fallback())
     await di.init()
 
     expect(di.has(kFlu))
@@ -159,11 +159,11 @@ describe('.fallback() on BinderOptions', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu2)
+    di.bind(kFlu2, t => t
       .toClass(FluLib)
-      .fallback()
-    di.bind(kFlu2)
-      .toClass(FluConsumer)
+      .fallback())
+    di.bind(kFlu2, t => t
+      .toClass(FluConsumer))
     await di.init()
 
     expect((di.get(kFlu2) as FluConsumer).tag())
@@ -248,7 +248,7 @@ describe('@Fallback() + @ConditionalOn() — conditional evaluation', function (
 
   it('should skip a @Fallback + @ConditionalOn bean when a competing binding already exists', async function () {
     const di = new CaffeineIoC({ profiles: ['fb-cond-skip'] })
-    di.bind(FbCondSkip).toValue('override' as unknown as FbCondSkip)
+    di.bind(FbCondSkip, t => t.toValue('override' as unknown as FbCondSkip))
     await di.init()
 
     expect(di.get(FbCondSkip)).toBe('override')

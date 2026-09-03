@@ -148,10 +148,10 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(CycleA)
-        .toSelf([CycleB])
-      di.bind(CycleB)
-        .toSelf([CycleA])
+      di.bind(CycleA, t => t
+        .toSelf([CycleB]))
+      di.bind(CycleB, t => t
+        .toSelf([CycleA]))
 
       await expect(di.init()).rejects.toThrow(ErrCircularDependency)
     })
@@ -166,10 +166,10 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(CycleA)
-        .toSelf([CycleB])
-      di.bind(CycleB)
-        .toSelf([CycleA])
+      di.bind(CycleA, t => t
+        .toSelf([CycleB]))
+      di.bind(CycleB, t => t
+        .toSelf([CycleA]))
 
       let message = ''
       try {
@@ -200,12 +200,12 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(NodeA)
-        .toSelf([NodeB])
-      di.bind(NodeB)
-        .toSelf([NodeC])
-      di.bind(NodeC)
-        .toSelf([NodeA])
+      di.bind(NodeA, t => t
+        .toSelf([NodeB]))
+      di.bind(NodeB, t => t
+        .toSelf([NodeC]))
+      di.bind(NodeC, t => t
+        .toSelf([NodeA]))
 
       await expect(di.init()).rejects.toThrow(ErrCircularDependency)
     })
@@ -220,12 +220,12 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(OptA)
+      di.bind(OptA, t => t
         .toSelf([$i.optional(OptB)])
-        .lazy()
-      di.bind(OptB)
+        .lazy())
+      di.bind(OptB, t => t
         .toSelf([OptA])
-        .lazy()
+        .lazy())
 
       await di.init()
     })
@@ -240,10 +240,10 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(DeferA)
-        .toSelf([$i.defer(() => DeferB)])
-      di.bind(DeferB)
-        .toSelf([DeferA])
+      di.bind(DeferA, t => t
+        .toSelf([$i.defer(() => DeferB)]))
+      di.bind(DeferB, t => t
+        .toSelf([DeferA]))
 
       await di.init()
 
@@ -294,12 +294,12 @@ describe('Circular References', function () {
       class HandlerC extends Handler {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA).toSelf([$i.allOf($i.defer(() => Handler))])
-        .extends(Handler)
-      di.bind(HandlerB).toSelf()
-        .extends(Handler)
-      di.bind(HandlerC).toSelf()
-        .extends(Handler)
+      di.bind(HandlerA, t => t.toSelf([$i.allOf($i.defer(() => Handler))])
+        .extends(Handler))
+      di.bind(HandlerB, t => t.toSelf()
+        .extends(Handler))
+      di.bind(HandlerC, t => t.toSelf()
+        .extends(Handler))
       await di.init()
 
       const a = di.get(HandlerA)
@@ -317,8 +317,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA).toSelf([$i.allOf($i.defer(() => Handler))])
-        .extends(Handler)
+      di.bind(HandlerA, t => t.toSelf([$i.allOf($i.defer(() => Handler))])
+        .extends(Handler))
       await di.init()
 
       const a = di.get(HandlerA)
@@ -336,10 +336,10 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA).toSelf()
-        .extends(Handler)
-      di.bind(HandlerB).toSelf()
-        .extends(Handler)
+      di.bind(HandlerA, t => t.toSelf()
+        .extends(Handler))
+      di.bind(HandlerB, t => t.toSelf()
+        .extends(Handler))
       await di.init()
 
       const dispatcher = di.build(Dispatcher, [$i.allOf($i.defer(() => Handler))])
@@ -359,9 +359,9 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA).toSelf()
-      di.bind(DepB).toSelf()
-      di.bind(Consumer).toSelf([$i.object({ a: $i.defer(() => DepA), b: DepB })])
+      di.bind(DepA, t => t.toSelf())
+      di.bind(DepB, t => t.toSelf())
+      di.bind(Consumer, t => t.toSelf([$i.object({ a: $i.defer(() => DepA), b: DepB })]))
       await di.init()
 
       const consumer = di.get(Consumer)
@@ -381,8 +381,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ServiceA).toSelf([$i.object({ b: $i.defer(() => ServiceB) })])
-      di.bind(ServiceB).toSelf([ServiceA])
+      di.bind(ServiceA, t => t.toSelf([$i.object({ b: $i.defer(() => ServiceB) })]))
+      di.bind(ServiceB, t => t.toSelf([ServiceA]))
       await di.init()
 
       const a = di.get(ServiceA)
@@ -398,8 +398,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Dep).toSelf()
-      di.bind(Consumer).toSelf([$i.object({ dep: $i.optional($i.defer(() => Dep)) })])
+      di.bind(Dep, t => t.toSelf())
+      di.bind(Consumer, t => t.toSelf([$i.object({ dep: $i.optional($i.defer(() => Dep)) })]))
       await di.init()
 
       const consumer = di.get(Consumer)
@@ -414,7 +414,7 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Consumer).toSelf([$i.object({ dep: $i.optional($i.defer(() => Dep)) })])
+      di.bind(Consumer, t => t.toSelf([$i.object({ dep: $i.optional($i.defer(() => Dep)) })]))
       await di.init()
 
       const consumer = di.get(Consumer)
@@ -432,11 +432,11 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA).toSelf()
-        .extends(Handler)
-      di.bind(HandlerB).toSelf()
-        .extends(Handler)
-      di.bind(Consumer).toSelf([$i.object({ handlers: $i.allOf($i.defer(() => Handler)) })])
+      di.bind(HandlerA, t => t.toSelf()
+        .extends(Handler))
+      di.bind(HandlerB, t => t.toSelf()
+        .extends(Handler))
+      di.bind(Consumer, t => t.toSelf([$i.object({ handlers: $i.allOf($i.defer(() => Handler)) })]))
       await di.init()
 
       const consumer = di.get(Consumer)

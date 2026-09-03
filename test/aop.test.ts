@@ -70,7 +70,7 @@ function makeContainer(...extra: Array<(di: CaffeineIoC) => void>) {
   const di = new CaffeineIoC({ profiles: ['guard-e2e'] })
   // Container must self-bind so GuardAspect can dynamically resolve guards by key.
   // Framework gap: CaffeineIoC does not auto-register itself; callers must do it manually.
-  di.bind(CaffeineIoC).toValue(di)
+  di.bind(CaffeineIoC, t => t.toValue(di))
   for (const setup of extra) {
     setup(di)
   }
@@ -106,8 +106,8 @@ describe('AOP guard — class-level annotation', function () {
 
   it('allows access when class-level guard returns true', async function () {
     const di = makeContainer(d => {
-      d.bind(Resource).toSelf()
-      d.bind(AllowGuard).toSelf()
+      d.bind(Resource, t => t.toSelf())
+      d.bind(AllowGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -123,8 +123,8 @@ describe('AOP guard — class-level annotation', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(Restricted).toSelf()
-      d.bind(DenyGuard).toSelf()
+      d.bind(Restricted, t => t.toSelf())
+      d.bind(DenyGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -148,8 +148,8 @@ describe('AOP guard — class-level annotation', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(TrackedResource).toSelf()
-      d.bind(TrackingGuard).toSelf()
+      d.bind(TrackedResource, t => t.toSelf())
+      d.bind(TrackingGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -172,8 +172,8 @@ describe('AOP guard — method-level annotation', function () {
 
   it('guards only the annotated method', async function () {
     const di = makeContainer(d => {
-      d.bind(PartialService).toSelf()
-      d.bind(DenyGuard).toSelf()
+      d.bind(PartialService, t => t.toSelf())
+      d.bind(DenyGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -197,8 +197,8 @@ describe('AOP guard — method-level annotation', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(SemiGuarded).toSelf()
-      d.bind(SpyGuard).toSelf()
+      d.bind(SemiGuarded, t => t.toSelf())
+      d.bind(SpyGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -230,9 +230,9 @@ describe('AOP guard — method-level overrides class-level', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(OverrideService).toSelf()
-      d.bind(AllowGuard).toSelf()
-      d.bind(DenyGuard).toSelf()
+      d.bind(OverrideService, t => t.toSelf())
+      d.bind(AllowGuard, t => t.toSelf())
+      d.bind(DenyGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -250,8 +250,8 @@ describe('AOP guard — async guards', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(AsyncResource).toSelf()
-      d.bind(AsyncAllowGuard).toSelf()
+      d.bind(AsyncResource, t => t.toSelf())
+      d.bind(AsyncAllowGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -265,8 +265,8 @@ describe('AOP guard — async guards', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(AsyncRestricted).toSelf()
-      d.bind(AsyncDenyGuard).toSelf()
+      d.bind(AsyncRestricted, t => t.toSelf())
+      d.bind(AsyncDenyGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -287,8 +287,8 @@ describe('AOP guard — unannotated class is not intercepted', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(NoGuardService).toSelf()
-      d.bind(UnusedGuard).toSelf()
+      d.bind(NoGuardService, t => t.toSelf())
+      d.bind(UnusedGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -314,8 +314,8 @@ describe('AOP guard — JoinPoint fields inside guard', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(InspectedService).toSelf()
-      d.bind(InspectGuard).toSelf()
+      d.bind(InspectedService, t => t.toSelf())
+      d.bind(InspectGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -347,9 +347,9 @@ describe('AOP guard — multiple guard implementations', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(MultiGuardedService).toSelf()
-      d.bind(AdminGuard).toSelf()
-      d.bind(OwnerGuard).toSelf()
+      d.bind(MultiGuardedService, t => t.toSelf())
+      d.bind(AdminGuard, t => t.toSelf())
+      d.bind(OwnerGuard, t => t.toSelf())
     })
     await di.init()
 
@@ -372,8 +372,8 @@ describe('AOP guard — multiple guard implementations', function () {
     }
 
     const di = makeContainer(d => {
-      d.bind(RepeatService).toSelf()
-      d.bind(CountingGuard).toSelf()
+      d.bind(RepeatService, t => t.toSelf())
+      d.bind(CountingGuard, t => t.toSelf())
     })
     await di.init()
 

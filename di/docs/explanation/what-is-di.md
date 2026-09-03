@@ -57,8 +57,8 @@ the container resolves the construction order and manages instances:
 ```ts
 const di = new CaffeineIoC()
 
-di.bind(SmtpMailer).toValue(new SmtpMailer('smtp.example.com', 587))
-di.bind(UserService).toSelf([SmtpMailer])
+di.bind(SmtpMailer, t => t.toValue(new SmtpMailer('smtp.example.com', 587)))
+di.bind(UserService, t => t.toSelf([SmtpMailer]))
 
 await di.init()
 

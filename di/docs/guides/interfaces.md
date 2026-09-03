@@ -247,7 +247,7 @@ class RedisCache implements Cache {
 
 const di = new CaffeineIoC()
 
-di.bind(kCache).toClass(RedisCache)
+di.bind(kCache, t => t.toClass(RedisCache))
 
 await di.init()
 

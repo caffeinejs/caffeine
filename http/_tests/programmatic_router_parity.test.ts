@@ -62,8 +62,8 @@ describe('programmatic router parity with the decorator feature set', () => {
       router.get('/closed').guards([DenyGuard]).handler(() => ({ ok: true }))
 
       const container = new CaffeineIoC()
-      container.bind(TraceGuard).toSelf()
-      container.bind(DenyGuard).toSelf()
+      container.bind(TraceGuard, t => t.toSelf())
+      container.bind(DenyGuard, t => t.toSelf())
 
       const app = createWebApplication({ container }).build().mount(router)
       await app.ready()

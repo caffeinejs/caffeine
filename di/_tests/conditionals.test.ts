@@ -67,14 +67,14 @@ describe('Conditionals', function () {
 
     it('should resolve components that pass conditionals and handle optional absent deps', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Managed)
-        .toSelf()
-      di.bind(Pass)
-        .toSelf()
-      di.bind(RefPassed)
-        .toSelf([Pass])
-      di.bind(RefNotPassedOptional)
-        .toSelf([$i.optional(NoPass)])
+      di.bind(Managed, t => t
+        .toSelf())
+      di.bind(Pass, t => t
+        .toSelf())
+      di.bind(RefPassed, t => t
+        .toSelf([Pass]))
+      di.bind(RefNotPassedOptional, t => t
+        .toSelf([$i.optional(NoPass)]))
       await di.init()
 
       const refPassed = di.get(RefPassed)
@@ -101,8 +101,8 @@ describe('Conditionals', function () {
 
       const di = new CaffeineIoC({
         modules: [(container: ContainerBindingOps) => {
-          container.bind(ModuleSvc)
-            .toSelf()
+          container.bind(ModuleSvc, t => t
+            .toSelf())
         }],
       })
 
@@ -153,17 +153,17 @@ describe('Conditionals', function () {
     })
   })
 
-  describe('BinderOptions.conditional()', function () {
+  describe('BindingSpec.conditional()', function () {
     it('should keep a manually-bound component when its conditional passes', async function () {
       class PresenceSvc {}
       class ConditionalSvc {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(PresenceSvc)
+      di.bind(PresenceSvc, t => t
+        .toSelf())
+      di.bind(ConditionalSvc, t => t
         .toSelf()
-      di.bind(ConditionalSvc)
-        .toSelf()
-        .conditional(ctx => ctx.container.has(PresenceSvc))
+        .conditional(ctx => ctx.container.has(PresenceSvc)))
       await di.init()
 
       expect(di.has(ConditionalSvc))
@@ -177,9 +177,9 @@ describe('Conditionals', function () {
       class ConditionalSvcFailing {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ConditionalSvcFailing)
+      di.bind(ConditionalSvcFailing, t => t
         .toSelf()
-        .conditional(ctx => ctx.container.has(AbsentSvc))
+        .conditional(ctx => ctx.container.has(AbsentSvc)))
       await di.init()
 
       expect(di.has(ConditionalSvcFailing))
@@ -190,9 +190,9 @@ describe('Conditionals', function () {
       class AsyncConditionalSvc {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(AsyncConditionalSvc)
+      di.bind(AsyncConditionalSvc, t => t
         .toSelf()
-        .conditional(async () => true)
+        .conditional(async () => true))
       await di.init()
 
       expect(di.has(AsyncConditionalSvc))

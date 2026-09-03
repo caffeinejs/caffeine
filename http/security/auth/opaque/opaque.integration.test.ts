@@ -36,7 +36,7 @@ class FakeOpaqueStore extends OpaqueTokenStore {
 
 function opaqueBuilder() {
   const container = new CaffeineIoC()
-  container.bind(OpaqueTokenStore).toClass(FakeOpaqueStore)
+  container.bind(OpaqueTokenStore, t => t.toClass(FakeOpaqueStore))
   const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
   // Only the policy this file's own controller references — no cross-section superset needed, since
   // each test file has an isolated decorator registrar.

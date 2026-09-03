@@ -138,7 +138,7 @@ await di.init()
 Manual bindings use the same OR semantics as `@Profile`:
 
 ```ts
-di.bind(StubPaymentGateway).toSelf().profiles('test', 'development')
+di.bind(StubPaymentGateway, t => t.toSelf().profiles('test', 'development'))
 ```
 
 ---

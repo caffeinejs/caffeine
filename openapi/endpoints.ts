@@ -59,7 +59,7 @@ export function registerEndpoints(
     }
   }
 
-  container.bind(endpoints).toValue(new endpoints()).labels(Keys.CONTROLLER)
+  container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER))
 
   registerRouteGroup(endpoints, router => {
     router.path(options.routes.base)

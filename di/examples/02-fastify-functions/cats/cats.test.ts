@@ -16,8 +16,8 @@ describe('GET /cats/:id', function () {
     }
 
     const container = createContainer()
-    container.rebind(CATS_REPOSITORY)
-      .toValue(mockRepo)
+    container.rebind(CATS_REPOSITORY, t => t
+      .toValue(mockRepo))
 
     await container.init()
 

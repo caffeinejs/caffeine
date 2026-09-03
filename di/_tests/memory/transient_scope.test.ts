@@ -9,9 +9,9 @@ describe('Transient scope memory', function () {
     class TrSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(TrSvc)
+    di.bind(TrSvc, t => t
       .toSelf()
-      .lifetime(Scopes.TRANSIENT)
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
 
     const refs = Array.from({ length: 10 }, () => trackForCollection(di.get(TrSvc)!))
@@ -27,9 +27,9 @@ describe('Transient scope memory', function () {
     class TrSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(TrSvc)
+    di.bind(TrSvc, t => t
       .toSelf()
-      .lifetime(Scopes.TRANSIENT)
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
 
     const isCollected = trackForCollection(di.get(TrSvc)!)

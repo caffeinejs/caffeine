@@ -54,8 +54,8 @@ describe('Property Injection', function () {
 
     it('should construct class and resolve property dependencies', async function () {
       const di = new CaffeineIoC()
-      di.bind(kValue)
-        .toValue('test')
+      di.bind(kValue, t => t
+        .toValue('test'))
       await di.init()
 
       const root = di.get(PropertyOnly)
@@ -95,8 +95,8 @@ describe('Property Injection', function () {
 
     it('should instantiate class injecting constructor dependencies and then inject property dependencies', async function () {
       const di = new CaffeineIoC()
-      di.bind(kValue)
-        .toValue('test')
+      di.bind(kValue, t => t
+        .toValue('test'))
       await di.init()
 
       const root = di.get(CtorAndProperties)
@@ -155,8 +155,8 @@ describe('Property Injection', function () {
 
     it('should inject values any type of private property', async function () {
       const di = new CaffeineIoC()
-      di.bind(kValue)
-        .toValue('test')
+      di.bind(kValue, t => t
+        .toValue('test'))
       await di.init()
 
       const root = di.get(PrivateTest)

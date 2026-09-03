@@ -24,7 +24,7 @@ describe('loadHealthIndicators', () => {
 
   it('returns a default-scoped indicator', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(Stub).toSelf().extends(HealthIndicator)
+    container.bind(Stub, t => t.toSelf().extends(HealthIndicator))
     await container.init()
 
     const [indicator] = loadHealthIndicators(container)
@@ -38,7 +38,7 @@ describe('loadHealthIndicators', () => {
     ['refresh', Scopes.REFRESH],
   ] as const)('rejects a %s indicator', async (_label, scope) => {
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(Stub).toSelf().lifetime(scope).extends(HealthIndicator)
+    container.bind(Stub, t => t.toSelf().lifetime(scope).extends(HealthIndicator))
     await container.init()
 
     expect(() => loadHealthIndicators(container)).toThrow(ErrHealthIndicatorNotSingleton)

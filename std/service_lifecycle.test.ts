@@ -31,7 +31,7 @@ class WidgetService implements Service {
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     this.steps.push('configure')
     this.bound = this.slice!.config.size
-    kit.container.bind(token<any>('widget.size')).toValue(this.bound)
+    kit.container.bind(token<any>('widget.size'), t => t.toValue(this.bound))
     return Promise.resolve()
   }
 }

@@ -161,14 +161,14 @@ describe('Profile', function () {
   })
 })
 
-describe('BinderOptions.profiles()', function () {
+describe('BindingSpec.profiles()', function () {
   it('should keep a manually-bound component when its profile is active', async function () {
     class FluentProfPass {}
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-pass'] })
-    di.bind(FluentProfPass)
+    di.bind(FluentProfPass, t => t
       .toSelf()
-      .profiles('fluent-pass')
+      .profiles('fluent-pass'))
     await di.init()
 
     expect(di.has(FluentProfPass)).toBe(true)
@@ -179,9 +179,9 @@ describe('BinderOptions.profiles()', function () {
     class FluentProfFail {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(FluentProfFail)
+    di.bind(FluentProfFail, t => t
       .toSelf()
-      .profiles('fluent-fail')
+      .profiles('fluent-fail'))
     await di.init()
 
     expect(di.has(FluentProfFail)).toBe(false)
@@ -191,9 +191,9 @@ describe('BinderOptions.profiles()', function () {
     class FluentProfOr {}
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-b'] })
-    di.bind(FluentProfOr)
+    di.bind(FluentProfOr, t => t
       .toSelf()
-      .profiles('fluent-a', 'fluent-b')
+      .profiles('fluent-a', 'fluent-b'))
     await di.init()
 
     expect(di.has(FluentProfOr)).toBe(true)
@@ -203,10 +203,10 @@ describe('BinderOptions.profiles()', function () {
     class FluentProfCond {}
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-both'] })
-    di.bind(FluentProfCond)
+    di.bind(FluentProfCond, t => t
       .toSelf()
       .profiles('fluent-both')
-      .conditional(() => false)
+      .conditional(() => false))
     await di.init()
 
     expect(di.has(FluentProfCond)).toBe(false)

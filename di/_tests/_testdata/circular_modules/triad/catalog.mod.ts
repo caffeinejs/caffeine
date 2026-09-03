@@ -9,6 +9,6 @@ export const catalogModule: Module = mod({
   provides: () => [Catalog],
   fn: container => {
     moduleFnCalls.push('catalog')
-    container.bind(Catalog).toSelf()
+    container.bind(Catalog, t => t.toSelf())
   },
 })

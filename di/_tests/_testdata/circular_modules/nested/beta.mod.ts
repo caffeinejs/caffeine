@@ -8,6 +8,6 @@ export const betaModule: Module = mod({
   provides: () => [alphaModule],
   fn: container => {
     moduleFnCalls.push('beta')
-    container.bind(token<any>('beta')).toValue('beta')
+    container.bind(token<any>('beta'), t => t.toValue('beta'))
   },
 })

@@ -63,7 +63,7 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
 
     const shardKey = token<ConfigShard<T>>(Symbol('@caffeinejs/config:shard'))
 
-    container.bind<ConfigHandle<T>>(tokenName).toValue(shard.handle)
+    container.bind(tokenName, t => t.toValue(shard.handle))
 
     // The same handle, under the container's well-known values key, so `$i.value(c => c.database.host)` reads
     // the application configuration. The handle is live and the config resolver calls the binding's factory on
@@ -75,34 +75,34 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
     const boundAlready = [...container.entries()].some(([key]) => key === Keys.kValuesProvider)
 
     if (!boundAlready) {
-      container.bindValuesProvider<ConfigHandle<T>>().toValue(shard.handle)
+      container.bindValuesProvider<ConfigHandle<T>>(t => t.toValue(shard.handle))
     }
 
     container
-      .bind<Configuration<T>>(kConfiguration)
-      .toValue(new Configuration<T>({
-        get handle() {
-          return shard.handle
-        },
-        get validated() {
-          return shard.validated
-        },
-        get revision() {
-          return shard.revision
-        },
-        get diagnostics() {
-          return shard.diagnostics
-        },
-        onChange: listener => shard.onChange(listener),
-        settled: () => shard.settled(),
-      }))
-      .internal()
+      .bind(kConfiguration, t => t
+        .toValue(new Configuration<T>({
+          get handle() {
+            return shard.handle
+          },
+          get validated() {
+            return shard.validated
+          },
+          get revision() {
+            return shard.revision
+          },
+          get diagnostics() {
+            return shard.diagnostics
+          },
+          onChange: listener => shard.onChange(listener),
+          settled: () => shard.settled(),
+        }))
+        .internal())
 
     container
-      .bind(shardKey)
-      .toValue(shard)
-      .lifetime(Scopes.REFRESH)
-      .labels(CONFIG_REFRESH_LABEL as symbol)
+      .bind(shardKey, t => t
+        .toValue(shard)
+        .lifetime(Scopes.REFRESH)
+        .labels(CONFIG_REFRESH_LABEL as symbol))
 
     container.hooks.on('onDisposed', async () => {
       await shard.dispose()

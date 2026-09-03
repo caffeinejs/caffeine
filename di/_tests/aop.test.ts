@@ -41,7 +41,7 @@ describe('AOP', function () {
       beforeSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-before'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       const result = di.get(Calculator).add(1, 2)
@@ -68,7 +68,7 @@ describe('AOP', function () {
       beforeSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-builder-fn'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       const result = di.get(Calculator).add(1, 2)
@@ -91,7 +91,7 @@ describe('AOP', function () {
 
     it('should transform the return value', async function () {
       const di = new CaffeineIoC({ profiles: ['aop-after-return'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       expect(di.get(Calculator).add(3, 4)).toBe(14)
@@ -115,7 +115,7 @@ describe('AOP', function () {
 
     it('should intercept and swallow a thrown error', async function () {
       const di = new CaffeineIoC({ profiles: ['aop-swallow'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       expect(() => di.get(Calculator).fail()).not.toThrow()
@@ -123,7 +123,7 @@ describe('AOP', function () {
 
     it('should propagate the error when afterThrow is not defined', async function () {
       const di = new CaffeineIoC({ profiles: ['aop-propagate'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       expect(() => di.get(Calculator).fail()).toThrow('boom')
@@ -158,7 +158,7 @@ describe('AOP', function () {
       afterSuccessSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-after-success'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       di.get(Calculator).add(1, 2)
@@ -171,7 +171,7 @@ describe('AOP', function () {
       afterFailureSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-after-failure'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       di.get(Calculator).fail()
@@ -210,7 +210,7 @@ describe('AOP', function () {
       greetSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-short-circuit'] })
-      di.bind(Greeter).toSelf()
+      di.bind(Greeter, t => t.toSelf())
       await di.init()
 
       const result = di.get(Greeter).greet()
@@ -221,7 +221,7 @@ describe('AOP', function () {
 
     it('should call the original via proceed() and wrap the result', async function () {
       const di = new CaffeineIoC({ profiles: ['aop-around-proceed'] })
-      di.bind(Calculator).toSelf()
+      di.bind(Calculator, t => t.toSelf())
       await di.init()
 
       expect(di.get(Calculator).add(1, 2)).toBe(103)
@@ -257,7 +257,7 @@ describe('AOP', function () {
       priorityOrder.length = 0
 
       const di = new CaffeineIoC({ profiles: ['aop-priority'] })
-      di.bind(Svc).toSelf()
+      di.bind(Svc, t => t.toSelf())
       await di.init()
 
       di.get(Svc).run()
@@ -304,7 +304,7 @@ describe('AOP', function () {
       methodListSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-method-list'] })
-      di.bind(MultiMethod).toSelf()
+      di.bind(MultiMethod, t => t.toSelf())
       await di.init()
 
       const svc = di.get(MultiMethod)
@@ -319,7 +319,7 @@ describe('AOP', function () {
       allMethodsSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-all-methods'] })
-      di.bind(AllMethods).toSelf()
+      di.bind(AllMethods, t => t.toSelf())
       await di.init()
 
       const svc = di.get(AllMethods)
@@ -355,8 +355,8 @@ describe('AOP', function () {
       logged.length = 0
 
       const di = new CaffeineIoC({ profiles: ['aop-inject'] })
-      di.bind(kLogPrefix).toValue('[LOG]')
-      di.bind(Target).toSelf()
+      di.bind(kLogPrefix, t => t.toValue('[LOG]'))
+      di.bind(Target, t => t.toSelf())
       await di.init()
 
       di.get(Target).work()
@@ -390,7 +390,7 @@ describe('AOP', function () {
       asyncBeforeSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-async'] })
-      di.bind(AsyncTarget).toSelf()
+      di.bind(AsyncTarget, t => t.toSelf())
       await di.init()
 
       const result = await di.get(AsyncTarget).fetch(7)
@@ -434,8 +434,8 @@ describe('AOP', function () {
       ctorInjSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-ctor-inject'] })
-      di.bind(kGreetSvc).toClass(GreetSvc)
-      di.bind(InjTarget).toSelf()
+      di.bind(kGreetSvc, t => t.toClass(GreetSvc))
+      di.bind(InjTarget, t => t.toSelf())
       await di.init()
 
       di.get(InjTarget).work()
@@ -448,8 +448,8 @@ describe('AOP', function () {
       injFirstSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-injectable-first'] })
-      di.bind(kGreetSvc).toClass(GreetSvc)
-      di.bind(InjTarget).toSelf()
+      di.bind(kGreetSvc, t => t.toClass(GreetSvc))
+      di.bind(InjTarget, t => t.toSelf())
       await di.init()
 
       di.get(InjTarget).work()
@@ -549,7 +549,7 @@ describe('AOP', function () {
       txPredSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-method-pred'] })
-      di.bind(TxTarget).toSelf()
+      di.bind(TxTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(TxTarget)
@@ -564,7 +564,7 @@ describe('AOP', function () {
       multiTagSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-multi-tag'] })
-      di.bind(MultiTagTarget).toSelf()
+      di.bind(MultiTagTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(MultiTagTarget)
@@ -580,7 +580,7 @@ describe('AOP', function () {
       cacheSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-method-cache'] })
-      di.bind(CacheTarget).toSelf()
+      di.bind(CacheTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(CacheTarget)
@@ -595,7 +595,7 @@ describe('AOP', function () {
       classAnnSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-class-ann'] })
-      di.bind(ReportSvc).toSelf()
+      di.bind(ReportSvc, t => t.toSelf())
       await di.init()
 
       di.get(ReportSvc).generate()
@@ -644,7 +644,7 @@ describe('AOP', function () {
       patternSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-pattern-regex'] })
-      di.bind(PatternTarget).toSelf()
+      di.bind(PatternTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(PatternTarget)
@@ -661,7 +661,7 @@ describe('AOP', function () {
       startsSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-pattern-starts'] })
-      di.bind(PatternTarget).toSelf()
+      di.bind(PatternTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(PatternTarget)
@@ -677,7 +677,7 @@ describe('AOP', function () {
       endsSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-pattern-ends'] })
-      di.bind(PatternTarget).toSelf()
+      di.bind(PatternTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(PatternTarget)
@@ -759,8 +759,8 @@ describe('AOP', function () {
       matchClassSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-match-class'] })
-      di.bind(SvcA).toSelf()
-      di.bind(SvcB).toSelf()
+      di.bind(SvcA, t => t.toSelf())
+      di.bind(SvcB, t => t.toSelf())
       await di.init()
 
       di.get(SvcA).run()
@@ -820,8 +820,8 @@ describe('AOP', function () {
       arraySpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-array-target'] })
-      di.bind(ArrayTargetA).toSelf()
-      di.bind(ArrayTargetB).toSelf()
+      di.bind(ArrayTargetA, t => t.toSelf())
+      di.bind(ArrayTargetB, t => t.toSelf())
       await di.init()
 
       di.get(ArrayTargetA).run()
@@ -927,7 +927,7 @@ describe('AOP', function () {
       logReturnSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-entry-exit'] })
-      di.bind(LogTarget).toSelf()
+      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       const result = di.get(LogTarget).process('hello')
@@ -941,7 +941,7 @@ describe('AOP', function () {
       logErrorSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-error'] })
-      di.bind(LogTarget).toSelf()
+      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       expect(() => di.get(LogTarget).fail()).toThrow('log-error')
@@ -952,7 +952,7 @@ describe('AOP', function () {
       logTimingSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-timing'] })
-      di.bind(LogTarget).toSelf()
+      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       di.get(LogTarget).process('x')
@@ -965,7 +965,7 @@ describe('AOP', function () {
       logLevelSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-level'] })
-      di.bind(LogTarget).toSelf()
+      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(LogTarget)
@@ -980,7 +980,7 @@ describe('AOP', function () {
       classLogSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-class'] })
-      di.bind(ClassLogTarget).toSelf()
+      di.bind(ClassLogTarget, t => t.toSelf())
       await di.init()
 
       di.get(ClassLogTarget).process()
@@ -1045,7 +1045,7 @@ describe('AOP', function () {
       asyncAfterReturnSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-async-after-return'] })
-      di.bind(AsyncHookTarget).toSelf()
+      di.bind(AsyncHookTarget, t => t.toSelf())
       await di.init()
 
       const result = await di.get(AsyncHookTarget).compute(5)
@@ -1058,7 +1058,7 @@ describe('AOP', function () {
       asyncAfterThrowSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-async-after-throw'] })
-      di.bind(AsyncHookTarget).toSelf()
+      di.bind(AsyncHookTarget, t => t.toSelf())
       await di.init()
 
       await expect(di.get(AsyncHookTarget).reject()).resolves.toBeUndefined()
@@ -1069,7 +1069,7 @@ describe('AOP', function () {
       asyncAfterSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-async-after'] })
-      di.bind(AsyncHookTarget).toSelf()
+      di.bind(AsyncHookTarget, t => t.toSelf())
       await di.init()
 
       await di.get(AsyncHookTarget).compute(3)
@@ -1084,7 +1084,7 @@ describe('AOP', function () {
       asyncAfterFailSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-async-after-fail'] })
-      di.bind(AsyncHookTarget).toSelf()
+      di.bind(AsyncHookTarget, t => t.toSelf())
       await di.init()
 
       await di.get(AsyncHookTarget).reject()
@@ -1118,7 +1118,7 @@ describe('AOP', function () {
 
     it('throws ErrInvalidAspect at compile time when aspect is not singleton scoped', async function () {
       const di = new CaffeineIoC({ profiles: ['aop-non-singleton'] })
-      di.bind(NonSingletonTarget).toSelf()
+      di.bind(NonSingletonTarget, t => t.toSelf())
       await expect(di.init()).rejects.toThrow(ErrInvalidAspect)
     })
   })
@@ -1151,7 +1151,7 @@ describe('AOP', function () {
 
     beforeAll(async function () {
       di = new CaffeineIoC({ profiles: ['aop-provider'] })
-      di.bind(ProviderTarget).toSelf()
+      di.bind(ProviderTarget, t => t.toSelf())
       await di.init()
     })
 
@@ -1243,8 +1243,8 @@ describe('AOP', function () {
       manualSpy.mockClear()
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ManualTarget).toSelf()
-      di.aspect(ManualAspect).toSelf().pointcuts($aop.forClass(ManualTarget, 'run'))
+      di.bind(ManualTarget, t => t.toSelf())
+      di.aspect(ManualAspect, t => t.toSelf().pointcuts($aop.forClass(ManualTarget, 'run')))
       await di.init()
 
       const result = di.get(ManualTarget).run()
@@ -1256,11 +1256,11 @@ describe('AOP', function () {
       manualDepSpy.mockClear()
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ManualDepTarget).toSelf()
-      di.bind(ManualDep).toSelf()
-      di.aspect(ManualDepAspect)
+      di.bind(ManualDepTarget, t => t.toSelf())
+      di.bind(ManualDep, t => t.toSelf())
+      di.aspect(ManualDepAspect, t => t
         .toSelf([ManualDep])
-        .pointcuts($aop.forClass(ManualDepTarget, 'run'))
+        .pointcuts($aop.forClass(ManualDepTarget, 'run')))
       await di.init()
 
       di.get(ManualDepTarget).run()
@@ -1271,9 +1271,9 @@ describe('AOP', function () {
       manualOrderLog.length = 0
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ManualOrderTarget).toSelf()
-      di.aspect(ManualOuterAspect).toSelf().order(1).pointcuts($aop.forClass(ManualOrderTarget, 'run'))
-      di.aspect(ManualInnerAspect).toSelf().order(10).pointcuts($aop.forClass(ManualOrderTarget, 'run'))
+      di.bind(ManualOrderTarget, t => t.toSelf())
+      di.aspect(ManualOuterAspect, t => t.toSelf().order(1).pointcuts($aop.forClass(ManualOrderTarget, 'run')))
+      di.aspect(ManualInnerAspect, t => t.toSelf().order(10).pointcuts($aop.forClass(ManualOrderTarget, 'run')))
       await di.init()
 
       di.get(ManualOrderTarget).run()
@@ -1284,9 +1284,9 @@ describe('AOP', function () {
       manualOrderLog.length = 0
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ManualOrderTarget).toSelf()
-      di.aspect(ManualOuterAspect).toSelf().pointcuts($aop.forClass(ManualOrderTarget, 'run')).order(1)
-      di.aspect(ManualInnerAspect).toSelf().pointcuts($aop.forClass(ManualOrderTarget, 'run')).order(10)
+      di.bind(ManualOrderTarget, t => t.toSelf())
+      di.aspect(ManualOuterAspect, t => t.toSelf().pointcuts($aop.forClass(ManualOrderTarget, 'run')).order(1))
+      di.aspect(ManualInnerAspect, t => t.toSelf().pointcuts($aop.forClass(ManualOrderTarget, 'run')).order(10))
       await di.init()
 
       di.get(ManualOrderTarget).run()
@@ -1296,18 +1296,18 @@ describe('AOP', function () {
     it('throws ErrInvalidContainerState when aspect() is called after init', async function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.init()
-      expect(() => di.aspect(ManualAspect)).toThrow(ErrInvalidContainerState)
+      expect(() => di.aspect(ManualAspect, t => t.toSelf())).toThrow(ErrInvalidContainerState)
     })
 
     it('conditional() skips weaving when condition evaluates to false', async function () {
       condSpy.mockClear()
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(CondTarget).toSelf()
-      di.aspect(CondAspect)
+      di.bind(CondTarget, t => t.toSelf())
+      di.aspect(CondAspect, t => t
         .toSelf()
         .pointcuts($aop.forClass(CondTarget, 'run'))
-        .conditional(() => false)
+        .conditional(() => false))
       await di.init()
 
       di.get(CondTarget).run()
@@ -1318,10 +1318,10 @@ describe('AOP', function () {
       asyncFactorySpy.mockClear()
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(AsyncFactoryTarget).toSelf()
-      di.aspect(AsyncFactoryAspect)
+      di.bind(AsyncFactoryTarget, t => t.toSelf())
+      di.aspect(AsyncFactoryAspect, t => t
         .toAsyncFactory(async () => new AsyncFactoryAspect())
-        .pointcuts($aop.forClass(AsyncFactoryTarget, 'run'))
+        .pointcuts($aop.forClass(AsyncFactoryTarget, 'run')))
       await di.init()
 
       di.get(AsyncFactoryTarget).run()
@@ -1352,7 +1352,7 @@ describe('this binding and instanceof', function () {
     selfCallSpy.mockClear()
 
     const di = new CaffeineIoC({ profiles: ['aop-self-call'] })
-    di.bind(SelfCallTarget).toSelf()
+    di.bind(SelfCallTarget, t => t.toSelf())
     await di.init()
 
     const result = di.get(SelfCallTarget).methodA()
@@ -1386,7 +1386,7 @@ describe('this binding and instanceof', function () {
     builderSpy.mockClear()
 
     const di = new CaffeineIoC({ profiles: ['aop-builder-chain'] })
-    di.bind(BuilderTarget).toSelf()
+    di.bind(BuilderTarget, t => t.toSelf())
     await di.init()
 
     const result = di.get(BuilderTarget).setName('test').getName()
@@ -1410,7 +1410,7 @@ describe('this binding and instanceof', function () {
 
   it('instanceof check returns true for proxied instances', async function () {
     const di = new CaffeineIoC({ profiles: ['aop-instanceof'] })
-    di.bind(InstanceofTarget).toSelf()
+    di.bind(InstanceofTarget, t => t.toSelf())
     await di.init()
 
     const instance = di.get(InstanceofTarget)
@@ -1450,7 +1450,7 @@ describe('multiple aspects on the same method', function () {
     noOrderLog.length = 0
 
     const di = new CaffeineIoC({ profiles: ['aop-multi-no-order'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     di.get(MultiAspectTarget).add(1, 2)
@@ -1484,7 +1484,7 @@ describe('multiple aspects on the same method', function () {
 
   it('two around hooks both calling proceed compose in onion order', async function () {
     const di = new CaffeineIoC({ profiles: ['aop-multi-around'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     // target: 1+2=3, inner*2=6, outer+100=106
@@ -1514,7 +1514,7 @@ describe('multiple aspects on the same method', function () {
 
   it('afterReturn values chain: inner runs first, outer sees inner-transformed result', async function () {
     const di = new CaffeineIoC({ profiles: ['aop-multi-after-return'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     // target: 1+2=3, inner+1=4, outer*2=8
@@ -1548,7 +1548,7 @@ describe('multiple aspects on the same method', function () {
     argMutationLog.length = 0
 
     const di = new CaffeineIoC({ profiles: ['aop-multi-arg-mutation'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     const result = di.get(MultiAspectTarget).add(1, 2)
@@ -1582,7 +1582,7 @@ describe('multiple aspects on the same method', function () {
     shortCircuitLog.length = 0
 
     const di = new CaffeineIoC({ profiles: ['aop-multi-short-circuit'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     expect(di.get(MultiAspectTarget).add(1, 2)).toBe(-1)
@@ -1614,7 +1614,7 @@ describe('multiple aspects on the same method', function () {
     swallowOuterAfterLog.length = 0
 
     const di = new CaffeineIoC({ profiles: ['aop-multi-swallow-inner'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     expect(() => di.get(MultiAspectTarget).fail()).not.toThrow()
@@ -1643,7 +1643,7 @@ describe('multiple aspects on the same method', function () {
 
   it('error not caught by inner propagates to outer which can swallow it', async function () {
     const di = new CaffeineIoC({ profiles: ['aop-multi-outer-swallow'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     expect(() => di.get(MultiAspectTarget).fail()).not.toThrow()
@@ -1661,7 +1661,7 @@ describe('multiple aspects on the same method', function () {
 
   it('async afterThrow that rejects must propagate the rejection to the caller', async function () {
     const di = new CaffeineIoC({ profiles: ['aop-async-after-throw-rethrow'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     await expect(di.get(MultiAspectTarget).asyncFail()).rejects.toThrow('async-multi-fail')
@@ -1701,7 +1701,7 @@ describe('multiple aspects on the same method', function () {
     threeAspectLog.length = 0
 
     const di = new CaffeineIoC({ profiles: ['aop-three-aspects'] })
-    di.bind(MultiAspectTarget).toSelf()
+    di.bind(MultiAspectTarget, t => t.toSelf())
     await di.init()
 
     di.get(MultiAspectTarget).add(1, 2)

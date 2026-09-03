@@ -145,18 +145,18 @@ describe('class field injection', function () {
     })
   })
 
-  describe('BinderOptions.injectProperty() — happy paths', function () {
+  describe('BindingSpec.injectProperty() — happy paths', function () {
     it('should inject a single required property on a manually-bound class', async function () {
       class ManualSvc {
         dep!: DepA
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA)
+      di.bind(DepA, t => t
+        .toSelf())
+      di.bind(ManualSvc, t => t
         .toSelf()
-      di.bind(ManualSvc)
-        .toSelf()
-        .injectProperty('dep', DepA)
+        .injectProperty('dep', DepA))
       await di.init()
 
       const svc = di.get(ManualSvc)
@@ -182,14 +182,14 @@ describe('class field injection', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA)
-        .toSelf()
-      di.bind(DepB)
-        .toSelf()
-      di.bind(MultiField)
+      di.bind(DepA, t => t
+        .toSelf())
+      di.bind(DepB, t => t
+        .toSelf())
+      di.bind(MultiField, t => t
         .toSelf()
         .injectProperty('fieldA', DepA)
-        .injectProperty('fieldB', DepB)
+        .injectProperty('fieldB', DepB))
       await di.init()
 
       const instance = di.get(MultiField)
@@ -207,13 +207,13 @@ describe('class field injection', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA)
-        .toSelf()
-      di.bind(DepB)
-        .toSelf()
-      di.bind(WithCtor)
+      di.bind(DepA, t => t
+        .toSelf())
+      di.bind(DepB, t => t
+        .toSelf())
+      di.bind(WithCtor, t => t
         .toSelf([DepA])
-        .injectProperty('fieldDep', DepB)
+        .injectProperty('fieldDep', DepB))
       await di.init()
 
       const instance = di.get(WithCtor)
@@ -230,13 +230,13 @@ describe('class field injection', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA)
-        .toSelf()
+      di.bind(DepA, t => t
+        .toSelf())
       // DepC is intentionally NOT bound
-      di.bind(WithOptional)
+      di.bind(WithOptional, t => t
         .toSelf()
         .injectProperty('required', DepA)
-        .injectProperty('absent', $i.optional(DepC))
+        .injectProperty('absent', $i.optional(DepC)))
       await di.init()
 
       const instance = di.get(WithOptional)
@@ -247,15 +247,15 @@ describe('class field injection', function () {
     })
   })
 
-  describe('BinderOptions.injectProperty() — validation', function () {
+  describe('BindingSpec.injectProperty() — validation', function () {
     it('should throw ErrInvalidBinding when key is a symbol', function () {
       const kSym = token<any>(Symbol('sym'))
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
-        di.bind(kSym)
+        di.bind(kSym, t => t
           .toValue('x')
-          .injectProperty('prop', DepA)
+          .injectProperty('prop', DepA))
       })
         .toThrow(ErrInvalidBinding)
     })
@@ -264,9 +264,9 @@ describe('class field injection', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
-        di.bind(token<any>('stringKey'))
+        di.bind(token<any>('stringKey'), t => t
           .toValue('x')
-          .injectProperty('prop', DepA)
+          .injectProperty('prop', DepA))
       })
         .toThrow(ErrInvalidBinding)
     })

@@ -54,8 +54,8 @@ describe('Hooks', function () {
 
     it('should call method marked as on destroy when instance is a singleton', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['hooks-pre-destroy'] })
-      di.bind(Dep)
-        .toSelf()
+      di.bind(Dep, t => t
+        .toSelf())
       await di.init()
       di.get(Dep)
 
@@ -67,8 +67,8 @@ describe('Hooks', function () {
 
     it('should accept async destroy method', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['hooks-pre-destroy'] })
-      di.bind(AsyncDep)
-        .toSelf()
+      di.bind(AsyncDep, t => t
+        .toSelf())
       await di.init()
       di.get(AsyncDep)
 

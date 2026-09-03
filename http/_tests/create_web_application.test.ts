@@ -55,7 +55,7 @@ describe('createWebApplication default Fastify form', () => {
         const state: { value: string | undefined } = { value: undefined }
         const service: Service = {
           bootstrap(kit) {
-            kit.container.bind(kProbe).toValue({ value: state.value })
+            kit.container.bind(kProbe, t => t.toValue({ value: state.value }))
             return Promise.resolve()
           },
 

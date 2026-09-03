@@ -57,14 +57,14 @@ export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true):
     const deps = edges.filter(e => e.from === key)
 
     if (deps.length === 0) {
-      di.bind(token<any>(key))
-        .toValue({})
+      di.bind(token<any>(key), t => t
+        .toValue({}))
       continue
     }
 
     const injections = deps.map(toInjection)
-    di.bind(token<any>(key))
-      .toFunction(fnWithArity(deps.length), injections)
+    di.bind(token<any>(key), t => t
+      .toFunction(fnWithArity(deps.length), injections))
   }
 
   return di

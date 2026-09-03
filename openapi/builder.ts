@@ -322,17 +322,17 @@ export class OpenAPIBuilder<C = unknown> implements Service {
     // The store, not the document: bindings must all be registered before `container.init()`, which runs long
     // before the server phase that generates the document. Resolving the store and reading `.document` off it
     // is the supported way to reach the document without an HTTP request.
-    kit.container.bind(OpenAPIDocumentStore).toValue(this.#store).internal()
+    kit.container.bind(OpenAPIDocumentStore, t => t.toValue(this.#store).internal())
 
     // Registers the document endpoints as ordinary routes. Still here, before `buildRouting` runs — but now
     // fed the *resolved* options, because configuration resolved before this step.
     const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
 
-    kit.container.bind(OpenAPIExtension)
+    kit.container.bind(OpenAPIExtension, t => t
       // Reads through the slice, so the generated document reflects the merged configuration. The extension
       // runs at server setup, which is after `container.init()`.
       .toValue(new OpenAPIExtension(this.#store, options, paths))
-      .extends()
+      .extends())
 
     return Promise.resolve()
   }

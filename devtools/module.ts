@@ -6,7 +6,7 @@ export function DevtoolsModule(options: DevtoolsOptions = {}): Module {
   return mod('DevtoolsModule', container => {
     const server = new DevtoolsServer(options)
 
-    container.bind(DevtoolsServer).toValue(server)
+    container.bind(DevtoolsServer, t => t.toValue(server))
 
     const collector = new ContainerCollector(
       container.hooks,

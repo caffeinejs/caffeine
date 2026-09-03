@@ -158,15 +158,15 @@ describe('$i.ordered() with .order() binder option', function () {
     }
 
     const m = mod('plugins', c => {
-      c.bind(PluginBeta).toClass(PluginBeta)
+      c.bind(PluginBeta, t => t.toClass(PluginBeta)
         .extends(Plugin)
-        .order(2)
-      c.bind(PluginAlpha).toClass(PluginAlpha)
+        .order(2))
+      c.bind(PluginAlpha, t => t.toClass(PluginAlpha)
         .extends(Plugin)
-        .order(1)
-      c.bind(PluginGamma).toClass(PluginGamma)
+        .order(1))
+      c.bind(PluginGamma, t => t.toClass(PluginGamma)
         .extends(Plugin)
-        .order(3)
+        .order(3))
     })
 
     const di = new CaffeineIoC({ modules: [m] })
@@ -198,14 +198,14 @@ describe('$i.ordered() with .order() binder option', function () {
     }
 
     const m = mod('svcs', c => {
-      c.bind(SvcC).toClass(SvcC)
+      c.bind(SvcC, t => t.toClass(SvcC)
+        .extends(Svc))
+      c.bind(SvcA, t => t.toClass(SvcA)
         .extends(Svc)
-      c.bind(SvcA).toClass(SvcA)
+        .order(1))
+      c.bind(SvcB, t => t.toClass(SvcB)
         .extends(Svc)
-        .order(1)
-      c.bind(SvcB).toClass(SvcB)
-        .extends(Svc)
-        .order(2)
+        .order(2))
     })
 
     const di = new CaffeineIoC({ modules: [m] })

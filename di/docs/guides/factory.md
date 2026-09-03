@@ -29,14 +29,14 @@ const REPOSITORY = Symbol('app:repository')
 
 const di = new CaffeineIoC()
 
-di.bind(DatabaseService).toSelf()
-di.bind(CacheService).toSelf()
+di.bind(DatabaseService, t => t.toSelf())
+di.bind(CacheService, t => t.toSelf())
 
-di.bind(REPOSITORY).toFactory(({ container }) => {
+di.bind(REPOSITORY, t => t.toFactory(({ container }) => {
   const db = container.get(DatabaseService)
   const cache = container.get(CacheService)
   return { db, cache }
-})
+}))
 
 await di.init()
 
@@ -57,7 +57,7 @@ class MetricsService { record(event: string): void { /* ... */ } }
 
 const HANDLER = Symbol('app:handler')
 
-di.bind(HANDLER).toFactory(({ container }) => {
+di.bind(HANDLER, t => t.toFactory(({ container }) => {
   const metrics = container.getOptional(MetricsService)
 
   return {
@@ -66,7 +66,7 @@ di.bind(HANDLER).toFactory(({ container }) => {
       // ...
     },
   }
-})
+}))
 ```
 
 ---
@@ -80,7 +80,7 @@ abstract class Plugin { abstract run(): void }
 
 const RUNNER = Symbol('app:runner')
 
-di.bind(RUNNER).toFactory(({ container }) => {
+di.bind(RUNNER, t => t.toFactory(({ container }) => {
   const plugins = container.getMany(Plugin)
 
   return {
@@ -88,7 +88,7 @@ di.bind(RUNNER).toFactory(({ container }) => {
       for (const plugin of plugins) plugin.run()
     },
   }
-})
+}))
 ```
 
 ---

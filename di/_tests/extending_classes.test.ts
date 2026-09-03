@@ -365,9 +365,9 @@ describe('Abstract Classes', function () {
 
       it('should resolve the concrete class via the abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemStore)
+        di.bind(MemStore, t => t
           .toSelf()
-          .extends(Store)
+          .extends(Store))
         await di.init()
 
         const result = di.get(Store)
@@ -380,9 +380,9 @@ describe('Abstract Classes', function () {
 
       it('should return the same singleton instance via both the concrete and abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemStore)
+        di.bind(MemStore, t => t
           .toSelf()
-          .extends(Store)
+          .extends(Store))
         await di.init()
 
         const viaAbstract = di.get(Store)
@@ -402,10 +402,10 @@ describe('Abstract Classes', function () {
 
       it('should produce a new instance on each resolution via the abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(IdImpl)
+        di.bind(IdImpl, t => t
           .toSelf()
           .lifetime(Scopes.TRANSIENT)
-          .extends(IdBase)
+          .extends(IdBase))
         await di.init()
 
         const a = di.get(IdBase)
@@ -434,13 +434,13 @@ describe('Abstract Classes', function () {
 
       it('should resolve the primary implementation when requesting by abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemCache)
+        di.bind(MemCache, t => t
+          .toSelf()
+          .extends(Cache))
+        di.bind(RedisCache, t => t
           .toSelf()
           .extends(Cache)
-        di.bind(RedisCache)
-          .toSelf()
-          .extends(Cache)
-          .primary()
+          .primary())
         await di.init()
 
         const cache = di.get(Cache)
@@ -451,12 +451,12 @@ describe('Abstract Classes', function () {
 
       it('should resolve all implementations via getMany', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemCache)
+        di.bind(MemCache, t => t
           .toSelf()
-          .extends(Cache)
-        di.bind(RedisCache)
+          .extends(Cache))
+        di.bind(RedisCache, t => t
           .toSelf()
-          .extends(Cache)
+          .extends(Cache))
         await di.init()
 
         const all = di.getMany(Cache)
@@ -477,9 +477,9 @@ describe('Abstract Classes', function () {
       it('should throw when the concrete class does not extend the given base', function () {
         const di = new CaffeineIoC()
 
-        expect(() => di.bind(Unrelated)
+        expect(() => di.bind(Unrelated, t => t
           .toSelf()
-          .extends(Base))
+          .extends(Base)))
           .toThrow(ErrInvalidBinding)
       })
 
@@ -490,9 +490,9 @@ describe('Abstract Classes', function () {
 
         expect(() =>
           di
-            .bind(Impl)
-            .toSelf()
-            .extends('not-a-class' as any),
+            .bind(Impl, t => t
+              .toSelf()
+              .extends('not-a-class' as any)),
         )
           .toThrow(ErrInvalidBinding)
       })
@@ -578,7 +578,7 @@ describe('has() and a polymorphic binding', function () {
 
   it('reports a base key bound only through .extends() as present', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(HasChild).toSelf().extends(HasBase)
+    di.bind(HasChild, t => t.toSelf().extends(HasBase))
     await di.init()
 
     expect(di.has(HasBase)).toBe(true)
@@ -587,7 +587,7 @@ describe('has() and a polymorphic binding', function () {
 
   it('agrees with get() before the container is initialized', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(HasChild).toSelf().extends(HasBase)
+    di.bind(HasChild, t => t.toSelf().extends(HasBase))
 
     // `.extends()` maps the base while the chain is built, so the answer does not wait for init().
     expect(di.has(HasBase)).toBe(true)
@@ -595,7 +595,7 @@ describe('has() and a polymorphic binding', function () {
 
   it('still reports a base nothing extends as absent', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(HasChild).toSelf()
+    di.bind(HasChild, t => t.toSelf())
     await di.init()
 
     expect(di.has(HasUnextended)).toBe(false)

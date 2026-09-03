@@ -20,7 +20,7 @@ function probe() {
           return 'probe'
         },
         bootstrap(kit) {
-          kit.container.bind(kProbe).toValue({ broker: state.broker })
+          kit.container.bind(kProbe, t => t.toValue({ broker: state.broker }))
           return Promise.resolve()
         },
       }

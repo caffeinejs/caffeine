@@ -8,8 +8,8 @@ describe('Named bindings visible in child containers', function () {
     const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
 
-    child.bind(token<any>('child-key'))
-      .toValue('hello')
+    child.bind(token<any>('child-key'), t => t
+      .toValue('hello'))
     await child.init()
 
     expect(child.get(token<string>('child-key')))
@@ -21,8 +21,8 @@ describe('Named bindings visible in child containers', function () {
     const child = parent.newChild()
     const k = token<any>(Symbol('sym-child'))
 
-    child.bind(k)
-      .toValue(42)
+    child.bind(k, t => t
+      .toValue(42))
     await child.init()
 
     expect(child.get<number>(k))
@@ -31,8 +31,8 @@ describe('Named bindings visible in child containers', function () {
 
   it('should fall through to parent for a named key not in the child', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(token<any>('parent-key'))
-      .toValue('from-parent')
+    parent.bind(token<any>('parent-key'), t => t
+      .toValue('from-parent'))
 
     const child = parent.newChild()
     await child.init()
@@ -43,12 +43,12 @@ describe('Named bindings visible in child containers', function () {
 
   it('should prefer child over parent when both have the same named key', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(token<any>('shared'))
-      .toValue('parent-value')
+    parent.bind(token<any>('shared'), t => t
+      .toValue('parent-value'))
 
     const child = parent.newChild()
-    child.bind(token<any>('shared'))
-      .toValue('child-value')
+    child.bind(token<any>('shared'), t => t
+      .toValue('child-value'))
     await parent.init()
     await child.init()
 
@@ -66,12 +66,12 @@ describe('Per-container scope instances', function () {
 
   it('should give independent singleton instances across separate containers', async function () {
     const di1 = new CaffeineIoC({ decorators: false })
-    di1.bind(PerContainerSingleton)
-      .toSelf()
+    di1.bind(PerContainerSingleton, t => t
+      .toSelf())
 
     const di2 = new CaffeineIoC({ decorators: false })
-    di2.bind(PerContainerSingleton)
-      .toSelf()
+    di2.bind(PerContainerSingleton, t => t
+      .toSelf())
     await di1.init()
     await di2.init()
 
@@ -97,10 +97,10 @@ describe('Child', function () {
         const parent = new CaffeineIoC()
         const child = parent.newChild()
 
-        parent.bind(Dep)
-          .toSelf()
-        child.bind(Svc)
-          .toSelf([Dep])
+        parent.bind(Dep, t => t
+          .toSelf())
+        child.bind(Svc, t => t
+          .toSelf([Dep]))
         await parent.init()
         await child.init()
 

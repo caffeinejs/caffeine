@@ -117,15 +117,15 @@ export class StaticBuilder<C = unknown> implements Service {
     // are handed to it directly: the builder is holding them right here, and routing them through a container
     // key only to read them back at server setup adds a lookup and a key without adding a decision.
     kit.container
-      .bind(StaticExtension)
-      .toValue(new StaticExtension(resolved.config.mounts, spa))
-      .extends()
+      .bind(StaticExtension, t => t
+        .toValue(new StaticExtension(resolved.config.mounts, spa))
+        .extends())
 
     if (spa !== undefined) {
       kit.container
-        .bind(SPAFallback)
-        .toValue(new SPAFallback(spa))
-        .extends(NotFoundFallback)
+        .bind(SPAFallback, t => t
+          .toValue(new SPAFallback(spa))
+          .extends(NotFoundFallback))
     }
 
     return Promise.resolve()

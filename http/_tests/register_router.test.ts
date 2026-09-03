@@ -48,7 +48,7 @@ class ProgrammaticService implements Service {
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     const endpoints = this.#endpoints
-    kit.container.bind(endpoints).toValue(new endpoints()).labels(Keys.CONTROLLER)
+    kit.container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER))
 
     const authz = this.#authz
     registerRouteGroup(endpoints, router => {

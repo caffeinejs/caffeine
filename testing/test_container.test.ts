@@ -144,7 +144,7 @@ describe('TestContainer', function () {
       const clock = { now: () => 0 }
       const di = new TestContainer()
         .modules(c => {
-          c.bind(kClock).toValue(clock)
+          c.bind(kClock, t => t.toValue(clock))
         })
         .build()
       await di.init()
@@ -637,7 +637,7 @@ describe('TestContainer', function () {
         .override(kCgDbConn, b => b.toValue(new CgDbConn(new CgDbPool('f'))))
         .override(kCgCache, b => b.toValue(new CgCacheClient('f')))
         .modules(c => {
-          c.bind(kTestClock).toValue(fakeClock)
+          c.bind(kTestClock, t => t.toValue(fakeClock))
         })
         .build()
       await di.init()

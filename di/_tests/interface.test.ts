@@ -38,8 +38,8 @@ describe('interfaces', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Service)
-        .toSelf()
+      di.bind(Service, t => t
+        .toSelf())
       await di.init()
       const svc = di.get(Service)
       expect(svc)

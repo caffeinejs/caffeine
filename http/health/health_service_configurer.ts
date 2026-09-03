@@ -55,9 +55,9 @@ export class HealthServiceConfigurer implements Service {
     if (!kit.container.has(ApplicationAvailability)) {
       // The application's own instance, not a container-constructed one: the lifecycle writes to that object, and
       // a second instance would report a state nothing ever updates.
-      kit.container.bind(ApplicationAvailability)
+      kit.container.bind(ApplicationAvailability, t => t
         .toValue(kit.availability)
-        .internal()
+        .internal())
     }
 
     // Only ever set when no `HealthBuilder` is registered — `beforeBootstrap` returns early otherwise — so

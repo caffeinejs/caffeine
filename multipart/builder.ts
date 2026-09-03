@@ -23,7 +23,7 @@ export class MultipartBuilder implements Service {
   }
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    kit.container.bind(MultipartExtension).toValue(new MultipartExtension(this.#options)).extends()
+    kit.container.bind(MultipartExtension, t => t.toValue(new MultipartExtension(this.#options)).extends())
     return Promise.resolve()
   }
 }

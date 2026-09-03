@@ -44,12 +44,12 @@ class UpIndicator extends HealthIndicator {
 function bindIndicators(app: WebApplication, ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>): void {
   for (const indicator of indicators) {
     if (typeof indicator === 'function') {
-      app.container.bind(indicator).toSelf().extends(HealthIndicator)
+      app.container.bind(indicator, t => t.toSelf().extends(HealthIndicator))
     } else {
       app.container
-        .bind(indicator.constructor as Ctor<HealthIndicator>)
-        .toValue(indicator)
-        .extends(HealthIndicator)
+        .bind(indicator.constructor as Ctor<HealthIndicator>, t => t
+          .toValue(indicator)
+          .extends(HealthIndicator))
     }
   }
 }
@@ -165,7 +165,7 @@ describe('health probes', () => {
 
   it('rejects a non-singleton indicator at ready', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).health().build()
-    app.container.bind(DownIndicator).toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator)
+    app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
       await expect(app.ready()).rejects.toThrow(ErrHealthIndicatorNotSingleton)

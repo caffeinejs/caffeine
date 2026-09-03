@@ -37,8 +37,8 @@ function createWelcomeSender(email: EmailService) {
 
 const di = new CaffeineIoC()
 
-di.bind(EmailService).toSelf()
-di.bind(SEND_WELCOME).toFunction(createWelcomeSender, [EmailService])
+di.bind(EmailService, t => t.toSelf())
+di.bind(SEND_WELCOME, t => t.toFunction(createWelcomeSender, [EmailService]))
 
 await di.init()
 
@@ -71,8 +71,8 @@ function buildHttpOptions(config: AppConfig) {
 
 const di = new CaffeineIoC()
 
-di.bind(AppConfig).toSelf()
-di.bind(HTTP_OPTIONS).toFunction(buildHttpOptions, [AppConfig])
+di.bind(AppConfig, t => t.toSelf())
+di.bind(HTTP_OPTIONS, t => t.toFunction(buildHttpOptions, [AppConfig]))
 
 await di.init()
 
@@ -114,9 +114,9 @@ function createUserService(repo: UserRepository, logger: Logger) {
 
 const di = new CaffeineIoC()
 
-di.bind(UserRepository).toSelf()
-di.bind(Logger).toSelf()
-di.bind(USER_SERVICE).toFunction(createUserService, [UserRepository, Logger])
+di.bind(UserRepository, t => t.toSelf())
+di.bind(Logger, t => t.toSelf())
+di.bind(USER_SERVICE, t => t.toFunction(createUserService, [UserRepository, Logger]))
 
 await di.init()
 
@@ -134,14 +134,14 @@ injection.
 ```ts
 import { optional, allOf, useValue } from '@caffeinejs/di'
 
-di.bind(PIPELINE).toFunction(
+di.bind(PIPELINE, t => t.toFunction(
   (validators, cache, maxItems) => createPipeline(validators, cache, maxItems),
   [
     allOf(Validator),         // array of all Validator bindings
     optional(CacheService),   // undefined if not registered
     useValue(100),            // literal
   ],
-)
+))
 ```
 
 The injection count must equal the function's parameter count. CaffeineIoC throws at bind
@@ -160,7 +160,7 @@ export const SEND_WELCOME = Symbol('app:send-welcome')
 export type WelcomeSender = (username: string) => void
 
 // binding
-di.bind(SEND_WELCOME).toFunction(createWelcomeSender, [EmailService])
+di.bind(SEND_WELCOME, t => t.toFunction(createWelcomeSender, [EmailService]))
 
 // consumer
 const send = di.get<WelcomeSender>(SEND_WELCOME)

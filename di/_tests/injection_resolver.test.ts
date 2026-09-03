@@ -81,8 +81,8 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Consumer)
-      .toSelf([$i.provide(kMissing)])
+    di.bind(Consumer, t => t
+      .toSelf([$i.provide(kMissing)]))
 
     await expect(di.init()).rejects.toBeInstanceOf(ErrNoResolutionForKey)
   })
@@ -95,8 +95,8 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(OptConsumer)
-      .toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER }])
+    di.bind(OptConsumer, t => t
+      .toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER }]))
     await di.init()
 
     const inst = di.get(OptConsumer)
@@ -129,12 +129,12 @@ describe('defaultResolverFactory', function () {
     const kShared = token<any>(Symbol('resolver-shared-multi'))
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(token<any>('a'))
+    di.bind(token<any>('a'), t => t
       .toValue('one')
-      .names(kShared)
-    di.bind(token<any>('b'))
+      .names(kShared))
+    di.bind(token<any>('b'), t => t
       .toValue('two')
-      .names(kShared)
+      .names(kShared))
     await di.init()
 
     const resolver = standardFactory({
@@ -156,8 +156,8 @@ describe('custom resolver end-to-end', function () {
     bindResolver(kTestResolver, () => () => sentinel)
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(CustomConsumer)
-      .toSelf([{ resolver: kTestResolver }])
+    di.bind(CustomConsumer, t => t
+      .toSelf([{ resolver: kTestResolver }]))
     await di.init()
 
     expect(di.get(CustomConsumer)!.dep)
@@ -166,8 +166,8 @@ describe('custom resolver end-to-end', function () {
 
   it('throws ErrUnknownResolver when resolver name is not registered', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(UnknownResolverConsumer)
-      .toSelf([{ resolver: token<any>(Symbol('no-such-resolver')) }])
+    di.bind(UnknownResolverConsumer, t => t
+      .toSelf([{ resolver: token<any>(Symbol('no-such-resolver')) }]))
 
     await expect(di.init()).rejects.toBeInstanceOf(ErrUnknownResolver)
   })

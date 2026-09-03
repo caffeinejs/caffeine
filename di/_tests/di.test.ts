@@ -27,10 +27,10 @@ describe('CaffeineIoC', function () {
 
   it('should print the type name when calling toString()', function () {
     const di = new CaffeineIoC()
-    di.bind(token<any>('tk100'))
-      .toValue('test')
-    di.bind(token<any>('tk200'))
-      .toValue('test')
+    di.bind(token<any>('tk100'), t => t
+      .toValue('test'))
+    di.bind(token<any>('tk200'), t => t
+      .toValue('test'))
 
     const str = di.toString()
     const protoStr = Object.prototype.toString.call(di)

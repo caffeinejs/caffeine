@@ -32,8 +32,8 @@ describe('PreDestroy', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Managed)
-      .toSelf()
+    di.bind(Managed, t => t
+      .toSelf())
     await di.init()
     await di.dispose()
 
@@ -151,9 +151,9 @@ describe('PreDestroy', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc)
+      di.bind(Svc, t => t
         .toSelf()
-        .lifetime(Scopes.SINGLETON)
+        .lifetime(Scopes.SINGLETON))
       await di.init()
 
       const before = di.get(Svc)
@@ -182,9 +182,9 @@ describe('PreDestroy', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc)
+      di.bind(Svc, t => t
         .toSelf()
-        .lifetime(Scopes.SINGLETON)
+        .lifetime(Scopes.SINGLETON))
       await di.init()
 
       const before = di.get(Svc)

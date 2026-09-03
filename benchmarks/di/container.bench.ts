@@ -304,10 +304,18 @@ group('resolutions', () => {
 })
 
 group('bindings', () => {
-  bench('toValue str key', () => diForBindings.bind(token<number>(`bk_${bindSeq++}`)).toValue(bindSeq))
-  bench('toValue sym key', () => diForBindings.bind(kBindSym).toValue(bindSeq))
-  bench('toSelf', () => diForBindings.bind(Undecorated).toSelf())
-  bench('toFactory', () => diForBindings.bind(token<number>(`bf_${bindSeq++}`)).toFactory(() => bindSeq))
+  bench('toValue str key', () => diForBindings.bind(token<number>(`bk_${bindSeq++}`), t => t.toValue(bindSeq)))
+  bench('toValue sym key', () => diForBindings.bind(kBindSym, t => t.toValue(bindSeq)))
+  bench('toSelf', () => diForBindings.bind(Undecorated, t => t.toSelf()))
+  bench('toFactory', () => diForBindings.bind(token<number>(`bf_${bindSeq++}`), t => t.toFactory(() => bindSeq)))
+  // A chain with modifiers, which is what production binding code actually looks like. The other cases in this
+  // group configure nothing, so they do not show what a multi-step chain costs.
+  bench('toSelf chained', () => diForBindings.bind(Undecorated, t => t
+    .toSelf()
+    .lifetime(Scopes.SINGLETON)
+    .names(`n_${bindSeq++}`)
+    .lazy()
+    .internal()))
 })
 
 const { benchmarks } = await run()

@@ -86,7 +86,11 @@ describe('Class', function () {
   })
 
   describe('when trying to initialize with unregistered dependencies', function () {
-    class Repo {}
+    class Repo {
+      name(): string {
+        return 'repo'
+      }
+    }
 
     class Service {
       constructor(private readonly repo: Repo) {}
@@ -94,8 +98,8 @@ describe('Class', function () {
 
     it('should throw error', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Service)
-        .toSelf([Repo])
+      di.bind(Service, t => t
+        .toSelf([Repo]))
 
       await expect(di.init()).rejects.toThrow(ErrNoResolutionForKey)
     })

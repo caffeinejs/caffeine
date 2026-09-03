@@ -5,8 +5,8 @@ export const CATS_REPOSITORY = token<CatsRepository>(Symbol.for('cats.repository
 
 export function createContainer(): Container {
   const di = new CaffeineIoC()
-  di.bind(CATS_REPOSITORY)
-    .toClass(CatsInMemoryRepository)
+  di.bind(CATS_REPOSITORY, t => t
+    .toClass(CatsInMemoryRepository))
 
   return di
 }

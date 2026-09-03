@@ -8,8 +8,8 @@ describe('Singleton scope memory', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc)
-      .toSelf()
+    di.bind(Svc, t => t
+      .toSelf())
     await di.init()
     const isCollected = trackForCollection(di.get(Svc)!)
 
@@ -26,12 +26,12 @@ describe('Singleton scope memory', function () {
     class Root {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Dep)
-      .toSelf()
-    di.bind(Mid)
-      .toSelf()
-    di.bind(Root)
-      .toSelf()
+    di.bind(Dep, t => t
+      .toSelf())
+    di.bind(Mid, t => t
+      .toSelf())
+    di.bind(Root, t => t
+      .toSelf())
     await di.init()
 
     const depRef = trackForCollection(di.get(Dep)!)
@@ -53,8 +53,8 @@ describe('Singleton scope memory', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc)
-      .toSelf()
+    di.bind(Svc, t => t
+      .toSelf())
     await di.init()
     const isCollected = trackForCollection(di.get(Svc)!)
 
@@ -73,12 +73,12 @@ describe('Singleton scope memory', function () {
 
     const run = async () => {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(CycleA)
-        .toSelf()
-      di.bind(CycleB)
-        .toSelf()
-      di.bind(CycleC)
-        .toSelf()
+      di.bind(CycleA, t => t
+        .toSelf())
+      di.bind(CycleB, t => t
+        .toSelf())
+      di.bind(CycleC, t => t
+        .toSelf())
       await di.init()
       di.get(CycleA)
       di.get(CycleB)

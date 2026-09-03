@@ -2,6 +2,7 @@ import '../index.nodejs.js'
 import { describe, it, beforeEach, expect, vi } from 'vitest'
 import { token } from '../key.js'
 import { CaffeineIoC } from '../container.js'
+import { ErrInvalidBinding, ErrOutOfScope, ErrNoResolutionForKey, ErrRepeatedInjectableConfiguration } from '../errors.js'
 import { Configuration } from '../decorators/configuration.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Fallback } from '../decorators/fallback.js'
@@ -13,7 +14,6 @@ import { PostConstruct } from '../decorators/post_construct.js'
 import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Primary } from '../decorators/primary.js'
 import { Provides } from '../decorators/provides.js'
-import { ErrOutOfScope, ErrNoResolutionForKey, ErrRepeatedInjectableConfiguration } from '../errors.js'
 import { $i } from '../injection.js'
 import { Scopes } from '../scope.js'
 import { Provider } from '../provider.js'
@@ -107,8 +107,8 @@ describe('B4: toFactory() returning null — null is a valid resolved value', fu
     const di = new CaffeineIoC({ decorators: false })
     const kB4 = token<any>(Symbol('ec-b4'))
 
-    di.bind(kB4)
-      .toFactory(() => null as any)
+    di.bind(kB4, t => t
+      .toFactory(() => null as any))
     await di.init()
     expect(di.get(kB4))
       .toBeNull()
@@ -126,10 +126,10 @@ describe('B5: Binding the same key twice — last write wins', function () {
       readonly value = 'second'
     }
 
-    di.bind(EC_B5Key)
-      .toClass(EC_B5First)
-    di.bind(EC_B5Key)
-      .toClass(EC_B5Second)
+    di.bind(EC_B5Key, t => t
+      .toClass(EC_B5First))
+    di.bind(EC_B5Key, t => t
+      .toClass(EC_B5Second))
     await di.init()
     const result = di.get(EC_B5Key) as EC_B5Second
     expect(result.value)
@@ -156,9 +156,9 @@ describe('C1: @PostConstruct on TRANSIENT — called for every new instance', fu
 
   it('should invoke the @PostConstruct method once per transient resolution', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_C1Transient)
+    di.bind(EC_C1Transient, t => t
       .toSelf()
-      .lifetime(Scopes.TRANSIENT)
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     di.get(EC_C1Transient)
     di.get(EC_C1Transient)
@@ -182,9 +182,9 @@ describe('C2: @PreDestroy on TRANSIENT — never called by dispose()', function 
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_C2Transient)
+    di.bind(EC_C2Transient, t => t
       .toSelf()
-      .lifetime(Scopes.TRANSIENT)
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     di.get(EC_C2Transient)
     di.get(EC_C2Transient)
@@ -201,9 +201,9 @@ describe('C4: Request scope outside run() block — throws ErrOutOfScope', funct
     class EC_C4RequestSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_C4RequestSvc)
+    di.bind(EC_C4RequestSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
 
     await di.init()
     expect(() => di.get(EC_C4RequestSvc))
@@ -216,9 +216,9 @@ describe('C5: RequestScopeManager.run() — returns a Promise for both sync and 
     class EC_C5Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_C5Svc)
+    di.bind(EC_C5Svc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
     await di.init()
 
     const result = di.requestScopeManager.run(() => 42)
@@ -232,9 +232,9 @@ describe('C5: RequestScopeManager.run() — returns a Promise for both sync and 
     class EC_C5AsyncSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_C5AsyncSvc)
+    di.bind(EC_C5AsyncSvc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
     await di.init()
 
     const result = await di.requestScopeManager.run(async () => 'hello')
@@ -256,11 +256,11 @@ describe('D1: injectAll with zero matching bindings — returns empty array', fu
     const di = new CaffeineIoC({ decorators: false })
     const kD1Consumer = token<any>(Symbol('ec-d1-consumer'))
 
-    di.bind(kD1Consumer)
+    di.bind(kD1Consumer, t => t
       .toFunction((deps: unknown[]) => {
         captured = deps
         return {}
-      }, [$i.allOf(kD1Missing)])
+      }, [$i.allOf(kD1Missing)]))
 
     await di.init()
     di.get(kD1Consumer)
@@ -274,13 +274,13 @@ describe('D3: get() with manual bind — primary wins among named bindings', fun
   it('should return the primary binding when multiple named bindings exist', async function () {
     const kD3 = token<any>(Symbol('ec-d3'))
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('a'))
+    di.bind(token<any>('a'), t => t
       .toValue('plain')
-      .names(kD3)
-    di.bind(token<any>('b'))
+      .names(kD3))
+    di.bind(token<any>('b'), t => t
       .toValue('winner')
       .names(kD3)
-      .primary()
+      .primary())
     await di.init()
 
     expect(di.get<string>(kD3))
@@ -295,13 +295,13 @@ describe('D2: getMany() with @Primary — primary instance is first in result', 
     class EC_D2aRegular {}
     class EC_D2aPrimary {}
 
-    di.bind(EC_D2aRegular)
+    di.bind(EC_D2aRegular, t => t
       .toSelf()
-      .names(kD2a)
-    di.bind(EC_D2aPrimary)
+      .names(kD2a))
+    di.bind(EC_D2aPrimary, t => t
       .toSelf()
       .primary()
-      .names(kD2a)
+      .names(kD2a))
     await di.init()
     const results = di.getMany(kD2a)
 
@@ -319,13 +319,13 @@ describe('D2: getMany() with @Primary — primary instance is first in result', 
     class EC_D2bRegular {}
     class EC_D2bPrimary {}
 
-    di.bind(EC_D2bRegular)
+    di.bind(EC_D2bRegular, t => t
+      .toSelf()
+      .names(kD2b))
+    di.bind(EC_D2bPrimary, t => t
       .toSelf()
       .names(kD2b)
-    di.bind(EC_D2bPrimary)
-      .toSelf()
-      .names(kD2b)
-      .primary()
+      .primary())
     await di.init()
     const results = di.getMany(kD2b)
 
@@ -351,12 +351,12 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
       }
 
       const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-      di.bind(EC_D3SingletonDep)
+      di.bind(EC_D3SingletonDep, t => t
         .toSelf()
-        .lifetime(Scopes.SINGLETON)
-      di.bind(EC_D3TransientConsumer)
+        .lifetime(Scopes.SINGLETON))
+      di.bind(EC_D3TransientConsumer, t => t
         .toSelf()
-        .lifetime(Scopes.TRANSIENT)
+        .lifetime(Scopes.TRANSIENT))
       await di.init()
       const t1 = di.get(EC_D3TransientConsumer)
       const t2 = di.get(EC_D3TransientConsumer)
@@ -381,12 +381,12 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(EC_D3SingletonDep)
+      di.bind(EC_D3SingletonDep, t => t
         .toSelf()
-        .lifetime(Scopes.SINGLETON)
-      di.bind(EC_D3TransientConsumer)
+        .lifetime(Scopes.SINGLETON))
+      di.bind(EC_D3TransientConsumer, t => t
         .toSelf()
-        .lifetime(Scopes.TRANSIENT)
+        .lifetime(Scopes.TRANSIENT))
       await di.init()
       const t1 = di.get(EC_D3TransientConsumer)
       const t2 = di.get(EC_D3TransientConsumer)
@@ -438,8 +438,8 @@ describe('E1: @ConditionalOn at class + method level — independent evaluation'
 
   it('should skip the bean when class condition passes but method condition fails', function () {
     const di = new CaffeineIoC({ profiles: [NS_E1], decorators: false })
-    di.bind(kE1ClassFlag)
-      .toValue(true)
+    di.bind(kE1ClassFlag, t => t
+      .toValue(true))
     // kE1MethodFlag is absent → method condition fails → bean skipped
     di.autoWire()
 
@@ -449,10 +449,10 @@ describe('E1: @ConditionalOn at class + method level — independent evaluation'
 
   it('should register the bean when both conditions pass', async function () {
     const di = new CaffeineIoC({ profiles: [NS_E1], decorators: false })
-    di.bind(kE1ClassFlag)
-      .toValue(true)
-    di.bind(kE1MethodFlag)
-      .toValue(true)
+    di.bind(kE1ClassFlag, t => t
+      .toValue(true))
+    di.bind(kE1MethodFlag, t => t
+      .toValue(true))
     di.autoWire()
     await di.init()
     expect(di.has(kE1Bean))
@@ -534,8 +534,8 @@ describe('F1: @PostConstruct throws — error propagates from init()', function 
     }
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['ec-f1'] })
-    di.bind(EC_F1BadInit)
-      .toSelf()
+    di.bind(EC_F1BadInit, t => t
+      .toSelf())
 
     await expect(di.init()).rejects.toThrow('post-construct-boom')
   })
@@ -572,12 +572,12 @@ describe('F2: dispose() calls @PreDestroy on all resolved singletons', function 
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_F2Svc1)
-      .toSelf()
-    di.bind(EC_F2Svc2)
-      .toSelf()
-    di.bind(EC_F2Svc3)
-      .toSelf()
+    di.bind(EC_F2Svc1, t => t
+      .toSelf())
+    di.bind(EC_F2Svc2, t => t
+      .toSelf())
+    di.bind(EC_F2Svc3, t => t
+      .toSelf())
     await di.init()
 
     di.get(EC_F2Svc1)
@@ -609,9 +609,9 @@ describe('F3: @Interceptor on TRANSIENT — invoked for every new resolution', f
 
   it('should call the interceptor once per transient resolution', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_F3Transient)
+    di.bind(EC_F3Transient, t => t
       .toSelf()
-      .lifetime(Scopes.TRANSIENT)
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     di.get(EC_F3Transient)
     di.get(EC_F3Transient)
@@ -653,8 +653,8 @@ describe('Self-referencing', function () {
 
     it('should allow using manual binding using deferred injection', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Service)
-        .toSelf([$i.defer(() => Service)])
+      di.bind(Service, t => t
+        .toSelf([$i.defer(() => Service)]))
       await di.init()
 
       const service = di.get(Service)
@@ -667,13 +667,13 @@ describe('Self-referencing', function () {
         .toBe('hello')
     })
 
-    it('should fail when not using deferred injection', async function () {
+    it('should fail when not using deferred injection', function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Service)
-        .toSelf([Service])
 
-      // throws stack overflow error
-      await expect(di.init()).rejects.toThrow()
+      // Rejected at the bind() call rather than left to blow the stack during init().
+      expect(() => di.bind(Service, t => t
+        .toSelf([Service])))
+        .toThrow(ErrInvalidBinding)
     })
   })
 })

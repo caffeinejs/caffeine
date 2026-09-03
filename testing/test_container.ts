@@ -1,9 +1,9 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import type { Binder, Container, Identifier, InjectionToken, Module, ModuleFn, Snapshot } from '@caffeinejs/di'
+import type { BindingSpec, Container, Identifier, InjectionToken, Module, ModuleFn, Snapshot, TokenValue } from '@caffeinejs/di'
 import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
 interface IsolationEntry {
-  configure: (binder: Binder<any>) => void
+  configure: (spec: BindingSpec<any, any>) => void
   pruneSharedDependencies: boolean
 }
 
@@ -21,7 +21,7 @@ interface IsolationEntry {
 export class TestContainer {
   readonly #snap: Snapshot
   readonly #fromScratch: boolean
-  readonly #overrides = new Map<InjectionToken, (binder: Binder<any>) => void>()
+  readonly #overrides = new Map<InjectionToken, (spec: BindingSpec<any, any>) => void>()
   readonly #isolations = new Map<InjectionToken, IsolationEntry>()
   readonly #skips = new Set<InjectionToken>()
 
@@ -89,9 +89,9 @@ export class TestContainer {
   /**
    * Replaces the binding for `key` in the test container.
    *
-   * The `configure` callback receives a {@link Binder} pre-linked to `key`, so the full
+   * The `configure` callback receives a {@link BindingSpec} pre-linked to `key`, so the full
    * binding DSL is available: `.toValue()`, `.toClass()`, `.toFactory()`, `.toFunction()`,
-   * and all {@link BinderOptions} modifiers (`.lifetime()`, `.lazy()`, `.names()`, etc.).
+   * and all its modifiers (`.lifetime()`, `.lazy()`, `.names()`, etc.).
    *
    * Overriding a key that was removed by {@link skipAsyncBindings} re-adds it — the override
    * is always exempt from async filters.
@@ -106,8 +106,8 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  override<T>(key: InjectionToken<T>, configure: (binder: Binder<T>) => void): this {
-    this.#overrides.set(key, configure as (binder: Binder<any>) => void)
+  override<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this {
+    this.#overrides.set(key, configure as (spec: BindingSpec<any, any>) => void)
     return this
   }
 
@@ -138,9 +138,9 @@ export class TestContainer {
    * When `pruneSharedDependencies` is `true`, **all** transitive dependencies of `key`
    * are pruned, regardless of whether other bindings reference them.
    *
-   * The `configure` callback receives a {@link Binder} pre-linked to `key`, giving access
+   * The `configure` callback receives a {@link BindingSpec} pre-linked to `key`, giving access
    * to the full binding DSL: `.toValue()`, `.toClass()`, `.toFactory()`, `.toFunction()`,
-   * and all {@link BinderOptions} modifiers.
+   * and all its modifiers.
    *
    * Keys registered via `isolate` are always exempt from {@link skipAsyncBindings} filters.
    *
@@ -152,8 +152,15 @@ export class TestContainer {
    *   .build()
    * ```
    */
-  isolate<T>(key: InjectionToken<T>, pruneSharedDependencies: boolean, configure: (binder: Binder<T>) => void): this {
-    this.#isolations.set(key, { configure, pruneSharedDependencies })
+  isolate<K extends InjectionToken<any>>(
+    key: K,
+    pruneSharedDependencies: boolean,
+    configure: (spec: BindingSpec<TokenValue<K>, K>) => void,
+  ): this {
+    this.#isolations.set(key, {
+      configure: configure as (spec: BindingSpec<any, any>) => void,
+      pruneSharedDependencies,
+    })
     return this
   }
 
@@ -319,11 +326,11 @@ export class TestContainer {
     di.restore(snap)
 
     for (const [key, { configure }] of this.#isolations) {
-      configure(di.rebind(key as any))
+      di.rebind(key as any, configure)
     }
 
     for (const [key, configure] of this.#overrides) {
-      configure(di.rebind(key as any))
+      di.rebind(key as any, configure)
     }
 
     return di

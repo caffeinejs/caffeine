@@ -10,7 +10,7 @@ The following documents cover the APIs you will use most often:
 - [Container](./container.md) — the `CaffeineIoC` class: constructor options, all
   resolution, binding, lifecycle, and inspection methods.
 
-- [Binder](./binder.md) — the `Binder` and `BinderOptions` fluent APIs
+- [BindingSpec](./binding-spec.md) — the `BindingSpec` fluent API
   returned by `di.bind()`.
 
 - [Decorators](./decorators.md) — every decorator exported from
@@ -26,7 +26,7 @@ The following documents cover the APIs you will use most often:
 
 ## Reference table of contents
 
-- [Binder](./binder.md) — `Binder<T>` and `BinderOptions<T>` fluent APIs.
+- [BindingSpec](./binding-spec.md) — the `BindingSpec<T>` fluent API.
 
 - [Container](./container.md) — `CaffeineIoC` constructor, resolution methods,
   binding methods, lifecycle, and properties.

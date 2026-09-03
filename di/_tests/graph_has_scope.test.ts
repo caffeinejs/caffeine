@@ -15,8 +15,8 @@ describe('hasScopeWithinGraph', function () {
   it('returns true when root binding has the scope', async function () {
     const kA = token<any>(Symbol('ghs-root-scope'))
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(kA).toValue('a')
-      .lifetime(Scopes.SINGLETON)
+    di.bind(kA, t => t.toValue('a')
+      .lifetime(Scopes.SINGLETON))
     await di.init()
     expect(di.hasScopeInGraph(kA, Scopes.SINGLETON)).toBe(true)
   })
@@ -24,8 +24,8 @@ describe('hasScopeWithinGraph', function () {
   it('returns false when root binding does not have the scope', async function () {
     const kA = token<any>(Symbol('ghs-root-no-scope'))
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(kA).toValue('a')
-      .lifetime(Scopes.TRANSIENT)
+    di.bind(kA, t => t.toValue('a')
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     expect(di.hasScopeInGraph(kA, Scopes.SINGLETON)).toBe(false)
   })
@@ -35,12 +35,12 @@ describe('hasScopeWithinGraph', function () {
     const kB = token<any>(Symbol('ghs-trans-b'))
     const kC = token<any>(Symbol('ghs-trans-c'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-    di.bind(kC).toValue('c')
-      .lifetime(Scopes.SINGLETON)
-    di.bind(kB).toFunction((_: unknown) => 'b', [kC])
-      .lifetime(Scopes.TRANSIENT)
-    di.bind(kA).toFunction((_: unknown) => 'a', [kB])
-      .lifetime(Scopes.TRANSIENT)
+    di.bind(kC, t => t.toValue('c')
+      .lifetime(Scopes.SINGLETON))
+    di.bind(kB, t => t.toFunction((_: unknown) => 'b', [kC])
+      .lifetime(Scopes.TRANSIENT))
+    di.bind(kA, t => t.toFunction((_: unknown) => 'a', [kB])
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     expect(di.hasScopeInGraph(kA, Scopes.SINGLETON)).toBe(true)
   })
@@ -49,10 +49,10 @@ describe('hasScopeWithinGraph', function () {
     const kA = token<any>(Symbol('ghs-none-a'))
     const kB = token<any>(Symbol('ghs-none-b'))
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(kB).toValue('b')
-      .lifetime(Scopes.TRANSIENT)
-    di.bind(kA).toFunction((_: unknown) => 'a', [kB])
-      .lifetime(Scopes.TRANSIENT)
+    di.bind(kB, t => t.toValue('b')
+      .lifetime(Scopes.TRANSIENT))
+    di.bind(kA, t => t.toFunction((_: unknown) => 'a', [kB])
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     expect(di.hasScopeInGraph(kA, Scopes.SINGLETON)).toBe(false)
   })
@@ -61,10 +61,10 @@ describe('hasScopeWithinGraph', function () {
     const kA = token<any>(Symbol('ghs-cycle-a'))
     const kB = token<any>(Symbol('ghs-cycle-b'))
     const di = new CaffeineIoC({ checks: { circularReferences: false, scopes: 'off' }, decorators: false })
-    di.bind(kA).toFunction((_: unknown) => 'a', [kB])
-      .lifetime(Scopes.TRANSIENT)
-    di.bind(kB).toFunction((_: unknown) => 'b', [kA])
-      .lifetime(Scopes.TRANSIENT)
+    di.bind(kA, t => t.toFunction((_: unknown) => 'a', [kB])
+      .lifetime(Scopes.TRANSIENT))
+    di.bind(kB, t => t.toFunction((_: unknown) => 'b', [kA])
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     expect(di.hasScopeInGraph(kA, Scopes.SINGLETON)).toBe(false)
   })
@@ -73,10 +73,10 @@ describe('hasScopeWithinGraph', function () {
     const kSvc = token<any>('ghs-named-svc')
     const kOwner = token<any>(Symbol('ghs-named-owner'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-    di.bind(kSvc).toValue('svc')
-      .lifetime(Scopes.SINGLETON)
-    di.bind(kOwner).toFunction((_: unknown) => 'owner', [kSvc])
-      .lifetime(Scopes.TRANSIENT)
+    di.bind(kSvc, t => t.toValue('svc')
+      .lifetime(Scopes.SINGLETON))
+    di.bind(kOwner, t => t.toFunction((_: unknown) => 'owner', [kSvc])
+      .lifetime(Scopes.TRANSIENT))
     await di.init()
     expect(di.hasScopeInGraph(kOwner, Scopes.SINGLETON)).toBe(true)
   })
@@ -102,9 +102,9 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
     const kDep = token<any>(Symbol('ghs-aspect-dep'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
-    di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
-    di.bind(kDep).toValue('dep').lifetime(Scopes.TRANSIENT)
-    di.aspect(AspectWithDep).toSelf([kDep]).pointcuts($aop.forClass(Object))
+    di.bind(kController, t => t.toValue('ctrl').lifetime(Scopes.SINGLETON))
+    di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+    di.aspect(AspectWithDep, t => t.toSelf([kDep]).pointcuts($aop.forClass(Object)))
 
     await di.init()
 
@@ -116,8 +116,8 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
     const kController = token<any>(Symbol('ghs-aspect-no-scope-ctrl'))
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
-    di.aspect(AspectNoDep).toSelf().pointcuts($aop.forClass(Object))
+    di.bind(kController, t => t.toValue('ctrl').lifetime(Scopes.SINGLETON))
+    di.aspect(AspectNoDep, t => t.toSelf().pointcuts($aop.forClass(Object)))
 
     await di.init()
 
@@ -130,9 +130,9 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
     const kDep = token<any>(Symbol('ghs-aspect-precompile-dep'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
-    di.bind(kController).toValue('ctrl').lifetime(Scopes.SINGLETON)
-    di.bind(kDep).toValue('dep').lifetime(Scopes.TRANSIENT)
-    di.aspect(AspectWithDep).toSelf([kDep]).pointcuts($aop.forClass(Object))
+    di.bind(kController, t => t.toValue('ctrl').lifetime(Scopes.SINGLETON))
+    di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+    di.aspect(AspectWithDep, t => t.toSelf([kDep]).pointcuts($aop.forClass(Object)))
 
     // init() not called — _aspectScopeCache is null; aspect deps are not consulted.
     expect(di.hasScopeInGraph(kController, Scopes.TRANSIENT)).toBe(false)
@@ -158,10 +158,10 @@ describe('hasScopeWithinGraph through a polymorphic dependency', function () {
 
   it('counts the scope of a dependency injected through an abstract base key', async function () {
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-    di.bind(GhsRequestStore).toSelf().extends(GhsStore)
-      .lifetime(Scopes.TRANSIENT)
-    di.bind(GhsConsumer).toClass(GhsConsumer, [GhsStore])
-      .lifetime(Scopes.SINGLETON)
+    di.bind(GhsRequestStore, t => t.toSelf().extends(GhsStore)
+      .lifetime(Scopes.TRANSIENT))
+    di.bind(GhsConsumer, t => t.toClass(GhsConsumer, [GhsStore])
+      .lifetime(Scopes.SINGLETON))
     await di.init()
 
     // Only reachable through GhsStore, which is a key nothing is bound directly under.
@@ -170,10 +170,10 @@ describe('hasScopeWithinGraph through a polymorphic dependency', function () {
 
   it('still reports false when the polymorphic dependency is not in that scope', async function () {
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-    di.bind(GhsRequestStore).toSelf().extends(GhsStore)
-      .lifetime(Scopes.SINGLETON)
-    di.bind(GhsConsumer).toClass(GhsConsumer, [GhsStore])
-      .lifetime(Scopes.SINGLETON)
+    di.bind(GhsRequestStore, t => t.toSelf().extends(GhsStore)
+      .lifetime(Scopes.SINGLETON))
+    di.bind(GhsConsumer, t => t.toClass(GhsConsumer, [GhsStore])
+      .lifetime(Scopes.SINGLETON))
     await di.init()
 
     expect(di.hasScopeInGraph(GhsConsumer, Scopes.TRANSIENT)).toBe(false)
@@ -185,8 +185,8 @@ describe('hasScopeWithinGraph through a polymorphic dependency', function () {
     }
 
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-    di.bind(GhsProbeDep).toSelf()
-    di.bind(GhsProbe).toClass(GhsProbe, [GhsProbeDep])
+    di.bind(GhsProbeDep, t => t.toSelf())
+    di.bind(GhsProbe, t => t.toClass(GhsProbe, [GhsProbeDep]))
     await di.init()
 
     di.hasScopeInGraph(GhsProbe, Scopes.REQUEST)

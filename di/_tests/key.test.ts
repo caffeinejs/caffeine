@@ -113,20 +113,20 @@ describe('token()', function () {
 
 function injectionTokenTypeChecks(di: CaffeineIoC): void {
   // @ts-expect-error bare string is not an InjectionToken
-  di.bind('foo')
+  di.bind('foo', t => t.toValue(1))
   // @ts-expect-error bare string is not an InjectionToken
   di.get('foo')
   // @ts-expect-error bare symbol is not an InjectionToken
-  di.bind(Symbol('x'))
+  di.bind(Symbol('x'), t => t.toValue(1))
 
   const kPort = token<string>('port')
-  di.bind(kPort).toValue('8080')
+  di.bind(kPort, t => t.toValue('8080'))
   // @ts-expect-error value type must match the token
-  di.bind(kPort).toValue(42)
+  di.bind(kPort, t => t.toValue(42))
   const port: string = di.get(kPort)
   void port
 
   // @ts-expect-error token() requires a type argument
-  di.bind(token(Symbol('x')))
+  di.bind(token(Symbol('x')), t => t.toValue(1))
 }
 void injectionTokenTypeChecks

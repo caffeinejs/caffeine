@@ -17,9 +17,9 @@ describe('REQUEST scope — manual bindScope', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc)
+    di.bind(Svc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
     await di.init()
 
     let resolved: Svc | undefined
@@ -37,9 +37,9 @@ describe('REQUEST scope — manual bindScope', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc)
+    di.bind(Svc, t => t
       .toSelf()
-      .lifetime(Scopes.REQUEST)
+      .lifetime(Scopes.REQUEST))
     await di.init()
 
     expect(() => di.get(Svc))

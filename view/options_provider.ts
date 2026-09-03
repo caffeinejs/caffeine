@@ -68,7 +68,7 @@ export class ViewOptionsProvider implements Service {
     // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
     // and registers it as a Fastify plugin — http no longer hardcodes it. The provider goes in directly
     // rather than through a container key it would only be read back out of at server setup.
-    kit.container.bind(ViewExtension).toValue(new ViewExtension(this)).extends()
+    kit.container.bind(ViewExtension, t => t.toValue(new ViewExtension(this)).extends())
 
     return Promise.resolve()
   }

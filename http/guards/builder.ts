@@ -23,10 +23,10 @@ export class GuardsBuilder implements Service {
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     kit.container
-      .bind(kGlobalGuards)
-      .toValue(this.#keys)
-      .lifetime(Scopes.SINGLETON)
-      .internal()
+      .bind(kGlobalGuards, t => t
+        .toValue(this.#keys)
+        .lifetime(Scopes.SINGLETON)
+        .internal())
 
     return Promise.resolve()
   }

@@ -259,8 +259,8 @@ class RedisCache extends Cache {
 
 const di = new CaffeineIoC()
 
-di.bind(MemCache).toSelf().extends()
-di.bind(RedisCache).toSelf().extends().primary()
+di.bind(MemCache, t => t.toSelf().extends())
+di.bind(RedisCache, t => t.toSelf().extends().primary())
 
 await di.init()
 

@@ -139,13 +139,13 @@ import { CaffeineIoC } from '@caffeinejs/di'
 
 const di = new CaffeineIoC({ decorators: false })
 
-di.bind(HeavyService)
+di.bind(HeavyService, t => t
   .toSelf()
-  .lazy()                  // deferred to first get()
+  .lazy())                  // deferred to first get()
 
-di.bind(CriticalService)
+di.bind(CriticalService, t => t
   .toSelf()
-  .lazy(false)             // constructed during init()
+  .lazy(false))             // constructed during init()
 
 await di.init()
 ```

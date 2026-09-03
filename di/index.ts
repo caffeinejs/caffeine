@@ -9,11 +9,9 @@ import './_polyfill.js'
 export { annotate, createAnnotation } from './annotations.js'
 export type { JoinPoint, MethodAspect, Pointcut, PointcutClassPredicate, PointcutMethodPredicate } from './aop.js'
 export { $aop } from './aop.js'
-export type { AOPBinder } from './aop_binder.js'
-export type { AOPBinderOptions } from './aop_binder_options.js'
-export type { Binder } from './binder.js'
-export type { BinderOptions } from './binder_options.js'
+export type { AspectSpec } from './aspect_spec.js'
 export type { Binding } from './binding.js'
+export type { BindingSpec } from './binding_spec.js'
 export type { Conditional, ConditionContext } from './conditional.js'
 export { CaffeineIoC } from './container.js'
 export type * from './container_interface.js'
@@ -40,6 +38,7 @@ export {
   type NamedToken,
   token,
   type TokenBrand,
+  type TokenValue,
   type TypedKey,
 } from './key.js'
 export type { MetadataReader } from './metadata_reader.js'

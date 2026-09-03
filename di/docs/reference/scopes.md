@@ -40,7 +40,7 @@ Set a scope with the `@Lifetime` decorator or the fluent binder:
 class RequestContext { ... }
 
 // Fluent API
-di.bind(RequestContext).toSelf().lifetime(Scopes.REQUEST)
+di.bind(RequestContext, t => t.toSelf().lifetime(Scopes.REQUEST))
 ```
 
 ---

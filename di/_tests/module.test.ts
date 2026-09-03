@@ -30,8 +30,8 @@ describe('Module', function () {
   describe('new CaffeineIoC({ modules })', function () {
     it('should execute a single module and register its bindings', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(Svc)
-          .toSelf()
+        container.bind(Svc, t => t
+          .toSelf())
       }
 
       const di = new CaffeineIoC({ decorators: false, modules: [module] })
@@ -63,8 +63,8 @@ describe('Module', function () {
 
     it('should give each module access to the container', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(token<any>('key'))
-          .toValue('value')
+        container.bind(token<any>('key'), t => t
+          .toValue('value'))
       }
 
       const di = new CaffeineIoC({ decorators: false, modules: [module] })
@@ -90,12 +90,12 @@ describe('Module', function () {
 
     it('should support multiple modules each registering different bindings', async function () {
       const modA: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(Svc)
-          .toSelf()
+        container.bind(Svc, t => t
+          .toSelf())
       }
       const modB: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(OtherSvc)
-          .toSelf()
+        container.bind(OtherSvc, t => t
+          .toSelf())
       }
 
       const di = new CaffeineIoC({ decorators: false, modules: [modA, modB] })
@@ -114,8 +114,8 @@ describe('Module', function () {
 
     it('should execute modules after autoWire', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(token<any>('manual-key'))
-          .toValue('manual-value')
+        container.bind(token<any>('manual-key'), t => t
+          .toValue('manual-value'))
       }
 
       const di = new CaffeineIoC({ modules: [module] })
@@ -128,8 +128,8 @@ describe('Module', function () {
     it('should coexist with auto-wired bindings', async function () {
       const kToken = token<any>(Symbol('module-test-token'))
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(kToken)
-          .toValue(42)
+        container.bind(kToken, t => t
+          .toValue(42))
       }
 
       const di = new CaffeineIoC({ modules: [module] })
@@ -159,7 +159,7 @@ describe('Module', function () {
   describe('addModules', function () {
     it('should register a module queued before init', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(Svc).toSelf()
+        container.bind(Svc, t => t.toSelf())
       }
 
       const di = new CaffeineIoC({ decorators: false })
@@ -171,10 +171,10 @@ describe('Module', function () {
 
     it('should register multiple modules queued before init', async function () {
       const modA: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(Svc).toSelf()
+        container.bind(Svc, t => t.toSelf())
       }
       const modB: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(OtherSvc).toSelf()
+        container.bind(OtherSvc, t => t.toSelf())
       }
 
       const di = new CaffeineIoC({ decorators: false })

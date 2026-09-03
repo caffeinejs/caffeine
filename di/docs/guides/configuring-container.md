@@ -161,8 +161,8 @@ Set to `false` for fully manual containers where no decorators are used:
 ```ts
 const di = new CaffeineIoC({ decorators: false })
 
-di.bind(Logger).toSelf()
-di.bind(UserService).toClass(UserService, [Logger])
+di.bind(Logger, t => t.toSelf())
+di.bind(UserService, t => t.toClass(UserService, [Logger]))
 
 await di.init()
 ```

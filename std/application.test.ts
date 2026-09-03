@@ -44,7 +44,7 @@ describe('Application lifecycle', () => {
       }
     }
 
-    const app = appWith(c => c.bind(Beacon).toClass(Beacon))
+    const app = appWith(c => c.bind(Beacon, t => t.toClass(Beacon)))
 
     await app.ready()
     expect(order).toEqual(['ready'])
@@ -102,7 +102,7 @@ describe('Application lifecycle', () => {
       }
     }
 
-    const app = appWith(c => c.bind(Boom).toClass(Boom))
+    const app = appWith(c => c.bind(Boom, t => t.toClass(Boom)))
 
     await expect(app.ready()).rejects.toThrow('boom')
   })
@@ -125,8 +125,8 @@ describe('Application lifecycle', () => {
     }
 
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(Failing).toClass(Failing)
-    container.bind(Ok).toClass(Ok)
+    container.bind(Failing, t => t.toClass(Failing))
+    container.bind(Ok, t => t.toClass(Ok))
     const dispose = vi.spyOn(container, 'dispose')
 
     const app = createApplication({ container }).build()
@@ -147,7 +147,7 @@ describe('Application lifecycle', () => {
       }
     }
 
-    const app = appWith(c => c.bind(Transient).toClass(Transient).lifetime(Scopes.TRANSIENT))
+    const app = appWith(c => c.bind(Transient, t => t.toClass(Transient).lifetime(Scopes.TRANSIENT)))
     await app.ready()
 
     expect(fired).not.toHaveBeenCalled()
@@ -173,7 +173,7 @@ describe('Application lifecycle', () => {
             return 'probe'
           },
           bootstrap(kit) {
-            kit.container.bind(kSentinel).toValue({ value: state.value })
+            kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
             return Promise.resolve()
           },
         })
@@ -237,7 +237,7 @@ describe('application name and profiles', () => {
 
   it('does not register a @Profile bean without matching config profiles', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(EuOnly).toSelf()
+    container.bind(EuOnly, t => t.toSelf())
     const app = createApplication({ container }).build()
     await app.ready()
 
@@ -246,7 +246,7 @@ describe('application name and profiles', () => {
 
   it('registers a @Profile bean when caffeine.profiles includes it', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(EuOnly).toSelf()
+    container.bind(EuOnly, t => t.toSelf())
     const app = createApplication({ container })
       .config(c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
       .build()
