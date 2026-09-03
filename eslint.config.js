@@ -4,7 +4,6 @@ import { configs as tseslintConfigs } from 'typescript-eslint'
 import importX from 'eslint-plugin-import-x'
 import pluginN from 'eslint-plugin-n'
 import pluginPromise from 'eslint-plugin-promise'
-import tsdocPlugin from 'eslint-plugin-tsdoc'
 import globals from 'globals'
 import unusedImports from 'eslint-plugin-unused-imports'
 import simpleImportSort from 'eslint-plugin-simple-import-sort'
@@ -66,7 +65,6 @@ export default defineConfig(
     plugins: {
       n: pluginN,
       promise: pluginPromise,
-      tsdoc: tsdocPlugin,
       'unused-imports': unusedImports,
       'simple-import-sort': simpleImportSort,
     },
@@ -77,8 +75,6 @@ export default defineConfig(
     },
     rules: {
       curly: ['error', 'all'],
-
-      'tsdoc/syntax': 'error',
 
       '@stylistic/max-len': ['warn', {
         code: 120,
@@ -141,7 +137,6 @@ export default defineConfig(
     rules: {
       'import-x/extensions': 'off',
       'import-x/no-unresolved': ['error', { ignore: ['^bun:'] }],
-      'tsdoc/syntax': 'off',
       '@typescript-eslint/no-useless-constructor': 'off',
       '@typescript-eslint/no-empty-function': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
