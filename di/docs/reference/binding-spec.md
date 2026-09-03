@@ -232,12 +232,20 @@ di.bind(Logger, t => t.toClass(FileLogger).primary())
 fallback(boolean?)
 ```
 
-Marks this binding as a fallback. It is only used when no non-fallback binding
-exists for the same key.
+Marks this binding as a fallback. It is only used when no other binding exists
+for the same key.
 
 ```ts
 di.bind(Metrics, t => t.toClass(NoOpMetrics).fallback())
 ```
+
+Unlike every other binding, a fallback is not registered when `bind()` returns. It
+is held until `compile()`, after modules, profiles and conditionals have settled, so
+the order the binds happened in does not decide the outcome. Until then the key is
+not visible to `has()`, `entries()` or `size`. When two fallbacks target one key, the
+first registers.
+
+See the [Fallback Bindings guide](../guides/fallback-bindings.md).
 
 ### byPassPostProcessors
 

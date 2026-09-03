@@ -1,26 +1,17 @@
 # `@caffeinejs/di`
 
-## `.fallback()` is order-dependent (known defect)
+## `.fallback()` is held back until `compile()`
 
-`.fallback()` only defers to a binding registered for the same key **after** it. Registered second, it wins —
-so it does not do what its name suggests:
+A `bind()` call registers as soon as its callback returns — except when the spec called `.fallback()`. Those
+bindings are queued and registered by `evaluatePendingFallbacks()`, after modules, profiles and conditionals
+have settled, and only if nothing else has claimed the key. The first fallback for a key wins.
 
-```ts
-// This does NOT keep the first binding. The fallback overwrites it.
-container.bind(CacheStore, t => t.toValue(userStore))
-container.bind(CacheStore, t => t.toClass(MemoryCacheStore).fallback())
-```
+Two consequences, both deliberate:
 
-A `bind()` call registers as soon as its callback returns, so the second call reaches `registerBinding`, which
-merges it into the first with `Object.assign`. Nothing reads the flag in between. Only the decorator path
-defers fallbacks (`pendingFallbacks` in `container.ts`), which is why `_tests/fallback.test.ts` passes while
-the imperative equivalent does not.
-
-Do not reach for `.fallback()` to replace a `has()` probe — it makes the problem worse, silently. Fixing it
-means the imperative path deferring registration the way the decorator path does. That is a smaller change
-than it used to be: the whole chain is now materialised before `configureBinding` runs, so `fallback` is known
-at registration time. `configureBinding` still throws eagerly, with tests depending on that
-(`_tests/extending_classes.test.ts`, `_tests/manual_bind.test.ts`).
+- `has()`, `entries()` and `size` do not see a fallback-only key until `compile()`. Every other binding is
+  still visible the moment `bind()` returns.
+- `bind()` does not inherit `@Fallback` from a decorated class. Binding a key by hand is an explicit
+  registration, so an override would otherwise defer to the default it is replacing.
 
 ## `has()` means resolvable, not directly bound
 

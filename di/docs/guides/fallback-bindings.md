@@ -162,6 +162,20 @@ di.get(Cache) // RedisCache — InMemoryCache was skipped
 
 If the second `bind` call is absent, `InMemoryCache` is used.
 
+Order does not matter. A fallback is resolved during `compile()`, once modules,
+profiles and conditionals have settled, so the override wins whether it was bound
+before or after the fallback. That matters because services bootstrap concurrently
+and cannot control which of them binds first.
+
+Two consequences follow from that timing:
+
+- A fallback-only key is not visible to `has()`, `entries()` or `size` until the
+  container is compiled. Every other binding is visible as soon as `bind()` returns.
+- When two fallbacks target the same key, the first one registers.
+
+Binding a key by hand never inherits `@Fallback` from the decorated class — an
+explicit `bind()` is an override, so only calling `.fallback()` makes it a fallback.
+
 ---
 
 ## `@Fallback` vs `@ConditionalOn`

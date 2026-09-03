@@ -104,6 +104,7 @@ export class CaffeineIoC implements Container {
   private _pendingManualProfiles: PendingBinding[] = []
   private _pendingManualProfileKeys = new Set<InjectionToken>()
   private _pendingConfigKeys: Map<InjectionToken, InjectionToken[]> = new Map()
+  private _pendingFallbacks: Array<[InjectionToken, Binding]> = []
   private _evaluatingProfiles = false
   private _pendingConditionalKeys = new Set<InjectionToken>()
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
@@ -659,11 +660,17 @@ export class CaffeineIoC implements Container {
 
     const type = getBindingConfiguration(key)
     const binding = newBinding<TokenValue<K>>(type ? decoratorConfigToBinding(type) : {})
+
+    // Binding a key by hand is an explicit registration, so `@Fallback` on the decorated class is not
+    // inherited — otherwise an override would defer to the very default it is replacing. Only an explicit
+    // `.fallback()` on the spec holds the binding back.
+    binding.fallback = undefined
+
     const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, binding)
 
     configure(spec)
 
-    this.configureBinding(key as InjectionToken, spec[kBuildBinding]())
+    this.registerOrDeferFallback(key as InjectionToken, spec[kBuildBinding]())
 
     return this
   }
@@ -712,6 +719,7 @@ export class CaffeineIoC implements Container {
     this._pendingManualProfiles = this._pendingManualProfiles.filter(e => e.key !== key)
     this._pendingManualProfileKeys.delete(key)
     this._pendingConfigKeys.delete(key)
+    this._pendingFallbacks = this._pendingFallbacks.filter(([k]) => k !== key)
 
     return this.bind(key, configure)
   }
@@ -746,7 +754,7 @@ export class CaffeineIoC implements Container {
 
     configure(spec)
 
-    this.configureBinding(cls as InjectionToken, spec[kBuildBinding]())
+    this.registerOrDeferFallback(cls as InjectionToken, spec[kBuildBinding]())
 
     return this
   }
@@ -1697,6 +1705,7 @@ export class CaffeineIoC implements Container {
     await runModules(this.modules, this)
     this.evaluatePendingProfiles()
     await this.evaluatePendingConditionals()
+    await this.evaluatePendingFallbacks()
 
     if (this.circularReferences) {
       checkCircularReferences(this.registry, this.bindings)
@@ -1832,17 +1841,60 @@ export class CaffeineIoC implements Container {
     return undefined
   }
 
+  /**
+   * Registers a binding, or holds it back when it is a fallback.
+   *
+   * A fallback must not overwrite a binding that already covers the key, and the binding it competes with may
+   * be registered later — by a module, or by a conditional that has not been evaluated yet. Holding it until
+   * {@link evaluatePendingFallbacks} is what makes the outcome independent of the order the binds happened in.
+   */
+  private registerOrDeferFallback(key: InjectionToken, binding: Binding): void {
+    if (binding.fallback === true) {
+      this._pendingFallbacks.push([key, binding])
+      return
+    }
+
+    this.configureBinding(key, binding)
+  }
+
+  /**
+   * Registers the held-back fallbacks whose key is still unclaimed.
+   *
+   * Runs after profiles and conditionals have settled, so a competing binding has either taken the key or been
+   * unregistered. The first fallback for a key wins; later ones find the key taken.
+   */
+  private async evaluatePendingFallbacks(): Promise<void> {
+    for (const [key, binding] of this._pendingFallbacks) {
+      if (this.registry.has(key) || !this.isRegistrable(binding)) {
+        continue
+      }
+
+      if (binding.conditionals.length > 0
+        && !await this.evalConditionals(binding.conditionals, { container: this, key, binding })) {
+        continue
+      }
+
+      this.configureBinding(key, binding)
+    }
+
+    this._pendingFallbacks = []
+  }
+
+  private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
+    for (const c of conditionals) {
+      if (!await c(ctx)) {
+        return false
+      }
+    }
+
+    return true
+  }
+
   private async evaluatePendingConditionals(): Promise<void> {
     const justRegistered = new Set<number>()
 
-    const evalAll = async (conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> => {
-      for (const c of conditionals) {
-        if (!await c(ctx)) {
-          return false
-        }
-      }
-      return true
-    }
+    const evalAll = (conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> =>
+      this.evalConditionals(conditionals, ctx)
 
     const registerEntry = (key: InjectionToken, binding: Binding): void => {
       this.configureBinding(key, binding)
