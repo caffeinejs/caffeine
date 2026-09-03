@@ -12,6 +12,9 @@ export default defineConfig({
       exclude: ['examples/**'],
     },
     pool: 'threads',
+    experimental: {
+      fsModuleCache: true,
+    },
     projects: [
       './di/vitest.config.ts',
       './di/vitest.leak.config.ts',

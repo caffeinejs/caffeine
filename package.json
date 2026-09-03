@@ -37,7 +37,7 @@
     "build:cli": "npm run build -w @caffeinejs/cli && npm install -w @caffeinejs/cli",
     "build:examples": "npm run build:cli && for d in examples/*/; do npm run build -w \"$d\" --if-present || exit 1; done",
     "clean": "npm run clean:dist --workspaces --if-present && tsc --build --clean tsconfig.build.json",
-    "test": "vitest run",
+    "test": "vitest run --shard 1/3",
     "test:e2e": "vitest run --config test/e2e/vitest.config.ts",
     "test:coverage": "vitest run --coverage",
     "test:property": "vitest run prop.test",
