@@ -26,8 +26,12 @@ import { Injectable } from '@caffeinejs/di/decorators'
 
 @Injectable(kRepository)
 class InMemoryRepository implements Repository {
-  async save(entity: unknown) { /* ... */ }
-  async findById(id: string) { /* ... */ }
+  async save(entity: unknown) {
+    /* ... */
+  }
+  async findById(id: string) {
+    /* ... */
+  }
 }
 ```
 
@@ -60,19 +64,25 @@ const kProcessor = Symbol('Processor')
 @Named(kProcessor)
 @Injectable()
 class UpperCaseProcessor implements Processor {
-  process(input: string) { return input.toUpperCase() }
+  process(input: string) {
+    return input.toUpperCase()
+  }
 }
 
 @Named(kProcessor)
 @Injectable()
 class TrimProcessor implements Processor {
-  process(input: string) { return input.trim() }
+  process(input: string) {
+    return input.trim()
+  }
 }
 
 @Named(kProcessor)
 @Injectable()
 class SanitizeProcessor implements Processor {
-  process(input: string) { return input.replace(/<[^>]*>/g, '') }
+  process(input: string) {
+    return input.replace(/<[^>]*>/g, '')
+  }
 }
 
 @Injectable([allOf(kProcessor)])
@@ -113,16 +123,24 @@ const kUserRepository = Symbol('UserRepository')
 @Injectable()
 class InMemoryUserRepository implements UserRepository {
   private store = new Map<string, User>()
-  async findById(id: string) { return this.store.get(id) }
-  async save(user: User) { this.store.set(user.id, user) }
+  async findById(id: string) {
+    return this.store.get(id)
+  }
+  async save(user: User) {
+    this.store.set(user.id, user)
+  }
 }
 
 @Primary()
 @Named(kUserRepository)
 @Injectable()
 class PostgresUserRepository implements UserRepository {
-  async findById(id: string) { /* query postgres */ }
-  async save(user: User) { /* insert into postgres */ }
+  async findById(id: string) {
+    /* query postgres */
+  }
+  async save(user: User) {
+    /* insert into postgres */
+  }
 }
 
 // Resolves to PostgresUserRepository because it is @Primary
@@ -151,13 +169,17 @@ const kNotificationSender = Symbol('NotificationSender')
 @Named(kNotificationSender, 'email')
 @Injectable()
 class EmailSender implements NotificationSender {
-  async send(message: string, to: string) { /* send email */ }
+  async send(message: string, to: string) {
+    /* send email */
+  }
 }
 
 @Named(kNotificationSender, 'sms')
 @Injectable()
 class SmsSender implements NotificationSender {
-  async send(message: string, to: string) { /* send SMS */ }
+  async send(message: string, to: string) {
+    /* send SMS */
+  }
 }
 
 // Inject a specific implementation by string name
@@ -201,8 +223,12 @@ const kCacheStore = Symbol('CacheStore')
 @Injectable()
 class InMemoryCache implements CacheStore {
   private store = new Map<string, string>()
-  async get(key: string) { return this.store.get(key) }
-  async set(key: string, value: string) { this.store.set(key, value) }
+  async get(key: string) {
+    return this.store.get(key)
+  }
+  async set(key: string, value: string) {
+    this.store.set(key, value)
+  }
 }
 
 // Only registered when a RedisClient binding is present in the container
@@ -212,8 +238,12 @@ class InMemoryCache implements CacheStore {
 @Injectable()
 class RedisCache implements CacheStore {
   constructor(private readonly client: RedisClient) {}
-  async get(key: string) { return this.client.get(key) }
-  async set(key: string, value: string) { await this.client.set(key, value) }
+  async get(key: string) {
+    return this.client.get(key)
+  }
+  async set(key: string, value: string) {
+    await this.client.set(key, value)
+  }
 }
 ```
 
@@ -236,13 +266,21 @@ const kCache = Symbol('Cache')
 
 class MemCache implements Cache {
   private store = new Map<string, string>()
-  get(key: string) { return this.store.get(key) }
-  set(key: string, value: string) { this.store.set(key, value) }
+  get(key: string) {
+    return this.store.get(key)
+  }
+  set(key: string, value: string) {
+    this.store.set(key, value)
+  }
 }
 
 class RedisCache implements Cache {
-  get(key: string) { /* ... */ return undefined }
-  set(key: string, value: string) { /* ... */ }
+  get(key: string) {
+    /* ... */ return undefined
+  }
+  set(key: string, value: string) {
+    /* ... */
+  }
 }
 
 const di = new CaffeineIoC()
@@ -251,7 +289,7 @@ di.bind(kCache, t => t.toClass(RedisCache))
 
 await di.init()
 
-const cache = di.get<Cache>(kCache)         // RedisCache
+const cache = di.get<Cache>(kCache) // RedisCache
 ```
 
 `.names(token)` registers the binding under the symbol token in addition to its own

@@ -6,7 +6,7 @@
  */
 export const VERBS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const
 
-export type Verb = typeof VERBS[number]
+export type Verb = (typeof VERBS)[number]
 
 const lookup: ReadonlySet<string> = new Set(VERBS)
 

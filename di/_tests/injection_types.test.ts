@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest'
+
 import { $i, type InjectedOf, type InjectionDescriptor, type ResolveInjection } from '../injection.js'
 import { token } from '../key.js'
 import type { Provider } from '../provider.js'
@@ -64,7 +65,7 @@ describe('InjectedOf', function () {
     }
 
     expectTypeOf<InjectedOf<typeof spec>>().toEqualTypeOf<{
-      services: { user: UserService, order: OrderService | undefined }
+      services: { user: UserService; order: OrderService | undefined }
       config: AppConfig
     }>()
   })
@@ -103,7 +104,7 @@ describe('$i.object()', function () {
     const desc = $i.object(spec)
 
     type Bag = typeof desc extends InjectionDescriptor<infer T> ? T : never
-    expectTypeOf<Bag>().toEqualTypeOf<{ us: UserService, os: OrderService | undefined }>()
+    expectTypeOf<Bag>().toEqualTypeOf<{ us: UserService; os: OrderService | undefined }>()
     expectTypeOf<Bag>().toEqualTypeOf<InjectedOf<typeof spec>>()
   })
 })

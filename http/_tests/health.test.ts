@@ -1,11 +1,12 @@
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
 import { Scopes, type Ctor } from '@caffeinejs/di'
 import { HealthIndicator, type HealthReport, type ServiceAPI, down, up } from '@caffeinejs/std'
-import { Authorize, Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
+import type { WebApplication } from '../application.js'
 import { ErrHealthIndicatorNotSingleton } from '../health/errors.js'
 import type { HealthBuilder } from '../health/health_builder.js'
-import type { WebApplication } from '../application.js'
+import { Authorize, Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 class DownIndicator extends HealthIndicator {
   get name(): string {
@@ -46,10 +47,9 @@ function bindIndicators(app: WebApplication, ...indicators: Array<Ctor<HealthInd
     if (typeof indicator === 'function') {
       app.container.bind(indicator, t => t.toSelf().extends(HealthIndicator))
     } else {
-      app.container
-        .bind(indicator.constructor as Ctor<HealthIndicator>, t => t
-          .toValue(indicator)
-          .extends(HealthIndicator))
+      app.container.bind(indicator.constructor as Ctor<HealthIndicator>, t =>
+        t.toValue(indicator).extends(HealthIndicator),
+      )
     }
   }
 }
@@ -268,7 +268,9 @@ describe('health probes', () => {
     void [SecuredController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .authentication(auth => auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()))
+      .authentication(auth =>
+        auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()),
+      )
       .health()
       .build()
       .useAuthenticationAndAuthorization()

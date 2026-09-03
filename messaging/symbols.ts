@@ -1,7 +1,8 @@
 import { token } from '@caffeinejs/di'
-import type { MessagingRuntime } from './runtime.js'
+
 import type { MessageBus } from './bus.js'
 import type { MessagingContainer } from './engine.js'
+import type { MessagingRuntime } from './runtime.js'
 
 /** The default binder instance name used when a messaging integration is declared without an explicit name. */
 export const DEFAULT_BINDER = 'default'

@@ -9,8 +9,8 @@ import { ErrCaffeineWebApplication } from '../error/common.js'
 export class ErrPipelineSealed extends ErrCaffeineWebApplication {
   constructor() {
     super(
-      'Cannot register a middleware: the application is already started, and the pipeline was composed at '
-      + 'start-up',
+      'Cannot register a middleware: the application is already started, and the pipeline was composed at ' +
+        'start-up',
       'ERR_PIPELINE_SEALED',
     )
     this.name = 'ErrPipelineSealed'
@@ -26,7 +26,10 @@ export class ErrPipelineSealed extends ErrCaffeineWebApplication {
  */
 export class ErrNextCalledTwice extends ErrCaffeineWebApplication {
   constructor() {
-    super('Cannot continue the pipeline: next() was called more than once by the same middleware', 'ERR_NEXT_CALLED_TWICE')
+    super(
+      'Cannot continue the pipeline: next() was called more than once by the same middleware',
+      'ERR_NEXT_CALLED_TWICE',
+    )
     this.name = 'ErrNextCalledTwice'
   }
 }
@@ -42,8 +45,8 @@ export class ErrNextCalledTwice extends ErrCaffeineWebApplication {
 export class ErrAuthenticationMiddlewareMissing extends ErrCaffeineWebApplication {
   constructor() {
     super(
-      'Cannot start application: routes are protected but the authentication middleware is not registered: '
-      + 'call app.useAuthenticationAndAuthorization()',
+      'Cannot start application: routes are protected but the authentication middleware is not registered: ' +
+        'call app.useAuthenticationAndAuthorization()',
       'ERR_AUTHENTICATION_MIDDLEWARE_MISSING',
     )
     this.name = 'ErrAuthenticationMiddlewareMissing'
@@ -60,8 +63,8 @@ export class ErrAuthenticationMiddlewareMissing extends ErrCaffeineWebApplicatio
 export class ErrAuthenticationNotConfigured extends ErrCaffeineWebApplication {
   constructor() {
     super(
-      'Cannot register the authentication middleware: authentication is not configured: call '
-      + '.authentication(auth => ...) on the application builder',
+      'Cannot register the authentication middleware: authentication is not configured: call ' +
+        '.authentication(auth => ...) on the application builder',
       'ERR_AUTHENTICATION_NOT_CONFIGURED',
     )
     this.name = 'ErrAuthenticationNotConfigured'

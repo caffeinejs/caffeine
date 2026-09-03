@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import type { Container } from '@caffeinejs/di'
+import { describe, it, expect } from 'vitest'
+
 import type { KafkaClients, ProducerClient, ResolvedKafkaConfig } from './config.js'
 import type { KafkaRuntime } from './runtime.js'
 import { KafkaTemplate } from './template.js'
@@ -8,7 +9,7 @@ interface Sent {
   messages: unknown[]
 }
 
-function fakeRuntime(): { runtime: KafkaRuntime, sent: Sent[], created: () => number, closed: () => number } {
+function fakeRuntime(): { runtime: KafkaRuntime; sent: Sent[]; created: () => number; closed: () => number } {
   const sent: Sent[] = []
   let createdCount = 0
   let closedCount = 0
@@ -79,7 +80,10 @@ describe('KafkaTemplate', () => {
     const template = new KafkaTemplate(runtime)
 
     await template.sendMessage({ topic: 't', value: 'v', key: 'k' })
-    await template.sendBatch([{ topic: 'a', value: 1 }, { topic: 'b', value: 2 }])
+    await template.sendBatch([
+      { topic: 'a', value: 1 },
+      { topic: 'b', value: 2 },
+    ])
 
     expect(sent[0].messages).toHaveLength(1)
     expect(sent[1].messages).toHaveLength(2)

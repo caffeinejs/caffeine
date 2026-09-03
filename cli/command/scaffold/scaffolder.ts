@@ -17,7 +17,7 @@ async function walk(dir: string): Promise<string[]> {
   for (const entry of entries) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
-      files.push(...await walk(full))
+      files.push(...(await walk(full)))
     } else {
       files.push(full)
     }
@@ -26,7 +26,10 @@ async function walk(dir: string): Promise<string[]> {
 }
 
 async function exists(p: string): Promise<boolean> {
-  return access(p).then(() => true, () => false)
+  return access(p).then(
+    () => true,
+    () => false,
+  )
 }
 
 async function copyTree(srcDir: string, destDir: string): Promise<void> {
@@ -94,7 +97,7 @@ export async function scaffold(ctx: ScaffoldContext): Promise<void> {
     return
   }
 
-  const aiDir = ctx.aiDir ?? await findAiDir(import.meta.dirname)
+  const aiDir = ctx.aiDir ?? (await findAiDir(import.meta.dirname))
   if (aiDir === undefined) {
     console.error('[caffeine] skipping agent files: cannot find ai/llms.txt (pass --no-agents-md to silence this)')
     return

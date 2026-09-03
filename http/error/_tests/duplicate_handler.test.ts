@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Catch, type Context, ErrConfiguration, ErrHTTPNotFound, ErrorHandler, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { describe, it, expect } from 'vitest'
+
+import {
+  Catch,
+  type Context,
+  ErrConfiguration,
+  ErrHTTPNotFound,
+  ErrorHandler,
+  createWebApplication,
+  fastifyAdapterFactory,
+} from '../../index.js'
 
 // Isolated: two handlers for the same error type. The ambiguity poisons every app build in its
 // module, so it must be the only error-handler concern in this file.

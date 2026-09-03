@@ -6,11 +6,11 @@ How to change **this** monorepo. Behavioral rules for agents live in [`AGENTS.md
 
 In this repository these names mean **this project**, not a third-party library:
 
-| You say | It means |
-|---|---|
-| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`. |
-| CaffeineIoC | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`. |
-| Caffeine HTTP, the HTTP package | `@caffeinejs/http` (Fastify adapter). |
+| You say                                  | It means                                                           |
+| ---------------------------------------- | ------------------------------------------------------------------ |
+| Caffeine Framework, Caffeine, CaffeineJS | This monorepo (`caffeinejs/caffeine`). npm scope `@caffeinejs/*`.  |
+| CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`. |
+| Caffeine HTTP, the HTTP package          | `@caffeinejs/http` (Fastify adapter).                              |
 
 Package names (`@caffeinejs/kafka`, …) are the npm names. Workspace dirs are in the table below.
 
@@ -18,31 +18,31 @@ This is not NestJS, Express, or Spring Boot. Do not use `experimentalDecorators`
 
 When editing a first-party package, also read that package’s `AGENTS.md`:
 
-| Directory | Package |
-|---|---|
-| [`di/`](di/AGENTS.md) | `@caffeinejs/di` |
-| [`http/`](http/AGENTS.md) | `@caffeinejs/http` |
-| [`cors/`](cors/AGENTS.md) | `@caffeinejs/cors` |
-| [`compress/`](compress/AGENTS.md) | `@caffeinejs/compress` |
-| [`html/`](html/AGENTS.md) | `@caffeinejs/html` |
-| [`kafka/`](kafka/AGENTS.md) | `@caffeinejs/kafka` |
-| [`openapi/`](openapi/AGENTS.md) | `@caffeinejs/openapi` |
-| [`messaging/`](messaging/AGENTS.md) | `@caffeinejs/messaging` |
-| [`std/`](std/AGENTS.md) | `@caffeinejs/std` |
-| [`static/`](static/AGENTS.md) | `@caffeinejs/static` |
-| [`view/`](view/AGENTS.md) | `@caffeinejs/view` |
-| [`multipart/`](multipart/AGENTS.md) | `@caffeinejs/multipart` |
-| [`scan/`](scan/AGENTS.md) | `@caffeinejs/scan` |
-| [`cli/`](cli/AGENTS.md) | `@caffeinejs/cli` |
-| [`testing/`](testing/AGENTS.md) | `@caffeinejs/testing` |
-| [`brewer/`](brewer/AGENTS.md) | `@caffeinejs/brewer` |
-| [`devtools/`](devtools/AGENTS.md) | `@caffeinejs/devtools` |
-| [`fetchy/fetchy/`](fetchy/fetchy/AGENTS.md) | `@caffeinejs/fetchy` |
-| [`fetchy/fetchy-undici/`](fetchy/fetchy-undici/AGENTS.md) | `@caffeinejs/fetchy-undici` |
+| Directory                                                                           | Package                                  |
+| ----------------------------------------------------------------------------------- | ---------------------------------------- |
+| [`di/`](di/AGENTS.md)                                                               | `@caffeinejs/di`                         |
+| [`http/`](http/AGENTS.md)                                                           | `@caffeinejs/http`                       |
+| [`cors/`](cors/AGENTS.md)                                                           | `@caffeinejs/cors`                       |
+| [`compress/`](compress/AGENTS.md)                                                   | `@caffeinejs/compress`                   |
+| [`html/`](html/AGENTS.md)                                                           | `@caffeinejs/html`                       |
+| [`kafka/`](kafka/AGENTS.md)                                                         | `@caffeinejs/kafka`                      |
+| [`openapi/`](openapi/AGENTS.md)                                                     | `@caffeinejs/openapi`                    |
+| [`messaging/`](messaging/AGENTS.md)                                                 | `@caffeinejs/messaging`                  |
+| [`std/`](std/AGENTS.md)                                                             | `@caffeinejs/std`                        |
+| [`static/`](static/AGENTS.md)                                                       | `@caffeinejs/static`                     |
+| [`view/`](view/AGENTS.md)                                                           | `@caffeinejs/view`                       |
+| [`multipart/`](multipart/AGENTS.md)                                                 | `@caffeinejs/multipart`                  |
+| [`scan/`](scan/AGENTS.md)                                                           | `@caffeinejs/scan`                       |
+| [`cli/`](cli/AGENTS.md)                                                             | `@caffeinejs/cli`                        |
+| [`testing/`](testing/AGENTS.md)                                                     | `@caffeinejs/testing`                    |
+| [`brewer/`](brewer/AGENTS.md)                                                       | `@caffeinejs/brewer`                     |
+| [`devtools/`](devtools/AGENTS.md)                                                   | `@caffeinejs/devtools`                   |
+| [`fetchy/fetchy/`](fetchy/fetchy/AGENTS.md)                                         | `@caffeinejs/fetchy`                     |
+| [`fetchy/fetchy-undici/`](fetchy/fetchy-undici/AGENTS.md)                           | `@caffeinejs/fetchy-undici`              |
 | [`fetchy/fetchy-logging-interceptor/`](fetchy/fetchy-logging-interceptor/AGENTS.md) | `@caffeinejs/fetchy-logging-interceptor` |
-| [`plugins/eslint/`](plugins/eslint/AGENTS.md) | `@caffeinejs/eslint-plugin` |
-| [`plugins/esbuild/`](plugins/esbuild/AGENTS.md) | `@caffeinejs/esbuild-plugin` |
-| [`plugins/vite/`](plugins/vite/AGENTS.md) | `@caffeinejs/vite-plugin` |
+| [`plugins/eslint/`](plugins/eslint/AGENTS.md)                                       | `@caffeinejs/eslint-plugin`              |
+| [`plugins/esbuild/`](plugins/esbuild/AGENTS.md)                                     | `@caffeinejs/esbuild-plugin`             |
+| [`plugins/vite/`](plugins/vite/AGENTS.md)                                           | `@caffeinejs/vite-plugin`                |
 
 Workspace membership is the root [`package.json`](package.json) `workspaces` list. Cross-package imports use the package name (`@caffeinejs/di`), not a relative path into another package.
 
@@ -59,7 +59,7 @@ Run checks in this order and fix failures before considering the task complete. 
   2. `npm run test:typecheck -w <pkg> --if-present` (no-op when the package has no such script; vitest typecheck in `npm test` still covers test files)
   3. `npm test -w <pkg>`
   4. `npm run lint:fix -- <pkg-path>` — zero errors (warnings are pre-existing and acceptable)
-- **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `eslint.config.js`, root `package.json`, `vitest.config.ts`, `.github/**`):
+- **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
   1. `npm run build`
   2. `npm run test:typecheck`
   3. `npm test`
@@ -70,7 +70,7 @@ Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a 
 When in doubt on **code** scope, run the full suite. A README next to a TypeScript change does not make the task docs-only.
 
 Every package has two `tsc` projects. `X/tsconfig.build.json` emits `dist/` from the package sources and
-references the sibling build projects it depends on. `X/tsconfig.json` type-checks the package *including*
+references the sibling build projects it depends on. `X/tsconfig.json` type-checks the package _including_
 its tests, emits nothing, and references only `./tsconfig.build.json`. Root `tsconfig.json` holds the shared
 `compilerOptions` and nothing else.
 
@@ -87,7 +87,7 @@ The root `.npmrc` sets `ignore-scripts=true`. Never rely on npm `pre*` / `post*`
 
 ## Import style
 
-Group all imports from the same module into a single import statement. Enforced by `import-x/no-duplicates`.
+Group all imports from the same module into a single import statement. Enforced by `import/no-duplicates`.
 
 ```ts
 // correct
@@ -150,13 +150,13 @@ A package’s `index.ts` barrel aggregating that package’s **own** modules is 
 
 Where a value goes depends on who reads it, not on what is convenient:
 
-| The value is… | Goes to | Read with |
-|---|---|---|
-| a setting a user tunes from the environment or a file | a config slice, in `beforeBootstrap` | `defineFeatureConfig(...)` → `slice.config` |
-| something user code injects | a container binding, in `bootstrap` | `container.get` / constructor injection |
-| one of many providers a single consumer collects | a container binding with `.extends()` | `container.getManyOptional(Base)` |
-| an extension's own data | that extension's **constructor** | the field |
-| a framework value the application needs once everything is up | a contribution, in `bootstrap` | `app.contributions.get(key)` |
+| The value is…                                                 | Goes to                               | Read with                                   |
+| ------------------------------------------------------------- | ------------------------------------- | ------------------------------------------- |
+| a setting a user tunes from the environment or a file         | a config slice, in `beforeBootstrap`  | `defineFeatureConfig(...)` → `slice.config` |
+| something user code injects                                   | a container binding, in `bootstrap`   | `container.get` / constructor injection     |
+| one of many providers a single consumer collects              | a container binding with `.extends()` | `container.getManyOptional(Base)`           |
+| an extension's own data                                       | that extension's **constructor**      | the field                                   |
+| a framework value the application needs once everything is up | a contribution, in `bootstrap`        | `app.contributions.get(key)`                |
 
 Do not route an extension's own configuration through a container key it reads back at server setup: the
 builder is holding the value when it constructs the extension. `bind(X).toValue(new X(data)).extends()`.
@@ -241,4 +241,4 @@ TC39 ECMAScript decorators only. Root `tsconfig.json` sets `"lib": ["Decorators"
 
 Never use `git stash`. If uncommitted changes exist and you need to switch state, stop and ask.
 
-Never revert, discard, or `git checkout --` a file outside the current task’s scope — including files a tool (e.g. `eslint --fix`) modified as a side effect. That uncommitted state is other in-progress work. Stop and report it; do not revert it yourself.
+Never revert, discard, or `git checkout --` a file outside the current task’s scope — including files a tool (e.g. `oxlint --fix` / `oxfmt`) modified as a side effect. That uncommitted state is other in-progress work. Stop and report it; do not revert it yourself.

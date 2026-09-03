@@ -1,5 +1,6 @@
 import type { Route } from '@caffeinejs/http'
 import { hasFileSchema } from '@caffeinejs/std/schema'
+
 import type { RequestBodyObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
 

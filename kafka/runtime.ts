@@ -1,4 +1,5 @@
 import type { Container } from '@caffeinejs/di'
+
 import type { KafkaClients, ResolvedKafkaConfig } from './config.js'
 
 /**

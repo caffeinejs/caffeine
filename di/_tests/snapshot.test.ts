@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
 import { type Options } from '../container_interface.js'
+import { token } from '../key.js'
 import { type Snapshot } from '../snapshot.js'
 
 function newContainerFromSnapshot(snap: Snapshot, options?: Partial<Options>): CaffeineIoC {
@@ -154,8 +155,7 @@ describe('ContainerSnapshot', function () {
 
     it('filter() keeps only matching bindings', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb, t => t.toValue('db-url')
-        .labels(kLabel))
+      di.bind(kDb, t => t.toValue('db-url').labels(kLabel))
       di.bind(kAPI, t => t.toValue('api-url'))
       await di.init()
 

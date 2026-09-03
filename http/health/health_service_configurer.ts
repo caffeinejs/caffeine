@@ -1,5 +1,11 @@
-import { ApplicationAvailability, type ServiceBeforeBootstrapIn, type Service, ServiceBootstrapIn } from '@caffeinejs/std'
+import {
+  ApplicationAvailability,
+  type ServiceBeforeBootstrapIn,
+  type Service,
+  ServiceBootstrapIn,
+} from '@caffeinejs/std'
 import type { ConfigSlice } from '@caffeinejs/std/config'
+
 import { kHealthContribution } from './keys.js'
 import {
   HEALTH_CONFIG_NAMESPACE,
@@ -55,9 +61,7 @@ export class HealthServiceConfigurer implements Service {
     if (!kit.container.has(ApplicationAvailability)) {
       // The application's own instance, not a container-constructed one: the lifecycle writes to that object, and
       // a second instance would report a state nothing ever updates.
-      kit.container.bind(ApplicationAvailability, t => t
-        .toValue(kit.availability)
-        .internal())
+      kit.container.bind(ApplicationAvailability, t => t.toValue(kit.availability).internal())
     }
 
     // Only ever set when no `HealthBuilder` is registered — `beforeBootstrap` returns early otherwise — so

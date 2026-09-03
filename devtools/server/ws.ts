@@ -1,5 +1,7 @@
 import type { IncomingMessage, Server } from 'node:http'
+
 import { WebSocketServer, type WebSocket } from 'ws'
+
 import type { WsMessage } from '../types.js'
 
 function onWsError() {

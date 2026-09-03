@@ -1,12 +1,13 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { beforeAll, describe, expect, it } from 'vitest'
+
 import type { ConfigHandle } from '../../accessor.js'
-import type { ConfigSchema } from '../../schema.js'
 import { bootstrapConfig } from '../../bootstrap.js'
+import { SpringCloudConfigProvider } from '../../index.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
-import { SpringCloudConfigProvider } from '../../index.js'
 import type { SpringCloudConfigProviderOptions } from '../../providers/scc_provider.js'
+import type { ConfigSchema } from '../../schema.js'
 
 const CONFIGSERVER_URL = process.env['CONFIGSERVER_URL'] ?? 'http://localhost:8888'
 const CONFIGSERVER_USERNAME = process.env['CONFIGSERVER_USERNAME'] ?? 'configuser'
@@ -161,10 +162,7 @@ describe('Refresh e2e with live proxy', () => {
       ConfigModule<CaffeineConfig>({
         token: APP_TOKEN,
         schema,
-        providers: [
-          mutableInline,
-          makeProvider(),
-        ],
+        providers: [mutableInline, makeProvider()],
         context: { app: 'caffeine', profiles: ['default'] },
       }),
     )

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { token } from '../key.js'
 import { defineMetadata, getMetadata, getMetadataOverride, reflect } from '../reflect.js'
 

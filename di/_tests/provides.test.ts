@@ -1,21 +1,23 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect, vi } from 'vitest'
-import { token } from '../key.js'
-import { Provides } from '../decorators/provides.js'
+
+import { CaffeineIoC } from '../container.js'
+import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
+import { Interceptor } from '../decorators/interceptor.js'
+import { Lifetime } from '../decorators/lifetime.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { CaffeineIoC } from '../container.js'
-import { Scopes } from '../scope.js'
-import { Lifetime } from '../decorators/lifetime.js'
-import { Interceptor } from '../decorators/interceptor.js'
+import { Profile } from '../decorators/profile.js'
+import { Provides } from '../decorators/provides.js'
 import { ErrInvalidDecorator } from '../errors.js'
 import { $i } from '../injection.js'
-import { Configuration } from '../decorators/configuration.js'
-import { Profile } from '../decorators/profile.js'
+import { token } from '../key.js'
 import { Provider } from '../provider.js'
-import { Foo } from './_testdata/circular_beans/Foo.js'
+import { Scopes } from '../scope.js'
 import { Bar } from './_testdata/circular_beans/Bar.js'
+import { Foo } from './_testdata/circular_beans/Foo.js'
 
 describe('Configuration', function () {
   describe('class factory', function () {
@@ -69,14 +71,10 @@ describe('Configuration', function () {
       await di.init()
       const service = di.get(Service)
 
-      expect(service)
-        .toBeDefined()
-      expect(service.repo.list())
-        .toEqual('listed')
-      expect(service.listener.listen())
-        .toEqual('listened')
-      expect(spy)
-        .toHaveBeenCalledTimes(4)
+      expect(service).toBeDefined()
+      expect(service.repo.list()).toEqual('listed')
+      expect(service.listener.listen()).toEqual('listened')
+      expect(spy).toHaveBeenCalledTimes(4)
     })
   })
 
@@ -109,21 +107,16 @@ describe('Configuration', function () {
       const di = new CaffeineIoC({ profiles: ['provides-named'] })
       const msg = 'hello world'
 
-      di.bind(token<any>('msg'), t => t
-        .toValue(msg))
+      di.bind(token<any>('msg'), t => t.toValue(msg))
       await di.init()
 
       const service = di.get<Service>(kTest)
       const service2 = di.get<Service>(kTest)
 
-      expect(service)
-        .toBeInstanceOf(Service)
-      expect(service.txt())
-        .toEqual(msg)
-      expect(spy)
-        .toHaveBeenCalledTimes(1)
-      expect(service)
-        .toEqual(service2)
+      expect(service).toBeInstanceOf(Service)
+      expect(service.txt()).toEqual(msg)
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(service).toEqual(service2)
     })
   })
 
@@ -148,10 +141,8 @@ describe('Configuration', function () {
       const usingTxt = di.get(UsingTxt)
       const expected = 'hello world'
 
-      expect(txt)
-        .toEqual(expected)
-      expect(usingTxt.txt)
-        .toEqual(expected)
+      expect(txt).toEqual(expected)
+      expect(usingTxt.txt).toEqual(expected)
     })
   })
 
@@ -186,21 +177,21 @@ describe('Configuration', function () {
       @Provides(Abs)
       @Primary()
       abs(): Abs {
-        return new class extends Abs {
+        return new (class extends Abs {
           test(): string {
             return 'abs-bean'
           }
-        }()
+        })()
       }
 
       @Provides(kInterface)
       @Primary()
       fromInterface(): Interface {
-        return new class implements Interface {
+        return new (class implements Interface {
           test(): string {
             return 'interface-bean'
           }
-        }()
+        })()
       }
     }
 
@@ -210,10 +201,8 @@ describe('Configuration', function () {
       const abs = di.get(Abs)
       const i = di.get<Interface>(kInterface)
 
-      expect(abs.test())
-        .toEqual('abs-bean')
-      expect(i.test())
-        .toEqual('interface-bean')
+      expect(abs.test()).toEqual('abs-bean')
+      expect(i.test()).toEqual('interface-bean')
     })
   })
 
@@ -245,8 +234,7 @@ describe('Configuration', function () {
       const root = di.get(Root)
       const dep = di.get(Dep)
 
-      expect(root.dep.id)
-        .toEqual(dep.id)
+      expect(root.dep.id).toEqual(dep.id)
     })
   })
 
@@ -277,18 +265,13 @@ describe('Configuration', function () {
       di.get(Foo)
       di.get(Bar)
 
-      expect(foo.test())
-        .toEqual('foo-bar')
-      expect(bar.test())
-        .toEqual('bar-foo')
+      expect(foo.test()).toEqual('foo-bar')
+      expect(bar.test()).toEqual('bar-foo')
 
-      expect(foo2.test())
-        .toEqual('foo-bar')
-      expect(bar2.test())
-        .toEqual('bar-foo')
+      expect(foo2.test()).toEqual('foo-bar')
+      expect(bar2.test()).toEqual('bar-foo')
 
-      expect(foo.uuid)
-        .toEqual(foo2.uuid)
+      expect(foo.uuid).toEqual(foo2.uuid)
       expect(bar.uuid).not.toEqual(bar2.uuid)
     })
   })
@@ -304,7 +287,6 @@ describe('Configuration', function () {
           return new Comp()
         }
       }
-    })
-      .toThrow(ErrInvalidDecorator)
+    }).toThrow(ErrInvalidDecorator)
   })
 })

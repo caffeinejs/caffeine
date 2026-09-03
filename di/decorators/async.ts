@@ -1,7 +1,7 @@
 import { ErrInvalidDecorator } from '../errors.js'
-import { extendMemberInjectableAttributes } from './registrar/index.js'
-import { Provides } from './provides.js'
 import { Configuration } from './configuration.js'
+import { Provides } from './provides.js'
+import { extendMemberInjectableAttributes } from './registrar/index.js'
 
 /**
  * Marks a `@Provides` method as async. The container awaits the returned promise before injecting.

@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
+import fastify from 'fastify'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWK, JWTVerifyGetKey, KeyLike } from 'jose'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import {
   AllowAnonymous,
   Authorize,
@@ -26,25 +27,24 @@ const CALLBACK_PATH = '/oidc/callback'
 /** Cookie names and derived keys are namespaced by the strategy this app registers. */
 const SCHEME = 'Google'
 
-function makeOIDCApp(
-  fastifyInstance: ReturnType<typeof fastify>,
-  jwksResolver?: (uri: string) => JWTVerifyGetKey,
-) {
+function makeOIDCApp(fastifyInstance: ReturnType<typeof fastify>, jwksResolver?: (uri: string) => JWTVerifyGetKey) {
   const builder = createWebApplication(fastifyAdapterFactory(fastifyInstance))
-  builder.authentication(auth => auth.addOIDC('Google', opts => {
-    opts
-      .clientID(CLIENT_ID)
-      .clientSecret('oidc-client-secret')
-      .sessionSecret(SESSION_SECRET)
-      .callbackURL(CALLBACK_URL)
-      .authorizationEndpoint(`${ISSUER}/auth`)
-      .tokenEndpoint(`${ISSUER}/token`)
-      .jwksURI(`${ISSUER}/jwks`)
-      .issuer(ISSUER)
-    if (jwksResolver) {
-      opts.jwksResolver(jwksResolver)
-    }
-  }))
+  builder.authentication(auth =>
+    auth.addOIDC('Google', opts => {
+      opts
+        .clientID(CLIENT_ID)
+        .clientSecret('oidc-client-secret')
+        .sessionSecret(SESSION_SECRET)
+        .callbackURL(CALLBACK_URL)
+        .authorizationEndpoint(`${ISSUER}/auth`)
+        .tokenEndpoint(`${ISSUER}/token`)
+        .jwksURI(`${ISSUER}/jwks`)
+        .issuer(ISSUER)
+      if (jwksResolver) {
+        opts.jwksResolver(jwksResolver)
+      }
+    }),
+  )
   return builder
 }
 
@@ -123,13 +123,16 @@ describe('OIDC integration', () => {
     }
 
     function mockTokenEndpoint(nonce: string) {
-      vi.stubGlobal('fetch', vi.fn(async (_url: string, opts?: RequestInit) => {
-        if (opts?.method === 'POST') {
-          const idToken = await signIDToken(nonce)
-          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
-        }
-        return { ok: false, status: 404 }
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_url: string, opts?: RequestInit) => {
+          if (opts?.method === 'POST') {
+            const idToken = await signIDToken(nonce)
+            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+          }
+          return { ok: false, status: 404 }
+        }),
+      )
     }
 
     it('valid callback → 302 to returnTo + session cookie set', async () => {
@@ -142,10 +145,9 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(f, jwksResolver).build().useAuthenticationAndAuthorization()
       await app.ready()
 
-      const res = await app.fetch(
-        `${CALLBACK_PATH}?code=code&state=oidc-st`,
-        { headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` } },
-      )
+      const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
+        headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
+      })
 
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toBe('/dashboard')
@@ -161,10 +163,9 @@ describe('OIDC integration', () => {
 
       // Planted under the name the *query* state derives, so the lookup succeeds and the sealed-vs-parameter
       // comparison is what rejects it rather than the cookie simply being absent.
-      const res = await app.fetch(
-        `${CALLBACK_PATH}?code=c&state=wrong-state`,
-        { headers: { cookie: `__Host-oidc_Google_state.wrong-state=${stateCookie}` } },
-      )
+      const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=wrong-state`, {
+        headers: { cookie: `__Host-oidc_Google_state.wrong-state=${stateCookie}` },
+      })
 
       expect(res.status).toBe(400)
     })
@@ -177,10 +178,9 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(f, jwksResolver).build().useAuthenticationAndAuthorization()
       await app.ready()
 
-      const res = await app.fetch(
-        `${CALLBACK_PATH}?code=c&state=oidc-st`,
-        { headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` } },
-      )
+      const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
+        headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
+      })
 
       expect(res.status).toBe(400)
     })
@@ -193,10 +193,9 @@ describe('OIDC integration', () => {
       const app = makeOIDCApp(f, jwksResolver).build().useAuthenticationAndAuthorization()
       await app.ready()
 
-      const res = await app.fetch(
-        `${CALLBACK_PATH}?code=c&state=oidc-st`,
-        { headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` } },
-      )
+      const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
+        headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
+      })
       const body = await res.text()
 
       expect(res.status).toBe(400)
@@ -233,7 +232,7 @@ describe('OIDC integration', () => {
     })
 
     expect(res.status).toBe(200)
-    const body = await res.json() as Record<string, unknown>
+    const body = (await res.json()) as Record<string, unknown>
     expect(body.sub).toBe('oidc-int-user')
   })
 
@@ -259,10 +258,7 @@ describe('OIDC integration', () => {
     const app = makeOIDCApp(f).build().useAuthenticationAndAuthorization()
     await app.ready()
 
-    const [pub, prot] = await Promise.all([
-      app.fetch('/oidc-int-anon/public'),
-      app.fetch('/oidc-int-anon/protected'),
-    ])
+    const [pub, prot] = await Promise.all([app.fetch('/oidc-int-anon/public'), app.fetch('/oidc-int-anon/protected')])
 
     expect(pub.status).toBe(200)
     // 401 rather than 302: neither request claims to be a browser navigation, and the point here is that the
@@ -312,10 +308,7 @@ describe('OIDC integration', () => {
     }
     void [OIDCIntRoleOkController]
 
-    const sessionJWT = await makeSessionCookie([
-      new Claim('sub', 'admin', ISSUER),
-      new Claim('roles', 'admin', ISSUER),
-    ])
+    const sessionJWT = await makeSessionCookie([new Claim('sub', 'admin', ISSUER), new Claim('roles', 'admin', ISSUER)])
     const f = fastify()
     f.register(FastifyCookie)
     const app = makeOIDCApp(f).build().useAuthenticationAndAuthorization()

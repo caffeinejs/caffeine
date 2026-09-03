@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { Get } from '../decorators/verbs.js'
+
 import { Controller } from '../decorators/controller.js'
 import { getRouteGroup } from '../decorators/registrar/registrar.js'
+import { Get } from '../decorators/verbs.js'
 
 describe('HTTPAdapter', () => {
   it('should be defined', () => {
@@ -36,7 +37,9 @@ describe('path normalization', () => {
     @Controller('/')
     class C1 {
       @Get('/action')
-      get() { return {} }
+      get() {
+        return {}
+      }
     }
     void C1
     const r = getRouteGroup(C1)!.toRouteGroup()
@@ -48,7 +51,9 @@ describe('path normalization', () => {
     @Controller('/api/')
     class C2 {
       @Get('/users')
-      get() { return {} }
+      get() {
+        return {}
+      }
     }
     void C2
     const r = getRouteGroup(C2)!.toRouteGroup()
@@ -60,7 +65,9 @@ describe('path normalization', () => {
     @Controller('/api')
     class C3 {
       @Get('action')
-      get() { return {} }
+      get() {
+        return {}
+      }
     }
     void C3
     const r = getRouteGroup(C3)!.toRouteGroup()
@@ -71,7 +78,9 @@ describe('path normalization', () => {
     @Controller('/api')
     class C4 {
       @Get('//double')
-      get() { return {} }
+      get() {
+        return {}
+      }
     }
     void C4
     const r = getRouteGroup(C4)!.toRouteGroup()
@@ -82,7 +91,9 @@ describe('path normalization', () => {
     @Controller('')
     class C5 {
       @Get('/')
-      get() { return {} }
+      get() {
+        return {}
+      }
     }
     void C5
     const r = getRouteGroup(C5)!.toRouteGroup()
@@ -94,7 +105,9 @@ describe('path normalization', () => {
     @Controller('/')
     class C6 {
       @Get('/action')
-      go() { return {} }
+      go() {
+        return {}
+      }
     }
     void C6
     const r = getRouteGroup(C6)!.toRouteGroup()

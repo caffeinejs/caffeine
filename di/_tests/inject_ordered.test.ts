@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Order } from '../decorators/order.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 import { mod } from '../module.js'
 
 describe('$i.ordered() injection', function () {
@@ -17,19 +18,25 @@ describe('$i.ordered() injection', function () {
     @Order(2)
     @Injectable(kHandler)
     class HandlerB implements Handler {
-      name() { return 'B' }
+      name() {
+        return 'B'
+      }
     }
 
     @Order(1)
     @Injectable(kHandler)
     class HandlerA implements Handler {
-      name() { return 'A' }
+      name() {
+        return 'A'
+      }
     }
 
     @Order(3)
     @Injectable(kHandler)
     class HandlerC implements Handler {
-      name() { return 'C' }
+      name() {
+        return 'C'
+      }
     }
 
     @Injectable([$i.ordered(kHandler)])
@@ -56,13 +63,17 @@ describe('$i.ordered() injection', function () {
     @Order(1)
     @Injectable(kTied)
     class TiedA implements Tied {
-      label() { return 'A' }
+      label() {
+        return 'A'
+      }
     }
 
     @Order(1)
     @Injectable(kTied)
     class TiedB implements Tied {
-      label() { return 'B' }
+      label() {
+        return 'B'
+      }
     }
 
     @Injectable([$i.ordered(kTied)])
@@ -90,18 +101,24 @@ describe('$i.ordered() injection', function () {
     @Order(1)
     @Injectable(kStep)
     class StepFirst implements Step {
-      label() { return 'first' }
+      label() {
+        return 'first'
+      }
     }
 
     @Injectable(kStep)
     class StepUnordered implements Step {
-      label() { return 'unordered' }
+      label() {
+        return 'unordered'
+      }
     }
 
     @Order(2)
     @Injectable(kStep)
     class StepSecond implements Step {
-      label() { return 'second' }
+      label() {
+        return 'second'
+      }
     }
 
     @Injectable([$i.ordered(kStep)])
@@ -146,36 +163,33 @@ describe('$i.ordered() with .order() binder option', function () {
     }
 
     class PluginAlpha extends Plugin {
-      id() { return 'alpha' }
+      id() {
+        return 'alpha'
+      }
     }
 
     class PluginBeta extends Plugin {
-      id() { return 'beta' }
+      id() {
+        return 'beta'
+      }
     }
 
     class PluginGamma extends Plugin {
-      id() { return 'gamma' }
+      id() {
+        return 'gamma'
+      }
     }
 
     const m = mod('plugins', c => {
-      c.bind(PluginBeta, t => t.toClass(PluginBeta)
-        .extends(Plugin)
-        .order(2))
-      c.bind(PluginAlpha, t => t.toClass(PluginAlpha)
-        .extends(Plugin)
-        .order(1))
-      c.bind(PluginGamma, t => t.toClass(PluginGamma)
-        .extends(Plugin)
-        .order(3))
+      c.bind(PluginBeta, t => t.toClass(PluginBeta).extends(Plugin).order(2))
+      c.bind(PluginAlpha, t => t.toClass(PluginAlpha).extends(Plugin).order(1))
+      c.bind(PluginGamma, t => t.toClass(PluginGamma).extends(Plugin).order(3))
     })
 
     const di = new CaffeineIoC({ modules: [m] })
     await di.init()
 
-    const plugins = di.build(
-      (items: Plugin[]) => items,
-      [$i.ordered(Plugin)],
-    ) as Plugin[]
+    const plugins = di.build((items: Plugin[]) => items, [$i.ordered(Plugin)]) as Plugin[]
 
     expect(plugins.map(p => p.id())).toEqual(['alpha', 'beta', 'gamma'])
   })
@@ -186,35 +200,33 @@ describe('$i.ordered() with .order() binder option', function () {
     }
 
     class SvcA extends Svc {
-      tag() { return 'A' }
+      tag() {
+        return 'A'
+      }
     }
 
     class SvcB extends Svc {
-      tag() { return 'B' }
+      tag() {
+        return 'B'
+      }
     }
 
     class SvcC extends Svc {
-      tag() { return 'C' }
+      tag() {
+        return 'C'
+      }
     }
 
     const m = mod('svcs', c => {
-      c.bind(SvcC, t => t.toClass(SvcC)
-        .extends(Svc))
-      c.bind(SvcA, t => t.toClass(SvcA)
-        .extends(Svc)
-        .order(1))
-      c.bind(SvcB, t => t.toClass(SvcB)
-        .extends(Svc)
-        .order(2))
+      c.bind(SvcC, t => t.toClass(SvcC).extends(Svc))
+      c.bind(SvcA, t => t.toClass(SvcA).extends(Svc).order(1))
+      c.bind(SvcB, t => t.toClass(SvcB).extends(Svc).order(2))
     })
 
     const di = new CaffeineIoC({ modules: [m] })
     await di.init()
 
-    const svcs = di.build(
-      (items: Svc[]) => items,
-      [$i.ordered(Svc)],
-    ) as Svc[]
+    const svcs = di.build((items: Svc[]) => items, [$i.ordered(Svc)]) as Svc[]
 
     expect(svcs.map(s => s.tag())).toEqual(['A', 'B', 'C'])
   })

@@ -61,11 +61,7 @@ export function exceedsMaxDepth(rootRel: string, maxDepth: number): boolean {
   return dirDepth(dirOf(rootRel)) > maxDepth
 }
 
-export function effectiveStopDepth(
-  dirRel: string,
-  depth: number,
-  depths: Record<string, number>,
-): number {
+export function effectiveStopDepth(dirRel: string, depth: number, depths: Record<string, number>): number {
   let stop = depth
   if (!dirRel) {
     return stop
@@ -82,10 +78,7 @@ export function effectiveStopDepth(
   return stop
 }
 
-export function moduleDir(
-  dirRel: string,
-  opts: { depth: number, depths: Record<string, number> },
-): string {
+export function moduleDir(dirRel: string, opts: { depth: number; depths: Record<string, number> }): string {
   if (!dirRel) {
     return ''
   }

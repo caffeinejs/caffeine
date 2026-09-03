@@ -1,5 +1,5 @@
-import { check } from '../internal/util/assert/index.js'
 import { ErrInvalidDecorator } from '../errors.js'
+import { check } from '../internal/util/assert/index.js'
 import { AbstractCtor, Ctor } from '../types.js'
 import { defineInjectable, getBindingConfiguration } from './registrar/index.js'
 

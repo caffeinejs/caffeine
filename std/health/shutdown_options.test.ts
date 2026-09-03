@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { noopSignalDispatcher } from './signals.js'
+
 import {
   defaultShutdownOptions,
   isKubernetes,
@@ -7,6 +7,7 @@ import {
   resolveShutdownOptions,
   toMillis,
 } from './shutdown_options.js'
+import { noopSignalDispatcher } from './signals.js'
 
 describe('toMillis', () => {
   // parseDuration returns seconds for a string and passes a number through, so the conversion has to be explicit.

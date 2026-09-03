@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+
 import { Layout } from './components/layout/Layout.js'
 import { Navbar } from './components/layout/Navbar.js'
 import { Sidebar } from './components/layout/Sidebar.js'
@@ -7,8 +8,8 @@ import type { Tab } from './types.js'
 import { Bindings } from './views/Bindings.js'
 import { Events } from './views/Events.js'
 import { Routes } from './views/Routes.js'
-import type { BindingSnapshot, DevtoolsEvent, RouteSnapshot, WsMessage } from './ws/protocol.js'
 import { useDevtoolsWs } from './ws/client.js'
+import type { BindingSnapshot, DevtoolsEvent, RouteSnapshot, WsMessage } from './ws/protocol.js'
 
 export function App() {
   const [tab, setTab] = useState<Tab>('bindings')
@@ -35,7 +36,7 @@ export function App() {
 
   return (
     <Layout
-      sidebar={(
+      sidebar={
         <Sidebar
           tab={tab}
           onTab={setTab}
@@ -46,7 +47,7 @@ export function App() {
             events: events.length,
           }}
         />
-      )}
+      }
       navbar={<Navbar theme={theme} onToggle={toggle} />}
     >
       {tab === 'bindings' && <Bindings bindings={bindings} />}

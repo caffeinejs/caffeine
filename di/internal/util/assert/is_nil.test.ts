@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { isNil } from './is_nil.js'
 
 describe('isNil', function () {
@@ -11,19 +12,12 @@ describe('isNil', function () {
     const undef = undefined
     const nil = null
 
-    expect(isNil(str))
-      .toBeFalsy()
-    expect(isNil(bool))
-      .toBeFalsy()
-    expect(isNil(num))
-      .toBeFalsy()
-    expect(isNil(obj))
-      .toBeFalsy()
-    expect(isNil(arr))
-      .toBeFalsy()
-    expect(isNil(undef))
-      .toBeTruthy()
-    expect(isNil(nil))
-      .toBeTruthy()
+    expect(isNil(str)).toBeFalsy()
+    expect(isNil(bool)).toBeFalsy()
+    expect(isNil(num)).toBeFalsy()
+    expect(isNil(obj)).toBeFalsy()
+    expect(isNil(arr)).toBeFalsy()
+    expect(isNil(undef)).toBeTruthy()
+    expect(isNil(nil)).toBeTruthy()
   })
 })

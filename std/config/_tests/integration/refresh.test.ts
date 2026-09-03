@@ -1,6 +1,7 @@
 import { kSelfRefresh } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import { ErrConfigValidation } from '../../errors.js'
 import { ConfigShard } from '../../integration/shard.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'

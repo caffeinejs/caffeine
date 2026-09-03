@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory, BodyAsStream } from '../index.js'
 import { $p } from '../route_picker.js'
 
@@ -28,7 +29,11 @@ describe('BodyAsStream', () => {
 
     const payload = Buffer.from('hello stream world')
 
-    const res = await app.fetch('/stream/upload', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload })
+    const res = await app.fetch('/stream/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: payload,
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ isStream: true, size: payload.byteLength })
@@ -57,7 +62,11 @@ describe('BodyAsStream', () => {
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
 
-    const res = await app.fetch('/stream-binary/data', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: payload })
+    const res = await app.fetch('/stream-binary/data', {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: payload,
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ bytes: [1, 2, 3, 255] })
@@ -85,7 +94,11 @@ describe('BodyAsStream', () => {
 
     const jsonStr = JSON.stringify({ key: 'value' })
 
-    const res = await app.fetch('/stream-json/data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: jsonStr })
+    const res = await app.fetch('/stream-json/data', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: jsonStr,
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ raw: jsonStr })
@@ -113,9 +126,17 @@ describe('BodyAsStream', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const streamRes = await app.fetch('/stream-mixed/raw', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'hello' })
+    const streamRes = await app.fetch('/stream-mixed/raw', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'hello',
+    })
 
-    const parsedRes = await app.fetch('/stream-mixed/parsed', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: 1 }) })
+    const parsedRes = await app.fetch('/stream-mixed/parsed', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ x: 1 }),
+    })
 
     expect(streamRes.status).toBe(200)
     expect(await streamRes.json()).toEqual({ isStream: true })

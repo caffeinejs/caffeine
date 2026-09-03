@@ -23,10 +23,17 @@ Split configuration into one class per infrastructure concern. Each class handle
 cohesive set of bindings.
 
 ```ts
-class DatabaseConfig { /* DataSource, repositories */ }
-class CacheConfig    { /* CacheStore, session store  */ }
-class APIConfig      { /* HttpClient, rate limiter    */ }
+class DatabaseConfig {
+  /* DataSource, repositories */
+}
+class CacheConfig {
+  /* CacheStore, session store  */
+}
+class APIConfig {
+  /* HttpClient, rate limiter    */
+}
 ```
+
 :::
 
 ---
@@ -54,7 +61,7 @@ class InfrastructureConfig {
 const di = new CaffeineIoC()
 await di.init()
 
-di.get(HttpClient)     // HttpClient instance
+di.get(HttpClient) // HttpClient instance
 di.get<string>('db.url') // 'postgres://localhost/app'
 ```
 
@@ -141,7 +148,7 @@ const kMetrics = Symbol('Metrics')
 class ObservabilityConfig {
   @Provides(Logger)
   logger(): Logger {
-    return pino()  // third-party, no decorators possible
+    return pino() // third-party, no decorators possible
   }
 
   @Provides(kMetrics)
@@ -196,13 +203,13 @@ class ScopedConfig {
   @Lifetime(Scopes.SINGLETON)
   @Provides(HttpClient)
   httpClient(): HttpClient {
-    return new HttpClient()      // created once
+    return new HttpClient() // created once
   }
 
   @Lifetime(Scopes.TRANSIENT)
   @Provides(RequestBuilder)
   requestBuilder(): RequestBuilder {
-    return new RequestBuilder()  // new instance on every injection
+    return new RequestBuilder() // new instance on every injection
   }
 }
 ```
@@ -224,7 +231,7 @@ condition for each method is the AND of the class-level and method-level predica
 class EUConfig {
   @Provides(PaymentGateway)
   gateway(): PaymentGateway {
-    return new StripeEUGateway()  // always provided when REGION === 'eu'
+    return new StripeEUGateway() // always provided when REGION === 'eu'
   }
 
   @ConditionalOn(ctx => ctx.container.has(RedisClient))

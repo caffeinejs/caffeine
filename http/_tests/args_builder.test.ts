@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { $p, Controller, Get, Args, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 // @Args accepts either an array of `$p` pickers or a builder function that receives the builtin pickers.

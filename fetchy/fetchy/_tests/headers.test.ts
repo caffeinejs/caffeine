@@ -31,7 +31,7 @@ describe('header/form decorators', () => {
     expect(spec?.headers.get('accept')).toBe('application/json')
   })
 
-  it('@HeaderMap/@ContentType/@Accept at method level write into that method\'s registrar entry only', () => {
+  it("@HeaderMap/@ContentType/@Accept at method level write into that method's registrar entry only", () => {
     const { capture, metadata } = captureMetadata()
 
     @capture

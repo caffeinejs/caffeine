@@ -8,10 +8,7 @@ import { ErrCaffeineWebApplication } from '@caffeinejs/http'
  */
 export class ErrDuplicateSPAMount extends ErrCaffeineWebApplication {
   constructor(roots: readonly string[]) {
-    super(
-      `Cannot configure more than one SPA mount: "${roots.join('", "')}"`,
-      'ERR_DUPLICATE_SPA_MOUNT',
-    )
+    super(`Cannot configure more than one SPA mount: "${roots.join('", "')}"`, 'ERR_DUPLICATE_SPA_MOUNT')
     this.name = 'ErrDuplicateSPAMount'
   }
 }
@@ -25,11 +22,11 @@ export class ErrDuplicateSPAMount extends ErrCaffeineWebApplication {
 export class ErrSPAIndexMissing extends ErrCaffeineWebApplication {
   constructor(indexPath: string) {
     super(
-      `Cannot serve the SPA: the shell document does not exist: "${indexPath}"`
-      + '\nPossible Solutions:'
-      + '\n  - Build the site so the shell and its assets exist before the server starts'
-      + '\n  - Point spa() at the directory holding index.html'
-      + '\n  - Pass { onMissingIndex: "skip" } to start without the site, serving the API alone',
+      `Cannot serve the SPA: the shell document does not exist: "${indexPath}"` +
+        '\nPossible Solutions:' +
+        '\n  - Build the site so the shell and its assets exist before the server starts' +
+        '\n  - Point spa() at the directory holding index.html' +
+        '\n  - Pass { onMissingIndex: "skip" } to start without the site, serving the API alone',
       'ERR_SPA_INDEX_MISSING',
     )
     this.name = 'ErrSPAIndexMissing'

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { joinPaths, routeURL, templateParameters, translatePath } from '../generate/paths.js'
 
 describe('translatePath', () => {

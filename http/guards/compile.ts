@@ -1,12 +1,13 @@
 import { Scopes, type Binding, type Container, type InjectionToken, type Provider } from '@caffeinejs/di'
+
 import { ErrConfiguration } from '../error/common.js'
 import { solutions } from '../error/util.js'
 import { Guard } from './guard.js'
 import type { GuardRef } from './keys.js'
 
-export type CompiledGuard
-  = | { readonly kind: 'instance', readonly instance: Guard }
-    | { readonly kind: 'provider', readonly provider: Provider<Guard>, readonly requestScope: boolean }
+export type CompiledGuard =
+  | { readonly kind: 'instance'; readonly instance: Guard }
+  | { readonly kind: 'provider'; readonly provider: Provider<Guard>; readonly requestScope: boolean }
 
 /**
  * Resolves `keys` to a dense chain. Empty input yields an empty array.
@@ -45,29 +46,29 @@ function compileOne(
   const bindings = container.getBindings(key)
   if (bindings.length === 0) {
     throw new ErrConfiguration(
-      `Cannot resolve guard "${name}" referenced by "${owner}": no binding registered`
-      + solutions(
-        `Decorate the guard with "@Injectable()" so it is registered in the container`,
-        `Call "bind(${name}).toSelf()" if it is registered without decorators`,
-      ),
+      `Cannot resolve guard "${name}" referenced by "${owner}": no binding registered` +
+        solutions(
+          `Decorate the guard with "@Injectable()" so it is registered in the container`,
+          `Call "bind(${name}).toSelf()" if it is registered without decorators`,
+        ),
     )
   }
 
   const binding = container.getBinding(key) as Binding<Guard>
   if (!isGuardBinding(binding, key)) {
     throw new ErrConfiguration(
-      `Cannot use "${name}" as a guard in "${owner}": it is not a container-managed Guard`
-      + solutions(
-        `"${name}" must extend Guard`,
-        'List only Guard subclasses in "@UseGuards" or "guards(g => g.use(...))"',
-      ),
+      `Cannot use "${name}" as a guard in "${owner}": it is not a container-managed Guard` +
+        solutions(
+          `"${name}" must extend Guard`,
+          'List only Guard subclasses in "@UseGuards" or "guards(g => g.use(...))"',
+        ),
     )
   }
 
   const requestScope = container.hasScopeInGraph(key, Scopes.REQUEST)
   const provider = container.wrapBinding<Guard>(binding)
-  const compiled: CompiledGuard
-    = binding.scopeID === Scopes.SINGLETON && !requestScope
+  const compiled: CompiledGuard =
+    binding.scopeID === Scopes.SINGLETON && !requestScope
       ? { kind: 'instance', instance: provider.get() }
       : { kind: 'provider', provider, requestScope }
 

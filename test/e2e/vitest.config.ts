@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vitest/config'
+
 import swc from 'unplugin-swc'
+import { defineConfig } from 'vitest/config'
 
 // Opt-in e2e project (not in the root vitest projects list). Runs the OIDC/OAuth2 flows against
 // the dockerized Spring Authorization Server (test/services/oauthserver). Specs skip when it is not up.

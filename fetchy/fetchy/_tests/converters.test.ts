@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
+import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
+import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Param } from '../decorators/params/param.js'
-import { Params } from '../decorators/params.js'
 import { Path } from '../decorators/path.js'
 import { RawResponse } from '../decorators/raw_response.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
 import { UseResponseHandler } from '../decorators/response_handler.js'
 import { GET, POST } from '../decorators/verbs.js'
-import { newClient } from '../client_builder.js'
 import { ErrFetchyHTTP, ErrFetchyInvalidFormBody } from '../errors.js'
 import { noop } from '../noop.js'
 import { FormRequestBodyConverter, RawRequestBodyConverter } from '../request_body_converter.js'
@@ -81,9 +81,7 @@ describe('converters', () => {
 
     await api.createFormUser({ name: 'Ada' })
 
-    expect(await callFactory.calls[0].lastRequest?.clone().text()).toBe(
-      new URLSearchParams({ name: 'Ada' }).toString(),
-    )
+    expect(await callFactory.calls[0].lastRequest?.clone().text()).toBe(new URLSearchParams({ name: 'Ada' }).toString())
   })
 
   it('FormRequestBodyConverter throws ErrFetchyInvalidFormBody for a flat array', () => {
@@ -142,9 +140,7 @@ describe('converters', () => {
 
     await api.createUser({ name: 'Ada' })
 
-    expect(await callFactory.calls[0].lastRequest?.clone().text()).toBe(
-      new URLSearchParams({ name: 'Ada' }).toString(),
-    )
+    expect(await callFactory.calls[0].lastRequest?.clone().text()).toBe(new URLSearchParams({ name: 'Ada' }).toString())
   })
 
   it('a method-level @UseRequestBodyConverter() overrides the class-level default', async () => {

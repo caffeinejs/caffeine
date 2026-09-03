@@ -1,19 +1,18 @@
-import { describe, expect, it } from 'vitest'
 import type { Container } from '@caffeinejs/di'
 import { $t, createApplication, kAppConfig } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import { describe, expect, it } from 'vitest'
+
 import type { ConsumerClient, KafkaClients, ProducerClient, ResolvedKafkaConfig } from './config.js'
 import { kafka } from './plugin.js'
-import { runtimeKey } from './symbols.js'
 import type { KafkaRuntime } from './runtime.js'
+import { runtimeKey } from './symbols.js'
 
 function noopClients(): KafkaClients {
   const producer: ProducerClient = { send: () => Promise.resolve(), close: () => Promise.resolve() }
   const consumer: ConsumerClient = {
-    consume: () => Promise.resolve(Object.assign(
-      { async* [Symbol.asyncIterator]() {} },
-      { close: () => Promise.resolve() },
-    )),
+    consume: () =>
+      Promise.resolve(Object.assign({ async *[Symbol.asyncIterator]() {} }, { close: () => Promise.resolve() })),
     close: () => Promise.resolve(),
   }
   return { createProducer: () => producer, createConsumer: () => consumer }
@@ -23,16 +22,19 @@ function configOf(container: Container, instance: string): ResolvedKafkaConfig {
   return (container.get(runtimeKey(instance)) as KafkaRuntime).config
 }
 
-const env = (values: Record<string, string>) =>
-  new EnvConfigProvider({ env: values })
+const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
 
 describe('kafka configuration', () => {
   it('reads brokers from the configuration tree with no builder call at all', async () => {
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        kafka: { default: { brokers: ['from-config:9092'], groupId: 'from-config' } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            kafka: { default: { brokers: ['from-config:9092'], groupId: 'from-config' } },
+          }),
+        ),
+      )
       .extend(kfk)
 
     const built = app.build()
@@ -93,9 +95,13 @@ describe('kafka configuration', () => {
 
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(schema, c => c.source(new InlineConfigProvider({
-        app: { events: { groupId: 'from-moved-path' } },
-      })))
+      .config(schema, c =>
+        c.source(
+          new InlineConfigProvider({
+            app: { events: { groupId: 'from-moved-path' } },
+          }),
+        ),
+      )
       // No annotation on the selector: the config type is recovered from the builder.
       .extend(kfk, k => k.brokers('moved:9092').config(c => c.app.events))
 
@@ -137,9 +143,13 @@ describe('kafka configuration', () => {
 
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        kafka: { default: { brokers: ['b:9092'], deadLetter: true } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            kafka: { default: { brokers: ['b:9092'], deadLetter: true } },
+          }),
+        ),
+      )
       .extend(kfk, k => k.deadLetter({ topic }))
 
     const built = app.build()
@@ -153,9 +163,13 @@ describe('kafka configuration', () => {
   it('honours a configured deadLetter: false when code set no object', async () => {
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        kafka: { default: { brokers: ['b:9092'], deadLetter: false } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            kafka: { default: { brokers: ['b:9092'], deadLetter: false } },
+          }),
+        ),
+      )
       .extend(kfk, k => k.brokers('b:9092'))
 
     const built = app.build()
@@ -170,9 +184,13 @@ describe('kafka configuration', () => {
   it('configures nothing for an instance the application never declared', async () => {
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        kafka: { ghost: { brokers: ['nobody:9092'] } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            kafka: { ghost: { brokers: ['nobody:9092'] } },
+          }),
+        ),
+      )
       .extend(kfk, k => k.brokers('real:9092'))
 
     const built = app.build()

@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+
 import type { CustomerController } from './customer.controller.js'
 
 export function createCustomerRouter(ctrl: CustomerController): Hono {

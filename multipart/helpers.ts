@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream'
+
 import type { FastifyRequest } from 'fastify'
-import type { MultipartField, WebMultipartFile } from './multipart.js'
+
 import {
   nodeStreamFile,
   nodeStreamFiles,
@@ -12,6 +13,7 @@ import {
   webStreamFiles,
   webStreamParts,
 } from './_parts.js'
+import type { MultipartField, WebMultipartFile } from './multipart.js'
 
 /**
  * What {@link multipart} needs from a context: the Fastify request behind it.

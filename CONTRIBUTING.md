@@ -21,7 +21,7 @@ npm install
 
 ```sh
 make test           # run tests
-make lint           # eslint, with fixes
+make lint           # oxlint + oxfmt, with fixes
 make lint-markdown  # markdownlint (docs-only changes)
 make build          # compile
 make check          # full quality gate

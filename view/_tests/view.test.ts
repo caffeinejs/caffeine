@@ -1,17 +1,20 @@
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+
+import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import * as ejs from 'ejs'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
-import * as ejs from 'ejs'
-import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { View, ViewBuilder, ViewOptionsProvider, ViewExt } from '../index.js'
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
 
 function viewApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(ViewExt, v =>
+    v.engine({ handlebars }).root(templatesRoot).extension('hbs'),
+  )
 }
 
 describe('view feature', () => {
@@ -28,7 +31,9 @@ describe('view feature', () => {
     @Controller('/view-model')
     class ModelController {
       @Get('/show')
-      show() { return View('hello', { name: 'Ada' }) }
+      show() {
+        return View('hello', { name: 'Ada' })
+      }
     }
 
     void [ModelController]
@@ -47,7 +52,9 @@ describe('view feature', () => {
     @Controller('/view-plain')
     class PlainController {
       @Get('/show')
-      show() { return View('plain') }
+      show() {
+        return View('plain')
+      }
     }
 
     void [PlainController]
@@ -65,13 +72,17 @@ describe('view feature', () => {
     @Controller('/view-context')
     class ContextController {
       @Get('/show')
-      show() { return View('site') }
+      show() {
+        return View('site')
+      }
     }
 
     void [ContextController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }))
+      .extend(ViewExt, v =>
+        v.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }),
+      )
       .build()
     await app.ready()
 
@@ -84,7 +95,9 @@ describe('view feature', () => {
     @Controller('/view-namespaced')
     class NamespacedController {
       @Get('/show')
-      show() { return View('nested/deep', { name: 'Nested' }) }
+      show() {
+        return View('nested/deep', { name: 'Nested' })
+      }
     }
 
     void [NamespacedController]
@@ -104,7 +117,9 @@ describe('view feature', () => {
     @Controller('/view-async')
     class AsyncController {
       @Get('/show')
-      async show() { return View('hello', { name: 'Grace' }) }
+      async show() {
+        return View('hello', { name: 'Grace' })
+      }
     }
 
     void [AsyncController]
@@ -122,7 +137,9 @@ describe('view feature', () => {
     @Controller('/view-layout')
     class LayoutController {
       @Get('/show')
-      show() { return View('plain', {}, { layout: 'layout-alt' }) }
+      show() {
+        return View('plain', {}, { layout: 'layout-alt' })
+      }
     }
 
     void [LayoutController]
@@ -143,7 +160,9 @@ describe('view feature', () => {
     @Controller('/view-json')
     class JsonController {
       @Get('/show')
-      show() { return { ok: true } }
+      show() {
+        return { ok: true }
+      }
     }
 
     void [JsonController]
@@ -161,7 +180,9 @@ describe('view feature', () => {
     @Controller('/view-unconfigured')
     class UnconfiguredController {
       @Get('/show')
-      show() { return View('hello', { name: 'Nobody' }) }
+      show() {
+        return View('hello', { name: 'Nobody' })
+      }
     }
 
     void [UnconfiguredController]
@@ -178,7 +199,9 @@ describe('view feature', () => {
     @Controller('/view-unconfigured-async')
     class UnconfiguredAsyncController {
       @Get('/show')
-      async show() { return View('hello', { name: 'Nobody' }) }
+      async show() {
+        return View('hello', { name: 'Nobody' })
+      }
     }
 
     void [UnconfiguredAsyncController]
@@ -196,11 +219,15 @@ describe('view feature', () => {
     class MultiController {
       // Default engine (handlebars → reply.view).
       @Get('/hbs')
-      hbs() { return View('hello', { name: 'Ada' }) }
+      hbs() {
+        return View('hello', { name: 'Ada' })
+      }
 
       // Named engine (ejs → reply.ejs), selected via View options.engine.
       @Get('/ejs')
-      ejs() { return View('page', { text: 'hi' }, { engine: 'ejs' }) }
+      ejs() {
+        return View('page', { text: 'hi' }, { engine: 'ejs' })
+      }
     }
 
     void [MultiController]
@@ -226,11 +253,15 @@ describe('view feature', () => {
     class SameEngineController {
       // Default handlebars — no layout.
       @Get('/plain')
-      plain() { return View('plain') }
+      plain() {
+        return View('plain')
+      }
 
       // Named handlebars registration wrapping the alt layout.
       @Get('/alt')
-      alt() { return View('plain', {}, { engine: 'alt' }) }
+      alt() {
+        return View('plain', {}, { engine: 'alt' })
+      }
     }
 
     void [SameEngineController]
@@ -259,7 +290,9 @@ describe('view feature', () => {
     @Controller('/multi-missing')
     class MissingEngineController {
       @Get('/show')
-      show() { return View('hello', { name: 'Ada' }, { engine: 'nope' }) }
+      show() {
+        return View('hello', { name: 'Ada' }, { engine: 'nope' })
+      }
     }
 
     void [MissingEngineController]
@@ -274,17 +307,21 @@ describe('view feature', () => {
 
   it('rejects registering an engine named "view" (reserved for the default engine)', () => {
     expect(() =>
-      createWebApplication(fastifyAdapterFactory(fastify()), {})
-        .extend(ViewExt('view'), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs')),
+      createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(ViewExt('view'), v =>
+        v.engine({ handlebars }).root(templatesRoot).extension('hbs'),
+      ),
     ).toThrow(/reserved for the default engine/)
   })
 })
 
 describe('ViewBuilder', () => {
   it('build() assembles the configured options', () => {
-    const options = new ViewBuilder()
-      .engine({ handlebars }).root(templatesRoot).extension('hbs')
-      .build() as { root: string, viewExt: string, engine: unknown, propertyName?: string }
+    const options = new ViewBuilder().engine({ handlebars }).root(templatesRoot).extension('hbs').build() as {
+      root: string
+      viewExt: string
+      engine: unknown
+      propertyName?: string
+    }
 
     expect(options.root).toBe(templatesRoot)
     expect(options.viewExt).toBe('hbs')
@@ -294,9 +331,9 @@ describe('ViewBuilder', () => {
   })
 
   it('build() stamps propertyName for a named engine', () => {
-    const options = new ViewBuilder('mobile')
-      .engine({ handlebars }).root(templatesRoot).extension('hbs')
-      .build() as { propertyName?: string }
+    const options = new ViewBuilder('mobile').engine({ handlebars }).root(templatesRoot).extension('hbs').build() as {
+      propertyName?: string
+    }
 
     expect(options.propertyName).toBe('mobile')
   })
@@ -315,8 +352,11 @@ describe('ViewBuilder', () => {
   it('configure() merges a full options object over prior settings (last write wins)', () => {
     // configure overrides the earlier viewExt; a later fluent setter overrides configure.
     const options = new ViewBuilder()
-      .engine({ handlebars }).extension('hbs').configure({ charset: 'ascii', viewExt: 'html' }).extension('pug')
-      .build() as { charset: string, viewExt: string }
+      .engine({ handlebars })
+      .extension('hbs')
+      .configure({ charset: 'ascii', viewExt: 'html' })
+      .extension('pug')
+      .build() as { charset: string; viewExt: string }
 
     expect(options.charset).toBe('ascii')
     expect(options.viewExt).toBe('pug')

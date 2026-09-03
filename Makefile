@@ -31,7 +31,6 @@ test\:%: ## run the test suite of a single package (e.g. test:http)
 .PHONY: check
 check: ## run all checks
 	@npm run lint:fix
-	@npm run lint:fix -w @caffeinejs/example-petstore
 	@npm run lint:markdown
 	@npm run build
 	@npm run build:examples
@@ -45,7 +44,7 @@ fmt: ## format code
 	@npm run fmt
 
 fmt\:%: ## format a single package (e.g. fmt:http)
-	@npm run fmt -w $*
+	@npx oxfmt $*
 
 .PHONY: lint
 lint: ## check lint and fix errors
@@ -60,7 +59,8 @@ licensecheck: ## check production dependency licenses against the allowlist
 	@npm run license:check
 
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
-	@npm run lint:fix -w $*
+	@npx oxlint --fix $*
+	@npx oxfmt $*
 
 .PHONY: bench
 bench: ## list available benchmarks

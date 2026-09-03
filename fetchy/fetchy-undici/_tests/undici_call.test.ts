@@ -5,7 +5,7 @@ import { UndiciCall } from '../undici_call.js'
 
 const ORIGIN = 'http://example.test'
 
-function newMockPool(): { call: UndiciCall, mockPool: ReturnType<MockAgent['get']> } {
+function newMockPool(): { call: UndiciCall; mockPool: ReturnType<MockAgent['get']> } {
   const mockAgent = new MockAgent()
   mockAgent.disableNetConnect()
   const mockPool = mockAgent.get(ORIGIN)
@@ -16,9 +16,13 @@ function newMockPool(): { call: UndiciCall, mockPool: ReturnType<MockAgent['get'
 describe('UndiciCall', () => {
   it('translates a successful GET response', async () => {
     const { call, mockPool } = newMockPool()
-    mockPool.intercept({ path: '/users/1', method: 'GET' }).reply(200, { id: '1' }, {
-      headers: { 'content-type': 'application/json' },
-    })
+    mockPool.intercept({ path: '/users/1', method: 'GET' }).reply(
+      200,
+      { id: '1' },
+      {
+        headers: { 'content-type': 'application/json' },
+      },
+    )
 
     const response = await call.execute(new Request(`${ORIGIN}/users/1`))
 
@@ -66,9 +70,13 @@ describe('UndiciCall', () => {
 
   it('preserves repeated header values', async () => {
     const { call, mockPool } = newMockPool()
-    mockPool.intercept({ path: '/login', method: 'POST' }).reply(200, {}, {
-      headers: { 'set-cookie': ['a=1', 'b=2'] },
-    })
+    mockPool.intercept({ path: '/login', method: 'POST' }).reply(
+      200,
+      {},
+      {
+        headers: { 'set-cookie': ['a=1', 'b=2'] },
+      },
+    )
 
     const response = await call.execute(new Request(`${ORIGIN}/login`, { method: 'POST' }))
 

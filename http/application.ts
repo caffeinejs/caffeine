@@ -1,24 +1,33 @@
 import type { Container } from '@caffeinejs/di'
 import { BaseApplication, type ApplicationInit, type Service, type ShutdownOptions } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import type { RouteGroup } from './route.js'
-import type { Services } from './service.js'
+
+import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
+import { ErrConfiguration } from './error/common.js'
+import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
+import { solutions } from './error/util.js'
+import {
+  ErrShutdownTimeout,
+  HealthBuilder,
+  HealthRegistry,
+  HealthServiceConfigurer,
+  ProbeEndpoint,
+  kHealthContribution,
+  loadHealthIndicators,
+} from './health/index.js'
+import type { HealthServices } from './health/services.js'
 import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
-import { buildRouting, type RouteSource } from './routing/index.js'
+import type { RouteGroup } from './route.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
-import { FluentRouteSource } from './routing/programmatic/source.js'
+import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
+import { FluentRouteSource } from './routing/programmatic/source.js'
 import { Authentication } from './security/auth/authentication_middleware.js'
+import { kAuthContribution, kOIDCContribution } from './security/auth/keys.js'
 import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
 import { AuthenticationService } from './security/auth/service.js'
-import { kAuthContribution, kOIDCContribution } from './security/auth/keys.js'
-import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
-import { ErrConfiguration } from './error/common.js'
-import { solutions } from './error/util.js'
-import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
 import { ServerOptions, kServerContribution, type ServerAddress } from './server/index.js'
-import { ErrShutdownTimeout, HealthBuilder, HealthRegistry, HealthServiceConfigurer, ProbeEndpoint, kHealthContribution, loadHealthIndicators } from './health/index.js'
-import type { HealthServices } from './health/services.js'
+import type { Services } from './service.js'
 
 export interface AdapterIn<R> {
   routeGroups: RouteGroup<R>[]
@@ -49,8 +58,7 @@ export interface AdapterFactoryIn {
   container: Container
 }
 
-export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>
-  = (input: AdapterFactoryIn) => A
+export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> = (input: AdapterFactoryIn) => A
 
 /**
  * The HTTP application: a {@link BaseApplication} whose lifecycle steps drive a Fastify {@link Adapter}.
@@ -169,8 +177,8 @@ export abstract class AbstractWebApplication<
   mount(...routers: Router<any, any, any, any>[]): this {
     if (this.#built) {
       throw new ErrConfiguration(
-        'Cannot mount a router: routing has already been built'
-        + solutions('Call "mount()" before the application is started'),
+        'Cannot mount a router: routing has already been built' +
+          solutions('Call "mount()" before the application is started'),
       )
     }
 
@@ -280,7 +288,7 @@ export abstract class AbstractWebApplication<
     })
 
     try {
-      if (await Promise.race([completed, expired]) === 'done') {
+      if ((await Promise.race([completed, expired])) === 'done') {
         return
       }
 

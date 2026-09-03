@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
 import { CaffeineIoC, type Ctor } from '@caffeinejs/di'
 import fastify from 'fastify'
 import fp from 'fastify-plugin'
+import { describe, it, expect } from 'vitest'
+
 import {
   Controller,
   Get,
@@ -99,8 +100,7 @@ describe('ServerExtension metadata (enforced by Fastify)', () => {
       configure = (): void => {}
     }
 
-    await expect(newApp(new NeedsMissing()).ready())
-      .rejects.toThrow(/'nobody-registered-this'.*'needs-missing'/)
+    await expect(newApp(new NeedsMissing()).ready()).rejects.toThrow(/'nobody-registered-this'.*'needs-missing'/)
   })
 
   it('fails start-up when a required decorator is absent', async () => {
@@ -127,10 +127,15 @@ describe('ServerExtension metadata (enforced by Fastify)', () => {
 
     const server = fastify()
     // Registered before the application boots, so avvio has loaded it by the time the extension registers.
-    server.register(fp((instance, _opts, done) => {
-      instance.decorateRequest('sugar', null)
-      done()
-    }, { name: 'sugar-plugin' }))
+    server.register(
+      fp(
+        (instance, _opts, done) => {
+          instance.decorateRequest('sugar', null)
+          done()
+        },
+        { name: 'sugar-plugin' },
+      ),
+    )
 
     const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()

@@ -1,10 +1,10 @@
-import { Injection } from '../injection.js'
-import { InjectionToken, NamedToken, isNamedKey } from '../key.js'
-import { isNil } from '../internal/util/assert/index.js'
 import { ErrInvalidDecorator } from '../errors.js'
+import { Injection } from '../injection.js'
+import { isNil } from '../internal/util/assert/index.js'
+import { InjectionToken, NamedToken, isNamedKey } from '../key.js'
+import { Configuration } from './configuration.js'
 import { extendMemberInjectableAttributes } from './registrar/index.js'
 import { normalizeInjections } from './util/index.js'
-import { Configuration } from './configuration.js'
 
 /**
  * Marks a method inside a `@Configuration` class as a factory that provides a binding.
@@ -57,11 +57,8 @@ export function Provides(key: InjectionToken, nameOrDependencies?: Injection[] |
     const type = typeof key === 'function' ? key : undefined
     const actualKey = typeof name === 'undefined' ? key : name
 
-    extendMemberInjectableAttributes(context.metadata, context.name,
-      config => config
-        .dependencies(normalizeInjections(deps))
-        .key(actualKey)
-        .type(type),
+    extendMemberInjectableAttributes(context.metadata, context.name, config =>
+      config.dependencies(normalizeInjections(deps)).key(actualKey).type(type),
     )
   }
 }

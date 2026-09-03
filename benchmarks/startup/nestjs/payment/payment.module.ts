@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common'
-import { SharedModule } from '../shared/shared.module.js'
+
 import { OrderModule } from '../order/order.module.js'
-import { NotifierService } from '../shared/notifier.service.js'
 import { OrderService } from '../order/order.service.js'
+import { NotifierService } from '../shared/notifier.service.js'
+import { SharedModule } from '../shared/shared.module.js'
+import { PaymentController } from './payment.controller.js'
 import { PaymentRepository } from './payment.repository.js'
 import { PaymentService } from './payment.service.js'
-import { PaymentController } from './payment.controller.js'
 
 @Module({
   imports: [SharedModule, OrderModule],

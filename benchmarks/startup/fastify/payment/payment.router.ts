@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+
 import type { PaymentController } from './payment.controller.js'
 
 export function createPaymentRouter(ctrl: PaymentController) {

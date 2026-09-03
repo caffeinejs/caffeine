@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache'
+
 import { CacheEntry } from './cache.js'
 
 /**
@@ -38,9 +39,10 @@ export class MemoryCacheStore extends CacheStore {
 
   constructor(options?: MemoryCacheStoreOptions) {
     super()
-    this.#cache = options?.maxBytes !== undefined
-      ? new LRUCache({ max: options.max ?? 500, maxSize: options.maxBytes, sizeCalculation: entrySize })
-      : new LRUCache({ max: options?.max ?? 500 })
+    this.#cache =
+      options?.maxBytes !== undefined
+        ? new LRUCache({ max: options.max ?? 500, maxSize: options.maxBytes, sizeCalculation: entrySize })
+        : new LRUCache({ max: options?.max ?? 500 })
   }
 
   async get(key: string, segment: string): Promise<CacheEntry | undefined> {
@@ -77,9 +79,7 @@ export class MemoryCacheStore extends CacheStore {
 
 // Rough byte size of an entry: the payload plus its stored headers (etag/last-modified included).
 function entrySize(entry: CacheEntry): number {
-  const payloadBytes = typeof entry.payload === 'string'
-    ? Buffer.byteLength(entry.payload)
-    : entry.payload.length
+  const payloadBytes = typeof entry.payload === 'string' ? Buffer.byteLength(entry.payload) : entry.payload.length
   let headerBytes = 0
   for (const [k, v] of Object.entries(entry.headers)) {
     headerBytes += k.length + v.length

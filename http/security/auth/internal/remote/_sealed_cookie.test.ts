@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { jwtDecrypt } from 'jose'
+import { describe, it, expect } from 'vitest'
+
 import { Claim } from '../../../index.js'
 import { keyFor } from './_sealed_cookie.js'
 import type { OIDCTokenPurpose } from './_sealed_cookie.js'
@@ -75,7 +76,8 @@ describe('cookie key separation', () => {
   it('seals state under a key the session purpose cannot open', async () => {
     const token = await encodeState(
       { state: 's', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
-      SECRET, SCHEME,
+      SECRET,
+      SCHEME,
     )
 
     await expect(jwtDecrypt(token, key('oidc-session+jwt'))).rejects.toThrow()
@@ -84,8 +86,17 @@ describe('cookie key separation', () => {
 
   it('hides the PKCE code_verifier carried by the state cookie', async () => {
     const token = await encodeState(
-      { state: 's', nonce: 'n', codeVerifier: 'super-secret-verifier', pkceMethod: 'S256', returnTo: '/inbox', scheme: SCHEME, issuer: ISSUER },
-      SECRET, SCHEME,
+      {
+        state: 's',
+        nonce: 'n',
+        codeVerifier: 'super-secret-verifier',
+        pkceMethod: 'S256',
+        returnTo: '/inbox',
+        scheme: SCHEME,
+        issuer: ISSUER,
+      },
+      SECRET,
+      SCHEME,
     )
 
     expect(token).not.toContain('super-secret-verifier')

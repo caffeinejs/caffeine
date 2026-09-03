@@ -101,9 +101,7 @@ describe('LoggingInterceptor', () => {
       statusText: 'Not Found',
       headers: { 'x-secret': 'super-secret-value' },
     })
-    const chain = fakeChain(request, () =>
-      Promise.reject(new ErrFetchyHTTP(request, errorResponse, null)),
-    )
+    const chain = fakeChain(request, () => Promise.reject(new ErrFetchyHTTP(request, errorResponse, null)))
 
     await expect(interceptor.intercept(chain)).rejects.toBeInstanceOf(ErrFetchyHTTP)
 

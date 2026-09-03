@@ -1,10 +1,10 @@
 import { Context } from '../../context.js'
 import { RouteAuthzOptions } from '../../routing/spec.js'
 import { Principal } from '../index.js'
-import { ErrAuthzPolicyNotFound, ErrAuthzRequirementHandlerNotFound } from './errors.js'
-import { AuthzRouteService } from './route_service.js'
 import { AuthorizationOptions } from './authz.js'
+import { ErrAuthzPolicyNotFound, ErrAuthzRequirementHandlerNotFound } from './errors.js'
 import { PolicyBuilder } from './policy_builder.js'
+import { AuthzRouteService } from './route_service.js'
 
 export interface AuthzPolicy {
   readonly name: string
@@ -19,7 +19,11 @@ export abstract class AuthzRequirementHandler<R extends AuthzRequirement> {
   abstract get kind(): string
 
   abstract handle(
-    ctx: Context, user: Principal, requirement: R, resource?: unknown): AuthzPolicyResult | Promise<AuthzPolicyResult>
+    ctx: Context,
+    user: Principal,
+    requirement: R,
+    resource?: unknown,
+  ): AuthzPolicyResult | Promise<AuthzPolicyResult>
 }
 
 export interface AuthzResult {
@@ -34,15 +38,13 @@ export interface AuthzPolicyResult {
   reason?: Error | string
 }
 
-export type PolicyEvaluator
-  = (ctx: Context, user: Principal, resource?: unknown) => AuthzResult | Promise<AuthzResult>
+export type PolicyEvaluator = (ctx: Context, user: Principal, resource?: unknown) => AuthzResult | Promise<AuthzResult>
 
 export function newPolicyEvaluator(
   policy: AuthzPolicy,
   handlers: Map<string, AuthzRequirementHandler<AuthzRequirement>>,
 ): PolicyEvaluator {
-  const compiled
-    = new Array<[AuthzRequirement, AuthzRequirementHandler<AuthzRequirement>]>(policy.requirements.length)
+  const compiled = new Array<[AuthzRequirement, AuthzRequirementHandler<AuthzRequirement>]>(policy.requirements.length)
 
   for (let i = 0; i < policy.requirements.length; i++) {
     const requirement = policy.requirements[i]
@@ -82,9 +84,7 @@ export function compileRoutePolicy(
   routerOptions?: RouteAuthzOptions,
   routeOptions?: RouteAuthzOptions,
 ): AuthzRouteService | undefined {
-  const anonymous
-    = routerOptions?.allowAnonymous === true
-      || routeOptions?.allowAnonymous === true
+  const anonymous = routerOptions?.allowAnonymous === true || routeOptions?.allowAnonymous === true
 
   if (anonymous) {
     return undefined

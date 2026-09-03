@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+
 import { buildServer } from '../app.js'
 import { CATS_REPOSITORY, createContainer } from '../dependencies.js'
-import { catsRoutes } from './cats.routes.js'
 import type { CatsRepository } from './cats.repository.js'
+import { catsRoutes } from './cats.routes.js'
 
 describe('GET /cats/:id', function () {
   it('should return a cat when found', async function (t) {
@@ -16,8 +17,7 @@ describe('GET /cats/:id', function () {
     }
 
     const container = createContainer()
-    container.rebind(CATS_REPOSITORY, t => t
-      .toValue(mockRepo))
+    container.rebind(CATS_REPOSITORY, t => t.toValue(mockRepo))
 
     await container.init()
 
@@ -37,11 +37,8 @@ describe('GET /cats/:id', function () {
       url: '/cats/1',
     })
 
-    expect(mockFindOne)
-      .toHaveBeenCalledWith(1)
-    expect(response.statusCode)
-      .toBe(200)
-    expect(response.json())
-      .toEqual(cat)
+    expect(mockFindOne).toHaveBeenCalledWith(1)
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual(cat)
   })
 })

@@ -1,4 +1,5 @@
 import type { Container } from '@caffeinejs/di'
+
 import type { ApplicationEvent } from './decorators/lifecycle_registry.js'
 import { ErrCaffeine } from './error.js'
 import type { Service } from './service.js'
@@ -14,10 +15,7 @@ import type { Service } from './service.js'
 export interface PluginContext {
   addService(service: Service): void
   readonly container: Container
-  on(
-    event: ApplicationEvent,
-    listener: (app: { readonly container: Container }) => void | Promise<void>,
-  ): void
+  on(event: ApplicationEvent, listener: (app: { readonly container: Container }) => void | Promise<void>): void
   readonly state: Map<string, unknown>
 }
 
@@ -55,12 +53,15 @@ export interface TypeLambda {
 /**
  * Recovers the builder type a feature hands to `.extend`'s callback, rebound to config type `C`.
  */
-export type BuilderOf<F, C>
-  = F extends { readonly _F: infer L }
-    ? L extends TypeLambda
-      ? (L & { readonly In: C })['Out']
-      : F extends Feature<infer B> ? B : never
-    : F extends Feature<infer B> ? B : never
+export type BuilderOf<F, C> = F extends { readonly _F: infer L }
+  ? L extends TypeLambda
+    ? (L & { readonly In: C })['Out']
+    : F extends Feature<infer B>
+      ? B
+      : never
+  : F extends Feature<infer B>
+    ? B
+    : never
 
 /** Thrown when `.extend` installs the same singleton feature, or the same keyed instance, twice. */
 export class ErrFeatureAlreadyInstalled extends ErrCaffeine {
@@ -122,10 +123,9 @@ export function defineKeyedFeature<B>(options: {
   }
 
   const def = make(options.defaultInstance)
-  const keyed = Object.assign(
-    (instance: string) => make(instance),
-    { install: def.install },
-  ) as KeyedFeature<B>
+  const keyed = Object.assign((instance: string) => make(instance), {
+    install: (ctx: PluginContext, configure?: (builder: B) => void) => def.install(ctx, configure),
+  }) as KeyedFeature<B>
   Object.defineProperty(keyed, 'name', { value: options.name })
   return keyed
 }

@@ -1,16 +1,17 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
-import { $i } from '../injection.js'
 import { ErrCircularDependency } from '../errors.js'
+import { $i } from '../injection.js'
 import { Bar, BarTransient } from './_testdata/circular/Bar.js'
-import { Foo, FooTransient } from './_testdata/circular/Foo.js'
 import { BarFail } from './_testdata/circular/BarFail.js'
+import { Foo, FooTransient } from './_testdata/circular/Foo.js'
 import { FooFail } from './_testdata/circular/FooFail.js'
+import { DispatchHandlerA, DispatchHandlerB, Dispatcher } from './_testdata/circular/handler_dispatch.js'
 import { HandlerA, HandlerB, HandlerC } from './_testdata/circular/handler_peers.js'
 import { SoleHandlerA } from './_testdata/circular/handler_sole.js'
-import { DispatchHandlerA, DispatchHandlerB, Dispatcher } from './_testdata/circular/handler_dispatch.js'
 
 describe('Circular References', function () {
   describe('dependencies with deferred constructor', function () {
@@ -26,18 +27,13 @@ describe('Circular References', function () {
       di.get(Foo)
       di.get(Bar)
 
-      expect(foo.test())
-        .toEqual('foo-bar')
-      expect(bar.test())
-        .toEqual('bar-foo')
+      expect(foo.test()).toEqual('foo-bar')
+      expect(bar.test()).toEqual('bar-foo')
 
-      expect(foo2.test())
-        .toEqual('foo-bar')
-      expect(bar2.test())
-        .toEqual('bar-foo')
+      expect(foo2.test()).toEqual('foo-bar')
+      expect(bar2.test()).toEqual('bar-foo')
 
-      expect(foo.uuid)
-        .toEqual(foo2.uuid)
+      expect(foo.uuid).toEqual(foo2.uuid)
     })
 
     it('should resolve dependencies with mixed scopes', async function () {
@@ -49,15 +45,11 @@ describe('Circular References', function () {
       const foo2 = di.get(FooTransient)
       const bar2 = di.get(BarTransient)
 
-      expect(foo.test())
-        .toEqual('foo-bar')
-      expect(bar.test())
-        .toEqual('bar-foo')
+      expect(foo.test()).toEqual('foo-bar')
+      expect(bar.test()).toEqual('bar-foo')
 
-      expect(foo2.test())
-        .toEqual('foo-bar')
-      expect(bar2.test())
-        .toEqual('bar-foo')
+      expect(foo2.test()).toEqual('foo-bar')
+      expect(bar2.test()).toEqual('bar-foo')
 
       expect(foo.uuid).not.toEqual(foo2.uuid)
       expect(bar.uuid).not.toEqual(bar2.uuid)
@@ -72,12 +64,9 @@ describe('Circular References', function () {
       const bar = di.get(BarFail)
       const foo = di.get(FooFail)
 
-      expect(bar.foo)
-        .toBeInstanceOf(FooFail)
-      expect(foo.bar)
-        .toBeUndefined()
-      expect(() => foo.test())
-        .toThrow()
+      expect(bar.foo).toBeInstanceOf(FooFail)
+      expect(foo.bar).toBeUndefined()
+      expect(() => foo.test()).toThrow()
     })
   })
 
@@ -100,10 +89,8 @@ describe('Circular References', function () {
       await di.init()
       const consumer = di.get(PropConsumer)
 
-      expect(consumer.svc)
-        .toBeInstanceOf(PropService)
-      expect(consumer.svc.tag())
-        .toEqual('prop-service')
+      expect(consumer.svc).toBeInstanceOf(PropService)
+      expect(consumer.svc.tag()).toEqual('prop-service')
     })
   })
 
@@ -130,10 +117,8 @@ describe('Circular References', function () {
       await di.init()
       const consumer = di.get(MethodConsumer)
 
-      expect(consumer.svc)
-        .toBeInstanceOf(MethodService)
-      expect(consumer.svc.tag())
-        .toEqual('method-service')
+      expect(consumer.svc).toBeInstanceOf(MethodService)
+      expect(consumer.svc.tag()).toEqual('method-service')
     })
   })
 
@@ -148,10 +133,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(CycleA, t => t
-        .toSelf([CycleB]))
-      di.bind(CycleB, t => t
-        .toSelf([CycleA]))
+      di.bind(CycleA, t => t.toSelf([CycleB]))
+      di.bind(CycleB, t => t.toSelf([CycleA]))
 
       await expect(di.init()).rejects.toThrow(ErrCircularDependency)
     })
@@ -166,10 +149,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(CycleA, t => t
-        .toSelf([CycleB]))
-      di.bind(CycleB, t => t
-        .toSelf([CycleA]))
+      di.bind(CycleA, t => t.toSelf([CycleB]))
+      di.bind(CycleB, t => t.toSelf([CycleA]))
 
       let message = ''
       try {
@@ -178,12 +159,9 @@ describe('Circular References', function () {
         message = (e as Error).message
       }
 
-      expect(message)
-        .toContain('CycleA')
-      expect(message)
-        .toContain('CycleB')
-      expect(message)
-        .toMatch(/→/)
+      expect(message).toContain('CycleA')
+      expect(message).toContain('CycleB')
+      expect(message).toMatch(/→/)
     })
 
     it('should detect a 3-node constructor cycle', async function () {
@@ -200,12 +178,9 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(NodeA, t => t
-        .toSelf([NodeB]))
-      di.bind(NodeB, t => t
-        .toSelf([NodeC]))
-      di.bind(NodeC, t => t
-        .toSelf([NodeA]))
+      di.bind(NodeA, t => t.toSelf([NodeB]))
+      di.bind(NodeB, t => t.toSelf([NodeC]))
+      di.bind(NodeC, t => t.toSelf([NodeA]))
 
       await expect(di.init()).rejects.toThrow(ErrCircularDependency)
     })
@@ -220,12 +195,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(OptA, t => t
-        .toSelf([$i.optional(OptB)])
-        .lazy())
-      di.bind(OptB, t => t
-        .toSelf([OptA])
-        .lazy())
+      di.bind(OptA, t => t.toSelf([$i.optional(OptB)]).lazy())
+      di.bind(OptB, t => t.toSelf([OptA]).lazy())
 
       await di.init()
     })
@@ -240,15 +211,12 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-      di.bind(DeferA, t => t
-        .toSelf([$i.defer(() => DeferB)]))
-      di.bind(DeferB, t => t
-        .toSelf([DeferA]))
+      di.bind(DeferA, t => t.toSelf([$i.defer(() => DeferB)]))
+      di.bind(DeferB, t => t.toSelf([DeferA]))
 
       await di.init()
 
-      expect(di.get(DeferA))
-        .toBeInstanceOf(DeferA)
+      expect(di.get(DeferA)).toBeInstanceOf(DeferA)
     })
   })
 
@@ -288,18 +256,17 @@ describe('Circular References', function () {
       abstract class Handler {}
 
       class HandlerA extends Handler {
-        constructor(readonly peers: Handler[]) { super() }
+        constructor(readonly peers: Handler[]) {
+          super()
+        }
       }
       class HandlerB extends Handler {}
       class HandlerC extends Handler {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA, t => t.toSelf([$i.allOf($i.defer(() => Handler))])
-        .extends(Handler))
-      di.bind(HandlerB, t => t.toSelf()
-        .extends(Handler))
-      di.bind(HandlerC, t => t.toSelf()
-        .extends(Handler))
+      di.bind(HandlerA, t => t.toSelf([$i.allOf($i.defer(() => Handler))]).extends(Handler))
+      di.bind(HandlerB, t => t.toSelf().extends(Handler))
+      di.bind(HandlerC, t => t.toSelf().extends(Handler))
       await di.init()
 
       const a = di.get(HandlerA)
@@ -313,12 +280,13 @@ describe('Circular References', function () {
       abstract class Handler {}
 
       class HandlerA extends Handler {
-        constructor(readonly peers: Handler[]) { super() }
+        constructor(readonly peers: Handler[]) {
+          super()
+        }
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA, t => t.toSelf([$i.allOf($i.defer(() => Handler))])
-        .extends(Handler))
+      di.bind(HandlerA, t => t.toSelf([$i.allOf($i.defer(() => Handler))]).extends(Handler))
       await di.init()
 
       const a = di.get(HandlerA)
@@ -336,10 +304,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA, t => t.toSelf()
-        .extends(Handler))
-      di.bind(HandlerB, t => t.toSelf()
-        .extends(Handler))
+      di.bind(HandlerA, t => t.toSelf().extends(Handler))
+      di.bind(HandlerB, t => t.toSelf().extends(Handler))
       await di.init()
 
       const dispatcher = di.build(Dispatcher, [$i.allOf($i.defer(() => Handler))])
@@ -355,7 +321,7 @@ describe('Circular References', function () {
       class DepB {}
 
       class Consumer {
-        constructor(readonly deps: { a: DepA, b: DepB }) {}
+        constructor(readonly deps: { a: DepA; b: DepB }) {}
       }
 
       const di = new CaffeineIoC({ decorators: false })
@@ -372,12 +338,16 @@ describe('Circular References', function () {
     it('should resolve circular deps via deferred field in object injection', async function () {
       class ServiceA {
         constructor(readonly deps: { b: ServiceB }) {}
-        tag() { return `a:${this.deps.b.tag()}` }
+        tag() {
+          return `a:${this.deps.b.tag()}`
+        }
       }
 
       class ServiceB {
         constructor(readonly a: ServiceA) {}
-        tag() { return 'b' }
+        tag() {
+          return 'b'
+        }
       }
 
       const di = new CaffeineIoC({ decorators: false })
@@ -432,10 +402,8 @@ describe('Circular References', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(HandlerA, t => t.toSelf()
-        .extends(Handler))
-      di.bind(HandlerB, t => t.toSelf()
-        .extends(Handler))
+      di.bind(HandlerA, t => t.toSelf().extends(Handler))
+      di.bind(HandlerB, t => t.toSelf().extends(Handler))
       di.bind(Consumer, t => t.toSelf([$i.object({ handlers: $i.allOf($i.defer(() => Handler)) })]))
       await di.init()
 

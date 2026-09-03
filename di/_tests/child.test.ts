@@ -1,19 +1,19 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
+import { token } from '../key.js'
 
 describe('Named bindings visible in child containers', function () {
   it('should resolve a named string key registered only in the child', async function () {
     const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
 
-    child.bind(token<any>('child-key'), t => t
-      .toValue('hello'))
+    child.bind(token<any>('child-key'), t => t.toValue('hello'))
     await child.init()
 
-    expect(child.get(token<string>('child-key')))
-      .toEqual('hello')
+    expect(child.get(token<string>('child-key'))).toEqual('hello')
   })
 
   it('should resolve a named symbol key registered only in the child', async function () {
@@ -21,41 +21,33 @@ describe('Named bindings visible in child containers', function () {
     const child = parent.newChild()
     const k = token<any>(Symbol('sym-child'))
 
-    child.bind(k, t => t
-      .toValue(42))
+    child.bind(k, t => t.toValue(42))
     await child.init()
 
-    expect(child.get<number>(k))
-      .toEqual(42)
+    expect(child.get<number>(k)).toEqual(42)
   })
 
   it('should fall through to parent for a named key not in the child', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(token<any>('parent-key'), t => t
-      .toValue('from-parent'))
+    parent.bind(token<any>('parent-key'), t => t.toValue('from-parent'))
 
     const child = parent.newChild()
     await child.init()
 
-    expect(child.get(token<string>('parent-key')))
-      .toEqual('from-parent')
+    expect(child.get(token<string>('parent-key'))).toEqual('from-parent')
   })
 
   it('should prefer child over parent when both have the same named key', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(token<any>('shared'), t => t
-      .toValue('parent-value'))
+    parent.bind(token<any>('shared'), t => t.toValue('parent-value'))
 
     const child = parent.newChild()
-    child.bind(token<any>('shared'), t => t
-      .toValue('child-value'))
+    child.bind(token<any>('shared'), t => t.toValue('child-value'))
     await parent.init()
     await child.init()
 
-    expect(child.get(token<string>('shared')))
-      .toEqual('child-value')
-    expect(parent.get(token<string>('shared')))
-      .toEqual('parent-value')
+    expect(child.get(token<string>('shared'))).toEqual('child-value')
+    expect(parent.get(token<string>('shared'))).toEqual('parent-value')
   })
 })
 
@@ -66,12 +58,10 @@ describe('Per-container scope instances', function () {
 
   it('should give independent singleton instances across separate containers', async function () {
     const di1 = new CaffeineIoC({ decorators: false })
-    di1.bind(PerContainerSingleton, t => t
-      .toSelf())
+    di1.bind(PerContainerSingleton, t => t.toSelf())
 
     const di2 = new CaffeineIoC({ decorators: false })
-    di2.bind(PerContainerSingleton, t => t
-      .toSelf())
+    di2.bind(PerContainerSingleton, t => t.toSelf())
     await di1.init()
     await di2.init()
 
@@ -97,10 +87,8 @@ describe('Child', function () {
         const parent = new CaffeineIoC()
         const child = parent.newChild()
 
-        parent.bind(Dep, t => t
-          .toSelf())
-        child.bind(Svc, t => t
-          .toSelf([Dep]))
+        parent.bind(Dep, t => t.toSelf())
+        child.bind(Svc, t => t.toSelf([Dep]))
         await parent.init()
         await child.init()
 
@@ -108,22 +96,14 @@ describe('Child', function () {
         const childDep = child.get(Dep)
         const svc = child.get(Svc)
 
-        expect(parent.has(Dep))
-          .toBeTruthy()
-        expect(parent.has(Svc))
-          .toBeFalsy()
-        expect(child.has(Dep))
-          .toBeTruthy()
-        expect(child.has(Svc))
-          .toBeTruthy()
-        expect(parentDep)
-          .toBeInstanceOf(Dep)
-        expect(svc)
-          .toBeInstanceOf(Svc)
-        expect(svc.dep)
-          .toBeInstanceOf(Dep)
-        expect(parentDep)
-          .toEqual(childDep)
+        expect(parent.has(Dep)).toBeTruthy()
+        expect(parent.has(Svc)).toBeFalsy()
+        expect(child.has(Dep)).toBeTruthy()
+        expect(child.has(Svc)).toBeTruthy()
+        expect(parentDep).toBeInstanceOf(Dep)
+        expect(svc).toBeInstanceOf(Svc)
+        expect(svc.dep).toBeInstanceOf(Dep)
+        expect(parentDep).toEqual(childDep)
       })
     })
   })

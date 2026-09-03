@@ -1,4 +1,5 @@
 import type { JWTPayload } from 'jose'
+
 import type { Principal } from '../../index.js'
 import type { RefreshTokenRecord } from './refresh_token_store.js'
 
@@ -7,8 +8,10 @@ import type { RefreshTokenRecord } from './refresh_token_store.js'
  * upstream OAuth provider performs the upstream refresh here and returns fresh claims. Return null to
  * reject the refresh (unknown/disabled user) — the series is then revoked.
  */
-export type RefreshPrincipalResolver
-  = (subject: string, record: RefreshTokenRecord) => Promise<Principal | null> | Principal | null
+export type RefreshPrincipalResolver = (
+  subject: string,
+  record: RefreshTokenRecord,
+) => Promise<Principal | null> | Principal | null
 
 export interface RefreshTokenOptions {
   resolve: RefreshPrincipalResolver

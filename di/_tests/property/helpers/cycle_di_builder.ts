@@ -1,7 +1,7 @@
 import { CaffeineIoC } from '../../../container.js'
-import { token } from '../../../key.js'
 import { $i } from '../../../injection.js'
 import type { Injection } from '../../../injection.js'
+import { token } from '../../../key.js'
 
 export type CycleEdge = {
   from: string
@@ -57,14 +57,12 @@ export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true):
     const deps = edges.filter(e => e.from === key)
 
     if (deps.length === 0) {
-      di.bind(token<any>(key), t => t
-        .toValue({}))
+      di.bind(token<any>(key), t => t.toValue({}))
       continue
     }
 
     const injections = deps.map(toInjection)
-    di.bind(token<any>(key), t => t
-      .toFunction(fnWithArity(deps.length), injections))
+    di.bind(token<any>(key), t => t.toFunction(fnWithArity(deps.length), injections))
   }
 
   return di

@@ -1,5 +1,5 @@
-import type { ServerExtensionContext } from '../../../server_extension.js'
 import { joinPaths } from '../../../internal/paths/index.js'
+import type { ServerExtensionContext } from '../../../server_extension.js'
 import { isOIDCError } from './index.js'
 
 /**
@@ -17,9 +17,7 @@ export function installOIDCRoutes(ctx: ServerExtensionContext): void {
   }
 
   const server = ctx.server
-  const compiledPaths = new Set(
-    ctx.routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))),
-  )
+  const compiledPaths = new Set(ctx.routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))))
 
   for (const { callbackPath } of oidc.handlers) {
     if (compiledPaths.has(callbackPath)) {
@@ -42,12 +40,13 @@ export function installOIDCRoutes(ctx: ServerExtensionContext): void {
   const unreachable = oidc.unreachableCandidates.filter(name => !namedByRoutes.has(name))
   if (unreachable.length > 0) {
     process.emitWarning(
-      `OAuth strategies ${unreachable.map(n => `"${n}"`).join(', ')} can never authenticate a request: `
-      + 'they are not the default authenticate scheme and no route names them',
+      `OAuth strategies ${unreachable.map(n => `"${n}"`).join(', ')} can never authenticate a request: ` +
+        'they are not the default authenticate scheme and no route names them',
       {
         type: 'CaffeineAuthenticationWarning',
-        detail: 'Name the scheme on a route with @Authorize({ schemes: [...] }), make it the default, '
-          + 'or use a Forward default to select per request.',
+        detail:
+          'Name the scheme on a route with @Authorize({ schemes: [...] }), make it the default, ' +
+          'or use a Forward default to select per request.',
       },
     )
   }

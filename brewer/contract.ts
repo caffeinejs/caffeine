@@ -22,7 +22,10 @@ export interface RouteContract {
  * Both `brewer<typeof app>` and `brewer<RoutesOf<typeof app>>` work, and neither needs explaining — the phantom is
  * unwrapped when there is one, and the union taken as-is when there is not.
  */
-export type Routes<T>
-  = T extends { readonly __routes?: infer R }
-    ? NonNullable<R> extends RouteContract ? NonNullable<R> : never
-    : T extends RouteContract ? T : never
+export type Routes<T> = T extends { readonly __routes?: infer R }
+  ? NonNullable<R> extends RouteContract
+    ? NonNullable<R>
+    : never
+  : T extends RouteContract
+    ? T
+    : never

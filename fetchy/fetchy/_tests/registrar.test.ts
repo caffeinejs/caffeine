@@ -116,7 +116,7 @@ describe('registrar', () => {
     expect(getAPI(function Unregistered() {})).toBeUndefined()
   })
 
-  it('a second, unrelated target constructor never sees another class\'s drained methods', () => {
+  it("a second, unrelated target constructor never sees another class's drained methods", () => {
     const metadataA = {}
     const metadataB = {}
     function APIA() {}

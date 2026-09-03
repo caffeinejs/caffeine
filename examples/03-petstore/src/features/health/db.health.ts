@@ -1,6 +1,6 @@
-import { Injectable } from "@caffeinejs/di";
-import { HealthIndicator, type HealthReport, up } from "@caffeinejs/std";
-import { PrismaClient } from "@prisma/client";
+import { Injectable } from '@caffeinejs/di'
+import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std'
+import { PrismaClient } from '@prisma/client'
 
 /**
  * Reports whether the database is reachable, on the **readiness** probe only.
@@ -24,21 +24,21 @@ import { PrismaClient } from "@prisma/client";
 @Injectable([PrismaClient])
 export class DatabaseHealth extends HealthIndicator {
   get name(): string {
-    return "database";
+    return 'database'
   }
 
-  readonly #prisma: PrismaClient;
+  readonly #prisma: PrismaClient
 
   constructor(prisma: PrismaClient) {
-    super();
-    this.#prisma = prisma;
+    super()
+    this.#prisma = prisma
   }
 
   async check(): Promise<HealthReport> {
     // The cheapest round trip that proves the connection pool can still reach the server. The probe deadline
     // bounds it, so a hung database produces a 503 rather than a hung request.
-    await this.#prisma.$queryRaw`SELECT 1`;
+    await this.#prisma.$queryRaw`SELECT 1`
 
-    return up();
+    return up()
   }
 }

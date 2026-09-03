@@ -49,15 +49,15 @@ export interface DevtoolsEvent {
   payload: Record<string, unknown>
 }
 
-export type WsMessage
-  = | {
-    type: 'snapshot'
-    bindings: BindingSnapshot[]
-    graph: BindingGraph
-    routes: RouteSnapshot[]
-    events: DevtoolsEvent[]
-  }
+export type WsMessage =
   | {
-    type: 'event'
-    event: DevtoolsEvent
-  }
+      type: 'snapshot'
+      bindings: BindingSnapshot[]
+      graph: BindingGraph
+      routes: RouteSnapshot[]
+      events: DevtoolsEvent[]
+    }
+  | {
+      type: 'event'
+      event: DevtoolsEvent
+    }

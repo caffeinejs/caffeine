@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+
 import type { KafkaMessage } from './config.js'
 import { buildClassifier, deadLetterRecoverer, delayFor } from './error_handling.js'
 import type { KafkaTemplate } from './template.js'

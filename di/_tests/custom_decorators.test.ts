@@ -1,20 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
-import { Provides } from '../decorators/provides.js'
+
+import { CaffeineIoC } from '../container.js'
+import { composeDecorators } from '../decorators/compose_decorators.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Label } from '../decorators/label.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { composeDecorators } from '../decorators/compose_decorators.js'
+import { Provides } from '../decorators/provides.js'
 import {
   defineMemberInjection,
   extendInjectableAttributes,
   extendMemberInjectableAttributes,
   defineInjectable,
 } from '../decorators/registrar/index.js'
-import { Ctor } from '../types.js'
-import { CaffeineIoC } from '../container.js'
+import { token } from '../key.js'
 import { Scopes } from '../scope.js'
+import { Ctor } from '../types.js'
 
 describe('Custom decorator primitives', function () {
   describe('configureInjectable — static partial', function () {
@@ -24,13 +25,12 @@ describe('Custom decorator primitives', function () {
 
     @LazyClass
     @Injectable()
-    class StaticLazy { }
+    class StaticLazy {}
 
     it('should apply a static partial to the class binding', function () {
       const di = new CaffeineIoC()
       const binding = di.getBindings(StaticLazy)[0]
-      expect(binding.lazy)
-        .toBe(true)
+      expect(binding.lazy).toBe(true)
     })
   })
 
@@ -66,8 +66,7 @@ describe('Custom decorator primitives', function () {
 
       const consumer = di.get(FieldConsumer)
       expect(consumer.dep).toBeInstanceOf(FieldDep)
-      expect(consumer.dep.value)
-        .toBe('injected')
+      expect(consumer.dep.value).toBe('injected')
     })
   })
 
@@ -89,8 +88,7 @@ describe('Custom decorator primitives', function () {
     it('should apply a partial to a @Provides method making it lazy', function () {
       const di = new CaffeineIoC()
       const binding = di.getBindings(kService)[0]
-      expect(binding.lazy)
-        .toBe(true)
+      expect(binding.lazy).toBe(true)
     })
   })
 
@@ -98,17 +96,15 @@ describe('Custom decorator primitives', function () {
     const Transient = composeDecorators(Injectable(), Lifetime(Scopes.TRANSIENT))
 
     @Transient
-    class TransientSvc { }
+    class TransientSvc {}
 
     it('should compose Injectable + Scoped into a single decorator', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(TransientSvc, t => t
-        .toSelf())
+      di.bind(TransientSvc, t => t.toSelf())
       await di.init()
       const a = di.get(TransientSvc)
       const b = di.get(TransientSvc)
-      expect(a)
-        .toBeInstanceOf(TransientSvc)
+      expect(a).toBeInstanceOf(TransientSvc)
       expect(a).not.toBe(b)
     })
 
@@ -116,17 +112,14 @@ describe('Custom decorator primitives', function () {
     const Controller = composeDecorators(Injectable(), Label(sym))
 
     @Controller
-    class ComposedCtrl { }
+    class ComposedCtrl {}
 
     it('should compose Injectable + Label and accumulate all contributions', function () {
       const di = new CaffeineIoC()
-      expect(di.has(ComposedCtrl))
-        .toBe(true)
+      expect(di.has(ComposedCtrl)).toBe(true)
       const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
-      expect(result)
-        .toHaveLength(1)
-      expect(result[0].key)
-        .toBe(ComposedCtrl)
+      expect(result).toHaveLength(1)
+      expect(result[0].key).toBe(ComposedCtrl)
     })
   })
 
@@ -151,16 +144,12 @@ describe('Custom decorator primitives', function () {
 
     it('should build a custom field injection decorator that resolves correctly', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kCustomDep, t => t
-        .toClass(TargetService))
-      di.bind(TargetConsumer, t => t
-        .toSelf())
+      di.bind(kCustomDep, t => t.toClass(TargetService))
+      di.bind(TargetConsumer, t => t.toSelf())
       await di.init()
       const consumer = di.get(TargetConsumer) as TargetConsumer
-      expect(consumer.dep)
-        .toBeInstanceOf(TargetService)
-      expect(consumer.dep.value)
-        .toBe('service')
+      expect(consumer.dep).toBeInstanceOf(TargetService)
+      expect(consumer.dep.value).toBe('service')
     })
   })
 })

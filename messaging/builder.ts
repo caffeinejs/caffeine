@@ -1,5 +1,11 @@
 import type { Ctor } from '@caffeinejs/di'
-import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, AnySchema, ServiceBootstrapIn } from '@caffeinejs/std'
+import {
+  type ServiceBeforeBootstrapIn,
+  type Service,
+  type ServiceAPI,
+  AnySchema,
+  ServiceBootstrapIn,
+} from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   instanceNamespace,
@@ -7,6 +13,10 @@ import {
   type ConfigHandle,
   type ConfigSlice,
 } from '@caffeinejs/std/config'
+
+import type { Binder } from './binder.js'
+import type { ConsumerBinding, ProducerBinding } from './binding.js'
+import { MessageBus } from './bus.js'
 import {
   BINDING_CONFIG_KEYS,
   MESSAGING_CONFIG_NAMESPACE,
@@ -14,9 +24,6 @@ import {
   type BindingConfig,
   type MessagingConfigSlice,
 } from './config.js'
-import type { Binder } from './binder.js'
-import type { ConsumerBinding, ProducerBinding } from './binding.js'
-import { MessageBus } from './bus.js'
 import { MessagingContainer } from './engine.js'
 import type { ErrorClassifier, RetryPolicy } from './error_handling.js'
 import { ErrMissingDestination } from './errors.js'
@@ -64,7 +71,7 @@ export class MessagingBuilder<C = unknown> implements Service {
   #onInvalidMessage?: InvalidMessageHandler
   #onError?: ErrorObserver
   #recoverer?: Recoverer
-  #resolved?: ConfigSlice<{ inbound: Map<string, ConsumerBinding>, outbound: Map<string, ProducerBinding> }>
+  #resolved?: ConfigSlice<{ inbound: Map<string, ConsumerBinding>; outbound: Map<string, ProducerBinding> }>
 
   constructor(name: string = DEFAULT_BINDER) {
     this.#name = name
@@ -152,17 +159,17 @@ export class MessagingBuilder<C = unknown> implements Service {
     const bKey = busKey(this.#name)
     const container = kit.container
 
-    kit.container
-      .bind(rKey, t => t
-        .toValue<MessagingRuntime>({
-          container,
-          binders,
-          inbound: resolved.config.inbound,
-          outbound: resolved.config.outbound,
-          ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
-          ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
-          ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
-        }))
+    kit.container.bind(rKey, t =>
+      t.toValue<MessagingRuntime>({
+        container,
+        binders,
+        inbound: resolved.config.inbound,
+        outbound: resolved.config.outbound,
+        ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
+        ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
+        ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
+      }),
+    )
 
     if (this.#name === DEFAULT_BINDER) {
       kit.container.bind(MessageBus, t => t.toClass(MessageBus, [rKey]).names(bKey))
@@ -170,10 +177,9 @@ export class MessagingBuilder<C = unknown> implements Service {
       kit.container.bind(bKey, t => t.toClass(MessageBus, [rKey]))
     }
 
-    kit.container
-      .bind(containerKey(this.#name), t => t
-        .toClass(MessagingContainer, [rKey, bKey])
-        .labels(Keys.MESSAGING_CONTAINER))
+    kit.container.bind(containerKey(this.#name), t =>
+      t.toClass(MessagingContainer, [rKey, bKey]).labels(Keys.MESSAGING_CONTAINER),
+    )
 
     return Promise.resolve()
   }
@@ -193,9 +199,7 @@ function configurableHalf(
     const held = options as unknown as Record<string, unknown>
 
     out[binding] = Object.fromEntries(
-      BINDING_CONFIG_KEYS
-        .filter(key => held[key] !== undefined)
-        .map(key => [key, held[key]]),
+      BINDING_CONFIG_KEYS.filter(key => held[key] !== undefined).map(key => [key, held[key]]),
     )
   }
 

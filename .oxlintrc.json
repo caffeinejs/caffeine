@@ -1,0 +1,92 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "import"],
+  "env": {
+    "node": true
+  },
+  "categories": {
+    "correctness": "error"
+  },
+  "options": {
+    "typeAware": true
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    ".vscode/**",
+    ".local/**",
+    "benchmarks/di/testdata/third_party_legacy/**",
+    "di/_tests/deno/**",
+    "fetchy/fetchy/_benchmarks/generated/**",
+    "**/*.generated.mod.ts"
+  ],
+  "rules": {
+    "curly": ["error", "all"],
+    "no-empty-function": ["error", { "allow": ["decoratedFunctions"] }],
+    "no-useless-constructor": "error",
+    "no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "regex": "(?:\\.\\./)+_",
+            "message": "Private (_*) modules cannot be imported from outside their directory."
+          }
+        ]
+      }
+    ],
+    "typescript/no-explicit-any": "off",
+    "typescript/no-namespace": "off",
+    "typescript/no-non-null-assertion": "off",
+    "typescript/no-unsafe-function-type": "off",
+    "typescript/no-wrapper-object-types": "off",
+    "typescript/no-empty-object-type": "off",
+    "typescript/no-redundant-type-constituents": "off",
+    "typescript/no-base-to-string": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/consistent-type-exports": "error",
+    "import/no-named-as-default": "off",
+    "import/no-named-as-default-member": "off",
+    "import/extensions": [
+      "error",
+      "ignorePackages",
+      {
+        "js": "always",
+        "jsx": "never",
+        "ts": "never",
+        "tsx": "never"
+      }
+    ],
+    "import/no-duplicates": "error",
+    "import/no-mutable-exports": "error",
+    "import/no-self-import": "error",
+    "import/export": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "rules": {
+        "import/extensions": "off",
+        "no-useless-constructor": "off",
+        "no-empty-function": "off",
+        "no-unused-vars": "off",
+        "typescript/no-unused-vars": "off",
+        "typescript/unbound-method": "off",
+        "typescript/require-array-sort-compare": "off",
+        "typescript/await-thenable": "off"
+      }
+    },
+    {
+      "files": ["**/*.js", "**/*.cjs"],
+      "rules": {
+        "typescript/no-require-imports": "off"
+      }
+    }
+  ]
+}

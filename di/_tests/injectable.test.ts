@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { token, type NamedToken } from '../key.js'
-import { Injectable } from '../decorators/injectable.js'
+
 import { CaffeineIoC } from '../container.js'
+import { Injectable } from '../decorators/injectable.js'
+import { token, type NamedToken } from '../key.js'
 
 describe('@Injectable overloads', function () {
   it('should register with no arguments', async function () {
@@ -10,8 +11,7 @@ describe('@Injectable overloads', function () {
 
     const di = new CaffeineIoC()
     await di.init()
-    expect(di.get(NoArgs))
-      .toBeInstanceOf(NoArgs)
+    expect(di.get(NoArgs)).toBeInstanceOf(NoArgs)
   })
 
   it('should register with a symbol qualifier key only', async function () {
@@ -22,8 +22,7 @@ describe('@Injectable overloads', function () {
 
     const di = new CaffeineIoC()
     await di.init()
-    expect(di.get(kSvc))
-      .toBeInstanceOf(KeyOnly)
+    expect(di.get(kSvc)).toBeInstanceOf(KeyOnly)
   })
 
   it('should register with a string qualifier key only', async function () {
@@ -32,8 +31,7 @@ describe('@Injectable overloads', function () {
 
     const di = new CaffeineIoC()
     await di.init()
-    expect(di.get(token<any>('myService')))
-      .toBeInstanceOf(StringKey)
+    expect(di.get(token<any>('myService'))).toBeInstanceOf(StringKey)
   })
 
   it('should register with dependencies array only', async function () {
@@ -50,10 +48,8 @@ describe('@Injectable overloads', function () {
     const di = new CaffeineIoC()
     await di.init()
     const instance = di.get(WithDeps) as WithDeps
-    expect(instance.dep)
-      .toBeInstanceOf(Dep)
-    expect(instance.dep.value)
-      .toBe(42)
+    expect(instance.dep).toBeInstanceOf(Dep)
+    expect(instance.dep.value).toBe(42)
   })
 
   it('should register with a symbol key and dependencies', async function () {
@@ -72,17 +68,14 @@ describe('@Injectable overloads', function () {
     const di = new CaffeineIoC()
     await di.init()
     const instance = di.get(kNamed) as KeyAndDeps
-    expect(instance)
-      .toBeInstanceOf(KeyAndDeps)
-    expect(instance.dep.name)
-      .toBe('dep')
+    expect(instance).toBeInstanceOf(KeyAndDeps)
+    expect(instance.dep.name).toBe('dep')
   })
 
   it('should throw when a function type is passed as key', function () {
     expect(() => {
       @Injectable(class AbstractBase {} as unknown as NamedToken<any>)
       class Wrong {}
-    })
-      .toThrow()
+    }).toThrow()
   })
 })

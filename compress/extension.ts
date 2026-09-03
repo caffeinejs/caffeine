@@ -1,5 +1,5 @@
-import fastifyCompress from '@fastify/compress'
 import { ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
+import fastifyCompress from '@fastify/compress'
 
 export type CompressOptions = NonNullable<Parameters<typeof fastifyCompress>[1]>
 

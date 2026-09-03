@@ -1,33 +1,42 @@
 import './_fastify.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
+
 import { Container, Ctor, Scopes } from '@caffeinejs/di'
-import { type FastifyInstance, type FastifyReply, type FastifyRequest, type RawReplyDefaultExpression, type RawRequestDefaultExpression, type RawServerBase } from 'fastify'
+import {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+  type RawReplyDefaultExpression,
+  type RawRequestDefaultExpression,
+  type RawServerBase,
+} from 'fastify'
 import fp from 'fastify-plugin'
-import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
-import type { RouteGroup } from './route.js'
-import type { Principal } from './security/index.js'
+
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
-import type { RouteCompilers } from './routing/dispatch.js'
-import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
-import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
-import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
-import { Authentication } from './security/auth/authentication_middleware.js'
-import { installOIDCRoutes } from './security/auth/oidc/oidc_routes.js'
-import { installFormBodyParser } from './form/index.js'
-import { installGlobalErrorHandler, installRouteGroupErrorHandler } from './error/error_handling.js'
-import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
+import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import { type CacheDeps, type CacheOptions, attachCacheHooks, resolveCacheDeps } from './cache/cache.js'
 import { type CacheInvalidateOptions, attachCacheInvalidateHook } from './cache/cache_invalidate.js'
-import { installHealthProbes } from './health/index.js'
 import { FastifyContext } from './context.js'
-import { DEFAULT_SERVER_OPTIONS, ServerOptions, type ServerAddress } from './server/index.js'
-import { Responder } from './response.js'
-import { compileRouteSchema } from './schema/compile_route_schema.js'
-import { joinPaths } from './internal/paths/index.js'
-import { type AdapterRouteOptions } from './internal/route_hooks.js'
+import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
+import { installGlobalErrorHandler, installRouteGroupErrorHandler } from './error/error_handling.js'
+import { installFormBodyParser } from './form/index.js'
 import { attachGuardHook } from './guards/attach.js'
 import { kGuardOptions } from './guards/keys.js'
+import { installHealthProbes } from './health/index.js'
+import { joinPaths } from './internal/paths/index.js'
+import { type AdapterRouteOptions } from './internal/route_hooks.js'
+import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
+import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
+import { Responder } from './response.js'
+import type { RouteGroup } from './route.js'
+import type { RouteCompilers } from './routing/dispatch.js'
+import { compileRouteSchema } from './schema/compile_route_schema.js'
+import { Authentication } from './security/auth/authentication_middleware.js'
+import { installOIDCRoutes } from './security/auth/oidc/oidc_routes.js'
+import type { Principal } from './security/index.js'
+import { DEFAULT_SERVER_OPTIONS, ServerOptions, type ServerAddress } from './server/index.js'
+import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
 
 /** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
 type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error) => void) => void
@@ -42,10 +51,8 @@ export class FastifyAdapter<
    * a source sees is opaque, so the two are re-typed here rather than in the neutral contract.
    */
   readonly #compilers: RouteCompilers<REQ> = {
-    handler: (parameters, fn) =>
-      compileHandler<REQ, RES>(parameters, fn) as (req: REQ, res: unknown) => unknown,
-    args: parameters =>
-      compileArgs<REQ, RES>(parameters) as (req: REQ, res: unknown) => unknown[] | Promise<unknown[]>,
+    handler: (parameters, fn) => compileHandler<REQ, RES>(parameters, fn) as (req: REQ, res: unknown) => unknown,
+    args: parameters => compileArgs<REQ, RES>(parameters) as (req: REQ, res: unknown) => unknown[] | Promise<unknown[]>,
   }
 
   #fastify: SERVER
@@ -53,17 +60,16 @@ export class FastifyAdapter<
   #serverOptions: ServerOptions = DEFAULT_SERVER_OPTIONS
   readonly #fastifyCtxAls = new AsyncLocalStorage<FastifyContext>()
 
-  constructor(
-    kit: AdapterFactoryIn,
-    fastify: SERVER,
-  ) {
+  constructor(kit: AdapterFactoryIn, fastify: SERVER) {
     this.#fastify = fastify
     this.#container = kit.container
-    this.#container.bind(FastifyContext, t => t
-      .toFactory(() => this.#fastifyCtxAls.getStore()!)
-      .lifetime(Scopes.REQUEST)
-      .byPassPostProcessors()
-      .internal())
+    this.#container.bind(FastifyContext, t =>
+      t
+        .toFactory(() => this.#fastifyCtxAls.getStore()!)
+        .lifetime(Scopes.REQUEST)
+        .byPassPostProcessors()
+        .internal(),
+    )
   }
 
   async run(): Promise<void> {
@@ -94,7 +100,9 @@ export class FastifyAdapter<
       fastify.addHook('onRequest', (req, reply, done) => {
         const ctx = new FastifyContext(req, reply)
         req.httpContext = ctx
-        this.#fastifyCtxAls.run(ctx, () => man.run(() => done()))
+        this.#fastifyCtxAls.run(ctx, () => {
+          void man.run(() => done())
+        })
       })
     } else {
       fastify.addHook('onRequest', (req, reply, done) => {
@@ -121,27 +129,26 @@ export class FastifyAdapter<
     // `decorators` and the version range are enforced by Fastify — and so each shows up by name in
     // `printPlugins()`. `fp` skips encapsulation, so an extension still decorates the root instance.
     for (const extension of container.getManyOptional<ServerExtension>(ServerExtension)) {
-      await fastify.register(fp(
-        // Async so a `configure` that throws synchronously becomes a rejection avvio can carry, rather than
-        // escaping the plugin call and stalling the boot.
-        async instance => {
-          await extension.configure({ ...extensionContext, server: instance })
-        },
-        {
-          name: extension.name,
-          dependencies: extension.dependencies as string[] | undefined,
-          decorators: extension.decorators,
-          fastify: extension.fastify,
-        },
-      ))
+      await fastify.register(
+        fp(
+          // Async so a `configure` that throws synchronously becomes a rejection avvio can carry, rather than
+          // escaping the plugin call and stalling the boot.
+          async instance => {
+            await extension.configure({ ...extensionContext, server: instance })
+          },
+          {
+            name: extension.name,
+            dependencies: extension.dependencies as string[] | undefined,
+            decorators: extension.decorators,
+            fastify: extension.fastify,
+          },
+        ),
+      )
     }
 
     // After the extensions, not up with the other built-ins: a fallback may be bound by an extension, and one
     // serving files needs the `reply.sendFile` that `@fastify/static` decorates while it registers.
-    installNotFoundHandler(
-      extensionContext,
-      container.getManyOptional<NotFoundFallback>(NotFoundFallback),
-    )
+    installNotFoundHandler(extensionContext, container.getManyOptional<NotFoundFallback>(NotFoundFallback))
 
     await middlewares.setupAll(extensionContext)
 
@@ -165,187 +172,196 @@ export class FastifyAdapter<
       const basePath = router.path
       const routes = router.routes
 
-      fastify.register(async server => {
-        server.decorateRequest('responseCached', false)
+      fastify.register(
+        async server => {
+          server.decorateRequest('responseCached', false)
 
-        installRouteGroupErrorHandler(server, router, globalErrorHandler)
+          installRouteGroupErrorHandler(server, router, globalErrorHandler)
 
-        // Whatever preparation the source that built this group needs — resolving the instance a `@Catch`
-        // method will run on, for one. Registered as given, so it costs what the hook it replaces cost.
-        if (router.onRequest !== undefined) {
-          server.addHook('onRequest', router.onRequest as OnRequestHook)
-        }
+          // Whatever preparation the source that built this group needs — resolving the instance a `@Catch`
+          // method will run on, for one. Registered as given, so it costs what the hook it replaces cost.
+          if (router.onRequest !== undefined) {
+            server.addHook('onRequest', router.onRequest as OnRequestHook)
+          }
 
-        for (const route of routes) {
-          // Built here, once. The source decides *how* the route is invoked — a method on a singleton, one
-          // resolved per request, a plain function — and hands back the function to install.
-          const handle = route.dispatch(compilers) as (req: REQ, res: RES) => unknown
+          for (const route of routes) {
+            // Built here, once. The source decides *how* the route is invoked — a method on a singleton, one
+            // resolved per request, a plain function — and hands back the function to install.
+            const handle = route.dispatch(compilers) as (req: REQ, res: RES) => unknown
 
-          // The `handler` middleware group wraps the dispatch, so `next()` hands the middleware whatever
-          // the handler returned. Returns the dispatch unchanged when nothing is registered there.
-          const dispatch = middlewares.wrapHandler(handle)
+            // The `handler` middleware group wraps the dispatch, so `next()` hands the middleware whatever
+            // the handler returned. Returns the dispatch unchanged when nothing is registered there.
+            const dispatch = middlewares.wrapHandler(handle)
 
-          // Route Config
-          // https://fastify.dev/docs/latest/Reference/Routes/#config
-          const config: Record<string | symbol, unknown> = {}
-          if (route.config) {
-            for (const [k, v] of route.config) {
-              config[k] = v
+            // Route Config
+            // https://fastify.dev/docs/latest/Reference/Routes/#config
+            const config: Record<string | symbol, unknown> = {}
+            if (route.config) {
+              for (const [k, v] of route.config) {
+                config[k] = v
+              }
             }
-          }
 
-          // Route Options
-          // https://fastify.dev/docs/latest/Reference/Routes/#routes-options
-          const options: Record<string | symbol, unknown> = {}
-          if (route.options) {
-            for (const [k, v] of route.options) {
-              options[k] = v
+            // Route Options
+            // https://fastify.dev/docs/latest/Reference/Routes/#routes-options
+            const options: Record<string | symbol, unknown> = {}
+            if (route.options) {
+              for (const [k, v] of route.options) {
+                options[k] = v
+              }
             }
-          }
 
-          // Guard Options
-          if (route.guardOptions) {
-            const opts: Record<string | symbol, unknown> = {}
-            for (const [k, v] of Object.entries(route.guardOptions)) {
-              opts[k] = v
+            // Guard Options
+            if (route.guardOptions) {
+              const opts: Record<string | symbol, unknown> = {}
+              for (const [k, v] of Object.entries(route.guardOptions)) {
+                opts[k] = v
+              }
+              config[kGuardOptions] = opts
             }
-            config[kGuardOptions] = opts
-          }
 
-          const status = route.statusCode!
-          const hasStatus = typeof status === 'number' && status > 0
-          const contentType = route.contentType
-          const hasContentType = typeof contentType === 'string' && contentType.length > 0
-          const header = [] as Array<[string, string | string[]]>
-          if (route.header) {
-            for (const [k, v] of route.header) {
-              header.push([k, v])
+            const status = route.statusCode!
+            const hasStatus = typeof status === 'number' && status > 0
+            const contentType = route.contentType
+            const hasContentType = typeof contentType === 'string' && contentType.length > 0
+            const header = [] as Array<[string, string | string[]]>
+            if (route.header) {
+              for (const [k, v] of route.header) {
+                header.push([k, v])
+              }
             }
-          }
-          const hasHeader = header.length > 0
+            const hasHeader = header.length > 0
 
-          config.caffeine = {
-            hasStatus,
-            status,
-            hasContentType,
-            contentType,
-            hasHeader,
-            header,
-            catchBy: route.catchBy,
-            // The authentication middleware is registered once, for the whole server, so what a route
-            // declared has to travel with the route rather than be closed over per registration.
-            auth: {
-              schemes: route.authorization.options?.schemes,
-              allowAnonymous: route.authorization.options?.allowAnonymous === true,
-              authorizer: route.authorization.authorizer,
-            },
-            target: router.target,
-            handler: route.name,
-          }
-
-          const url = joinPaths(basePath, route.path)
-
-          const routeDef: AdapterRouteOptions = {
-            method: [...new Set(route.method.map(m => m.toUpperCase()))],
-            url,
-            // Compiled here, once, so Fastify's Ajv owns request validation with zero schema work per request.
-            schema: compileRouteSchema(route.schema, `${route.method.join('|')} ${url}`),
-            bodyLimit: route.bodyLimit,
-            handlerTimeout: route.timeout,
-            config,
-            ...options,
-            handler: function (req, res) {
-              const config = req.routeOptions.config.caffeine
-
-              if (config.hasHeader) {
-                for (let i = 0; i < config.header.length; i++) {
-                  const item = config.header[i]
-                  res.header(item[0], item[1])
-                }
-              }
-
-              if (config.hasContentType) {
-                res.type(config.contentType)
-              }
-
-              if (config.hasStatus) {
-                res.code(config.status)
-              }
-
-              const result = dispatch(req as REQ, res as RES)
-
-              if (result instanceof Responder) {
-                return result.respond(req.httpContext)
-              }
-
-              if (result instanceof Promise) {
-                return result.then(r => (r instanceof Responder ? r.respond(req.httpContext) : r))
-              }
-
-              return result
-            },
-          }
-
-          const routeFn = (s: typeof server, def: AdapterRouteOptions) =>
-            (s as FastifyInstance<
-              RawServerBase,
-              RawRequestDefaultExpression<RawServerBase>,
-              RawReplyDefaultExpression<RawServerBase>
-            >).route(def)
-
-          // Cache, attached only to the routes that asked for it. A route with neither decorator leaves both
-          // hook slots undefined and pays nothing.
-          const cacheOpts = config.cache as CacheOptions | false | undefined
-          if (cacheOpts !== undefined) {
-            attachCacheHooks(routeDef, cacheOpts, cacheDeps)
-          }
-
-          const invalidateOpts = config.cacheInvalidate as CacheInvalidateOptions | false | undefined
-          if (invalidateOpts !== undefined && invalidateOpts !== false) {
-            attachCacheInvalidateHook(routeDef, invalidateOpts, cacheDeps.store)
-          }
-
-          if (route.guards !== undefined && route.guards.length > 0) {
-            // Built here rather than in the hook: it is the same object for every request on this route.
-            attachGuardHook(routeDef, route.guards, {
-              clazz: router.target as Ctor<unknown> | undefined,
+            config.caffeine = {
+              hasStatus,
+              status,
+              hasContentType,
+              contentType,
+              hasHeader,
+              header,
+              catchBy: route.catchBy,
+              // The authentication middleware is registered once, for the whole server, so what a route
+              // declared has to travel with the route rather than be closed over per registration.
+              auth: {
+                schemes: route.authorization.options?.schemes,
+                allowAnonymous: route.authorization.options?.allowAnonymous === true,
+                authorizer: route.authorization.authorizer,
+              },
+              target: router.target,
               handler: route.name,
-            })
-          }
+            }
 
-          // BodyAsBuffer
-          // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
-          if (route.extras?.get(kBodyBuffer)) {
-            server.register(async innerServer => {
-              innerServer.removeAllContentTypeParsers()
-              innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit }, function (_request, payload, done) {
-                const chunks: Buffer[] = []
-                payload.on('data', (chunk: Buffer) => chunks.push(chunk))
-                payload.on('end', () => done(null, Buffer.concat(chunks)))
-                payload.on('error', done)
+            const url = joinPaths(basePath, route.path)
+
+            const routeDef: AdapterRouteOptions = {
+              method: [...new Set(route.method.map(m => m.toUpperCase()))],
+              url,
+              // Compiled here, once, so Fastify's Ajv owns request validation with zero schema work per request.
+              schema: compileRouteSchema(route.schema, `${route.method.join('|')} ${url}`),
+              bodyLimit: route.bodyLimit,
+              handlerTimeout: route.timeout,
+              config,
+              ...options,
+              handler: function (req, res) {
+                const config = req.routeOptions.config.caffeine
+
+                if (config.hasHeader) {
+                  for (let i = 0; i < config.header.length; i++) {
+                    const item = config.header[i]
+                    res.header(item[0], item[1])
+                  }
+                }
+
+                if (config.hasContentType) {
+                  res.type(config.contentType)
+                }
+
+                if (config.hasStatus) {
+                  res.code(config.status)
+                }
+
+                const result = dispatch(req as REQ, res as RES)
+
+                if (result instanceof Responder) {
+                  return result.respond(req.httpContext)
+                }
+
+                if (result instanceof Promise) {
+                  return result.then(r => (r instanceof Responder ? r.respond(req.httpContext) : r))
+                }
+
+                return result
+              },
+            }
+
+            const routeFn = (s: typeof server, def: AdapterRouteOptions) =>
+              (
+                s as FastifyInstance<
+                  RawServerBase,
+                  RawRequestDefaultExpression<RawServerBase>,
+                  RawReplyDefaultExpression<RawServerBase>
+                >
+              ).route(def)
+
+            // Cache, attached only to the routes that asked for it. A route with neither decorator leaves both
+            // hook slots undefined and pays nothing.
+            const cacheOpts = config.cache as CacheOptions | false | undefined
+            if (cacheOpts !== undefined) {
+              attachCacheHooks(routeDef, cacheOpts, cacheDeps)
+            }
+
+            const invalidateOpts = config.cacheInvalidate as CacheInvalidateOptions | false | undefined
+            if (invalidateOpts !== undefined && invalidateOpts !== false) {
+              attachCacheInvalidateHook(routeDef, invalidateOpts, cacheDeps.store)
+            }
+
+            if (route.guards !== undefined && route.guards.length > 0) {
+              // Built here rather than in the hook: it is the same object for every request on this route.
+              attachGuardHook(routeDef, route.guards, {
+                clazz: router.target as Ctor<unknown> | undefined,
+                handler: route.name,
               })
+            }
 
-              routeFn(innerServer, routeDef)
-            })
-            continue
-          }
+            // BodyAsBuffer
+            // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
+            if (route.extras?.get(kBodyBuffer)) {
+              server.register(async innerServer => {
+                innerServer.removeAllContentTypeParsers()
+                innerServer.addContentTypeParser(
+                  '*',
+                  { bodyLimit: route.bodyLimit },
+                  function (_request, payload, done) {
+                    const chunks: Buffer[] = []
+                    payload.on('data', (chunk: Buffer) => chunks.push(chunk))
+                    payload.on('end', () => done(null, Buffer.concat(chunks)))
+                    payload.on('error', done)
+                  },
+                )
 
-          // BodyAsStream
-          if (route.extras?.get(kBodyStream)) {
-            server.register(async innerServer => {
-              innerServer.removeAllContentTypeParsers()
-              innerServer.addContentTypeParser('*', function (_request, payload, done) {
-                done(null, Readable.toWeb(payload))
+                routeFn(innerServer, routeDef)
               })
+              continue
+            }
 
-              routeFn(innerServer, routeDef)
-            })
-            continue
+            // BodyAsStream
+            if (route.extras?.get(kBodyStream)) {
+              server.register(async innerServer => {
+                innerServer.removeAllContentTypeParsers()
+                innerServer.addContentTypeParser('*', function (_request, payload, done) {
+                  done(null, Readable.toWeb(payload))
+                })
+
+                routeFn(innerServer, routeDef)
+              })
+              continue
+            }
+
+            routeFn(server, routeDef)
           }
-
-          routeFn(server, routeDef)
-        }
-      }, { prefix: router.prefix })
+        },
+        { prefix: router.prefix },
+      )
     }
 
     await fastify.ready()
@@ -404,7 +420,7 @@ export class FastifyAdapter<
     request.headers.delete('content-length')
 
     return new Promise<Response>((resolve, reject) => {
-      void this.#fastify.inject(
+      this.#fastify.inject(
         {
           method: request.method as any,
           url: request.url,
@@ -434,16 +450,19 @@ export class FastifyAdapter<
 
           // Null-body statuses (204/205/304, plus 1xx) must be constructed with a null body, otherwise
           // the Response constructor throws "Invalid response status code".
-          const nullBody = result.statusCode < 200
-            || result.statusCode === 204
-            || result.statusCode === 205
-            || result.statusCode === 304
+          const nullBody =
+            result.statusCode < 200 ||
+            result.statusCode === 204 ||
+            result.statusCode === 205 ||
+            result.statusCode === 304
 
-          resolve(new Response(nullBody ? null : result.rawPayload, {
-            status: result.statusCode,
-            statusText: result.statusMessage,
-            headers: responseHeaders,
-          }))
+          resolve(
+            new Response(nullBody ? null : result.rawPayload, {
+              status: result.statusCode,
+              statusText: result.statusMessage,
+              headers: responseHeaders,
+            }),
+          )
         },
       )
     })

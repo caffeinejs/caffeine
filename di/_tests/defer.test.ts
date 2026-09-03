@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
-import { $i } from '../injection.js'
 import { ErrScopeMismatch } from '../errors.js'
+import { $i } from '../injection.js'
+import { token } from '../key.js'
 import { Scopes } from '../scope.js'
 
 describe('$i.defer() composition', function () {
@@ -19,17 +20,13 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Dep, t => t
-        .toSelf())
-      di.bind(Owner, t => t
-        .toSelf([$i.optional($i.defer(() => Dep))]))
+      di.bind(Dep, t => t.toSelf())
+      di.bind(Owner, t => t.toSelf([$i.optional($i.defer(() => Dep))]))
       await di.init()
 
       const owner = di.get(Owner)
-      expect(owner.dep)
-        .toBeInstanceOf(Dep)
-      expect(owner.dep!.tag())
-        .toEqual('dep')
+      expect(owner.dep).toBeInstanceOf(Dep)
+      expect(owner.dep!.tag()).toEqual('dep')
     })
 
     describe('when the deferred key is not registered and marked as optional', function () {
@@ -41,13 +38,11 @@ describe('$i.defer() composition', function () {
         }
 
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(Owner, t => t
-          .toSelf([$i.optional($i.defer(() => MissingDep))]))
+        di.bind(Owner, t => t.toSelf([$i.optional($i.defer(() => MissingDep))]))
         await di.init()
 
         const owner = di.get(Owner)
-        expect(owner.dep)
-          .toBeUndefined()
+        expect(owner.dep).toBeUndefined()
       })
     })
   })
@@ -73,22 +68,14 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(PluginA, t => t
-        .toSelf()
-        .names(kPlugin))
-      di.bind(PluginB, t => t
-        .toSelf()
-        .names(kPlugin))
-      di.bind(Host, t => t
-        .toSelf([$i.allOf($i.defer(() => kPlugin))]))
+      di.bind(PluginA, t => t.toSelf().names(kPlugin))
+      di.bind(PluginB, t => t.toSelf().names(kPlugin))
+      di.bind(Host, t => t.toSelf([$i.allOf($i.defer(() => kPlugin))]))
       await di.init()
 
       const host = di.get(Host)
-      expect(host.plugins)
-        .toHaveLength(2)
-      expect(host.plugins.map(p => p.name())
-        .sort())
-        .toEqual(['a', 'b'])
+      expect(host.plugins).toHaveLength(2)
+      expect(host.plugins.map(p => p.name()).sort()).toEqual(['a', 'b'])
     })
 
     it('injects empty array when no bindings are registered for the deferred key', async function () {
@@ -99,13 +86,11 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Host, t => t
-        .toSelf([$i.allOf($i.defer(() => kAbsent))]))
+      di.bind(Host, t => t.toSelf([$i.allOf($i.defer(() => kAbsent))]))
       await di.init()
 
       const host = di.get(Host)
-      expect(host.items)
-        .toEqual([])
+      expect(host.items).toEqual([])
     })
 
     it('strict mode: throws ErrScopeMismatch when SINGLETON depends on TRANSIENT via $i.allOf($i.defer())', async function () {
@@ -116,12 +101,8 @@ describe('$i.defer() composition', function () {
       }
 
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
-      di.bind(TransientDep, t => t
-        .toSelf()
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(SingletonOwner, t => t
-        .toSelf([$i.allOf($i.defer(() => TransientDep))])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(TransientDep, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+      di.bind(SingletonOwner, t => t.toSelf([$i.allOf($i.defer(() => TransientDep))]).lifetime(Scopes.SINGLETON))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })

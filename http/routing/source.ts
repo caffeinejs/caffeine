@@ -1,4 +1,5 @@
 import type { Container } from '@caffeinejs/di'
+
 import type { RouteGroup } from '../route.js'
 import type { RouteGroupCompiler } from './compile.js'
 

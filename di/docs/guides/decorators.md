@@ -42,7 +42,10 @@ declared explicitly in the `@Injectable` array:
 ```ts
 @Injectable([Logger, Database])
 class UserService {
-  constructor(private readonly logger: Logger, private readonly db: Database) {}
+  constructor(
+    private readonly logger: Logger,
+    private readonly db: Database,
+  ) {}
 }
 ```
 
@@ -91,7 +94,10 @@ metadata. CaffeineIoC reads this at startup so you do not need an explicit depen
 @Injectable()
 class UserService {
   // Logger and Database inferred automatically from the parameter types
-  constructor(private readonly logger: Logger, private readonly db: Database) {}
+  constructor(
+    private readonly logger: Logger,
+    private readonly db: Database,
+  ) {}
 }
 ```
 
@@ -138,12 +144,12 @@ rules: {
 
 ## Which flavour to choose
 
-| | Stage 3 | Legacy |
-| --- | --- | --- |
-| TypeScript version | 5.0+ | any |
+|                    | Stage 3      | Legacy   |
+| ------------------ | ------------ | -------- |
+| TypeScript version | 5.0+         | any      |
 | `reflect-metadata` | not required | required |
-| Explicit dep list | required | optional |
-| Long-term standard | yes | no |
+| Explicit dep list  | required     | optional |
+| Long-term standard | yes          | no       |
 
 Choose stage 3 for new projects. Use legacy only when migrating an existing codebase
 that already relies on `experimentalDecorators` and implicit injection.

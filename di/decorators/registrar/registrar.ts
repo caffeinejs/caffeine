@@ -1,11 +1,11 @@
 import { Binding } from '../../binding.js'
 import { ErrInvalidDecorator } from '../../errors.js'
+import { Injection } from '../../injection.js'
 import { notNil } from '../../internal/util/assert/index.js'
 import { Identifier, InjectionToken } from '../../key.js'
-import { Injection } from '../../injection.js'
 import { normalizeInjections } from '../util/util.js'
-import { idfy, MemberKind, TypeID } from './types.js'
 import { DecoratedBindingConfig, MemberMetadata } from './spec.js'
+import { idfy, MemberKind, TypeID } from './types.js'
 
 const Bindings = new Map<InjectionToken, DecoratedBindingConfig>()
 const ByProfile = new Map<Identifier, Set<InjectionToken>>()
@@ -68,9 +68,8 @@ export function defineMemberInjection<T = unknown>(
 ): void {
   const metadata = getInjectionMetadata(idfy(id))
   const injections = normalizeInjections(
-    Array.isArray(singleOrMultipleInjections)
-      ? singleOrMultipleInjections
-      : [singleOrMultipleInjections])
+    Array.isArray(singleOrMultipleInjections) ? singleOrMultipleInjections : [singleOrMultipleInjections],
+  )
 
   switch (kind) {
     case 'method': {

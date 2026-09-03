@@ -1,5 +1,5 @@
-import { $i, type Provider } from '@caffeinejs/di'
-import { Injectable } from '@caffeinejs/di'
+import { $i, type Provider, Injectable } from '@caffeinejs/di'
+
 import { DataConfig } from '../util/gcs/data.config.js'
 import { RequestContext } from '../util/request/request.context.js'
 import type { Cat, CreateCatDTO, UpdateCatDTO } from './cat.js'
@@ -13,7 +13,7 @@ export class CatsService {
     private readonly cache: CatsCache,
     private readonly ctx: Provider<RequestContext>,
     private readonly dataConfig: Provider<DataConfig>,
-  ) { }
+  ) {}
 
   async findAll(): Promise<Cat[]> {
     return this.repo.findAll()

@@ -1,9 +1,10 @@
 import { parentPort } from 'node:worker_threads'
+
 import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { Scopes } from '../scope.js'
 import { PostConstruct } from '../decorators/post_construct.js'
+import { Scopes } from '../scope.js'
 
 @Injectable()
 @Lifetime(Scopes.SINGLETON)

@@ -1,5 +1,15 @@
 import { $i, Injectable, Lifetime, Scopes, type Provider } from '@caffeinejs/di'
-import { Controller, Get, createWebApplication, Args, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
+import {
+  Controller,
+  Get,
+  createWebApplication,
+  Args,
+  Post,
+  Schema,
+  $p,
+  fastifyAdapterFactory,
+  FastifyContext,
+} from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 
@@ -35,13 +45,17 @@ class AppConfig {
 @Injectable([AppConfig])
 class AppLogger {
   constructor(readonly config: AppConfig) {}
-  log(_msg: string): void { /* no-op */ }
+  log(_msg: string): void {
+    /* no-op */
+  }
 }
 
 @Injectable([AppConfig])
 class TestRepository {
   constructor(readonly config: AppConfig) {}
-  find(): unknown[] { return [] }
+  find(): unknown[] {
+    return []
+  }
 }
 
 @Controller('', [TestRepository, $i.provide(AppLogger)])
@@ -59,13 +73,7 @@ class AppController {
   @Post('/api/test/:text/:num/:bool')
   @Args([$p.param(), $p.query(), $p.body(), $p.header(), $p.context()])
   @Schema({ params: schema, querystring: schema, body: schema, headers: schema, response: responseSchema })
-  test(
-    params: DataSchema,
-    q: DataSchema,
-    b: DataSchema,
-    h: DataSchema,
-    ctx: FastifyContext,
-  ) {
+  test(params: DataSchema, q: DataSchema, b: DataSchema, h: DataSchema, ctx: FastifyContext) {
     this.logger.get().log('request')
 
     ctx.header('text', h.text)
@@ -86,8 +94,7 @@ void [AppController]
 const server = fastify({ logger: false })
 
 server.addHook('onRequest', (_req, reply, done) => {
-  reply.header('x-request-id', Math.random().toString(36)
-    .slice(2))
+  reply.header('x-request-id', Math.random().toString(36).slice(2))
   done()
 })
 

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
 import { SignJWT } from 'jose'
+import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { JWTAuthenticationHandler } from './jwt.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt_options.js'
@@ -18,14 +19,8 @@ function makeCtx(authHeader?: string) {
   return { ctx, status, header }
 }
 
-async function sign(
-  payload: Record<string, unknown>,
-  opts: { issuer?: string, audience?: string } = {},
-) {
-  let builder = new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
+async function sign(payload: Record<string, unknown>, opts: { issuer?: string; audience?: string } = {}) {
+  let builder = new SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
   if (opts.issuer) {
     builder = builder.setIssuer(opts.issuer)
   }
@@ -80,7 +75,10 @@ describe('JWTAuthenticationHandler', () => {
       const { ctx } = makeCtx(`Bearer ${token}`)
       const result = await makeHandler().authenticate(ctx)
 
-      const types = result.ticket!.principal.claims().map(c => c.type).sort()
+      const types = result
+        .ticket!.principal.claims()
+        .map(c => c.type)
+        .sort()
       expect(types).toEqual(['dept', 'sub'])
       // `iss` is still the issuer stamped on every claim, just not a claim of its own.
       expect(result.ticket!.principal.findFirst('sub')?.issuer).toBe('https://iss.example')
@@ -305,7 +303,7 @@ describe('JWTAuthenticationHandler', () => {
       expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"')
     })
 
-    it('keeps one request\'s failure out of another request\'s challenge', async () => {
+    it("keeps one request's failure out of another request's challenge", async () => {
       // The handler is a singleton, so the failure has to be keyed by request rather than held in a field.
       const handler = makeHandler()
       const failing = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
@@ -324,13 +322,13 @@ describe('JWTAuthenticationHandler', () => {
     // signature and nothing else — with a shared symmetric secret that admits every sibling service's
     // tokens. The builder refuses that configuration rather than defaulting it open.
     it('refuses to build without an issuer', () => {
-      expect(() => new JWTAuthenticationOptionsBuilder().secret(SECRET).audience('api').build())
-        .toThrow(/issuer/)
+      expect(() => new JWTAuthenticationOptionsBuilder().secret(SECRET).audience('api').build()).toThrow(/issuer/)
     })
 
     it('refuses to build without an audience', () => {
-      expect(() => new JWTAuthenticationOptionsBuilder().secret(SECRET).issuer('https://issuer.example').build())
-        .toThrow(/audience/)
+      expect(() =>
+        new JWTAuthenticationOptionsBuilder().secret(SECRET).issuer('https://issuer.example').build(),
+      ).toThrow(/audience/)
     })
 
     it('builds once both are pinned', () => {
@@ -345,11 +343,7 @@ describe('JWTAuthenticationHandler', () => {
     })
 
     it('builds when the checks are waived explicitly', () => {
-      const opts = new JWTAuthenticationOptionsBuilder()
-        .secret(SECRET)
-        .allowAnyIssuer()
-        .allowAnyAudience()
-        .build()
+      const opts = new JWTAuthenticationOptionsBuilder().secret(SECRET).allowAnyIssuer().allowAnyAudience().build()
 
       // Waived means absent, not `undefined`-valued: an explicit undefined would spread over and erase a
       // service-level default in JWTService.verify.

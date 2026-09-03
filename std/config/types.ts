@@ -1,8 +1,5 @@
 export type ConfigPrimitive = string | number | boolean | null
-export type ConfigValue
-  = | ConfigPrimitive
-    | ConfigValue[]
-    | { [k: string]: ConfigValue }
+export type ConfigValue = ConfigPrimitive | ConfigValue[] | { [k: string]: ConfigValue }
 
 export interface ConfigEntry {
   key: string

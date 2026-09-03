@@ -1,8 +1,9 @@
+import { afterEach, describe, expect, it } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'bun:test'
+
 import { generateModules } from './modules_generator.js'
 
 function tempDir(): string {
@@ -29,8 +30,8 @@ describe('generateModules()', () => {
     await generateModules({ files, output, importExtension: '.js' })
 
     const content = await Bun.file(output).text()
-    expect(content).toContain('import * as _0 from \'./order/order.mod.js\'')
-    expect(content).toContain('import * as _1 from \'./users/users.mod.js\'')
+    expect(content).toContain("import * as _0 from './order/order.mod.js'")
+    expect(content).toContain("import * as _1 from './users/users.mod.js'")
   })
 
   it('exports modules array with _pick calls for each file', async () => {
@@ -58,7 +59,7 @@ describe('generateModules()', () => {
 
     const content = await Bun.file(output).text()
     expect(content).toContain('function _pick(')
-    expect(content).toContain('ns[\'default\']')
+    expect(content).toContain("ns['default']")
     expect(content).toContain('[kModule]')
   })
 
@@ -70,8 +71,8 @@ describe('generateModules()', () => {
     await generateModules({ files: [], output, importExtension: '.js' })
 
     const content = await Bun.file(output).text()
-    expect(content).toContain('import { kModule } from \'@caffeinejs/di\'')
-    expect(content).toContain('import type { Module, ModuleFn } from \'@caffeinejs/di\'')
+    expect(content).toContain("import { kModule } from '@caffeinejs/di'")
+    expect(content).toContain("import type { Module, ModuleFn } from '@caffeinejs/di'")
   })
 
   it('includes auto-generated header', async () => {
@@ -121,6 +122,6 @@ describe('generateModules()', () => {
     await generateModules({ files: [join(dir, 'a.mod.ts')], output, importExtension: '.ts' })
 
     const content = await Bun.file(output).text()
-    expect(content).toContain('import * as _0 from \'./a.mod.ts\'')
+    expect(content).toContain("import * as _0 from './a.mod.ts'")
   })
 })

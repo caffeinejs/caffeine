@@ -1,9 +1,9 @@
 /** The four application lifecycle events, in the order they fire across an application's life. */
-export type ApplicationEvent
-  = | 'application:ready'
-    | 'application:run'
-    | 'application:pre-shutdown'
-    | 'application:shutdown'
+export type ApplicationEvent =
+  | 'application:ready'
+  | 'application:run'
+  | 'application:pre-shutdown'
+  | 'application:shutdown'
 
 /** All events, ordered — useful for iterating the full lifecycle. */
 export const APPLICATION_EVENTS: readonly ApplicationEvent[] = [

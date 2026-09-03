@@ -1,4 +1,5 @@
 import { token } from '@caffeinejs/di'
+
 import type { ConfigHandle } from './accessor.js'
 import type { ConfigDiagnostics } from './diagnostics.js'
 import type { ConfigChangeListener } from './notifier.js'

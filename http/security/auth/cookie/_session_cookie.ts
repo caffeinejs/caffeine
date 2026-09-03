@@ -1,4 +1,5 @@
 import { hkdfSync } from 'node:crypto'
+
 import { EncryptJWT, jwtDecrypt } from 'jose'
 
 /**
@@ -43,11 +44,7 @@ export async function sealSession(
     .encrypt(keyFor(secret, scheme))
 }
 
-export async function unsealSession<T>(
-  cookie: string,
-  secret: string | Uint8Array,
-  scheme: string,
-): Promise<T> {
+export async function unsealSession<T>(cookie: string, secret: string | Uint8Array, scheme: string): Promise<T> {
   const { payload } = await jwtDecrypt(cookie, keyFor(secret, scheme), { typ: PURPOSE })
   return payload as unknown as T
 }

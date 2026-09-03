@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { CaffeineIoC } from '../container.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Aspect } from '../decorators/aspect.js'
-import { Profile } from '../decorators/profile.js'
+
+import { annotate, createAnnotation } from '../annotations.js'
 import { $aop } from '../aop.js'
 import type { JoinPoint, MethodAspect } from '../aop.js'
-import { annotate, createAnnotation } from '../annotations.js'
+import { CaffeineIoC } from '../container.js'
+import { Aspect } from '../decorators/aspect.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Profile } from '../decorators/profile.js'
 import { reflect } from '../reflect.js'
 
 // ─── fixtures ───────────────────────────────────────────────────────────────
@@ -198,17 +199,19 @@ describe('AOP integration', function () {
     @RoutAnn({ prefix: '/api' })
     @Injectable()
     class ApiController {
-      handle() { return 'ok' }
+      handle() {
+        return 'ok'
+      }
     }
 
     @Injectable()
     class PlainService {
-      run() { return 'ok' }
+      run() {
+        return 'ok'
+      }
     }
 
-    @Aspect([$aop.pointcut(
-      (_desc, cls) => reflect.get(cls, RoutAnn) !== undefined,
-    )])
+    @Aspect([$aop.pointcut((_desc, cls) => reflect.get(cls, RoutAnn) !== undefined)])
     @Profile('aop-ann-class-pred')
     class ClassPredAspect implements MethodAspect {
       before(_jp: JoinPoint) {
@@ -233,22 +236,26 @@ describe('AOP integration', function () {
   })
 
   describe('PointcutMethodPredicate receives annotations', function () {
-    const methodAnnSpy: { method: string | undefined, name: string | symbol }[] = []
+    const methodAnnSpy: { method: string | undefined; name: string | symbol }[] = []
 
     @Injectable()
     class HttpController {
       @HandlerAnn({ method: 'GET' })
-      getUsers() { return [] }
+      getUsers() {
+        return []
+      }
 
       @HandlerAnn({ method: 'POST' })
-      createUser() { return {} }
+      createUser() {
+        return {}
+      }
 
-      notAHandler() { return null }
+      notAHandler() {
+        return null
+      }
     }
 
-    @Aspect([$aop.forClass(HttpController,
-      (name, _desc, cls) => reflect.get(cls, HandlerAnn, name) !== undefined,
-    )])
+    @Aspect([$aop.forClass(HttpController, (name, _desc, cls) => reflect.get(cls, HandlerAnn, name) !== undefined)])
     @Profile('aop-ann-method-pred')
     class MethodPredAspect implements MethodAspect {
       before(jp: JoinPoint) {
@@ -287,7 +294,7 @@ describe('AOP integration', function () {
   })
 
   describe('JoinPoint.cls', function () {
-    const jpAnnSpy: { classAnn: unknown, memberAnn: unknown }[] = []
+    const jpAnnSpy: { classAnn: unknown; memberAnn: unknown }[] = []
 
     const SvcAnn = createAnnotation<string>()
     const OpAnn = createAnnotation<string>()
@@ -296,7 +303,9 @@ describe('AOP integration', function () {
     @Injectable()
     class PaySvc {
       @OpAnn('charge')
-      charge() { return 'charged' }
+      charge() {
+        return 'charged'
+      }
     }
 
     @Aspect([$aop.forClass(PaySvc, 'charge')])
@@ -342,7 +351,9 @@ describe('AOP integration', function () {
       @Aspect([$aop.forClass(ClsRefSvc, 'run')])
       @Profile('aop-ann-cls-ref')
       class ClsRefAspect implements MethodAspect {
-        before(jp: JoinPoint) { clsRefs.push(jp.ctor) }
+        before(jp: JoinPoint) {
+          clsRefs.push(jp.ctor)
+        }
       }
       void ClsRefAspect
 

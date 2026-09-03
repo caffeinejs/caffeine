@@ -10,7 +10,7 @@ The compiled group the adapter registers is `RouteGroup`, not `Router` — `Rout
 
 ## The two spellings of a route
 
-A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. Given a handler the route is closed on the spot and the **group** comes back, not the chain — which is what lets the next route chain off it and what keeps the `RouteDef` accumulating. The schema sits *before* the handler because TypeScript fixes inferences from non-context-sensitive arguments first, so `S` is resolved by the time the handler's `ctx` is contextually typed; after the handler it would not be.
+A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. Given a handler the route is closed on the spot and the **group** comes back, not the chain — which is what lets the next route chain off it and what keeps the `RouteDef` accumulating. The schema sits _before_ the handler because TypeScript fixes inferences from non-context-sensitive arguments first, so `S` is resolved by the time the handler's `ctx` is contextually typed; after the handler it would not be.
 
 `.inject()` on both `Router` and `RouteChain` takes a spec or a `(i) => spec` callback handed `$i`. The spec overload must stay **first**: a function type gets no implicit index signature, so an arrow fails the `ObjectInjectionSpec` constraint and falls through, while an object literal never reaches the second. `$i` is handed over at run time rather than re-exported. Both forms are merged identically, so anything reading `#state.injection` cannot tell them apart.
 
@@ -18,7 +18,7 @@ The inline forms are implemented by calling `RouteChain` — `chain.handler(fn)`
 
 ## Extending a route from outside http
 
-`RouteExtension` / `RouteGroupExtension` (`routing/programmatic/extension.ts`) are `(builder) => void` — the *same* function a decorator hands to `configureRoute`. That is the point: a feature is implemented once as an extension, and the decorator calls it. `@Operation` and `openapi`'s `operation()`, `@Compress` and `@caffeinejs/compress`'s `compress()`, `@BodyAsStream` and `bodyAsStream()` are each one implementation with two spellings. When adding a route-level feature, write the extension first and make the decorator call it — never the other way round, and never two copies.
+`RouteExtension` / `RouteGroupExtension` (`routing/programmatic/extension.ts`) are `(builder) => void` — the _same_ function a decorator hands to `configureRoute`. That is the point: a feature is implemented once as an extension, and the decorator calls it. `@Operation` and `openapi`'s `operation()`, `@Compress` and `@caffeinejs/compress`'s `compress()`, `@BodyAsStream` and `bodyAsStream()` are each one implementation with two spellings. When adding a route-level feature, write the extension first and make the decorator call it — never the other way round, and never two copies.
 
 Applied with `.with(ext, ...rest)` on `Router` and `RouteChain`. An extension may write anything on the builder except `path`, `method`, `parameters` and the handler — `flatten.ts` overwrites those.
 
@@ -49,12 +49,12 @@ One global `@Catch` per error class. Duplicate global for the same class fails a
 
 Where a value goes depends on who reads it and how long it lives:
 
-| The value is… | Goes to | Read with |
-|---|---|---|
-| an injectable service with a lifecycle | a request-scoped binding (`Scopes.REQUEST`) | `container.get` / injection |
-| a plain value one middleware computes and a handler reads | `ctx.state` | `ctx.state.get(key)` |
-| the authenticated principal | `ctx.user` | `ctx.user` |
-| what the route declared | the route config | `ctx.routeConfig` |
+| The value is…                                             | Goes to                                     | Read with                   |
+| --------------------------------------------------------- | ------------------------------------------- | --------------------------- |
+| an injectable service with a lifecycle                    | a request-scoped binding (`Scopes.REQUEST`) | `container.get` / injection |
+| a plain value one middleware computes and a handler reads | `ctx.state`                                 | `ctx.state.get(key)`        |
+| the authenticated principal                               | `ctx.user`                                  | `ctx.user`                  |
+| what the route declared                                   | the route config                            | `ctx.routeConfig`           |
 
 `ctx.state` is a `Map` on the context, allocated on first touch. It does not participate in DI: no binding, no
 destroy callback, no scope. What it may hold is named by the `V` type parameter a router declares with

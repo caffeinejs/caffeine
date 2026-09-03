@@ -26,9 +26,7 @@ export function selectorPath(selector: (c: never) => unknown): readonly string[]
   const parts = (result as Partial<PathNode> | null | undefined)?.[kPathParts]
 
   if (parts === undefined) {
-    throw errSelector(
-      'the selector must be a plain property chain such as "c => c.app.server", not a computed value',
-    )
+    throw errSelector('the selector must be a plain property chain such as "c => c.app.server", not a computed value')
   }
 
   if (parts.length === 0) {

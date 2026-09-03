@@ -26,17 +26,17 @@ export async function generateModules(opts: GenerateModulesOptions): Promise<boo
   const content = [
     HEADER,
     '',
-    'import { kModule } from \'@caffeinejs/di\'',
-    'import type { Module, ModuleFn } from \'@caffeinejs/di\'',
+    "import { kModule } from '@caffeinejs/di'",
+    "import type { Module, ModuleFn } from '@caffeinejs/di'",
     ...imports,
     '',
     'function _pick(ns: Record<string, unknown>): Array<Module | ModuleFn> {',
     '  const out: Array<Module | ModuleFn> = []',
-    '  const def = ns[\'default\']',
-    '  if (typeof def === \'function\') out.push(def as ModuleFn)',
-    '  else if (def != null && typeof def === \'object\' && (def as any)[kModule]) out.push(def as Module)',
+    "  const def = ns['default']",
+    "  if (typeof def === 'function') out.push(def as ModuleFn)",
+    "  else if (def != null && typeof def === 'object' && (def as any)[kModule]) out.push(def as Module)",
     '  for (const [k, v] of Object.entries(ns)) {',
-    '    if (k !== \'default\' && v != null && typeof v === \'object\' && (v as any)[kModule]) {',
+    "    if (k !== 'default' && v != null && typeof v === 'object' && (v as any)[kModule]) {",
     '      out.push(v as Module)',
     '    }',
     '  }',
@@ -65,6 +65,5 @@ export async function generateModules(opts: GenerateModulesOptions): Promise<boo
 }
 
 function hash(content: string): string {
-  return new Bun.CryptoHasher('sha1').update(content)
-    .digest('hex')
+  return new Bun.CryptoHasher('sha1').update(content).digest('hex')
 }

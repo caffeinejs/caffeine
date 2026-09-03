@@ -1,4 +1,5 @@
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+
 import type { KafkaMessage } from '../config.js'
 import { $k, type KafkaPickers } from '../pickers.js'
 import { configureListener } from './registrar.js'

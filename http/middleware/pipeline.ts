@@ -1,5 +1,6 @@
 import { type Container, type InjectionToken, type Provider, Scopes } from '@caffeinejs/di'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+
 import type { Context } from '../context.js'
 import { type ActionResult, type ActionResultTypes, Responder } from '../response.js'
 import { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
@@ -60,10 +61,9 @@ export class MiddlewarePipeline {
 
   /** Whether a middleware of type `ctor` is registered — as a class, as an instance, resolved or not. */
   has(ctor: Function): boolean {
-    return this.#entries.some(entry =>
-      entry.ref === ctor
-      || entry.ref instanceof ctor
-      || entry.instance instanceof ctor)
+    return this.#entries.some(
+      entry => entry.ref === ctor || entry.ref instanceof ctor || entry.instance instanceof ctor,
+    )
   }
 
   get size(): number {
@@ -191,23 +191,20 @@ export class MiddlewarePipeline {
         }
 
         if (isThenable(result)) {
-          Promise.resolve(result).then(
-            settled => {
-              // The chain ran through, so this is not the middleware's response to give. A value returned
-              // after `next()` is discarded, exactly as Fastify discards a hook's return value — a hook
-              // group cannot alter the handler's result, which is what the `handler` group is for.
-              if (reachedEnd) {
-                done()
-                return
-              }
+          Promise.resolve(result).then(settled => {
+            // The chain ran through, so this is not the middleware's response to give. A value returned
+            // after `next()` is discarded, exactly as Fastify discards a hook's return value — a hook
+            // group cannot alter the handler's result, which is what the `handler` group is for.
+            if (reachedEnd) {
+              done()
+              return
+            }
 
-              const answered = this.#answer(ctx, reply, settled)
-              if (isThenable(answered)) {
-                answered.then(() => undefined, done)
-              }
-            },
-            done,
-          )
+            const answered = this.#answer(ctx, reply, settled)
+            if (isThenable(answered)) {
+              answered.then(() => undefined, done)
+            }
+          }, done)
           return
         }
 

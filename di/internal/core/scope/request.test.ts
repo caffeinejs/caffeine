@@ -1,14 +1,16 @@
 import HTTP, { IncomingMessage, ServerResponse } from 'http'
 import { randomUUID } from 'node:crypto'
-import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
+
 import Supertest from 'supertest'
-import { token } from '../../../key.js'
-import { CaffeineIoC, Scopes } from '../../../index.nodejs.js'
+import { describe, it, beforeAll, afterAll, beforeEach, expect, vi } from 'vitest'
+
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
 import { PostConstruct } from '../../../decorators/post_construct.js'
 import { PreDestroy } from '../../../decorators/pre_destroy.js'
+import { CaffeineIoC, Scopes } from '../../../index.nodejs.js'
+import { token } from '../../../key.js'
 
 describe('Request Scope', function () {
   describe('common cases', function () {
@@ -56,7 +58,7 @@ describe('Request Scope', function () {
     })
 
     async function requestListener(req: IncomingMessage, res: ServerResponse) {
-      di.requestScopeManager.run(() => {
+      void di.requestScopeManager.run(() => {
         const ctrl = di.get(Ctrl)
 
         res.writeHead(200)
@@ -80,14 +82,12 @@ describe('Request Scope', function () {
     })
 
     it('should fail when trying to resolve outside a request scope', function () {
-      expect(() => di.get(Ctrl))
-        .toThrow()
+      expect(() => di.get(Ctrl)).toThrow()
     })
 
     it('should fail when starting a nested request scope', async function () {
       await di.requestScopeManager.run(async () => {
-        expect(() => di.requestScopeManager.run(() => {}))
-          .toThrow()
+        expect(() => di.requestScopeManager.run(() => {})).toThrow()
       })
     })
 
@@ -99,14 +99,12 @@ describe('Request Scope', function () {
         }),
       ).rejects.toThrow('request failed')
 
-      expect(destroySpy)
-        .toHaveBeenCalledTimes(1)
+      expect(destroySpy).toHaveBeenCalledTimes(1)
     })
 
     describe('non request scoped with a request scope dependency', function () {
       it('should fail to resolve root component when not inside a request scope', function () {
-        expect(() => di.get(SingletonWithReq))
-          .toThrow()
+        expect(() => di.get(SingletonWithReq)).toThrow()
       })
     })
 
@@ -114,30 +112,23 @@ describe('Request Scope', function () {
       it('should create and destroy one instance per request', async function () {
         const val = 'hello world'
 
-        expect(() => di.get(Ctrl))
-          .toThrow()
+        expect(() => di.get(Ctrl)).toThrow()
 
         await Supertest(server)
           .get(token<any>('/'))
           .expect(200)
-          .expect(res => expect(res.text)
-            .toEqual(val))
+          .expect(res => expect(res.text).toEqual(val))
 
         await Supertest(server)
           .get(token<any>('/'))
           .expect(200)
-          .expect(res => expect(res.text)
-            .toEqual(val))
+          .expect(res => expect(res.text).toEqual(val))
 
-        expect(ctorSpy)
-          .toHaveBeenCalledTimes(2)
-        expect(initSpy)
-          .toHaveBeenCalledTimes(2)
-        expect(destroySpy)
-          .toHaveBeenCalledTimes(2)
+        expect(ctorSpy).toHaveBeenCalledTimes(2)
+        expect(initSpy).toHaveBeenCalledTimes(2)
+        expect(destroySpy).toHaveBeenCalledTimes(2)
 
-        expect(() => di.get(Ctrl))
-          .toThrow()
+        expect(() => di.get(Ctrl)).toThrow()
       })
     })
   })

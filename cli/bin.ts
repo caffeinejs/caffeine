@@ -3,6 +3,7 @@
 import { watch } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+
 import { run as generate } from './command/generate/index.js'
 import { run as scaffold } from './command/scaffold/index.js'
 

@@ -53,15 +53,7 @@ services:
     volumes:
       - ./_tests/_testdata/gcs/data:/data
     healthcheck:
-      test:
-        [
-          'CMD',
-          'wget',
-          '-q',
-          '-O',
-          '/dev/null',
-          'http://localhost:4443/storage/v1/b/cats/o',
-        ]
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:4443/storage/v1/b/cats/o']
       interval: 5s
       timeout: 10s
       retries: 5

@@ -1,4 +1,10 @@
-import type { RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerBase, RouteGenericInterface, RouteOptions } from 'fastify'
+import type {
+  RawReplyDefaultExpression,
+  RawRequestDefaultExpression,
+  RawServerBase,
+  RouteGenericInterface,
+  RouteOptions,
+} from 'fastify'
 
 /** Fastify route options parameterized for HTTP/1 and HTTP/2. */
 export type AdapterRouteOptions = RouteOptions<
@@ -47,7 +53,7 @@ export function addRouteHook<K extends RouteHookKey>(
   }
 
   if (Array.isArray(existing)) {
-    (existing as unknown[]).push(fn)
+    ;(existing as unknown[]).push(fn)
     return
   }
 

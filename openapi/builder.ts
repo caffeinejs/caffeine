@@ -1,16 +1,22 @@
-import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, AnySchema, ServiceBootstrapIn } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 import type { Route, RouteGroup } from '@caffeinejs/http'
+import {
+  type ServiceBeforeBootstrapIn,
+  type Service,
+  type ServiceAPI,
+  AnySchema,
+  ServiceBootstrapIn,
+} from '@caffeinejs/std'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+
 import {
   OPENAPI_CONFIG_KEYS,
   OPENAPI_CONFIG_NAMESPACE,
   openapiConfigSchema,
   type OpenAPIConfigSlice,
 } from './config.js'
-import { OpenAPIExtension } from './extension.js'
 import { OpenAPIDocumentStore } from './document_store.js'
 import { registerEndpoints } from './endpoints.js'
-
+import { OpenAPIExtension } from './extension.js'
 import {
   type ErrorStatusOptions,
   type InferenceOptions,
@@ -74,9 +80,7 @@ export class OpenAPIBuilder<C = unknown> implements Service {
   /** Adds a server the API is reachable at. Call it more than once for more than one. */
   server(url: string | ServerObject, description?: string): ServiceAPI<this> {
     this.#options.servers.push(
-      typeof url === 'string'
-        ? { url, ...(description === undefined ? {} : { description }) }
-        : url,
+      typeof url === 'string' ? { url, ...(description === undefined ? {} : { description }) } : url,
     )
     return this
   }
@@ -291,9 +295,10 @@ export class OpenAPIBuilder<C = unknown> implements Service {
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: openapiConfigSchema,
       values: Object.fromEntries(
-        OPENAPI_CONFIG_KEYS
-          .filter(key => code[key as keyof OpenAPIOptions] !== undefined)
-          .map(key => [key, code[key as keyof OpenAPIOptions]]),
+        OPENAPI_CONFIG_KEYS.filter(key => code[key as keyof OpenAPIOptions] !== undefined).map(key => [
+          key,
+          code[key as keyof OpenAPIOptions],
+        ]),
       ),
     })
 
@@ -328,11 +333,13 @@ export class OpenAPIBuilder<C = unknown> implements Service {
     // fed the *resolved* options, because configuration resolved before this step.
     const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
 
-    kit.container.bind(OpenAPIExtension, t => t
-      // Reads through the slice, so the generated document reflects the merged configuration. The extension
-      // runs at server setup, which is after `container.init()`.
-      .toValue(new OpenAPIExtension(this.#store, options, paths))
-      .extends())
+    kit.container.bind(OpenAPIExtension, t =>
+      t
+        // Reads through the slice, so the generated document reflects the merged configuration. The extension
+        // runs at server setup, which is after `container.init()`.
+        .toValue(new OpenAPIExtension(this.#store, options, paths))
+        .extends(),
+    )
 
     return Promise.resolve()
   }

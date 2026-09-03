@@ -1,4 +1,5 @@
 import type { Provider } from '@caffeinejs/di'
+
 import type { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
@@ -40,10 +41,7 @@ export class AuthenticationService {
    */
   readonly #settled: WeakMap<Context, Map<string, AuthenticateResult>> = new WeakMap()
 
-  constructor(
-    schemeProvider: AuthenticationSchemeProvider,
-    mapper?: Provider<PrincipalMapper>,
-  ) {
+  constructor(schemeProvider: AuthenticationSchemeProvider, mapper?: Provider<PrincipalMapper>) {
     this.#schemeProvider = schemeProvider
     this.#mapper = mapper
   }
@@ -71,13 +69,16 @@ export class AuthenticationService {
     const handler = this.#handlerFor(scheme).get()
     const result = await handler.authenticate(ctx)
 
-    const mapped = result.succeeded && this.#mapper !== undefined
-      ? AuthenticateResult.success(new AuthenticationTicket(
-          await this.#mapper.get()(ctx, result.ticket!.principal),
-          scheme,
-          result.ticket?.properties,
-        ))
-      : result
+    const mapped =
+      result.succeeded && this.#mapper !== undefined
+        ? AuthenticateResult.success(
+            new AuthenticationTicket(
+              await this.#mapper.get()(ctx, result.ticket!.principal),
+              scheme,
+              result.ticket?.properties,
+            ),
+          )
+        : result
 
     let settled = this.#settled.get(ctx)
     if (settled === undefined) {

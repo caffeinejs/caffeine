@@ -1,9 +1,9 @@
 import { ErrInvalidDecorator } from '../errors.js'
-import { AbstractCtor, Ctor } from '../types.js'
-import { isNamedKey, NamedToken, InjectionToken } from '../key.js'
 import { Injection } from '../injection.js'
-import { defineInjectable } from './registrar/index.js'
+import { isNamedKey, NamedToken, InjectionToken } from '../key.js'
+import { AbstractCtor, Ctor } from '../types.js'
 import { Extends } from './extends.js'
+import { defineInjectable } from './registrar/index.js'
 
 /**
  * Marks a class as an injectable component, registering it in the container.
@@ -34,20 +34,19 @@ export function Injectable(
 ): (target: Ctor, context: ClassDecoratorContext) => void
 export function Injectable<T>(keyOrDependencies?: InjectionToken | Injection[], dependencies?: Injection[]) {
   const key = keyOrDependencies !== undefined && !Array.isArray(keyOrDependencies) ? keyOrDependencies : undefined
-  const deps = Array.isArray(keyOrDependencies) ? keyOrDependencies : dependencies ?? []
+  const deps = Array.isArray(keyOrDependencies) ? keyOrDependencies : (dependencies ?? [])
 
   if (key !== undefined && !isNamedKey(key)) {
     throw new ErrInvalidDecorator(
-      `@${Injectable.name} only accepts a string or symbol as a named key: received "${typeof key}" on the decorated class.\n`
-      + `To bind this to an abstract class, decorate this class with @${Extends.name}()`,
+      `@${Injectable.name} only accepts a string or symbol as a named key: received "${typeof key}" on the decorated class.\n` +
+        `To bind this to an abstract class, decorate this class with @${Extends.name}()`,
     )
   }
 
   return (target: Ctor, context: ClassDecoratorContext) => {
     const parent = Object.getPrototypeOf(target) as Ctor | AbstractCtor
     defineInjectable<T>(context.metadata, target, config => {
-      config.type(target).dependencies(deps)
-        .names(key)
+      config.type(target).dependencies(deps).names(key)
       if (parent !== Function.prototype) {
         config.extend(parent)
       }

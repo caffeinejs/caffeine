@@ -1,5 +1,6 @@
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import type { Container } from '@caffeinejs/di'
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
+
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsService } from './cats.service.js'
 
@@ -29,17 +30,17 @@ export const catsRoutes: FastifyPluginAsync<ContainerPluginOptions> = async func
     return reply.code(201).send(cat)
   })
 
-  fastify.put('/cats/:id', async (
-    req: FastifyRequest<{ Params: { id: string }, Body: UpdateCatDTO }>,
-    reply: FastifyReply,
-  ) => {
-    const cat = await service.update(Number(req.params.id), req.body)
-    if (cat === undefined) {
-      return reply.code(404).send()
-    }
+  fastify.put(
+    '/cats/:id',
+    async (req: FastifyRequest<{ Params: { id: string }; Body: UpdateCatDTO }>, reply: FastifyReply) => {
+      const cat = await service.update(Number(req.params.id), req.body)
+      if (cat === undefined) {
+        return reply.code(404).send()
+      }
 
-    return reply.code(200).send(cat)
-  })
+      return reply.code(200).send(cat)
+    },
+  )
 
   fastify.delete('/cats/:id', async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const removed = await service.remove(Number(req.params.id))

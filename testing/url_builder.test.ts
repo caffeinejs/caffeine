@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { ErrMissingRouteParam, newURL } from './index.js'
 
 describe('newURL()', () => {
@@ -7,11 +8,7 @@ describe('newURL()', () => {
   })
 
   it('appends query params and honors a custom baseURL', () => {
-    const url = newURL('/tasks/:id')
-      .param('id', 7)
-      .query('verbose', 'true')
-      .baseURL('http://api.test')
-      .build()
+    const url = newURL('/tasks/:id').param('id', 7).query('verbose', 'true').baseURL('http://api.test').build()
 
     expect(url).toBe('http://api.test/tasks/7?verbose=true')
   })

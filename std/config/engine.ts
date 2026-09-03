@@ -1,6 +1,6 @@
+import { ErrConfig } from './errors.js'
 import { splitPath } from './path.js'
 import type { ConfigSources } from './sources.js'
-import { ErrConfig } from './errors.js'
 import type { ConfigSnapshot, PropertySource, ResolutionContext } from './types.js'
 
 export interface ConfigEngineOptions {
@@ -133,8 +133,8 @@ function claimsOf(source: PropertySource): Set<string> {
       if (!seen.has(i)) {
         const indices = [...seen].sort((a, b) => a - b)
         throw new ErrConfig(
-          `Cannot merge config array "${prefix}" from "${source.name}": indices [${indices.join(', ')}]`
-          + ' are not a complete list',
+          `Cannot merge config array "${prefix}" from "${source.name}": indices [${indices.join(', ')}]` +
+            ' are not a complete list',
           'ERR_CONFIG_ARRAY_INDICES',
           undefined,
           'Set the whole array rather than one element: a higher-priority source replaces a list, it does not patch it',

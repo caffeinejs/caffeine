@@ -1,16 +1,17 @@
 import { describe, it, beforeAll, afterAll, expect, vi } from 'vitest'
-import { token } from '../key.js'
+
 import { Binding } from '../binding.js'
+import { CaffeineIoC } from '../container.js'
+import { ByPassPostProcessors } from '../decorators/bypass_post_processors.js'
+import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { CaffeineIoC } from '../container.js'
-import { Factory } from '../factory.js'
-import { PostProcessor } from '../post_processor.js'
-import { bindScope, Scope, unbindScope } from '../scope.js'
-import { ResolutionContext } from '../resolution_context.js'
-import { ByPassPostProcessors } from '../decorators/bypass_post_processors.js'
 import { Provides } from '../decorators/provides.js'
-import { Configuration } from '../decorators/configuration.js'
+import { Factory } from '../factory.js'
+import { token } from '../key.js'
+import { PostProcessor } from '../post_processor.js'
+import { ResolutionContext } from '../resolution_context.js'
+import { bindScope, Scope, unbindScope } from '../scope.js'
 
 describe('Post Processors', function () {
   const ppSpy = vi.fn()
@@ -143,17 +144,11 @@ describe('Post Processors', function () {
 
     await di.dispose()
 
-    expect(ppSpy)
-      .toHaveBeenCalledTimes(16)
-    expect(sSpy)
-      .toHaveBeenCalledTimes(2)
-    expect(nonDep)
-      .toBeInstanceOf(NonDep)
-    expect(dep)
-      .toBeInstanceOf(Decorated)
-    expect(conf)
-      .toBeInstanceOf(Conf)
-    expect(dep.message())
-      .toEqual('the message is hello world')
+    expect(ppSpy).toHaveBeenCalledTimes(16)
+    expect(sSpy).toHaveBeenCalledTimes(2)
+    expect(nonDep).toBeInstanceOf(NonDep)
+    expect(dep).toBeInstanceOf(Decorated)
+    expect(conf).toBeInstanceOf(Conf)
+    expect(dep.message()).toEqual('the message is hello world')
   })
 })

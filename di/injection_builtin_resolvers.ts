@@ -1,3 +1,4 @@
+import { BuiltInResolvers, type InjectionResolverFactory } from './injection_resolver.js'
 import {
   configFactory,
   deferredFactory,
@@ -8,7 +9,6 @@ import {
   providerFactory,
   valueFactory,
 } from './internal/core/resolver/index.js'
-import { BuiltInResolvers, type InjectionResolverFactory } from './injection_resolver.js'
 
 /**
  * The resolvers every container starts with, paired with the names they answer to.

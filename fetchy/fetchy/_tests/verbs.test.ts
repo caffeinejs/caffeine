@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
 import { Path } from '../decorators/path.js'
 import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
+import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
 import { noop } from '../noop.js'
 import { captureMetadata } from './capture_metadata.js'
 

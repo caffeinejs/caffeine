@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import { createApplication } from '@caffeinejs/std'
+import { describe, expect, it } from 'vitest'
+
 import { FakeBroker } from './broker.testkit.js'
 import type { KafkaConsumerEventPayload } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
@@ -17,7 +18,9 @@ class LifecycleConsumer {
 describe('consumer lifecycle events + status', () => {
   it('re-emits normalized events and tracks status', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId('lc-group'))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k.brokers('b').groupId('lc-group'),
+    )
     const built = app.build()
     await built.run()
 

@@ -39,9 +39,7 @@ type GithubInput = Omit<
  * - `subjectClaim: 'id'`, because `login` is renameable and so cannot identify a user.
  * - PKCE stays on: GitHub supports S256 and rejects `plain`.
  */
-export function githubOAuth2Preset(
-  opts: GithubInput & GithubPresetOptions,
-): OAuth2AuthenticationOptions {
+export function githubOAuth2Preset(opts: GithubInput & GithubPresetOptions): OAuth2AuthenticationOptions {
   const { includeEmail, userAgent = 'caffeinejs', ...rest } = opts
 
   return {
@@ -74,7 +72,7 @@ export function githubOAuth2Preset(
     // `?? ` alone is not enough: a resolved option bag arrives with `scopes: []`, which is not
     // nullish, and an empty scope means GitHub grants nothing — no `user:email`, so the email
     // enrichment silently 403s. Treat empty as unset; GitHub always needs at least read:user.
-    scopes: rest.scopes?.length ? rest.scopes : (includeEmail ? ['read:user', 'user:email'] : ['read:user']),
+    scopes: rest.scopes?.length ? rest.scopes : includeEmail ? ['read:user', 'user:email'] : ['read:user'],
     userInfoHeaders: {
       'User-Agent': userAgent,
       'X-GitHub-Api-Version': '2022-11-28',
@@ -86,10 +84,11 @@ export function githubOAuth2Preset(
     },
     enrichUserInfo: includeEmail
       ? async (userInfo, tokens) => ({
-        ...userInfo,
-        email: userInfo.email
-          ?? await fetchPrimaryEmail(tokens, userAgent, rest.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS),
-      })
+          ...userInfo,
+          email:
+            userInfo.email ??
+            (await fetchPrimaryEmail(tokens, userAgent, rest.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS)),
+        })
       : rest.enrichUserInfo,
   }
 }
@@ -136,8 +135,6 @@ async function fetchPrimaryEmail(
     return undefined
   }
 
-  const emails = await response.json().catch(() => []) as GithubEmail[]
-  return Array.isArray(emails)
-    ? emails.find(e => e.primary && e.verified)?.email
-    : undefined
+  const emails = (await response.json().catch(() => [])) as GithubEmail[]
+  return Array.isArray(emails) ? emails.find(e => e.primary && e.verified)?.email : undefined
 }

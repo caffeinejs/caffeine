@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { GET } from '../decorators/verbs.js'
 import { getMethodBuilders } from '../decorators/registrar/registrar.js'
+import { GET } from '../decorators/verbs.js'
 import { noop } from '../noop.js'
 import { captureMetadata } from './capture_metadata.js'
 
@@ -34,7 +34,7 @@ describe('subclassing', () => {
     expect(childMethods.has('base')).toBe(false)
   })
 
-  it('a subclass\'s own decorated methods never leak into or mutate the parent\'s registry entries', () => {
+  it("a subclass's own decorated methods never leak into or mutate the parent's registry entries", () => {
     const base = captureMetadata()
     const child = captureMetadata()
 

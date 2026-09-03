@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Controller, ErrHTTPBadRequest, ErrHTTPConflict, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { describe, it, expect } from 'vitest'
+
+import {
+  Controller,
+  ErrHTTPBadRequest,
+  ErrHTTPConflict,
+  Get,
+  createWebApplication,
+  fastifyAdapterFactory,
+} from '../index.js'
 
 // No @Catch handlers in this file: thrown ErrHTTP errors fall through to the adapter's envelope.
 @Controller('/http-err')

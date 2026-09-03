@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+
 import type { WsMessage } from './protocol.js'
 
 const RECONNECT_BASE_MS = 1000

@@ -1,5 +1,6 @@
-import { Redis } from 'ioredis'
 import { Injectable } from '@caffeinejs/di'
+import { Redis } from 'ioredis'
+
 import type { Cat } from './cat.js'
 
 const TTL_SECONDS = 60

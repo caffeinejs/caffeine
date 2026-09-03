@@ -1,1 +1,1 @@
-export * from "./inventory.controller.js";
+export * from './inventory.controller.js'

@@ -1,8 +1,10 @@
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
+
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import type { ServiceAPI } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticBuilder, StaticExt } from '../index.js'
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))

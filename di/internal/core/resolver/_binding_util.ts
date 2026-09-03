@@ -1,9 +1,7 @@
 import { Binding, getUniqueBinding } from '../../../binding.js'
 import { ContainerOps } from '../../../container_interface.js'
 import { ErrNoUniqueInjectionForKey } from '../../../errors.js'
-import {
-  InjectionResolverFactoryContext,
-} from '../../../injection_resolver.js'
+import { InjectionResolverFactoryContext } from '../../../injection_resolver.js'
 import { InjectionToken, keyStr, TypedKey } from '../../../key.js'
 import { describeContext } from './_fmt.js'
 
@@ -26,15 +24,10 @@ export function uniqueBindingOrThrow(
   ctx: InjectionResolverFactoryContext,
   key: InjectionToken,
 ): Binding<unknown> | undefined {
-  return getUniqueBinding(
-    ctx.container,
-    key,
-    undefined,
-    () => {
-      throw new ErrNoUniqueInjectionForKey(
-        key,
-        `${describeContext(ctx)}: Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`,
-      )
-    },
-  )
+  return getUniqueBinding(ctx.container, key, undefined, () => {
+    throw new ErrNoUniqueInjectionForKey(
+      key,
+      `${describeContext(ctx)}: Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`,
+    )
+  })
 }

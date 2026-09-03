@@ -1,4 +1,5 @@
 import { token } from '@caffeinejs/di'
+
 import {
   ArgsConfigProvider,
   ConfigPriority,

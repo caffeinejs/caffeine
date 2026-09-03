@@ -79,10 +79,12 @@ export class ScryptPasswordHasher extends PasswordHasher {
     }
 
     const { params } = parsed
-    return params.N !== this.#params.N
-      || params.r !== this.#params.r
-      || params.p !== this.#params.p
-      || params.keylen !== this.#params.keylen
+    return (
+      params.N !== this.#params.N ||
+      params.r !== this.#params.r ||
+      params.p !== this.#params.p ||
+      params.keylen !== this.#params.keylen
+    )
   }
 
   #derive(password: string, salt: Buffer, params: ScryptParams): Promise<Buffer> {
@@ -101,7 +103,7 @@ export class ScryptPasswordHasher extends PasswordHasher {
     })
   }
 
-  #parse(encoded: string): { params: ScryptParams, salt: Buffer, hash: Buffer } | null {
+  #parse(encoded: string): { params: ScryptParams; salt: Buffer; hash: Buffer } | null {
     // $scrypt$n=<N>,r=<r>,p=<p>$<saltB64>$<hashB64>
     const parts = encoded.split('$')
     if (parts.length !== 5 || parts[0] !== '' || parts[1] !== 'scrypt') {

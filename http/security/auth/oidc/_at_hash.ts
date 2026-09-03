@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
+
 import { redactPii } from '../internal/remote/pii.js'
 import { ErrOIDCCallback } from './errors.js'
 
@@ -34,21 +35,16 @@ export function accessTokenHash(accessToken: string, alg: string): string {
  * close. Checked anyway when the provider asserts it, as a cheap guard against provider
  * misconfiguration and against a token response assembled from mismatched parts.
  */
-export function assertAccessTokenHash(
-  accessToken: string,
-  atHash: string,
-  alg: string,
-  showPii = false,
-): void {
+export function assertAccessTokenHash(accessToken: string, atHash: string, alg: string, showPii = false): void {
   const computed = accessTokenHash(accessToken, alg)
   const expected = Buffer.from(computed)
   const actual = Buffer.from(atHash)
 
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
     throw new ErrOIDCCallback(
-      'Cannot process OIDC callback: at_hash does not match the access token'
-      + ` (expected ${redactPii('at_hash', computed, showPii)},`
-      + ` received ${redactPii('at_hash', atHash, showPii)})`,
+      'Cannot process OIDC callback: at_hash does not match the access token' +
+        ` (expected ${redactPii('at_hash', computed, showPii)},` +
+        ` received ${redactPii('at_hash', atHash, showPii)})`,
     )
   }
 }

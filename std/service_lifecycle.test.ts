@@ -1,10 +1,11 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
-import { $t } from './schema/t.js'
+
 import { InlineConfigProvider, type ConfigSlice } from './config/index.js'
-import { type ServiceBeforeBootstrapIn, type Service, type ServiceBootstrapIn } from './service.js'
 import { ErrContributionPhase, contributionKey } from './contributions.js'
 import { createApplication } from './index.js'
+import { $t } from './schema/t.js'
+import { type ServiceBeforeBootstrapIn, type Service, type ServiceBootstrapIn } from './service.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
 const widgetSchema = $t.Object({ size: $t.Optional($t.Number()) })

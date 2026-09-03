@@ -1,13 +1,6 @@
-import {
-  AllowAnonymous,
-  AuthenticationService,
-  Authorize,
-  type Context,
-  Controller,
-  Get,
-} from "@caffeinejs/http";
-import { APIGroup } from "@caffeinejs/openapi";
-import { View } from "@caffeinejs/view";
+import { AllowAnonymous, AuthenticationService, Authorize, type Context, Controller, Get } from '@caffeinejs/http'
+import { APIGroup } from '@caffeinejs/openapi'
+import { View } from '@caffeinejs/view'
 
 // GitHub OAuth sign-in. The callback route (/login/github/callback) is registered automatically by
 // the framework's OIDCConfigurer from the configured callbackURL — only the initiation route lives
@@ -16,7 +9,7 @@ import { View } from "@caffeinejs/view";
 // Hidden from the OpenAPI document: these are browser redirects and rendered pages, not API operations. The
 // GitHub scheme itself still appears under components.securitySchemes, derived from .authentication(...).
 @APIGroup({ hidden: true })
-@Controller("/", [AuthenticationService])
+@Controller('/', [AuthenticationService])
 export class GithubAuthController {
   constructor(private readonly auth: AuthenticationService) {}
 
@@ -27,77 +20,66 @@ export class GithubAuthController {
   // Already-signed-in requests must NOT re-challenge: the callback redirects back to the URL that
   // started the flow (this route), so a blind challenge here loops forever. Send them to the
   // dashboard instead — which is also the landing page after a fresh sign-in.
-  @Get("/login/github", (p) => [p.context()])
+  @Get('/login/github', p => [p.context()])
   @AllowAnonymous()
   async login(ctx: Context) {
     if (ctx.user.authenticated) {
-      ctx.redirect("/dashboard");
-      return;
+      ctx.redirect('/dashboard')
+      return
     }
-    await this.auth.challenge(ctx, "GitHub");
+    await this.auth.challenge(ctx, 'GitHub')
   }
 
   // Post-login landing page: a small HTML profile of whoever is signed in.
   // Rendered from src/views/dashboard.hbs; Handlebars auto-escapes the model, so no manual escaping.
-  @Get("/dashboard", (p) => [p.context()])
+  @Get('/dashboard', p => [p.context()])
   @Authorize()
   dashboard(ctx: Context) {
-    const user = ctx.user;
-    const name =
-      user.findFirst("name")?.value ??
-      user.findFirst("login")?.value ??
-      "there";
-    const sub = user.findFirst("sub")?.value;
-    const email = user.findFirst("email")?.value;
-    const avatarRaw = user.findFirst("avatar_url")?.value;
+    const user = ctx.user
+    const name = user.findFirst('name')?.value ?? user.findFirst('login')?.value ?? 'there'
+    const sub = user.findFirst('sub')?.value
+    const email = user.findFirst('email')?.value
+    const avatarRaw = user.findFirst('avatar_url')?.value
     // Only render a plain https image URL — never inject an arbitrary attacker-influenced string as a src.
-    const avatar =
-      typeof avatarRaw === "string" && avatarRaw.startsWith("https://")
-        ? avatarRaw
-        : undefined;
-    const authType =
-      user.identities.map((i) => i.authenticationType).join(", ") || "unknown";
-    const roles = user
-      .findAll("roles")
-      .flatMap((c) => (Array.isArray(c.value) ? c.value : [c.value]));
+    const avatar = typeof avatarRaw === 'string' && avatarRaw.startsWith('https://') ? avatarRaw : undefined
+    const authType = user.identities.map(i => i.authenticationType).join(', ') || 'unknown'
+    const roles = user.findAll('roles').flatMap(c => (Array.isArray(c.value) ? c.value : [c.value]))
 
     const rows = [
-      { label: "Subject", value: sub ?? "—" },
-      { label: "Email", value: email ?? "—" },
-      { label: "Signed in via", value: authType },
-      { label: "Roles", value: roles.length ? roles.join(", ") : "—" },
-    ];
+      { label: 'Subject', value: sub ?? '—' },
+      { label: 'Email', value: email ?? '—' },
+      { label: 'Signed in via', value: authType },
+      { label: 'Roles', value: roles.length ? roles.join(', ') : '—' },
+    ]
 
-    return View("dashboard", {
+    return View('dashboard', {
       name,
       avatar,
       rows,
-      title: "Petstore — Signed in",
-    });
+      title: 'Petstore — Signed in',
+    })
   }
 
   // Clears the GitHub session cookie and returns home. Anonymous so signing out never 401s.
-  @Get("/logout", (p) => [p.context()])
+  @Get('/logout', p => [p.context()])
   @AllowAnonymous()
   async logout(ctx: Context) {
-    await this.auth.revoke(ctx, "GitHub");
-    ctx.redirect("/");
+    await this.auth.revoke(ctx, 'GitHub')
+    ctx.redirect('/')
   }
 
   // Machine-readable principal for API clients. Accepts either scheme.
-  @Get("/me", (p) => [p.context()])
+  @Get('/me', p => [p.context()])
   @Authorize()
   me(ctx: Context) {
-    const user = ctx.user;
+    const user = ctx.user
     return {
       authenticated: user.authenticated,
-      authenticationType: user.identities.map((i) => i.authenticationType),
-      sub: user.findFirst("sub")?.value,
-      name: user.findFirst("name")?.value ?? user.findFirst("login")?.value,
-      email: user.findFirst("email")?.value,
-      roles: user
-        .findAll("roles")
-        .flatMap((c) => (Array.isArray(c.value) ? c.value : [c.value])),
-    };
+      authenticationType: user.identities.map(i => i.authenticationType),
+      sub: user.findFirst('sub')?.value,
+      name: user.findFirst('name')?.value ?? user.findFirst('login')?.value,
+      email: user.findFirst('email')?.value,
+      roles: user.findAll('roles').flatMap(c => (Array.isArray(c.value) ? c.value : [c.value])),
+    }
   }
 }

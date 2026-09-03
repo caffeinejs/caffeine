@@ -1,5 +1,6 @@
-import fastifyView from '@fastify/view'
 import { ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
+import fastifyView from '@fastify/view'
+
 import type { ViewOptionsProvider } from './options_provider.js'
 
 /**
@@ -21,11 +22,6 @@ export class ViewExtension extends ServerExtension {
   }
 
   configure = async (ctx: ServerExtensionContext): Promise<void> => {
-    await Promise.all(this.provider
-      .all()
-      .map(options =>
-        ctx.server.register(fastifyView, options),
-      ),
-    )
+    await Promise.all(this.provider.all().map(options => ctx.server.register(fastifyView, options)))
   }
 }

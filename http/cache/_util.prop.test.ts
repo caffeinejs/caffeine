@@ -1,14 +1,15 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { generateETag, matchesETag } from './_util.js'
 
 // Arbitrary ETag token: no commas (would be parsed as list delimiter), no leading W/ (covered separately)
 // matchesETag trims ifNoneMatch entries after splitting but not the stored ETag, so a stored
 // value with leading/trailing whitespace would never match itself in a list context.
 // Restricting to trimmed strings keeps properties about list membership meaningful.
-const etagToken = fc.string({ minLength: 1 }).filter(
-  s => s === s.trim() && !s.includes(',') && !s.startsWith('W/') && s !== '*',
-)
+const etagToken = fc
+  .string({ minLength: 1 })
+  .filter(s => s === s.trim() && !s.includes(',') && !s.startsWith('W/') && s !== '*')
 
 describe('generateETag (property)', () => {
   const anyPayload = fc.oneof(
@@ -32,13 +33,10 @@ describe('generateETag (property)', () => {
     expect(await generateETag(s)).toBe(await generateETag(Buffer.from(s)))
   })
 
-  it.prop([fc.string(), fc.string()])(
-    'distinct string inputs produce distinct ETags',
-    async (a, b) => {
-      fc.pre(a !== b)
-      expect(await generateETag(a)).not.toBe(await generateETag(b))
-    },
-  )
+  it.prop([fc.string(), fc.string()])('distinct string inputs produce distinct ETags', async (a, b) => {
+    fc.pre(a !== b)
+    expect(await generateETag(a)).not.toBe(await generateETag(b))
+  })
 })
 
 describe('matchesETag (property)', () => {
@@ -70,10 +68,7 @@ describe('matchesETag (property)', () => {
     },
   )
 
-  it.prop([
-    fc.array(etagToken, { minLength: 1 }),
-    etagToken,
-  ])(
+  it.prop([fc.array(etagToken, { minLength: 1 }), etagToken])(
     'stored ETag absent from comma-separated list returns false',
     (tags, stored) => {
       fc.pre(!tags.includes(stored))
@@ -81,11 +76,7 @@ describe('matchesETag (property)', () => {
     },
   )
 
-  it.prop([
-    etagToken,
-    fc.array(etagToken, { maxLength: 3 }),
-    fc.integer({ min: 0, max: 4 }).map(n => ' '.repeat(n)),
-  ])(
+  it.prop([etagToken, fc.array(etagToken, { maxLength: 3 }), fc.integer({ min: 0, max: 4 }).map(n => ' '.repeat(n))])(
     'whitespace around comma separators is trimmed',
     (stored, others, spaces) => {
       const list = [stored, ...others].join(`,${spaces}`)

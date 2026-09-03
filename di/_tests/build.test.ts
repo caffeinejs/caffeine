@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
 import { ErrInvalidContainerState, ErrMissingInjectionKey, ErrNoResolutionForKey } from '../errors.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 import { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
 
@@ -20,10 +21,8 @@ describe('build()', function () {
 
       const svc = di.build(Service)
 
-      expect(svc)
-        .toBeInstanceOf(Service)
-      expect(svc.greet())
-        .toEqual('hello')
+      expect(svc).toBeInstanceOf(Service)
+      expect(svc.greet()).toEqual('hello')
     })
 
     it('should build an instance when an empty injections array is passed', async function () {
@@ -32,8 +31,7 @@ describe('build()', function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
-      expect(di.build(Service, []))
-        .toBeInstanceOf(Service)
+      expect(di.build(Service, [])).toBeInstanceOf(Service)
     })
   })
 
@@ -54,23 +52,17 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Repo, t => t
-        .toSelf())
+      di.bind(Repo, t => t.toSelf())
 
-      di.bind(token<any>('env'), t => t
-        .toValue('production'))
+      di.bind(token<any>('env'), t => t.toValue('production'))
       await di.init()
 
       const uc = di.build(Usecase, [Repo, token<any>('env')])
 
-      expect(uc)
-        .toBeInstanceOf(Usecase)
-      expect(uc.repo)
-        .toBeInstanceOf(Repo)
-      expect(uc.repo.find())
-        .toEqual('row')
-      expect(uc.env)
-        .toEqual('production')
+      expect(uc).toBeInstanceOf(Usecase)
+      expect(uc.repo).toBeInstanceOf(Repo)
+      expect(uc.repo.find()).toEqual('row')
+      expect(uc.env).toEqual('production')
     })
   })
 
@@ -81,8 +73,7 @@ describe('build()', function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
-      expect(di.build(fn))
-        .toEqual(42)
+      expect(di.build(fn)).toEqual(42)
     })
 
     it('should call the function with resolved deps', async function () {
@@ -94,15 +85,12 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Config, t => t
-        .toSelf())
+      di.bind(Config, t => t.toSelf())
 
-      di.bind(token<any>('port'), t => t
-        .toValue(3000))
+      di.bind(token<any>('port'), t => t.toValue(3000))
       await di.init()
 
-      expect(di.build(fn, [Config, token<any>('port')]))
-        .toEqual('localhost:3000')
+      expect(di.build(fn, [Config, token<any>('port')])).toEqual('localhost:3000')
     })
   })
 
@@ -116,14 +104,12 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Logger, t => t
-        .toSelf())
+      di.bind(Logger, t => t.toSelf())
       await di.init()
 
       const svc = di.build(Service, [$i.optional(Logger)])
 
-      expect(svc.logger)
-        .toBeInstanceOf(Logger)
+      expect(svc.logger).toBeInstanceOf(Logger)
     })
 
     it('should inject undefined when the dep is not registered', async function () {
@@ -138,8 +124,7 @@ describe('build()', function () {
 
       const svc = di.build(Service, [$i.optional(Logger)])
 
-      expect(svc.logger)
-        .toBeUndefined()
+      expect(svc.logger).toBeUndefined()
     })
   })
 
@@ -155,23 +140,16 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(HandlerA, t => t
-        .toSelf()
-        .extends(Handler))
+      di.bind(HandlerA, t => t.toSelf().extends(Handler))
 
-      di.bind(HandlerB, t => t
-        .toSelf()
-        .extends(Handler))
+      di.bind(HandlerB, t => t.toSelf().extends(Handler))
       await di.init()
 
       const dispatcher = di.build(Dispatcher, [$i.allOf(Handler)])
 
-      expect(dispatcher.handlers)
-        .toHaveLength(2)
-      expect(dispatcher.handlers.some(h => h instanceof HandlerA))
-        .toBe(true)
-      expect(dispatcher.handlers.some(h => h instanceof HandlerB))
-        .toBe(true)
+      expect(dispatcher.handlers).toHaveLength(2)
+      expect(dispatcher.handlers.some(h => h instanceof HandlerA)).toBe(true)
+      expect(dispatcher.handlers.some(h => h instanceof HandlerB)).toBe(true)
     })
 
     it('should inject an empty array when no implementations are registered', async function () {
@@ -186,8 +164,7 @@ describe('build()', function () {
 
       const runner = di.build(Runner, [$i.allOf(Plugin)])
 
-      expect(runner.plugins)
-        .toEqual([])
+      expect(runner.plugins).toEqual([])
     })
   })
 
@@ -201,14 +178,12 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Connection, t => t
-        .toSelf())
+      di.bind(Connection, t => t.toSelf())
       await di.init()
 
       const worker = di.build(Worker, [$i.provide(Connection)])
 
-      expect(worker.connProvider.get())
-        .toBeInstanceOf(Connection)
+      expect(worker.connProvider.get()).toBeInstanceOf(Connection)
     })
 
     it('should inject a Provider whose .get() returns a new instance each call for transient deps', async function () {
@@ -220,9 +195,7 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Request, t => t
-        .toSelf()
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(Request, t => t.toSelf().lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const handler = di.build(Handler, [$i.provide(Request)])
@@ -230,10 +203,8 @@ describe('build()', function () {
       const r1 = handler.requestProvider.get()
       const r2 = handler.requestProvider.get()
 
-      expect(r1)
-        .toBeInstanceOf(Request)
-      expect(r2)
-        .toBeInstanceOf(Request)
+      expect(r1).toBeInstanceOf(Request)
+      expect(r2).toBeInstanceOf(Request)
       expect(r1).not.toBe(r2)
     })
 
@@ -248,20 +219,15 @@ describe('build()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(ValidatorA, t => t
-        .toSelf()
-        .extends(Validator))
+      di.bind(ValidatorA, t => t.toSelf().extends(Validator))
 
-      di.bind(ValidatorB, t => t
-        .toSelf()
-        .extends(Validator))
+      di.bind(ValidatorB, t => t.toSelf().extends(Validator))
       await di.init()
 
       const pipeline = di.build(Pipeline, [$i.allOf($i.provide(Validator))])
 
       const validators = pipeline.validatorsProvider.get()
-      expect(validators)
-        .toHaveLength(2)
+      expect(validators).toHaveLength(2)
     })
   })
 })
@@ -272,15 +238,13 @@ describe('when target type is registered in the container', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(Service, t => t
-      .toSelf())
+    di.bind(Service, t => t.toSelf())
     await di.init()
 
     const singleton = di.get(Service)
     const built = di.build(Service)
 
-    expect(built)
-      .toBeInstanceOf(Service)
+    expect(built).toBeInstanceOf(Service)
     expect(built).not.toBe(singleton)
   })
 
@@ -297,29 +261,19 @@ describe('when target type is registered in the container', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(HandlerA, t => t
-      .toSelf()
-      .extends(Handler))
+    di.bind(HandlerA, t => t.toSelf().extends(Handler))
 
-    di.bind(HandlerB, t => t
-      .toSelf()
-      .extends(Handler))
+    di.bind(HandlerB, t => t.toSelf().extends(Handler))
 
-    di.bind(Dispatcher, t => t
-      .toSelf()
-      .extends(Handler))
+    di.bind(Dispatcher, t => t.toSelf().extends(Handler))
     await di.init()
 
     const dispatcher = di.build(Dispatcher, [$i.allOf(Handler)])
 
-    expect(dispatcher.handlers)
-      .toHaveLength(3)
-    expect(dispatcher.handlers.some(h => h instanceof HandlerA))
-      .toBe(true)
-    expect(dispatcher.handlers.some(h => h instanceof HandlerB))
-      .toBe(true)
-    expect(dispatcher.handlers.some(h => h instanceof Dispatcher))
-      .toBe(true)
+    expect(dispatcher.handlers).toHaveLength(3)
+    expect(dispatcher.handlers.some(h => h instanceof HandlerA)).toBe(true)
+    expect(dispatcher.handlers.some(h => h instanceof HandlerB)).toBe(true)
+    expect(dispatcher.handlers.some(h => h instanceof Dispatcher)).toBe(true)
   })
 })
 
@@ -332,8 +286,7 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('name'), t => t
-        .toValue('worker'))
+      di.bind(token<any>('name'), t => t.toValue('worker'))
       await di.init()
 
       const factory = di.builder(Task, [token<any>('name')])
@@ -341,10 +294,8 @@ describe('builder()', function () {
       const a = factory()
       const b = factory()
 
-      expect(a)
-        .toBeInstanceOf(Task)
-      expect(b)
-        .toBeInstanceOf(Task)
+      expect(a).toBeInstanceOf(Task)
+      expect(b).toBeInstanceOf(Task)
       expect(a).not.toBe(b)
     })
 
@@ -357,8 +308,7 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Config, t => t
-        .toSelf())
+      di.bind(Config, t => t.toSelf())
       await di.init()
 
       const factory = di.builder(Service, [Config])
@@ -367,8 +317,7 @@ describe('builder()', function () {
       const svc2 = factory()
 
       expect(svc1).not.toBe(svc2)
-      expect(svc1.config)
-        .toBe(svc2.config)
+      expect(svc1.config).toBe(svc2.config)
     })
 
     it('should capture even transient deps eagerly — all factory calls share the same dep instance', async function () {
@@ -380,9 +329,7 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Tracker, t => t
-        .toSelf()
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(Tracker, t => t.toSelf().lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const factory = di.builder(Consumer, [Tracker])
@@ -390,8 +337,7 @@ describe('builder()', function () {
       const c1 = factory()
       const c2 = factory()
 
-      expect(c1.tracker)
-        .toBe(c2.tracker)
+      expect(c1.tracker).toBe(c2.tracker)
     })
 
     it('should allow re-resolution on each .get() call when using $i.provide()', async function () {
@@ -403,9 +349,7 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Session, t => t
-        .toSelf()
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(Session, t => t.toSelf().lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const factory = di.builder(Controller, [$i.provide(Session)])
@@ -413,14 +357,12 @@ describe('builder()', function () {
       const ctrl1 = factory()
       const ctrl2 = factory()
 
-      expect(ctrl1.sessionProvider)
-        .toBe(ctrl2.sessionProvider)
+      expect(ctrl1.sessionProvider).toBe(ctrl2.sessionProvider)
 
       const s1 = ctrl1.sessionProvider.get()
       const s2 = ctrl1.sessionProvider.get()
 
-      expect(s1)
-        .toBeInstanceOf(Session)
+      expect(s1).toBeInstanceOf(Session)
       expect(s1).not.toBe(s2)
     })
   })
@@ -436,17 +378,14 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t
-        .toValue('hello'))
+      di.bind(token<any>('a'), t => t.toValue('hello'))
       await di.init()
 
       const factory = di.builder(Service, [token<any>('a'), null])
       const instance = factory()
 
-      expect(instance.a)
-        .toBe('hello')
-      expect(instance.b)
-        .toBeNull()
+      expect(instance.a).toBe('hello')
+      expect(instance.b).toBeNull()
     })
 
     it('should pass undefined to the constructor when the injection is undefined', async function () {
@@ -459,17 +398,14 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t
-        .toValue('hello'))
+      di.bind(token<any>('a'), t => t.toValue('hello'))
       await di.init()
 
       const factory = di.builder(Service, [token<any>('a'), undefined])
       const instance = factory()
 
-      expect(instance.a)
-        .toBe('hello')
-      expect(instance.b)
-        .toBeUndefined()
+      expect(instance.a).toBe('hello')
+      expect(instance.b).toBeUndefined()
     })
 
     it('should pass undefined for positions not covered by the injection array', async function () {
@@ -482,17 +418,14 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t
-        .toValue('hello'))
+      di.bind(token<any>('a'), t => t.toValue('hello'))
       await di.init()
 
       const factory = di.builder(Service, [token<any>('a')])
       const instance = factory()
 
-      expect(instance.a)
-        .toBe('hello')
-      expect(instance.b)
-        .toBeUndefined()
+      expect(instance.a).toBe('hello')
+      expect(instance.b).toBeUndefined()
     })
 
     it('should inject only the specified position — null passes raw null for other positions', async function () {
@@ -505,17 +438,14 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('second'), t => t
-        .toValue('world'))
+      di.bind(token<any>('second'), t => t.toValue('world'))
       await di.init()
 
       const factory = di.builder(Service, [null, token<any>('second')])
       const instance = factory()
 
-      expect(instance.first)
-        .toBeNull()
-      expect(instance.second)
-        .toBe('world')
+      expect(instance.first).toBeNull()
+      expect(instance.second).toBe('world')
     })
   })
 
@@ -525,8 +455,7 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t
-        .toValue('x'))
+      di.bind(token<any>('a'), t => t.toValue('x'))
       await di.init()
 
       expect(() => di.builder(fn, [token<any>('a')])).not.toThrow()
@@ -542,8 +471,7 @@ describe('builder()', function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.init()
 
-      expect(() => di.build(Consumer, [Missing]))
-        .toThrow(ErrNoResolutionForKey)
+      expect(() => di.build(Consumer, [Missing])).toThrow(ErrNoResolutionForKey)
     })
 
     it('should throw ErrMissingInjectionKey when an InjectionDescriptor with no key is passed', async function () {
@@ -556,8 +484,7 @@ describe('builder()', function () {
 
       // { optional: true } is a valid InjectionDescriptor but has no key —
       // ctx.key ends up undefined because builder() casts injection.key as Key without guarding
-      expect(() => di.builder(Service, [{ optional: true }]))
-        .toThrow(ErrMissingInjectionKey)
+      expect(() => di.builder(Service, [{ optional: true }])).toThrow(ErrMissingInjectionKey)
     })
   })
 })

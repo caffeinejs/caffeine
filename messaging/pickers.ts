@@ -1,4 +1,5 @@
 import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/std/framework'
+
 import type { Message } from './message.js'
 
 /**
@@ -23,10 +24,7 @@ export interface MessagePickers {
   /** The 1-based delivery attempt. */
   attempt(): ParameterPickOptions<Message>
   /** A custom extractor over the raw message. */
-  pick(
-    fn: (message: Message) => unknown | Promise<unknown>,
-    opts?: { async?: boolean },
-  ): ParameterPickOptions<Message>
+  pick(fn: (message: Message) => unknown | Promise<unknown>, opts?: { async?: boolean }): ParameterPickOptions<Message>
 }
 
 function payload(): ParameterPickOptions<Message> {

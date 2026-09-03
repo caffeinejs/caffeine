@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+
 import { createLiveAccessors } from '../accessor.js'
 
 interface AppConfig {
-  http: { host: string, port: number }
-  db: { url: string, pool: number }
+  http: { host: string; port: number }
+  db: { url: string; pool: number }
   origin: string
   tags: string[]
 }
@@ -83,7 +84,12 @@ describe('createLiveAccessors', () => {
   })
 
   it('getOwnPropertyDescriptor returns the actual value', () => {
-    const data = { http: { host: 'localhost', port: 3000 }, db: { url: 'postgres://localhost', pool: 5 }, origin: 'o', tags: [] }
+    const data = {
+      http: { host: 'localhost', port: 3000 },
+      db: { url: 'postgres://localhost', pool: 5 },
+      origin: 'o',
+      tags: [],
+    }
     const config = createLiveAccessors(() => data)
     const originDesc = Object.getOwnPropertyDescriptor(config, 'origin')
     expect(originDesc).toBeDefined()
@@ -97,7 +103,7 @@ describe('createLiveAccessors', () => {
     const data = { x: 1 }
     const config = createLiveAccessors(() => data)
     expect(() => {
-      (config as Record<string, unknown>).x = 99
+      ;(config as Record<string, unknown>).x = 99
     }).toThrow(expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_READ_ONLY' }))
   })
 })

@@ -133,9 +133,9 @@ Pre-destroy hooks are **not** called on the old instances during refresh.
 
 ## Summary
 
-| Phase | How to enter | What happens |
-|---|---|---|
-| Construction | `new CaffeineIoC(...)` | Bindings registered, no instances |
-| Init | `await di.init()` | Graph validated, singletons created |
-| Resolution | `di.get(...)` | Instances returned per scope rules |
-| Disposal | `await di.dispose()` | PreDestroy hooks, instances released |
+| Phase        | How to enter           | What happens                         |
+| ------------ | ---------------------- | ------------------------------------ |
+| Construction | `new CaffeineIoC(...)` | Bindings registered, no instances    |
+| Init         | `await di.init()`      | Graph validated, singletons created  |
+| Resolution   | `di.get(...)`          | Instances returned per scope rules   |
+| Disposal     | `await di.dispose()`   | PreDestroy hooks, instances released |

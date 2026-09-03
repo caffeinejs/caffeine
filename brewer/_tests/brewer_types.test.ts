@@ -1,6 +1,7 @@
-import { describe, expectTypeOf, it } from 'vitest'
-import { $t } from '@caffeinejs/std'
 import { Router, blend, createWebApplication, type RouteDef, type RoutesOf } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std'
+import { describe, expectTypeOf, it } from 'vitest'
+
 import { brewer, type Fetchable } from '../brewer.js'
 import type { RouteContract } from '../contract.js'
 import type { BrewResponse } from '../response.js'
@@ -8,8 +9,10 @@ import type { BrewResponse } from '../response.js'
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
 
 const pets = new Router('/pets')
-  .get('/').handler(() => [] as Array<{ id: number, name: string }>)
-  .post('/').schema({ body: petSchema })
+  .get('/')
+  .handler(() => [] as Array<{ id: number; name: string }>)
+  .post('/')
+  .schema({ body: petSchema })
   .handler(() => ({ created: true }))
   .get('/:id')
   .schema({ params: $t.Object({ id: $t.Integer() }), response: { 200: petSchema } })
@@ -24,7 +27,7 @@ const pets = new Router('/pets')
 const app = createWebApplication().build().mount(pets)
 
 type App = typeof app
-type Pet = { id: number, name: string }
+type Pet = { id: number; name: string }
 
 const client = brewer<App>('http://localhost')
 
@@ -34,13 +37,12 @@ const client = brewer<App>('http://localhost')
  * These calls would reach the network, and what is under test is the type of the call rather than its result — so
  * the body is built and dropped. `test:typecheck` is what actually reads this file.
  */
-function typeOnly(_assertions: () => unknown): void { }
+function typeOnly(_assertions: () => unknown): void {}
 
 describe('the route contract', () => {
   it('is the shape the server describes a route with', () => {
     // The guard that makes the structural copy safe: if either side changes, this stops compiling.
-    expectTypeOf<RouteDef<'GET', '/pets', unknown, unknown, unknown, unknown, unknown>>()
-      .toExtend<RouteContract>()
+    expectTypeOf<RouteDef<'GET', '/pets', unknown, unknown, unknown, unknown, unknown>>().toExtend<RouteContract>()
   })
 })
 
@@ -112,16 +114,16 @@ describe('the init argument', () => {
     typeOnly(() => {
       expectTypeOf(client.pets.post).toBeCallableWith({ body: { id: 1, name: 'Rex' } })
       // @ts-expect-error -- the body is declared, so it is required
-      client.pets.post()
+      void client.pets.post()
     })
   })
 
   it('requires a declared query and headers', () => {
     typeOnly(() => {
       // @ts-expect-error -- both are declared by the route
-      client.pets.search.get()
+      void client.pets.search.get()
       // @ts-expect-error -- the querystring schema says q is a string
-      client.pets.search.get({ query: { q: 1 }, headers: { 'x-tenant': 't1' } })
+      void client.pets.search.get({ query: { q: 1 }, headers: { 'x-tenant': 't1' } })
     })
   })
 
@@ -144,7 +146,7 @@ describe('the escape hatch', () => {
   it('rejects a path the method does not answer', () => {
     typeOnly(() => {
       // @ts-expect-error -- there is no POST /pets/:id
-      client.$request('POST', '/pets/:id', { params: { id: 1 } })
+      void client.$request('POST', '/pets/:id', { params: { id: 1 } })
     })
   })
 })

@@ -1,7 +1,7 @@
 import type { Call, CallFactory } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
-import { getAPI } from './decorators/registrar/registrar.js'
 import type { ClassSpec, MethodSpec } from './decorators/registrar/index.js'
+import { getAPI } from './decorators/registrar/registrar.js'
 import { ErrFetchyEmptyClient, ErrFetchyInvalidRoute, ErrFetchyMissingAPIDecorator } from './errors.js'
 import { mergeHeaders } from './headers_util.js'
 import type { Interceptor } from './interceptor.js'
@@ -47,7 +47,10 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
     throw new ErrFetchyInvalidRoute(name, 'more than one @Body() parameter is not allowed')
   }
 
-  if (bodyParamCount > 0 && (spec.httpMethod === 'GET' || spec.httpMethod === 'HEAD' || spec.httpMethod === 'OPTIONS')) {
+  if (
+    bodyParamCount > 0 &&
+    (spec.httpMethod === 'GET' || spec.httpMethod === 'HEAD' || spec.httpMethod === 'OPTIONS')
+  ) {
     throw new ErrFetchyInvalidRoute(name, `${spec.httpMethod} requests cannot have a body`)
   }
 

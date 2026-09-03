@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+
 import { createConfigDiagnostics } from '../diagnostics.js'
 import type { ConfigEntry, ConfigSnapshot } from '../types.js'
 
-function makeSnapshot(data: Record<string, { value: unknown, origin: string }>): ConfigSnapshot {
+function makeSnapshot(data: Record<string, { value: unknown; origin: string }>): ConfigSnapshot {
   const values = new Map<string, ConfigEntry>(
     Object.entries(data).map(([k, v]) => [k, { key: k, value: v.value as never, origin: v.origin }]),
   )
@@ -10,7 +11,7 @@ function makeSnapshot(data: Record<string, { value: unknown, origin: string }>):
 }
 
 interface TestConfig {
-  db: { host: string, port: number }
+  db: { host: string; port: number }
 }
 
 describe('ConfigDiagnostics', () => {

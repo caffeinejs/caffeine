@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
 import { PostProcessor } from '../../post_processor.js'
 import { ResolutionContext } from '../../resolution_context.js'
-import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
+import { forceGC } from './_gc.js'
 
 describe('PostProcessor memory', function () {
   it('instances resolved through a post processor are GC-able after dispose()', async function () {
@@ -20,8 +21,7 @@ describe('PostProcessor memory', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(postProcessor)
-    di.bind(Svc, t => t
-      .toSelf())
+    di.bind(Svc, t => t.toSelf())
     await di.init()
 
     const isCollected = trackForCollection(di.get(Svc)!)
@@ -29,8 +29,7 @@ describe('PostProcessor memory', function () {
     await di.dispose()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
   })
 
   it('post processor does not retain instances after dispose()', async function () {
@@ -50,15 +49,13 @@ describe('PostProcessor memory', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(postProcessor)
-    di.bind(Svc, t => t
-      .toSelf())
+    di.bind(Svc, t => t.toSelf())
     await di.init()
     di.get(Svc)
 
     await di.dispose()
     await forceGC()
 
-    expect(seen.every(ref => ref.deref() === undefined))
-      .toBe(true)
+    expect(seen.every(ref => ref.deref() === undefined)).toBe(true)
   })
 })

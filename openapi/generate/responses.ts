@@ -1,6 +1,7 @@
 import type { Route } from '@caffeinejs/http'
-import type { OpenAPIOptions } from '../options.js'
+
 import type { ResponseDetail } from '../decorators/detail.js'
+import type { OpenAPIOptions } from '../options.js'
 import type { HeaderObject, ResponseObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
 
@@ -78,9 +79,11 @@ export function deriveResponses(
       ...(existing?.headers === undefined ? {} : { headers: existing.headers }),
       ...(key === '204'
         ? {}
-        : { content: Object.fromEntries(
-            contentTypesFor(key, successStatus, successTypes).map(type => [type, { schema }]),
-          ) }),
+        : {
+            content: Object.fromEntries(
+              contentTypesFor(key, successStatus, successTypes).map(type => [type, { schema }]),
+            ),
+          }),
     })
   }
 
@@ -112,9 +115,10 @@ function addInferred(
     return
   }
 
-  const schema = options.errorSchema === undefined
-    ? undefined
-    : registry.register(options.errorSchema, 'output', `${context} response.${status}`)
+  const schema =
+    options.errorSchema === undefined
+      ? undefined
+      : registry.register(options.errorSchema, 'output', `${context} response.${status}`)
 
   responses.set(status, {
     description: REASONS[status] ?? 'Error',
@@ -135,7 +139,9 @@ function applyDetail(
       ...authored,
       description: authored.description ?? existing?.description ?? REASONS[key] ?? 'Response',
       ...(authored.content === undefined
-        ? existing?.content === undefined ? {} : { content: existing.content }
+        ? existing?.content === undefined
+          ? {}
+          : { content: existing.content }
         : { content: { ...existing?.content, ...authored.content } }),
     })
   }
@@ -205,10 +211,12 @@ function hasRequestSchema(route: Route<unknown>): boolean {
     return false
   }
 
-  return schema.params !== undefined
-    || schema.querystring !== undefined
-    || schema.headers !== undefined
-    || schema.body !== undefined
+  return (
+    schema.params !== undefined ||
+    schema.querystring !== undefined ||
+    schema.headers !== undefined ||
+    schema.body !== undefined
+  )
 }
 
 // Numeric statuses ascending, then the wildcard ranges, then `default` — the order a reader expects.

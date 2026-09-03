@@ -7,8 +7,7 @@ export interface RouteParam {
 
 export function Params(params: RouteParam[]) {
   return function (target: Function, context: ClassMethodDecoratorContext): void {
-    Tag(Symbol.for('controller:params'), new Map()
-      .set(context.name, params))(target, context)
+    Tag(Symbol.for('controller:params'), new Map().set(context.name, params))(target, context)
   }
 }
 

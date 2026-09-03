@@ -1,25 +1,23 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
 import { Scopes } from '../../scope.js'
-import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
+import { forceGC } from './_gc.js'
 
 describe('Refresh scope memory', function () {
   it('releases refresh-scoped instance after resetInstances()', async function () {
     class RefSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(RefSvc, t => t
-      .toSelf()
-      .lifetime(Scopes.REFRESH))
+    di.bind(RefSvc, t => t.toSelf().lifetime(Scopes.REFRESH))
     await di.init()
     const isCollected = trackForCollection(di.get(RefSvc)!)
 
     await di.resetInstances()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
     await di.dispose()
   })
 
@@ -27,26 +25,21 @@ describe('Refresh scope memory', function () {
     class RefSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(RefSvc, t => t
-      .toSelf()
-      .lifetime(Scopes.REFRESH))
+    di.bind(RefSvc, t => t.toSelf().lifetime(Scopes.REFRESH))
     await di.init()
     const isCollected = trackForCollection(di.get(RefSvc)!)
 
     await di.dispose()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
   })
 
   it('releases old instance and retains new one after resetInstance()', async function () {
     class RefSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(RefSvc, t => t
-      .toSelf()
-      .lifetime(Scopes.REFRESH))
+    di.bind(RefSvc, t => t.toSelf().lifetime(Scopes.REFRESH))
     await di.init()
 
     const oldRef = trackForCollection(di.get(RefSvc)!)
@@ -55,10 +48,8 @@ describe('Refresh scope memory', function () {
 
     await forceGC()
 
-    expect(oldRef())
-      .toBe(true)
-    expect(newInstance)
-      .toBeInstanceOf(RefSvc)
+    expect(oldRef()).toBe(true)
+    expect(newInstance).toBeInstanceOf(RefSvc)
     await di.dispose()
   })
 })

@@ -10,6 +10,7 @@ import type {
   ProducerBinding,
 } from '@caffeinejs/messaging'
 import { sleep } from '@caffeinejs/messaging'
+
 import { defaultDeserializers, defaultKafkaClients, defaultSerializers } from './clients.js'
 import {
   type ConsumerClient,
@@ -85,7 +86,7 @@ class KafkaBinder implements Binder {
   readonly #config: ResolvedKafkaConfig
   readonly #clients: KafkaClients
   readonly #onError?: (error: unknown) => void
-  readonly #consumers: Array<{ stream: ConsumerStream, consumer: ConsumerClient }> = []
+  readonly #consumers: Array<{ stream: ConsumerStream; consumer: ConsumerClient }> = []
   #producer?: ProducerClient
   #stopped = false
 
@@ -163,7 +164,7 @@ class KafkaBinder implements Binder {
           if (deserError !== undefined) {
             // Poison record: never invoke the handler; advance past it so it does not block the partition.
             if (ackMode !== 'auto') {
-              msg.commit()
+              void msg.commit()
             }
             continue
           }
@@ -257,7 +258,7 @@ class KafkaDeliveryControl implements DeliveryControl {
   #commit(): Promise<void> {
     // `auto` leaves commits to platformatic autocommit; otherwise advance the offset past this record.
     if (this.#ackMode !== 'auto') {
-      this.#message.commit()
+      void this.#message.commit()
     }
     return Promise.resolve()
   }

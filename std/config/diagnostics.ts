@@ -67,9 +67,12 @@ function redactEntries(
   const out = new Map<string, ConfigEntry>()
 
   for (const [key, entry] of entries) {
-    out.set(key, isSecretPath(secrets, entry.key)
-      ? { ...entry, value: redact(secrets, entry.key, entry.value) as ConfigValue }
-      : entry)
+    out.set(
+      key,
+      isSecretPath(secrets, entry.key)
+        ? { ...entry, value: redact(secrets, entry.key, entry.value) as ConfigValue }
+        : entry,
+    )
   }
 
   return out

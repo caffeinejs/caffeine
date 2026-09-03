@@ -1,6 +1,6 @@
 import { ErrFetchyInvalidDecoratorTarget } from '../errors.js'
-import { configureMethod } from './registrar/registrar.js'
 import type { APIParameterSpec } from './params/api_parameter_spec.js'
+import { configureMethod } from './registrar/registrar.js'
 
 /**
  * Binds a method's arguments to request parts, in declaration order. TC39 has no parameter
@@ -8,10 +8,7 @@ import type { APIParameterSpec } from './params/api_parameter_spec.js'
  * (`Param`, `Query`, `QueryName`, `Header`, `Body`, `Field`, `SignalParam`) instead.
  */
 export function Params(specs: APIParameterSpec[]) {
-  return function (
-    _value: unknown,
-    context: ClassMethodDecoratorContext | ClassFieldDecoratorContext,
-  ): void {
+  return function (_value: unknown, context: ClassMethodDecoratorContext | ClassFieldDecoratorContext): void {
     if (context.kind !== 'method' && context.kind !== 'field') {
       throw new ErrFetchyInvalidDecoratorTarget('Params', 'a method or field')
     }

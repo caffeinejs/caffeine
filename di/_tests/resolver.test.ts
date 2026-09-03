@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { CaffeineIoC } from '../container.js'
 import { ErrInvalidContainerState } from '../errors.js'
 import { $i } from '../injection.js'
@@ -20,11 +21,11 @@ class B extends Validator {
   }
 }
 
-class Singleton { }
+class Singleton {}
 
-class Transient { }
+class Transient {}
 
-class Absent { }
+class Absent {}
 
 describe('resolver()', function () {
   async function container() {
@@ -50,12 +51,14 @@ describe('resolver()', function () {
   describe('given an object spec', function () {
     it('should resolve every field, honouring each binding scope', async function () {
       const di = await container()
-      const resolve = di.resolver($i.object({
-        singleton: Singleton,
-        transient: Transient,
-        absent: $i.optional(Absent),
-        validators: $i.allOf(Validator),
-      }))
+      const resolve = di.resolver(
+        $i.object({
+          singleton: Singleton,
+          transient: Transient,
+          absent: $i.optional(Absent),
+          validators: $i.allOf(Validator),
+        }),
+      )
 
       const first = resolve()
       const second = resolve()

@@ -1,4 +1,11 @@
-import { defineKeyedFeature, type KeyedFeature, type PluginContext, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
+import {
+  defineKeyedFeature,
+  type KeyedFeature,
+  type PluginContext,
+  type ServiceAPI,
+  type TypeLambda,
+} from '@caffeinejs/std'
+
 import { MessagingBuilder } from './builder.js'
 import type { MessagingContainer } from './engine.js'
 import { DEFAULT_BINDER, Keys } from './symbols.js'

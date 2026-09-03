@@ -5,10 +5,7 @@ function decorateVerb(httpMethod: string, path: string) {
   // Return type deliberately `any`: this must satisfy both the method decorator return type
   // (`void | Method`) and the field decorator return type (`void | Initializer`) at each use
   // site, and no single concrete type (including `unknown`) is assignable to both at once.
-  return function (
-    _value: unknown,
-    context: ClassMethodDecoratorContext | ClassFieldDecoratorContext,
-  ): any {
+  return function (_value: unknown, context: ClassMethodDecoratorContext | ClassFieldDecoratorContext): any {
     if (context.kind !== 'method' && context.kind !== 'field') {
       throw new ErrFetchyInvalidDecoratorTarget(httpMethod, 'a method or field')
     }

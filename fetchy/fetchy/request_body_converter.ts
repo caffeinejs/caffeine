@@ -20,7 +20,12 @@ export const JSONRequestBodyConverter: RequestBodyConverter = {
       return null
     }
 
-    if (typeof value === 'string' || value instanceof Blob || value instanceof URLSearchParams || ArrayBuffer.isView(value)) {
+    if (
+      typeof value === 'string' ||
+      value instanceof Blob ||
+      value instanceof URLSearchParams ||
+      ArrayBuffer.isView(value)
+    ) {
       return value as RequestBody
     }
 

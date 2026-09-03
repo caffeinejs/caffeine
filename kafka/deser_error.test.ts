@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import { createApplication } from '@caffeinejs/std'
+import { describe, expect, it } from 'vitest'
+
 import { deferred, FakeBroker } from './broker.testkit.js'
 import type { DeserializationErrorRecord, KafkaMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
@@ -25,13 +26,15 @@ class DeserConsumer {
 describe('deserialization-error path', () => {
   it('routes a deserialization failure to onDeserializationError, not the listener', async () => {
     delivered = undefined
-    const received = deferred<{ error: unknown, record: DeserializationErrorRecord }>()
+    const received = deferred<{ error: unknown; record: DeserializationErrorRecord }>()
 
     const broker = new FakeBroker({ applyDeserializers: true })
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k
-      .brokers('b')
-      .groupId('de-group')
-      .onDeserializationError((error, record) => received.resolve({ error, record })))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k
+        .brokers('b')
+        .groupId('de-group')
+        .onDeserializationError((error, record) => received.resolve({ error, record })),
+    )
     const built = app.build()
     await built.run()
 

@@ -1,8 +1,34 @@
 import type { Ctor } from '@caffeinejs/di'
-import { HealthIndicator, type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, type ServiceBootstrapIn } from '@caffeinejs/std'
-import { defineFeatureConfig, instanceNamespace, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import {
+  HealthIndicator,
+  type ServiceBeforeBootstrapIn,
+  type Service,
+  type ServiceAPI,
+  type ServiceBootstrapIn,
+} from '@caffeinejs/std'
+import {
+  defineFeatureConfig,
+  instanceNamespace,
+  type ConfigAccessors,
+  type ConfigHandle,
+  type ConfigSlice,
+} from '@caffeinejs/std/config'
+
 import { defaultDeserializers, defaultSerializers } from './clients.js'
-import { KAFKA_CONFIG_NAMESPACE, kafkaConfigSchema, type DeserializationErrorHandler, type KafkaAckMode, type KafkaClients, type KafkaConfigSlice, type KafkaDeserializers, type KafkaMessage, type ResolvedKafkaConfig, type KafkaSerializers, resolveConfig, type TopicProvisioning } from './config.js'
+import {
+  KAFKA_CONFIG_NAMESPACE,
+  kafkaConfigSchema,
+  type DeserializationErrorHandler,
+  type KafkaAckMode,
+  type KafkaClients,
+  type KafkaConfigSlice,
+  type KafkaDeserializers,
+  type KafkaMessage,
+  type ResolvedKafkaConfig,
+  type KafkaSerializers,
+  resolveConfig,
+  type TopicProvisioning,
+} from './config.js'
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
 import { KafkaHealthIndicator } from './health.js'
@@ -194,9 +220,8 @@ export class KafkaBuilder<C = unknown> implements Service {
       schema: kafkaConfigSchema,
       values: {
         // A builder method is a default: `KAFKA__DEFAULT__BROKERS` overrides whatever `.brokers(...)` set.
-        brokers: this.#brokers === undefined
-          ? undefined
-          : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers],
+        brokers:
+          this.#brokers === undefined ? undefined : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers],
         clientId: this.#clientId,
         groupId: this.#groupId,
         ackMode: this.#ackMode,
@@ -251,15 +276,16 @@ export class KafkaBuilder<C = unknown> implements Service {
     const tKey = kafkaTemplate(this.#name)
     const container = kit.container
 
-    kit.container
-      .bind(rKey, t => t
-      // The config object is the slice's own and is live, so a refresh reaches whatever reads through it.
+    kit.container.bind(rKey, t =>
+      t
+        // The config object is the slice's own and is live, so a refresh reaches whatever reads through it.
         .toValue<KafkaRuntime>({
           name: this.#name,
           container,
           config: resolved.config,
           clients: this.#clients,
-        }))
+        }),
+    )
 
     // The default instance's template is bound under the KafkaTemplate class (so it can be injected by type),
     // carrying tKey as a name alias. Named instances bind under their name key only.
@@ -269,19 +295,17 @@ export class KafkaBuilder<C = unknown> implements Service {
       kit.container.bind(tKey, t => t.toClass(KafkaTemplate, [rKey]))
     }
 
-    kit.container
-      .bind(containerKey(this.#name), t => t
-        .toClass(KafkaListenerContainer, [rKey, tKey])
-        .labels(Keys.KAFKA_CONTAINER))
+    kit.container.bind(containerKey(this.#name), t =>
+      t.toClass(KafkaListenerContainer, [rKey, tKey]).labels(Keys.KAFKA_CONTAINER),
+    )
 
     // Registered once, covering every configured instance. Inert unless the application exposes the probes, and
     // then it is what makes readiness mean "serving HTTP *and* consuming" rather than "the port is open".
     if (!kit.container.has(KafkaHealthIndicator)) {
       const container = kit.container
-      kit.container
-        .bind(KafkaHealthIndicator, t => t
-          .toFactory(() => new KafkaHealthIndicator(container))
-          .extends(HealthIndicator))
+      kit.container.bind(KafkaHealthIndicator, t =>
+        t.toFactory(() => new KafkaHealthIndicator(container)).extends(HealthIndicator),
+      )
     }
 
     return Promise.resolve()

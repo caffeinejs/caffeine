@@ -1,19 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
-import { token } from '../key.js'
-import { Named } from '../decorators/named.js'
+
 import { CaffeineIoC } from '../container.js'
-import { Inject } from '../decorators/inject.js'
-import { $i } from '../injection.js'
-import { UseFactory } from '../decorators/use_factory.js'
-import { Provides } from '../decorators/provides.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
-import { Extends } from '../decorators/extends.js'
-import { Primary } from '../decorators/primary.js'
-import { PreDestroy } from '../decorators/pre_destroy.js'
-import { PostConstruct } from '../decorators/post_construct.js'
-import { valueFactory } from '../internal/core/factory/value.js'
-import { Injectable } from '../decorators/injectable.js'
 import { Configuration } from '../decorators/configuration.js'
+import { Extends } from '../decorators/extends.js'
+import { Inject } from '../decorators/inject.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Named } from '../decorators/named.js'
+import { PostConstruct } from '../decorators/post_construct.js'
+import { PreDestroy } from '../decorators/pre_destroy.js'
+import { Primary } from '../decorators/primary.js'
+import { Provides } from '../decorators/provides.js'
+import { UseFactory } from '../decorators/use_factory.js'
+import { $i } from '../injection.js'
+import { valueFactory } from '../internal/core/factory/value.js'
+import { token } from '../key.js'
 
 describe('Real World', function () {
   const initSpy = vi.fn()
@@ -233,31 +234,20 @@ describe('Real World', function () {
     await di.init()
     const controller = di.get(Controller)
 
-    expect(controller)
-      .toBeInstanceOf(Controller)
-    expect(controller.render())
-      .toEqual('rendered - actual')
-    expect(controller.productName())
-      .toContain(Product.name)
+    expect(controller).toBeInstanceOf(Controller)
+    expect(controller.render()).toEqual('rendered - actual')
+    expect(controller.productName()).toContain(Product.name)
     expect(() => controller.saveUser()).not.toThrow()
-    expect(controller.sendMessage())
-      .toContain('sms')
-    expect(controller.sendMessage())
-      .toContain('am')
-    expect(controller.sendMessage())
-      .toContain('as')
-    expect(controller.sendMessage())
-      .toContain('af')
+    expect(controller.sendMessage()).toContain('sms')
+    expect(controller.sendMessage()).toContain('am')
+    expect(controller.sendMessage()).toContain('as')
+    expect(controller.sendMessage()).toContain('af')
 
     await di.dispose()
 
-    expect(initSpy)
-      .toHaveBeenCalledTimes(1)
-    expect(destroySpy)
-      .toHaveBeenCalledTimes(1)
-    expect(sendSpy)
-      .toHaveBeenCalledTimes(1)
-    expect(userSpy)
-      .toHaveBeenCalledTimes(1)
+    expect(initSpy).toHaveBeenCalledTimes(1)
+    expect(destroySpy).toHaveBeenCalledTimes(1)
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+    expect(userSpy).toHaveBeenCalledTimes(1)
   })
 })

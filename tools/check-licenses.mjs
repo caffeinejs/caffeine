@@ -29,9 +29,7 @@ function shouldSkipWorkspace(dir) {
   if (rel === 'benchmarks' || rel.startsWith('benchmarks/')) {
     return true
   }
-  return SKIP_WORKSPACE_PREFIXES.some(
-    prefix => rel === prefix.replace(/\/$/, '') || rel.startsWith(prefix),
-  )
+  return SKIP_WORKSPACE_PREFIXES.some(prefix => rel === prefix.replace(/\/$/, '') || rel.startsWith(prefix))
 }
 
 function expandWorkspacePattern(pattern) {

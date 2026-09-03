@@ -7,6 +7,7 @@ import {
   type ConfigHandle,
   type ConfigSlice,
 } from '@caffeinejs/std/config'
+
 import { VIEW_CONFIG_KEYS, VIEW_CONFIG_NAMESPACE, viewConfigSchema, type ViewConfig } from './config.js'
 import type { ViewOptions } from './view.js'
 
@@ -155,19 +156,23 @@ export class ViewBuilder<C = unknown> {
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: viewConfigSchema,
       values: Object.fromEntries(
-        VIEW_CONFIG_KEYS
-          .filter(key => code[key as keyof ViewOptions] !== undefined)
-          .map(key => [key, code[key as keyof ViewOptions]]),
+        VIEW_CONFIG_KEYS.filter(key => code[key as keyof ViewOptions] !== undefined).map(key => [
+          key,
+          code[key as keyof ViewOptions],
+        ]),
       ),
     })
 
-    this.#resolved = slice.derive(published => ({
-      // Code first, configuration over it: a builder method is a default, like everywhere else. `engine` and
-      // the engine's own options only exist on the code side and survive untouched.
-      ...code,
-      ...published,
-      ...(this.#name === undefined ? {} : { propertyName: this.#name }),
-    }) as ViewOptions)
+    this.#resolved = slice.derive(
+      published =>
+        ({
+          // Code first, configuration over it: a builder method is a default, like everywhere else. `engine` and
+          // the engine's own options only exist on the code side and survive untouched.
+          ...code,
+          ...published,
+          ...(this.#name === undefined ? {} : { propertyName: this.#name }),
+        }) as ViewOptions,
+    )
   }
 
   /**

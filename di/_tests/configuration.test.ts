@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { Configuration } from '../decorators/configuration.js'
-import { Provides } from '../decorators/provides.js'
-import { Injectable } from '../decorators/injectable.js'
+
 import { CaffeineIoC } from '../container.js'
+import { Configuration } from '../decorators/configuration.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Provides } from '../decorators/provides.js'
 
 describe('@Configuration bean factory', function () {
   describe('with 2 injected dependencies', function () {

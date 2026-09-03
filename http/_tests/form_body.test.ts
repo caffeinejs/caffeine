@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { $p } from '../route_picker.js'
 
@@ -24,7 +25,11 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormObjectController)
-    const res = await app.fetch('/form-object/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'name=ada&age=36' })
+    const res = await app.fetch('/form-object/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'name=ada&age=36',
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ name: 'ada', age: '36' })
@@ -41,7 +46,11 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormArrayController)
-    const res = await app.fetch('/form-array/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'tag=a&tag=b' })
+    const res = await app.fetch('/form-array/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'tag=a&tag=b',
+    })
 
     expect(await res.json()).toEqual({ tag: ['a', 'b'] })
   })
@@ -57,7 +66,11 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormDecodeController)
-    const res = await app.fetch('/form-decode/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'msg=hello+world%21' })
+    const res = await app.fetch('/form-decode/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'msg=hello+world%21',
+    })
 
     expect(await res.json()).toEqual({ msg: 'hello world!' })
   })
@@ -73,7 +86,11 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormCharsetController)
-    const res = await app.fetch('/form-charset/echo', { method: 'POST', headers: { 'content-type': `${FORM}; charset=utf-8` }, body: 'name=ada' })
+    const res = await app.fetch('/form-charset/echo', {
+      method: 'POST',
+      headers: { 'content-type': `${FORM}; charset=utf-8` },
+      body: 'name=ada',
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ name: 'ada' })
@@ -90,7 +107,11 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormProtoController)
-    const res = await app.fetch('/form-proto/echo', { method: 'POST', headers: { 'content-type': FORM }, body: '__proto__[polluted]=yes&__proto__=yes' })
+    const res = await app.fetch('/form-proto/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: '__proto__[polluted]=yes&__proto__=yes',
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ polluted: null })
@@ -125,7 +146,11 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormBareKeyController)
-    const res = await app.fetch('/form-bare-key/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'ok' })
+    const res = await app.fetch('/form-bare-key/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'ok',
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: '' })

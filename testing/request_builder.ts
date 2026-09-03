@@ -16,7 +16,7 @@ export class RequestInitBuilder {
   #body?: RequestInit['body']
   #path?: string
   readonly #query: [string, string][] = []
-  readonly #init: { redirect?: RequestInit['redirect'], signal?: RequestInit['signal'] } = {}
+  readonly #init: { redirect?: RequestInit['redirect']; signal?: RequestInit['signal'] } = {}
 
   method(method: string): this {
     this.#method = method

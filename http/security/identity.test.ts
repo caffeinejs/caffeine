@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { Claim, Identity, Principal, newAnonymousUser } from './identity.js'
 
 /**
@@ -51,10 +52,11 @@ describe('Identity', () => {
 })
 
 describe('Principal', () => {
-  const principal = () => new Principal(true, [
-    new Identity('a', true, [claim('sub', 'u1'), claim('scope', 'read')]),
-    new Identity('b', true, [claim('scope', 'write'), claim('roles', ['admin'])]),
-  ])
+  const principal = () =>
+    new Principal(true, [
+      new Identity('a', true, [claim('sub', 'u1'), claim('scope', 'read')]),
+      new Identity('b', true, [claim('scope', 'write'), claim('roles', ['admin'])]),
+    ])
 
   it('accepts a single identity as well as an array', () => {
     const one = new Principal(true, new Identity('a', true, [claim('sub', 'u1')]))
@@ -72,12 +74,20 @@ describe('Principal', () => {
   })
 
   it('findAll collects the claim from every identity', () => {
-    expect(principal().findAll('scope').map(c => c.value)).toEqual(['read', 'write'])
+    expect(
+      principal()
+        .findAll('scope')
+        .map(c => c.value),
+    ).toEqual(['read', 'write'])
   })
 
   it('claims() returns everything, and claims(type) only that type', () => {
     expect(principal().claims()).toHaveLength(4)
-    expect(principal().claims('scope').map(c => c.value)).toEqual(['read', 'write'])
+    expect(
+      principal()
+        .claims('scope')
+        .map(c => c.value),
+    ).toEqual(['read', 'write'])
   })
 
   it('hasClaim checks presence, and presence with a value', () => {
@@ -95,7 +105,7 @@ describe('Principal', () => {
     expect(principal().isInRole('nope')).toBe(false)
   })
 
-  it('resolves roles per identity, honouring each identity\'s own roleClaimType', () => {
+  it("resolves roles per identity, honouring each identity's own roleClaimType", () => {
     const mixed = new Principal(true, [
       new Identity('a', true, [claim('roles', 'reader')]),
       new Identity('b', true, [claim('scope', 'writer')], 'scope'),
@@ -133,7 +143,8 @@ describe('the anonymous user', () => {
   // Kept as defence in depth: nothing shares the instance now, but an anonymous principal that could
   // acquire an identity would still be a contradiction.
   it('refuses to accept an identity', () => {
-    expect(() => newAnonymousUser().addIdentity(new Identity('x', true, [])))
-      .toThrow('Anonymous user cannot add identities')
+    expect(() => newAnonymousUser().addIdentity(new Identity('x', true, []))).toThrow(
+      'Anonymous user cannot add identities',
+    )
   })
 })

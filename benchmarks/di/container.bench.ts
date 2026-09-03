@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-empty-function -- bench stubs */
-/* eslint-disable @typescript-eslint/no-unused-vars -- decorator-registered fixtures */
+/* oxlint-disable no-empty-function -- bench stubs */
+/* oxlint-disable no-unused-vars -- decorator-registered fixtures */
 import {
   $i,
   CaffeineIoC,
@@ -260,7 +260,7 @@ class Dep2 {}
 ])
 @Lifetime(Scopes.TRANSIENT)
 class DestructuringRoot {
-  constructor(readonly args: { dep1: Dep1, dep2?: Dep2, nested: { inner: Dep1 } }) {}
+  constructor(readonly args: { dep1: Dep1; dep2?: Dep2; nested: { inner: Dep1 } }) {}
 }
 
 @Injectable([Act, $i.allOf(kLog), $i.optional(Maybe)])
@@ -310,12 +310,10 @@ group('bindings', () => {
   bench('toFactory', () => diForBindings.bind(token<number>(`bf_${bindSeq++}`), t => t.toFactory(() => bindSeq)))
   // A chain with modifiers, which is what production binding code actually looks like. The other cases in this
   // group configure nothing, so they do not show what a multi-step chain costs.
-  bench('toSelf chained', () => diForBindings.bind(Undecorated, t => t
-    .toSelf()
-    .lifetime(Scopes.SINGLETON)
-    .names(`n_${bindSeq++}`)
-    .lazy()
-    .internal()))
+  bench('toSelf chained', () =>
+    diForBindings.bind(Undecorated, t =>
+      t.toSelf().lifetime(Scopes.SINGLETON).names(`n_${bindSeq++}`).lazy().internal(),
+    ))
 })
 
 const { benchmarks } = await run()

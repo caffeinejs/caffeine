@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { encodeState, decodeState } from './state_store.js'
 import type { RemoteAuthenticationState } from './state_store.js'
 

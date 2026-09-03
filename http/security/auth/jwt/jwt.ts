@@ -1,10 +1,11 @@
 import type { JWTPayload } from 'jose'
+
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
-import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import { REGISTERED_CLAIMS } from '../registered_claims.js'
+import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import type { JWTAuthenticationOptions } from './jwt_options.js'
 import { JWTService } from './jwt_service.js'
 

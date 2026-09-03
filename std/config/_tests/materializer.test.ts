@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { materialize, readByPath } from '../materializer.js'
 import type { ConfigEntry, ConfigSnapshot } from '../types.js'
 
@@ -54,20 +55,24 @@ describe('materialize', () => {
   })
 
   it('lets indexed children win over a whole-array leaf at the same path', () => {
-    const leafFirst = materialize(makeSnapshot({
-      tags: ['old'],
-      'tags.0': 'a',
-      'tags.1': 'b',
-    }))
+    const leafFirst = materialize(
+      makeSnapshot({
+        tags: ['old'],
+        'tags.0': 'a',
+        'tags.1': 'b',
+      }),
+    )
     expect(Array.isArray(leafFirst.tags)).toBe(true)
     expect(leafFirst.tags).toEqual(['a', 'b'])
 
     // Whole-array leaf arriving after indexed keys must not overwrite them.
-    const indexFirst = materialize(makeSnapshot({
-      'tags.0': 'a',
-      'tags.1': 'b',
-      tags: ['old'],
-    }))
+    const indexFirst = materialize(
+      makeSnapshot({
+        'tags.0': 'a',
+        'tags.1': 'b',
+        tags: ['old'],
+      }),
+    )
     expect(Array.isArray(indexFirst.tags)).toBe(true)
     expect(indexFirst.tags).toEqual(['a', 'b'])
   })

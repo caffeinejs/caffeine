@@ -1,7 +1,8 @@
 import { describe, it, afterEach, expect } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey, ErrResolverAlreadyRegistered, ErrUnknownResolver } from '../errors.js'
+import { $i } from '../injection.js'
 import {
   BuiltInResolvers,
   bindResolver,
@@ -9,8 +10,8 @@ import {
   InjectionResolverFactory,
   unbindResolver,
 } from '../injection_resolver.js'
-import { $i } from '../injection.js'
 import { standardFactory } from '../internal/core/resolver/index.js'
+import { token } from '../key.js'
 
 const sentinel = { value: 42 }
 const kTestResolver = token<any>(Symbol('test-resolver'))
@@ -31,19 +32,14 @@ afterEach(() => {
 
 describe('hasResolver()', function () {
   it('returns true for built-in resolvers', function () {
-    expect(hasResolver(BuiltInResolvers.DEFAULT))
-      .toBe(true)
-    expect(hasResolver(BuiltInResolvers.MAP))
-      .toBe(true)
-    expect(hasResolver(BuiltInResolvers.DEFER))
-      .toBe(true)
-    expect(hasResolver(BuiltInResolvers.OBJECT))
-      .toBe(true)
+    expect(hasResolver(BuiltInResolvers.DEFAULT)).toBe(true)
+    expect(hasResolver(BuiltInResolvers.MAP)).toBe(true)
+    expect(hasResolver(BuiltInResolvers.DEFER)).toBe(true)
+    expect(hasResolver(BuiltInResolvers.OBJECT)).toBe(true)
   })
 
   it('returns false for unknown resolver', function () {
-    expect(hasResolver(token<any>(Symbol('unknown'))))
-      .toBe(false)
+    expect(hasResolver(token<any>(Symbol('unknown')))).toBe(false)
   })
 })
 
@@ -51,15 +47,13 @@ describe('bindResolver()', function () {
   it('registers a custom resolver', function () {
     const factory: InjectionResolverFactory = () => () => undefined
     bindResolver(kTestResolver, factory)
-    expect(hasResolver(kTestResolver))
-      .toBe(true)
+    expect(hasResolver(kTestResolver)).toBe(true)
   })
 
   it('throws ErrResolverAlreadyRegistered on duplicate name', function () {
     const factory: InjectionResolverFactory = () => () => undefined
     bindResolver(kTestResolver, factory)
-    expect(() => bindResolver(kTestResolver, factory))
-      .toThrow(ErrResolverAlreadyRegistered)
+    expect(() => bindResolver(kTestResolver, factory)).toThrow(ErrResolverAlreadyRegistered)
   })
 })
 
@@ -67,8 +61,7 @@ describe('unbindResolver()', function () {
   it('removes a registered resolver', function () {
     bindResolver(kTestResolver, () => () => undefined)
     unbindResolver(kTestResolver)
-    expect(hasResolver(kTestResolver))
-      .toBe(false)
+    expect(hasResolver(kTestResolver)).toBe(false)
   })
 })
 
@@ -81,8 +74,7 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Consumer, t => t
-      .toSelf([$i.provide(kMissing)]))
+    di.bind(Consumer, t => t.toSelf([$i.provide(kMissing)]))
 
     await expect(di.init()).rejects.toBeInstanceOf(ErrNoResolutionForKey)
   })
@@ -95,15 +87,12 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(OptConsumer, t => t
-      .toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER }]))
+    di.bind(OptConsumer, t => t.toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER }]))
     await di.init()
 
     const inst = di.get(OptConsumer)
-    expect(inst.dep)
-      .toBeDefined()
-    expect((inst.dep as { get: () => unknown }).get())
-      .toBeUndefined()
+    expect(inst.dep).toBeDefined()
+    expect((inst.dep as { get: () => unknown }).get()).toBeUndefined()
   })
 })
 
@@ -121,20 +110,15 @@ describe('defaultResolverFactory', function () {
       index: 0,
     })
 
-    expect(resolver())
-      .toBeUndefined()
+    expect(resolver()).toBeUndefined()
   })
 
   it('should resolve all bindings for multiple injection', async function () {
     const kShared = token<any>(Symbol('resolver-shared-multi'))
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(token<any>('a'), t => t
-      .toValue('one')
-      .names(kShared))
-    di.bind(token<any>('b'), t => t
-      .toValue('two')
-      .names(kShared))
+    di.bind(token<any>('a'), t => t.toValue('one').names(kShared))
+    di.bind(token<any>('b'), t => t.toValue('two').names(kShared))
     await di.init()
 
     const resolver = standardFactory({
@@ -146,8 +130,7 @@ describe('defaultResolverFactory', function () {
       index: 0,
     })
 
-    expect(resolver())
-      .toEqual(['one', 'two'])
+    expect(resolver()).toEqual(['one', 'two'])
   })
 })
 
@@ -156,18 +139,15 @@ describe('custom resolver end-to-end', function () {
     bindResolver(kTestResolver, () => () => sentinel)
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(CustomConsumer, t => t
-      .toSelf([{ resolver: kTestResolver }]))
+    di.bind(CustomConsumer, t => t.toSelf([{ resolver: kTestResolver }]))
     await di.init()
 
-    expect(di.get(CustomConsumer)!.dep)
-      .toBe(sentinel)
+    expect(di.get(CustomConsumer)!.dep).toBe(sentinel)
   })
 
   it('throws ErrUnknownResolver when resolver name is not registered', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(UnknownResolverConsumer, t => t
-      .toSelf([{ resolver: token<any>(Symbol('no-such-resolver')) }]))
+    di.bind(UnknownResolverConsumer, t => t.toSelf([{ resolver: token<any>(Symbol('no-such-resolver')) }]))
 
     await expect(di.init()).rejects.toBeInstanceOf(ErrUnknownResolver)
   })

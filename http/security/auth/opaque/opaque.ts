@@ -1,4 +1,5 @@
 import type { Provider } from '@caffeinejs/di'
+
 import type { Context } from '../../../context.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'

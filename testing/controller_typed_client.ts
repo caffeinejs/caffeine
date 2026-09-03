@@ -3,9 +3,9 @@ import { ErrFetchFailed } from './error.js'
 import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
 
 export type ControllerTypedTestClient<C extends RouterCtor> = {
-  [H in RouteMethods<C>]: (input?: Request | RequestInit) => Promise<
-    InstanceType<C>[H] extends (...args: never[]) => infer R ? Awaited<R> : never
-  >
+  [H in RouteMethods<C>]: (
+    input?: Request | RequestInit,
+  ) => Promise<InstanceType<C>[H] extends (...args: never[]) => infer R ? Awaited<R> : never>
 }
 
 export function controllerTypedClient<C extends RouterCtor>(
@@ -29,12 +29,7 @@ export function controllerTypedClient<C extends RouterCtor>(
         : undefined
 
       if (!res.ok) {
-        throw new ErrFetchFailed(
-          `${key}: ${res.status} ${res.statusText}`,
-          res.status,
-          res.headers,
-          body,
-        )
+        throw new ErrFetchFailed(`${key}: ${res.status} ${res.statusText}`, res.status, res.headers, body)
       }
 
       return body

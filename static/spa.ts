@@ -96,11 +96,10 @@ export const DEFAULT_SPA_CACHE: Required<SPACacheOptions> = {
 
 /** Applies the defaults, normalizing every prefix to a leading slash and no trailing slash. */
 export function resolveSPASettings(root: string, options: SPAOptions = {}): SPASettings {
-  const immutable = (options.cache === false ? [] : options.cache?.immutable ?? DEFAULT_SPA_CACHE.immutable)
-    .map(normalizePrefix)
-  const cache = options.cache === false
-    ? false as const
-    : { ...DEFAULT_SPA_CACHE, ...options.cache, immutable }
+  const immutable = (options.cache === false ? [] : (options.cache?.immutable ?? DEFAULT_SPA_CACHE.immutable)).map(
+    normalizePrefix,
+  )
+  const cache = options.cache === false ? (false as const) : { ...DEFAULT_SPA_CACHE, ...options.cache, immutable }
 
   return {
     root,

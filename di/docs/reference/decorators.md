@@ -4,24 +4,17 @@ sidebar_label: Decorators
 
 # Decorators
 
-All decorators are exported from: 
+All decorators are exported from:
+
 - **Stage 3 Decorators**: `@caffeinejs/di/decorators`
 - **Legacy TypeScript Decorators**: `@caffeinejs/di/decorators/legacy`
 
 ```ts
-import { 
-  Injectable, 
-  Lifetime, 
-  Inject,
-} from '@caffeinejs/di/decorators'
+import { Injectable, Lifetime, Inject } from '@caffeinejs/di/decorators'
 
 // or
 
-import { 
-  Injectable, 
-  Lifetime, 
-  Inject,
-} from '@caffeinejs/di/decorators/legacy'
+import { Injectable, Lifetime, Inject } from '@caffeinejs/di/decorators/legacy'
 ```
 
 CaffeineIoC ships two decorator flavours. This document focus on **stage 3 decorators**
@@ -427,9 +420,7 @@ Injects a dependency into a constructor parameter, class property, or method.
 ```ts
 @Injectable()
 class Service {
-  constructor(
-    @Inject('config') private readonly cfg: AppConfig,
-  ) {}
+  constructor(@Inject('config') private readonly cfg: AppConfig) {}
 }
 ```
 

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   type ActionResult,
   Catch,

@@ -40,8 +40,6 @@
     "test:coverage:html": "vitest run --coverage --coverage.reporter=html --coverage.reporter=text",
     "test:browser": "esbuild dist/index.js --bundle --platform=browser --format=esm --outfile=/dev/null",
     "test:deno": "npm run build && docker compose -f _tests/deno/docker-compose.yml up --build --abort-on-container-exit --exit-code-from deno",
-    "lint": "eslint",
-    "lint:fix": "eslint --fix",
     "lint:markdown": "markdownlint-cli2",
     "docs:llms-full": "node tools/generate-llms-full.mjs",
     "example:javascript": "npm run start -w @caffeinejs/example-javascript",
@@ -54,7 +52,6 @@
     "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^4.1.8",
     "esbuild": "^0.28.0",
-    "eslint-plugin-jsdoc": "^63.0.2",
     "supertest": "^7.2.2",
     "tsx": "^4.22.4"
   }

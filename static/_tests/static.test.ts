@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
+
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { StaticExt } from '../index.js'
 
 const fixtures = fileURLToPath(new URL('./_testdata/fixtures', import.meta.url))
@@ -55,9 +57,7 @@ describe('static feature', () => {
 
   it('serves from multiple mounts (only the first decorates reply)', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(StaticExt, s => s
-        .serve(fixtures, { prefix: '/one' })
-        .serve(fixtures2, { prefix: '/two' }))
+      .extend(StaticExt, s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' }))
       .build()
     await app.ready()
 

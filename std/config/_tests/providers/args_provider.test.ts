@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
+
 import { ArgsConfigProvider } from '../../providers/args_provider.js'
-import { EnvConfigProvider } from '../../providers/env_provider.js'
 import type { ArgsConfigProviderOptions } from '../../providers/args_provider.js'
+import { EnvConfigProvider } from '../../providers/env_provider.js'
 import type { ResolutionContext } from '../../types.js'
 
 const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 
-async function parse(argv: string[], options: Omit<ArgsConfigProviderOptions, 'argv'> = {}): Promise<Record<string, unknown>> {
+async function parse(
+  argv: string[],
+  options: Omit<ArgsConfigProviderOptions, 'argv'> = {},
+): Promise<Record<string, unknown>> {
   const [source] = await new ArgsConfigProvider({ ...options, argv }).load(ctx)
   return Object.fromEntries([...source.entries].map(([k, e]) => [k, e.value]))
 }
@@ -47,8 +51,7 @@ describe('ArgsConfigProvider', () => {
   })
 
   it('stops at --, leaving the rest to the application', async () => {
-    expect(await parse(['--server.port=8080', '--', '--server.host=nope']))
-      .toEqual({ 'server.port': 8080 })
+    expect(await parse(['--server.port=8080', '--', '--server.host=nope'])).toEqual({ 'server.port': 8080 })
   })
 
   it('parses process.argv, its slice, and Deno.args identically', async () => {
@@ -109,8 +112,7 @@ describe('ArgsConfigProvider', () => {
       const [envSource] = await new EnvConfigProvider({ env: { KEY: raw } }).load(ctx)
       const args = await parse([`--key=${raw}`])
 
-      expect(args.key, `"${raw}" must coerce the same from both sources`)
-        .toEqual(envSource.entries.get('key')?.value)
+      expect(args.key, `"${raw}" must coerce the same from both sources`).toEqual(envSource.entries.get('key')?.value)
     }
   })
 

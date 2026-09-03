@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+
 import { loadConfig } from '../../config.js'
 import { generate } from './generator.js'
 import { generateModuleGraph } from './module_graph_generator.js'
@@ -29,9 +30,7 @@ export async function run(opts: GenerateOptions): Promise<void> {
     const outputPath = resolve(opts.cwd, output)
     const files = await scan({ root: opts.cwd, include, exclude: [...exclude, ...allOutputs] })
     const changed = await generate({ files, output: outputPath, importExtension })
-    console.log(changed
-      ? `[caffeine] generated ${output} (${files.length} files)`
-      : `[caffeine] up to date ${output}`)
+    console.log(changed ? `[caffeine] generated ${output} (${files.length} files)` : `[caffeine] up to date ${output}`)
   }
 
   if (config.modules) {
@@ -39,9 +38,11 @@ export async function run(opts: GenerateOptions): Promise<void> {
     const outputPath = resolve(opts.cwd, output)
     const files = await scan({ root: opts.cwd, include, exclude: [...exclude, ...allOutputs] })
     const changed = await generateModules({ files, output: outputPath, importExtension })
-    console.log(changed
-      ? `[caffeine] generated modules ${output} (${files.length} files)`
-      : `[caffeine] up to date modules ${output}`)
+    console.log(
+      changed
+        ? `[caffeine] generated modules ${output} (${files.length} files)`
+        : `[caffeine] up to date modules ${output}`,
+    )
   }
 
   if (config.moduleGraph) {
@@ -52,8 +53,10 @@ export async function run(opts: GenerateOptions): Promise<void> {
         exclude: [...(config.moduleGraph.exclude ?? []), ...allOutputs],
       },
     })
-    console.log(result.changed
-      ? `[caffeine] generated module graph (${result.modules} modules)`
-      : `[caffeine] up to date module graph`)
+    console.log(
+      result.changed
+        ? `[caffeine] generated module graph (${result.modules} modules)`
+        : `[caffeine] up to date module graph`,
+    )
   }
 }

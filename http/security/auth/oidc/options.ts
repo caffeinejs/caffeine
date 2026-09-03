@@ -1,4 +1,5 @@
 import type { JWTVerifyGetKey } from 'jose'
+
 import type { Context } from '../../../context.js'
 import type { Claim } from '../../index.js'
 import {
@@ -51,23 +52,23 @@ export interface OIDCTokens {
  * Doubles as the checklist the resolver must satisfy: because it returns
  * `ResolvedOIDCAuthenticationOptions`, forgetting one of these is a compile error.
  */
-type DefaultedKey
-  = | 'defaultRedirectPath'
-    | 'scopes'
-    | 'sessionCookieName'
-    | 'stateCookieName'
-    | 'sessionCookieTtlSeconds'
-    | 'secureCookie'
-    | 'roleClaimType'
-    | 'allowPlainPKCE'
-    | 'clockToleranceSeconds'
-    | 'httpTimeoutMs'
-    | 'discoveryCacheTtlSeconds'
-    | 'tokenEndpointAuthMethod'
-    | 'showPii'
-    | 'challengeMode'
-    | 'getClaimsFromUserInfoEndpoint'
-    | 'saveTokens'
+type DefaultedKey =
+  | 'defaultRedirectPath'
+  | 'scopes'
+  | 'sessionCookieName'
+  | 'stateCookieName'
+  | 'sessionCookieTtlSeconds'
+  | 'secureCookie'
+  | 'roleClaimType'
+  | 'allowPlainPKCE'
+  | 'clockToleranceSeconds'
+  | 'httpTimeoutMs'
+  | 'discoveryCacheTtlSeconds'
+  | 'tokenEndpointAuthMethod'
+  | 'showPii'
+  | 'challengeMode'
+  | 'getClaimsFromUserInfoEndpoint'
+  | 'saveTokens'
 
 /**
  * The canonical option shape, as consumed by the handler.
@@ -238,11 +239,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    * long-lived, high-value credentials and the cookie is client-side and size-capped.
    * Store them server-side here if the application needs them.
    */
-  onTokenValidated?: (
-    ctx: Context,
-    idTokenPayload: Record<string, unknown>,
-    tokens: OIDCTokens,
-  ) => Promise<void> | void
+  onTokenValidated?: (ctx: Context, idTokenPayload: Record<string, unknown>, tokens: OIDCTokens) => Promise<void> | void
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
   /**
    * Shapes the challenge response. Receives the fully built authorization URL — state,
@@ -258,8 +255,7 @@ export interface ResolvedOIDCAuthenticationOptions {
 }
 
 /** What the caller supplies — the defaulted fields are optional. */
-export type OIDCAuthenticationOptions
-  = PartialBy<ResolvedOIDCAuthenticationOptions, DefaultedKey>
+export type OIDCAuthenticationOptions = PartialBy<ResolvedOIDCAuthenticationOptions, DefaultedKey>
 
 function withRequiredScope(scopes: string[]): string[] {
   return scopes.includes(REQUIRED_SCOPE) ? [...scopes] : [REQUIRED_SCOPE, ...scopes]
@@ -297,12 +293,7 @@ export function resolveOIDCOptions(
   }
 
   const hasDiscovery = Boolean(input.discoveryURL)
-  const hasManual = Boolean(
-    input.authorizationEndpoint
-    && input.tokenEndpoint
-    && input.jwksURI
-    && input.issuer,
-  )
+  const hasManual = Boolean(input.authorizationEndpoint && input.tokenEndpoint && input.jwksURI && input.issuer)
 
   if (!hasDiscovery && !hasManual) {
     throw new ErrOIDCConfiguration(
@@ -313,9 +304,7 @@ export function resolveOIDCOptions(
   // Without a pinned issuer the discovery document defines the issuer that every id_token is
   // then validated against, so a compromised or swapped document validates its own tokens.
   if (hasDiscovery && !input.issuer) {
-    throw new ErrOIDCConfiguration(
-      'Cannot configure OIDC: issuer is required when discoveryURL is set',
-    )
+    throw new ErrOIDCConfiguration('Cannot configure OIDC: issuer is required when discoveryURL is set')
   }
 
   // Every configured protocol endpoint must be TLS-protected. Endpoints that arrive later

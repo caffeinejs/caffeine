@@ -1,6 +1,7 @@
+import type { AnySchema, InferSchema } from '@caffeinejs/std'
 import type { CookieSerializeOptions } from '@fastify/cookie'
 import type { RawRequestDefaultExpression, RawServerDefault } from 'fastify'
-import type { AnySchema, InferSchema } from '@caffeinejs/std'
+
 import type { Context, Fst, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
 import type { RouteValidationSchema } from '../../route.js'
 
@@ -16,19 +17,17 @@ export type Simplify<T> = { [K in keyof T]: T[K] } & {}
  */
 export type PathParams<P extends string> = string extends P ? Record<string, string> : ParamsOfPath<P>
 
-type ParamsOfPath<P extends string>
-  = P extends `${string}:${infer Tail}`
-    ? Tail extends `${infer Segment}/${infer Rest}`
-      ? ParamEntry<Segment> & ParamsOfPath<`/${Rest}`>
-      : ParamEntry<Tail>
-    : P extends `${string}*${string}`
-      ? { '*': string }
-      : Record<never, never>
+type ParamsOfPath<P extends string> = P extends `${string}:${infer Tail}`
+  ? Tail extends `${infer Segment}/${infer Rest}`
+    ? ParamEntry<Segment> & ParamsOfPath<`/${Rest}`>
+    : ParamEntry<Tail>
+  : P extends `${string}*${string}`
+    ? { '*': string }
+    : Record<never, never>
 
-type ParamEntry<Segment extends string>
-  = Segment extends `${infer Name}?`
-    ? { [K in ParamName<Name>]?: string }
-    : { [K in ParamName<Segment>]: string }
+type ParamEntry<Segment extends string> = Segment extends `${infer Name}?`
+  ? { [K in ParamName<Name>]?: string }
+  : { [K in ParamName<Segment>]: string }
 
 type ParamName<Segment extends string> = Segment extends `${infer Name}(${string}` ? Name : Segment
 
@@ -36,8 +35,9 @@ type ParamName<Segment extends string> = Segment extends `${infer Name}(${string
  * The type of `ctx.req.param()`: what the `params` schema declares when the route has one, and what the path
  * itself says when it does not.
  */
-export type ParamsOf<S extends RouteValidationSchema, P extends string>
-  = S extends { params: AnySchema } ? InferParams<S> : Simplify<PathParams<P>>
+export type ParamsOf<S extends RouteValidationSchema, P extends string> = S extends { params: AnySchema }
+  ? InferParams<S>
+  : Simplify<PathParams<P>>
 
 /**
  * The context a programmatic handler receives, typed by the route's schema and path.
@@ -67,23 +67,23 @@ export interface RouteContext<S extends RouteValidationSchema, P extends string,
  * nothing at all when the handler answered through the context. It is a type parameter so that a route can carry
  * what its handler answers with — see {@link DeclaredRoute}.
  */
-export type RouteHandler<S extends RouteValidationSchema, P extends string, V, D, O = unknown>
-  = (ctx: RouteContext<S, P, V>, deps: D) => O
+export type RouteHandler<S extends RouteValidationSchema, P extends string, V, D, O = unknown> = (
+  ctx: RouteContext<S, P, V>,
+  deps: D,
+) => O
 
 /**
  * The dependencies visible to a route: what its groups injected, with anything the route injected under the same
  * name taking over.
  */
-export type MergeDeps<OUTER, INNER>
-  = [OUTER] extends [undefined]
-    ? INNER
-    : [INNER] extends [undefined]
-        ? OUTER
-        : Simplify<Omit<OUTER, keyof INNER> & INNER>
+export type MergeDeps<OUTER, INNER> = [OUTER] extends [undefined]
+  ? INNER
+  : [INNER] extends [undefined]
+    ? OUTER
+    : Simplify<Omit<OUTER, keyof INNER> & INNER>
 
 /** Concatenates a group path with a route path, keeping both literal so parameters stay inferable. */
-export type JoinPath<A extends string, B extends string>
-  = A extends '' ? B : B extends '' | '/' ? A : `${A}${B}`
+export type JoinPath<A extends string, B extends string> = A extends '' ? B : B extends '' | '/' ? A : `${A}${B}`
 
 /**
  * One route, as a type: everything a client generated from the router needs to call it.
@@ -114,8 +114,15 @@ export interface RouteDef<
  * The descriptor a router accumulates for one route it declared: everything {@link RouteDef} holds, worked out
  * from the route's method, its full path, the schema it validates against and what its handler returns.
  */
-export type DeclaredRoute<M extends string, P extends string, S extends RouteValidationSchema, O>
-  = RouteDef<M, P, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>, OutputOf<S, O>>
+export type DeclaredRoute<M extends string, P extends string, S extends RouteValidationSchema, O> = RouteDef<
+  M,
+  P,
+  ParamsOf<S, P>,
+  InferQuery<S>,
+  InferHeaders<S>,
+  InferBody<S>,
+  OutputOf<S, O>
+>
 
 /**
  * What a route answers with.
@@ -124,24 +131,24 @@ export type DeclaredRoute<M extends string, P extends string, S extends RouteVal
  * one the handler's own return type is used — unless the handler answered through the context, in which case there
  * is nothing to read and `unknown` is the honest answer.
  */
-export type OutputOf<S extends RouteValidationSchema, O>
-  = S extends { response: infer R }
-    ? [SuccessBody<R>] extends [never] ? HandlerOutput<O> : SuccessBody<R>
-    : HandlerOutput<O>
+export type OutputOf<S extends RouteValidationSchema, O> = S extends { response: infer R }
+  ? [SuccessBody<R>] extends [never]
+    ? HandlerOutput<O>
+    : SuccessBody<R>
+  : HandlerOutput<O>
 
-type SuccessBody<R>
-  = R extends { 200: infer S extends AnySchema }
+type SuccessBody<R> = R extends { 200: infer S extends AnySchema }
+  ? InferSchema<S>
+  : R extends { 201: infer S extends AnySchema }
     ? InferSchema<S>
-    : R extends { 201: infer S extends AnySchema }
-      ? InferSchema<S>
-      : never
+    : never
 
-type HandlerOutput<O>
-  = Awaited<O> extends { readonly req: unknown, status: (code: number) => unknown } ? unknown : Awaited<O>
+type HandlerOutput<O> =
+  Awaited<O> extends { readonly req: unknown; status: (code: number) => unknown } ? unknown : Awaited<O>
 
 /** Re-bases a set of route descriptors under a prefix, for a router mounted inside another. */
-export type PrefixRoutePaths<R, Prefix extends string>
-  = R extends RouteDef<infer M, infer P, infer Params, infer Query, infer Headers, infer Body, infer Output>
+export type PrefixRoutePaths<R, Prefix extends string> =
+  R extends RouteDef<infer M, infer P, infer Params, infer Query, infer Headers, infer Body, infer Output>
     ? RouteDef<M, JoinPath<Prefix, P>, Params, Query, Headers, Body, Output>
     : never
 

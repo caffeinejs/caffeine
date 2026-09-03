@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common'
-import { SharedModule } from '../shared/shared.module.js'
+
 import { CustomerModule } from '../customer/customer.module.js'
-import { LoggerService } from '../shared/logger.service.js'
 import { CustomerService } from '../customer/customer.service.js'
+import { LoggerService } from '../shared/logger.service.js'
+import { SharedModule } from '../shared/shared.module.js'
+import { AddressController } from './address.controller.js'
 import { AddressRepository } from './address.repository.js'
 import { AddressService } from './address.service.js'
-import { AddressController } from './address.controller.js'
 
 @Module({
   imports: [SharedModule, CustomerModule],

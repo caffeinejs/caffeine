@@ -54,7 +54,6 @@ class UserService {
 }
 ```
 
-
 ---
 
 ## provide
@@ -124,7 +123,10 @@ import { useValue } from '@caffeinejs/di'
 
 @Injectable([useValue('localhost'), useValue(5432)])
 class DatabaseClient {
-  constructor(readonly host: string, readonly port: number) {}
+  constructor(
+    readonly host: string,
+    readonly port: number,
+  ) {}
 }
 ```
 

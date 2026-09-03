@@ -1,4 +1,5 @@
 import { ErrInvalidDecorator, type InjectionToken } from '@caffeinejs/di'
+
 import type { Guard } from '../guards/guard.js'
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
 import { configureRoute, configureRouteGroup } from './registrar/registrar.js'

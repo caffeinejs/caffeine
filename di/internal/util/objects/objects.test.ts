@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { mergeObject } from './objects.js'
 
 describe('mergeObject', function () {
@@ -8,10 +9,8 @@ describe('mergeObject', function () {
 
     const result = mergeObject<any>({ [kA]: 1 }, { [kB]: 2 })
 
-    expect(result[kA])
-      .toBe(1)
-    expect(result[kB])
-      .toBe(2)
+    expect(result[kA]).toBe(1)
+    expect(result[kB]).toBe(2)
   })
 
   it('should use other value when both have the same Symbol key and other is not nil', function () {
@@ -19,8 +18,7 @@ describe('mergeObject', function () {
 
     const result = mergeObject<any>({ [k]: 'original' }, { [k]: 'override' })
 
-    expect(result[k])
-      .toBe('override')
+    expect(result[k]).toBe('override')
   })
 
   it('should keep value when other Symbol key is undefined', function () {
@@ -28,7 +26,6 @@ describe('mergeObject', function () {
 
     const result = mergeObject<any>({ [k]: 'keep' }, { [k]: undefined })
 
-    expect(result[k])
-      .toBe('keep')
+    expect(result[k]).toBe('keep')
   })
 })

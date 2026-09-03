@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+
 import type { AddressController } from './address.controller.js'
 
 export function createAddressRouter(ctrl: AddressController) {

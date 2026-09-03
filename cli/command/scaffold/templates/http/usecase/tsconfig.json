@@ -3,11 +3,7 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": [
-      "esnext",
-      "Decorators",
-      "esnext.decorators"
-    ],
+    "lib": ["esnext", "Decorators", "esnext.decorators"],
     "strict": true,
     "rootDir": "./src",
     "outDir": "dist"

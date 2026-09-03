@@ -11,12 +11,12 @@ export class ErrAuthzPolicyNotFound extends ErrCaffeineWebApplication {
   // See ErrAuthSchemeNotFound: the list is optional so this cannot throw while reporting another failure.
   constructor(policy: string, registered?: readonly string[]) {
     super(
-      `Cannot evaluate authorization policy "${policy}": no policy is registered under that name`
-      + (registered === undefined
-        ? ''
-        : registered.length > 0
-          ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
-          : ' (no policies are registered)'),
+      `Cannot evaluate authorization policy "${policy}": no policy is registered under that name` +
+        (registered === undefined
+          ? ''
+          : registered.length > 0
+            ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
+            : ' (no policies are registered)'),
       'ERR_AUTHZ_POLICY_NOT_FOUND',
     )
     this.name = 'ErrAuthzPolicyNotFound'

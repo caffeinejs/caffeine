@@ -1,6 +1,7 @@
 import type { Ctor } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
 import type { Deserializers, Message, MessageToProduce, Serializers } from '@platformatic/kafka'
+
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
 import type { DeadLetterManager } from './retry/dead_letter_manager.js'
 import type { RetryStrategy } from './retry/strategy.js'
@@ -136,11 +137,13 @@ export const kafkaConfigSchema = $t.Object({
   groupId: $t.Optional($t.String()),
   ackMode: $t.Optional($t.UnionEnum(['auto', 'record', 'manual'])),
   retry: $t.Optional($t.Object({ attempts: $t.Number(), backoff: $t.Optional(backoffSchema) })),
-  topicProvisioning: $t.Optional($t.Object({
-    autoCreate: $t.Optional($t.Boolean()),
-    partitions: $t.Optional($t.Number()),
-    replicas: $t.Optional($t.Number()),
-  })),
+  topicProvisioning: $t.Optional(
+    $t.Object({
+      autoCreate: $t.Optional($t.Boolean()),
+      partitions: $t.Optional($t.Number()),
+      replicas: $t.Optional($t.Number()),
+    }),
+  ),
   deadLetter: $t.Optional($t.Boolean()),
 })
 
@@ -155,7 +158,7 @@ export interface ResolvedKafkaConfig {
   retry?: RetryPolicy
   retryStrategy?: RetryStrategy
   // `partitions` stays optional: unset means "inherit the source topic's partition count" at provisioning time.
-  topicProvisioning: { autoCreate: boolean, partitions?: number, replicas: number }
+  topicProvisioning: { autoCreate: boolean; partitions?: number; replicas: number }
   deadLetterManager?: DeadLetterManager
   deadLetter?: DeadLetterOptions | boolean
   notRetryable?: Ctor<Error>[]
@@ -168,7 +171,7 @@ export interface ResolvedKafkaConfig {
 
 /** The producer surface the integration depends on (a narrow view of the platformatic `Producer`). */
 export interface ProducerClient {
-  send(options: { messages: KafkaOutboundMessage[], acks?: number }): Promise<unknown>
+  send(options: { messages: KafkaOutboundMessage[]; acks?: number }): Promise<unknown>
   close(force?: boolean): Promise<void>
 }
 
@@ -228,10 +231,13 @@ export interface KafkaClients {
 }
 
 /** Normalizes user config: brokers to an array, a default client id, and default (string/JSON) serializers. */
-export function resolveConfig(config: KafkaConfig, defaults: {
-  serializers: KafkaSerializers
-  deserializers: KafkaDeserializers
-}): ResolvedKafkaConfig {
+export function resolveConfig(
+  config: KafkaConfig,
+  defaults: {
+    serializers: KafkaSerializers
+    deserializers: KafkaDeserializers
+  },
+): ResolvedKafkaConfig {
   const brokers = Array.isArray(config.brokers) ? config.brokers : [config.brokers]
 
   return {

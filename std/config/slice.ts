@@ -20,7 +20,7 @@ import type { ConfigSchema } from './schema.js'
 export class ConfigSlice<T> {
   readonly parts: readonly string[]
   readonly #derivations: Array<(value: T) => void> = []
-  readonly #derived: Array<{ notify: () => void, settled: () => Promise<void> }> = []
+  readonly #derived: Array<{ notify: () => void; settled: () => Promise<void> }> = []
   readonly #notifier: ConfigNotifier<T>
   readonly #report: () => ((message: string) => void) | undefined
   #current: T | undefined

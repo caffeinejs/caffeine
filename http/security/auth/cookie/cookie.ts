@@ -1,14 +1,15 @@
 import type { Provider } from '@caffeinejs/di'
+
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
-import { BaseAuthenticationHandler } from '../handler.js'
-import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
-import { challengeHeaders, isSafeReturnPath, shouldRedirectChallenge } from '../internal/remote/config.js'
 import { buildCredentialPrincipal, type UserProvider } from '../credentials/index.js'
-import type { CookieAuthenticationOptions } from './cookie_options.js'
-import { sealSession, unsealSession } from './_session_cookie.js'
-import type { RememberMeRecord, RememberMeTokenStore } from './remember_me_token_store.js'
+import { BaseAuthenticationHandler } from '../handler.js'
+import { challengeHeaders, isSafeReturnPath, shouldRedirectChallenge } from '../internal/remote/config.js'
+import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
 import { formatRemember, hashToken, newSeries, newToken, parseRemember, tokenMatches } from './_remember.js'
+import { sealSession, unsealSession } from './_session_cookie.js'
+import type { CookieAuthenticationOptions } from './cookie_options.js'
+import type { RememberMeRecord, RememberMeTokenStore } from './remember_me_token_store.js'
 
 interface SealedClaim {
   type: string
@@ -55,9 +56,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   }
 
   #durable(): boolean {
-    return this.options.rememberMe === true
-      && this.#rememberStore !== undefined
-      && this.#userProvider !== undefined
+    return this.options.rememberMe === true && this.#rememberStore !== undefined && this.#userProvider !== undefined
   }
 
   async authenticate(ctx: Context): Promise<AuthenticateResult> {
@@ -161,7 +160,8 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
 
     // Same reasoning as the OAuth strategies: `location` on a 401 is a hint a browser will not follow,
     // the body is what a cross-origin caller can actually read, and the header is exposed for the rest.
-    ctx.status(401)
+    ctx
+      .status(401)
       .header('location', location)
       .header('access-control-expose-headers', 'location')
       .body({ error: 'authentication_required', loginURL: location })
@@ -226,7 +226,11 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
       roleClaimType: this.options.roleClaimType!,
     }
     const sealed = await sealSession(
-      payload as unknown as Record<string, unknown>, this.options.sessionSecret, this.#name, ttl)
+      payload as unknown as Record<string, unknown>,
+      this.options.sessionSecret,
+      this.#name,
+      ttl,
+    )
     // Persistent cookie carries Max-Age; a session cookie omits it and dies with the browser. Either
     // way the sealed token's own `exp` is the hard cap, so a surviving cookie past expiry still fails.
     ctx.cookie(this.options.cookieName!, sealed, this.#cookieOpts(persistent ? ttl : undefined))
@@ -346,8 +350,11 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   }
 
   #setRememberCookie(ctx: Context, series: string, token: string): void {
-    ctx.cookie(this.options.rememberMeCookieName!, formatRemember(series, token),
-      this.#cookieOpts(this.options.rememberMeMaxAge))
+    ctx.cookie(
+      this.options.rememberMeCookieName!,
+      formatRemember(series, token),
+      this.#cookieOpts(this.options.rememberMeMaxAge),
+    )
   }
 
   #clearRememberCookie(ctx: Context): void {

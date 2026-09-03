@@ -1,5 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import type { SchemaIssue } from '@caffeinejs/std/schema'
+
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
 import type { RecoverContext } from './error_handling.js'

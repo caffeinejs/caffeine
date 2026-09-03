@@ -1,6 +1,6 @@
+import { FetchCallFactory } from './builtin/fetch/index.js'
 import type { CallFactory } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
-import { FetchCallFactory } from './builtin/fetch/index.js'
 import { FetchyClient } from './client.js'
 import type { Interceptor, InterceptorFunction } from './interceptor.js'
 import { toInterceptor } from './interceptor.js'

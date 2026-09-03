@@ -27,18 +27,13 @@ const WELL_KNOWN = '/.well-known/openid-configuration'
 const REQUIRED_FIELDS = ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri'] as const
 
 /** Capability fields that must be arrays of strings when a provider advertises them. */
-const STRING_ARRAY_FIELDS = [
-  'code_challenge_methods_supported',
-  'token_endpoint_auth_methods_supported',
-] as const
+const STRING_ARRAY_FIELDS = ['code_challenge_methods_supported', 'token_endpoint_auth_methods_supported'] as const
 
 export async function fetchDiscovery(
   discoveryURL: string,
   timeoutMs = DEFAULT_HTTP_TIMEOUT_MS,
 ): Promise<OIDCDiscoveryDocument> {
-  const url = discoveryURL.endsWith(WELL_KNOWN)
-    ? discoveryURL
-    : `${discoveryURL.replace(/\/$/, '')}${WELL_KNOWN}`
+  const url = discoveryURL.endsWith(WELL_KNOWN) ? discoveryURL : `${discoveryURL.replace(/\/$/, '')}${WELL_KNOWN}`
 
   let response: Response
   try {

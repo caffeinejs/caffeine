@@ -1,8 +1,9 @@
 import { createServer } from 'node:http'
-import { defineConfig, Server } from '@adonisjs/http-server'
+
 import { Application } from '@adonisjs/application'
 import { Encryption } from '@adonisjs/encryption'
 import { Emitter } from '@adonisjs/events'
+import { defineConfig, Server } from '@adonisjs/http-server'
 import { Logger } from '@adonisjs/logger'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)

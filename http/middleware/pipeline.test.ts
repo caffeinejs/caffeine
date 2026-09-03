@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import type { Context } from '../context.js'
 import type { ActionResult } from '../response.js'
 import { ErrNextCalledTwice } from './errors.js'
@@ -144,8 +145,9 @@ describe('compose', () => {
       }
     })
 
-    await expect(chain(ctx, () => Promise.reject(new Error('handler failed'))) as Promise<unknown>)
-      .rejects.toThrow('handler failed')
+    await expect(chain(ctx, () => Promise.reject(new Error('handler failed'))) as Promise<unknown>).rejects.toThrow(
+      'handler failed',
+    )
     expect((caught as Error).message).toBe('handler failed')
   })
 

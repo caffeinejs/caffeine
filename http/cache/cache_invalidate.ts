@@ -1,4 +1,9 @@
-import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '../internal/route_hooks.js'
+import {
+  addRouteHook,
+  type AdapterReply,
+  type AdapterRequest,
+  type AdapterRouteOptions,
+} from '../internal/route_hooks.js'
 import { CacheStore } from './store.js'
 
 export interface CacheInvalidateOptions {

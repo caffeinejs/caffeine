@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import {
   Contributions,
   ErrContributionConflict,
@@ -35,8 +36,9 @@ describe('Contributions', () => {
     contributions.contribute(kServer, { port: 8080 })
 
     expect(() => contributions.contribute(kServer, { port: 9090 })).toThrow(ErrContributionConflict)
-    expect(() => contributions.contribute(kServer, { port: 9090 }))
-      .toThrow('Cannot contribute "test:server": a contribution for that key already exists')
+    expect(() => contributions.contribute(kServer, { port: 9090 })).toThrow(
+      'Cannot contribute "test:server": a contribution for that key already exists',
+    )
   })
 
   // The reason the phase exists: services bootstrap concurrently, so a read here would be answered by
@@ -48,24 +50,25 @@ describe('Contributions', () => {
     expect(() => contributions.get(kServer)).toThrow(ErrContributionPhase)
     expect(() => contributions.find(kServer)).toThrow(ErrContributionPhase)
     expect(() => contributions.has(kServer)).toThrow(ErrContributionPhase)
-    expect(() => contributions.get(kServer))
-      .toThrow('Cannot read contribution "test:server": contributions are not sealed yet')
+    expect(() => contributions.get(kServer)).toThrow(
+      'Cannot read contribution "test:server": contributions are not sealed yet',
+    )
   })
 
   it('refuses a contribution once the step is sealed', () => {
     const contributions = sealed()
 
     expect(() => contributions.contribute(kServer, { port: 8080 })).toThrow(ErrContributionPhase)
-    expect(() => contributions.contribute(kServer, { port: 8080 }))
-      .toThrow('Cannot contribute "test:server": contributions are already sealed')
+    expect(() => contributions.contribute(kServer, { port: 8080 })).toThrow(
+      'Cannot contribute "test:server": contributions are already sealed',
+    )
   })
 
   it('throws on get for a key nothing contributed, and reports absence through find/has', () => {
     const contributions = sealed(c => c.contribute(kServer, { port: 8080 }))
 
     expect(() => contributions.get(kOther)).toThrow(ErrNoContribution)
-    expect(() => contributions.get(kOther))
-      .toThrow('Cannot resolve contribution "test:other": nothing contributed it')
+    expect(() => contributions.get(kOther)).toThrow('Cannot resolve contribution "test:other": nothing contributed it')
     expect(contributions.find(kOther)).toBeUndefined()
     expect(contributions.has(kOther)).toBe(false)
     expect(contributions.has(kServer)).toBe(true)

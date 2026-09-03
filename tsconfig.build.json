@@ -69,6 +69,6 @@
     },
     {
       "path": "./plugins/eslint/tsconfig.build.json"
-    },
+    }
   ]
 }

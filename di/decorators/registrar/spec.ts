@@ -31,7 +31,7 @@ export class DecoratedBindingConfig {
   #injectableProperties?: Map<Identifier, InjectionDescriptor<unknown>>
   #injectableMethods?: Map<Identifier, InjectionDescriptor<unknown>[]>
   #configuredBy?: string
-  #source?: { ctor: Ctor, method: string | symbol }
+  #source?: { ctor: Ctor; method: string | symbol }
   #fallback?: boolean
   #order?: number
   #async?: boolean
@@ -85,7 +85,7 @@ export class DecoratedBindingConfig {
     return this.#keysProvided
   }
 
-  get getSource(): { ctor: Ctor, method: string | symbol } | undefined {
+  get getSource(): { ctor: Ctor; method: string | symbol } | undefined {
     return this.#source
   }
 
@@ -122,8 +122,7 @@ export class DecoratedBindingConfig {
 
     if (this.#names.some(value => names.includes(value))) {
       throw new ErrRepeatedInjectableConfiguration(
-        `Found repeated names for binding "${keyStr(this.#key)}": ${names.map(x => keyStr(x))
-          .join(', ')}`,
+        `Found repeated names for binding "${keyStr(this.#key)}": ${names.map(x => keyStr(x)).join(', ')}`,
       )
     }
 
@@ -186,7 +185,7 @@ export class DecoratedBindingConfig {
   }
 
   interceptor(interceptor: PostResolutionInterceptor): this {
-    (this.#interceptors ??= []).push(interceptor)
+    ;(this.#interceptors ??= []).push(interceptor)
     return this
   }
 
@@ -235,8 +234,8 @@ export class DecoratedBindingConfig {
 
   injectableProperties(properties: Map<Identifier, Injection<unknown>>): this {
     this.#injectableProperties = new Map(
-      properties.entries()
-        .map(([name, descriptor]) => [name, normalizeInjection(descriptor)]))
+      properties.entries().map(([name, descriptor]) => [name, normalizeInjection(descriptor)]),
+    )
     return this
   }
 
@@ -248,8 +247,8 @@ export class DecoratedBindingConfig {
 
   injectableMethods(methods: Map<Identifier, Injection<unknown>[]>): this {
     this.#injectableMethods = new Map(
-      methods.entries()
-        .map(([name, descriptors]) => [name, normalizeInjections(descriptors)]))
+      methods.entries().map(([name, descriptors]) => [name, normalizeInjections(descriptors)]),
+    )
     return this
   }
 
@@ -349,7 +348,7 @@ export class MemberMetadata {
   }
 
   member(name: Identifier, config: DecoratedBindingConfig): this {
-    (this.#members ??= new Map()).set(name, config)
+    ;(this.#members ??= new Map()).set(name, config)
     return this
   }
 
@@ -419,12 +418,12 @@ export class MemberMetadata {
 
 function isPlainObject(v: unknown): v is Record<string | symbol, unknown> {
   return (
-    typeof v === 'object'
-    && v !== null
-    && !Array.isArray(v)
-    && !(v instanceof Map)
-    && !(v instanceof Set)
-    && Object.getPrototypeOf(v) === Object.prototype
+    typeof v === 'object' &&
+    v !== null &&
+    !Array.isArray(v) &&
+    !(v instanceof Map) &&
+    !(v instanceof Set) &&
+    Object.getPrototypeOf(v) === Object.prototype
   )
 }
 

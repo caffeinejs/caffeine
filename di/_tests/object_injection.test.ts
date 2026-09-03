@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { CaffeineIoC } from '../container.js'
 import { DeferredCtor } from '../deferred_ctor.js'
 import { ErrNoResolutionForKey } from '../errors.js'
@@ -23,11 +24,11 @@ class Beta extends Plugin {
   }
 }
 
-class Singleton { }
+class Singleton {}
 
-class Transient { }
+class Transient {}
 
-class Absent { }
+class Absent {}
 
 const kMovie = token<{ title: string }>('movie')
 
@@ -41,8 +42,9 @@ describe('$i.object', function () {
     di.bind(Beta, t => t.toSelf().extends(Plugin).order(2))
     di.bind(Singleton, t => t.toSelf())
     di.bind(Transient, t => t.toSelf().lifetime(Scopes.TRANSIENT))
-    di.bindValuesProvider<{ database: { host: string, port: number } }>(t => t
-      .toValue({ database: { host: 'localhost', port: 5432 } }))
+    di.bindValuesProvider<{ database: { host: string; port: number } }>(t =>
+      t.toValue({ database: { host: 'localhost', port: 5432 } }),
+    )
 
     await di.init()
 
@@ -62,11 +64,13 @@ describe('$i.object', function () {
   describe('given a value read from the values provider', function () {
     it('should select it by function, by path, and fall back to a default', async function () {
       const di = await container()
-      const bag = di.resolver($i.object({
-        host: $i.value<{ database: { host: string } }>(cfg => cfg.database.host),
-        port: $i.value<{ database: { port: number } }>('database.port'),
-        missing: $i.value<{ database: { host: string } }>('database.missing', 'fallback'),
-      }))()
+      const bag = di.resolver(
+        $i.object({
+          host: $i.value<{ database: { host: string } }>(cfg => cfg.database.host),
+          port: $i.value<{ database: { port: number } }>('database.port'),
+          missing: $i.value<{ database: { host: string } }>('database.missing', 'fallback'),
+        }),
+      )()
 
       expect(bag.host).toBe('localhost')
       expect(bag.port).toBe(5432)
@@ -111,10 +115,12 @@ describe('$i.object', function () {
   describe('given an object nested inside the spec', function () {
     it('should resolve it as a bag, written either way', async function () {
       const di = await container()
-      const bag = di.resolver($i.object({
-        explicit: $i.object({ singleton: Singleton, label: $i.just('inner') }),
-        implicit: { singleton: Singleton },
-      }))()
+      const bag = di.resolver(
+        $i.object({
+          explicit: $i.object({ singleton: Singleton, label: $i.just('inner') }),
+          implicit: { singleton: Singleton },
+        }),
+      )()
 
       expect(bag.explicit.singleton).toBeInstanceOf(Singleton)
       expect(bag.explicit.label).toBe('inner')
@@ -125,14 +131,16 @@ describe('$i.object', function () {
   describe('given the helpers that already worked', function () {
     it('should keep resolving them the same way', async function () {
       const di = await container()
-      const bag = di.resolver($i.object({
-        singleton: Singleton,
-        transient: Transient,
-        absent: $i.optional(Absent),
-        present: $i.optional(Singleton),
-        all: $i.allOf(Plugin),
-        deferred: $i.defer(() => Singleton),
-      }))()
+      const bag = di.resolver(
+        $i.object({
+          singleton: Singleton,
+          transient: Transient,
+          absent: $i.optional(Absent),
+          present: $i.optional(Singleton),
+          all: $i.allOf(Plugin),
+          deferred: $i.defer(() => Singleton),
+        }),
+      )()
 
       expect(bag.singleton).toBeInstanceOf(Singleton)
       expect(bag.transient).toBeInstanceOf(Transient)
@@ -160,11 +168,13 @@ describe('$i.object', function () {
       di.bind(Singleton, t => t.toSelf().names(kNamed))
       await di.init()
 
-      const bag = di.resolver($i.object({
-        byClass: Singleton,
-        byToken: kNamed,
-        byDeferred: new DeferredCtor(() => Singleton),
-      }))()
+      const bag = di.resolver(
+        $i.object({
+          byClass: Singleton,
+          byToken: kNamed,
+          byDeferred: new DeferredCtor(() => Singleton),
+        }),
+      )()
 
       expect(bag.byClass).toBeInstanceOf(Singleton)
       expect(bag.byToken).toBeInstanceOf(Singleton)
@@ -195,10 +205,8 @@ describe('$i.object', function () {
     it('should say which field failed', async function () {
       const di = await container()
 
-      expect(() => di.resolver($i.object({ outer: { inner: Absent } }))())
-        .toThrow(ErrNoResolutionForKey)
-      expect(() => di.resolver($i.object({ outer: { inner: Absent } }))())
-        .toThrow(/outer\.inner/)
+      expect(() => di.resolver($i.object({ outer: { inner: Absent } }))()).toThrow(ErrNoResolutionForKey)
+      expect(() => di.resolver($i.object({ outer: { inner: Absent } }))()).toThrow(/outer\.inner/)
     })
   })
 })

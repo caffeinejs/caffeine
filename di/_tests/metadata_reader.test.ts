@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import { Binding } from '../binding.js'
 import { CaffeineIoC } from '../container.js'
 import { InjectionDescriptor } from '../injection.js'
@@ -64,25 +65,17 @@ describe('Custom Binding Metadata', function () {
     it('should resolve dependencies based on the return of the Symbols.injections function', async function () {
       const di = new CaffeineIoC({ metadataReader: builtInMetadataReader })
 
-      di.bind(Dep, t => t
-        .toSelf())
-      di.bind(Nm, t => t
-        .toSelf()
-        .names(kNm))
-      di.bind(Root, t => t
-        .toSelf())
+      di.bind(Dep, t => t.toSelf())
+      di.bind(Nm, t => t.toSelf().names(kNm))
+      di.bind(Root, t => t.toSelf())
       await di.init()
 
       const root = di.get(Root)
 
-      expect(root)
-        .toBeInstanceOf(Root)
-      expect(root.dep)
-        .toBeInstanceOf(Dep)
-      expect(root.nm)
-        .toBeInstanceOf(Nm)
-      expect(root.opt)
-        .toBeUndefined()
+      expect(root).toBeInstanceOf(Root)
+      expect(root.dep).toBeInstanceOf(Dep)
+      expect(root.nm).toBeInstanceOf(Nm)
+      expect(root.opt).toBeUndefined()
     })
   })
 
@@ -97,11 +90,9 @@ describe('Custom Binding Metadata', function () {
 
       class Svc {}
       const di = new CaffeineIoC({ metadataReader: custom, decorators: false })
-      di.bind(Svc, t => t
-        .toSelf())
+      di.bind(Svc, t => t.toSelf())
 
-      expect(spy)
-        .toHaveBeenCalled()
+      expect(spy).toHaveBeenCalled()
     })
   })
 })

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ResolutionContext } from '../../types.js'
+
 import { SpringCloudConfigProvider } from '../../providers/scc_provider.js'
+import type { ResolutionContext } from '../../types.js'
 
 const ctx: ResolutionContext = { app: 'caffeine', profiles: ['default'] }
 
-function mockFetch(responses: Array<{ ok: boolean, status?: number, body?: unknown }>) {
+function mockFetch(responses: Array<{ ok: boolean; status?: number; body?: unknown }>) {
   let call = 0
   return vi.fn(async () => {
     const r = responses[Math.min(call++, responses.length - 1)]
@@ -67,7 +68,8 @@ describe('SpringCloudConfigProvider', () => {
   })
 
   it('fails over to second URL when first is unreachable', async () => {
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockRejectedValueOnce(new Error('ECONNREFUSED'))
       .mockResolvedValueOnce({ ok: true, json: async () => successBody })
     vi.stubGlobal('fetch', fetchMock)
@@ -158,10 +160,13 @@ describe('SpringCloudConfigProvider', () => {
 
   it('throws immediately on 401 without retrying', async () => {
     let callCount = 0
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      callCount++
-      return { ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({}) }
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        callCount++
+        return { ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({}) }
+      }),
+    )
 
     const provider = new SpringCloudConfigProvider({
       baseURLs: ['http://localhost:8888'],
@@ -209,9 +214,12 @@ describe('SpringCloudConfigProvider', () => {
 
   it('beforeRequest is called on each retry attempt', async () => {
     let hookCalls = 0
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Service Unavailable', json: async () => ({}) })
-      .mockResolvedValueOnce({ ok: true, json: async () => successBody }),
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Service Unavailable', json: async () => ({}) })
+        .mockResolvedValueOnce({ ok: true, json: async () => successBody }),
     )
 
     const provider = new SpringCloudConfigProvider({

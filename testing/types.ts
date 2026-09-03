@@ -4,11 +4,13 @@ export interface Fetchable {
 
 export type RouterCtor = abstract new (...args: never[]) => object
 
-export type RouterDescriptor = { path: string, prefix?: string }
+export type RouterDescriptor = { path: string; prefix?: string }
 
 export type RouteMethods<C extends RouterCtor> = {
   [K in keyof InstanceType<C>]: InstanceType<C>[K] extends (...args: never[]) => unknown
-    ? K extends string ? K : never
+    ? K extends string
+      ? K
+      : never
     : never
 }[keyof InstanceType<C>]
 

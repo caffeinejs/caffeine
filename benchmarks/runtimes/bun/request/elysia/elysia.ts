@@ -4,8 +4,7 @@ const PORT = parseInt(process.env.PORT ?? '3024', 10)
 
 new Elysia({ aot: true })
   .onRequest(({ set }) => {
-    set.headers['x-request-id'] = Math.random().toString(36)
-      .slice(2)
+    set.headers['x-request-id'] = Math.random().toString(36).slice(2)
   })
   .get('/health', () => ({ ok: true }))
   .post(

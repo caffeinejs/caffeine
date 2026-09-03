@@ -6,9 +6,9 @@ method injections after properties.
 
 ## Constructor injection
 
-Dependencies are injected to the constructor.  
+Dependencies are injected to the constructor.
 
-For **ECMAScript Stage 3** decorators, dependencies must be explicitly passed to the `@Injectable` decorator, following the order of the parameters in the class constructor.  
+For **ECMAScript Stage 3** decorators, dependencies must be explicitly passed to the `@Injectable` decorator, following the order of the parameters in the class constructor.
 
 With **TypeScript Legacy** decorators, injections can be inferred by the parameter type, as long as the class type itself is the injection key.
 
@@ -31,7 +31,7 @@ class UserService {
 The dep array passed to `@Injectable` must match the constructor parameter
 positions exactly.
 
-**Legacy decorators:** With `@caffeinejs/di/decorators/legacy`, 
+**Legacy decorators:** With `@caffeinejs/di/decorators/legacy`,
 constructor dependencies whose key is the class constructor itself are inferred automatically from TypeScript's type metadata — the `deps` array can be omitted:
 
 ```ts
@@ -48,6 +48,7 @@ class UserService {
 
 :::info
 For Legacy Decorators, make sure to enable Experimental decorators and Emit Decorator Metadata options in your tsconfig.json to use this library:
+
 ```json
 {
   "compilerOptions": {
@@ -56,6 +57,7 @@ For Legacy Decorators, make sure to enable Experimental decorators and Emit Deco
   }
 }
 ```
+
 :::
 
 When a key is a string, symbol, or you need to use an injection modifier (like `allOf`, `optional`), use
@@ -98,7 +100,7 @@ class ReportService {
 ## Method injection
 
 `@Inject([...deps])` on a method injects dependencies as arguments and calls the
-method after all property injections have been applied. 
+method after all property injections have been applied.
 
 ```ts
 import { Injectable, Inject } from '@caffeinejs/di/decorators'

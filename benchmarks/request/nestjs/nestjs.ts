@@ -1,15 +1,31 @@
 import 'reflect-metadata'
 import {
-  Body, CallHandler, CanActivate, Controller, ExecutionContext, Get,
-  Headers, HttpCode, Injectable, Module, NestInterceptor, Param, Post,
-  Query, Res, UnauthorizedException, UseGuards, UseInterceptors, ValidationPipe,
+  Body,
+  CallHandler,
+  CanActivate,
+  Controller,
+  ExecutionContext,
+  Get,
+  Headers,
+  HttpCode,
+  Injectable,
+  Module,
+  NestInterceptor,
+  Param,
+  Post,
+  Query,
+  Res,
+  UnauthorizedException,
+  UseGuards,
+  UseInterceptors,
+  ValidationPipe,
 } from '@nestjs/common'
-import { Transform, Type } from 'class-transformer'
-import { IsBoolean, IsInt, IsNotEmpty, IsString } from 'class-validator'
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
-import { Observable } from 'rxjs'
+import { Transform, Type } from 'class-transformer'
+import { IsBoolean, IsInt, IsNotEmpty, IsString } from 'class-validator'
 import { FastifyReply } from 'fastify'
+import { Observable } from 'rxjs'
 
 const PORT = parseInt(process.env.PORT ?? '3022', 10)
 
@@ -81,7 +97,7 @@ class TestController {
   controllers: [TestController],
   providers: [RequestIdInterceptor],
 })
-class AppModule { }
+class AppModule {}
 
 const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
 app.useGlobalPipes(new ValidationPipe({ transform: true }))

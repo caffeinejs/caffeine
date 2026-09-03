@@ -1,15 +1,18 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
+
 import { $t } from '../../schema/t.js'
-import { ConfigDefinition } from '../definition.js'
-import { ConfigPriority } from '../sources.js'
 import { Configuration, kConfiguration } from '../configuration.js'
+import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
+import { ConfigPriority } from '../sources.js'
 
 const APP_CONFIG = token<any>(Symbol('app.config'))
 
-interface App { server: { port: number } }
+interface App {
+  server: { port: number }
+}
 
 const schema = $t.Object({
   server: $t.Object({ port: $t.Number({ default: 0 }) }, { default: {} }),
@@ -74,7 +77,7 @@ describe('Configuration', () => {
     // Plain property access: the fastest read available, which is why a snapshot is worth having at all.
     expect(taken.server).toBe(taken.server)
     expect(() => {
-      (taken.server as { port: number }).port = 1
+      ;(taken.server as { port: number }).port = 1
     }).toThrow(TypeError)
   })
 

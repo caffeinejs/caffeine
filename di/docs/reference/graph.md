@@ -4,13 +4,7 @@ CaffeineIoC can render a container's bindings as a dependency graph in several
 formats. All graph functions are exported from the main package.
 
 ```ts
-import {
-  graphToText,
-  graphToMarkdown,
-  graphToMermaid,
-  graphToDot,
-  graphToJson,
-} from '@caffeinejs/di'
+import { graphToText, graphToMarkdown, graphToMermaid, graphToDot, graphToJson } from '@caffeinejs/di'
 ```
 
 - [graphToText](#graphtotext)

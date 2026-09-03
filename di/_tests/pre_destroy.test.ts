@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect, vi } from 'vitest'
-import { PreDestroy } from '../decorators/pre_destroy.js'
-import { OnPreDestroy } from '../decorators/on_pre_destroy.js'
+
 import { CaffeineIoC } from '../container.js'
-import { Injectable } from '../decorators/injectable.js'
 import { Configuration } from '../decorators/configuration.js'
-import { Provides } from '../decorators/provides.js'
-import { Scopes } from '../scope.js'
-import { ErrInvalidDecorator } from '../errors.js'
+import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
+import { OnPreDestroy } from '../decorators/on_pre_destroy.js'
+import { PreDestroy } from '../decorators/pre_destroy.js'
+import { Provides } from '../decorators/provides.js'
+import { ErrInvalidDecorator } from '../errors.js'
+import { Scopes } from '../scope.js'
 
 describe('PreDestroy', function () {
   it('should call method decorated with @PreDestroy() when the container is disposed', async function () {
@@ -32,14 +34,12 @@ describe('PreDestroy', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Managed, t => t
-      .toSelf())
+    di.bind(Managed, t => t.toSelf())
     await di.init()
     await di.dispose()
 
     expect(nmspy).not.toHaveBeenCalled()
-    expect(mspy)
-      .toHaveBeenCalledTimes(1)
+    expect(mspy).toHaveBeenCalledTimes(1)
   })
 
   describe('OnPreDestroy', function () {
@@ -151,17 +151,14 @@ describe('PreDestroy', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc, t => t
-        .toSelf()
-        .lifetime(Scopes.SINGLETON))
+      di.bind(Svc, t => t.toSelf().lifetime(Scopes.SINGLETON))
       await di.init()
 
       const before = di.get(Svc)
 
       await expect(di.resetBinding(di.getBinding(Svc)!)).rejects.toThrow('preDestroy boom')
 
-      expect(destroySpy)
-        .toHaveBeenCalledTimes(1)
+      expect(destroySpy).toHaveBeenCalledTimes(1)
 
       const after = di.get(Svc)
       expect(after).not.toBe(before)
@@ -182,17 +179,14 @@ describe('PreDestroy', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc, t => t
-        .toSelf()
-        .lifetime(Scopes.SINGLETON))
+      di.bind(Svc, t => t.toSelf().lifetime(Scopes.SINGLETON))
       await di.init()
 
       const before = di.get(Svc)
 
       await di.resetBinding(di.getBinding(Svc)!)
 
-      expect(destroySpy)
-        .toHaveBeenCalledTimes(1)
+      expect(destroySpy).toHaveBeenCalledTimes(1)
 
       const after = di.get(Svc)
       expect(after).not.toBe(before)

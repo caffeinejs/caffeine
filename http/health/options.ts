@@ -8,6 +8,7 @@ import {
   isTestEnvironment,
   toMillis,
 } from '@caffeinejs/std'
+
 import { solutions } from '../error/util.js'
 import { ErrHealthConfiguration } from './errors.js'
 
@@ -134,11 +135,13 @@ const duration = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Nu
  */
 export const healthConfigSchema = $t.Object({
   enabled: $t.Optional($t.Boolean()),
-  paths: $t.Optional($t.Object({
-    live: $t.Optional($t.String()),
-    ready: $t.Optional($t.String()),
-    startup: $t.Optional($t.String()),
-  })),
+  paths: $t.Optional(
+    $t.Object({
+      live: $t.Optional($t.String()),
+      ready: $t.Optional($t.String()),
+      startup: $t.Optional($t.String()),
+    }),
+  ),
   drainDelay: $t.Optional(duration()),
   shutdownTimeout: $t.Optional(duration()),
   terminationGracePeriod: $t.Optional(duration()),
@@ -166,7 +169,7 @@ export const healthConfigSchema = $t.Object({
  */
 export function mergeHealthConfig(
   config: HealthConfig,
-  options: { dispatcher?: SignalDispatcher, enabledDefault?: boolean } = {},
+  options: { dispatcher?: SignalDispatcher; enabledDefault?: boolean } = {},
 ): HealthOptions {
   const defaults = defaultHealthOptions()
 
@@ -223,17 +226,17 @@ export function validateHealthOptions(options: HealthOptions, env: EnvLike = hos
 
     if (clamped <= 0) {
       throw new ErrHealthConfiguration(
-        `Cannot configure health: a drain delay of ${options.drainDelayMs}ms does not fit in a termination grace period of ${options.terminationGracePeriodMs}ms`
-        + solutions(
-          'Lower the drain delay with .drainDelay(...)',
-          'Raise terminationGracePeriodSeconds on the pod spec and mirror it with .terminationGracePeriod(...)',
-        ),
+        `Cannot configure health: a drain delay of ${options.drainDelayMs}ms does not fit in a termination grace period of ${options.terminationGracePeriodMs}ms` +
+          solutions(
+            'Lower the drain delay with .drainDelay(...)',
+            'Raise terminationGracePeriodSeconds on the pod spec and mirror it with .terminationGracePeriod(...)',
+          ),
       )
     }
 
     warnings.push(
-      `Health shutdown budget (${budget}ms) exceeds the termination grace period (${options.terminationGracePeriodMs}ms); `
-      + `the shutdown timeout was clamped to ${clamped}ms so in-flight requests are not cut short by SIGKILL`,
+      `Health shutdown budget (${budget}ms) exceeds the termination grace period (${options.terminationGracePeriodMs}ms); ` +
+        `the shutdown timeout was clamped to ${clamped}ms so in-flight requests are not cut short by SIGKILL`,
     )
 
     options = { ...options, shutdownTimeoutMs: clamped }
@@ -241,8 +244,8 @@ export function validateHealthOptions(options: HealthOptions, env: EnvLike = hos
 
   if (options.enabled && options.drainDelayMs === 0 && isKubernetes(env)) {
     warnings.push(
-      'Health drain delay is 0 under Kubernetes: the server will stop accepting before the EndpointSlice update '
-      + 'propagates, dropping in-flight requests on every rolling deploy',
+      'Health drain delay is 0 under Kubernetes: the server will stop accepting before the EndpointSlice update ' +
+        'propagates, dropping in-flight requests on every rolling deploy',
     )
   }
 

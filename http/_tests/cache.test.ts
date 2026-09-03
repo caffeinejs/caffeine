@@ -1,8 +1,24 @@
 import { Readable } from 'node:stream'
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
+
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Delete, Get, Post, Status, createWebApplication, fastifyAdapterFactory, Cache, CacheInvalidate, MemoryCacheStore, CacheStore, kETagGenerator, type CacheEntry } from '../index.js'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
+import {
+  Controller,
+  Delete,
+  Get,
+  Post,
+  Status,
+  createWebApplication,
+  fastifyAdapterFactory,
+  Cache,
+  CacheInvalidate,
+  MemoryCacheStore,
+  CacheStore,
+  kETagGenerator,
+  type CacheEntry,
+} from '../index.js'
 
 describe('Cache-Control headers', () => {
   describe('ttl', () => {
@@ -11,13 +27,14 @@ describe('Cache-Control headers', () => {
       class TtlNumController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [TtlNumController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-ttl-num/data')
@@ -30,13 +47,14 @@ describe('Cache-Control headers', () => {
       class TtlStrMController {
         @Cache({ ttl: '5m' })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [TtlStrMController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-ttl-str-m/data')
@@ -48,13 +66,14 @@ describe('Cache-Control headers', () => {
       class TtlCompoundController {
         @Cache({ ttl: '1h30m' })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [TtlCompoundController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-ttl-compound/data')
@@ -68,13 +87,14 @@ describe('Cache-Control headers', () => {
       class SharedMaxAgeController {
         @Cache({ ttl: '5m', sharedMaxAge: '1h' })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [SharedMaxAgeController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-smaxage/data')
@@ -89,13 +109,14 @@ describe('Cache-Control headers', () => {
       class StaleWhileRevalidateController {
         @Cache({ ttl: 60, staleWhileRevalidate: 30 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [StaleWhileRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-swr/data')
@@ -107,13 +128,14 @@ describe('Cache-Control headers', () => {
       class StaleIfErrorController {
         @Cache({ ttl: 60, staleIfError: '1h' })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [StaleIfErrorController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-sie/data')
@@ -127,13 +149,14 @@ describe('Cache-Control headers', () => {
       class PrivateCacheController {
         @Cache({ ttl: 60, privacy: 'private' })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [PrivateCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-private/data')
@@ -145,13 +168,14 @@ describe('Cache-Control headers', () => {
       class PublicCacheController {
         @Cache({ ttl: 60, privacy: 'public' })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [PublicCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-public/data')
@@ -165,13 +189,14 @@ describe('Cache-Control headers', () => {
       class NoStoreController {
         @Cache({ noStore: true })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [NoStoreController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-nostore/data')
@@ -183,13 +208,14 @@ describe('Cache-Control headers', () => {
       class NoCacheController {
         @Cache({ noCache: true })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [NoCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-nocache/data')
@@ -201,13 +227,14 @@ describe('Cache-Control headers', () => {
       class MustRevalidateController {
         @Cache({ ttl: 60, mustRevalidate: true })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [MustRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-mustrevalidate/data')
@@ -219,13 +246,14 @@ describe('Cache-Control headers', () => {
       class ImmutableController {
         @Cache({ ttl: 60, immutable: true })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [ImmutableController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-cc-immutable/data')
@@ -238,13 +266,14 @@ describe('Cache-Control headers', () => {
     class EmptyOptionsController {
       @Cache()
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [EmptyOptionsController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-cc-empty/data')
@@ -258,13 +287,14 @@ describe('Vary header', () => {
     class VarySingleController {
       @Cache({ vary: ['Accept-Language'] })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [VarySingleController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-vary-single/data')
@@ -276,13 +306,14 @@ describe('Vary header', () => {
     class VaryMultiController {
       @Cache({ vary: ['Accept', 'Accept-Encoding'] })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [VaryMultiController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-vary-multi/data')
@@ -294,13 +325,14 @@ describe('Vary header', () => {
     class VaryNoneController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [VaryNoneController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-vary-none/data')
@@ -314,13 +346,14 @@ describe('ETag', () => {
     class ETagPresentController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [ETagPresentController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-etag-present/data')
@@ -334,13 +367,14 @@ describe('ETag', () => {
     class ETagStableController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { value: 'constant' } }
+      data() {
+        return { value: 'constant' }
+      }
     }
     void [ETagStableController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res1 = await app.fetch('/cache-etag-stable/data')
@@ -354,17 +388,20 @@ describe('ETag', () => {
     class ETagDiffController {
       @Cache({ ttl: 60 })
       @Get('/a')
-      a() { return { label: 'alpha' } }
+      a() {
+        return { label: 'alpha' }
+      }
 
       @Cache({ ttl: 60 })
       @Get('/b')
-      b() { return { label: 'beta' } }
+      b() {
+        return { label: 'beta' }
+      }
     }
     void [ETagDiffController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const resA = await app.fetch('/cache-etag-diff/a')
@@ -380,13 +417,14 @@ describe('ETag', () => {
     class ETagDisabledController {
       @Cache({ ttl: 60, etag: false })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [ETagDisabledController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-etag-disabled/data')
@@ -398,13 +436,14 @@ describe('ETag', () => {
     class ETagNoStoreController {
       @Cache({ noStore: true })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [ETagNoStoreController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-etag-nostore/data')
@@ -416,13 +455,14 @@ describe('ETag', () => {
     class ETagStreamController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return Readable.from(['hello', ' ', 'world']) }
+      data() {
+        return Readable.from(['hello', ' ', 'world'])
+      }
     }
     void [ETagStreamController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-etag-stream/data')
@@ -437,13 +477,14 @@ describe('304 Not Modified', () => {
     class Match304Controller {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { value: 'cached' } }
+      data() {
+        return { value: 'cached' }
+      }
     }
     void [Match304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res1 = await app.fetch('/cache-304-match/data')
@@ -460,13 +501,14 @@ describe('304 Not Modified', () => {
     class NoMatch304Controller {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { value: 'cached' } }
+      data() {
+        return { value: 'cached' }
+      }
     }
     void [NoMatch304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-304-nomatch/data')
@@ -481,7 +523,9 @@ describe('304 Not Modified', () => {
     class Stale304Controller {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { value: 'content' } }
+      data() {
+        return { value: 'content' }
+      }
     }
     void [Stale304Controller]
 
@@ -489,8 +533,7 @@ describe('304 Not Modified', () => {
     const container = new CaffeineIoC()
     container.bind(CacheStore, t => t.toValue(store))
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server), { container })
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
 
     const res1 = await app.fetch('/cache-304-stale/data')
@@ -508,13 +551,14 @@ describe('304 Not Modified', () => {
     class Head304Controller {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { value: 'head-cached' } }
+      data() {
+        return { value: 'head-cached' }
+      }
     }
     void [Head304Controller]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res1 = await app.fetch('/cache-304-head/data')
@@ -541,8 +585,7 @@ describe('Cache store', () => {
     void [StoreBupassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res1 = await app.fetch('/cache-store-bypass/data')
@@ -569,8 +612,7 @@ describe('Cache store', () => {
     void [StoreNoStoreController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-store-nostore/data')
@@ -593,8 +635,7 @@ describe('Cache store', () => {
     void [StorePostDefaultController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-store-post-default/data', { method: 'POST' })
@@ -617,8 +658,7 @@ describe('Cache store', () => {
     void [StorePostCustomController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res1 = await app.fetch('/cache-store-post-custom/data', { method: 'POST' })
@@ -656,8 +696,7 @@ describe('Cache store', () => {
     server.setNotFoundHandler((_req, reply) => {
       void reply.code(400).send({ error: 'bad' })
     })
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-store-status/ok')
@@ -683,8 +722,7 @@ describe('Cache store', () => {
     const container = new CaffeineIoC()
     container.bind(CacheStore, t => t.toValue(store))
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server), { container })
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
     await app.ready()
 
     await app.fetch('/cache-store-clear/data')
@@ -716,8 +754,7 @@ describe('Cache key', () => {
     void [KeyDefaultController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-key-default/data')
@@ -748,8 +785,7 @@ describe('Cache key', () => {
     void [KeyURLsController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-key-urls/a')
@@ -776,8 +812,7 @@ describe('Cache key', () => {
     void [KeyCustomPathController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-key-custom-path/data?v=1')
@@ -800,8 +835,7 @@ describe('Cache key', () => {
     void [KeyCustomQueryController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-key-custom-query/data?lang=en')
@@ -820,16 +854,19 @@ describe('Decorator scope', () => {
     @Controller('/cache-scope-class')
     class ScopeClassController {
       @Get('/a')
-      a() { return { route: 'a' } }
+      a() {
+        return { route: 'a' }
+      }
 
       @Get('/b')
-      b() { return { route: 'b' } }
+      b() {
+        return { route: 'b' }
+      }
     }
     void [ScopeClassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const resA = await app.fetch('/cache-scope-class/a')
@@ -844,16 +881,19 @@ describe('Decorator scope', () => {
     class ScopeMethodController {
       @Cache({ ttl: 60 })
       @Get('/cached')
-      cached() { return { ok: true } }
+      cached() {
+        return { ok: true }
+      }
 
       @Get('/uncached')
-      uncached() { return { ok: true } }
+      uncached() {
+        return { ok: true }
+      }
     }
     void [ScopeMethodController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const resCached = await app.fetch('/cache-scope-method/cached')
@@ -869,13 +909,14 @@ describe('Decorator scope', () => {
     class ScopeReplaceController {
       @Cache({ ttl: 30 })
       @Get('/route')
-      route() { return { ok: true } }
+      route() {
+        return { ok: true }
+      }
     }
     void [ScopeReplaceController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-scope-replace/route')
@@ -899,8 +940,7 @@ describe('Undecorated routes', () => {
     void [UndecoratedController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res1 = await app.fetch('/cache-undecorated/data')
@@ -918,13 +958,14 @@ describe('@Cache(false)', () => {
     class CacheFalseMethodController {
       @Cache(false)
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [CacheFalseMethodController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const res = await app.fetch('/cache-false-method/data')
@@ -940,16 +981,19 @@ describe('@Cache(false)', () => {
     @Controller('/cache-false-class')
     class CacheFalseClassController {
       @Get('/a')
-      a() { return { route: 'a' } }
+      a() {
+        return { route: 'a' }
+      }
 
       @Get('/b')
-      b() { return { route: 'b' } }
+      b() {
+        return { route: 'b' }
+      }
     }
     void [CacheFalseClassController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     const resA = await app.fetch('/cache-false-class/a')
@@ -974,8 +1018,7 @@ describe('@Cache(false)', () => {
     void [CacheFalseNoCacheController]
 
     const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
     await app.ready()
 
     await app.fetch('/cache-false-nocache/data')
@@ -1002,8 +1045,7 @@ describe('Bug fixes', () => {
       void [Bug1EtagFalseController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-bug1-etag-false/data')
@@ -1022,13 +1064,14 @@ describe('Bug fixes', () => {
       class Bug1InmIgnoredController {
         @Cache({ ttl: 60, etag: false })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [Bug1InmIgnoredController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-bug1-inm-ignored/data')
@@ -1054,8 +1097,7 @@ describe('Bug fixes', () => {
       void [Bug2PrivateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-bug2-private/data')
@@ -1084,8 +1126,7 @@ describe('Bug fixes', () => {
       void [Bug3VarySeparateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'en-US' } })
@@ -1108,8 +1149,7 @@ describe('Bug fixes', () => {
       void [Bug3VaryHitController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
@@ -1132,17 +1172,20 @@ describe('Bug fixes', () => {
       void [Bug3VaryMultiController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       // same Accept-Language, different Accept → separate entry
-      await app.fetch('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'application/json' } })
+      await app.fetch('/cache-bug3-vary-multi/data', {
+        headers: { 'accept-language': 'en', accept: 'application/json' },
+      })
       await app.fetch('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'text/html' } })
       expect(callCount).toBe(2)
 
       // exact same headers → cache hit
-      await app.fetch('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'application/json' } })
+      await app.fetch('/cache-bug3-vary-multi/data', {
+        headers: { 'accept-language': 'en', accept: 'application/json' },
+      })
       expect(callCount).toBe(2)
     })
   })
@@ -1163,8 +1206,7 @@ describe('Bug fixes', () => {
       void [Bug4CCNoCacheController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-bug4-cc-nocache/data')
@@ -1195,8 +1237,7 @@ describe('Bug fixes', () => {
       void [Bug4PragmaController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-bug4-pragma/data')
@@ -1214,13 +1255,14 @@ describe('Bug fixes', () => {
       class Bug5HeadNoBodyController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { value: 'cached' } }
+        data() {
+          return { value: 'cached' }
+        }
       }
       void [Bug5HeadNoBodyController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const getRes = await app.fetch('/cache-bug5-head-nobody/data')
@@ -1238,20 +1280,24 @@ describe('Bug fixes', () => {
       class Bug5Head304Controller {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { value: 'head-cached' } }
+        data() {
+          return { value: 'head-cached' }
+        }
       }
       void [Bug5Head304Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const getRes = await app.fetch('/cache-bug5-head-304/data')
       const etag = getRes.headers.get('etag') as string
       expect(etag).toBeDefined()
 
-      const headRes = await app.fetch('/cache-bug5-head-304/data', { method: 'HEAD', headers: { 'if-none-match': etag } })
+      const headRes = await app.fetch('/cache-bug5-head-304/data', {
+        method: 'HEAD',
+        headers: { 'if-none-match': etag },
+      })
       expect(headRes.status).toBe(304)
       expect(await headRes.text()).toBe('')
     })
@@ -1273,8 +1319,7 @@ describe('Bug fixes', () => {
       void [VaryStarController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-vary-star/data')
@@ -1298,7 +1343,9 @@ describe('Bug fixes', () => {
           return undefined
         }
 
-        async set(_key: string, segment: string) { this.setCalls.push(segment) }
+        async set(_key: string, segment: string) {
+          this.setCalls.push(segment)
+        }
         async delete() {}
         async deleteMany() {}
         async clear() {}
@@ -1309,7 +1356,9 @@ describe('Bug fixes', () => {
       class SegmentController {
         @Cache({ ttl: 60, segment: 'products' })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [SegmentController]
 
@@ -1318,8 +1367,7 @@ describe('Bug fixes', () => {
       const container = new CaffeineIoC()
       container.bind(CacheStore, t => t.toValue(spyStore))
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server), { container })
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
       await app.ready()
 
       await app.fetch('/cache-segment/data')
@@ -1344,8 +1392,7 @@ describe('Bug fixes', () => {
       void [AuthPrivateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
@@ -1374,14 +1421,15 @@ describe('Bug fixes', () => {
       void [AuthPublicOverrideController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
       expect(callCount).toBe(1)
 
-      const res2 = await app.fetch('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
+      const res2 = await app.fetch('/cache-auth-public-override/data', {
+        headers: { authorization: 'Bearer token123' },
+      })
       expect(res2.status).toBe(200)
       expect(callCount).toBe(1)
     })
@@ -1396,7 +1444,9 @@ describe('Bug fixes', () => {
           return undefined
         }
 
-        async set(key: string) { this.keySeen.push(key) }
+        async set(key: string) {
+          this.keySeen.push(key)
+        }
         async delete() {}
         async deleteMany() {}
         async clear() {}
@@ -1408,7 +1458,9 @@ describe('Bug fixes', () => {
       class KeyEncodeController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [KeyEncodeController]
 
@@ -1417,8 +1469,7 @@ describe('Bug fixes', () => {
       const container = new CaffeineIoC()
       container.bind(CacheStore, t => t.toValue(spyStore))
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server), { container })
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
       await app.ready()
 
       await app.fetch('/cache-key-encode/data?a=1&b=2')
@@ -1447,8 +1498,7 @@ describe('Bug fixes', () => {
       void [ReqNoStoreController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-req-nostore/data')
@@ -1471,13 +1521,14 @@ describe('Bug fixes', () => {
       class Headers304Controller {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { value: 'hello' } }
+        data() {
+          return { value: 'hello' }
+        }
       }
       void [Headers304Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-304-headers/data')
@@ -1497,13 +1548,14 @@ describe('Bug fixes', () => {
       class InmWildcardController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { v: 1 } }
+        data() {
+          return { v: 1 }
+        }
       }
       void [InmWildcardController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-inm-wildcard/data')
@@ -1517,19 +1569,22 @@ describe('Bug fixes', () => {
       class InmListController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { v: 1 } }
+        data() {
+          return { v: 1 }
+        }
       }
       void [InmListController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-inm-list/data')
       const etag = res1.headers.get('etag') as string
 
-      const res = await app.fetch('/cache-inm-list/data', { headers: { 'if-none-match': `"stale-one", ${etag}, "stale-two"` } })
+      const res = await app.fetch('/cache-inm-list/data', {
+        headers: { 'if-none-match': `"stale-one", ${etag}, "stale-two"` },
+      })
       expect(res.status).toBe(304)
     })
 
@@ -1538,13 +1593,14 @@ describe('Bug fixes', () => {
       class InmWeakController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { v: 1 } }
+        data() {
+          return { v: 1 }
+        }
       }
       void [InmWeakController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-inm-weak/data')
@@ -1565,7 +1621,9 @@ describe('Bug fixes', () => {
       class SegIsoAController {
         @Cache({ ttl: 60, segment: 'a' })
         @Get('/data')
-        data() { return { seg: 'a' } }
+        data() {
+          return { seg: 'a' }
+        }
       }
       void [SegIsoAController]
 
@@ -1573,7 +1631,9 @@ describe('Bug fixes', () => {
       class SegIsoBController {
         @Cache({ ttl: 60, segment: 'b' })
         @Get('/data')
-        data() { return { seg: 'b' } }
+        data() {
+          return { seg: 'b' }
+        }
       }
       void [SegIsoBController]
 
@@ -1582,8 +1642,7 @@ describe('Bug fixes', () => {
       const container = new CaffeineIoC()
       container.bind(CacheStore, t => t.toValue(store))
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server), { container })
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server), { container }).build()
       await app.ready()
 
       // Prime both segments
@@ -1608,13 +1667,14 @@ describe('Bug fixes', () => {
       class ProxyRevalidateController {
         @Cache({ ttl: 60, proxyRevalidate: true })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [ProxyRevalidateController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-proxy-revalidate/data')
@@ -1645,8 +1705,7 @@ describe('Bug fixes', () => {
       void [InvalidateSelfController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-invalidate-self/resource')
@@ -1680,8 +1739,7 @@ describe('Bug fixes', () => {
       void [InvalidatePathsController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-invalidate-paths/resource')
@@ -1715,8 +1773,7 @@ describe('Bug fixes', () => {
       void [Invalidate4xxController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-invalidate-4xx/resource')
@@ -1736,13 +1793,14 @@ describe('Bug fixes', () => {
       class OnlyIfCachedMissController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [OnlyIfCachedMissController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-only-if-cached-miss/data', { headers: { 'cache-control': 'only-if-cached' } })
@@ -1764,8 +1822,7 @@ describe('Bug fixes', () => {
       void [OnlyIfCachedHitController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-only-if-cached-hit/data')
@@ -1783,13 +1840,14 @@ describe('Bug fixes', () => {
       class NoTransformController {
         @Cache({ ttl: 60, noTransform: true })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [NoTransformController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-no-transform/data')
@@ -1804,13 +1862,14 @@ describe('Bug fixes', () => {
       class LastModifiedController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [LastModifiedController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res = await app.fetch('/cache-last-modified/data')
@@ -1822,13 +1881,14 @@ describe('Bug fixes', () => {
       class ImsMatchController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [ImsMatchController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       const res1 = await app.fetch('/cache-ims-match/data')
@@ -1845,18 +1905,21 @@ describe('Bug fixes', () => {
       class ImsStaleController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [ImsStaleController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-ims-stale/data')
 
-      const res = await app.fetch('/cache-ims-stale/data', { headers: { 'if-modified-since': new Date(Date.now() - 60_000).toUTCString() } })
+      const res = await app.fetch('/cache-ims-stale/data', {
+        headers: { 'if-modified-since': new Date(Date.now() - 60_000).toUTCString() },
+      })
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ ok: true })
     })
@@ -1866,23 +1929,26 @@ describe('Bug fixes', () => {
       class InmPrecedenceController {
         @Cache({ ttl: 60 })
         @Get('/data')
-        data() { return { ok: true } }
+        data() {
+          return { ok: true }
+        }
       }
       void [InmPrecedenceController]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-inm-precedence/data')
 
       // Stale If-Modified-Since would normally yield 200, but a non-matching
       // If-None-Match must be evaluated instead and also yield 200.
-      const res = await app.fetch('/cache-inm-precedence/data', { headers: {
-        'if-none-match': '"does-not-match"',
-        'if-modified-since': new Date(Date.now() + 60_000).toUTCString(),
-      } })
+      const res = await app.fetch('/cache-inm-precedence/data', {
+        headers: {
+          'if-none-match': '"does-not-match"',
+          'if-modified-since': new Date(Date.now() + 60_000).toUTCString(),
+        },
+      })
       expect(res.status).toBe(200)
     })
   })
@@ -1903,8 +1969,7 @@ describe('Bug fixes', () => {
       void [ReqMaxAge0Controller]
 
       const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server))
-        .build()
+      const app = createWebApplication(fastifyAdapterFactory(server)).build()
       await app.ready()
 
       await app.fetch('/cache-req-maxage0/data')
@@ -2047,7 +2112,9 @@ describe('Cache builder & container-managed store', () => {
     class BuilderBothController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [BuilderBothController]
 
@@ -2068,7 +2135,9 @@ describe('Cache builder & container-managed store', () => {
     class ETagGenController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [ETagGenController]
 
@@ -2087,7 +2156,9 @@ describe('Cache builder & container-managed store', () => {
     class ETagOverrideController {
       @Cache({ ttl: 60, etagGenerator: () => '"route-override"' })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [ETagOverrideController]
 
@@ -2108,7 +2179,9 @@ describe('X-Cache status header', () => {
     class XCBasicController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [XCBasicController]
 
@@ -2128,7 +2201,9 @@ describe('X-Cache status header', () => {
     class XC304Controller {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { v: 1 } }
+      data() {
+        return { v: 1 }
+      }
     }
     void [XC304Controller]
 
@@ -2149,7 +2224,9 @@ describe('X-Cache status header', () => {
     class XCBypassController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [XCBypassController]
 
@@ -2166,7 +2243,9 @@ describe('X-Cache status header', () => {
     class XCFalseController {
       @Cache(false)
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [XCFalseController]
 
@@ -2183,7 +2262,9 @@ describe('X-Cache status header', () => {
     class XCCustomController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [XCCustomController]
 
@@ -2255,7 +2336,9 @@ describe('Age header & request max-age', () => {
     class AgeHitController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [AgeHitController]
 
@@ -2276,7 +2359,9 @@ describe('Age header & request max-age', () => {
     class AgeMaxAgeOkController {
       @Cache({ ttl: 60 })
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [AgeMaxAgeOkController]
 
@@ -2352,8 +2437,7 @@ describe('default CacheStore', () => {
     const container = new CaffeineIoC()
     container.bind(ExtendingStore, t => t.toSelf().extends(CacheStore))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).build()
     await app.ready()
 
     expect(app.container.get(CacheStore)).toBeInstanceOf(ExtendingStore)
@@ -2362,8 +2446,7 @@ describe('default CacheStore', () => {
   })
 
   it('is used when nothing else bound a store', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).build()
     await app.ready()
 
     expect(app.container.get(CacheStore)).toBeInstanceOf(MemoryCacheStore)

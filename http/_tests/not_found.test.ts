@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import fastify from 'fastify'
+import { describe, expect, it } from 'vitest'
+
 import {
   Controller,
   ErrHTTPNotFound,
@@ -32,8 +33,8 @@ describe('unmatched routes', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
     await app.ready()
 
-    const thrown = await (await app.fetch('/pets/42')).json() as Record<string, unknown>
-    const unmatched = await (await app.fetch('/no-such-route')).json() as Record<string, unknown>
+    const thrown = (await (await app.fetch('/pets/42')).json()) as Record<string, unknown>
+    const unmatched = (await (await app.fetch('/no-such-route')).json()) as Record<string, unknown>
 
     // Same keys, same values — only the detail differs.
     expect(Object.keys(unmatched).sort()).toEqual(Object.keys(thrown).sort())

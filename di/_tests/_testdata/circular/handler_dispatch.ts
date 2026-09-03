@@ -1,5 +1,5 @@
-import { Injectable } from '../../../decorators/injectable.js'
 import { Extends } from '../../../decorators/extends.js'
+import { Injectable } from '../../../decorators/injectable.js'
 import { $i } from '../../../injection.js'
 
 export abstract class DispatchHandler {}

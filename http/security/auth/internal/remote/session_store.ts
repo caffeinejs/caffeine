@@ -2,7 +2,7 @@ import type { Claim } from '../../../index.js'
 import { sealCookie, unsealCookie } from './_sealed_cookie.js'
 
 export interface RemoteAuthenticationSession {
-  claims: Array<{ type: string, value: unknown, issuer: string }>
+  claims: Array<{ type: string; value: unknown; issuer: string }>
   scheme: string
 }
 
@@ -20,7 +20,7 @@ export function assertValidSession(value: unknown): asserts value is RemoteAuthe
   if (value === null || typeof value !== 'object') {
     throw new TypeError('ticket store returned a session that is not an object')
   }
-  const session = value as { scheme?: unknown, claims?: unknown }
+  const session = value as { scheme?: unknown; claims?: unknown }
   if (typeof session.scheme !== 'string' || session.scheme.length === 0) {
     throw new TypeError('ticket store returned a session with no scheme')
   }
@@ -42,13 +42,7 @@ export async function encodeSession(
   scheme: string,
   ttlSeconds: number,
 ): Promise<string> {
-  return sealCookie(
-    value as unknown as Record<string, unknown>,
-    'oidc-session+jwt',
-    secret,
-    scheme,
-    ttlSeconds,
-  )
+  return sealCookie(value as unknown as Record<string, unknown>, 'oidc-session+jwt', secret, scheme, ttlSeconds)
 }
 
 export async function decodeSession(
@@ -77,11 +71,7 @@ export async function encodeTicketRef(
   return sealCookie({ key }, 'oidc-ticket+jwt', secret, scheme, ttlSeconds)
 }
 
-export async function decodeTicketRef(
-  cookie: string,
-  secret: string,
-  scheme: string,
-): Promise<string> {
+export async function decodeTicketRef(cookie: string, secret: string, scheme: string): Promise<string> {
   const { key } = await unsealCookie<{ key?: unknown }>(cookie, 'oidc-ticket+jwt', secret, scheme)
   if (typeof key !== 'string' || key.length === 0) {
     throw new TypeError('Ticket reference cookie is missing its key')

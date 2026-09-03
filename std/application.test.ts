@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
 import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
+import { describe, it, expect, vi } from 'vitest'
+
 import { InlineConfigProvider } from './config/index.js'
 import {
   defineFeature,

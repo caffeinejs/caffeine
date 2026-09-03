@@ -1,5 +1,5 @@
-import { Injectable } from '../../../decorators/injectable.js'
 import { Extends } from '../../../decorators/extends.js'
+import { Injectable } from '../../../decorators/injectable.js'
 import { $i } from '../../../injection.js'
 
 export abstract class SoleHandler {}
@@ -7,5 +7,7 @@ export abstract class SoleHandler {}
 @Extends(SoleHandler)
 @Injectable([$i.allOf($i.defer(() => SoleHandler))])
 export class SoleHandlerA extends SoleHandler {
-  constructor(readonly peers: SoleHandler[]) { super() }
+  constructor(readonly peers: SoleHandler[]) {
+    super()
+  }
 }

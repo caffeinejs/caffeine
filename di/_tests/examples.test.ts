@@ -1,32 +1,37 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
-import { ErrNoResolutionForKey } from '../errors.js'
-import { $i } from '../injection.js'
-import type { Provider } from '../provider.js'
-import { Scopes } from '../scope.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Named } from '../decorators/named.js'
-import { Primary } from '../decorators/primary.js'
-import { Fallback } from '../decorators/fallback.js'
-import { Extends } from '../decorators/extends.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
-import { Profile } from '../decorators/profile.js'
 import { Configuration } from '../decorators/configuration.js'
-import { Provides } from '../decorators/provides.js'
+import { Extends } from '../decorators/extends.js'
+import { Fallback } from '../decorators/fallback.js'
+import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Lifetime } from '../decorators/lifetime.js'
+import { Named } from '../decorators/named.js'
+import { Primary } from '../decorators/primary.js'
+import { Profile } from '../decorators/profile.js'
+import { Provides } from '../decorators/provides.js'
+import { ErrNoResolutionForKey } from '../errors.js'
+import { $i } from '../injection.js'
+import { token } from '../key.js'
+import type { Provider } from '../provider.js'
+import { Scopes } from '../scope.js'
 
 // ─── getting-started: manual bindings ────────────────────────────────────────
 
 describe('getting-started: manual bindings', function () {
   it('bind/toSelf/get resolves instance', async function () {
     class GsLogger {
-      log(msg: string) { return msg }
+      log(msg: string) {
+        return msg
+      }
     }
     class GsUserService {
       constructor(readonly logger: GsLogger) {}
-      greet(name: string) { return this.logger.log(`Hello, ${name}!`) }
+      greet(name: string) {
+        return this.logger.log(`Hello, ${name}!`)
+      }
     }
 
     const di = new CaffeineIoC({ decorators: false })
@@ -41,7 +46,9 @@ describe('getting-started: manual bindings', function () {
 
   it('symbol key bindings', async function () {
     class GsLoggerSym {
-      log(msg: string) { return msg }
+      log(msg: string) {
+        return msg
+      }
     }
     const kGsLogger = token<any>(Symbol.for('gs.logger'))
     const di = new CaffeineIoC({ decorators: false })
@@ -59,13 +66,17 @@ describe('getting-started: manual bindings', function () {
 describe('getting-started: @Injectable decorators', function () {
   @Injectable()
   class GsDecLogger {
-    log(msg: string) { return msg }
+    log(msg: string) {
+      return msg
+    }
   }
 
   @Injectable([GsDecLogger])
   class GsDecUserService {
     constructor(readonly logger: GsDecLogger) {}
-    greet(name: string) { return this.logger.log(`Hello, ${name}!`) }
+    greet(name: string) {
+      return this.logger.log(`Hello, ${name}!`)
+    }
   }
 
   let di: CaffeineIoC
@@ -97,7 +108,9 @@ describe('abstract-classes: @Extends basic', function () {
   @Injectable()
   @Extends()
   class AcConsoleLogger extends AcBasicLogger {
-    log(message: string) { return message }
+    log(message: string) {
+      return message
+    }
   }
 
   let di: CaffeineIoC
@@ -121,19 +134,25 @@ describe('abstract-classes: allOf with @Extends', function () {
   @Injectable()
   @Extends()
   class AcUpperCaseProcessor extends AcProcessor {
-    process(input: string) { return input.toUpperCase() }
+    process(input: string) {
+      return input.toUpperCase()
+    }
   }
 
   @Injectable()
   @Extends()
   class AcTrimProcessor extends AcProcessor {
-    process(input: string) { return input.trim() }
+    process(input: string) {
+      return input.trim()
+    }
   }
 
   @Injectable()
   @Extends()
   class AcSanitizeProcessor extends AcProcessor {
-    process(input: string) { return input.replace(/<[^>]*>/g, '') }
+    process(input: string) {
+      return input.replace(/<[^>]*>/g, '')
+    }
   }
 
   @Injectable([$i.allOf(AcProcessor)])
@@ -171,14 +190,18 @@ describe('abstract-classes: @Primary', function () {
   @Injectable()
   @Extends()
   class AcInMemoryUserRepository extends AcUserRepository {
-    findByID(id: string) { return `in-memory:${id}` }
+    findByID(id: string) {
+      return `in-memory:${id}`
+    }
   }
 
   @Primary()
   @Injectable()
   @Extends()
   class AcPrimaryUserRepository extends AcUserRepository {
-    findByID(id: string) { return `primary:${id}` }
+    findByID(id: string) {
+      return `primary:${id}`
+    }
   }
 
   let di: CaffeineIoC
@@ -203,14 +226,18 @@ describe('abstract-classes: @Named + $i.mapped()', function () {
   @Injectable()
   @Extends()
   class AcEmailSender extends AcNotificationSender {
-    send(message: string, to: string) { return `email:${to}:${message}` }
+    send(message: string, to: string) {
+      return `email:${to}:${message}`
+    }
   }
 
   @Named('acSms')
   @Injectable()
   @Extends()
   class AcSmsSender extends AcNotificationSender {
-    send(message: string, to: string) { return `sms:${to}:${message}` }
+    send(message: string, to: string) {
+      return `sms:${to}:${message}`
+    }
   }
 
   @Injectable([token<any>('acEmail')])
@@ -257,7 +284,9 @@ describe('abstract-classes: @Named + $i.mapped()', function () {
 
 describe('abstract-classes: @ConditionalOn with fallback — no redis', function () {
   class AcRedisClient {
-    get(key: string) { return key }
+    get(key: string) {
+      return key
+    }
   }
 
   abstract class AcCacheStore {
@@ -269,17 +298,27 @@ describe('abstract-classes: @ConditionalOn with fallback — no redis', function
   @Extends()
   class AcInMemoryCacheA extends AcCacheStore {
     private store = new Map<string, string>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: string) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: string) {
+      this.store.set(key, value)
+    }
   }
 
   @ConditionalOn(ctx => ctx.container.has(AcRedisClient))
   @Injectable([AcRedisClient])
   @Extends()
   class AcRedisCacheA extends AcCacheStore {
-    constructor(readonly client: AcRedisClient) { super() }
-    get(key: string) { return this.client.get(key) }
-    set(key: string, value: string) { /* no-op */ }
+    constructor(readonly client: AcRedisClient) {
+      super()
+    }
+    get(key: string) {
+      return this.client.get(key)
+    }
+    set(key: string, value: string) {
+      /* no-op */
+    }
   }
 
   let di: CaffeineIoC
@@ -297,7 +336,9 @@ describe('abstract-classes: @ConditionalOn with fallback — no redis', function
 
 describe('abstract-classes: @ConditionalOn with fallback — with redis', function () {
   class AcRedisClientB {
-    get(key: string) { return `redis:${key}` }
+    get(key: string) {
+      return `redis:${key}`
+    }
   }
 
   abstract class AcCacheStoreB {
@@ -309,8 +350,12 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
   @Extends()
   class AcInMemoryCacheB extends AcCacheStoreB {
     private store = new Map<string, string>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: string) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: string) {
+      this.store.set(key, value)
+    }
   }
 
   @Primary()
@@ -318,9 +363,15 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
   @Injectable([AcRedisClientB])
   @Extends()
   class AcRedisCacheB extends AcCacheStoreB {
-    constructor(readonly client: AcRedisClientB) { super() }
-    get(key: string) { return this.client.get(key) }
-    set(key: string, value: string) { /* no-op */ }
+    constructor(readonly client: AcRedisClientB) {
+      super()
+    }
+    get(key: string) {
+      return this.client.get(key)
+    }
+    set(key: string, value: string) {
+      /* no-op */
+    }
   }
 
   let di: CaffeineIoC
@@ -339,7 +390,9 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
 
 describe('abstract-classes: @ConditionalOn with fallback — with redis', function () {
   class AcRedisClientB {
-    get(key: string) { return `redis:${key}` }
+    get(key: string) {
+      return `redis:${key}`
+    }
   }
 
   abstract class AcCacheStoreB {
@@ -352,8 +405,12 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
   @Fallback()
   class AcInMemoryCacheB extends AcCacheStoreB {
     private store = new Map<string, string>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: string) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: string) {
+      this.store.set(key, value)
+    }
   }
 
   @Primary()
@@ -361,9 +418,15 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
   @Injectable([AcRedisClientB])
   @Extends()
   class AcRedisCacheB extends AcCacheStoreB {
-    constructor(readonly client: AcRedisClientB) { super() }
-    get(key: string) { return this.client.get(key) }
-    set(key: string, value: string) { /* no-op */ }
+    constructor(readonly client: AcRedisClientB) {
+      super()
+    }
+    get(key: string) {
+      return this.client.get(key)
+    }
+    set(key: string, value: string) {
+      /* no-op */
+    }
   }
 
   let di: CaffeineIoC
@@ -388,40 +451,42 @@ describe('abstract-classes: manual .extends() API', function () {
 
   class AcManualMemCache extends AcManualCache {
     private store = new Map<string, string>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: string) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: string) {
+      this.store.set(key, value)
+    }
   }
 
   class AcManualRedisCache extends AcManualCache {
-    get(key: string) { return undefined }
-    set(key: string, value: string) { /* no-op */ }
+    get(key: string) {
+      return undefined
+    }
+    set(key: string, value: string) {
+      /* no-op */
+    }
   }
 
   it('resolves via fluent extends chain', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AcManualMemCache, t => t.toSelf()
-      .extends())
+    di.bind(AcManualMemCache, t => t.toSelf().extends())
     await di.init()
     expect(di.get(AcManualCache)).toBeInstanceOf(AcManualMemCache)
   })
 
   it('primary() wins over non-primary', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AcManualMemCache, t => t.toSelf()
-      .extends())
-    di.bind(AcManualRedisCache, t => t.toSelf()
-      .extends()
-      .primary())
+    di.bind(AcManualMemCache, t => t.toSelf().extends())
+    di.bind(AcManualRedisCache, t => t.toSelf().extends().primary())
     await di.init()
     expect(di.get(AcManualCache)).toBeInstanceOf(AcManualRedisCache)
   })
 
   it('getMany returns all implementations', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AcManualMemCache, t => t.toSelf()
-      .extends())
-    di.bind(AcManualRedisCache, t => t.toSelf()
-      .extends())
+    di.bind(AcManualMemCache, t => t.toSelf().extends())
+    di.bind(AcManualRedisCache, t => t.toSelf().extends())
     await di.init()
     const all = di.getMany(AcManualCache)
     expect(all).toHaveLength(2)
@@ -439,7 +504,9 @@ describe('interfaces: symbol token pattern', function () {
 
   @Injectable(kIfRepository)
   class IfInMemoryRepository implements IfRepository {
-    findByID(id: string) { return `found:${id}` }
+    findByID(id: string) {
+      return `found:${id}`
+    }
   }
 
   @Injectable([kIfRepository])
@@ -476,13 +543,17 @@ describe('interfaces: allOf with symbol token', function () {
   @Named(kIfProcessor)
   @Injectable()
   class IfUpperCaseProcessor implements IfProcessor {
-    process(input: string) { return input.toUpperCase() }
+    process(input: string) {
+      return input.toUpperCase()
+    }
   }
 
   @Named(kIfProcessor)
   @Injectable()
   class IfTrimProcessor implements IfProcessor {
-    process(input: string) { return input.trim() }
+    process(input: string) {
+      return input.trim()
+    }
   }
 
   @Injectable([$i.allOf(kIfProcessor)])
@@ -506,7 +577,9 @@ describe('interfaces: allOf with symbol token', function () {
 
   it('pipeline processes input through all symbol-keyed processors', function () {
     const pipeline = di.get(IfPipeline)
-    expect(pipeline.run('  HELLO  ')).toBe('  hello  '.trim().toUpperCase() === '  HELLO  '.toUpperCase() ? '  HELLO  '.trim() : pipeline.run('  HELLO  '))
+    expect(pipeline.run('  HELLO  ')).toBe(
+      '  hello  '.trim().toUpperCase() === '  HELLO  '.toUpperCase() ? '  HELLO  '.trim() : pipeline.run('  HELLO  '),
+    )
     expect(typeof pipeline.run('  hello  ')).toBe('string')
   })
 })
@@ -523,14 +596,18 @@ describe('interfaces: @Primary for interfaces', function () {
   @Named(kIfUserRepository)
   @Injectable()
   class IfMemoryUserRepository implements IfUserRepository {
-    findByID(id: string) { return `memory:${id}` }
+    findByID(id: string) {
+      return `memory:${id}`
+    }
   }
 
   @Primary()
   @Named(kIfUserRepository)
   @Injectable()
   class IfPrimaryUserRepository implements IfUserRepository {
-    findByID(id: string) { return `primary:${id}` }
+    findByID(id: string) {
+      return `primary:${id}`
+    }
   }
 
   let di: CaffeineIoC
@@ -558,13 +635,17 @@ describe('interfaces: @Named dispatch for interfaces', function () {
   @Injectable(kIfNotificationSender)
   @Named('ifEmail')
   class IfEmailSender implements IfNotificationSender {
-    send(message: string, to: string) { return `email:${to}` }
+    send(message: string, to: string) {
+      return `email:${to}`
+    }
   }
 
   @Injectable(kIfNotificationSender)
   @Named('ifSms')
   class IfSmsSender implements IfNotificationSender {
-    send(message: string, to: string) { return `sms:${to}` }
+    send(message: string, to: string) {
+      return `sms:${to}`
+    }
   }
 
   @Injectable([token<any>('ifEmail')])
@@ -607,8 +688,12 @@ describe('interfaces: manual bind with interface symbol', function () {
 
   class IfMemCache implements IfCache {
     private store = new Map<string, string>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: string) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: string) {
+      this.store.set(key, value)
+    }
   }
 
   it('binds class to symbol key and resolves it', async function () {
@@ -672,7 +757,10 @@ describe('factory-classes: constructor injection into factory', function () {
   }
 
   class FcDataSource {
-    constructor(readonly host: string, readonly port: number) {}
+    constructor(
+      readonly host: string,
+      readonly port: number,
+    ) {}
   }
 
   @Configuration([FcAppConfig])
@@ -703,17 +791,26 @@ describe('factory-classes: constructor injection into factory', function () {
 describe('factory-classes: method-level @Provides dependencies', function () {
   @Injectable()
   class FcRepository {
-    list() { return ['item1', 'item2'] }
+    list() {
+      return ['item1', 'item2']
+    }
   }
 
   @Injectable()
   class FcLogger {
-    log(msg: string) { return msg }
+    log(msg: string) {
+      return msg
+    }
   }
 
   class FcOrderService {
-    constructor(readonly repo: FcRepository, readonly logger: FcLogger) {}
-    listOrders() { return this.repo.list() }
+    constructor(
+      readonly repo: FcRepository,
+      readonly logger: FcLogger,
+    ) {}
+    listOrders() {
+      return this.repo.list()
+    }
   }
 
   @Configuration()
@@ -753,12 +850,16 @@ describe('factory-classes: abstract and symbol keys in @Provides', function () {
   }
 
   class FcPinoLogger extends FcAbstractLogger {
-    log(msg: string) { return `pino:${msg}` }
+    log(msg: string) {
+      return `pino:${msg}`
+    }
   }
 
   class FcPrometheusMetrics implements FcMetrics {
     readonly recorded: string[] = []
-    record(name: string) { this.recorded.push(name) }
+    record(name: string) {
+      this.recorded.push(name)
+    }
   }
 
   @Configuration()
@@ -803,8 +904,12 @@ describe('factory-classes: @Fallback on @Provides — fallback used', function (
 
   class FcInMemoryCacheA extends FcCacheStoreA {
     private store = new Map<string, string>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: string) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: string) {
+      this.store.set(key, value)
+    }
   }
 
   @Configuration()
@@ -836,13 +941,21 @@ describe('factory-classes: @Primary on @Provides wins over @Fallback', function 
   }
 
   class FcInMemoryCacheB extends FcCacheStoreB {
-    get(key: string) { return undefined }
-    set(key: string, value: string) { /* no-op */ }
+    get(key: string) {
+      return undefined
+    }
+    set(key: string, value: string) {
+      /* no-op */
+    }
   }
 
   class FcRedisCacheB extends FcCacheStoreB {
-    get(key: string) { return undefined }
-    set(key: string, value: string) { /* no-op */ }
+    get(key: string) {
+      return undefined
+    }
+    set(key: string, value: string) {
+      /* no-op */
+    }
   }
 
   @Configuration()
@@ -875,7 +988,9 @@ describe('factory-classes: @Primary on @Provides wins over @Fallback', function 
 
 describe('factory-classes: @Named on @Provides injectable by name', function () {
   class FcLocalCacheC {
-    type() { return 'local' }
+    type() {
+      return 'local'
+    }
   }
 
   @Configuration()
@@ -947,7 +1062,9 @@ describe('factory-classes: @Profile-gated @Configuration — inactive', function
   }
 
   class FcStubGatewayA extends FcGatedGatewayA {
-    charge(amount: number) { return `stub:${amount}` }
+    charge(amount: number) {
+      return `stub:${amount}`
+    }
   }
 
   @Configuration()
@@ -974,7 +1091,9 @@ describe('factory-classes: @Profile-gated @Configuration — active', function (
   }
 
   class FcStubGatewayB extends FcGatedGatewayB {
-    charge(amount: number) { return `stub:${amount}` }
+    charge(amount: number) {
+      return `stub:${amount}`
+    }
   }
 
   @Configuration()
@@ -1003,14 +1122,18 @@ describe('profiles: @Profile basic — active', function () {
   @Injectable()
   @Extends()
   class PrStripeGatewayA extends PrGatewayA {
-    charge(amount: number) { return `stripe:${amount}` }
+    charge(amount: number) {
+      return `stripe:${amount}`
+    }
   }
 
   @Profile('prtestA')
   @Injectable()
   @Extends()
   class PrStubGatewayA extends PrGatewayA {
-    charge(amount: number) { return `stub:${amount}` }
+    charge(amount: number) {
+      return `stub:${amount}`
+    }
   }
 
   it('resolves @Profile bean when profile active', async function () {
@@ -1030,14 +1153,18 @@ describe('profiles: @Profile basic — inactive', function () {
   @Injectable()
   @Extends()
   class PrStripeGatewayB extends PrGatewayB {
-    charge(amount: number) { return `stripe:${amount}` }
+    charge(amount: number) {
+      return `stripe:${amount}`
+    }
   }
 
   @Profile('prtestB')
   @Injectable()
   @Extends()
   class PrStubGatewayB extends PrGatewayB {
-    charge(amount: number) { return `stub:${amount}` }
+    charge(amount: number) {
+      return `stub:${amount}`
+    }
   }
 
   it('throws when @Profile bean resolved without active profile', async function () {
@@ -1054,7 +1181,9 @@ describe('profiles: multiple profiles OR semantics', function () {
   @Profile('prDev', 'prStaging')
   @Injectable()
   class PrVerboseLogger {
-    log(msg: string) { return `verbose:${msg}` }
+    log(msg: string) {
+      return `verbose:${msg}`
+    }
   }
 
   it('registers when first listed profile is active', async function () {
@@ -1082,13 +1211,17 @@ describe('profiles: multiple active profiles simultaneously', function () {
   @Profile('prEuMulti')
   @Injectable()
   class PrEuService {
-    region() { return 'eu' }
+    region() {
+      return 'eu'
+    }
   }
 
   @Profile('prTestMulti')
   @Injectable()
   class PrTestService {
-    stub() { return 'stub' }
+    stub() {
+      return 'stub'
+    }
   }
 
   it('activates all listed profiles at once', async function () {
@@ -1107,7 +1240,9 @@ describe('profiles: @Profile on @Configuration — inactive', function () {
   }
 
   class PrNoopEmailServiceA extends PrEmailServiceA {
-    send(to: string) { return `noop:${to}` }
+    send(to: string) {
+      return `noop:${to}`
+    }
   }
 
   @Configuration()
@@ -1134,7 +1269,9 @@ describe('profiles: @Profile on @Configuration — active', function () {
   }
 
   class PrNoopEmailServiceB extends PrEmailServiceB {
-    send(to: string) { return `noop:${to}` }
+    send(to: string) {
+      return `noop:${to}`
+    }
   }
 
   @Configuration()
@@ -1165,7 +1302,9 @@ describe('profiles: @Profile + @ConditionalOn — condition fails', function () 
   @Injectable()
   @Extends()
   class PrCondMemCacheA extends PrCondCacheA {
-    get(key: string) { return undefined }
+    get(key: string) {
+      return undefined
+    }
   }
 
   @Profile('prCondEuA')
@@ -1173,8 +1312,12 @@ describe('profiles: @Profile + @ConditionalOn — condition fails', function () 
   @Injectable([PrCondRedisClientA])
   @Extends()
   class PrCondRedisEuCacheA extends PrCondCacheA {
-    constructor(readonly client: PrCondRedisClientA) { super() }
-    get(key: string) { return undefined }
+    constructor(readonly client: PrCondRedisClientA) {
+      super()
+    }
+    get(key: string) {
+      return undefined
+    }
   }
 
   it('skips bean when profile active but condition false', async function () {
@@ -1197,7 +1340,9 @@ describe('profiles: @Profile + @ConditionalOn — both pass', function () {
   @Injectable()
   @Extends()
   class PrCondMemCacheB extends PrCondCacheB {
-    get(key: string) { return undefined }
+    get(key: string) {
+      return undefined
+    }
   }
 
   @Primary()
@@ -1206,8 +1351,12 @@ describe('profiles: @Profile + @ConditionalOn — both pass', function () {
   @Injectable([PrCondRedisClientB])
   @Extends()
   class PrCondRedisEuCacheB extends PrCondCacheB {
-    constructor(readonly client: PrCondRedisClientB) { super() }
-    get(key: string) { return undefined }
+    constructor(readonly client: PrCondRedisClientB) {
+      super()
+    }
+    get(key: string) {
+      return undefined
+    }
   }
 
   it('registers bean when both profile active and condition true', async function () {
@@ -1231,13 +1380,17 @@ describe('conditional-bindings: @ConditionalOn env-based — eu', function () {
   @Injectable()
   @Extends()
   class CbStripeEuGateway extends CbGatewayEu {
-    charge(amount: number) { return `eu:${amount}` }
+    charge(amount: number) {
+      return `eu:${amount}`
+    }
   }
 
   @Injectable()
   @Extends()
   class CbMockGatewayEu extends CbGatewayEu {
-    charge(amount: number) { return `mock:${amount}` }
+    charge(amount: number) {
+      return `mock:${amount}`
+    }
   }
 
   let origRegion: string | undefined
@@ -1277,7 +1430,9 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — all pass', func
   @Injectable([CbAndRedisClientA])
   class CbRedisEuCacheA {
     constructor(readonly client: CbAndRedisClientA) {}
-    type() { return 'redis-eu' }
+    type() {
+      return 'redis-eu'
+    }
   }
 
   let origRegion: string | undefined
@@ -1358,13 +1513,17 @@ describe('conditional-bindings: async conditionals', function () {
   @Injectable()
   @Extends()
   class CbNewPaymentGateway extends CbAsyncGateway {
-    charge(amount: number) { return `new:${amount}` }
+    charge(amount: number) {
+      return `new:${amount}`
+    }
   }
 
   @Injectable()
   @Extends()
   class CbDefaultAsyncGateway extends CbAsyncGateway {
-    charge(amount: number) { return `default:${amount}` }
+    charge(amount: number) {
+      return `default:${amount}`
+    }
   }
 
   it('skips bean when async condition returns false', async function () {
@@ -1393,7 +1552,9 @@ describe('conditional-bindings: conditional @Configuration — class gate', func
   }
 
   class CbCfgStripeGatewayA extends CbCfgGatewayA {
-    charge(amount: number) { return `stripe:${amount}` }
+    charge(amount: number) {
+      return `stripe:${amount}`
+    }
   }
 
   @Configuration()
@@ -1444,11 +1605,15 @@ describe('conditional-bindings: conditional @Configuration — method gate', fun
   }
 
   class CbCfgStripeGatewayB extends CbCfgGatewayB {
-    charge(amount: number) { return `stripe:${amount}` }
+    charge(amount: number) {
+      return `stripe:${amount}`
+    }
   }
 
   class CbCfgTaxCalcImpl extends CbCfgTaxCalc {
-    calculate(amount: number) { return amount * 0.2 }
+    calculate(amount: number) {
+      return amount * 0.2
+    }
   }
 
   class CbCfgRedisDepB {}
@@ -1506,11 +1671,15 @@ describe('conditional-bindings: fluent .conditional() API', function () {
   }
 
   class CbFluentEuGateway extends CbFluentGateway {
-    charge(amount: number) { return `eu:${amount}` }
+    charge(amount: number) {
+      return `eu:${amount}`
+    }
   }
 
   class CbFluentMockGateway extends CbFluentGateway {
-    charge(amount: number) { return `mock:${amount}` }
+    charge(amount: number) {
+      return `mock:${amount}`
+    }
   }
 
   let origRegion: string | undefined
@@ -1528,12 +1697,14 @@ describe('conditional-bindings: fluent .conditional() API', function () {
   it('conditional() registers matching bean and skips others', async function () {
     process.env.CB_FLUENT_REGION = 'eu'
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(CbFluentEuGateway, t => t.toSelf()
-      .extends(CbFluentGateway)
-      .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
-      .primary())
-    di.bind(CbFluentMockGateway, t => t.toSelf()
-      .extends(CbFluentGateway))
+    di.bind(CbFluentEuGateway, t =>
+      t
+        .toSelf()
+        .extends(CbFluentGateway)
+        .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
+        .primary(),
+    )
+    di.bind(CbFluentMockGateway, t => t.toSelf().extends(CbFluentGateway))
     await di.init()
     expect(di.get(CbFluentGateway)).toBeInstanceOf(CbFluentEuGateway)
   })
@@ -1541,12 +1712,14 @@ describe('conditional-bindings: fluent .conditional() API', function () {
   it('falls back when condition fails', async function () {
     process.env.CB_FLUENT_REGION = 'other'
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(CbFluentEuGateway, t => t.toSelf()
-      .extends(CbFluentGateway)
-      .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
-      .primary())
-    di.bind(CbFluentMockGateway, t => t.toSelf()
-      .extends(CbFluentGateway))
+    di.bind(CbFluentEuGateway, t =>
+      t
+        .toSelf()
+        .extends(CbFluentGateway)
+        .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
+        .primary(),
+    )
+    di.bind(CbFluentMockGateway, t => t.toSelf().extends(CbFluentGateway))
     await di.init()
     expect(di.get(CbFluentGateway)).toBeInstanceOf(CbFluentMockGateway)
   })
@@ -1563,7 +1736,9 @@ describe('fallback-bindings: @Fallback used alone', function () {
   @Injectable()
   @Extends()
   class FbNoopLoggerA extends FbLoggerA {
-    log(_msg: string) { return 'noop' }
+    log(_msg: string) {
+      return 'noop'
+    }
   }
 
   let di: CaffeineIoC
@@ -1588,14 +1763,18 @@ describe('fallback-bindings: @Fallback skipped with override', function () {
   @Injectable()
   @Extends()
   class FbNoopLoggerB extends FbLoggerB {
-    log(_msg: string) { return 'noop' }
+    log(_msg: string) {
+      return 'noop'
+    }
   }
 
   @Primary()
   @Injectable()
   @Extends()
   class FbRealLoggerB extends FbLoggerB {
-    log(msg: string) { return `real:${msg}` }
+    log(msg: string) {
+      return `real:${msg}`
+    }
   }
 
   let di: CaffeineIoC
@@ -1622,16 +1801,24 @@ describe('fallback-bindings: library override pattern', function () {
   @Extends()
   class FbInMemoryCacheLib extends FbCacheLib {
     private readonly store = new Map<string, unknown>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: unknown) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: unknown) {
+      this.store.set(key, value)
+    }
   }
 
   @Primary()
   @Injectable()
   @Extends()
   class FbRedisCacheLib extends FbCacheLib {
-    get(key: string) { return `redis:${key}` }
-    set(key: string, value: unknown) { /* no-op */ }
+    get(key: string) {
+      return `redis:${key}`
+    }
+    set(key: string, value: unknown) {
+      /* no-op */
+    }
   }
 
   let di: CaffeineIoC
@@ -1654,7 +1841,9 @@ describe('fallback-bindings: @Fallback on @Provides — used', function () {
 
   class FbProvidesInMemoryCacheA extends FbProvidesCacheA {
     private store = new Map<string, unknown>()
-    get(key: string) { return this.store.get(key) }
+    get(key: string) {
+      return this.store.get(key)
+    }
   }
 
   @Configuration()
@@ -1685,11 +1874,15 @@ describe('fallback-bindings: @Fallback on @Provides — overridden', function ()
   }
 
   class FbProvidesInMemoryCacheB extends FbProvidesCacheB {
-    get(key: string) { return undefined }
+    get(key: string) {
+      return undefined
+    }
   }
 
   class FbProvidesRedisCacheB extends FbProvidesCacheB {
-    get(key: string) { return `redis:${key}` }
+    get(key: string) {
+      return `redis:${key}`
+    }
   }
 
   @Configuration()
@@ -1732,7 +1925,9 @@ describe('fallback-bindings: @Fallback + @ConditionalOn — active', function ()
   @Injectable()
   @Extends()
   class FbDefaultGatewayA extends FbCondGatewayA {
-    charge(amount: number) { return `default:${amount}` }
+    charge(amount: number) {
+      return `default:${amount}`
+    }
   }
 
   let origNodeEnv: string | undefined
@@ -1768,7 +1963,9 @@ describe('fallback-bindings: @Fallback + @ConditionalOn — inactive', function 
   @Injectable()
   @Extends()
   class FbDefaultGatewayB extends FbCondGatewayB {
-    charge(amount: number) { return `default:${amount}` }
+    charge(amount: number) {
+      return `default:${amount}`
+    }
   }
 
   let origNodeEnv: string | undefined
@@ -1801,27 +1998,33 @@ describe('fallback-bindings: fluent .fallback() API', function () {
 
   class FbFluentInMemoryCache extends FbFluentCache {
     private store = new Map<string, string>()
-    get(key: string) { return this.store.get(key) }
-    set(key: string, value: string) { this.store.set(key, value) }
+    get(key: string) {
+      return this.store.get(key)
+    }
+    set(key: string, value: string) {
+      this.store.set(key, value)
+    }
   }
 
   class FbFluentRedisCache extends FbFluentCache {
-    get(key: string) { return undefined }
-    set(key: string, value: string) { /* no-op */ }
+    get(key: string) {
+      return undefined
+    }
+    set(key: string, value: string) {
+      /* no-op */
+    }
   }
 
   it('.fallback() used when no non-fallback binding exists', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache)
-      .fallback())
+    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache).fallback())
     await di.init()
     expect(di.get(FbFluentCache)).toBeInstanceOf(FbFluentInMemoryCache)
   })
 
   it('.fallback() skipped when non-fallback binding exists', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache)
-      .fallback())
+    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache).fallback())
     di.bind(FbFluentCache, t => t.toClass(FbFluentRedisCache))
     await di.init()
     expect(di.get(FbFluentCache)).toBeInstanceOf(FbFluentRedisCache)
@@ -1840,7 +2043,9 @@ describe('lazy-bindings: @Lazy() basic', function () {
       lbLazyConstructed = true
     }
 
-    compute() { return 42 }
+    compute() {
+      return 42
+    }
   }
 
   let di: CaffeineIoC
@@ -1872,7 +2077,9 @@ describe('lazy-bindings: container-wide lazy: true', function () {
       lbWideLazyConstructed = true
     }
 
-    value() { return 'wide-lazy' }
+    value() {
+      return 'wide-lazy'
+    }
   }
 
   let di: CaffeineIoC
@@ -1905,7 +2112,9 @@ describe('lazy-bindings: @Lazy(false) eager override', function () {
       lbEagerConstructed = true
     }
 
-    status() { return 'ok' }
+    status() {
+      return 'ok'
+    }
   }
 
   let di: CaffeineIoC
@@ -1935,11 +2144,12 @@ describe('lazy-bindings: manual .lazy() API', function () {
   it('.lazy() defers bean construction to first get()', async function () {
     let constructed = false
     class LbDeferredService {
-      constructor() { constructed = true }
+      constructor() {
+        constructed = true
+      }
     }
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(LbDeferredService, t => t.toSelf()
-      .lazy())
+    di.bind(LbDeferredService, t => t.toSelf().lazy())
     await di.init()
     expect(constructed).toBe(false)
     di.get(LbDeferredService)
@@ -1949,11 +2159,12 @@ describe('lazy-bindings: manual .lazy() API', function () {
   it('.lazy(false) constructs bean during init() in lazy container', async function () {
     let eagerConstructed = false
     class LbEagerService {
-      constructor() { eagerConstructed = true }
+      constructor() {
+        eagerConstructed = true
+      }
     }
     const di = new CaffeineIoC({ decorators: false, lazy: true })
-    di.bind(LbEagerService, t => t.toSelf()
-      .lazy(false))
+    di.bind(LbEagerService, t => t.toSelf().lazy(false))
     await di.init()
     expect(eagerConstructed).toBe(true)
   })
@@ -1966,7 +2177,9 @@ describe('mixing-scopes: Provider<T> with $i.provide()', function () {
   @Lifetime(Scopes.TRANSIENT)
   class MsEmailSender {
     readonly id = Math.random()
-    send(to: string, body: string) { return `sent:${to}` }
+    send(to: string, body: string) {
+      return `sent:${to}`
+    }
   }
 
   @Injectable([$i.provide(MsEmailSender)])

@@ -1,5 +1,7 @@
 import { KeyLike } from 'crypto'
+
 import { JWTPayload, JWTVerifyOptions, type KeyLike as JoseKeyLike } from 'jose'
+
 import { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { JWTKeyResolver, JWTServiceOptions } from './jwt_service_options.js'
@@ -173,14 +175,14 @@ export class JWTAuthenticationOptionsBuilder {
     const jwt = this.#options.jwtOptions
     if (!this.#anyIssuer && jwt?.issuer === undefined) {
       throw new Error(
-        'Cannot build JWTAuthenticationOptions: an "issuer" is required — call issuer(...) to pin the '
-        + 'token issuer, or allowAnyIssuer() to accept tokens from any issuer',
+        'Cannot build JWTAuthenticationOptions: an "issuer" is required — call issuer(...) to pin the ' +
+          'token issuer, or allowAnyIssuer() to accept tokens from any issuer',
       )
     }
     if (!this.#anyAudience && jwt?.audience === undefined) {
       throw new Error(
-        'Cannot build JWTAuthenticationOptions: an "audience" is required — call audience(...) to pin the '
-        + 'token audience, or allowAnyAudience() to accept tokens minted for any audience',
+        'Cannot build JWTAuthenticationOptions: an "audience" is required — call audience(...) to pin the ' +
+          'token audience, or allowAnyAudience() to accept tokens minted for any audience',
       )
     }
 

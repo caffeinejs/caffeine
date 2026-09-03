@@ -1,5 +1,3 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
 import {
   ApplicationAvailability,
   type InferSchema,
@@ -14,6 +12,9 @@ import {
   InlineConfigProvider,
   type ConfigProvider,
 } from '@caffeinejs/std/config'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { kHealthContribution } from './index.js'
 
@@ -58,13 +59,15 @@ describe('HealthBuilder', () => {
 
   it('normalizes every duration to milliseconds', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .health(h => h
-        .drainDelay('2s')
-        .shutdownTimeout('10s')
-        .terminationGracePeriod('45s')
-        .indicatorTimeout('500ms')
-        .probeDeadline(1_500)
-        .cacheTTL('1s'))
+      .health(h =>
+        h
+          .drainDelay('2s')
+          .shutdownTimeout('10s')
+          .terminationGracePeriod('45s')
+          .indicatorTimeout('500ms')
+          .probeDeadline(1_500)
+          .cacheTTL('1s'),
+      )
       .build()
 
     await app.ready()
@@ -97,9 +100,15 @@ describe('HealthBuilder', () => {
 
   it('layers a builder-set duration under the config source rather than conflicting with it', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c
-        .source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true }), ConfigPriority.ENV))
-      .health(h => h.drainDelay('10ms').cacheTTL('7s').config(c => c.health))
+      .config(schema, c =>
+        c.source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true }), ConfigPriority.ENV),
+      )
+      .health(h =>
+        h
+          .drainDelay('10ms')
+          .cacheTTL('7s')
+          .config(c => c.health),
+      )
       .build()
 
     await app.ready()
@@ -119,11 +128,7 @@ describe('HealthBuilder', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
-      .config(c => c
-        .source(
-          new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '30ms' } }),
-          ConfigPriority.ENV,
-        ))
+      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '30ms' } }), ConfigPriority.ENV))
       .health(h => h.drainDelay('10s'))
       .build()
 
@@ -137,11 +142,7 @@ describe('HealthBuilder', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
-      .config(c => c
-        .source(
-          new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }),
-          ConfigPriority.ENV,
-        ))
+      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV))
       .health()
       .build()
 
@@ -154,11 +155,7 @@ describe('HealthBuilder', () => {
     const provider = new EnvConfigProvider()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(c => c
-        .source(
-          new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'SIGTERM,SIGINT' } }),
-          ConfigPriority.ENV,
-        ))
+      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'SIGTERM,SIGINT' } }), ConfigPriority.ENV))
       .health(h => h.signals(['SIGTERM']))
       .build()
 
@@ -173,11 +170,7 @@ describe('HealthBuilder', () => {
     const provider = new EnvConfigProvider()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(c => c
-        .source(
-          new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'false' } }),
-          ConfigPriority.ENV,
-        ))
+      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'false' } }), ConfigPriority.ENV))
       .health()
       .build()
 
@@ -191,11 +184,7 @@ describe('HealthBuilder', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
-      .config(c => c
-        .source(
-          new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '40ms' } }),
-          ConfigPriority.ENV,
-        ))
+      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV))
       .build()
 
     await app.ready()
@@ -211,8 +200,9 @@ describe('HealthBuilder', () => {
     }
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c
-        .source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true }), ConfigPriority.ENV))
+      .config(schema, c =>
+        c.source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true }), ConfigPriority.ENV),
+      )
       .health(h => h.dispatcher(dispatcher).config(c => c.health))
       .build()
 
@@ -255,7 +245,7 @@ describe('HealthBuilder', () => {
   // answers for keys reachable through `.extends()`. The ordinary path must still bind the application's own
   // instance: the lifecycle writes to that object, and a container-constructed one reports a state nothing
   // ever updates.
-  it('binds the application\'s own availability, not a container-constructed one', async () => {
+  it("binds the application's own availability, not a container-constructed one", async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify())).health().build()
 
     await app.ready()

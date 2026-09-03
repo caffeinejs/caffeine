@@ -14,9 +14,9 @@ export class ErrBrewPathParam extends ErrBrew {
 
   constructor(path: string, param: string) {
     super(
-      `Cannot build a request for "${path}": no value for path parameter "${param}"`
-      + '\nPossible Solutions:'
-      + `\n  - Pass it in the request init: { params: { "${param}": value } }`,
+      `Cannot build a request for "${path}": no value for path parameter "${param}"` +
+        '\nPossible Solutions:' +
+        `\n  - Pass it in the request init: { params: { "${param}": value } }`,
     )
     this.name = 'ErrBrewPathParam'
   }

@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Fallback } from '../decorators/fallback.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
+import { Fallback } from '../decorators/fallback.js'
+import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
+import { token } from '../key.js'
 import { mod } from '../module.js'
 
 // ----- @Fallback() on a class -----------------------------------------------
@@ -24,11 +25,8 @@ describe('@Fallback() on a class', function () {
     const di = new CaffeineIoC()
     await di.init()
 
-    expect(di.has(DefaultService))
-      .toBe(true)
-    expect(di.get(DefaultService)
-      .value())
-      .toBe('default')
+    expect(di.has(DefaultService)).toBe(true)
+    expect(di.get(DefaultService).value()).toBe('default')
   })
 
   it('should be skipped when a non-fallback binding is manually registered for the same key', async function () {
@@ -40,12 +38,10 @@ describe('@Fallback() on a class', function () {
       }
     }
 
-    di.bind(DefaultService, t => t
-      .toClass(OverrideService))
+    di.bind(DefaultService, t => t.toClass(OverrideService))
     await di.init()
 
-    expect((di.get(DefaultService) as OverrideService).value())
-      .toBe('override')
+    expect((di.get(DefaultService) as OverrideService).value()).toBe('override')
   })
 })
 
@@ -97,24 +93,21 @@ describe('@Fallback() on a @Provides method', function () {
     const di = new CaffeineIoC()
     await di.init()
 
-    expect(di.get(kFallbackOnly))
-      .toBe('lib-fallback-only')
+    expect(di.get(kFallbackOnly)).toBe('lib-fallback-only')
   })
 
   it('should skip a fallback @Provides bean when a non-fallback binding exists for the same key', async function () {
     const di = new CaffeineIoC()
     await di.init()
 
-    expect(di.get(kShared))
-      .toBe('consumer-shared')
+    expect(di.get(kShared)).toBe('consumer-shared')
   })
 
   it('should always register non-fallback @Provides beans from the same @Configuration class', async function () {
     const di = new CaffeineIoC()
     await di.init()
 
-    expect(di.get(kConcrete))
-      .toBe('lib-concrete')
+    expect(di.get(kConcrete)).toBe('lib-concrete')
   })
 })
 
@@ -132,15 +125,11 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu, t => t
-      .toClass(FluLib)
-      .fallback())
+    di.bind(kFlu, t => t.toClass(FluLib).fallback())
     await di.init()
 
-    expect(di.has(kFlu))
-      .toBe(true)
-    expect((di.get(kFlu) as FluLib).tag())
-      .toBe('flu-lib')
+    expect(di.has(kFlu)).toBe(true)
+    expect((di.get(kFlu) as FluLib).tag()).toBe('flu-lib')
   })
 
   it('should be skipped when a non-fallback binding was registered for the key first', async function () {
@@ -162,15 +151,11 @@ describe('.fallback() on BindingSpec', function () {
 
     // The order the two binds happen in must not decide the outcome. Services bootstrap concurrently, so it
     // is not something a caller can control.
-    di.bind(kFlu3, t => t
-      .toClass(FluConsumer))
-    di.bind(kFlu3, t => t
-      .toClass(FluLib)
-      .fallback())
+    di.bind(kFlu3, t => t.toClass(FluConsumer))
+    di.bind(kFlu3, t => t.toClass(FluLib).fallback())
     await di.init()
 
-    expect((di.get(kFlu3) as FluConsumer).tag())
-      .toBe('flu-consumer')
+    expect((di.get(kFlu3) as FluConsumer).tag()).toBe('flu-consumer')
   })
 
   it('should keep the first fallback when a second one is registered for the same key', async function () {
@@ -190,16 +175,11 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu4, t => t
-      .toClass(FirstLib)
-      .fallback())
-    di.bind(kFlu4, t => t
-      .toClass(SecondLib)
-      .fallback())
+    di.bind(kFlu4, t => t.toClass(FirstLib).fallback())
+    di.bind(kFlu4, t => t.toClass(SecondLib).fallback())
     await di.init()
 
-    expect((di.get(kFlu4) as FirstLib).tag())
-      .toBe('first')
+    expect((di.get(kFlu4) as FirstLib).tag()).toBe('first')
   })
 
   it('should register when the competing binding is dropped by a failing conditional', async function () {
@@ -221,16 +201,11 @@ describe('.fallback() on BindingSpec', function () {
 
     // The competitor claims the key at bind time and gives it back when its predicate fails, which is why a
     // fallback is resolved after conditionals rather than when it was declared.
-    di.bind(kFlu5, t => t
-      .toClass(FluConsumer)
-      .conditional(() => false))
-    di.bind(kFlu5, t => t
-      .toClass(FluLib)
-      .fallback())
+    di.bind(kFlu5, t => t.toClass(FluConsumer).conditional(() => false))
+    di.bind(kFlu5, t => t.toClass(FluLib).fallback())
     await di.init()
 
-    expect((di.get(kFlu5) as FluLib).tag())
-      .toBe('flu-lib')
+    expect((di.get(kFlu5) as FluLib).tag()).toBe('flu-lib')
   })
 
   it('should not register a fallback whose own conditional fails', async function () {
@@ -240,14 +215,15 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu6, t => t
-      .toClass(FluLib)
-      .fallback()
-      .conditional(() => false))
+    di.bind(kFlu6, t =>
+      t
+        .toClass(FluLib)
+        .fallback()
+        .conditional(() => false),
+    )
     await di.init()
 
-    expect(di.has(kFlu6))
-      .toBe(false)
+    expect(di.has(kFlu6)).toBe(false)
   })
 
   it('should not register a fallback whose profiles do not match', async function () {
@@ -257,14 +233,10 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['prod'] })
 
-    di.bind(kFlu7, t => t
-      .toClass(FluLib)
-      .fallback()
-      .profiles('test'))
+    di.bind(kFlu7, t => t.toClass(FluLib).fallback().profiles('test'))
     await di.init()
 
-    expect(di.has(kFlu7))
-      .toBe(false)
+    expect(di.has(kFlu7)).toBe(false)
   })
 
   it('should lose to a non-fallback binding registered by a module', async function () {
@@ -284,18 +256,17 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({
       decorators: false,
-      modules: [mod('flu-module', container => {
-        container.bind(kFlu8, t => t.toClass(FluConsumer))
-      })],
+      modules: [
+        mod('flu-module', container => {
+          container.bind(kFlu8, t => t.toClass(FluConsumer))
+        }),
+      ],
     })
 
-    di.bind(kFlu8, t => t
-      .toClass(FluLib)
-      .fallback())
+    di.bind(kFlu8, t => t.toClass(FluLib).fallback())
     await di.init()
 
-    expect((di.get(kFlu8) as FluConsumer).tag())
-      .toBe('flu-consumer')
+    expect((di.get(kFlu8) as FluConsumer).tag()).toBe('flu-consumer')
   })
 
   it('should be invisible until the container is compiled', async function () {
@@ -305,19 +276,15 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu9, t => t
-      .toClass(FluLib)
-      .fallback())
+    di.bind(kFlu9, t => t.toClass(FluLib).fallback())
 
     // Unlike every other binding, a fallback is held back until compile() — whether it registers is not known
     // until the bindings it competes with have settled.
-    expect(di.has(kFlu9))
-      .toBe(false)
+    expect(di.has(kFlu9)).toBe(false)
 
     await di.init()
 
-    expect(di.has(kFlu9))
-      .toBe(true)
+    expect(di.has(kFlu9)).toBe(true)
   })
 
   it('should drop a held-back fallback when the key is rebound', async function () {
@@ -337,15 +304,11 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu10, t => t
-      .toClass(FluLib)
-      .fallback())
-    di.rebind(kFlu10, t => t
-      .toClass(FluRebound))
+    di.bind(kFlu10, t => t.toClass(FluLib).fallback())
+    di.rebind(kFlu10, t => t.toClass(FluRebound))
     await di.init()
 
-    expect((di.get(kFlu10) as FluRebound).tag())
-      .toBe('flu-rebound')
+    expect((di.get(kFlu10) as FluRebound).tag()).toBe('flu-rebound')
   })
 
   it('should be overridden when a subsequent non-fallback binding is registered for the same key', async function () {
@@ -365,15 +328,11 @@ describe('.fallback() on BindingSpec', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(kFlu2, t => t
-      .toClass(FluLib)
-      .fallback())
-    di.bind(kFlu2, t => t
-      .toClass(FluConsumer))
+    di.bind(kFlu2, t => t.toClass(FluLib).fallback())
+    di.bind(kFlu2, t => t.toClass(FluConsumer))
     await di.init()
 
-    expect((di.get(kFlu2) as FluConsumer).tag())
-      .toBe('flu-consumer')
+    expect((di.get(kFlu2) as FluConsumer).tag()).toBe('flu-consumer')
   })
 })
 
@@ -409,10 +368,8 @@ describe('@Fallback() ordering guarantee via @Provides', function () {
     const di = new CaffeineIoC()
     await di.init()
 
-    expect(di.get(kFirst))
-      .toBe('second-non-fallback-wins')
-    expect(di.get(kSecond))
-      .toBe('second-non-fallback')
+    expect(di.get(kFirst)).toBe('second-non-fallback-wins')
+    expect(di.get(kSecond)).toBe('second-non-fallback')
   })
 })
 

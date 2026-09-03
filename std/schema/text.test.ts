@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { textList } from './text.js'
 
 describe('textList', () => {

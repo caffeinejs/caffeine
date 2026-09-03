@@ -25,6 +25,7 @@ A predicate evaluated once during `init()`. When it returns `false`, the
 binding is skipped — it is not registered in the container for that run.
 
 Used by:
+
 - [`BindingSpec.conditional()`](./binding-spec.md#conditional) — fluent API
 - [`@ConditionalOn`](./decorators.md#conditionalon) — decorator API
 
@@ -58,20 +59,16 @@ interface ConditionContext {
 
 Passed to every `Conditional` predicate at evaluation time.
 
-| Property | Description |
-|---|---|
-| `container.has` | Checks whether a binding is registered for the given key. |
-| `key` | The key of the binding being tested. |
-| `binding` | The full decorator config for the binding: scope, name, labels, tags, and other metadata set by decorators. |
+| Property        | Description                                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `container.has` | Checks whether a binding is registered for the given key.                                                   |
+| `key`           | The key of the binding being tested.                                                                        |
+| `binding`       | The full decorator config for the binding: scope, name, labels, tags, and other metadata set by decorators. |
 
 ```ts
 // guard on another binding being present
-di.bind(RedisCacheService, t => t
-  .toSelf()
-  .conditional(ctx => ctx.container.has(RedisClient)))
+di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
 
 // inspect the binding's own key
-di.bind(MetricsReporter, t => t
-  .toSelf()
-  .conditional(ctx => ctx.key !== Symbol.for('noop')))
+di.bind(MetricsReporter, t => t.toSelf().conditional(ctx => ctx.key !== Symbol.for('noop')))
 ```

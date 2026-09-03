@@ -1,4 +1,5 @@
 import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/std'
+
 import { CompressExtension, type CompressOptions } from './extension.js'
 
 /**

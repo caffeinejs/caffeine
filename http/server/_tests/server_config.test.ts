@@ -1,6 +1,5 @@
 import type { AddressInfo } from 'node:net'
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
+
 import { type InferSchema, kAppConfig, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
@@ -10,6 +9,9 @@ import {
   type ConfigHandle,
   type ConfigProvider,
 } from '@caffeinejs/std/config'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 import { DEFAULT_SERVER_OPTIONS, kServerContribution } from '../index.js'
 
@@ -37,8 +39,9 @@ describe('server builder + config', () => {
 
   it('drives the listen address from the application config slice', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c
-        .source(new InlineConfigProvider({ server: { host: '127.0.0.1', port: 0 }, db: { url: 'x' } })))
+      .config(schema, c =>
+        c.source(new InlineConfigProvider({ server: { host: '127.0.0.1', port: 0 }, db: { url: 'x' } })),
+      )
       .server(s => s.config(c => c.server))
       .build()
 
@@ -51,8 +54,9 @@ describe('server builder + config', () => {
 
   it('layers a code-set port under the environment rather than conflicting with it', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c
-        .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV))
+      .config(schema, c =>
+        c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV),
+      )
       .server(s => s.port(3000).host('0.0.0.0'))
       .build()
 
@@ -83,8 +87,9 @@ describe('server builder + config', () => {
 
   it('configures the server from the environment with no .server() call at all', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c
-        .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }), ConfigPriority.ENV))
+      .config(schema, c =>
+        c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }), ConfigPriority.ENV),
+      )
       .build()
 
     await app.ready()
@@ -94,10 +99,12 @@ describe('server builder + config', () => {
 
   it('lets command-line arguments beat both the environment and the code', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c
-        .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
-        // Given exactly as `process.argv` arrives, interpreter and script path included.
-        .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] }))
+      .config(schema, c =>
+        c
+          .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
+          // Given exactly as `process.argv` arrives, interpreter and script path included.
+          .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] }),
+      )
       .server(s => s.port(3000))
       .build()
 
@@ -145,8 +152,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution))
-      .toEqual({ host: DEFAULT_SERVER_OPTIONS.host, port: 4444 })
+    expect(app.contributions.get(kServerContribution)).toEqual({ host: DEFAULT_SERVER_OPTIONS.host, port: 4444 })
   })
 
   it('follows a config refresh, without the bound socket moving', async () => {
@@ -181,8 +187,7 @@ describe('server builder + config', () => {
 
   it('rejects a selector whose slice is not ServerOptions (compile-time)', () => {
     void createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c
-        .source(new InlineConfigProvider({ server: { host: 'h', port: 1 }, db: { url: 'u' } })))
+      .config(schema, c => c.source(new InlineConfigProvider({ server: { host: 'h', port: 1 }, db: { url: 'u' } })))
       // @ts-expect-error the `db` slice ({ url }) is not assignable to ServerOptions
       .server(s => s.config(c => c.db))
   })

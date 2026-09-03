@@ -1,5 +1,6 @@
 import { Scopes } from '@caffeinejs/di'
 import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
+
 import { CacheStore, MemoryCacheStore } from './store.js'
 
 export class CacheServiceConfigurer implements Service {
@@ -9,10 +10,7 @@ export class CacheServiceConfigurer implements Service {
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     if (!kit.container.has(CacheStore)) {
-      kit.container.bind(CacheStore, t => t
-        .toClass(MemoryCacheStore)
-        .lifetime(Scopes.SINGLETON)
-        .internal())
+      kit.container.bind(CacheStore, t => t.toClass(MemoryCacheStore).lifetime(Scopes.SINGLETON).internal())
     }
 
     return Promise.resolve()

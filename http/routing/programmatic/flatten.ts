@@ -1,4 +1,5 @@
 import type { Container, ObjectInjectionSpec } from '@caffeinejs/di'
+
 import { ErrConfiguration } from '../../error/index.js'
 import { solutions } from '../../error/util.js'
 import { $p } from '../../route_picker.js'
@@ -66,8 +67,8 @@ function compileRoute<R>(
 
   if (state.handle === undefined) {
     throw new ErrConfiguration(
-      `Cannot build route "${state.method.join('|')} ${groupPath}${path}": it declares no handler`
-      + solutions('Close the chain with ".handler(fn)"'),
+      `Cannot build route "${state.method.join('|')} ${groupPath}${path}": it declares no handler` +
+        solutions('Close the chain with ".handler(fn)"'),
     )
   }
 
@@ -108,8 +109,8 @@ function assertUniqueRouteNames<R>(routes: RouteSpec<R>[], group: string): void 
   for (const route of routes) {
     if (seen.has(route.name)) {
       throw new ErrConfiguration(
-        `Duplicate route name "${String(route.name)}" in "${group}"`
-        + solutions('Give one of the routes its own name with ".name(...)"'),
+        `Duplicate route name "${String(route.name)}" in "${group}"` +
+          solutions('Give one of the routes its own name with ".name(...)"'),
       )
     }
 
@@ -133,9 +134,7 @@ function defaultRouteName(method: string[], path: string): string {
 function defaultGroupName(path: string): string {
   const segments = pathSegments(path)
 
-  return segments.length === 0
-    ? 'Root'
-    : segments.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
+  return segments.length === 0 ? 'Root' : segments.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('')
 }
 
 // Parameter markers, matching constraints and the wildcard are not part of a name — two routes differing only

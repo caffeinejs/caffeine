@@ -1,4 +1,5 @@
 import { Responder, type ActionResult, type Context, type FastifyContext } from '@caffeinejs/http'
+
 import { HTML_DEFAULTS, kHTMLDefaults, type HTMLDefaults } from './extension.js'
 
 /**

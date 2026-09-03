@@ -1,9 +1,11 @@
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
+
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { StaticExtension, StaticExt } from '../index.js'
 import type { StaticMount } from '../static.js'
 
@@ -20,14 +22,17 @@ describe('static configuration', () => {
     app = undefined
   })
 
-  const mountsOf = (built: WebApplication): readonly StaticMount[] =>
-    built.container.get(StaticExtension).mounts
+  const mountsOf = (built: WebApplication): readonly StaticMount[] => built.container.get(StaticExtension).mounts
 
   it('reads mounts from the configuration tree with no serve() call at all', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(new InlineConfigProvider({
-        static: { mounts: [{ root: fixtures, prefix: '/from-config/' }] },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            static: { mounts: [{ root: fixtures, prefix: '/from-config/' }] },
+          }),
+        ),
+      )
       .extend(StaticExt, () => undefined)
       .build()
 
@@ -66,9 +71,13 @@ describe('static configuration', () => {
 
   it('lets configuration retune a SPA the application switched on', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(new InlineConfigProvider({
-        static: { spa: { index: 'index.html', navigationOnly: false } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            static: { spa: { index: 'index.html', navigationOnly: false } },
+          }),
+        ),
+      )
       .extend(StaticExt, s => s.spa(dist))
       .build()
 
@@ -82,9 +91,13 @@ describe('static configuration', () => {
   // Activation is the builder call, never the tree.
   it('does not switch a SPA on from configuration alone', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(new InlineConfigProvider({
-        static: { spa: { root: dist } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            static: { spa: { root: dist } },
+          }),
+        ),
+      )
       .extend(StaticExt, s => s.serve(fixtures))
       .build()
 

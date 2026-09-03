@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { BasicAuthenticationHandler } from './basic.js'

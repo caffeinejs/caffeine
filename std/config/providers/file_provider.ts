@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+
 import { ErrConfig } from '../errors.js'
 import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 import { flattenObject } from './_flatten.js'
@@ -69,8 +70,8 @@ export class FileConfigProvider implements ConfigProvider {
 
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new ErrConfig(
-        `Cannot parse config file "${this.#filePath}": the parser returned ${describe(parsed)},`
-        + ' but a config file must be a mapping at the top level',
+        `Cannot parse config file "${this.#filePath}": the parser returned ${describe(parsed)},` +
+          ' but a config file must be a mapping at the top level',
         'ERR_CONFIG_FILE_PARSE',
         undefined,
         'Wrap the file contents in a top-level object',

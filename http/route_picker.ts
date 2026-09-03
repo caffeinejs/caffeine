@@ -1,5 +1,5 @@
-import { FastifyRequest } from 'fastify'
 import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
+import { FastifyRequest } from 'fastify'
 
 export interface FSTPickers {
   request<R extends FastifyRequest = FastifyRequest>(): ParameterPickOptions<R>
@@ -31,9 +31,7 @@ export interface HTTPPickers {
     pick: ParameterPickOptions<R>,
     fn: (value: In) => Promise<Out>,
   ): ParameterPickOptions<unknown>
-  async<R = unknown>(
-    picker: ParameterPicker<R>,
-  ): ParameterPickOptions<R>
+  async<R = unknown>(picker: ParameterPicker<R>): ParameterPickOptions<R>
 
   fst: FSTPickers
 }
@@ -126,9 +124,7 @@ function mapAsync<In, Out, R>(
   return map(pick, fn, { async: true })
 }
 
-function async<R = unknown>(
-  picker: ParameterPicker<R>,
-): ParameterPickOptions<R> {
+function async<R = unknown>(picker: ParameterPicker<R>): ParameterPickOptions<R> {
   return { type: 'custom', picker, async: true }
 }
 

@@ -1,7 +1,7 @@
 import { createReadStream, existsSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const MIME: Record<string, string> = {
   '.html': 'text/html',

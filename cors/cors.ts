@@ -1,4 +1,5 @@
 import { configureRoute, configureRouteGroup, type AnyRouteExtension } from '@caffeinejs/http'
+
 import type { CorsOptions } from './extension.js'
 
 /**

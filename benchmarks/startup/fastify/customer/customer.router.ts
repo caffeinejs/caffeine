@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+
 import type { CustomerController } from './customer.controller.js'
 
 export function createCustomerRouter(ctrl: CustomerController) {

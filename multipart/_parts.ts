@@ -1,7 +1,9 @@
 /// <reference types="@fastify/multipart" />
 
 import { Readable } from 'node:stream'
+
 import type { FastifyRequest } from 'fastify'
+
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
 // The multipart readers, over the Fastify request. Both public surfaces are thin wrappers: `pickers.ts` for a
@@ -86,7 +88,9 @@ export function webStreamFile(req: FastifyRequest, fieldname?: string): Readable
         }
 
         // Drain the skipped file — busboy blocks until each file stream is consumed
-        for await (const _ of value.file) { /* drain */ }
+        for await (const _ of value.file) {
+          /* drain */
+        }
       }
     },
   })
@@ -96,9 +100,19 @@ export function nodeStreamParts(req: FastifyRequest): Readable {
   async function* gen() {
     for await (const part of req.parts()) {
       if (part.type === 'file') {
-        yield { type: 'file' as const, fieldname: part.fieldname, filename: part.filename, mimetype: part.mimetype, stream: part.file } satisfies MultipartFileNode
+        yield {
+          type: 'file' as const,
+          fieldname: part.fieldname,
+          filename: part.filename,
+          mimetype: part.mimetype,
+          stream: part.file,
+        } satisfies MultipartFileNode
       } else {
-        yield { type: 'field' as const, fieldname: part.fieldname, value: part.value as string } satisfies MultipartField
+        yield {
+          type: 'field' as const,
+          fieldname: part.fieldname,
+          value: part.value as string,
+        } satisfies MultipartField
       }
     }
   }
@@ -108,7 +122,13 @@ export function nodeStreamParts(req: FastifyRequest): Readable {
 export function nodeStreamFiles(req: FastifyRequest): Readable {
   async function* gen() {
     for await (const f of req.files()) {
-      yield { type: 'file' as const, fieldname: f.fieldname, filename: f.filename, mimetype: f.mimetype, stream: f.file } satisfies MultipartFileNode
+      yield {
+        type: 'file' as const,
+        fieldname: f.fieldname,
+        filename: f.filename,
+        mimetype: f.mimetype,
+        stream: f.file,
+      } satisfies MultipartFileNode
     }
   }
   return Readable.from(gen(), { objectMode: true })
@@ -118,10 +138,18 @@ export function nodeStreamFile(req: FastifyRequest, fieldname?: string): Readabl
   async function* gen() {
     for await (const f of req.files()) {
       if (!fieldname || f.fieldname === fieldname) {
-        yield { type: 'file' as const, fieldname: f.fieldname, filename: f.filename, mimetype: f.mimetype, stream: f.file } satisfies MultipartFileNode
+        yield {
+          type: 'file' as const,
+          fieldname: f.fieldname,
+          filename: f.filename,
+          mimetype: f.mimetype,
+          stream: f.file,
+        } satisfies MultipartFileNode
         return
       }
-      for await (const _ of f.file) { /* drain */ }
+      for await (const _ of f.file) {
+        /* drain */
+      }
     }
   }
   return Readable.from(gen(), { objectMode: true })
@@ -136,7 +164,9 @@ export async function readFile(req: FastifyRequest, fieldname?: string): Promise
       }
       return new File([Buffer.concat(chunks)], f.filename, { type: f.mimetype })
     }
-    for await (const _ of f.file) { /* drain */ }
+    for await (const _ of f.file) {
+      /* drain */
+    }
   }
   return undefined
 }

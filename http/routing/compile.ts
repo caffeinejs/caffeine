@@ -1,14 +1,24 @@
 import { Container, Ctor, InjectionToken } from '@caffeinejs/di'
+
 import { CatchMetadata, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
 import { solutions } from '../error/util.js'
-import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
-import { AuthorizationOptions, AuthzRequirement, AuthzRequirementHandler, compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts, PolicyEvaluator } from '../security/authz/index.js'
 import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
-import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
 import { Guard } from '../guards/index.js'
-import type { RouteSpec, RouteGroupSpec } from './spec.js'
+import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
+import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
+import {
+  AuthorizationOptions,
+  AuthzRequirement,
+  AuthzRequirementHandler,
+  compileRoutePolicy,
+  kAuthzEvaluators,
+  kAuthzHandlers,
+  kAuthzOpts,
+  PolicyEvaluator,
+} from '../security/authz/index.js'
 import type { RouteDispatch, RouteGroupHook } from './dispatch.js'
 import { mergeAuthz } from './inherit.js'
+import type { RouteSpec, RouteGroupSpec } from './spec.js'
 
 /** What a route source contributes on top of the spec: identity, and how the routes are invoked. */
 export interface RouteGroupMeta<R> {
@@ -107,26 +117,13 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         options: options,
         extras: route.extras,
         catchBy: buildCatchByMap(container, route.catchBy, owner),
-        guards: compileRouteGuardChain(
-          container,
-          compiledGuards,
-          globalGuards,
-          spec.guards,
-          route.guards,
-          owner,
-        ),
+        guards: compileRouteGuardChain(container, compiledGuards, globalGuards, spec.guards, route.guards, owner),
         guardOptions: compileGuardOptions(spec, route),
         authorization: (() => {
           // Always compiled, never gated on a decorator being present: an undecorated route is exactly
           // the one a configured fallback policy has to reach, and compileRoutePolicy is what knows
           // whether there is one. It returns undefined when the route really is ungated.
-          const authorizer = compileRoutePolicy(
-            authzOptions,
-            authzEvaluators,
-            authzHandlers,
-            spec.authz,
-            route.authz,
-          )
+          const authorizer = compileRoutePolicy(authzOptions, authzEvaluators, authzHandlers, spec.authz, route.authz)
 
           return {
             // Drives the "authorization configured but authentication is not" start-up check, so it has
@@ -166,11 +163,11 @@ function defaultDispatch<R>(route: RouteSpec<R>): RouteDispatch<R, unknown> {
 
   if (handle === undefined) {
     throw new ErrConfiguration(
-      `Cannot compile route "${String(route.name)}": it declares no handler`
-      + solutions(
-        'Set the function to call with "RouteBuilder.handle(fn)"',
-        'Supply a dispatch for the route from the route source that declared it',
-      ),
+      `Cannot compile route "${String(route.name)}": it declares no handler` +
+        solutions(
+          'Set the function to call with "RouteBuilder.handle(fn)"',
+          'Supply a dispatch for the route from the route source that declared it',
+        ),
     )
   }
 
@@ -224,19 +221,19 @@ function buildCatchByMap(
     const binding = container.getBinding(ref)
     if (!binding) {
       throw new ErrConfiguration(
-        `Cannot resolve error handler "${name}" referenced by "${owner}": no binding registered`
-        + solutions(
-          `Decorate "${name}" with "@Catch(ErrorType)" so it is registered in the container`,
-          'Make sure the handler module is imported by the application',
-        ),
+        `Cannot resolve error handler "${name}" referenced by "${owner}": no binding registered` +
+          solutions(
+            `Decorate "${name}" with "@Catch(ErrorType)" so it is registered in the container`,
+            'Make sure the handler module is imported by the application',
+          ),
       )
     }
 
     const meta = binding.tags.get(kErrorHandler) as CatchMetadata | undefined
     if (!meta) {
       throw new ErrConfiguration(
-        `Cannot use "${name}" as an error handler in "${owner}": it is not decorated with "@Catch"`
-        + solutions(`Decorate "${name}" with "@Catch(ErrorType)" to declare the errors it handles`),
+        `Cannot use "${name}" as an error handler in "${owner}": it is not decorated with "@Catch"` +
+          solutions(`Decorate "${name}" with "@Catch(ErrorType)" to declare the errors it handles`),
       )
     }
 
@@ -245,8 +242,8 @@ function buildCatchByMap(
       const previous = owners.get(errorType)
       if (previous !== undefined) {
         throw new ErrConfiguration(
-          `Ambiguous "@CatchWith" in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"`
-          + solutions(`Keep a single handler for "${errorType.name}" at this level`),
+          `Ambiguous "@CatchWith" in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"` +
+            solutions(`Keep a single handler for "${errorType.name}" at this level`),
         )
       }
 
@@ -258,10 +255,7 @@ function buildCatchByMap(
   return map
 }
 
-function compileGuardOptions<R>(
-  router: RouteGroupSpec<R>,
-  route: RouteSpec<R>,
-): Record<string | symbol, unknown> {
+function compileGuardOptions<R>(router: RouteGroupSpec<R>, route: RouteSpec<R>): Record<string | symbol, unknown> {
   const guardOptions: Record<string | symbol, unknown> = {}
 
   if (router.guardOptions) {

@@ -1,7 +1,15 @@
 import { IncomingMessage } from 'http'
+
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
-import { FastifyRequest, RawServerDefault, RawRequestDefaultExpression, FastifyReply, type FastifyContextConfig } from 'fastify'
 import { CookieSerializeOptions } from '@fastify/cookie'
+import {
+  FastifyRequest,
+  RawServerDefault,
+  RawRequestDefaultExpression,
+  FastifyReply,
+  type FastifyContextConfig,
+} from 'fastify'
+
 import { statusErrorBody } from './error/http.js'
 import type { RouteValidationSchema } from './route.js'
 import { type Principal } from './security/index.js'
@@ -31,7 +39,7 @@ export class ContextState<V = Record<never, never>> {
   }
 
   set<K extends keyof V & string>(key: K, value: V[K]): void {
-    (this.#vars ??= new Map()).set(key, value)
+    ;(this.#vars ??= new Map()).set(key, value)
   }
 }
 
@@ -156,8 +164,8 @@ export interface Context<
  * Inference reads the *authored* schema, so it reflects what the author wrote — not the per-slot strictness
  * the route compilation adds on top.
  */
-export type InferSlot<S, Slot extends keyof RouteValidationSchema, Fallback>
-  = S extends Record<Slot, infer Schema extends AnySchema> ? InferSchema<Schema> : Fallback
+export type InferSlot<S, Slot extends keyof RouteValidationSchema, Fallback> =
+  S extends Record<Slot, infer Schema extends AnySchema> ? InferSchema<Schema> : Fallback
 
 export type InferParams<S> = InferSlot<S, 'params', Record<string, string>>
 export type InferQuery<S> = InferSlot<S, 'querystring', Record<string, string>>
@@ -184,25 +192,22 @@ export class FastifyContext<
   #fastifyRequest: FastifyRequest
   #reply: REPLY
 
-  constructor(
-    request: FastifyRequest,
-    reply: REPLY,
-  ) {
+  constructor(request: FastifyRequest, reply: REPLY) {
     this.#reply = reply
     this.#fastifyRequest = request
   }
 
   get req(): FastifyContextRequest<SCHEMA> {
-    return this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest)
+    return (this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest))
   }
 
   /** The underlying Fastify request and reply. The escape hatch for platform-specific consumers. */
   get fst(): Fst<REPLY> {
-    return this.#fst ??= { request: this.#fastifyRequest, reply: this.#reply }
+    return (this.#fst ??= { request: this.#fastifyRequest, reply: this.#reply })
   }
 
   get state(): ContextState<V> {
-    return this.#state ??= new ContextState<V>()
+    return (this.#state ??= new ContextState<V>())
   }
 
   get user(): Principal {
@@ -313,7 +318,7 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
   false,
   InferBody<SCHEMA>
 > {
-  constructor(private readonly request: FastifyRequest) { }
+  constructor(private readonly request: FastifyRequest) {}
 
   get raw(): IncomingMessage {
     return this.request.raw

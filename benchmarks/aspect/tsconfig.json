@@ -1,8 +1,14 @@
 {
   "compilerOptions": {
-    "module": "nodenext", "target": "esnext", "moduleResolution": "nodenext",
-    "allowSyntheticDefaultImports": true, "esModuleInterop": true,
-    "strict": true, "skipLibCheck": true, "types": ["node"]
+    "module": "nodenext",
+    "target": "esnext",
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
   },
-  "include": ["bench.ts"], "exclude": ["node_modules"]
+  "include": ["bench.ts"],
+  "exclude": ["node_modules"]
 }

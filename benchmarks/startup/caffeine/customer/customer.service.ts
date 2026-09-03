@@ -1,4 +1,5 @@
 import { Injectable } from '@caffeinejs/di'
+
 import { LoggerService } from '../shared/logger.service.js'
 import { CustomerRepository } from './customer.repository.js'
 
@@ -9,8 +10,12 @@ export class CustomerService {
     private readonly logger: LoggerService,
   ) {}
 
-  findAll(): unknown[] { return this.repo.findAll() }
-  findById(id: string): unknown { return this.repo.findById(id) }
+  findAll(): unknown[] {
+    return this.repo.findAll()
+  }
+  findById(id: string): unknown {
+    return this.repo.findById(id)
+  }
   create(data: unknown): unknown {
     this.logger.log('customer.create')
     return this.repo.save(data)

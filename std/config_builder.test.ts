@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import {
   CONFIG_REFRESH_LABEL,
   ConfigPriority,
@@ -19,9 +20,11 @@ describe('base .config() builder', () => {
   it('binds the app config under kAppConfig, higher-precedence source winning', async () => {
     const container = new CaffeineIoC({ decorators: false })
     const app = createApplication({ container })
-      .config(schema, c => c
-        .source(new InlineConfigProvider({ server: { host: 'primary', port: 3000 } }))
-        .source(new InlineConfigProvider({ server: { host: 'fallback', port: 9999 } })))
+      .config(schema, c =>
+        c
+          .source(new InlineConfigProvider({ server: { host: 'primary', port: 3000 } }))
+          .source(new InlineConfigProvider({ server: { host: 'fallback', port: 9999 } })),
+      )
       .build()
 
     await app.ready()
@@ -42,7 +45,9 @@ describe('base .config() builder', () => {
     const container = new CaffeineIoC({ decorators: false })
     const app = createApplication({ container })
       // Block-body callback with no return — the config type still comes from `schema`.
-      .config(schema, c => { c.source(mutable) })
+      .config(schema, c => {
+        c.source(mutable)
+      })
       .build()
 
     await app.ready()
@@ -80,8 +85,9 @@ describe('base .config() builder', () => {
 
   it('picks up a source registered on the definition after .config() ran', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    const builder = createApplication({ container })
-      .config(schema, c => c.source(new InlineConfigProvider({ server: { host: 'first', port: 1 } })))
+    const builder = createApplication({ container }).config(schema, c =>
+      c.source(new InlineConfigProvider({ server: { host: 'first', port: 1 } })),
+    )
 
     // The registry is live: this lands on the first bootstrap, not on some later refresh.
     builder.configDefinition.sources.add(
@@ -98,9 +104,11 @@ describe('base .config() builder', () => {
   it('reads command-line arguments, above every other source', async () => {
     const container = new CaffeineIoC({ decorators: false })
     const app = createApplication({ container })
-      .config(schema, c => c
-        .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
-        .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] }))
+      .config(schema, c =>
+        c
+          .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
+          .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] }),
+      )
       .build()
 
     await app.run()
@@ -115,9 +123,7 @@ describe('base .config() builder', () => {
     try {
       const container = new CaffeineIoC({ decorators: false })
       const app = createApplication({ container })
-        .config(schema, c => c
-          .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
-          .args())
+        .config(schema, c => c.source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } })).args())
         .build()
 
       await app.run()

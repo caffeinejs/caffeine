@@ -1,15 +1,16 @@
-import { describe, it, expect, vi } from 'vitest'
 import { Contributions, type ServiceBootstrapIn } from '@caffeinejs/std'
+import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
-import { kOIDCContribution } from '../keys.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
+import { kOIDCContribution } from '../keys.js'
 import { OIDCAuthenticationHandler } from './handler.js'
-import { resolveOIDCOptions, sanitizeSchemeName } from './options.js'
 import type { OIDCMeta } from './index.js'
+import { resolveOIDCOptions, sanitizeSchemeName } from './options.js'
 
 const SESSION_SECRET = 'multi-idp-test-secret-at-least-32ch!!'
 const GOOGLE = 'https://accounts.google.example.com'
@@ -31,8 +32,8 @@ function makeCtx(cookies: Record<string, string> = {}) {
   return {
     req: {
       url: '/dashboard',
-      cookie: (name?: string) => name === undefined ? cookies : cookies[name],
-      query: (key?: string) => key === undefined ? {} : undefined,
+      cookie: (name?: string) => (name === undefined ? cookies : cookies[name]),
+      query: (key?: string) => (key === undefined ? {} : undefined),
       header: () => undefined,
     },
     cookie: vi.fn().mockReturnThis(),
@@ -43,7 +44,7 @@ function makeCtx(cookies: Record<string, string> = {}) {
 }
 
 /** Minimal service kit double — bootstrap only touches the container and the contributions. */
-function makeKit(): { kit: ServiceBootstrapIn, contributions: Contributions } {
+function makeKit(): { kit: ServiceBootstrapIn; contributions: Contributions } {
   const contributions = new Contributions()
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
@@ -91,7 +92,7 @@ describe('two OIDC strategies on default configuration', () => {
     expect(google.stateCookieName).not.toBe(okta.stateCookieName)
   })
 
-  it('T-MULTI-05: cannot read the other strategy\'s session even sharing a secret', async () => {
+  it("T-MULTI-05: cannot read the other strategy's session even sharing a secret", async () => {
     const session = claimsToSession([new Claim('sub', 'u1', GOOGLE)], 'Google')
     const cookie = await encodeSession(session, SESSION_SECRET, 'Google', 3600)
 
@@ -103,25 +104,39 @@ describe('two OIDC strategies on default configuration', () => {
     expect(result.error).toBeInstanceOf(Error)
   })
 
-  it('T-MULTI-05: cannot read the other strategy\'s state cookie', async () => {
+  it("T-MULTI-05: cannot read the other strategy's state cookie", async () => {
     const state = await encodeState(
       {
-        state: 's', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256',
-        returnTo: '/', scheme: 'Google', issuer: GOOGLE,
+        state: 's',
+        nonce: 'n',
+        codeVerifier: 'cv',
+        pkceMethod: 'S256',
+        returnTo: '/',
+        scheme: 'Google',
+        issuer: GOOGLE,
       },
       SESSION_SECRET,
       'Google',
     )
 
     await expect(
-      encodeState({
-        state: 's', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256',
-        returnTo: '/', scheme: 'Okta', issuer: OKTA,
-      }, SESSION_SECRET, 'Okta'),
+      encodeState(
+        {
+          state: 's',
+          nonce: 'n',
+          codeVerifier: 'cv',
+          pkceMethod: 'S256',
+          returnTo: '/',
+          scheme: 'Okta',
+          issuer: OKTA,
+        },
+        SESSION_SECRET,
+        'Okta',
+      ),
     ).resolves.not.toBe(state)
   })
 
-  it('T-MULTI-04: a session naming another scheme is not this handler\'s to accept', async () => {
+  it("T-MULTI-04: a session naming another scheme is not this handler's to accept", async () => {
     // Sealed with Okta's key so it decrypts, but claiming Google inside. The payload check is
     // the backstop for a deployment that shares cookie names between strategies.
     const session = claimsToSession([new Claim('sub', 'u1', GOOGLE)], 'Google')
@@ -161,9 +176,12 @@ describe('cookie name derivation', () => {
   })
 
   it('drops the __Host- prefix over http, where it is illegal', () => {
-    const handler = new OIDCAuthenticationHandler('Dev', optionsFor(GOOGLE, {
-      callbackURL: 'http://localhost:3000/cb',
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'Dev',
+      optionsFor(GOOGLE, {
+        callbackURL: 'http://localhost:3000/cb',
+      }),
+    )
     expect(handler.sessionCookieName).toBe('__oidc_Dev_session')
   })
 })
@@ -172,8 +190,10 @@ describe('startup validation', () => {
   const addOIDC = (b: AuthenticationBuilder, name: string, issuer: string, overrides = {}) =>
     b.addOIDC(name, o => {
       const opts = optionsFor(issuer, overrides)
-      o.clientID(opts.clientID).clientSecret(opts.clientSecret)
-        .sessionSecret(opts.sessionSecret).callbackURL(opts.callbackURL)
+      o.clientID(opts.clientID)
+        .clientSecret(opts.clientSecret)
+        .sessionSecret(opts.sessionSecret)
+        .callbackURL(opts.callbackURL)
         .discoveryURL(opts.discoveryURL)
         .issuer(opts.issuer)
       if ('sessionCookieName' in opts) {
@@ -182,27 +202,33 @@ describe('startup validation', () => {
     })
 
   it('T-MULTI-02: rejects two strategies sharing a callback path', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Google', GOOGLE)
-      addOIDC(b, 'Okta', OKTA, { callbackURL: 'https://app.example.com/auth/google' })
-      b.forward('auth', () => 'Google').default('auth')
-    })).rejects.toThrow(/share the callbackPath/)
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE)
+        addOIDC(b, 'Okta', OKTA, { callbackURL: 'https://app.example.com/auth/google' })
+        b.forward('auth', () => 'Google').default('auth')
+      }),
+    ).rejects.toThrow(/share the callbackPath/)
   })
 
   it('rejects two strategies sharing an explicit session cookie name', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
-      addOIDC(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
-      b.forward('auth', () => 'Google').default('auth')
-    })).rejects.toThrow(/share the session cookie name "shared"/)
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
+        addOIDC(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
+        b.forward('auth', () => 'Google').default('auth')
+      }),
+    ).rejects.toThrow(/share the session cookie name "shared"/)
   })
 
   it('names both offending strategies', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
-      addOIDC(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
-      b.forward('auth', () => 'Google').default('auth')
-    })).rejects.toThrow(/"Google" and "Okta"/)
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
+        addOIDC(b, 'Okta', OKTA, { sessionCookieName: 'shared' })
+        b.forward('auth', () => 'Google').default('auth')
+      }),
+    ).rejects.toThrow(/"Google" and "Okta"/)
   })
 
   // Previously rejected outright, on the grounds that only the default scheme is authenticated. That
@@ -210,11 +236,13 @@ describe('startup validation', () => {
   // naming one, is a working configuration. A strategy nothing reaches is
   // still reported, but as a start-up warning from the configurer that can actually see the routes.
   it('T-MULTI-07: accepts several OIDC strategies without a Forward default', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Google', GOOGLE)
-      addOIDC(b, 'Okta', OKTA)
-      b.default('Google')
-    })).resolves.toBeUndefined()
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE)
+        addOIDC(b, 'Okta', OKTA)
+        b.default('Google')
+      }),
+    ).resolves.toBeUndefined()
   })
 
   it('T-MULTI-07b: reports the strategies that no request could reach', async () => {
@@ -239,39 +267,47 @@ describe('startup validation', () => {
   })
 
   it('T-MULTI-08: accepts several OIDC strategies behind a Forward default', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Google', GOOGLE)
-      addOIDC(b, 'Okta', OKTA)
-      b.forward('auth', () => 'Google').default('auth')
-    })).resolves.toBeUndefined()
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE)
+        addOIDC(b, 'Okta', OKTA)
+        b.forward('auth', () => 'Google').default('auth')
+      }),
+    ).resolves.toBeUndefined()
   })
 
   // A misspelled default resolved to undefined, which made the Forward check a no-op — the
   // broken config passed startup and failed only at request time. It must be rejected here.
   it('T-MULTI-08b: rejects a default scheme that names no registered strategy', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Google', GOOGLE)
-      addOIDC(b, 'Okta', OKTA)
-      b.forward('auth', () => 'Google').default('AuthTypo')
-    })).rejects.toThrow(/"AuthTypo" is not a registered strategy/)
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE)
+        addOIDC(b, 'Okta', OKTA)
+        b.forward('auth', () => 'Google').default('AuthTypo')
+      }),
+    ).rejects.toThrow(/"AuthTypo" is not a registered strategy/)
   })
 
   // #11: two handlers sharing a name derive their sealed-cookie keys from the same HKDF
   // namespace. Distinct cookie names (the protocol prefix differs) hide the collision from the
   // other checks, so name uniqueness is enforced directly.
   it('T-MULTI-08c: rejects two OAuth strategies sharing a name', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Duplicate', GOOGLE)
-      addOIDC(b, 'Duplicate', OKTA, { callbackURL: 'https://app.example.com/auth/okta' })
-      b.forward('auth', () => 'Duplicate').default('auth')
-    })).rejects.toThrow(/two OAuth strategies share the name "Duplicate"/)
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Duplicate', GOOGLE)
+        addOIDC(b, 'Duplicate', OKTA, { callbackURL: 'https://app.example.com/auth/okta' })
+        b.forward('auth', () => 'Duplicate').default('auth')
+      }),
+    ).rejects.toThrow(/two OAuth strategies share the name "Duplicate"/)
   })
 
   it('does not require Forward for a single OIDC strategy', async () => {
-    await expect(configure(b => {
-      addOIDC(b, 'Google', GOOGLE)
-      b.default('Google')
-    })).resolves.toBeUndefined()
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE)
+        b.default('Google')
+      }),
+    ).resolves.toBeUndefined()
   })
 
   /**
@@ -283,17 +319,29 @@ describe('startup validation', () => {
    * buy nothing.
    */
   it('T-MULTI-09: allows two strategies against the same issuer', async () => {
-    await expect(configure(b => {
-      b.addOIDC('Users', o => o.clientID('users-client').clientSecret('s')
-        .sessionSecret(SESSION_SECRET).callbackURL('https://app.example.com/auth/users')
-        .discoveryURL(GOOGLE)
-        .issuer(GOOGLE))
-      b.addOIDC('Admins', o => o.clientID('admins-client').clientSecret('s')
-        .sessionSecret(SESSION_SECRET).callbackURL('https://app.example.com/auth/admins')
-        .discoveryURL(GOOGLE)
-        .issuer(GOOGLE))
-      b.forward('auth', () => 'Users').default('auth')
-    })).resolves.toBeUndefined()
+    await expect(
+      configure(b => {
+        b.addOIDC('Users', o =>
+          o
+            .clientID('users-client')
+            .clientSecret('s')
+            .sessionSecret(SESSION_SECRET)
+            .callbackURL('https://app.example.com/auth/users')
+            .discoveryURL(GOOGLE)
+            .issuer(GOOGLE),
+        )
+        b.addOIDC('Admins', o =>
+          o
+            .clientID('admins-client')
+            .clientSecret('s')
+            .sessionSecret(SESSION_SECRET)
+            .callbackURL('https://app.example.com/auth/admins')
+            .discoveryURL(GOOGLE)
+            .issuer(GOOGLE),
+        )
+        b.forward('auth', () => 'Users').default('auth')
+      }),
+    ).resolves.toBeUndefined()
   })
 })
 
@@ -335,31 +383,44 @@ describe('Forward wiring through configure', () => {
       revoke: vi.fn(),
     }
 
-    await expect(configure(b => {
-      b.addStrategy('Target', target as never)
-      b.forward('auth', () => 'Target')
-      b.default('auth')
-    })).resolves.toBeUndefined()
+    await expect(
+      configure(b => {
+        b.addStrategy('Target', target as never)
+        b.forward('auth', () => 'Target')
+        b.default('auth')
+      }),
+    ).resolves.toBeUndefined()
   })
 })
 
 describe('configuration hardening', () => {
   it('T-MULTI-06: rejects a non-loopback http callbackURL', () => {
-    expect(() => resolveOIDCOptions(optionsFor(GOOGLE, {
-      callbackURL: 'http://app.example.com/cb',
-    }), 'Google')).toThrow('must use https')
+    expect(() =>
+      resolveOIDCOptions(
+        optionsFor(GOOGLE, {
+          callbackURL: 'http://app.example.com/cb',
+        }),
+        'Google',
+      ),
+    ).toThrow('must use https')
   })
 
   it('T-MULTI-06: allows http on loopback for local development', () => {
-    expect(() => resolveOIDCOptions(optionsFor(GOOGLE, {
-      callbackURL: 'http://localhost:3000/cb',
-    }), 'Google')).not.toThrow()
+    expect(() =>
+      resolveOIDCOptions(
+        optionsFor(GOOGLE, {
+          callbackURL: 'http://localhost:3000/cb',
+        }),
+        'Google',
+      ),
+    ).not.toThrow()
   })
 
   it('requires a pinned issuer alongside discoveryURL', () => {
     const { issuer, ...withoutIssuer } = optionsFor(GOOGLE)
     void issuer
-    expect(() => resolveOIDCOptions(withoutIssuer as never, 'Google'))
-      .toThrow('issuer is required when discoveryURL is set')
+    expect(() => resolveOIDCOptions(withoutIssuer as never, 'Google')).toThrow(
+      'issuer is required when discoveryURL is set',
+    )
   })
 })

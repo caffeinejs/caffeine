@@ -1,5 +1,6 @@
 import { Value } from '@sinclair/typebox/value'
 import { describe, expect, expectTypeOf, it } from 'vitest'
+
 import type { InferSchema } from './schema.js'
 import { $t, hasFileSchema } from './t.js'
 
@@ -42,7 +43,12 @@ describe('$t', () => {
       properties: {
         name: { type: 'string', minLength: 1 },
         tags: { type: 'array', items: { type: 'string' } },
-        status: { anyOf: [{ const: 'draft', type: 'string' }, { const: 'live', type: 'string' }] },
+        status: {
+          anyOf: [
+            { const: 'draft', type: 'string' },
+            { const: 'live', type: 'string' },
+          ],
+        },
         count: { type: 'integer', minimum: 0 },
         note: { anyOf: [{ type: 'string' }, { type: 'null' }] },
         pair: {
@@ -60,8 +66,9 @@ describe('$t', () => {
     const schema = $t.Object({ note: $t.MaybeEmpty($t.String()) })
 
     expect(schema.required).toBeUndefined()
-    expect(JSON.parse(JSON.stringify(schema.properties.note)))
-      .toEqual({ anyOf: [{ type: 'string' }, { type: 'null' }] })
+    expect(JSON.parse(JSON.stringify(schema.properties.note))).toEqual({
+      anyOf: [{ type: 'string' }, { type: 'null' }],
+    })
   })
 
   it('Partial makes every property optional, which is the update-DTO shape', () => {
@@ -75,7 +82,10 @@ describe('$t', () => {
     const schema = $t.UnionEnum(['A', 'B'])
 
     expect(JSON.parse(JSON.stringify(schema))).toEqual({
-      anyOf: [{ const: 'A', type: 'string' }, { const: 'B', type: 'string' }],
+      anyOf: [
+        { const: 'A', type: 'string' },
+        { const: 'B', type: 'string' },
+      ],
     })
     expect(Value.Check(schema, 'A')).toBe(true)
     expect(Value.Check(schema, 'B')).toBe(true)
@@ -126,7 +136,7 @@ describe('$t.List', () => {
   it('types as an array of the item type', () => {
     const schema = $t.Object({ tags: $t.List($t.String()), ports: $t.List($t.Number()) })
 
-    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ tags: string[], ports: number[] }>()
+    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ tags: string[]; ports: number[] }>()
   })
 
   it('decodes inside an object', () => {
@@ -203,7 +213,7 @@ describe('$t.File', () => {
   it('types as the file the handler reads back', () => {
     const schema = $t.Object({ avatar: $t.File(), gallery: $t.Files() })
 
-    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ avatar: File, gallery: File[] }>()
+    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ avatar: File; gallery: File[] }>()
   })
 
   it('carries annotations through, so an upload can be described', () => {

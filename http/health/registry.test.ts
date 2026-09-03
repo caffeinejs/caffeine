@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { HealthIndicator, type HealthGroup, type HealthReport, down, up } from '@caffeinejs/std'
+import { describe, it, expect } from 'vitest'
+
 import { HealthRegistry } from './registry.js'
 
 const OPTIONS = { indicatorTimeoutMs: 50, probeDeadlineMs: 100, cacheTTLMs: 1_000 }
@@ -74,11 +75,14 @@ describe('HealthRegistry', () => {
   })
 
   it('reports a thrown check as down', async () => {
-    const registry = new HealthRegistry([
-      new Stub('db', () => {
-        throw new Error('boom')
-      }),
-    ], OPTIONS)
+    const registry = new HealthRegistry(
+      [
+        new Stub('db', () => {
+          throw new Error('boom')
+        }),
+      ],
+      OPTIONS,
+    )
 
     const outcome = await registry.evaluate('readiness')
 
@@ -87,12 +91,15 @@ describe('HealthRegistry', () => {
   })
 
   it('times out an indicator that ignores its abort signal', async () => {
-    const registry = new HealthRegistry([
-      new Stub('hung', async () => {
-        await sleep(5_000)
-        return up()
-      }),
-    ], OPTIONS)
+    const registry = new HealthRegistry(
+      [
+        new Stub('hung', async () => {
+          await sleep(5_000)
+          return up()
+        }),
+      ],
+      OPTIONS,
+    )
 
     const started = Date.now()
     const outcome = await registry.evaluate('readiness')
@@ -111,9 +118,13 @@ describe('HealthRegistry', () => {
       }
 
       check(signal: AbortSignal): Promise<never> {
-        signal.addEventListener('abort', () => {
-          aborted = true
-        }, { once: true })
+        signal.addEventListener(
+          'abort',
+          () => {
+            aborted = true
+          },
+          { once: true },
+        )
 
         return new Promise<never>(() => {})
       }
@@ -132,11 +143,7 @@ describe('HealthRegistry', () => {
     })
     const registry = new HealthRegistry([indicator], OPTIONS)
 
-    await Promise.all([
-      registry.evaluate('readiness'),
-      registry.evaluate('readiness'),
-      registry.evaluate('readiness'),
-    ])
+    await Promise.all([registry.evaluate('readiness'), registry.evaluate('readiness'), registry.evaluate('readiness')])
 
     expect(indicator.calls).toBe(1)
   })

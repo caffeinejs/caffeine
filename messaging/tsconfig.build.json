@@ -3,9 +3,6 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "references": [
-    { "path": "../di/tsconfig.build.json" },
-    { "path": "../std/tsconfig.build.json" }
-  ],
+  "references": [{ "path": "../di/tsconfig.build.json" }, { "path": "../std/tsconfig.build.json" }],
   "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "**/*.testkit.ts", "vitest.config.ts"]
 }

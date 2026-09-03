@@ -1,22 +1,31 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
+
 import { $t } from '../../schema/t.js'
-import { ConfigDefinition } from '../definition.js'
-import { ConfigPriority } from '../sources.js'
 import { Configuration, kConfiguration } from '../configuration.js'
+import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
+import { ConfigPriority } from '../sources.js'
 
 const APP_CONFIG = token<any>(Symbol('app.config'))
 
-interface App { server: { port: number, host: string } }
-interface Server { port: number, host: string }
+interface App {
+  server: { port: number; host: string }
+}
+interface Server {
+  port: number
+  host: string
+}
 
 const schema = $t.Object({
-  server: $t.Object({
-    port: $t.Number({ default: 0 }),
-    host: $t.String({ default: 'localhost' }),
-  }, { default: {} }),
+  server: $t.Object(
+    {
+      port: $t.Number({ default: 0 }),
+      host: $t.String({ default: 'localhost' }),
+    },
+    { default: {} },
+  ),
 })
 
 const serverSchema = $t.Object({
@@ -271,7 +280,10 @@ describe('onChange delivery', () => {
     release?.()
     await configuration.settled()
 
-    expect(seen).toEqual([[1, 3000], [3, 1]])
+    expect(seen).toEqual([
+      [1, 3000],
+      [3, 1],
+    ])
   })
 })
 

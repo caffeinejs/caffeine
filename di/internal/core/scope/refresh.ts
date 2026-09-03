@@ -15,18 +15,19 @@ export class RefreshScope extends SingletonScope {
   }
 
   async refresh(label?: symbol): Promise<void> {
-    const targets = label === undefined
-      ? this.managedBindings
-      : this.managedBindings.filter(b => b.labels.includes(label))
+    const targets =
+      label === undefined ? this.managedBindings : this.managedBindings.filter(b => b.labels.includes(label))
 
-    await Promise.all(targets.map(b => {
-      const cached = this._cachedInstances.get(b.id)
-      if (cached != null && typeof (cached as Record<symbol, unknown>)[kSelfRefresh] === 'function') {
-        return (cached as Record<symbol, () => unknown>)[kSelfRefresh]()
-      }
+    await Promise.all(
+      targets.map(b => {
+        const cached = this._cachedInstances.get(b.id)
+        if (cached != null && typeof (cached as Record<symbol, unknown>)[kSelfRefresh] === 'function') {
+          return (cached as Record<symbol, () => unknown>)[kSelfRefresh]()
+        }
 
-      return this.container.resetBinding(b)
-    }))
+        return this.container.resetBinding(b)
+      }),
+    )
   }
 
   configure(binding: Binding) {

@@ -28,23 +28,18 @@ export const configFactory: InjectionResolverFactory = ctx => {
     return () => undefined
   }
 
-  const select: (provider: unknown) => unknown
-    = typeof access === 'string'
+  const select: (provider: unknown) => unknown =
+    typeof access === 'string'
       ? (() => {
           const keys = access.split('.')
           return (provider: unknown) =>
-            keys.reduce(
-              (acc: unknown, k) => (acc == null ? undefined : (acc as Record<string, unknown>)[k]),
-              provider,
-            )
+            keys.reduce((acc: unknown, k) => (acc == null ? undefined : (acc as Record<string, unknown>)[k]), provider)
         })()
       : (access as (provider: unknown) => unknown)
 
   return () => {
     const v = select(providerBinding.factory(providerBinding.ctx!))
 
-    return v === undefined && hasDefault
-      ? defaultValue!
-      : v
+    return v === undefined && hasDefault ? defaultValue! : v
   }
 }

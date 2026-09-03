@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import fastify, { type RouteOptions } from 'fastify'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+
 import {
   Cache,
   CacheInvalidate,

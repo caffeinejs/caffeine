@@ -18,9 +18,14 @@
   ],
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
-    "clean:dist": "rm -rf dist"
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "eslint": ">=9"
+  },
+  "devDependencies": {
+    "eslint": "^10.3.0",
+    "typescript-eslint": "^8.59.2"
   }
 }

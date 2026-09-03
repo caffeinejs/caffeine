@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
+import { Lifetime } from '../decorators/lifetime.js'
 import { Named } from '../decorators/named.js'
 import { Provides } from '../decorators/provides.js'
-import { Lifetime } from '../decorators/lifetime.js'
-import { CaffeineIoC } from '../container.js'
 import { ErrInvalidDecorator, ErrOrphanedBindingConfig } from '../errors.js'
+import { token } from '../key.js'
 import { Scopes } from '../scope.js'
 
 describe('Orphaned binding config validation', function () {
@@ -13,8 +14,7 @@ describe('Orphaned binding config validation', function () {
     class Svc {}
     void Svc
 
-    expect(() => new CaffeineIoC())
-      .toThrow(ErrOrphanedBindingConfig)
+    expect(() => new CaffeineIoC()).toThrow(ErrOrphanedBindingConfig)
   })
 
   it('should throw when @Named is used without @Injectable', function () {
@@ -22,8 +22,7 @@ describe('Orphaned binding config validation', function () {
     class Svc {}
     void Svc
 
-    expect(() => new CaffeineIoC())
-      .toThrow(ErrOrphanedBindingConfig)
+    expect(() => new CaffeineIoC()).toThrow(ErrOrphanedBindingConfig)
   })
 
   it('should throw when @Provides is used at class level', function () {
@@ -34,7 +33,6 @@ describe('Orphaned binding config validation', function () {
       @Provides(kSvc)
       class Svc {}
       void Svc
-    })
-      .toThrow(ErrInvalidDecorator)
+    }).toThrow(ErrInvalidDecorator)
   })
 })

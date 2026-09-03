@@ -3,8 +3,6 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "references": [
-    { "path": "../fetchy/tsconfig.build.json" }
-  ],
+  "references": [{ "path": "../fetchy/tsconfig.build.json" }],
   "exclude": ["dist", "node_modules", "_tests", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
 }

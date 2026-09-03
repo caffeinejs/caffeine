@@ -1,5 +1,6 @@
-import type { FastifyRequest } from 'fastify'
 import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
+import type { FastifyRequest } from 'fastify'
+
 import {
   nodeStreamFile,
   nodeStreamFiles,

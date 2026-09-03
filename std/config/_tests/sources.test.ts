@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+
 import { ConfigEngine } from '../engine.js'
-import { ConfigPriority, ConfigSources } from '../sources.js'
 import { materialize } from '../materializer.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
+import { ConfigPriority, ConfigSources } from '../sources.js'
 import type { ConfigProvider, ResolutionContext } from '../types.js'
 
 const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
@@ -36,9 +37,7 @@ describe('ConfigSources', () => {
   })
 
   it('breaks ties within a band by registration order', async () => {
-    const sources = new ConfigSources()
-      .add(provider('first', 'first'))
-      .add(provider('second', 'second'))
+    const sources = new ConfigSources().add(provider('first', 'first')).add(provider('second', 'second'))
 
     expect(await hostFrom(sources)).toBe('first')
   })
@@ -203,17 +202,23 @@ describe('array merging across bands', () => {
     // basis yields a holed array that surfaces later as a baffling complaint about index 0, so say so here.
     const patch: ConfigProvider = {
       id: 'env',
-      load: () => Promise.resolve([{
-        name: 'env',
-        entries: new Map([['tags.1', { key: 'tags.1', value: 'z', origin: 'env:TAGS__1' }]]),
-      }]),
+      load: () =>
+        Promise.resolve([
+          {
+            name: 'env',
+            entries: new Map([['tags.1', { key: 'tags.1', value: 'z', origin: 'env:TAGS__1' }]]),
+          },
+        ]),
     }
 
     const sources = new ConfigSources()
       .add(tree('code', { tags: ['a', 'b'] }), ConfigPriority.CODE)
       .add(patch, ConfigPriority.ENV)
 
-    await expect(materializedFrom(sources)).rejects.toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_ARRAY_INDICES' })
+    await expect(materializedFrom(sources)).rejects.toMatchObject({
+      name: 'ErrConfig',
+      code: 'ERR_CONFIG_ARRAY_INDICES',
+    })
     await expect(materializedFrom(sources)).rejects.toThrow(/tags/)
   })
 })

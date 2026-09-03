@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'bun:test'
-import { bucketFiles, dirDepth, exceedsMaxDepth, isGeneratedMod, isHandwrittenMod, isSkipped, moduleDir, toRootRel } from './_module_graph_partition.js'
+
+import {
+  bucketFiles,
+  dirDepth,
+  exceedsMaxDepth,
+  isGeneratedMod,
+  isHandwrittenMod,
+  isSkipped,
+  moduleDir,
+  toRootRel,
+} from './_module_graph_partition.js'
 
 describe('module graph partition', () => {
   it('maps src-relative paths onto the walk root', () => {
@@ -34,20 +44,23 @@ describe('module graph partition', () => {
   })
 
   it('buckets files and ignores generated modules', () => {
-    const buckets = bucketFiles([
-      'app.ts',
-      'orders/order.ts',
-      'orders/internal/x.ts',
-      'libs/util.ts',
-      'libs/db/client.ts',
-      'vendor/skip.ts',
-      'orders/orders.generated.mod.ts',
-    ], {
-      depth: 1,
-      depths: { libs: 2 },
-      maxDepth: 8,
-      skip: ['vendor'],
-    })
+    const buckets = bucketFiles(
+      [
+        'app.ts',
+        'orders/order.ts',
+        'orders/internal/x.ts',
+        'libs/util.ts',
+        'libs/db/client.ts',
+        'vendor/skip.ts',
+        'orders/orders.generated.mod.ts',
+      ],
+      {
+        depth: 1,
+        depths: { libs: 2 },
+        maxDepth: 8,
+        skip: ['vendor'],
+      },
+    )
 
     expect([...buckets.keys()].sort()).toEqual(['', 'libs/db', 'orders'])
     expect(buckets.get('')).toEqual(['app.ts', 'libs/util.ts'])

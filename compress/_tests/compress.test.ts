@@ -1,5 +1,3 @@
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
 import {
   Controller,
   Get,
@@ -10,11 +8,13 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import type { ServiceAPI } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Compress, CompressBuilder, compress, CompressExt } from '../index.js'
 
 function compressApp(configure?: (c: ServiceAPI<CompressBuilder>) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(CompressExt, configure ?? (() => undefined))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CompressExt, configure ?? (() => undefined))
 }
 
 describe('Compress', () => {
@@ -81,9 +81,13 @@ describe('Compress', () => {
       const app = compressApp().build()
       await app.ready()
 
-      const resOff = await app.fetch('/compress-mixed/no-compress', { headers: { 'accept-encoding': 'br, gzip, deflate' } })
+      const resOff = await app.fetch('/compress-mixed/no-compress', {
+        headers: { 'accept-encoding': 'br, gzip, deflate' },
+      })
 
-      const resOn = await app.fetch('/compress-mixed/with-compress', { headers: { 'accept-encoding': 'br, gzip, deflate' } })
+      const resOn = await app.fetch('/compress-mixed/with-compress', {
+        headers: { 'accept-encoding': 'br, gzip, deflate' },
+      })
 
       expect(resOff.status).toBe(200)
       expect(resOff.headers.get('content-encoding')).toBeNull()
@@ -115,7 +119,9 @@ describe('Compress', () => {
 
       const resLow = await app.fetch('/compress-threshold/low-threshold', { headers: { 'accept-encoding': 'gzip' } })
 
-      const resDefault = await app.fetch('/compress-threshold/default-threshold', { headers: { 'accept-encoding': 'gzip' } })
+      const resDefault = await app.fetch('/compress-threshold/default-threshold', {
+        headers: { 'accept-encoding': 'gzip' },
+      })
 
       expect(resLow.status).toBe(200)
       expect(resLow.headers.get('content-encoding')).toBe('gzip')
@@ -158,8 +164,9 @@ describe('Compress', () => {
 
       expect((await app.fetch('/ext-compress/a', { headers })).headers.get('content-encoding')).toBeNull()
       expect((await app.fetch('/ext-compress/b', { headers })).headers.get('content-encoding')).toBeNull()
-      expect((await app.fetch('/ext-compressed/a', { headers })).headers.get('content-encoding'))
-        .toMatch(/br|gzip|deflate/)
+      expect((await app.fetch('/ext-compressed/a', { headers })).headers.get('content-encoding')).toMatch(
+        /br|gzip|deflate/,
+      )
     })
   })
 })

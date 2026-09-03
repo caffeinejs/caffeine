@@ -1,13 +1,14 @@
 import { type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
-import { ConfigDefinition, defineFeatureConfig } from './config/index.js'
+
 import { kAppConfig } from './app_config.js'
+import { ConfigDefinition, defineFeatureConfig } from './config/index.js'
+import { Contributions } from './contributions.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
 import { $t } from './schema/t.js'
-import { Contributions } from './contributions.js'
 import { type Service, ServiceBootstrapIn } from './service.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
@@ -169,10 +170,11 @@ export abstract class BaseApplication {
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()
 
-    await Promise
-      .all(services
-        .map(service =>
-          service.beforeBootstrap?.({ config: this.#config, container: this.#container })))
+    await Promise.all(
+      services.map(service =>
+        Promise.resolve(service.beforeBootstrap?.({ config: this.#config, container: this.#container })),
+      ),
+    )
     await this.#config.bootstrap()
 
     const profiles = caffeine.config.profiles.filter(profile => profile !== '')
@@ -185,9 +187,7 @@ export abstract class BaseApplication {
 
     const kit = this.serviceKit()
 
-    await Promise
-      .all(services
-        .map(service => service.bootstrap(kit)))
+    await Promise.all(services.map(service => service.bootstrap(kit)))
     // Every service has had its turn, so what they contributed is now complete — and closing the step is what
     // lets the rest of the boot read it without the answer depending on which service happened to finish first.
     this.#contributions.seal()
@@ -330,11 +330,12 @@ export abstract class BaseApplication {
   private buildDispatch(): Map<ApplicationEvent, Dispatch[]> {
     const dispatch = new Map<ApplicationEvent, Dispatch[]>()
 
-    const candidates: HookBinding[] = this.#hookBindings === 'scan'
-      ? this.#container
-          .getBindingsBy(d => typeof d.binding.type === 'function' && hooksOf(d.binding.type) !== undefined)
-          .map(d => ({ key: d.key, ctor: d.binding.type as Function }))
-      : this.#hookBindings
+    const candidates: HookBinding[] =
+      this.#hookBindings === 'scan'
+        ? this.#container
+            .getBindingsBy(d => typeof d.binding.type === 'function' && hooksOf(d.binding.type) !== undefined)
+            .map(d => ({ key: d.key, ctor: d.binding.type as Function }))
+        : this.#hookBindings
 
     for (const { key, ctor } of candidates) {
       const hooks = hooksOf(ctor)
@@ -395,7 +396,8 @@ export abstract class BaseApplication {
 
     const calls: Array<Promise<unknown>> = [
       ...(this.#dispatch?.get(event) ?? []).map(({ instance, method }) =>
-        invoke(() => (instance as Record<string | symbol, () => unknown>)[method]())),
+        invoke(() => (instance as Record<string | symbol, () => unknown>)[method]()),
+      ),
       ...this.#hooks.listenersFor(event).map(listener => invoke(() => listener(this))),
     ]
 

@@ -1,24 +1,30 @@
 // reflect-metadata is necessary for the legacy third party implementations
 import 'reflect-metadata'
-
-import { bench, group, run } from 'mitata'
 import { ReflectiveInjector } from 'injection-js'
+import { bench, group, run } from 'mitata'
+
 import { Root, di, RootSingleton, Rep1, Svc1, Rep3, Rep2, Svc2, Svc3, Svc4, Svc5, Svc6 } from './testdata/di.js'
 import { inferdi, inferdiFast } from './testdata/inferdi.js'
-import { inv, InvRootSingleton as InvSingletonRoot, InvRoot } from './testdata/third_party_legacy/dist/inversify.js'
-import { tsy, TsySingletonRoot, TsyRoot } from './testdata/third_party_legacy/dist/tsy.js'
-import { bootstrap, NestRoot, NestTransientRoot } from './testdata/third_party_legacy/dist/nest.js'
-import { loopCtx, LoopSingletonRoot, LoopRoot } from './testdata/third_party_legacy/dist/loopback.js'
-import { typeContainer, TypeSingletonRoot, TypeRoot } from './testdata/third_party_legacy/dist/typedi.js'
 import { awilixContainer } from './testdata/third_party_legacy/dist/awilix.js'
-import { injResolvedProviders, injSingletonInjector, InjRoot, InjSingletonRoot } from './testdata/third_party_legacy/dist/injection_js.js'
+import {
+  injResolvedProviders,
+  injSingletonInjector,
+  InjRoot,
+  InjSingletonRoot,
+} from './testdata/third_party_legacy/dist/injection_js.js'
+import { inv, InvRootSingleton as InvSingletonRoot, InvRoot } from './testdata/third_party_legacy/dist/inversify.js'
+import { loopCtx, LoopSingletonRoot, LoopRoot } from './testdata/third_party_legacy/dist/loopback.js'
+import { bootstrap, NestRoot, NestTransientRoot } from './testdata/third_party_legacy/dist/nest.js'
+import { tsy, TsySingletonRoot, TsyRoot } from './testdata/third_party_legacy/dist/tsy.js'
+import { typeContainer, TypeSingletonRoot, TypeRoot } from './testdata/third_party_legacy/dist/typedi.js'
 
 const nestApp = await bootstrap()
 const transientProvider = di.wrap(Root)
 const singletonProvider = di.wrap(RootSingleton)
 
 group('normal', () => {
-  bench('raw', () => new Root(new Svc1(new Rep1(), new Rep2(), new Rep3()), new Svc2(), new Svc3(), new Svc4(), new Svc5(), new Svc6()))
+  bench('raw', () =>
+    new Root(new Svc1(new Rep1(), new Rep2(), new Rep3()), new Svc2(), new Svc3(), new Svc4(), new Svc5(), new Svc6()))
   bench('caffeine-ioc:transient', () => di.get(Root))
   bench('caffeine-ioc:transient:provider', () => transientProvider.get())
   bench('caffeine-ioc:singleton', () => di.get(RootSingleton))

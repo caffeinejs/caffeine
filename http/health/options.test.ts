@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+
 import { ErrHealthConfiguration } from './errors.js'
 import { defaultHealthOptions, emitHealthWarnings, validateHealthOptions } from './options.js'
 
@@ -35,8 +36,12 @@ describe('defaultHealthOptions', () => {
 })
 
 describe('validateHealthOptions', () => {
-  const budget = (drainDelayMs: number, shutdownTimeoutMs: number, terminationGracePeriodMs: number) =>
-    ({ ...defaultHealthOptions({}), drainDelayMs, shutdownTimeoutMs, terminationGracePeriodMs })
+  const budget = (drainDelayMs: number, shutdownTimeoutMs: number, terminationGracePeriodMs: number) => ({
+    ...defaultHealthOptions({}),
+    drainDelayMs,
+    shutdownTimeoutMs,
+    terminationGracePeriodMs,
+  })
 
   it('accepts a budget that fits the grace period', () => {
     const options = budget(5_000, 20_000, 30_000)

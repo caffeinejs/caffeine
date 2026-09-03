@@ -1,9 +1,9 @@
 import type { Ctor } from '@caffeinejs/di'
 
 /** Backoff strategy between retry attempts. */
-export type BackOff
-  = | { type: 'fixed', delay: number }
-    | { type: 'exponential', delay: number, multiplier?: number, max?: number }
+export type BackOff =
+  | { type: 'fixed'; delay: number }
+  | { type: 'exponential'; delay: number; multiplier?: number; max?: number }
 
 /** A retry policy: `attempts` is the total number of tries (at least 1); `backoff` spaces them out. */
 export interface RetryPolicy {

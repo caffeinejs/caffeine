@@ -93,11 +93,11 @@ See the [Profiles guide](./profiles.md).
 
 Controls scope validation at init time. Three modes:
 
-| Mode | Behaviour |
-|---|---|
+| Mode                       | Behaviour                                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `'compatible-scopes-only'` | Durable scopes (singleton, container) cannot depend on shorter-lived scopes (transient, request). Reverse is allowed. |
-| `'no-mix'` | Every dependency must share the exact scope as its consumer. |
-| `'off'` | Validation disabled. |
+| `'no-mix'`                 | Every dependency must share the exact scope as its consumer.                                                          |
+| `'off'`                    | Validation disabled.                                                                                                  |
 
 ```ts
 const di = new CaffeineIoC({
@@ -196,13 +196,13 @@ cover the same ground with less ceremony.
 
 ## All options at a glance
 
-| Option | Type | Default |
-|---|---|---|
-| `defaultScopeId` | `Identifier` | `Scopes.SINGLETON` |
-| `lazy` | `boolean` | `false` |
-| `profiles` | `Identifier[]` | `[]` |
-| `checks.scopes` | `'compatible-scopes-only' \| 'no-mix' \| 'off'` | `'compatible-scopes-only'` |
-| `checks.circularReferences` | `boolean` | `true` |
-| `parent` | `Container` | `undefined` |
-| `decorators` | `boolean` | `true` |
-| `metadataReader` | `MetadataReader` | `undefined` |
+| Option                      | Type                                            | Default                    |
+| --------------------------- | ----------------------------------------------- | -------------------------- |
+| `defaultScopeId`            | `Identifier`                                    | `Scopes.SINGLETON`         |
+| `lazy`                      | `boolean`                                       | `false`                    |
+| `profiles`                  | `Identifier[]`                                  | `[]`                       |
+| `checks.scopes`             | `'compatible-scopes-only' \| 'no-mix' \| 'off'` | `'compatible-scopes-only'` |
+| `checks.circularReferences` | `boolean`                                       | `true`                     |
+| `parent`                    | `Container`                                     | `undefined`                |
+| `decorators`                | `boolean`                                       | `true`                     |
+| `metadataReader`            | `MetadataReader`                                | `undefined`                |

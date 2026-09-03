@@ -1,5 +1,6 @@
 import { FastifyPluginAsync, FastifyReply } from 'fastify'
 import type { FastifyRequest } from 'fastify'
+
 import { ContainerPluginOptions } from '../app.js'
 import { CATS_REPOSITORY } from '../dependencies.js'
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
@@ -11,50 +12,42 @@ export const catsRoutes: FastifyPluginAsync<ContainerPluginOptions> = async func
   async function byID(req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const cat = repository.findOne(Number(req.params.id))
     if (cat === undefined) {
-      return reply.code(404)
-        .send()
+      return reply.code(404).send()
     }
 
-    return reply.code(200)
-      .send(cat)
+    return reply.code(200).send(cat)
   }
 
   async function all(req: FastifyRequest, reply: FastifyReply) {
     const cats = repository.findAll()
 
-    return reply.code(200)
-      .send(cats)
+    return reply.code(200).send(cats)
   }
 
   async function create(req: FastifyRequest<{ Body: CreateCatDTO }>, reply: FastifyReply) {
     const cat = repository.create(req.body)
 
-    return reply.code(201)
-      .send(cat)
+    return reply.code(201).send(cat)
   }
 
-  async function update(req: FastifyRequest<{ Params: { id: string }, Body: UpdateCatDTO }>, reply: FastifyReply) {
+  async function update(req: FastifyRequest<{ Params: { id: string }; Body: UpdateCatDTO }>, reply: FastifyReply) {
     const cat = repository.update(Number(req.params.id), req.body)
 
     if (cat === undefined) {
-      return reply.code(404)
-        .send()
+      return reply.code(404).send()
     }
 
-    return reply.code(200)
-      .send(cat)
+    return reply.code(200).send(cat)
   }
 
   async function remove(req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
     const removed = repository.remove(Number(req.params.id))
 
     if (!removed) {
-      return reply.code(404)
-        .send()
+      return reply.code(404).send()
     }
 
-    return reply.code(204)
-      .send()
+    return reply.code(204).send()
   }
 
   fastify.get('/cats/:id', byID)

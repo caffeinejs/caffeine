@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
 import type { ServiceAPI } from '@caffeinejs/std'
-import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
+import type { WebApplication } from '../application.js'
 import { ErrShutdownTimeout } from '../health/errors.js'
 import type { HealthBuilder } from '../health/health_builder.js'
-import type { WebApplication } from '../application.js'
+import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -25,9 +26,7 @@ class DrainController {
 void [DrainController]
 
 async function start(configure: (health: ServiceAPI<HealthBuilder<unknown>>) => void): Promise<WebApplication> {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()))
-    .health(configure)
-    .build()
+  const app = createWebApplication(fastifyAdapterFactory(fastify())).health(configure).build()
 
   await app.run()
 

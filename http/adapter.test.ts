@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import Fastify from 'fastify'
-import FastifyCookie from '@fastify/cookie'
 import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
-import { $p } from './route_picker.js'
+import FastifyCookie from '@fastify/cookie'
+import Fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Get, Method, createWebApplication, Args, fastifyAdapterFactory, FastifyContext } from './index.js'
+import { $p } from './route_picker.js'
 
 describe('Fastify Adapter', () => {
   // Binds a real ephemeral socket (unlike the app.fetch() tests below), so it can hang up under
@@ -71,13 +72,7 @@ describe('Fastify Adapter', () => {
       class PickersController {
         @Get('/pickers')
         @Args([$p.url(), $p.path(), $p.signal(), $p.port(), $p.address()])
-        get(
-          u: string,
-          p: string,
-          sig: AbortSignal,
-          po: number | null,
-          addr: string | undefined,
-        ) {
+        get(u: string, p: string, sig: AbortSignal, po: number | null, addr: string | undefined) {
           return {
             url: u,
             path: p,
@@ -214,7 +209,7 @@ describe('Fastify Adapter', () => {
       @Lifetime(Scopes.TRANSIENT)
       @Controller('/transient-ctrl', [RequestScopedService])
       class TransientController {
-        constructor(private readonly svc: RequestScopedService) { }
+        constructor(private readonly svc: RequestScopedService) {}
 
         @Get('/svc-id')
         get() {

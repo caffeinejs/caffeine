@@ -1,6 +1,6 @@
+import { notNil } from '../internal/util/assert/not_nil.js'
 import { PostResolutionInterceptor } from '../post_resolution_interceptor.js'
 import { Ctor } from '../types.js'
-import { notNil } from '../internal/util/assert/not_nil.js'
 import { extendInjectableAttributes, extendMemberInjectableAttributes } from './registrar/index.js'
 
 /**

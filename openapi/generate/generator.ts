@@ -1,4 +1,5 @@
 import { type AuthSchemeDescriptor, type Route, type RouteGroup, solutions } from '@caffeinejs/http'
+
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
 import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { ErrOpenAPIConfiguration, ErrOpenAPIOperationConflict } from '../errors.js'
@@ -118,9 +119,7 @@ function addRoute(ctx: AddRouteInput): void {
   const { templates, parameters: pathParams } = translatePath(url)
   const site = operationSite(router, route)
 
-  const operationId = detail?.operationId
-    ?? options.operationId?.(router, route)
-    ?? defaultOperationId(router, route)
+  const operationId = detail?.operationId ?? options.operationId?.(router, route) ?? defaultOperationId(router, route)
 
   const existing = ctx.operationIds.get(operationId)
   if (existing !== undefined) {
@@ -137,7 +136,7 @@ function addRoute(ctx: AddRouteInput): void {
     ...(detail?.summary === undefined ? {} : { summary: detail.summary }),
     ...(describe(detail, route) === undefined ? {} : { description: describe(detail, route) }),
     ...(detail?.externalDocs === undefined ? {} : { externalDocs: detail.externalDocs }),
-    ...(detail?.deprecated ?? group?.deprecated ? { deprecated: true } : {}),
+    ...((detail?.deprecated ?? group?.deprecated) ? { deprecated: true } : {}),
     ...(derivedParameters.length > 0 || detail?.parameters !== undefined
       ? { parameters: mergeParameters(derivedParameters, detail?.parameters) }
       : {}),
@@ -147,14 +146,14 @@ function addRoute(ctx: AddRouteInput): void {
 
   const requestBody = deriveRequestBody(route, ctx.registry, context)
   if (requestBody !== undefined) {
-    operation.requestBody = detail?.requestBody === undefined
-      ? requestBody
-      : { ...requestBody, ...detail.requestBody, content: { ...requestBody.content, ...detail.requestBody.content } }
+    operation.requestBody =
+      detail?.requestBody === undefined
+        ? requestBody
+        : { ...requestBody, ...detail.requestBody, content: { ...requestBody.content, ...detail.requestBody.content } }
   }
 
-  const security = detail?.security
-    ?? deriveSecurity(route, ctx.securitySchemes, input.defaultScheme)
-    ?? group?.security
+  const security =
+    detail?.security ?? deriveSecurity(route, ctx.securitySchemes, input.defaultScheme) ?? group?.security
   if (security !== undefined) {
     operation.security = security
   }
@@ -180,12 +179,12 @@ function addRoute(ctx: AddRouteInput): void {
       // silently dropping it would be worse — so it is dropped loudly.
       if (options.version === '3.1.1') {
         warn(
-          `Route "${method} ${url}" (${site}) is omitted from the OpenAPI document: `
-          + `OpenAPI 3.1.1 cannot represent the "${method}" method`
-          + solutions(
-            'Set .version("3.2.0") on the OpenAPI builder, which represents it via additionalOperations',
-            'Hide the route with @Operation({ hidden: true }) to omit it deliberately',
-          ),
+          `Route "${method} ${url}" (${site}) is omitted from the OpenAPI document: ` +
+            `OpenAPI 3.1.1 cannot represent the "${method}" method` +
+            solutions(
+              'Set .version("3.2.0") on the OpenAPI builder, which represents it via additionalOperations',
+              'Hide the route with @Operation({ hidden: true }) to omit it deliberately',
+            ),
         )
         continue
       }
@@ -209,10 +208,7 @@ function describe(detail: OperationDetail | undefined, route: Route<unknown>): s
 }
 
 /** Authored parameters are merged over derived ones by `(name, in)`, never appended blindly. */
-function mergeParameters(
-  derived: ParameterObject[],
-  authored: OperationDetail['parameters'],
-): ParameterObject[] {
+function mergeParameters(derived: ParameterObject[], authored: OperationDetail['parameters']): ParameterObject[] {
   if (authored === undefined) {
     return derived
   }
@@ -263,12 +259,12 @@ export function validateDocument(document: OpenAPIDocument): void {
       for (const name of Object.keys(requirement)) {
         if (!definedSchemes.has(name)) {
           throw new ErrOpenAPIConfiguration(
-            `Cannot generate OpenAPI document: ${where} requires the security scheme "${name}", `
-            + 'which components.securitySchemes does not define'
-            + solutions(
-              `Declare it with .securityScheme("${name}", { ... }) on the OpenAPI builder`,
-              'Register it through .authentication(...) so it can be described automatically',
-            ),
+            `Cannot generate OpenAPI document: ${where} requires the security scheme "${name}", ` +
+              'which components.securitySchemes does not define' +
+              solutions(
+                `Declare it with .securityScheme("${name}", { ... }) on the OpenAPI builder`,
+                'Register it through .authentication(...) so it can be described automatically',
+              ),
           )
         }
       }
@@ -280,7 +276,9 @@ export function validateDocument(document: OpenAPIDocument): void {
   for (const [template, item] of Object.entries(document.paths ?? {})) {
     const declared = new Set<string>()
     const operations = [
-      ...Object.entries(item).filter(([key]) => FIXED_METHODS.has(key)).map(([, op]) => op as OperationObject),
+      ...Object.entries(item)
+        .filter(([key]) => FIXED_METHODS.has(key))
+        .map(([, op]) => op as OperationObject),
       ...Object.values(item.additionalOperations ?? {}),
     ]
 
@@ -297,11 +295,11 @@ export function validateDocument(document: OpenAPIDocument): void {
     for (const [, name] of template.matchAll(/\{([^}]+)\}/g)) {
       if (operations.length > 0 && !declared.has(name)) {
         throw new ErrOpenAPIConfiguration(
-          `Cannot generate OpenAPI document: path "${template}" declares no parameter for "{${name}}"`
-          + solutions(
-            `Add "${name}" to the route's @Schema({ params }) so it is described`,
-            `Add it via @Operation({ parameters: [{ name: "${name}", in: "path" }] })`,
-          ),
+          `Cannot generate OpenAPI document: path "${template}" declares no parameter for "{${name}}"` +
+            solutions(
+              `Add "${name}" to the route's @Schema({ params }) so it is described`,
+              `Add it via @Operation({ parameters: [{ name: "${name}", in: "path" }] })`,
+            ),
         )
       }
     }
@@ -321,9 +319,8 @@ function mergeComponents(
 
   for (const [key, value] of Object.entries(extra ?? {})) {
     const existing = components[key as keyof ComponentsObject]
-    components[key as keyof ComponentsObject] = isRecord(existing) && isRecord(value)
-      ? { ...existing, ...value }
-      : value
+    components[key as keyof ComponentsObject] =
+      isRecord(existing) && isRecord(value) ? { ...existing, ...value } : value
   }
 
   return Object.keys(components).length === 0 ? undefined : components

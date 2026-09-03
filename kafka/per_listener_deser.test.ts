@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import { createApplication } from '@caffeinejs/std'
+import { describe, expect, it } from 'vitest'
+
 import { deferred, FakeBroker } from './broker.testkit.js'
 import type { KafkaMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
@@ -34,7 +35,12 @@ describe('per-listener deserializers', () => {
     const kfk = kafka.with({ clients: broker.clients() })
     const app = createApplication({})
       // Instance default = identity (so the JSON side passes through); the avro listener overrides it.
-      .extend(kfk, k => k.brokers('b').groupId('pld-group').deserializers({ value: ((d: unknown) => d) as never }))
+      .extend(kfk, k =>
+        k
+          .brokers('b')
+          .groupId('pld-group')
+          .deserializers({ value: ((d: unknown) => d) as never }),
+      )
     const built = app.build()
     await built.run()
 

@@ -37,11 +37,11 @@ export interface SignalParamDescriptor {
   index: number
 }
 
-export type ParamDescriptor
-  = | PathParamDescriptor
-    | QueryParamDescriptor
-    | QueryNameParamDescriptor
-    | HeaderParamDescriptor
-    | BodyParamDescriptor
-    | FormFieldParamDescriptor
-    | SignalParamDescriptor
+export type ParamDescriptor =
+  | PathParamDescriptor
+  | QueryParamDescriptor
+  | QueryNameParamDescriptor
+  | HeaderParamDescriptor
+  | BodyParamDescriptor
+  | FormFieldParamDescriptor
+  | SignalParamDescriptor

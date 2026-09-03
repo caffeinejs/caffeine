@@ -27,7 +27,10 @@ import { Injectable, Lifetime, Scopes } from '@caffeinejs/di/decorators'
 
 @Injectable([Logger, Database])
 class UserService {
-  constructor(private readonly logger: Logger, private readonly db: Database) {}
+  constructor(
+    private readonly logger: Logger,
+    private readonly db: Database,
+  ) {}
 }
 ```
 
@@ -67,7 +70,10 @@ import { Injectable } from '@caffeinejs/di/decorators/legacy'
 @Injectable()
 class UserService {
   // Logger and Database inferred from the parameter types automatically
-  constructor(private readonly logger: Logger, private readonly db: Database) {}
+  constructor(
+    private readonly logger: Logger,
+    private readonly db: Database,
+  ) {}
 }
 ```
 
@@ -90,9 +96,11 @@ import { CaffeineIoC, type ModuleFn } from '@caffeinejs/di'
 
 const appModule: ModuleFn = di => {
   di.bind(Logger, t => t.toSelf())
-  di.bind(Database, t => t.toAsyncFactory(async () => {
-    return connectToDatabase(process.env.DATABASE_URL)
-  }))
+  di.bind(Database, t =>
+    t.toAsyncFactory(async () => {
+      return connectToDatabase(process.env.DATABASE_URL)
+    }),
+  )
   di.bind(UserService, t => t.toClass(UserService, [Logger, Database]))
 }
 
@@ -137,8 +145,8 @@ acts as a factory, keeping third-party constructors free of CaffeineIoC annotati
 
 ## Summary
 
-| Mode | TypeScript flag | Explicit deps | Package |
-|---|---|---|---|
-| Stage 3 decorators | none | yes | `@caffeinejs/di/decorators` |
-| Legacy decorators | `experimentalDecorators` + `emitDecoratorMetadata` | no | `@caffeinejs/di/decorators/legacy` |
-| Programmatic | none | yes | `@caffeinejs/di` |
+| Mode               | TypeScript flag                                    | Explicit deps | Package                            |
+| ------------------ | -------------------------------------------------- | ------------- | ---------------------------------- |
+| Stage 3 decorators | none                                               | yes           | `@caffeinejs/di/decorators`        |
+| Legacy decorators  | `experimentalDecorators` + `emitDecoratorMetadata` | no            | `@caffeinejs/di/decorators/legacy` |
+| Programmatic       | none                                               | yes           | `@caffeinejs/di`                   |

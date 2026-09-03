@@ -105,7 +105,7 @@ function killProcess(child: ChildProcess): Promise<void> {
 ensureBunAvailable()
 
 for (const server of servers) {
-  test(server.name, async t => {
+  void test(server.name, async t => {
     if (server.requiresBuild) {
       try {
         await access(server.args[0])
@@ -135,7 +135,7 @@ for (const server of servers) {
       await t.test('GET /health returns ok', async () => {
         const res = await fetch(`http://127.0.0.1:${server.port}/health`)
         assert.equal(res.status, 200)
-        const body = await res.json() as Record<string, unknown>
+        const body = (await res.json()) as Record<string, unknown>
         assert.deepEqual(body, { ok: true })
       })
 
@@ -157,7 +157,7 @@ for (const server of servers) {
 
         assert.equal(res.status, 200)
 
-        const body = await res.json() as {
+        const body = (await res.json()) as {
           params: typeof EXPECTED_PARAMS
           query: typeof EXPECTED_QUERY
           body: typeof EXPECTED_BODY

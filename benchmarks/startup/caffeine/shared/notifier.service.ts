@@ -1,4 +1,5 @@
 import { Injectable } from '@caffeinejs/di'
+
 import { LoggerService } from './logger.service.js'
 
 @Injectable([LoggerService])

@@ -1,17 +1,17 @@
-import { AsyncFactory, Factory } from './factory.js'
-import { InjectionToken, Identifier, TypedKey, isNamedKey, keyStr } from './key.js'
-import { Injection, InjectionDescriptor, InjectionsFor, ResolveInjection } from './injection.js'
 import { Binding } from './binding.js'
-import { check, notNil } from './internal/util/assert/index.js'
-import { ErrInvalidBinding, ErrNoResolutionForKey } from './errors.js'
-import { solutions } from './internal/util/errutil/index.js'
-import { valueFactory } from './internal/core/factory/value.js'
-import { AbstractCtor, Ctor } from './types.js'
-import { functionFactory } from './internal/core/factory/function_closure.js'
 import { Conditional } from './conditional.js'
-import { hasScope } from './scope.js'
-import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { DeferredCtor } from './deferred_ctor.js'
+import { ErrInvalidBinding, ErrNoResolutionForKey } from './errors.js'
+import { AsyncFactory, Factory } from './factory.js'
+import { Injection, InjectionDescriptor, InjectionsFor, ResolveInjection } from './injection.js'
+import { functionFactory } from './internal/core/factory/function_closure.js'
+import { valueFactory } from './internal/core/factory/value.js'
+import { check, notNil } from './internal/util/assert/index.js'
+import { solutions } from './internal/util/errutil/index.js'
+import { InjectionToken, Identifier, TypedKey, isNamedKey, keyStr } from './key.js'
+import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
+import { hasScope } from './scope.js'
+import { AbstractCtor, Ctor } from './types.js'
 
 /**
  * Materializes the accumulated {@link Binding}. Called by the container once the configure callback returns.
@@ -29,9 +29,8 @@ export type ToSelfNeedsAClassKey<K> = { readonly __toSelfRequiresAClassKey: K }
  * Parameters accepted by `toSelf` for the key `K`: the injections matching the key's own constructor.
  * A key that cannot be constructed accepts no call at all.
  */
-export type SelfInjections<K> = K extends Ctor<any, infer A>
-  ? [injections?: InjectionsFor<A>]
-  : [key: ToSelfNeedsAClassKey<K>]
+export type SelfInjections<K> =
+  K extends Ctor<any, infer A> ? [injections?: InjectionsFor<A>] : [key: ToSelfNeedsAClassKey<K>]
 
 /**
  * Configures how a key resolves in the container.
@@ -74,12 +73,15 @@ export class BindingSpec<TValue, K = unknown> {
    * ```
    */
   toClass<V extends TValue, A extends unknown[]>(ctor: Ctor<V, A>, injections?: InjectionsFor<A>): this {
-    check(typeof ctor === 'function', `BindingSpec .toClass() parameter must be class reference. Received: '${typeof ctor}'`)
+    check(
+      typeof ctor === 'function',
+      `BindingSpec .toClass() parameter must be class reference. Received: '${typeof ctor}'`,
+    )
 
     const deps = (injections ?? []) as Injection[]
 
     if (deps.length > 0) {
-      const normalized = deps.map(dep => typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep })
+      const normalized = deps.map(dep => (typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep }))
 
       if (normalized.length !== ctor.length) {
         throw new ErrInvalidBinding(
@@ -90,11 +92,11 @@ export class BindingSpec<TValue, K = unknown> {
       for (const injection of normalized) {
         if (injection.key === ctor || (this.key !== undefined && injection.key === this.key)) {
           throw new ErrInvalidBinding(
-            `Cannot bind "${ctor.name}": a component cannot be its own dependency`
-            + solutions(
-              `- Remove "${ctor.name}" from the injection list`,
-              `- Use $i.defer(() => ${ctor.name}) if the cycle is intended, so the key resolves lazily`,
-            ),
+            `Cannot bind "${ctor.name}": a component cannot be its own dependency` +
+              solutions(
+                `- Remove "${ctor.name}" from the injection list`,
+                `- Use $i.defer(() => ${ctor.name}) if the cycle is intended, so the key resolves lazily`,
+              ),
           )
         }
       }
@@ -227,8 +229,9 @@ export class BindingSpec<TValue, K = unknown> {
   ): this {
     check(typeof fn === 'function', `BindingSpec .toFunction() parameter must be a function. Received: '${typeof fn}'`)
 
-    const normalized = ((injections ?? []) as Injection[])
-      .map(dep => typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep })
+    const normalized = ((injections ?? []) as Injection[]).map(dep =>
+      typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep },
+    )
 
     if (normalized.length !== fn.length) {
       throw new ErrInvalidBinding(
@@ -395,8 +398,8 @@ export class BindingSpec<TValue, K = unknown> {
       )
     }
 
-    const descriptor: InjectionDescriptor
-      = typeof injection === 'object' && !(injection instanceof DeferredCtor)
+    const descriptor: InjectionDescriptor =
+      typeof injection === 'object' && !(injection instanceof DeferredCtor)
         ? (injection as InjectionDescriptor)
         : { key: injection as InjectionToken }
 
@@ -421,7 +424,9 @@ export class BindingSpec<TValue, K = unknown> {
     }
 
     const descriptors: InjectionDescriptor[] = deps.map(dep =>
-      typeof dep === 'object' && !(dep instanceof DeferredCtor) ? (dep as InjectionDescriptor) : { key: dep as InjectionToken },
+      typeof dep === 'object' && !(dep instanceof DeferredCtor)
+        ? (dep as InjectionDescriptor)
+        : { key: dep as InjectionToken },
     )
 
     this.binding.injectableMethods.set(method, descriptors)
@@ -530,7 +535,7 @@ export class BindingSpec<TValue, K = unknown> {
    */
   conditional(fn: Conditional | Conditional[]): this {
     const fns = Array.isArray(fn) ? fn : [fn]
-    this.binding.conditionals = [...this.binding.conditionals ?? [], ...fns]
+    this.binding.conditionals = [...(this.binding.conditionals ?? []), ...fns]
 
     return this
   }
@@ -576,8 +581,8 @@ export class BindingSpec<TValue, K = unknown> {
   extends(): this
   extends(base: Ctor | AbstractCtor): this
   extends(base?: Ctor | AbstractCtor): this {
-    const concreteType: Ctor | undefined
-      = this.binding.type !== undefined
+    const concreteType: Ctor | undefined =
+      this.binding.type !== undefined
         ? (this.binding.type as Ctor)
         : typeof this.key === 'function'
           ? (this.key as Ctor)

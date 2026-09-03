@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import Fastify from 'fastify'
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { $t, defineFeature, type Service } from '@caffeinejs/std'
 import { EnvConfigProvider } from '@caffeinejs/std/config'
+import Fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
@@ -37,8 +38,9 @@ function probe() {
 describe('builder.extend()', () => {
   it('installs the feature and rides the bootstrap path into the container', async () => {
     const container = new CaffeineIoC()
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
-      .extend(probe(), t => t.capture('localhost:9092'))
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }).extend(probe(), t =>
+      t.capture('localhost:9092'),
+    )
 
     const built = app.build()
     await built.ready()
@@ -47,8 +49,7 @@ describe('builder.extend()', () => {
   })
 
   it('does not add methods to the builder', () => {
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {})
-      .extend(probe())
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {}).extend(probe())
     // @ts-expect-error features no longer contribute methods
     const missing: unknown = app.probe
     expect(missing).toBeUndefined()

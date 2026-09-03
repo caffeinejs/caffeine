@@ -1,14 +1,15 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
+
 import { $t } from '../../schema/t.js'
-import { ConfigDefinition } from '../definition.js'
-import { ConfigPriority } from '../sources.js'
 import { Configuration, kConfiguration } from '../configuration.js'
+import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { ArgsConfigProvider } from '../providers/args_provider.js'
 import { EnvConfigProvider } from '../providers/env_provider.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
+import { ConfigPriority } from '../sources.js'
 import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 
 const APP_CONFIG = token<any>(Symbol('app.config'))
@@ -21,8 +22,7 @@ async function containerFor(definition: ConfigDefinition): Promise<CaffeineIoC> 
   return container
 }
 
-const refresh = (container: CaffeineIoC): Promise<void> =>
-  container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
+const refresh = (container: CaffeineIoC): Promise<void> => container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
 /** Counts loads, so "did nothing" can be asserted rather than inferred. */
 function counting(inner: ConfigProvider): ConfigProvider & { loads: number } {

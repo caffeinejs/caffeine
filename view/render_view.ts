@@ -1,4 +1,5 @@
 import { ErrConfiguration, ActionResult } from '@caffeinejs/http'
+
 import type { ViewResult, ViewRenderOptions } from './view.js'
 
 type ViewRenderFn = (page: string, data: object, opts?: ViewRenderOptions) => unknown
@@ -24,14 +25,10 @@ export function renderView(view: ViewResult, res: ViewCapableReply): ActionResul
   const render = (res as Record<string, ViewRenderFn | undefined>)[engine]
 
   if (typeof render !== 'function') {
-    const named = engine === 'view'
-      ? '.extend(ViewExt, v => v.engine(...))'
-      : `.extend(ViewExt("${engine}"), v => v.engine(...))`
-    throw new ErrConfiguration(
-      `Cannot render view: engine "${engine}" is not configured. Call ${named}`,
-    )
+    const named =
+      engine === 'view' ? '.extend(ViewExt, v => v.engine(...))' : `.extend(ViewExt("${engine}"), v => v.engine(...))`
+    throw new ErrConfiguration(`Cannot render view: engine "${engine}" is not configured. Call ${named}`)
   }
 
-  return render
-    .call(res, view.name, (view.model ?? {}) as object, { layout: view.options?.layout }) as ActionResult
+  return render.call(res, view.name, (view.model ?? {}) as object, { layout: view.options?.layout }) as ActionResult
 }

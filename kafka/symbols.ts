@@ -1,7 +1,8 @@
 import { token } from '@caffeinejs/di'
+
+import type { KafkaListenerContainer } from './listener_container.js'
 import type { KafkaRuntime } from './runtime.js'
 import type { KafkaTemplate } from './template.js'
-import type { KafkaListenerContainer } from './listener_container.js'
 
 /** The default instance name used when a kafka integration is declared without an explicit name. */
 export const DEFAULT_INSTANCE = 'default'

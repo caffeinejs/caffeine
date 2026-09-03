@@ -71,8 +71,7 @@ export function checkCircularReferences(
       if (color.get(dep) === GRAY) {
         const cycleStart = path.indexOf(dep)
         const cycle = [...path.slice(cycleStart), dep]
-        throw new ErrCircularDependency(cycle.map(k => `"${keyStr(k)}"`)
-          .join(' → '))
+        throw new ErrCircularDependency(cycle.map(k => `"${keyStr(k)}"`).join(' → '))
       }
 
       if (color.get(dep) === WHITE) {
@@ -182,15 +181,11 @@ export function checkAspects(bindings: Iterable<[InjectionToken, Binding]>): voi
     }
     const pointcuts = binding.tags.get(kAspectPointcuts) as Pointcut[] | undefined
     if (!pointcuts || pointcuts.length === 0) {
-      throw new ErrInvalidAspect(
-        `Cannot compile aspect "${keyStr(key)}": at least one pointcut is required`,
-      )
+      throw new ErrInvalidAspect(`Cannot compile aspect "${keyStr(key)}": at least one pointcut is required`)
     }
     const scope = binding.scopeID
     if (scope !== undefined && scope !== Scopes.SINGLETON) {
-      throw new ErrInvalidAspect(
-        `Cannot compile aspect "${keyStr(key)}": aspects must be singleton scoped`,
-      )
+      throw new ErrInvalidAspect(`Cannot compile aspect "${keyStr(key)}": aspects must be singleton scoped`)
     }
   }
 }

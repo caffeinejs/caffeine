@@ -1,5 +1,6 @@
 import type { Route } from '@caffeinejs/http'
 import type { AnySchema } from '@caffeinejs/std'
+
 import type { ParameterLocation, ParameterObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'
 import type { PathParameter } from './paths.js'

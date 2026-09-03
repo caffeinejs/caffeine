@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import type { AuthSchemeDescriptor } from '@caffeinejs/http'
+import { describe, expect, it } from 'vitest'
+
 import { toSecurityScheme } from '../generate/security.js'
 
 /**
@@ -12,11 +13,13 @@ import { toSecurityScheme } from '../generate/security.js'
 
 describe('toSecurityScheme', () => {
   it('maps an http scheme, carrying the bearer format when one is known', () => {
-    expect(toSecurityScheme({ kind: 'http', scheme: 'bearer', bearerFormat: 'JWT' }))
-      .toEqual({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
+    expect(toSecurityScheme({ kind: 'http', scheme: 'bearer', bearerFormat: 'JWT' })).toEqual({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    })
 
-    expect(toSecurityScheme({ kind: 'http', scheme: 'basic' }))
-      .toEqual({ type: 'http', scheme: 'basic' })
+    expect(toSecurityScheme({ kind: 'http', scheme: 'basic' })).toEqual({ type: 'http', scheme: 'basic' })
   })
 
   it('defaults an http scheme with no keyword to bearer', () => {
@@ -24,8 +27,11 @@ describe('toSecurityScheme', () => {
   })
 
   it('maps an apiKey scheme', () => {
-    expect(toSecurityScheme({ kind: 'apiKey', in: 'header', name: 'x-api-key' }))
-      .toEqual({ type: 'apiKey', in: 'header', name: 'x-api-key' })
+    expect(toSecurityScheme({ kind: 'apiKey', in: 'header', name: 'x-api-key' })).toEqual({
+      type: 'apiKey',
+      in: 'header',
+      name: 'x-api-key',
+    })
   })
 
   // Without both a location and a name there is nothing for a caller to send, so the scheme is dropped rather
@@ -36,15 +42,17 @@ describe('toSecurityScheme', () => {
   })
 
   it('maps an openIdConnect scheme', () => {
-    expect(toSecurityScheme({ kind: 'openIdConnect', openIdConnectURL: 'https://idp.example.com' }))
-      .toEqual({ type: 'openIdConnect', openIdConnectUrl: 'https://idp.example.com' })
+    expect(toSecurityScheme({ kind: 'openIdConnect', openIdConnectURL: 'https://idp.example.com' })).toEqual({
+      type: 'openIdConnect',
+      openIdConnectUrl: 'https://idp.example.com',
+    })
   })
 
   it('drops an openIdConnect scheme with no discovery URL', () => {
     expect(toSecurityScheme({ kind: 'openIdConnect' })).toBeUndefined()
   })
 
-  it('maps an oauth2 authorization-code flow, turning the scope list into the specification\'s map', () => {
+  it("maps an oauth2 authorization-code flow, turning the scope list into the specification's map", () => {
     const descriptor: AuthSchemeDescriptor = {
       kind: 'oauth2',
       flows: {
@@ -97,11 +105,10 @@ describe('an apiKey obtained through a sign-in', () => {
     })
 
     expect(scheme).toMatchObject({ type: 'apiKey', in: 'cookie', name: 'app_session' })
-    expect((scheme as { description: string }).description)
-      .toBe(
-        'Session cookie issued after an OAuth 2.0 sign-in at https://github.com/login/oauth/authorize '
-        + '(scopes: read:user, user:email). Sign in through the browser; the cookie is then sent automatically.',
-      )
+    expect((scheme as { description: string }).description).toBe(
+      'Session cookie issued after an OAuth 2.0 sign-in at https://github.com/login/oauth/authorize ' +
+        '(scopes: read:user, user:email). Sign in through the browser; the cookie is then sent automatically.',
+    )
   })
 
   it('omits the scope list when the scheme requests none', () => {
@@ -122,8 +129,9 @@ describe('an apiKey obtained through a sign-in', () => {
   it('describes an OpenID Connect sign-in by its discovery document', () => {
     const scheme = toSecurityScheme({ ...cookie, openIdConnectURL: 'https://accounts.google.com' })
 
-    expect((scheme as { description: string }).description)
-      .toContain('OpenID Connect sign-in against https://accounts.google.com')
+    expect((scheme as { description: string }).description).toContain(
+      'OpenID Connect sign-in against https://accounts.google.com',
+    )
   })
 
   it('says nothing extra for an apiKey that names no sign-in', () => {

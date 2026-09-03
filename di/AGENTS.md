@@ -16,7 +16,7 @@ Two consequences, both deliberate:
 ## `has()` means resolvable, not directly bound
 
 `has(key)` is true exactly when `get(key)` would resolve — including a key reachable only through
-`.names(...)` or `.extends(Base)`. When you need "is a binding registered *directly* under this key", read
+`.names(...)` or `.extends(Base)`. When you need "is a binding registered _directly_ under this key", read
 `registry` instead, as `rebind` and the fallback registration loops do.
 
 ## Testing and registrar.ts

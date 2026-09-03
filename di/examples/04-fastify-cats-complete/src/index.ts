@@ -1,9 +1,10 @@
-import { Pool } from 'pg'
 import { Redis } from 'ioredis'
-import { buildServer } from './app.js'
+import { Pool } from 'pg'
+
 import { AppConfig } from './app.config.js'
-import { catsRoutes } from './cats/cats.routes.js'
 import { createContainer } from './app.container.js'
+import { buildServer } from './app.js'
+import { catsRoutes } from './cats/cats.routes.js'
 import { kHealthRoutes, kPgPool } from './keys.js'
 
 // The application entrypoint.

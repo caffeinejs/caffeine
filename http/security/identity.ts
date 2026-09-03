@@ -49,7 +49,11 @@ export class Identity {
 }
 
 export class Claim {
-  constructor(readonly type: string, readonly value: unknown, readonly issuer: string) { }
+  constructor(
+    readonly type: string,
+    readonly value: unknown,
+    readonly issuer: string,
+  ) {}
 }
 
 export type PrincipalMapper = (ctx: Context, principal: Principal) => Promise<Principal> | Principal
@@ -72,8 +76,7 @@ export class Principal {
   }
 
   findFirst(type: string): Claim | undefined {
-    return this.#identities
-      .find(i => i.claims.some(c => c.type === type))?.claims.find(c => c.type === type)
+    return this.#identities.find(i => i.claims.some(c => c.type === type))?.claims.find(c => c.type === type)
   }
 
   findAll(type: string): readonly Claim[] {
@@ -85,9 +88,11 @@ export class Principal {
   }
 
   isInRole(role: string): boolean {
-    return this.#identities
-      .some(i => i.claims.some(c => c.type === i.roleClaimType
-        && (Array.isArray(c.value) ? c.value.includes(role) : c.value === role)))
+    return this.#identities.some(i =>
+      i.claims.some(
+        c => c.type === i.roleClaimType && (Array.isArray(c.value) ? c.value.includes(role) : c.value === role),
+      ),
+    )
   }
 
   claims(type?: string): readonly Claim[] {

@@ -8,8 +8,7 @@ Do not use `@MessagePattern`, `@EventPattern`, `ClientProxy`, or reply-topic RPC
 import { createApplication } from '@caffeinejs/std'
 import { kafka, KafkaHandler, KafkaListener, KafkaParams, KafkaTemplate, $k } from '@caffeinejs/kafka'
 
-const app = createApplication()
-  .extend(kafka, k => k.brokers('localhost:9092').groupId('svc'))
+const app = createApplication().extend(kafka, k => k.brokers('localhost:9092').groupId('svc'))
 
 @KafkaHandler()
 class Orders {

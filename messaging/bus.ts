@@ -1,4 +1,5 @@
 import { validateSchema } from '@caffeinejs/std/schema'
+
 import type { BoundProducer } from './binder.js'
 import { ErrMessageValidation, ErrUnknownBinder, ErrUnknownBinding } from './errors.js'
 import { isMessage, type Message, message as toMessage } from './message.js'

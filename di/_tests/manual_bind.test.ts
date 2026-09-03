@@ -1,14 +1,16 @@
 import '../index.nodejs.js'
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect, vi } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
-import { CaffeineIoC } from '../container.js'
 import { ErrInvalidBinding, ErrNoResolutionForKey } from '../errors.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 import { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
 
@@ -46,87 +48,67 @@ describe('Manual Binding', function () {
       const di = new CaffeineIoC()
       const before = di.has(Late)
 
-      di.bind(Late, t => t
-        .toClass(Late)
-        .lifetime(Scopes.SINGLETON))
+      di.bind(Late, t => t.toClass(Late).lifetime(Scopes.SINGLETON))
       await di.init()
 
       const after = di.has(Late)
       const late = di.get(Late)
 
-      expect(before)
-        .toBeFalsy()
-      expect(after)
-        .toBeTruthy()
-      expect(late)
-        .toBeDefined()
+      expect(before).toBeFalsy()
+      expect(after).toBeTruthy()
+      expect(late).toBeDefined()
     })
 
     it('should bind to class by name', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('test'), t => t
-        .toClass(Late))
+      di.bind(token<any>('test'), t => t.toClass(Late))
       await di.init()
 
       const r = di.get<Late>(token<any>('test'))
 
-      expect(r)
-        .toBeInstanceOf(Late)
-      expect(r.test())
-        .toEqual('hi')
+      expect(r).toBeInstanceOf(Late)
+      expect(r.test()).toEqual('hi')
     })
 
     it('should bind abstract class to concrete implementation', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(Abs, t => t
-        .toClass(Impl)
-        .lifetime(Scopes.SINGLETON))
+      di.bind(Abs, t => t.toClass(Impl).lifetime(Scopes.SINGLETON))
       await di.init()
 
       const impl = di.get(Abs)
 
-      expect(impl.msg())
-        .toEqual('impl')
+      expect(impl.msg()).toEqual('impl')
     })
 
     it('should bind value', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('val'), t => t
-        .toValue('test'))
-      di.bind(StrValue, t => t
-        .toSelf([token<any>('val')]))
+      di.bind(token<any>('val'), t => t.toValue('test'))
+      di.bind(StrValue, t => t.toSelf([token<any>('val')]))
       await di.init()
 
       const r = di.get(StrValue)
       const v = di.get(token<any>('val'))
 
-      expect(r.val)
-        .toEqual('test')
-      expect(v)
-        .toEqual('test')
+      expect(r.val).toEqual('test')
+      expect(v).toEqual('test')
     })
 
     it('should bind factory', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('val'), t => t
-        .toValue('test'))
-      di.bind(sy, t => t
-        .toFactory(({ container }) => `factory-${container.get(token<any>('val'))}`))
-      di.bind(FromFactory, t => t
-        .toSelf([sy]))
+      di.bind(token<any>('val'), t => t.toValue('test'))
+      di.bind(sy, t => t.toFactory(({ container }) => `factory-${container.get(token<any>('val'))}`))
+      di.bind(FromFactory, t => t.toSelf([sy]))
       await di.init()
 
       const r = di.get(FromFactory)
       const v = di.get(sy)
 
-      expect(r.val)
-        .toEqual('factory-test')
-      expect(v)
-        .toEqual('factory-test')
+      expect(r.val).toEqual('factory-test')
+      expect(v).toEqual('factory-test')
     })
 
     describe('toClass() with injections', function () {
@@ -152,50 +134,39 @@ describe('Manual Binding', function () {
       it('should resolve when multiple injections are provided', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepA, t => t
-          .toSelf())
-        di.bind(DepB, t => t
-          .toSelf())
-        di.bind(TwoParam, t => t
-          .toClass(TwoParam, [DepA, DepB]))
+        di.bind(DepA, t => t.toSelf())
+        di.bind(DepB, t => t.toSelf())
+        di.bind(TwoParam, t => t.toClass(TwoParam, [DepA, DepB]))
         await di.init()
 
         const svc = di.get(TwoParam)
 
-        expect(svc.a)
-          .toBeInstanceOf(DepA)
-        expect(svc.b)
-          .toBeInstanceOf(DepB)
+        expect(svc.a).toBeInstanceOf(DepA)
+        expect(svc.b).toBeInstanceOf(DepB)
       })
 
       it('should resolve when a single injection is provided without wrapping array', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepA, t => t
-          .toSelf())
-        di.bind(OneParam, t => t
-          .toClass(OneParam, [DepA]))
+        di.bind(DepA, t => t.toSelf())
+        di.bind(OneParam, t => t.toClass(OneParam, [DepA]))
         await di.init()
 
         const svc = di.get(OneParam)
 
-        expect(svc.a)
-          .toBeInstanceOf(DepA)
+        expect(svc.a).toBeInstanceOf(DepA)
       })
 
       it('should accept an InjectionDescriptor', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepA, t => t
-          .toSelf())
-        di.bind(OneParam, t => t
-          .toClass(OneParam, [{ key: DepA }]))
+        di.bind(DepA, t => t.toSelf())
+        di.bind(OneParam, t => t.toClass(OneParam, [{ key: DepA }]))
         await di.init()
 
         const svc = di.get(OneParam)
 
-        expect(svc.a)
-          .toBeInstanceOf(DepA)
+        expect(svc.a).toBeInstanceOf(DepA)
       })
     })
 
@@ -222,35 +193,27 @@ describe('Manual Binding', function () {
       it('should resolve when multiple injections are provided', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepC, t => t
-          .toSelf())
-        di.bind(DepD, t => t
-          .toSelf())
-        di.bind(TwoParamSelf, t => t
-          .toSelf([DepC, DepD]))
+        di.bind(DepC, t => t.toSelf())
+        di.bind(DepD, t => t.toSelf())
+        di.bind(TwoParamSelf, t => t.toSelf([DepC, DepD]))
         await di.init()
 
         const svc = di.get(TwoParamSelf)
 
-        expect(svc.c)
-          .toBeInstanceOf(DepC)
-        expect(svc.d)
-          .toBeInstanceOf(DepD)
+        expect(svc.c).toBeInstanceOf(DepC)
+        expect(svc.d).toBeInstanceOf(DepD)
       })
 
       it('should resolve when a single injection is provided without wrapping array', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(DepC, t => t
-          .toSelf())
-        di.bind(OneParamSelf, t => t
-          .toSelf([DepC]))
+        di.bind(DepC, t => t.toSelf())
+        di.bind(OneParamSelf, t => t.toSelf([DepC]))
         await di.init()
 
         const svc = di.get(OneParamSelf)
 
-        expect(svc.c)
-          .toBeInstanceOf(DepC)
+        expect(svc.c).toBeInstanceOf(DepC)
       })
     })
 
@@ -258,9 +221,7 @@ describe('Manual Binding', function () {
       it('should bind dependency as transient when using .transient()', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(Late, t => t
-          .toSelf()
-          .lifetime(Scopes.TRANSIENT))
+        di.bind(Late, t => t.toSelf().lifetime(Scopes.TRANSIENT))
         await di.init()
 
         const r1 = di.get(Late)
@@ -274,16 +235,13 @@ describe('Manual Binding', function () {
       it('should apply the new factory after rebind', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(Late, t => t
-          .toSelf())
-        di.rebind(Late, t => t
-          .toFactory(() => new Late()))
+        di.bind(Late, t => t.toSelf())
+        di.rebind(Late, t => t.toFactory(() => new Late()))
         await di.init()
 
         const dep = di.get(Late)
 
-        expect(dep)
-          .toBeInstanceOf(Late)
+        expect(dep).toBeInstanceOf(Late)
       })
 
       it('should not be overwritten by a pending conditional binding on the same key', async function () {
@@ -315,27 +273,17 @@ describe('Manual Binding', function () {
       it('should resolve all functions', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(kQry1, t => t
-          .toValue(qry1)
-          .names(kQry))
-        di.bind(kQry2, t => t
-          .toValue(qry2)
-          .names(kQry))
-        di.bind(kQry3, t => t
-          .toValue(qry3)
-          .names(kQry))
+        di.bind(kQry1, t => t.toValue(qry1).names(kQry))
+        di.bind(kQry2, t => t.toValue(qry2).names(kQry))
+        di.bind(kQry3, t => t.toValue(qry3).names(kQry))
         await di.init()
 
         const queries = di.getMany(kQry)
 
-        expect(queries)
-          .toHaveLength(3)
-        expect(queries)
-          .toContain(qry1)
-        expect(queries)
-          .toContain(qry2)
-        expect(queries)
-          .toContain(qry3)
+        expect(queries).toHaveLength(3)
+        expect(queries).toContain(qry1)
+        expect(queries).toContain(qry2)
+        expect(queries).toContain(qry3)
         expect(queries).not.toContain(qry4)
       })
     })
@@ -348,20 +296,19 @@ describe('Manual Binding', function () {
       it('should use the custom factory to build the instance', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(Dep, t => t
-          .toFactory(() => {
+        di.bind(Dep, t =>
+          t.toFactory(() => {
             const instance = new Dep()
             instance.value = 'test'
             return instance
-          }))
+          }),
+        )
         await di.init()
 
         const dep = di.get(Dep)
 
-        expect(dep)
-          .toBeInstanceOf(Dep)
-        expect(dep.value)
-          .toEqual('test')
+        expect(dep).toBeInstanceOf(Dep)
+        expect(dep.value).toEqual('test')
       })
     })
 
@@ -385,9 +332,7 @@ describe('Manual Binding', function () {
       it('should bind component as transient scoped', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(TransientDep, t => t
-          .toSelf()
-          .lifetime(Scopes.TRANSIENT))
+        di.bind(TransientDep, t => t.toSelf().lifetime(Scopes.TRANSIENT))
         await di.init()
 
         const one = di.get(TransientDep)
@@ -398,25 +343,19 @@ describe('Manual Binding', function () {
 
       it('should bind component as request scoped', async function () {
         const di = new CaffeineIoC()
-        di.bind(ReqDep, t => t
-          .toSelf()
-          .lifetime(Scopes.REQUEST))
+        di.bind(ReqDep, t => t.toSelf().lifetime(Scopes.REQUEST))
 
         await di.init()
 
-        expect(di.getBindings(ReqDep)[0].scopeID)
-          .toEqual(Scopes.REQUEST)
+        expect(di.getBindings(ReqDep)[0].scopeID).toEqual(Scopes.REQUEST)
       })
 
       it('should bind component as refresh scoped', function () {
         const di = new CaffeineIoC()
 
-        di.bind(RefreshDep, t => t
-          .toSelf()
-          .lifetime(Scopes.REFRESH))
+        di.bind(RefreshDep, t => t.toSelf().lifetime(Scopes.REFRESH))
 
-        expect(di.getBindings(RefreshDep)[0].scopeID)
-          .toEqual(Scopes.REFRESH)
+        expect(di.getBindings(RefreshDep)[0].scopeID).toEqual(Scopes.REFRESH)
       })
     })
   })
@@ -424,18 +363,20 @@ describe('Manual Binding', function () {
   describe('invalid bindings scenarios', function () {
     it('should only accept self binding with class types', function () {
       const di = new CaffeineIoC()
-      expect(() => di.bind(token<any>('test'), t => t
-        // @ts-expect-error toSelf() requires a class key
-        .toSelf()))
-        .toThrow(ErrInvalidBinding)
+      expect(() =>
+        di.bind(token<any>('test'), t =>
+          t
+            // @ts-expect-error toSelf() requires a class key
+            .toSelf(),
+        ),
+      ).toThrow(ErrInvalidBinding)
     })
 
     it('should only accept previously registered scopes', function () {
       const di = new CaffeineIoC()
-      expect(() => di.bind(token<any>('test'), t => t
-        .toValue('value')
-        .lifetime('nonexistent-scope')))
-        .toThrow(ErrInvalidBinding)
+      expect(() => di.bind(token<any>('test'), t => t.toValue('value').lifetime('nonexistent-scope'))).toThrow(
+        ErrInvalidBinding,
+      )
     })
 
     describe('toClass() injection count mismatch', function () {
@@ -450,18 +391,24 @@ describe('Manual Binding', function () {
 
       it('should throw when fewer injections than constructor parameters are provided', function () {
         const di = new CaffeineIoC()
-        expect(() => di.bind(TwoParam, t => t
-          // @ts-expect-error one injection for a two-parameter constructor
-          .toClass(TwoParam, [Dep])))
-          .toThrow(ErrInvalidBinding)
+        expect(() =>
+          di.bind(TwoParam, t =>
+            t
+              // @ts-expect-error one injection for a two-parameter constructor
+              .toClass(TwoParam, [Dep]),
+          ),
+        ).toThrow(ErrInvalidBinding)
       })
 
       it('should throw when more injections than constructor parameters are provided', function () {
         const di = new CaffeineIoC()
-        expect(() => di.bind(TwoParam, t => t
-          // @ts-expect-error three injections for a two-parameter constructor
-          .toClass(TwoParam, [Dep, Dep, Dep])))
-          .toThrow(ErrInvalidBinding)
+        expect(() =>
+          di.bind(TwoParam, t =>
+            t
+              // @ts-expect-error three injections for a two-parameter constructor
+              .toClass(TwoParam, [Dep, Dep, Dep]),
+          ),
+        ).toThrow(ErrInvalidBinding)
       })
     })
 
@@ -477,10 +424,13 @@ describe('Manual Binding', function () {
 
       it('should throw when the injection count does not match the constructor parameter count', function () {
         const di = new CaffeineIoC()
-        expect(() => di.bind(TwoParam, t => t
-          // @ts-expect-error one injection for a two-parameter constructor
-          .toSelf([Dep])))
-          .toThrow(ErrInvalidBinding)
+        expect(() =>
+          di.bind(TwoParam, t =>
+            t
+              // @ts-expect-error one injection for a two-parameter constructor
+              .toSelf([Dep]),
+          ),
+        ).toThrow(ErrInvalidBinding)
       })
     })
   })
@@ -490,12 +440,9 @@ describe('Manual Binding', function () {
       const kSvc = token<any>(Symbol('svc'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .labels(kSvc))
+      di.bind(token<any>('svc'), t => t.toValue({}).labels(kSvc))
 
-      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kSvc)))
-        .toHaveLength(1)
+      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kSvc))).toHaveLength(1)
     })
 
     it('should accumulate labels across multiple labels() calls', function () {
@@ -503,30 +450,21 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .labels(kA)
-        .labels(kB))
+      di.bind(token<any>('svc'), t => t.toValue({}).labels(kA).labels(kB))
 
-      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA)))
-        .toHaveLength(1)
-      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB)))
-        .toHaveLength(1)
+      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA))).toHaveLength(1)
+      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB))).toHaveLength(1)
     })
 
     it('should not add duplicate entries when called twice with the same symbol', function () {
       const kSvc = token<any>(Symbol('svc'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .labels(kSvc)
-        .labels(kSvc))
+      di.bind(token<any>('svc'), t => t.toValue({}).labels(kSvc).labels(kSvc))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.labels.filter(l => l === kSvc))
-        .toHaveLength(1)
+      expect(binding.labels.filter(l => l === kSvc)).toHaveLength(1)
     })
 
     it('should add multiple labels from an array', function () {
@@ -534,14 +472,10 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .labels(kA, kB))
+      di.bind(token<any>('svc'), t => t.toValue({}).labels(kA, kB))
 
-      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA)))
-        .toHaveLength(1)
-      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB)))
-        .toHaveLength(1)
+      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA))).toHaveLength(1)
+      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB))).toHaveLength(1)
     })
 
     it('should merge labels from single and array calls', function () {
@@ -549,30 +483,21 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .labels(kA)
-        .labels(kB))
+      di.bind(token<any>('svc'), t => t.toValue({}).labels(kA).labels(kB))
 
-      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA)))
-        .toHaveLength(1)
-      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB)))
-        .toHaveLength(1)
+      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA))).toHaveLength(1)
+      expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB))).toHaveLength(1)
     })
 
     it('should deduplicate symbols present in both existing labels and the new array', function () {
       const kSvc = token<any>(Symbol('svc'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .labels(kSvc)
-        .labels(kSvc))
+      di.bind(token<any>('svc'), t => t.toValue({}).labels(kSvc).labels(kSvc))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.labels.filter(l => l === kSvc))
-        .toHaveLength(1)
+      expect(binding.labels.filter(l => l === kSvc)).toHaveLength(1)
     })
   })
 
@@ -580,12 +505,9 @@ describe('Manual Binding', function () {
     it('should deduplicate names when the same name is added twice', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('svc'), t => t
-        .toValue('ok')
-        .names('alpha', 'alpha'))
+      di.bind(token<any>('svc'), t => t.toValue('ok').names('alpha', 'alpha'))
 
-      expect(di.getBinding(token<any>('svc')).names)
-        .toEqual(['alpha'])
+      expect(di.getBinding(token<any>('svc')).names).toEqual(['alpha'])
     })
   })
 
@@ -595,12 +517,9 @@ describe('Manual Binding', function () {
 
       class Svc {}
 
-      di.bind(Svc, t => t
-        .toSelf()
-        .primary())
+      di.bind(Svc, t => t.toSelf().primary())
 
-      expect(di.getBinding(Svc).primary)
-        .toBe(true)
+      expect(di.getBinding(Svc).primary).toBe(true)
     })
   })
 
@@ -609,14 +528,11 @@ describe('Manual Binding', function () {
       const kRoute = token<any>(Symbol('route'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .tags(kRoute, '/users'))
+      di.bind(token<any>('svc'), t => t.toValue({}).tags(kRoute, '/users'))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.tags.get(kRoute))
-        .toBe('/users')
+      expect(binding.tags.get(kRoute)).toBe('/users')
     })
 
     it('should accumulate tags across multiple tags() calls', function () {
@@ -624,32 +540,23 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .tags(kA, 1)
-        .tags(kB, 2))
+      di.bind(token<any>('svc'), t => t.toValue({}).tags(kA, 1).tags(kB, 2))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.tags.get(kA))
-        .toBe(1)
-      expect(binding.tags.get(kB))
-        .toBe(2)
+      expect(binding.tags.get(kA)).toBe(1)
+      expect(binding.tags.get(kB)).toBe(2)
     })
 
     it('should overwrite an existing tag when called with the same key', function () {
       const kSlot = token<any>(Symbol('slot'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .tags(kSlot, 'first')
-        .tags(kSlot, 'second'))
+      di.bind(token<any>('svc'), t => t.toValue({}).tags(kSlot, 'first').tags(kSlot, 'second'))
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.tags.get(kSlot))
-        .toBe('second')
+      expect(binding.tags.get(kSlot)).toBe('second')
     })
 
     it('should set multiple tags from a map', function () {
@@ -657,21 +564,19 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .tags(
+      di.bind(token<any>('svc'), t =>
+        t.toValue({}).tags(
           new Map([
             [kA, 'alpha'],
             [kB, 'beta'],
           ]),
-        ))
+        ),
+      )
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.tags.get(kA))
-        .toBe('alpha')
-      expect(binding.tags.get(kB))
-        .toBe('beta')
+      expect(binding.tags.get(kA)).toBe('alpha')
+      expect(binding.tags.get(kB)).toBe('beta')
     })
 
     it('should merge single tag with map tags', function () {
@@ -679,32 +584,33 @@ describe('Manual Binding', function () {
       const kB = token<any>(Symbol('b'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .tags(kA, 'from-single')
-        .tags(new Map([[kB, 'from-map']])))
+      di.bind(token<any>('svc'), t =>
+        t
+          .toValue({})
+          .tags(kA, 'from-single')
+          .tags(new Map([[kB, 'from-map']])),
+      )
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.tags.get(kA))
-        .toBe('from-single')
-      expect(binding.tags.get(kB))
-        .toBe('from-map')
+      expect(binding.tags.get(kA)).toBe('from-single')
+      expect(binding.tags.get(kB)).toBe('from-map')
     })
 
     it('should overwrite keys already present when maps overlap', function () {
       const kSlot = token<any>(Symbol('slot'))
       const di = new CaffeineIoC()
 
-      di.bind(token<any>('svc'), t => t
-        .toValue({})
-        .tags(kSlot, 'first')
-        .tags(new Map([[kSlot, 'second']])))
+      di.bind(token<any>('svc'), t =>
+        t
+          .toValue({})
+          .tags(kSlot, 'first')
+          .tags(new Map([[kSlot, 'second']])),
+      )
 
       const binding = di.getBindings(token<any>('svc'))[0]
 
-      expect(binding.tags.get(kSlot))
-        .toBe('second')
+      expect(binding.tags.get(kSlot)).toBe('second')
     })
   })
 
@@ -719,14 +625,11 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC()
-      di.bind(SvcWithInit, t => t
-        .toSelf()
-        .postConstruct(v => v.init()))
+      di.bind(SvcWithInit, t => t.toSelf().postConstruct(v => v.init()))
       await di.init()
       di.get(SvcWithInit)
 
-      expect(spy)
-        .toHaveBeenCalledTimes(1)
+      expect(spy).toHaveBeenCalledTimes(1)
     })
 
     it('should not call the method on subsequent resolutions of a singleton', async function () {
@@ -739,15 +642,12 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC()
-      di.bind(SvcWithInit, t => t
-        .toSelf()
-        .postConstruct(v => v.init()))
+      di.bind(SvcWithInit, t => t.toSelf().postConstruct(v => v.init()))
       await di.init()
       di.get(SvcWithInit)
       di.get(SvcWithInit)
 
-      expect(spy)
-        .toHaveBeenCalledTimes(1)
+      expect(spy).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -770,17 +670,12 @@ describe('Manual Binding', function () {
     it('should not init component on bootstrap when it is configured as lazy', async function () {
       const di = new CaffeineIoC()
 
-      di.bind(Laziest, t => t
-        .toSelf()
-        .lazy())
-      di.bind(NonLazy, t => t
-        .toSelf()
-        .lazy(false))
+      di.bind(Laziest, t => t.toSelf().lazy())
+      di.bind(NonLazy, t => t.toSelf().lazy(false))
       await di.init()
 
       expect(lazySpy).not.toHaveBeenCalled()
-      expect(nonLazySpy)
-        .toHaveBeenCalled()
+      expect(nonLazySpy).toHaveBeenCalled()
     })
   })
 
@@ -797,8 +692,7 @@ describe('Manual Binding', function () {
 
       void AsyncWithInjectableProp
 
-      expect(() => new CaffeineIoC())
-        .toThrow(ErrInvalidBinding)
+      expect(() => new CaffeineIoC()).toThrow(ErrInvalidBinding)
     })
 
     it('should throw ErrInvalidBinding when async binding has an injectable method', function () {
@@ -817,8 +711,7 @@ describe('Manual Binding', function () {
 
       void AsyncWithInjectableMethod
 
-      expect(() => new CaffeineIoC())
-        .toThrow(ErrInvalidBinding)
+      expect(() => new CaffeineIoC()).toThrow(ErrInvalidBinding)
     })
   })
 
@@ -829,12 +722,10 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(StringParam, t => t
-        .toSelf([$i.just('hello')]))
+      di.bind(StringParam, t => t.toSelf([$i.just('hello')]))
       await di.init()
 
-      expect(di.get(StringParam).val)
-        .toEqual('hello')
+      expect(di.get(StringParam).val).toEqual('hello')
     })
 
     it('should inject a numeric constant', async function () {
@@ -843,12 +734,10 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(NumParam, t => t
-        .toSelf([$i.just(42)]))
+      di.bind(NumParam, t => t.toSelf([$i.just(42)]))
       await di.init()
 
-      expect(di.get(NumParam).val)
-        .toEqual(42)
+      expect(di.get(NumParam).val).toEqual(42)
     })
 
     it('should inject an object by reference', async function () {
@@ -860,12 +749,10 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ConfigConsumer, t => t
-        .toSelf([$i.just(config)]))
+      di.bind(ConfigConsumer, t => t.toSelf([$i.just(config)]))
       await di.init()
 
-      expect(di.get(ConfigConsumer).config)
-        .toBe(config)
+      expect(di.get(ConfigConsumer).config).toBe(config)
     })
 
     it('should inject null', async function () {
@@ -874,12 +761,10 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(NullParam, t => t
-        .toSelf([$i.just(null)]))
+      di.bind(NullParam, t => t.toSelf([$i.just(null)]))
       await di.init()
 
-      expect(di.get(NullParam).val)
-        .toBeNull()
+      expect(di.get(NullParam).val).toBeNull()
     })
 
     it('should inject undefined', async function () {
@@ -888,12 +773,10 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(UndefinedParam, t => t
-        .toSelf([$i.just(undefined)]))
+      di.bind(UndefinedParam, t => t.toSelf([$i.just(undefined)]))
       await di.init()
 
-      expect(di.get(UndefinedParam).val)
-        .toBeUndefined()
+      expect(di.get(UndefinedParam).val).toBeUndefined()
     })
 
     it('should inject multiple constants', async function () {
@@ -905,14 +788,11 @@ describe('Manual Binding', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(MultiParam, t => t
-        .toSelf([$i.just('localhost'), $i.just(3000)]))
+      di.bind(MultiParam, t => t.toSelf([$i.just('localhost'), $i.just(3000)]))
       await di.init()
 
-      expect(di.get(MultiParam).host)
-        .toEqual('localhost')
-      expect(di.get(MultiParam).port)
-        .toEqual(3000)
+      expect(di.get(MultiParam).host).toEqual('localhost')
+      expect(di.get(MultiParam).port).toEqual(3000)
     })
   })
 
@@ -951,8 +831,7 @@ describe('Manual Binding', function () {
       const alias = token<any>(Symbol('alias'))
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(Svc, t => t.toSelf()
-        .lifetime(Scopes.SINGLETON))
+      di.bind(Svc, t => t.toSelf().lifetime(Scopes.SINGLETON))
       di.bind(alias, t => t.aliasOf(Svc))
       await di.init()
 
@@ -966,8 +845,7 @@ describe('Manual Binding', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       di.bind(alias, t => t.aliasOf(Svc))
-      di.bind(Svc, t => t.toSelf()
-        .lifetime(Scopes.SINGLETON))
+      di.bind(Svc, t => t.toSelf().lifetime(Scopes.SINGLETON))
       await di.init()
 
       expect(di.get(alias)).toBe(di.get(Svc))
@@ -978,8 +856,7 @@ describe('Manual Binding', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       di.bind(key2, t => t.toValue(42))
-      di.bind(token<any>(Symbol('key1')), t => t.aliasOf(key2)
-        .names('named-alias'))
+      di.bind(token<any>(Symbol('key1')), t => t.aliasOf(key2).names('named-alias'))
       await di.init()
 
       expect(di.get(token<number>('named-alias'))).toEqual(42)
@@ -1013,8 +890,7 @@ describe('Manual Binding', function () {
 
       void OneInjectionTwoMethodParams
 
-      expect(() => new CaffeineIoC())
-        .toThrow()
+      expect(() => new CaffeineIoC()).toThrow()
     })
   })
 })
@@ -1043,10 +919,8 @@ describe('wrapMany()', function () {
     const kSvc = token<any>(Symbol('wrap-many-svc'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('alpha'), t => t.toValue('alpha')
-      .names(kSvc))
-    di.bind(token<any>('bravo'), t => t.toValue('bravo')
-      .names(kSvc))
+    di.bind(token<any>('alpha'), t => t.toValue('alpha').names(kSvc))
+    di.bind(token<any>('bravo'), t => t.toValue('bravo').names(kSvc))
     await di.init()
 
     const provider: Provider<string[]> = di.wrapMany(kSvc)
@@ -1068,8 +942,7 @@ describe('wrapMany()', function () {
     const kSingle = token<any>(Symbol('wrap-many-single'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('solo'), t => t.toValue('only-one')
-      .names(kSingle))
+    di.bind(token<any>('solo'), t => t.toValue('only-one').names(kSingle))
     await di.init()
 
     const provider: Provider<string[]> = di.wrapMany(kSingle)
@@ -1096,8 +969,7 @@ describe('wrapBinding()', function () {
     class Dep {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Dep, t => t.toSelf()
-      .lifetime(Scopes.TRANSIENT))
+    di.bind(Dep, t => t.toSelf().lifetime(Scopes.TRANSIENT))
     await di.init()
 
     const binding = di.getBinding(Dep)
@@ -1124,10 +996,8 @@ describe('wrapBindings()', function () {
     const kShared = token<any>(Symbol('wrap-bindings-shared'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('alpha'), t => t.toValue('alpha')
-      .names(kShared))
-    di.bind(token<any>('bravo'), t => t.toValue('bravo')
-      .names(kShared))
+    di.bind(token<any>('alpha'), t => t.toValue('alpha').names(kShared))
+    di.bind(token<any>('bravo'), t => t.toValue('bravo').names(kShared))
     await di.init()
 
     const bindings = di.getBindings<string>(kShared)

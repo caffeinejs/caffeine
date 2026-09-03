@@ -1,4 +1,5 @@
 import { Injectable } from '@caffeinejs/di'
+
 import { CustomerService } from '../customer/customer.service.js'
 import { LoggerService } from '../shared/logger.service.js'
 import { CartRepository } from './cart.repository.js'
@@ -11,8 +12,12 @@ export class CartService {
     private readonly logger: LoggerService,
   ) {}
 
-  findAll(): unknown[] { return this.repo.findAll() }
-  findById(id: string): unknown { return this.repo.findById(id) }
+  findAll(): unknown[] {
+    return this.repo.findAll()
+  }
+  findById(id: string): unknown {
+    return this.repo.findById(id)
+  }
   create(data: unknown): unknown {
     this.logger.log('cart.create')
     void this.customerService.findById((data as Record<string, string>).customerId)

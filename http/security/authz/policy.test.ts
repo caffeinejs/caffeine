@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
+
 import type { Context } from '../../context.js'
 import type { RouteAuthzOptions } from '../../routing/spec.js'
 import { Claim, Identity, Principal, newAnonymousUser } from '../identity.js'
 import type { AuthorizationOptions } from './authz.js'
+import { AssertionHandler, AuthenticatedUserHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import {
-  AssertionHandler,
-  AuthenticatedUserHandler,
-  ClaimHandler,
-  ResourceHandler,
-  RoleHandler,
-} from './handlers.js'
-import { type AuthzRequirement, type AuthzRequirementHandler, type PolicyEvaluator, compileRoutePolicy } from './policy.js'
+  type AuthzRequirement,
+  type AuthzRequirementHandler,
+  type PolicyEvaluator,
+  compileRoutePolicy,
+} from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
 
 /**
@@ -45,7 +45,11 @@ function options(overrides: Partial<AuthorizationOptions> = {}): AuthorizationOp
 
 function user(claims: Array<[string, unknown]> = [], authenticated = true): Principal {
   return new Principal(authenticated, [
-    new Identity('test', authenticated, claims.map(([type, value]) => new Claim(type, value, ''))),
+    new Identity(
+      'test',
+      authenticated,
+      claims.map(([type, value]) => new Claim(type, value, '')),
+    ),
   ])
 }
 
@@ -218,8 +222,9 @@ describe('compileRoutePolicy — named policies', () => {
   })
 
   it('throws at compile time for an unknown policy name', () => {
-    expect(() => compileRoutePolicy(options(), new Map(), handlers(), undefined, { policy: 'ghost' }))
-      .toThrow(/no policy is registered under that name/)
+    expect(() => compileRoutePolicy(options(), new Map(), handlers(), undefined, { policy: 'ghost' })).toThrow(
+      /no policy is registered under that name/,
+    )
   })
 
   it('throws at compile time for a requirement no handler covers', () => {
@@ -230,7 +235,8 @@ describe('compileRoutePolicy — named policies', () => {
       },
     })
 
-    expect(() => compileRoutePolicy(authorization, new Map(), handlers(), undefined, {}))
-      .toThrow(/no handler is registered for requirement kind/)
+    expect(() => compileRoutePolicy(authorization, new Map(), handlers(), undefined, {})).toThrow(
+      /no handler is registered for requirement kind/,
+    )
   })
 })

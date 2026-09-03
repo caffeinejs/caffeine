@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, beforeEach, expect, vi } from 'vitest'
+
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
-import { UseFactory } from '../decorators/use_factory.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { Scopes } from '../scope.js'
-import { CaffeineIoC } from '../container.js'
-import { classFactory } from '../internal/core/factory/class.js'
+import { UseFactory } from '../decorators/use_factory.js'
 import { Factory } from '../factory.js'
+import { classFactory } from '../internal/core/factory/class.js'
 import { ResolutionContext } from '../resolution_context.js'
+import { Scopes } from '../scope.js'
 
 describe(`@${UseFactory.name}()`, function () {
   const spy = vi.fn()
@@ -49,12 +51,9 @@ describe(`@${UseFactory.name}()`, function () {
     await di.init()
     const loggable = di.get(Loggable)
 
-    expect(Loggable.Log())
-      .toEqual('the_log')
-    expect(loggable)
-      .toBeInstanceOf(Loggable)
-    expect(spy)
-      .toHaveBeenCalledTimes(1)
+    expect(Loggable.Log()).toEqual('the_log')
+    expect(loggable).toBeInstanceOf(Loggable)
+    expect(spy).toHaveBeenCalledTimes(1)
   })
 
   it('should use a factory factory using the function provided in the decorator', async function () {
@@ -62,10 +61,8 @@ describe(`@${UseFactory.name}()`, function () {
     await di.init()
     const dep = di.get(Dep)
 
-    expect(spy)
-      .toHaveBeenCalledTimes(1)
-    expect(dep)
-      .toBeInstanceOf(Dep)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(dep).toBeInstanceOf(Dep)
   })
 
   class Repo<T = any> {
@@ -102,12 +99,9 @@ describe(`@${UseFactory.name}()`, function () {
     const repo = di.get(User) as Repo<User>
     const repo2 = di.get(User) as Repo
 
-    expect(repo)
-      .toBeInstanceOf(Repo)
-    expect(repo.name())
-      .toEqual('User')
-    expect(repo.id)
-      .toEqual(repo2.id)
+    expect(repo).toBeInstanceOf(Repo)
+    expect(repo.name()).toEqual('User')
+    expect(repo.id).toEqual(repo2.id)
   })
 
   it('should provide another bean respecting configurations set on key class', async function () {
@@ -116,10 +110,8 @@ describe(`@${UseFactory.name}()`, function () {
     const repo = di.get(TrUser) as Repo<User>
     const repo2 = di.get(TrUser) as Repo
 
-    expect(repo)
-      .toBeInstanceOf(Repo)
-    expect(repo.name())
-      .toEqual('TrUser')
+    expect(repo).toBeInstanceOf(Repo)
+    expect(repo.name()).toEqual('TrUser')
     expect(repo.id).not.toEqual(repo2.id)
   })
 
@@ -128,11 +120,8 @@ describe(`@${UseFactory.name}()`, function () {
     await di.init()
     const svc = di.get(Svc)
 
-    expect(svc)
-      .toBeInstanceOf(Svc)
-    expect(svc.repo)
-      .toBeInstanceOf(Repo)
-    expect(svc.repo.name())
-      .toEqual('User')
+    expect(svc).toBeInstanceOf(Svc)
+    expect(svc.repo).toBeInstanceOf(Repo)
+    expect(svc.repo.name()).toEqual('User')
   })
 })

@@ -3,12 +3,5 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "exclude": [
-    "dist",
-    "node_modules",
-    "**/_testdata/",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "*.config.ts"
-  ]
+  "exclude": ["dist", "node_modules", "**/_testdata/", "**/*.test.ts", "**/*.spec.ts", "*.config.ts"]
 }

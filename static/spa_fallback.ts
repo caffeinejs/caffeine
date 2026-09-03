@@ -1,4 +1,5 @@
 import { FastifyContext, NotFoundFallback, type NotFoundContext } from '@caffeinejs/http'
+
 import type { SPASettings } from './spa.js'
 import { underPrefix } from './spa.js'
 

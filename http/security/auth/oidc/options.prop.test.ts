@@ -1,5 +1,6 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import {
   assertSecureEndpoint,
   defaultSecureCookie,
@@ -21,10 +22,12 @@ const BASE = 'https://app.example.com'
  * An unconstrained `fc.string()` is useless here: almost nothing it generates starts with
  * `/`, so the precondition rejects it and the interesting region is never reached.
  */
-const pathish = fc.array(
-  fc.constantFrom('/', '\\', '\t', '\n', '\r', ' ', '.', ':', '?', '#', '%', '@', 'a', 'e', 'v', 'i', 'l', '1'),
-  { maxLength: 12 },
-).map(cs => `/${cs.join('')}`)
+const pathish = fc
+  .array(
+    fc.constantFrom('/', '\\', '\t', '\n', '\r', ' ', '.', ':', '?', '#', '%', '@', 'a', 'e', 'v', 'i', 'l', '1'),
+    { maxLength: 12 },
+  )
+  .map(cs => `/${cs.join('')}`)
 
 describe('isSafeReturnPath (property)', () => {
   // The guard is syntactic; the URL parser is the real authority on where a path resolves.
@@ -56,14 +59,11 @@ describe('assertSecureEndpoint (property)', () => {
     expect(() => assertSecureEndpoint('endpoint', url)).not.toThrow()
   })
 
-  it.prop([fc.webUrl({ validSchemes: ['http'] })])(
-    'rejects http unless the host is loopback',
-    url => {
-      const host = new URL(url).hostname
-      fc.pre(!LOOPBACK.includes(host))
-      expect(() => assertSecureEndpoint('endpoint', url)).toThrow('must use https')
-    },
-  )
+  it.prop([fc.webUrl({ validSchemes: ['http'] })])('rejects http unless the host is loopback', url => {
+    const host = new URL(url).hostname
+    fc.pre(!LOOPBACK.includes(host))
+    expect(() => assertSecureEndpoint('endpoint', url)).toThrow('must use https')
+  })
 
   it.prop([fc.constantFrom(...LOOPBACK), fc.integer({ min: 1, max: 65535 })])(
     'accepts http on loopback for local development',
@@ -101,16 +101,19 @@ const optionsArb = fc.record({
   clientID: fc.string({ minLength: 1 }),
   clientSecret: fc.string({ minLength: 1 }),
   sessionSecret: fc.string({ minLength: 32, maxLength: 64 }),
-  callbackURL: fc.constantFrom(
-    'https://app.example.com/auth/callback',
-    'http://localhost:3000/auth/callback',
-  ),
+  callbackURL: fc.constantFrom('https://app.example.com/auth/callback', 'http://localhost:3000/auth/callback'),
   discoveryURL: fc.constant('https://accounts.example.com'),
   // Pinned alongside the discovery URL: the resolver now requires it.
   issuer: fc.constant('https://accounts.example.com'),
-  scopes: fc.option(fc.array(fc.string({ minLength: 1 }).filter(s => !s.includes(' ')), { maxLength: 5 }), {
-    nil: undefined,
-  }),
+  scopes: fc.option(
+    fc.array(
+      fc.string({ minLength: 1 }).filter(s => !s.includes(' ')),
+      { maxLength: 5 },
+    ),
+    {
+      nil: undefined,
+    },
+  ),
 }) as fc.Arbitrary<OIDCAuthenticationOptions>
 
 /** Undefined where the name is unusable, so preconditions can filter instead of throwing. */

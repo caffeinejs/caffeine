@@ -1,4 +1,5 @@
 import type { InjectionToken } from '@caffeinejs/di'
+
 import type { Context } from '../../../context.js'
 import { OpaqueTokenStore } from './opaque_token_store.js'
 

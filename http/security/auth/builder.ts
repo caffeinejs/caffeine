@@ -7,8 +7,11 @@ import {
   type ConfigSchema,
   type ConfigSlice,
 } from '@caffeinejs/std/config'
+
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
+import { BasicAuthenticationHandler } from './basic/basic.js'
+import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import {
   AUTH_CONFIG_NAMESPACE,
   CREDENTIALS_CONFIG_SEGMENT,
@@ -24,39 +27,33 @@ import {
   type SchemeConfigSpec,
   type SchemeKind,
 } from './config.js'
-import type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
-import type { AuthenticationHandler } from './handler.js'
-import { AuthenticationSchemeProvider } from './scheme_provider.js'
-import { AuthenticationService } from './service.js'
-import { BasicAuthenticationHandler } from './basic/basic.js'
-import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
-import { ForwardAuthenticationHandler } from './forward/forward.js'
-import { JWTAuthenticationHandler } from './jwt/jwt.js'
-import { JWTService } from './jwt/jwt_service.js'
-import { jwtServiceKey } from './jwt/keys.js'
-import { ErrAuthConfiguration } from './errors.js'
-import { kAuthContribution, kAuthSchemeDescriptors, kOIDCContribution } from './keys.js'
-import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
-import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
-import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
-import { OpaqueTokenStore } from './opaque/opaque_token_store.js'
 import { CookieAuthenticationHandler } from './cookie/cookie.js'
 import { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
 import { RememberMeTokenStore } from './cookie/remember_me_token_store.js'
 import { CredentialsService, type CredentialsServiceOptions } from './credentials/credentials_service.js'
 import { PasswordHasher, ScryptPasswordHasher } from './credentials/password_hasher.js'
 import { UserProvider } from './credentials/user_provider.js'
+import type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
+import { ErrAuthConfiguration } from './errors.js'
+import { ForwardAuthenticationHandler } from './forward/forward.js'
+import type { AuthenticationHandler } from './handler.js'
+import { JWTAuthenticationHandler } from './jwt/jwt.js'
+import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
+import { JWTService } from './jwt/jwt_service.js'
+import { jwtServiceKey } from './jwt/keys.js'
+import { kAuthContribution, kAuthSchemeDescriptors, kOIDCContribution } from './keys.js'
+import { githubOAuth2Preset, OAuth2AuthenticationHandler, OAuth2AuthenticationOptionsBuilder } from './oauth/index.js'
+import type { GithubPresetOptions } from './oauth/provider/github.js'
+import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
+import type { OAuthCallbackHandler, OIDCMeta } from './oidc/index.js'
+import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
+import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
+import { OpaqueTokenStore } from './opaque/opaque_token_store.js'
+import { type RefreshTokenOptions, RefreshTokenOptionsBuilder } from './refresh/refresh_options.js'
 import { RefreshTokenService } from './refresh/refresh_token_service.js'
 import { RefreshTokenStore } from './refresh/refresh_token_store.js'
-import { type RefreshTokenOptions, RefreshTokenOptionsBuilder } from './refresh/refresh_options.js'
-import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
-import {
-  githubOAuth2Preset,
-  OAuth2AuthenticationHandler,
-  OAuth2AuthenticationOptionsBuilder,
-} from './oauth/index.js'
-import type { GithubPresetOptions } from './oauth/provider/github.js'
-import type { OAuthCallbackHandler, OIDCMeta } from './oidc/index.js'
+import { AuthenticationSchemeProvider } from './scheme_provider.js'
+import { AuthenticationService } from './service.js'
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
@@ -110,7 +107,10 @@ export class AuthenticationBuilder<C = unknown> implements Service {
 
   addStrategy(name: string, handler: AuthenticationHandler): ServiceAPI<this>
   addStrategy(name: string, key: InjectionToken<AuthenticationHandler>): ServiceAPI<this>
-  addStrategy(name: string, keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler): ServiceAPI<this> {
+  addStrategy(
+    name: string,
+    keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler,
+  ): ServiceAPI<this> {
     this.#schemes.set(name, keyOrHandler)
     return this
   }
@@ -153,12 +153,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     optsOrName: ((opts: JWTAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: JWTAuthenticationOptionsBuilder) => void,
   ): ServiceAPI<this> {
-    const name = typeof optsOrName === 'string'
-      ? optsOrName
-      : 'Bearer'
-    const optsFn = typeof optsOrName === 'string'
-      ? options
-      : optsOrName
+    const name = typeof optsOrName === 'string' ? optsOrName : 'Bearer'
+    const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
       throw new ErrAuthConfiguration('Options are required')
     }
@@ -172,12 +168,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     optsOrName: ((opts: BasicAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: BasicAuthenticationOptionsBuilder) => void,
   ): ServiceAPI<this> {
-    const name = typeof optsOrName === 'string'
-      ? optsOrName
-      : 'Basic'
-    const optsFn = typeof optsOrName === 'string'
-      ? options
-      : optsOrName
+    const name = typeof optsOrName === 'string' ? optsOrName : 'Basic'
+    const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
       throw new ErrAuthConfiguration('Options are required')
     }
@@ -191,12 +183,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     optsOrName: ((opts: CookieAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: CookieAuthenticationOptionsBuilder) => void,
   ): ServiceAPI<this> {
-    const name = typeof optsOrName === 'string'
-      ? optsOrName
-      : 'Cookie'
-    const optsFn = typeof optsOrName === 'string'
-      ? options
-      : optsOrName
+    const name = typeof optsOrName === 'string' ? optsOrName : 'Cookie'
+    const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
       throw new ErrAuthConfiguration('Options are required')
     }
@@ -221,12 +209,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     optsOrName?: ((opts: OpaqueTokenAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void,
   ): ServiceAPI<this> {
-    const name = typeof optsOrName === 'string'
-      ? optsOrName
-      : 'OpaqueToken'
-    const optsFn = typeof optsOrName === 'string'
-      ? options
-      : optsOrName
+    const name = typeof optsOrName === 'string' ? optsOrName : 'OpaqueToken'
+    const optsFn = typeof optsOrName === 'string' ? options : optsOrName
 
     // The options callback is optional: `store` defaults to the `OpaqueTokenStore` token, so the
     // zero-arg form works once the user has bound their store to the container.
@@ -321,10 +305,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     }
 
     if (this.#credentials !== undefined) {
-      this.#credentialsSlice = kit.config.slice(
-        [...base, CREDENTIALS_CONFIG_SEGMENT],
-        credentialsConfigSchema,
-      )
+      this.#credentialsSlice = kit.config.slice([...base, CREDENTIALS_CONFIG_SEGMENT], credentialsConfigSchema)
     }
 
     if (this.#refreshConfigure !== undefined) {
@@ -371,11 +352,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
         case 'cookie': {
           const builder = new CookieAuthenticationOptionsBuilder()
           registration.configure(builder as never)
-          applyScheme(
-            builder,
-            SCHEME_CONFIG.cookie as SchemeConfigSpec<CookieAuthenticationOptionsBuilder>,
-            configured,
-          )
+          applyScheme(builder, SCHEME_CONFIG.cookie as SchemeConfigSpec<CookieAuthenticationOptionsBuilder>, configured)
           const resolved = builder.build()
 
           this.#describe(registration.name, { kind: 'apiKey', in: 'cookie', name: resolved.cookieName })
@@ -413,15 +390,17 @@ export class AuthenticationBuilder<C = unknown> implements Service {
 
           // Only a discovery URL describes the sign-in as OpenID Connect; a provider configured with explicit
           // endpoints is an OAuth 2.0 authorization-code flow as far as any consumer can tell.
-          this.#describe(registration.name, sessionCookieScheme(handler, options.discoveryURL !== undefined
-            ? { openIdConnectURL: options.discoveryURL }
-            : {
-                flows: authorizationCodeFlow(
-                  options.authorizationEndpoint,
-                  options.tokenEndpoint,
-                  options.scopes,
-                ),
-              }))
+          this.#describe(
+            registration.name,
+            sessionCookieScheme(
+              handler,
+              options.discoveryURL !== undefined
+                ? { openIdConnectURL: options.discoveryURL }
+                : {
+                    flows: authorizationCodeFlow(options.authorizationEndpoint, options.tokenEndpoint, options.scopes),
+                  },
+            ),
+          )
 
           this.addStrategy(registration.name, handler)
           break
@@ -437,21 +416,25 @@ export class AuthenticationBuilder<C = unknown> implements Service {
           // resolving here as well would validate and default the options twice. The github preset supplies
           // the endpoints, subjectClaim and scope defaults that resolution requires, so it has to be folded
           // in before resolution rather than after.
-          const raw = registration.kind === 'github'
-            ? githubOAuth2Preset({ ...builder.toOptions(), ...registration.preset })
-            : builder.toOptions()
+          const raw =
+            registration.kind === 'github'
+              ? githubOAuth2Preset({ ...builder.toOptions(), ...registration.preset })
+              : builder.toOptions()
 
           const handler = new OAuth2AuthenticationHandler(registration.name, raw)
           this.#oidcHandlers.push(handler)
 
           // Read back off the handler: it resolved the raw options, so this is what the flow actually uses.
-          this.#describe(registration.name, sessionCookieScheme(handler, {
-            flows: authorizationCodeFlow(
-              handler.options.authorizationEndpoint,
-              handler.options.tokenEndpoint,
-              handler.options.scopes,
-            ),
-          }))
+          this.#describe(
+            registration.name,
+            sessionCookieScheme(handler, {
+              flows: authorizationCodeFlow(
+                handler.options.authorizationEndpoint,
+                handler.options.tokenEndpoint,
+                handler.options.scopes,
+              ),
+            }),
+          )
 
           this.addStrategy(registration.name, handler)
           break
@@ -501,11 +484,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       schemes.set(name, handler)
     }
 
-    const mapper = this.#mapper === undefined
-      ? undefined
-      : typeof this.#mapper === 'string' || typeof this.#mapper === 'symbol'
-        ? kit.container.wrap(this.#mapper as InjectionToken<PrincipalMapper>)
-        : { get: () => this.#mapper as PrincipalMapper }
+    const mapper =
+      this.#mapper === undefined
+        ? undefined
+        : typeof this.#mapper === 'string' || typeof this.#mapper === 'symbol'
+          ? kit.container.wrap(this.#mapper as InjectionToken<PrincipalMapper>)
+          : { get: () => this.#mapper as PrincipalMapper }
     const schemeProvider = new AuthenticationSchemeProvider(schemes, options)
     const service = new AuthenticationService(schemeProvider, mapper)
 
@@ -550,8 +534,9 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     // Share each JWT scheme's service (verify + sign) for injection into token-issuing controllers.
     // Every JWT scheme is reachable via its keyed token; the default JWT scheme (or the first, if the
     // default is not a JWT scheme) is also bound under the bare `JWTService` token for the common case.
-    const jwtSchemes = [...this.#schemes]
-      .filter((entry): entry is [string, JWTAuthenticationHandler] => entry[1] instanceof JWTAuthenticationHandler)
+    const jwtSchemes = [...this.#schemes].filter(
+      (entry): entry is [string, JWTAuthenticationHandler] => entry[1] instanceof JWTAuthenticationHandler,
+    )
     for (const [name, handler] of jwtSchemes) {
       kit.container.bind(jwtServiceKey(name), t => t.toValue(handler.service))
     }
@@ -567,10 +552,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       // container key, so a plain DI injection cannot carry it).
       const options = this.#credentials
       kit.container.bind(PasswordHasher, t => t.toClass(ScryptPasswordHasher).fallback())
-      kit.container.bind(CredentialsService, t => t.toFunction(
-        (provider: UserProvider, hasher: PasswordHasher) => new CredentialsService(provider, hasher, options),
-        [UserProvider, PasswordHasher],
-      ))
+      kit.container.bind(CredentialsService, t =>
+        t.toFunction(
+          (provider: UserProvider, hasher: PasswordHasher) => new CredentialsService(provider, hasher, options),
+          [UserProvider, PasswordHasher],
+        ),
+      )
     }
 
     if (this.#refresh !== undefined) {
@@ -583,10 +570,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       // Signs with the shared (default) JWTService bound above and persists in the user-bound
       // RefreshTokenStore; the resolver/TTLs ride along in the closure (not container keys).
       const options = this.#refresh
-      kit.container.bind(RefreshTokenService, t => t.toFunction(
-        (jwt: JWTService, store: RefreshTokenStore) => new RefreshTokenService(jwt, store, options),
-        [JWTService, RefreshTokenStore],
-      ))
+      kit.container.bind(RefreshTokenService, t =>
+        t.toFunction(
+          (jwt: JWTService, store: RefreshTokenStore) => new RefreshTokenService(jwt, store, options),
+          [JWTService, RefreshTokenStore],
+        ),
+      )
     }
 
     if (this.#oidcHandlers.length > 0) {
@@ -647,8 +636,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
         const owner = owners.get(value)
         if (owner !== undefined) {
           throw new ErrAuthConfiguration(
-            `Cannot configure authentication: OIDC strategies "${owner}" and "${handler.schemeName}" `
-            + `share the ${label} "${value}"`,
+            `Cannot configure authentication: OIDC strategies "${owner}" and "${handler.schemeName}" ` +
+              `share the ${label} "${value}"`,
           )
         }
         owners.set(value, handler.schemeName)
@@ -686,9 +675,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       return []
     }
 
-    return this.#oidcHandlers
-      .map(handler => handler.schemeName)
-      .filter(name => name !== defaultScheme)
+    return this.#oidcHandlers.map(handler => handler.schemeName).filter(name => name !== defaultScheme)
   }
 }
 

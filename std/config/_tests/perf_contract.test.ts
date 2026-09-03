@@ -1,15 +1,19 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
+
 import { $t } from '../../schema/t.js'
 import { createLiveAccessors } from '../accessor.js'
 import { ConfigDefinition } from '../definition.js'
-import { ConfigPriority } from '../sources.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
+import { ConfigPriority } from '../sources.js'
 
 const APP_CONFIG = token<any>(Symbol('app.config'))
 
-interface Slice { paths: { live: string }, port: number }
+interface Slice {
+  paths: { live: string }
+  port: number
+}
 
 const schema = $t.Object({
   paths: $t.Object({ live: $t.String({ default: '/livez' }) }, { default: {} }),
@@ -100,7 +104,7 @@ describe('config read cost', () => {
 
     expect(Object.isFrozen(slice.snapshot())).toBe(true)
     expect(() => {
-      (slice.config.paths as { live: string }).live = 'nope'
+      ;(slice.config.paths as { live: string }).live = 'nope'
     }).toThrow(TypeError)
   })
 
@@ -115,7 +119,10 @@ describe('config read cost', () => {
   it('memoises the application handle against the resolve revision', () => {
     let data = { http: { host: 'old' } }
     let revision = 0
-    const handle = createLiveAccessors(() => data, () => revision)
+    const handle = createLiveAccessors(
+      () => data,
+      () => revision,
+    )
 
     const http = handle.http
     expect(http.host).toBe('old')

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+
+import { FakeBroker } from '../broker.testkit.js'
 import { defaultDeserializers, defaultSerializers } from '../clients.js'
 import { resolveConfig } from '../config.js'
-import { FakeBroker } from '../broker.testkit.js'
 import type { KafkaRuntime } from '../runtime.js'
 import { KafkaTemplate } from '../template.js'
 import { deadLetterManager } from './dead_letter_manager.js'

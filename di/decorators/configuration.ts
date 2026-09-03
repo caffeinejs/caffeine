@@ -1,17 +1,13 @@
-import { Injection } from '../injection.js'
-import { Ctor } from '../types.js'
 import { ErrInvalidDecorator, ErrScopeMismatchInConfiguration } from '../errors.js'
+import { Injection } from '../injection.js'
+import { isNil } from '../internal/util/assert/index.js'
 import { solutions } from '../internal/util/errutil/index.js'
 import { InjectionToken } from '../key.js'
-import { isNil } from '../internal/util/assert/index.js'
-import {
-  addProvidedBindings,
-  defineInjectable,
-  getInjectionMetadata,
-} from './registrar/index.js'
+import { Ctor } from '../types.js'
+import { Provides } from './provides.js'
+import { addProvidedBindings, defineInjectable, getInjectionMetadata } from './registrar/index.js'
 import { DecoratedBindingConfig } from './registrar/spec.js'
 import { normalizeInjections } from './util/index.js'
-import { Provides } from './provides.js'
 
 /**
  * Marks a class as a configuration source. Methods decorated with `@Provides` define factory bindings.
@@ -38,20 +34,15 @@ export function Configuration<T>(injections?: Injection[]) {
     const deps = injections ?? []
     const metadata = getInjectionMetadata(context.metadata)
     const members = metadata.members ?? new Map()
-    const configurations = Array.from(members.entries())
-      .map(([_, options]) => options)
-    const keys = configurations.map(x => x.bindingKey)
-      .filter((k): k is InjectionToken => k !== undefined)
+    const configurations = Array.from(members.entries()).map(([_, options]) => options)
+    const keys = configurations.map(x => x.bindingKey).filter((k): k is InjectionToken => k !== undefined)
 
     const classBinding = defineInjectable<T>(context.metadata, target, config =>
-      config
-        .dependencies(normalizeInjections(deps))
-        .configuration(true)
-        .keysProvided(keys))
+      config.dependencies(normalizeInjections(deps)).configuration(true).keysProvided(keys),
+    )
 
-    const effectiveProfiles = classBinding.getProfiles && classBinding.getProfiles.size > 0
-      ? classBinding.getProfiles
-      : undefined
+    const effectiveProfiles =
+      classBinding.getProfiles && classBinding.getProfiles.size > 0 ? classBinding.getProfiles : undefined
 
     for (const [method, factory] of members) {
       if (!isNil(classBinding.scopeID) && !isNil(factory.scopeID) && classBinding.scopeID !== factory.scopeID) {
@@ -60,8 +51,8 @@ export function Configuration<T>(injections?: Injection[]) {
 
       if (factory.bindingKey === undefined) {
         throw new ErrInvalidDecorator(
-          `Cannot determine injection key for injectable on method "${String(method)}" at class "${target.name}"`
-          + solutions(`- Ensure the method "${String(method)}" is decorated with '@${Provides.name}'`),
+          `Cannot determine injection key for injectable on method "${String(method)}" at class "${target.name}"` +
+            solutions(`- Ensure the method "${String(method)}" is decorated with '@${Provides.name}'`),
         )
       }
 
@@ -105,7 +96,7 @@ export function Configuration<T>(injections?: Injection[]) {
         factoryConfig.tags(new Map(fb.tags))
       }
 
-      const type = fb.type ?? (typeof factory.bindingKey === 'function' ? factory.bindingKey as Function : undefined)
+      const type = fb.type ?? (typeof factory.bindingKey === 'function' ? (factory.bindingKey as Function) : undefined)
       if (type) {
         factoryConfig.type(type)
       }

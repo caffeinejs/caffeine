@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { selectorPath } from '../selector_path.js'
 
 interface Config {
@@ -6,8 +7,7 @@ interface Config {
   app: { server: { port: number } }
 }
 
-const path = (selector: (c: Config) => unknown): readonly string[] =>
-  selectorPath(selector as (c: never) => unknown)
+const path = (selector: (c: Config) => unknown): readonly string[] => selectorPath(selector as (c: never) => unknown)
 
 const selectorError = expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_SELECTOR' })
 
@@ -43,8 +43,7 @@ describe('selectorPath', () => {
   })
 
   it('rejects a selector that calls a method', () => {
-    expect(() => path(c => (c.server as unknown as { toString(): string }).toString()))
-      .toThrow(selectorError)
+    expect(() => path(c => (c.server as unknown as { toString(): string }).toString())).toThrow(selectorError)
   })
 
   it('rejects a selector returning the config root', () => {
@@ -56,7 +55,6 @@ describe('selectorPath', () => {
   })
 
   it('explains itself', () => {
-    expect(() => path(c => ({ port: c.server.port })))
-      .toThrow(/plain property chain/)
+    expect(() => path(c => ({ port: c.server.port }))).toThrow(/plain property chain/)
   })
 })

@@ -1,8 +1,8 @@
 import { API } from '../decorators/api.js'
+import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Param } from '../decorators/params/param.js'
 import { Query } from '../decorators/params/query.js'
-import { Params } from '../decorators/params.js'
 import { POST } from '../decorators/verbs.js'
 
 @API()

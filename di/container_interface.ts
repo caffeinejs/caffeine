@@ -1,18 +1,18 @@
-import { Identifier, InjectionToken, TokenValue } from './key.js'
+import type { MethodAspect } from './aop.js'
+import type { AspectSpec } from './aspect_spec.js'
 import { Binding } from './binding.js'
 import { BindingSpec } from './binding_spec.js'
-import type { AspectSpec } from './aspect_spec.js'
-import type { MethodAspect } from './aop.js'
-import type { Snapshot } from './snapshot.js'
-import { MetadataReader } from './metadata_reader.js'
 import { HookListener } from './hooks.js'
+import { Injection, ResolveInjection } from './injection.js'
+import { Identifier, InjectionToken, TokenValue } from './key.js'
+import { MetadataReader } from './metadata_reader.js'
+import type { Module, ModuleFn } from './module.js'
+import { PostProcessor } from './post_processor.js'
+import { Provider } from './provider.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
-import { PostProcessor } from './post_processor.js'
-import { Injection, ResolveInjection } from './injection.js'
+import type { Snapshot } from './snapshot.js'
 import { Ctor } from './types.js'
-import { Provider } from './provider.js'
-import type { Module, ModuleFn } from './module.js'
 
 /**
  * Scope validation checks to apply during container initialization.
@@ -203,7 +203,8 @@ export interface Container {
 /**
  * {@link Container} operations that components can have access to safely.
  */
-export type ContainerOps = Pick<Container,
+export type ContainerOps = Pick<
+  Container,
   | 'get'
   | 'getMany'
   | 'getOptional'
@@ -222,12 +223,7 @@ export type ContainerOps = Pick<Container,
  * {@link Container} binding operations that available to components that
  * run before the container is initialized.
  */
-export type ContainerBindingOps = Pick<Container,
-  | 'hooks'
-  | 'postProcessors'
-  | 'bind'
-  | 'bindValuesProvider'
-  | 'rebind'
-  | 'aspect'
-  | 'entries'
+export type ContainerBindingOps = Pick<
+  Container,
+  'hooks' | 'postProcessors' | 'bind' | 'bindValuesProvider' | 'rebind' | 'aspect' | 'entries'
 >

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+
 import type { ConsumerClient, ConsumerStream, KafkaMessage } from './config.js'
 import { KafkaContext } from './context.js'
 import { kSignals } from './symbols.js'

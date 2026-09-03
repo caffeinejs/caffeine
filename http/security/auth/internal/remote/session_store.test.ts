@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { Claim } from '../../../index.js'
 import { encodeSession, decodeSession, claimsToSession } from './session_store.js'
 import type { RemoteAuthenticationSession } from './session_store.js'
@@ -60,10 +61,7 @@ describe('session_store', () => {
 
 describe('claimsToSession()', () => {
   it('maps Claim[] to RemoteAuthenticationSession format', () => {
-    const claims = [
-      new Claim('sub', 'u1', 'issuer'),
-      new Claim('email', 'u@x.com', 'issuer'),
-    ]
+    const claims = [new Claim('sub', 'u1', 'issuer'), new Claim('email', 'u@x.com', 'issuer')]
     const session = claimsToSession(claims, 'TestScheme')
 
     expect(session.scheme).toBe('TestScheme')

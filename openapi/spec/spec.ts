@@ -227,11 +227,11 @@ export interface ComponentsObject extends Extensions {
  */
 export type SecurityRequirementObject = Record<string, string[]>
 
-export type SecuritySchemeObject
-  = | HTTPSecurityScheme
-    | APIKeySecurityScheme
-    | OpenIDConnectSecurityScheme
-    | OAuth2SecurityScheme
+export type SecuritySchemeObject =
+  | HTTPSecurityScheme
+  | APIKeySecurityScheme
+  | OpenIDConnectSecurityScheme
+  | OAuth2SecurityScheme
 
 export interface HTTPSecurityScheme extends Extensions {
   type: 'http'

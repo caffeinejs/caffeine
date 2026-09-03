@@ -1,5 +1,6 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { token } from '../../key.js'
 import { buildChildScenario } from './helpers/child_di_builder.js'
 
@@ -21,10 +22,8 @@ describe('child container hierarchy (property)', function () {
     await child.init()
 
     for (const key of childOnly) {
-      expect(child.get(token<string>(key)))
-        .toBe(`child-${key}`)
-      expect(() => parent.get(token<string>(key)))
-        .toThrow()
+      expect(child.get(token<string>(key))).toBe(`child-${key}`)
+      expect(() => parent.get(token<string>(key))).toThrow()
     }
   })
 
@@ -42,10 +41,8 @@ describe('child container hierarchy (property)', function () {
     await child.init()
 
     for (const key of parentOnly) {
-      expect(child.get(token<string>(key)))
-        .toBe(`parent-${key}`)
-      expect(parent.get(token<string>(key)))
-        .toBe(`parent-${key}`)
+      expect(child.get(token<string>(key))).toBe(`parent-${key}`)
+      expect(parent.get(token<string>(key))).toBe(`parent-${key}`)
     }
   })
 
@@ -63,10 +60,8 @@ describe('child container hierarchy (property)', function () {
       await child.init()
 
       for (const entry of shared) {
-        expect(child.get(token<string>(entry.key)))
-          .toBe(entry.childValue)
-        expect(parent.get(token<string>(entry.key)))
-          .toBe(entry.parentValue)
+        expect(child.get(token<string>(entry.key))).toBe(entry.childValue)
+        expect(parent.get(token<string>(entry.key))).toBe(entry.parentValue)
       }
     },
   )

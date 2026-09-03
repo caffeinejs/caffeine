@@ -11,10 +11,22 @@ import {
 
 describe('errors', () => {
   it.each([
-    ['ErrFetchyInvalidDecoratorTarget', () => new ErrFetchyInvalidDecoratorTarget('Path', 'a class'), 'ERR_FETCHY_INVALID_DECORATOR_TARGET'],
-    ['ErrFetchyInvalidRoute', () => new ErrFetchyInvalidRoute('getUser', 'missing HTTP method'), 'ERR_FETCHY_INVALID_ROUTE'],
+    [
+      'ErrFetchyInvalidDecoratorTarget',
+      () => new ErrFetchyInvalidDecoratorTarget('Path', 'a class'),
+      'ERR_FETCHY_INVALID_DECORATOR_TARGET',
+    ],
+    [
+      'ErrFetchyInvalidRoute',
+      () => new ErrFetchyInvalidRoute('getUser', 'missing HTTP method'),
+      'ERR_FETCHY_INVALID_ROUTE',
+    ],
     ['ErrFetchyEmptyClient', () => new ErrFetchyEmptyClient('UsersAPI'), 'ERR_FETCHY_EMPTY_CLIENT'],
-    ['ErrFetchyNoParameterHandler', () => new ErrFetchyNoParameterHandler('model', 'getUser', 0), 'ERR_FETCHY_NO_PARAMETER_HANDLER'],
+    [
+      'ErrFetchyNoParameterHandler',
+      () => new ErrFetchyNoParameterHandler('model', 'getUser', 0),
+      'ERR_FETCHY_NO_PARAMETER_HANDLER',
+    ],
     ['ErrFetchyClientNotBuilt', () => new ErrFetchyClientNotBuilt('getUser'), 'ERR_FETCHY_CLIENT_NOT_BUILT'],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()

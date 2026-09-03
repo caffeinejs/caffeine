@@ -1,4 +1,5 @@
 import type { AuthSchemeDescriptor, Route } from '@caffeinejs/http'
+
 import type { OpenAPIOptions } from '../options.js'
 import type { SecurityRequirementObject, SecuritySchemeObject } from '../spec/spec.js'
 
@@ -106,8 +107,10 @@ export function toSecurityScheme(descriptor: AuthSchemeDescriptor): SecuritySche
  */
 function obtainedBy(descriptor: AuthSchemeDescriptor): string | undefined {
   if (descriptor.openIdConnectURL !== undefined) {
-    return `Session cookie issued after an OpenID Connect sign-in against ${descriptor.openIdConnectURL}. `
-      + 'Sign in through the browser; the cookie is then sent automatically.'
+    return (
+      `Session cookie issued after an OpenID Connect sign-in against ${descriptor.openIdConnectURL}. ` +
+      'Sign in through the browser; the cookie is then sent automatically.'
+    )
   }
 
   const flow = descriptor.flows?.authorizationCode
@@ -117,8 +120,10 @@ function obtainedBy(descriptor: AuthSchemeDescriptor): string | undefined {
 
   const scopes = flow.scopes?.length ? ` (scopes: ${flow.scopes.join(', ')})` : ''
 
-  return `Session cookie issued after an OAuth 2.0 sign-in at ${flow.authorizationURL}${scopes}. `
-    + 'Sign in through the browser; the cookie is then sent automatically.'
+  return (
+    `Session cookie issued after an OAuth 2.0 sign-in at ${flow.authorizationURL}${scopes}. ` +
+    'Sign in through the browser; the cookie is then sent automatically.'
+  )
 }
 
 /**
@@ -146,7 +151,9 @@ export function deriveSecurity(
 
   const requested = authz.options?.schemes?.length
     ? authz.options.schemes
-    : defaultSchemeName === undefined ? [] : [defaultSchemeName]
+    : defaultSchemeName === undefined
+      ? []
+      : [defaultSchemeName]
 
   // A requirement may only name a scheme that `components.securitySchemes` defines, so anything undescribable
   // is dropped here rather than emitted as a dangling reference.
@@ -197,9 +204,7 @@ export function authorizationNote(route: Route<unknown>): string | undefined {
     parts.push(`roles: ${options.roles.join(', ')}`)
   }
 
-  const policies = options.policy === undefined
-    ? []
-    : Array.isArray(options.policy) ? options.policy : [options.policy]
+  const policies = options.policy === undefined ? [] : Array.isArray(options.policy) ? options.policy : [options.policy]
   if (policies.length > 0) {
     parts.push(`policy: ${policies.join(', ')}`)
   }

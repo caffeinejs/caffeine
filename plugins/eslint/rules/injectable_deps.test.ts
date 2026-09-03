@@ -1,6 +1,7 @@
-import { describe, it } from 'vitest'
 import { RuleTester } from 'eslint'
 import { parser as tsParser } from 'typescript-eslint'
+import { describe, it } from 'vitest'
+
 import { injectableDeps } from './injectable_deps.js'
 
 RuleTester.describe = describe as typeof RuleTester.describe

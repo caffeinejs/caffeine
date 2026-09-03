@@ -92,13 +92,17 @@ const kGateway = Symbol('app:gateway')
 @Injectable(kGateway)
 @Named('stripe')
 class StripeGateway implements PaymentGateway {
-  charge(amount: number) { /* ... */ }
+  charge(amount: number) {
+    /* ... */
+  }
 }
 
 @Injectable(kGateway)
 @Named('paypal')
 class PayPalGateway implements PaymentGateway {
-  charge(amount: number) { /* ... */ }
+  charge(amount: number) {
+    /* ... */
+  }
 }
 
 @Injectable([mapped(kGateway)])
@@ -143,9 +147,9 @@ const pipeline = di.get(ValidationPipeline)
 
 ## Summary
 
-| Goal | Function |
-| --- | --- |
-| Inject all implementations as an ordered array | `allOf(key)` |
-| Inject all implementations keyed by name | `mapped(key)` |
-| Inject a single implementation | plain key or `optional(key)` |
-| Inject across scope boundaries | `provide(key)` — see [Mixing Scopes](./mixing-scopes.md) |
+| Goal                                           | Function                                                 |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| Inject all implementations as an ordered array | `allOf(key)`                                             |
+| Inject all implementations keyed by name       | `mapped(key)`                                            |
+| Inject a single implementation                 | plain key or `optional(key)`                             |
+| Inject across scope boundaries                 | `provide(key)` — see [Mixing Scopes](./mixing-scopes.md) |

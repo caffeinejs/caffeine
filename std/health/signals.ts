@@ -45,9 +45,7 @@ interface ProcessLike {
 export function hasProcessSignals(): boolean {
   const candidate = (globalThis as { process?: ProcessLike }).process
 
-  return candidate !== undefined
-    && typeof candidate.on === 'function'
-    && typeof candidate.removeListener === 'function'
+  return candidate !== undefined && typeof candidate.on === 'function' && typeof candidate.removeListener === 'function'
 }
 
 /** A dispatcher backed by the host `process`. Only valid where {@link hasProcessSignals} holds. */

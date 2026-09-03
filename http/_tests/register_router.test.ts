@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
-import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
+import { afterEach, describe, expect, it } from 'vitest'
+
+import { registerRouteGroup } from '../decorators/registrar/index.js'
 import {
   $p,
   Keys,
@@ -11,7 +13,6 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '../index.js'
-import { registerRouteGroup } from '../decorators/registrar/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -52,11 +53,7 @@ class ProgrammaticService implements Service {
 
     const authz = this.#authz
     registerRouteGroup(endpoints, router => {
-      const route = new RouteBuilder()
-        .path('/programmatic.json')
-        .method('GET')
-        .name('json')
-        .parameters([$p.context()])
+      const route = new RouteBuilder().path('/programmatic.json').method('GET').name('json').parameters([$p.context()])
 
       // Only when protection is actually wanted: `buildRouting` reads *any* defined authz — `{}` included — as
       // decorator protection, and an application with no authentication configured then refuses to start.

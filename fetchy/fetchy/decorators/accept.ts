@@ -1,5 +1,5 @@
-import { configureClass, configureMethod } from './registrar/registrar.js'
 import { classOrMember } from './_decorator_util.js'
+import { configureClass, configureMethod } from './registrar/registrar.js'
 
 export function Accept(value: string) {
   return classOrMember(

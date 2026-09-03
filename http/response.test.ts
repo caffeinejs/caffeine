@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   Catch,
   type Context,

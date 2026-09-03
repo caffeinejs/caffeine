@@ -1,7 +1,7 @@
 import type { BindingDescriptor, Container } from './container_interface.js'
 import type { TypedKey } from './key.js'
-import { type AnyClass } from './types.js'
 import type { PostResolutionInterceptor } from './post_resolution_interceptor.js'
+import { type AnyClass } from './types.js'
 
 export const kAspectLabel = Symbol('@caffeinejs/di:aspect')
 export const kAspectPointcuts = Symbol('@caffeinejs/di:aspect-pointcuts')
@@ -174,11 +174,7 @@ function isClassPredicate(f: Function): f is PointcutClassPredicate {
   return f.prototype === undefined
 }
 
-function registerEntry(
-  map: Map<Function, WeavingEntry[]>,
-  ctor: Function,
-  entry: WeavingEntry,
-): void {
+function registerEntry(map: Map<Function, WeavingEntry[]>, ctor: Function, entry: WeavingEntry): void {
   let list = map.get(ctor)
   if (!list) {
     list = []
@@ -311,25 +307,25 @@ function handleReturn(aspect: MethodAspect, joinPoint: JoinPoint, result: unknow
       r = aspect.afterReturn(joinPoint, result)
     } catch (e) {
       // afterReturn threw — after must still fire before re-throwing
-      aspect.after?.(joinPoint, undefined, e as Error)
+      void aspect.after?.(joinPoint, undefined, e as Error)
       throw e
     }
     if (r instanceof Promise) {
       // Use two-arg .then so afterReturn rejection doesn't fall into handleError
       return r.then(
         v => {
-          aspect.after?.(joinPoint, v, undefined)
+          void aspect.after?.(joinPoint, v, undefined)
           return v
         },
         e => {
-          aspect.after?.(joinPoint, undefined, e as Error)
+          void aspect.after?.(joinPoint, undefined, e as Error)
           throw e
         },
       )
     }
     result = r
   }
-  aspect.after?.(joinPoint, result, undefined)
+  void aspect.after?.(joinPoint, result, undefined)
   return result
 }
 
@@ -340,17 +336,19 @@ function handleError(aspect: MethodAspect, joinPoint: JoinPoint, err: Error): un
       // Call after regardless of whether afterThrow resolved or rejected;
       // if afterThrow rejects, propagate that rejection so the caller sees it.
       return maybeThrowAsync.then(
-        () => { aspect.after?.(joinPoint, undefined, err) },
+        () => {
+          void aspect.after?.(joinPoint, undefined, err)
+        },
         e => {
-          aspect.after?.(joinPoint, undefined, e as Error)
+          void aspect.after?.(joinPoint, undefined, e as Error)
           throw e
         },
       )
     }
-    aspect.after?.(joinPoint, undefined, err)
+    void aspect.after?.(joinPoint, undefined, err)
     return undefined
   }
-  aspect.after?.(joinPoint, undefined, err)
+  void aspect.after?.(joinPoint, undefined, err)
   throw err
 }
 
@@ -360,7 +358,7 @@ function runAspect(aspect: MethodAspect, joinPoint: JoinPoint): unknown {
     maybeBefore = aspect.before?.(joinPoint)
   } catch (e) {
     // before threw — after must still fire before re-throwing
-    aspect.after?.(joinPoint, undefined, e as Error)
+    void aspect.after?.(joinPoint, undefined, e as Error)
     throw e
   }
 
@@ -386,7 +384,7 @@ function runAspect(aspect: MethodAspect, joinPoint: JoinPoint): unknown {
     // .then(run) is skipped when catch re-throws, so run's own after logic is isolated
     return maybeBefore
       .catch(e => {
-        aspect.after?.(joinPoint, undefined, e as Error)
+        void aspect.after?.(joinPoint, undefined, e as Error)
         throw e
       })
       .then(run)
@@ -410,17 +408,11 @@ function normalizeMethods(methods?: MethodSelector): Set<string | symbol> | Poin
   return new Set(Array.isArray(methods) ? methods : [methods as string | symbol])
 }
 
-function forClass(
-  target: new (...args: any[]) => any,
-  methods?: MethodSelector,
-): Pointcut {
+function forClass(target: new (...args: any[]) => any, methods?: MethodSelector): Pointcut {
   return { target, methods: normalizeMethods(methods) }
 }
 
-function pointcut(
-  predicate: PointcutClassPredicate,
-  methods?: MethodSelector,
-): Pointcut {
+function pointcut(predicate: PointcutClassPredicate, methods?: MethodSelector): Pointcut {
   return { target: predicate, methods: normalizeMethods(methods) }
 }
 

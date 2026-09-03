@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { CallbackCallAdapterFactory } from '../builtin/callback/index.js'
+import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
 import { Callback } from '../decorators/callback.js'
-import { Param } from '../decorators/params/param.js'
 import { Params } from '../decorators/params.js'
+import { Param } from '../decorators/params/param.js'
 import { Path } from '../decorators/path.js'
 import { GET } from '../decorators/verbs.js'
 import { ErrFetchyHTTP, ErrFetchyMissingCallbackArgument } from '../errors.js'
-import { newClient } from '../client_builder.js'
 import { noop } from '../noop.js'
 import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
 

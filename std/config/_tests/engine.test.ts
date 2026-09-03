@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { ConfigEngine } from '../engine.js'
 import { ConfigSources } from '../sources.js'
 import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
@@ -8,19 +9,12 @@ const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 function makeProvider(id: string, sources: PropertySource[], fail = false): ConfigProvider {
   return {
     id,
-    load: fail
-      ? () => Promise.reject(new Error(`${id} failed`))
-      : () => Promise.resolve(sources),
+    load: fail ? () => Promise.reject(new Error(`${id} failed`)) : () => Promise.resolve(sources),
   }
 }
 
 function makeSource(name: string, data: Record<string, unknown>): PropertySource {
-  const entries = new Map(
-    Object.entries(data).map(([k, v]) => [
-      k,
-      { key: k, value: v as never, origin: name },
-    ]),
-  )
+  const entries = new Map(Object.entries(data).map(([k, v]) => [k, { key: k, value: v as never, origin: name }]))
   return { name, entries }
 }
 
@@ -82,10 +76,7 @@ describe('ConfigEngine', () => {
   it('within a provider, first returned source wins', async () => {
     const engine = new ConfigEngine({
       sources: ConfigSources.of(
-        makeProvider('p1', [
-          makeSource('first', { key: 'from-first' }),
-          makeSource('second', { key: 'from-second' }),
-        ]),
+        makeProvider('p1', [makeSource('first', { key: 'from-first' }), makeSource('second', { key: 'from-second' })]),
       ),
     })
 

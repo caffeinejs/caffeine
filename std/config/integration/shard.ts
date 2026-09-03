@@ -1,13 +1,14 @@
 import { kSelfRefresh, type SelfRefreshable } from '@caffeinejs/di'
-import type { ConfigBootstrapResult, BootstrapOptions } from '../bootstrap.js'
-import { bootstrapConfig, notifySlices, sourcesOf } from '../bootstrap.js'
+
 import type { ConfigHandle } from '../accessor.js'
 import { createLiveAccessors } from '../accessor.js'
+import type { ConfigBootstrapResult, BootstrapOptions } from '../bootstrap.js'
+import { bootstrapConfig, notifySlices, sourcesOf } from '../bootstrap.js'
 import type { ConfigDiagnostics } from '../diagnostics.js'
 import { createConfigDiagnostics } from '../diagnostics.js'
+import { ErrConfigSlices, type ConfigSliceFailure } from '../errors.js'
 import type { ConfigChangeListener } from '../notifier.js'
 import { ConfigNotifier } from '../notifier.js'
-import { ErrConfigSlices, type ConfigSliceFailure } from '../errors.js'
 import type { ConfigProvider, ConfigSnapshot } from '../types.js'
 
 export class ConfigShard<T> implements SelfRefreshable {
@@ -46,8 +47,14 @@ export class ConfigShard<T> implements SelfRefreshable {
     const sources = sourcesOf(options)
     this.#stamps = stampsOf(sources.resolved())
     this.#sources = sources.revision
-    this.handle = createLiveAccessors(() => this.#validated, () => this.#revision)
-    this.#notifier = new ConfigNotifier<T>(() => 'the application configuration', () => options.warn)
+    this.handle = createLiveAccessors(
+      () => this.#validated,
+      () => this.#revision,
+    )
+    this.#notifier = new ConfigNotifier<T>(
+      () => 'the application configuration',
+      () => options.warn,
+    )
     // The first configuration is what "unchanged" is measured against, never a change in itself.
     this.#notifier.record(result.validated)
   }
@@ -59,10 +66,7 @@ export class ConfigShard<T> implements SelfRefreshable {
 
   /** Resolves once no change notification is in flight or pending, at the root or in any slice. */
   async settled(): Promise<void> {
-    await Promise.all([
-      this.#notifier.settled(),
-      ...(this.#options.slices ?? []).map(spec => spec.slice.settled()),
-    ])
+    await Promise.all([this.#notifier.settled(), ...(this.#options.slices ?? []).map(spec => spec.slice.settled())])
   }
 
   /** The validated tree as of now — deep-frozen, and replaced wholesale rather than mutated by a refresh. */
@@ -119,14 +123,18 @@ export class ConfigShard<T> implements SelfRefreshable {
 
     for (const failure of result.failures) {
       this.#options.warn?.(
-        `Config refresh failed for "${failure.path}"; it keeps the values from the previous resolve: `
-        + messageOf(failure.error),
+        `Config refresh failed for "${failure.path}"; it keeps the values from the previous resolve: ` +
+          messageOf(failure.error),
       )
     }
   }
 
   async dispose(): Promise<void> {
-    await Promise.all(sourcesOf(this.#options).resolved().map(p => p.dispose?.()))
+    await Promise.all(
+      sourcesOf(this.#options)
+        .resolved()
+        .map(p => Promise.resolve(p.dispose?.())),
+    )
   }
 
   /**

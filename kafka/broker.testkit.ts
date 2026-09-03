@@ -1,4 +1,14 @@
-import type { AdminClient, ConsumerClient, ConsumerStream, KafkaClients, KafkaConsumerEvent, KafkaDeserializers, KafkaMessage, KafkaOutboundMessage, TopicSpec } from './config.js'
+import type {
+  AdminClient,
+  ConsumerClient,
+  ConsumerStream,
+  KafkaClients,
+  KafkaConsumerEvent,
+  KafkaDeserializers,
+  KafkaMessage,
+  KafkaOutboundMessage,
+  TopicSpec,
+} from './config.js'
 
 /** Options controlling the in-memory broker's behaviour. */
 export interface FakeBrokerOptions {
@@ -188,7 +198,7 @@ export class FakeBroker {
 }
 
 /** A resolvable promise for asserting async delivery. */
-export function deferred<T>(): { promise: Promise<T>, resolve: (v: T) => void } {
+export function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
   let resolve!: (v: T) => void
   const promise = new Promise<T>(res => {
     resolve = res

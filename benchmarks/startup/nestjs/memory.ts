@@ -1,6 +1,7 @@
 import 'reflect-metadata'
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
+
 import { AppModule } from './app.module.js'
 
 // Same app as app.ts, built but never listened on: measures the resident memory of the constructed

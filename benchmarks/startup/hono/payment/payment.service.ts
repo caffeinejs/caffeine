@@ -9,8 +9,12 @@ export class PaymentService {
     private readonly notifier: NotifierService,
   ) {}
 
-  findAll(): unknown[] { return this.repo.findAll() }
-  findById(id: string): unknown { return this.repo.findById(id) }
+  findAll(): unknown[] {
+    return this.repo.findAll()
+  }
+  findById(id: string): unknown {
+    return this.repo.findById(id)
+  }
   process(data: unknown): unknown {
     void this.orderService.findById((data as Record<string, string>).orderId)
     const payment = this.repo.save(data)

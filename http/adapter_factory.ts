@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import { type AdapterFactory } from './application.js'
+
 import { FastifyAdapter } from './adapter.js'
+import { type AdapterFactory } from './application.js'
 
 export function fastifyAdapterFactory(): AdapterFactory<FastifyInstance, FastifyRequest, FastifyAdapter>
 export function fastifyAdapterFactory<

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { parseAuthorizationHeader } from './authorization_header.js'
 
 describe('parseAuthorizationHeader', () => {

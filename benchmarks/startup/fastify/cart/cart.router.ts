@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+
 import type { CartController } from './cart.controller.js'
 
 export function createCartRouter(ctrl: CartController) {

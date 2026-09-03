@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import fastify from 'fastify'
 import { $t } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { describe, expect, it } from 'vitest'
+
+import { kBodyBuffer } from '../decorators/keys/keys.js'
 import {
   Args,
   BodyAsStream,
@@ -14,9 +16,8 @@ import {
   fst,
   type RouteExtension,
 } from '../index.js'
-import { RouteBuilder } from '../routing/builder.js'
-import { kBodyBuffer } from '../decorators/keys/keys.js'
 import { $p } from '../route_picker.js'
+import { RouteBuilder } from '../routing/builder.js'
 
 const kMark = Symbol('test.mark')
 
@@ -93,13 +94,18 @@ describe('route extensions', () => {
   describe('given several extensions in one call', () => {
     it('should apply them in argument order', () => {
       const seen: string[] = []
-      const mark = (tag: string): RouteExtension => route => {
-        seen.push(tag)
-        route.extras(kMark, tag)
-      }
+      const mark =
+        (tag: string): RouteExtension =>
+        route => {
+          seen.push(tag)
+          route.extras(kMark, tag)
+        }
 
       const router = new Router('/order')
-      router.get('/').with(mark('first'), mark('second'), mark('third')).handler(() => null)
+      router
+        .get('/')
+        .with(mark('first'), mark('second'), mark('third'))
+        .handler(() => null)
 
       expect(seen).toEqual(['first', 'second', 'third'])
     })
@@ -126,12 +132,14 @@ describe('fst', () => {
       const router = new Router('/fst')
       router
         .get('/hooked')
-        .with(fst({
-          onRequest: (_req, _res, done) => {
-            order.push('fst')
-            done()
-          },
-        }))
+        .with(
+          fst({
+            onRequest: (_req, _res, done) => {
+              order.push('fst')
+              done()
+            },
+          }),
+        )
         .handler(() => {
           order.push('handler')
           return { ok: true }

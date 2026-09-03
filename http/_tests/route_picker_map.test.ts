@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import type { FastifyRequest } from 'fastify'
+import { describe, expect, it } from 'vitest'
+
 import { $p } from '../route_picker.js'
 
 function asReq(partial: object): FastifyRequest {
@@ -40,12 +41,18 @@ describe('$p.map', () => {
   })
 
   it('maps a custom $p.pick', () => {
-    const mapped = $p.map($p.pick(req => (req as { url: string }).url), (url: string) => url.toUpperCase())
+    const mapped = $p.map(
+      $p.pick(req => (req as { url: string }).url),
+      (url: string) => url.toUpperCase(),
+    )
     expect(mapped.picker!(asReq({ url: '/pets' }))).toBe('/PETS')
   })
 
   it('keeps async when mapping an async pick with a sync function', async () => {
-    const mapped = $p.map($p.pick(async () => 'unsigned', { async: true }), (v: string) => v)
+    const mapped = $p.map(
+      $p.pick(async () => 'unsigned', { async: true }),
+      (v: string) => v,
+    )
     expect(mapped.async).toBe(true)
     await expect(mapped.picker!(asReq({}))).resolves.toBe('unsigned')
   })

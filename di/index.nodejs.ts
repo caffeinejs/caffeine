@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+
 import { RequestScope } from './internal/core/scope/index.js'
 import { bindScope, kScopeName, Scopes } from './scope.js'
 

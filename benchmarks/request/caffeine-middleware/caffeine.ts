@@ -1,5 +1,19 @@
 import { Injectable } from '@caffeinejs/di'
-import { Controller, Get, createWebApplication, Args, Post, Schema, $p, fastifyAdapterFactory, FastifyContext, Guard, ErrHTTPUnauthorized, GuardInput, UseGuards } from '@caffeinejs/http'
+import {
+  Controller,
+  Get,
+  createWebApplication,
+  Args,
+  Post,
+  Schema,
+  $p,
+  fastifyAdapterFactory,
+  FastifyContext,
+  Guard,
+  ErrHTTPUnauthorized,
+  GuardInput,
+  UseGuards,
+} from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 
@@ -70,8 +84,7 @@ void [AppController]
 
 const server = fastify({ logger: false })
 
-const app = createWebApplication(fastifyAdapterFactory(server))
-  .build()
+const app = createWebApplication(fastifyAdapterFactory(server)).build()
 
 // The same two hooks the `caffeine` fixture registers directly on Fastify, expressed as middlewares. The
 // work is identical; the delta against that fixture is the pipeline's overhead and nothing else.

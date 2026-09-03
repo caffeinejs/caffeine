@@ -1,5 +1,6 @@
-import fastify from 'fastify'
 import { createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import fastify from 'fastify'
+
 // Side-effect imports register the controllers (and, transitively, their services and repositories)
 // in the global component registry that the container snapshots when the app is built.
 import './customer/customer.controller.js'

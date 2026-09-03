@@ -1,11 +1,10 @@
 import type { TSchema } from '@sinclair/typebox'
 import { HasTransform, TransformDecodeError, Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
+
 import { type AnySchema, type InferSchema, isTypeBoxSchema, type SchemaIssue } from './schema.js'
 
-export type SchemaValidationResult<T>
-  = | { ok: true, value: T }
-    | { ok: false, issues: SchemaIssue[] }
+export type SchemaValidationResult<T> = { ok: true; value: T } | { ok: false; issues: SchemaIssue[] }
 
 export interface SchemaValidateOptions {
   /**
@@ -105,10 +104,12 @@ function validateStandard(schema: StandardSchemaV1, input: unknown): SchemaValid
   if (result instanceof Promise) {
     return {
       ok: false,
-      issues: [{
-        path: '',
-        message: `Async schema validation is not supported: the "${schema['~standard'].vendor}" schema returned a Promise`,
-      }],
+      issues: [
+        {
+          path: '',
+          message: `Async schema validation is not supported: the "${schema['~standard'].vendor}" schema returned a Promise`,
+        },
+      ],
     }
   }
 
@@ -120,9 +121,7 @@ function validateStandard(schema: StandardSchemaV1, input: unknown): SchemaValid
 }
 
 function toSchemaIssue(issue: StandardSchemaV1.Issue): SchemaIssue {
-  const path = (issue.path ?? [])
-    .map(segment => String(typeof segment === 'object' ? segment.key : segment))
-    .join('.')
+  const path = (issue.path ?? []).map(segment => String(typeof segment === 'object' ? segment.key : segment)).join('.')
 
   return { path, message: issue.message }
 }

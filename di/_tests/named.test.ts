@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, beforeAll, expect } from 'vitest'
-import { token } from '../key.js'
-import { Provides } from '../decorators/provides.js'
+
+import { CaffeineIoC } from '../container.js'
+import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { CaffeineIoC } from '../container.js'
+import { Provides } from '../decorators/provides.js'
 import { ErrInvalidContainerState, ErrNoResolutionForKey, ErrRepeatedInjectableConfiguration } from '../errors.js'
-import { Configuration } from '../decorators/configuration.js'
+import { token } from '../key.js'
 
 describe('Named Dependencies', function () {
   const kAck = token<any>(Symbol('ok'))
@@ -54,10 +56,8 @@ describe('Named Dependencies', function () {
     await di.init()
     const root = di.get(Root)
 
-    expect(root.byeService.bye())
-      .toEqual('bye-bye')
-    expect(root.ackService.ok())
-      .toEqual('ok-bye-bye')
+    expect(root.byeService.bye()).toEqual('bye-bye')
+    expect(root.ackService.ok()).toEqual('ok-bye-bye')
   })
 
   it('should resolve same instance when using named and type', async function () {
@@ -66,8 +66,7 @@ describe('Named Dependencies', function () {
     const bye = di.get(ByeService)
     const byeNamed = di.get(kBye)
 
-    expect(bye)
-      .toEqual(byeNamed)
+    expect(bye).toEqual(byeNamed)
   })
 
   describe('failure scenarios resolving many', function () {
@@ -89,8 +88,7 @@ describe('Named Dependencies', function () {
         }
 
         new CaffeineIoC()
-      })
-        .toThrow()
+      }).toThrow()
     })
 
     it('should fail when repeating the same bean key', function () {
@@ -111,8 +109,7 @@ describe('Named Dependencies', function () {
         }
 
         new CaffeineIoC()
-      })
-        .toThrow()
+      }).toThrow()
     })
   })
 
@@ -150,18 +147,14 @@ describe('Named Dependencies', function () {
       it('should return an array with a single entry when passing a named key with one entry', function () {
         const twos = di.getMany<Msg>(kTwo)
 
-        expect(twos)
-          .toHaveLength(1)
-        expect(twos[0])
-          .toBeInstanceOf(Msg)
-        expect(twos[0].type)
-          .toEqual('two_2')
+        expect(twos).toHaveLength(1)
+        expect(twos[0]).toBeInstanceOf(Msg)
+        expect(twos[0].type).toEqual('two_2')
       })
     })
 
     it('should throw when requesting a instance with the unregistered class type', function () {
-      expect(() => di.get(Msg))
-        .toThrow(ErrNoResolutionForKey)
+      expect(() => di.get(Msg)).toThrow(ErrNoResolutionForKey)
     })
 
     it('should return an specific instance for each named provided bean', function () {
@@ -169,12 +162,9 @@ describe('Named Dependencies', function () {
       const am = di.get<Msg>(kAm)
       const eu = di.get<Msg>(kEu)
 
-      expect(two.type)
-        .toEqual('two_2')
-      expect(am.type)
-        .toEqual('am')
-      expect(eu.type)
-        .toEqual('eu')
+      expect(two.type).toEqual('two_2')
+      expect(am.type).toEqual('am')
+      expect(eu.type).toEqual('eu')
     })
   })
 
@@ -271,8 +261,7 @@ describe('Named Dependencies', function () {
         @Named(kTest)
         @Named(kTest)
         class Dep {}
-      })
-        .toThrow(ErrRepeatedInjectableConfiguration)
+      }).toThrow(ErrRepeatedInjectableConfiguration)
     })
   })
 })
@@ -283,7 +272,9 @@ describe('has() and a named binding', function () {
     const kUnused = token<any>(Symbol('has-named-unused'))
 
     class NamedSvc {
-      tag(): string { return 'named' }
+      tag(): string {
+        return 'named'
+      }
     }
 
     const di = new CaffeineIoC({ decorators: false })

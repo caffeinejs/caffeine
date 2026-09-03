@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
+
 import { findAiDir, scaffold } from './scaffolder.js'
 
 export const VALID_FLAVORS = ['http'] as const
@@ -18,7 +19,10 @@ export interface ScaffoldOptions {
 }
 
 async function exists(p: string): Promise<boolean> {
-  return access(p).then(() => true, () => false)
+  return access(p).then(
+    () => true,
+    () => false,
+  )
 }
 
 export async function run(opts: ScaffoldOptions): Promise<void> {

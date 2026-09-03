@@ -52,11 +52,11 @@ export interface Scope {
   get lazy(): boolean
 
   /**
-     * Checks if the scope is durable.
-     * A durable scope should be used for durable types, like singleton.
-     *
-     * @readonly
-     */
+   * Checks if the scope is durable.
+   * A durable scope should be used for durable types, like singleton.
+   *
+   * @readonly
+   */
   get durable(): boolean
 
   /**

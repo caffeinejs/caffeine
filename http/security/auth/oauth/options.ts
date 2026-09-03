@@ -9,24 +9,24 @@ import {
   MIN_SESSION_SECRET_LENGTH,
 } from '../internal/remote/config.js'
 import { ErrOAuthConfiguration } from '../internal/remote/errors.js'
-import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
 import type { RemoteAuthenticationTokens, RemoteChallengeMode } from '../internal/remote/handler.js'
+import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
 
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
-type DefaultedKey
-  = | 'defaultRedirectPath'
-    | 'scopes'
-    | 'sessionCookieName'
-    | 'stateCookieName'
-    | 'sessionCookieTtlSeconds'
-    | 'secureCookie'
-    | 'roleClaimType'
-    | 'httpTimeoutMs'
-    | 'showPii'
-    | 'challengeMode'
-    | 'usePKCE'
-    | 'subjectClaim'
+type DefaultedKey =
+  | 'defaultRedirectPath'
+  | 'scopes'
+  | 'sessionCookieName'
+  | 'stateCookieName'
+  | 'sessionCookieTtlSeconds'
+  | 'secureCookie'
+  | 'roleClaimType'
+  | 'httpTimeoutMs'
+  | 'showPii'
+  | 'challengeMode'
+  | 'usePKCE'
+  | 'subjectClaim'
 
 /**
  * A plain OAuth 2.0 strategy, for providers that do not implement OpenID Connect.
@@ -87,7 +87,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
    * `map` renames a user info field to a claim type — `{ sub: 'id', name: 'login' }` reads the
    * provider's `id` into a `sub` claim. `remove` drops claim types after mapping.
    */
-  claimActions?: { map?: Record<string, string>, remove?: string[] }
+  claimActions?: { map?: Record<string, string>; remove?: string[] }
 
   /**
    * Fetches anything the user info endpoint does not return.
@@ -113,8 +113,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
   claimMapper?: (userInfo: Record<string, unknown>) => Claim[]
 }
 
-export type OAuth2AuthenticationOptions
-  = PartialBy<ResolvedOAuth2AuthenticationOptions, DefaultedKey>
+export type OAuth2AuthenticationOptions = PartialBy<ResolvedOAuth2AuthenticationOptions, DefaultedKey>
 
 export function resolveOAuth2Options(
   input: OAuth2AuthenticationOptions,
@@ -162,9 +161,10 @@ export function resolveOAuth2Options(
   // a principal with no claims at all — authenticated, but invisible to every policy that looks for `sub`.
   // Seeding the subject keeps the zero-config path working without reopening the door: the mapping is
   // chosen here from `subjectClaim`, never named by the provider.
-  const claimActions = input.claimMapper === undefined
-    ? { ...input.claimActions, map: { sub: subjectClaim, ...input.claimActions?.map } }
-    : input.claimActions
+  const claimActions =
+    input.claimMapper === undefined
+      ? { ...input.claimActions, map: { sub: subjectClaim, ...input.claimActions?.map } }
+      : input.claimActions
 
   // Mapping the provider's own field into the role claim is how a user-controlled profile value becomes a
   // role. It may still be done deliberately — an `enrichUserInfo` that resolves org membership server-side
@@ -172,9 +172,9 @@ export function resolveOAuth2Options(
   const mappedRole = claimActions?.map?.[roleClaimType]
   if (mappedRole !== undefined && input.claimMapper === undefined) {
     throw new ErrOAuthConfiguration(
-      `Cannot configure OAuth2: claimActions.map sends the user info field "${mappedRole}" into the role `
-      + `claim "${roleClaimType}", which lets the provider choose the caller's roles — use a claimMapper `
-      + 'if that is intended',
+      `Cannot configure OAuth2: claimActions.map sends the user info field "${mappedRole}" into the role ` +
+        `claim "${roleClaimType}", which lets the provider choose the caller's roles — use a claimMapper ` +
+        'if that is intended',
     )
   }
 

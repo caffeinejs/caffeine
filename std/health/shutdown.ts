@@ -95,9 +95,9 @@ export class GracefulShutdown {
     }
 
     this.#dispatcher.warn(
-      'Running as PID 1: signal delivery depends on the container entrypoint. Use the exec form '
-      + '(CMD ["node", "server.js"]) or an init such as tini, otherwise SIGTERM may never reach this process and '
-      + 'the graceful shutdown will not run',
+      'Running as PID 1: signal delivery depends on the container entrypoint. Use the exec form ' +
+        '(CMD ["node", "server.js"]) or an init such as tini, otherwise SIGTERM may never reach this process and ' +
+        'the graceful shutdown will not run',
     )
   }
 }

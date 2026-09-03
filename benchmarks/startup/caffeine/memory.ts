@@ -1,5 +1,6 @@
-import fastify from 'fastify'
 import { createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import fastify from 'fastify'
+
 // Same app graph as app.ts, built but never listened on: this worker measures the resident memory
 // of the constructed application, not its network stack.
 import './customer/customer.controller.js'

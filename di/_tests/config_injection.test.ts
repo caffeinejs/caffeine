@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../container.js'
 import { ErrNoValuesProvider } from '../errors.js'
 import { $i } from '../injection.js'
@@ -19,15 +20,20 @@ describe('$i.config', function () {
     it('throws ErrNoValuesProvider when no provider is registered and injection is required', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => configFactory(ctx(di, $i.value(cfg => cfg))))
-        .toThrow(ErrNoValuesProvider)
+      expect(() =>
+        configFactory(
+          ctx(
+            di,
+            $i.value(cfg => cfg),
+          ),
+        ),
+      ).toThrow(ErrNoValuesProvider)
     })
 
     it('does not throw when optional and no provider is registered', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => configFactory(ctx(di, $i.optional($i.value(cfg => cfg)))))
-        .not.toThrow()
+      expect(() => configFactory(ctx(di, $i.optional($i.value(cfg => cfg))))).not.toThrow()
     })
 
     it('returns a resolver that yields undefined when optional and no provider is registered', function () {
@@ -79,18 +85,20 @@ describe('$i.config', function () {
     })
 
     it('navigates nested properties via selector', async function () {
-      type Cfg = { database: { host: string, port: number } }
+      type Cfg = { database: { host: string; port: number } }
 
       class Svc {
-        constructor(readonly host: string, readonly port: number) {}
+        constructor(
+          readonly host: string,
+          readonly port: number,
+        ) {}
       }
 
       const di = new CaffeineIoC({ decorators: false })
       di.bindValuesProvider<Cfg>(t => t.toValue({ database: { host: 'db.local', port: 3306 } }))
-      di.bind(Svc, t => t.toClass(Svc, [
-        $i.value<Cfg>(cfg => cfg.database.host),
-        $i.value<Cfg>(cfg => cfg.database.port),
-      ]))
+      di.bind(Svc, t =>
+        t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.database.host), $i.value<Cfg>(cfg => cfg.database.port)]),
+      )
       await di.init()
 
       expect(di.get(Svc).host).toBe('db.local')
@@ -104,15 +112,15 @@ describe('$i.config', function () {
       }
 
       class Svc {
-        constructor(readonly host: string, readonly port: number) {}
+        constructor(
+          readonly host: string,
+          readonly port: number,
+        ) {}
       }
 
       const di = new CaffeineIoC({ decorators: false })
       di.bindValuesProvider<AppCfg>(t => t.toClass(AppCfg))
-      di.bind(Svc, t => t.toClass(Svc, [
-        $i.value<AppCfg>(cfg => cfg.host),
-        $i.value<AppCfg>(cfg => cfg.port),
-      ]))
+      di.bind(Svc, t => t.toClass(Svc, [$i.value<AppCfg>(cfg => cfg.host), $i.value<AppCfg>(cfg => cfg.port)]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('class-host')
@@ -120,19 +128,21 @@ describe('$i.config', function () {
     })
 
     it('resolves multiple independent config injections from the same provider', async function () {
-      type Cfg = { a: string, b: string, c: string }
+      type Cfg = { a: string; b: string; c: string }
 
       class Svc {
-        constructor(readonly a: string, readonly b: string, readonly c: string) {}
+        constructor(
+          readonly a: string,
+          readonly b: string,
+          readonly c: string,
+        ) {}
       }
 
       const di = new CaffeineIoC({ decorators: false })
       di.bindValuesProvider<Cfg>(t => t.toValue({ a: 'alpha', b: 'beta', c: 'gamma' }))
-      di.bind(Svc, t => t.toClass(Svc, [
-        $i.value<Cfg>(cfg => cfg.a),
-        $i.value<Cfg>(cfg => cfg.b),
-        $i.value<Cfg>(cfg => cfg.c),
-      ]))
+      di.bind(Svc, t =>
+        t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.a), $i.value<Cfg>(cfg => cfg.b), $i.value<Cfg>(cfg => cfg.c)]),
+      )
       await di.init()
 
       const svc = di.get(Svc)
@@ -326,7 +336,9 @@ describe('$i.config', function () {
     it('selector form invokes getter on provider class', async function () {
       class AppConfig {
         private _host = 'computed-host'
-        get host() { return this._host }
+        get host() {
+          return this._host
+        }
       }
 
       class Svc {
@@ -344,7 +356,9 @@ describe('$i.config', function () {
     it('string path form invokes getter on provider class', async function () {
       class AppConfig {
         private _host = 'path-computed-host'
-        get host() { return this._host }
+        get host() {
+          return this._host
+        }
       }
 
       class Svc {
@@ -363,7 +377,9 @@ describe('$i.config', function () {
       class AppConfig {
         readonly scheme = 'https'
         readonly domain = 'example.com'
-        get baseURL() { return `${this.scheme}://${this.domain}` }
+        get baseURL() {
+          return `${this.scheme}://${this.domain}`
+        }
       }
 
       class Svc {

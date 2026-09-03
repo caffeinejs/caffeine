@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import { Claim } from '../../index.js'
 import { CredentialsService } from './credentials_service.js'
 import type { PasswordHasher } from './password_hasher.js'

@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
+import { FormURLEncoded } from '../decorators/form_url_encoded.js'
+import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Field } from '../decorators/params/field.js'
 import { Param } from '../decorators/params/param.js'
 import { Query } from '../decorators/params/query.js'
-import { Params } from '../decorators/params.js'
 import { Path } from '../decorators/path.js'
-import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
 import { GET, POST } from '../decorators/verbs.js'
 import { ErrFetchyEmptyClient, ErrFetchyHTTP, ErrFetchyInvalidRoute, ErrFetchyMissingAPIDecorator } from '../errors.js'
@@ -221,7 +221,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
     expect(secondFactory.calls[0].lastRequest?.url).toBe('http://second.test/users/1')
   })
 
-  it('wires operations via defineProperty, preserving each one\'s original enumerability', () => {
+  it("wires operations via defineProperty, preserving each one's original enumerability", () => {
     @API()
     class UsersAPI {
       @GET('/method')

@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest'
 import {
   $i,
   Async,
@@ -11,8 +10,10 @@ import {
   Provides,
   token,
 } from '@caffeinejs/di'
-import { InstanceTracker } from './tracker.js'
+import { describe, expect, it } from 'vitest'
+
 import { newTestContainer, TestContainer } from './test_container.js'
+import { InstanceTracker } from './tracker.js'
 
 describe('TestContainer', function () {
   const kMsg = token<any>(Symbol('kMsg'))
@@ -47,7 +48,7 @@ describe('TestContainer', function () {
 
   @Injectable([$i.optional(UnrelatedService)])
   class WithOptionalDep {
-    constructor(readonly dep: UnrelatedService | undefined = undefined) {}
+    constructor(readonly dep?: UnrelatedService) {}
   }
 
   @Injectable()
@@ -80,8 +81,7 @@ describe('TestContainer', function () {
       const di = new TestContainer(source).build()
       await di.init()
 
-      expect(di.get(Repository))
-        .toBeInstanceOf(Repository)
+      expect(di.get(Repository)).toBeInstanceOf(Repository)
     })
 
     it('resolves root with all its dependencies', async function () {
@@ -110,8 +110,7 @@ describe('TestContainer', function () {
       const di = new TestContainer(source).build()
       await di.init()
 
-      expect(di.get(WithPropertyInjection).repo)
-        .toBeInstanceOf(Repository)
+      expect(di.get(WithPropertyInjection).repo).toBeInstanceOf(Repository)
     })
 
     it('resolves root with optional dep present', async function () {
@@ -119,8 +118,7 @@ describe('TestContainer', function () {
       const di = new TestContainer(source).build()
       await di.init()
 
-      expect(di.get(WithOptionalDep))
-        .toBeInstanceOf(WithOptionalDep)
+      expect(di.get(WithOptionalDep)).toBeInstanceOf(WithOptionalDep)
     })
   })
 
@@ -158,26 +156,20 @@ describe('TestContainer', function () {
     it('replaces a dep with the given value', async function () {
       const mockRepo = { isMock: true } as unknown as Repository
       const source = new CaffeineIoC()
-      const di = new TestContainer(source)
-        .override(Repository, b => b.toValue(mockRepo))
-        .build()
+      const di = new TestContainer(source).override(Repository, b => b.toValue(mockRepo)).build()
       await di.init()
       const ctrl = di.get(Controller)
 
-      expect(ctrl.repository)
-        .toBe(mockRepo)
+      expect(ctrl.repository).toBe(mockRepo)
     })
 
     it('allows overriding a named key', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source)
-        .override(kMsg, b => b.toValue('overridden'))
-        .build()
+      const di = new TestContainer(source).override(kMsg, b => b.toValue('overridden')).build()
       await di.init()
       const ctrl = di.get(Controller)
 
-      expect(ctrl.message)
-        .toBe('overridden')
+      expect(ctrl.message).toBe('overridden')
     })
   })
 
@@ -185,32 +177,24 @@ describe('TestContainer', function () {
     it('isolated key resolves to the provided value', async function () {
       const mockRepo = {} as RepositoryWithExclusive
       const source = new CaffeineIoC()
-      const di = new TestContainer(source)
-        .isolate(RepositoryWithExclusive, false, b => b.toValue(mockRepo))
-        .build()
+      const di = new TestContainer(source).isolate(RepositoryWithExclusive, false, b => b.toValue(mockRepo)).build()
       await di.init()
 
-      expect(di.get(RepositoryWithExclusive))
-        .toBe(mockRepo)
+      expect(di.get(RepositoryWithExclusive)).toBe(mockRepo)
     })
 
     it('exclusive sub-deps of isolated key are pruned', async function () {
       const mockRepo = {} as RepositoryWithExclusive
       const source = new CaffeineIoC()
-      const di = new TestContainer(source)
-        .isolate(RepositoryWithExclusive, false, b => b.toValue(mockRepo))
-        .build()
+      const di = new TestContainer(source).isolate(RepositoryWithExclusive, false, b => b.toValue(mockRepo)).build()
 
-      expect(di.has(ExclusiveDep))
-        .toBe(false)
+      expect(di.has(ExclusiveDep)).toBe(false)
     })
 
     it('shared dep of isolated key is NOT pruned', async function () {
       const mockRepo = {} as RepositoryWithShared
       const source = new CaffeineIoC()
-      const di = new TestContainer(source)
-        .isolate(RepositoryWithShared, false, b => b.toValue(mockRepo))
-        .build()
+      const di = new TestContainer(source).isolate(RepositoryWithShared, false, b => b.toValue(mockRepo)).build()
 
       expect(di.has(ControllerWithShared)).toBe(true)
       expect(di.has(SharedDep)).toBe(true)
@@ -219,9 +203,7 @@ describe('TestContainer', function () {
     it('pruneShared: true removes shared dep regardless', async function () {
       const mockRepo = {} as RepositoryWithShared
       const source = new CaffeineIoC()
-      const di = new TestContainer(source)
-        .isolate(RepositoryWithShared, true, b => b.toValue(mockRepo))
-        .build()
+      const di = new TestContainer(source).isolate(RepositoryWithShared, true, b => b.toValue(mockRepo)).build()
 
       expect(di.has(SharedDep)).toBe(false)
     })
@@ -246,8 +228,7 @@ describe('TestContainer', function () {
 
     it('skipAsyncBindings() with no args strips all async bindings', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skipAsyncBindings()
-        .build()
+      const di = new TestContainer(source).skipAsyncBindings().build()
 
       expect(di.has(InfraConfig)).toBe(true)
       expect(di.has(kConn)).toBe(false)
@@ -255,16 +236,14 @@ describe('TestContainer', function () {
 
     it('skipAsyncBindings(key) preserves the listed async binding', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skipAsyncBindings(kConn)
-        .build()
+      const di = new TestContainer(source).skipAsyncBindings(kConn).build()
 
       expect(di.has(kConn)).toBe(true)
     })
 
     it('skip(key) strips an async binding', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skip(kConn)
-        .build()
+      const di = new TestContainer(source).skip(kConn).build()
 
       expect(di.has(kConn)).toBe(false)
       expect(di.has(Repository)).toBe(true)
@@ -272,8 +251,7 @@ describe('TestContainer', function () {
 
     it('skip(key) strips a non-async binding', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skip(Repository)
-        .build()
+      const di = new TestContainer(source).skip(Repository).build()
 
       expect(di.has(Repository)).toBe(false)
       expect(di.has(kConn)).toBe(true)
@@ -304,10 +282,7 @@ describe('TestContainer', function () {
 
     it('chained calls accumulate exceptions', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source)
-        .skipAsyncBindings()
-        .skipAsyncBindings(kConn)
-        .build()
+      const di = new TestContainer(source).skipAsyncBindings().skipAsyncBindings(kConn).build()
 
       expect(di.has(kConn)).toBe(true)
     })
@@ -316,8 +291,7 @@ describe('TestContainer', function () {
   describe('focus()', function () {
     it('keeps root and its transitive deps', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Controller)
-        .build()
+      const di = new TestContainer(source).focus(Controller).build()
 
       expect(di.has(Controller)).toBe(true)
       expect(di.has(Repository)).toBe(true)
@@ -325,16 +299,14 @@ describe('TestContainer', function () {
 
     it('drops bindings not in the dep tree', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Controller)
-        .build()
+      const di = new TestContainer(source).focus(Controller).build()
 
       expect(di.has(UnrelatedService)).toBe(false)
     })
 
     it('multi-root keeps union of both trees', function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Controller, UnrelatedService)
-        .build()
+      const di = new TestContainer(source).focus(Controller, UnrelatedService).build()
 
       expect(di.has(Controller)).toBe(true)
       expect(di.has(UnrelatedService)).toBe(true)
@@ -358,8 +330,7 @@ describe('TestContainer', function () {
       const source = new CaffeineIoC()
       const di = new TestContainer(source).build()
 
-      expect(di.ready)
-        .toBe(false)
+      expect(di.ready).toBe(false)
     })
 
     it('can be initialized manually', async function () {
@@ -400,8 +371,7 @@ describe('TestContainer', function () {
     it('wasInstantiated() returns false for classes outside the focused graph', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Repository)
-        .build()
+      const di = new TestContainer(source).focus(Repository).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -412,8 +382,7 @@ describe('TestContainer', function () {
     it('confirms focus() trimmed bindings were not instantiated', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Repository)
-        .build()
+      const di = new TestContainer(source).focus(Repository).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -438,8 +407,7 @@ describe('TestContainer', function () {
     it('events() preserves dep-before-dependent order', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Controller)
-        .build()
+      const di = new TestContainer(source).focus(Controller).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -525,8 +493,7 @@ describe('TestContainer', function () {
 
     it('resolves the full 3-level async chain end-to-end', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(CgOrderService)
-        .build()
+      const di = new TestContainer(source).focus(CgOrderService).build()
       await di.init()
 
       const ord = di.get(CgOrderService)
@@ -542,8 +509,7 @@ describe('TestContainer', function () {
 
     it('kCgDbConn is a singleton — CgOrderService and CgUserRepo share the same instance', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(CgOrderService)
-        .build()
+      const di = new TestContainer(source).focus(CgOrderService).build()
       await di.init()
 
       const ord = di.get(CgOrderService)
@@ -661,8 +627,7 @@ describe('TestContainer', function () {
 
     it('snapshot from profile-aware source captures @Profile-gated classes', async function () {
       const source = new CaffeineIoC({ profiles: ['ci'] })
-      const di = new TestContainer(source).focus(CgCiOnlyService)
-        .build()
+      const di = new TestContainer(source).focus(CgCiOnlyService).build()
       await di.init()
 
       expect(di.get(CgCiOnlyService).env).toBe('ci')
@@ -671,29 +636,21 @@ describe('TestContainer', function () {
     describe('assertResolvable()', function () {
       it('does not throw when all deps are wired', function () {
         const source = new CaffeineIoC()
-        const di = new TestContainer(source).focus(CgOrderService)
-          .build()
+        const di = new TestContainer(source).focus(CgOrderService).build()
 
         expect(() => di.assertResolvable()).not.toThrow()
       })
 
       it('throws ErrUnresolvableDependencies when a binding is missing after skip', function () {
         const source = new CaffeineIoC()
-        const di = new TestContainer(source)
-          .focus(CgOrderService)
-          .skip(kCgDbConn)
-          .build()
+        const di = new TestContainer(source).focus(CgOrderService).skip(kCgDbConn).build()
 
         expect(() => di.assertResolvable()).toThrow(ErrUnresolvableDependencies)
       })
 
       it('collects all broken edges before throwing — not just the first', function () {
         const source = new CaffeineIoC()
-        const di = new TestContainer(source)
-          .focus(CgOrderService)
-          .skip(kCgDbConn)
-          .skip(kCgCache)
-          .build()
+        const di = new TestContainer(source).focus(CgOrderService).skip(kCgDbConn).skip(kCgCache).build()
 
         let error: ErrUnresolvableDependencies | undefined
         try {
@@ -725,9 +682,7 @@ describe('TestContainer', function () {
       it('overrideWithMock accepts a duck-typed object without a type assertion', async function () {
         const fake = { isMock: true }
         const source = new CaffeineIoC()
-        const di = new TestContainer(source)
-          .overrideWithMock(Repository, fake)
-          .build()
+        const di = new TestContainer(source).overrideWithMock(Repository, fake).build()
         await di.init()
 
         expect(di.get(Repository)).toBe(fake)

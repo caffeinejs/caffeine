@@ -1,19 +1,22 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import type { CredentialUser } from '../credentials/index.js'
 import { UserProvider } from '../credentials/index.js'
 import { AuthenticationTicket } from '../ticket.js'
+import { parseRemember } from './_remember.js'
 import { CookieAuthenticationHandler } from './cookie.js'
 import { CookieAuthenticationOptionsBuilder } from './cookie_options.js'
 import { RememberMeTokenStore, type RememberMeRecord, type RememberMeRotation } from './remember_me_token_store.js'
-import { parseRemember } from './_remember.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 
 class FakeStore extends RememberMeTokenStore {
   readonly map = new Map<string, RememberMeRecord>()
-  create = vi.fn((r: RememberMeRecord) => { this.map.set(r.series, { ...r }) })
+  create = vi.fn((r: RememberMeRecord) => {
+    this.map.set(r.series, { ...r })
+  })
   findBySeries = vi.fn((s: string) => this.map.get(s) ?? null)
   updateToken = vi.fn((s: string, rotation: RememberMeRotation) => {
     const r = this.map.get(s)
@@ -25,7 +28,9 @@ class FakeStore extends RememberMeTokenStore {
     }
   })
 
-  remove = vi.fn((s: string) => { this.map.delete(s) })
+  remove = vi.fn((s: string) => {
+    this.map.delete(s)
+  })
   removeBySubject = vi.fn((sub: string) => {
     for (const [k, v] of this.map) {
       if (v.subject === sub) {
@@ -38,7 +43,8 @@ class FakeStore extends RememberMeTokenStore {
 class FakeUserProvider extends UserProvider {
   findByIdentifier = vi.fn()
   findById = vi.fn((id: string): CredentialUser | null =>
-    id === 'u1' ? { id: 'u1', passwordHash: 'x', claims: [new Claim('roles', 'admin', '')] } : null)
+    id === 'u1' ? { id: 'u1', passwordHash: 'x', claims: [new Claim('roles', 'admin', '')] } : null,
+  )
 }
 
 function makeCtx(initial: Record<string, string> = {}) {

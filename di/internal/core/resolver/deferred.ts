@@ -33,7 +33,5 @@ export const deferredFactory: InjectionResolverFactory = ctx => {
     return () => binding.factory(binding.ctx!)
   }
 
-  return () =>
-    deferredKey
-      .createProxy(target => ctx.container.get(target as TypedKey<unknown>))
+  return () => deferredKey.createProxy(target => ctx.container.get(target as TypedKey<unknown>))
 }

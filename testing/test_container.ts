@@ -1,5 +1,15 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import type { BindingSpec, Container, Identifier, InjectionToken, Module, ModuleFn, Snapshot, TokenValue } from '@caffeinejs/di'
+import type {
+  BindingSpec,
+  Container,
+  Identifier,
+  InjectionToken,
+  Module,
+  ModuleFn,
+  Snapshot,
+  TokenValue,
+} from '@caffeinejs/di'
+
 import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
 interface IsolationEntry {
@@ -46,7 +56,7 @@ export class TestContainer {
     }
 
     this.#fromScratch = false
-    this.#snap = source instanceof CaffeineIoC ? source.snapshot() : source as Snapshot
+    this.#snap = source instanceof CaffeineIoC ? source.snapshot() : (source as Snapshot)
   }
 
   /**

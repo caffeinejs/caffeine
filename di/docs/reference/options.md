@@ -133,11 +133,11 @@ type ScopeCheckMode = 'compatible-scopes-only' | 'no-mix' | 'off'
 
 Controls scope compatibility validation.
 
-| Mode | Behaviour |
-|---|---|
+| Mode                       | Behaviour                                                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `'compatible-scopes-only'` | Durable scopes (singleton, container) cannot depend directly on shorter-lived scopes (transient, request). Reverse is allowed. |
-| `'no-mix'` | Every dependency in a chain must share the exact same scope as its consumer. |
-| `'off'` | Scope validation disabled. |
+| `'no-mix'`                 | Every dependency in a chain must share the exact same scope as its consumer.                                                   |
+| `'off'`                    | Scope validation disabled.                                                                                                     |
 
 `'compatible-scopes-only'` catches the most common mistake — a singleton
 holding a transient reference — without blocking valid mixed-scope designs that
@@ -243,14 +243,14 @@ const di = new CaffeineIoC({
 
 ## Summary
 
-| Field | Type | Default |
-|---|---|---|
-| `profiles` | `Identifier[]` | `[]` |
-| `defaultScopeId` | `Identifier` | `Scopes.SINGLETON` |
-| `lazy` | `boolean` | `false` |
-| `parent` | `Container` | `undefined` |
-| `checks.scopes` | `ScopeCheckMode` | `'compatible-scopes-only'` |
-| `checks.circularReferences` | `boolean` | `true` |
-| `decorators` | `boolean` | `true` |
-| `modules` | `Array<Module \| ModuleFn>` | `[]` |
-| `metadataReader` | `MetadataReader` | `undefined` |
+| Field                       | Type                        | Default                    |
+| --------------------------- | --------------------------- | -------------------------- |
+| `profiles`                  | `Identifier[]`              | `[]`                       |
+| `defaultScopeId`            | `Identifier`                | `Scopes.SINGLETON`         |
+| `lazy`                      | `boolean`                   | `false`                    |
+| `parent`                    | `Container`                 | `undefined`                |
+| `checks.scopes`             | `ScopeCheckMode`            | `'compatible-scopes-only'` |
+| `checks.circularReferences` | `boolean`                   | `true`                     |
+| `decorators`                | `boolean`                   | `true`                     |
+| `modules`                   | `Array<Module \| ModuleFn>` | `[]`                       |
+| `metadataReader`            | `MetadataReader`            | `undefined`                |

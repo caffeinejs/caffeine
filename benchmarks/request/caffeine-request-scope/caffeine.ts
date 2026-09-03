@@ -1,5 +1,15 @@
 import { $i, Injectable, Lifetime, Scopes, type Provider } from '@caffeinejs/di'
-import { Controller, Get, createWebApplication, Args, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
+import {
+  Controller,
+  Get,
+  createWebApplication,
+  Args,
+  Post,
+  Schema,
+  $p,
+  fastifyAdapterFactory,
+  FastifyContext,
+} from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 
@@ -31,7 +41,9 @@ const responseSchema = {
 @Lifetime(Scopes.REQUEST)
 @Injectable()
 class RequestScopedService {
-  touch(): void { /* no-op: exists only to activate the request scope */ }
+  touch(): void {
+    /* no-op: exists only to activate the request scope */
+  }
 }
 
 @Controller('', [$i.provide(RequestScopedService)])
@@ -73,11 +85,7 @@ void [AppController]
 const server = fastify({ logger: false })
 
 server.addHook('onRequest', (req, reply, done) => {
-  reply.header('x-request-id',
-    Math
-      .random()
-      .toString(36)
-      .slice(2))
+  reply.header('x-request-id', Math.random().toString(36).slice(2))
   done()
 })
 

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 // Isolated in its own file: the container snapshots the controller registry when it is constructed, so the

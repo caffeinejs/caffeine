@@ -1,23 +1,25 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { token } from '../key.js'
-import { CaffeineIoC } from '../container.js'
-import { Injectable } from '../decorators/injectable.js'
-import { PreDestroy } from '../decorators/pre_destroy.js'
-import { Configuration } from '../decorators/configuration.js'
-import { Provides } from '../decorators/provides.js'
-import { SingletonScope } from '../internal/core/scope/singleton.js'
-import { bindScope, unbindScope } from '../scope.js'
-import { Named } from '../decorators/named.js'
-import { Profile } from '../decorators/profile.js'
+
 import { Binding } from '../binding.js'
-import { Factory } from '../factory.js'
-import { ResolutionContext as Ctx } from '../resolution_context.js'
+import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
+import { Configuration } from '../decorators/configuration.js'
 import { Inject } from '../decorators/inject.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Named } from '../decorators/named.js'
+import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Primary } from '../decorators/primary.js'
+import { Profile } from '../decorators/profile.js'
+import { Provides } from '../decorators/provides.js'
 import { ErrInvalidContainerState, ErrUnresolvableDependencies } from '../errors.js'
+import { Factory } from '../factory.js'
 import { $i } from '../injection.js'
+import { SingletonScope } from '../internal/core/scope/singleton.js'
+import { token } from '../key.js'
+import { ResolutionContext as Ctx } from '../resolution_context.js'
+import { bindScope, unbindScope } from '../scope.js'
 
 describe('Scope removal does not affect existing containers', function () {
   it('should successfully dispose even when the scope factory is removed from the registry after container creation', async function () {
@@ -33,9 +35,7 @@ describe('Scope removal does not affect existing containers', function () {
       destroy() {}
     }
 
-    di.bind(Destroyable, t => t
-      .toSelf()
-      .lifetime(kCustom))
+    di.bind(Destroyable, t => t.toSelf().lifetime(kCustom))
     await di.init()
     di.get(Destroyable)
 
@@ -51,21 +51,17 @@ describe('bind() — registration', function () {
 
     class Svc {}
 
-    expect(di.has(Svc))
-      .toBe(false)
+    expect(di.has(Svc)).toBe(false)
 
-    di.bind(Svc, t => t
-      .toSelf())
+    di.bind(Svc, t => t.toSelf())
 
-    expect(di.has(Svc))
-      .toBe(true)
+    expect(di.has(Svc)).toBe(true)
   })
 
   it('should not register a key without an explicit bind() call', function () {
     const di = new CaffeineIoC({ decorators: false })
 
-    expect(di.getBindings(token<any>('my-key')))
-      .toHaveLength(0)
+    expect(di.getBindings(token<any>('my-key'))).toHaveLength(0)
   })
 })
 
@@ -109,10 +105,8 @@ describe('Container Operations', function () {
       it('should reset all instances, keeping value providers', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(kValue, t => t
-          .toValue('test'))
-        di.bind(Dep1, t => t
-          .toSelf([kValue]))
+        di.bind(kValue, t => t.toValue('test'))
+        di.bind(Dep1, t => t.toSelf([kValue]))
         await di.init()
 
         const dep11_1 = di.get(Dep1)
@@ -123,37 +117,29 @@ describe('Container Operations', function () {
         const dep41_1 = di.get(kDep4)
         const dep42_1 = di.get(Dep4)
 
-        await di.resetInstances()
-          .catch(() => {})
+        await di.resetInstances().catch(() => {})
 
         const dep11_2 = di.get(Dep1)
         const dep22_2 = di.get(Dep2)
         const dep31_2 = di.get(kDep3)
         const dep41_2 = di.get(kDep4)
 
-        expect(dep11_1)
-          .toEqual(dep12_1)
+        expect(dep11_1).toEqual(dep12_1)
         expect(dep11_2).not.toEqual(dep11_1)
         expect(dep21_1).not.toEqual(dep22_2)
-        expect(dep11_1.value)
-          .toEqual('test')
-        expect(dep11_2.value)
-          .toEqual('test')
-        expect(dep31_1)
-          .toEqual(dep32_1)
+        expect(dep11_1.value).toEqual('test')
+        expect(dep11_2.value).toEqual('test')
+        expect(dep31_1).toEqual(dep32_1)
         expect(dep31_1).not.toEqual(dep31_2)
-        expect(dep41_1)
-          .toEqual(dep42_1)
+        expect(dep41_1).toEqual(dep42_1)
         expect(dep41_1).not.toEqual(dep41_2)
       })
 
       it('should reset only the requested instance', async function () {
         const di = new CaffeineIoC()
 
-        di.bind(kValue, t => t
-          .toValue('test'))
-        di.bind(Dep1, t => t
-          .toSelf([kValue]))
+        di.bind(kValue, t => t.toValue('test'))
+        di.bind(Dep1, t => t.toSelf([kValue]))
         await di.init()
 
         const dep1 = di.get(Dep1)
@@ -162,8 +148,7 @@ describe('Container Operations', function () {
         const dep4_1 = di.get(kDep4)
         const dep4_2 = di.get(Dep4)
 
-        expect(dep4_1)
-          .toEqual(dep4_2)
+        expect(dep4_1).toEqual(dep4_2)
 
         await di.resetInstance(Dep1)
         await di.resetInstance(kDep3)
@@ -175,12 +160,10 @@ describe('Container Operations', function () {
         const otherDep4_1 = di.get(kDep4)
         const otherDep4_2 = di.get(Dep4)
 
-        expect(otherDep4_1)
-          .toEqual(otherDep4_2)
+        expect(otherDep4_1).toEqual(otherDep4_2)
 
         expect(dep1).not.toEqual(otherDep1)
-        expect(dep2)
-          .toEqual(otherDep2)
+        expect(dep2).toEqual(otherDep2)
         expect(dep3).not.toEqual(otherDep3)
         expect(dep4_1).not.toEqual(otherDep4_1)
         expect(dep4_2).not.toEqual(otherDep4_2)
@@ -217,10 +200,8 @@ describe('Container Operations', function () {
       it('should reset only the requested instance and call destroy hook if any', async function () {
         const di = new CaffeineIoC({ profiles: ['container-ops-async-reset'] })
 
-        di.bind(kValue, t => t
-          .toValue('test'))
-        di.bind(Dep1, t => t
-          .toSelf([kValue]))
+        di.bind(kValue, t => t.toValue('test'))
+        di.bind(Dep1, t => t.toSelf([kValue]))
         await di.init()
 
         const dep1 = di.get(Dep1)
@@ -236,10 +217,8 @@ describe('Container Operations', function () {
 
         expect(dep1).not.toEqual(otherDep1)
         expect(dep2).not.toEqual(otherDep2)
-        expect(dep3)
-          .toEqual(otherDep3)
-        expect(spy)
-          .toHaveBeenCalledTimes(1)
+        expect(dep3).toEqual(otherDep3)
+        expect(spy).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -281,10 +260,8 @@ describe('Container Operations', function () {
 
         await expect(di.resetInstance(kShared)).rejects.toThrow('SharedA destroy error')
 
-        expect(spyA)
-          .toHaveBeenCalledTimes(1)
-        expect(spyB)
-          .toHaveBeenCalledTimes(1)
+        expect(spyA).toHaveBeenCalledTimes(1)
+        expect(spyB).toHaveBeenCalledTimes(1)
       })
     })
 
@@ -322,16 +299,13 @@ describe('Container Operations', function () {
         class AsyncResetSvc {}
 
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(AsyncResetSvc, t => t
-          .toSelf()
-          .lifetime(kAsyncScope))
+        di.bind(AsyncResetSvc, t => t.toSelf().lifetime(kAsyncScope))
         await di.init()
         di.get(AsyncResetSvc)
 
         await di.resetInstance(AsyncResetSvc)
 
-        expect(asyncResetCompleted)
-          .toBe(true)
+        expect(asyncResetCompleted).toBe(true)
 
         unbindScope(kAsyncScope)
       })
@@ -352,24 +326,19 @@ describe('resetInstance — binding stays registered after preDestroy (H-1)', fu
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(WithDestroy, t => t
-      .toSelf())
+    di.bind(WithDestroy, t => t.toSelf())
     await di.init()
 
     const before = di.get(WithDestroy)
-    expect(before)
-      .toBeInstanceOf(WithDestroy)
+    expect(before).toBeInstanceOf(WithDestroy)
 
     await di.resetInstance(WithDestroy)
 
-    expect(spy)
-      .toHaveBeenCalledTimes(1)
-    expect(di.has(WithDestroy))
-      .toBe(true)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(di.has(WithDestroy)).toBe(true)
 
     const after = di.get(WithDestroy)
-    expect(after)
-      .toBeInstanceOf(WithDestroy)
+    expect(after).toBeInstanceOf(WithDestroy)
     expect(before).not.toBe(after)
   })
 })
@@ -380,8 +349,7 @@ describe('init() idempotency (M-3)', function () {
 
     const module = (container: ContainerBindingOps) => {
       spy()
-      container.bind(token<any>('svc-m3'), t => t
-        .toValue({}))
+      container.bind(token<any>('svc-m3'), t => t.toValue({}))
     }
 
     const di = new CaffeineIoC({ decorators: false, modules: [module] })
@@ -390,25 +358,21 @@ describe('init() idempotency (M-3)', function () {
     await di.init()
     await di.init()
 
-    expect(spy)
-      .toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('dispose() (L-1, L-5)', function () {
   it('should set ready to false after dispose()', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc-l1'), t => t
-      .toValue({}))
+    di.bind(token<any>('svc-l1'), t => t.toValue({}))
     await di.init()
 
-    expect(di.ready)
-      .toBe(true)
+    expect(di.ready).toBe(true)
 
     await di.dispose()
 
-    expect(di.ready)
-      .toBe(false)
+    expect(di.ready).toBe(false)
   })
 
   it('should reject with AggregateError when multiple preDestroy hooks fail', async function () {
@@ -429,22 +393,17 @@ describe('dispose() (L-1, L-5)', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(SvcA, t => t
-      .toSelf())
-    di.bind(SvcB, t => t
-      .toSelf())
+    di.bind(SvcA, t => t.toSelf())
+    di.bind(SvcB, t => t.toSelf())
     await di.init()
 
     di.get(SvcA)
     di.get(SvcB)
 
-    const err = await di.dispose()
-      .catch(e => e)
+    const err = await di.dispose().catch(e => e)
 
-    expect(err)
-      .toBeInstanceOf(AggregateError)
-    expect((err as AggregateError).errors)
-      .toHaveLength(2)
+    expect(err).toBeInstanceOf(AggregateError)
+    expect((err as AggregateError).errors).toHaveLength(2)
   })
 })
 
@@ -454,19 +413,18 @@ describe('async singleton resolution timing (L-3)', function () {
     const spy = vi.fn()
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(kAsync, t => t
-      .toAsyncFactory(async () => {
+    di.bind(kAsync, t =>
+      t.toAsyncFactory(async () => {
         spy()
         return { value: 'resolved' }
-      }))
+      }),
+    )
     await di.init()
 
-    expect(spy)
-      .toHaveBeenCalledTimes(1)
+    expect(spy).toHaveBeenCalledTimes(1)
 
     const result = di.get(kAsync)
-    expect(result)
-      .toEqual({ value: 'resolved' })
+    expect(result).toEqual({ value: 'resolved' })
     expect(result).not.toBeInstanceOf(Promise)
   })
 
@@ -505,10 +463,8 @@ describe('async singleton resolution timing (L-3)', function () {
       it('should not throw when all dependencies are resolvable', function () {
         const kDep = token<any>(Symbol('arfr-dep-1'))
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(kDep, t => t
-          .toValue('value'))
-        di.bind(token<any>('svc'), t => t
-          .toFunction((_: unknown) => ({}), [kDep]))
+        di.bind(kDep, t => t.toValue('value'))
+        di.bind(token<any>('svc'), t => t.toFunction((_: unknown) => ({}), [kDep]))
 
         expect(() => di.assertResolvable()).not.toThrow()
       })
@@ -516,8 +472,7 @@ describe('async singleton resolution timing (L-3)', function () {
       it('should throw when a required constructor dependency is missing', function () {
         const kMissing = token<any>(Symbol('arfr-missing-ctor'))
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(token<any>('svc'), t => t
-          .toFunction((_: unknown) => ({}), [kMissing]))
+        di.bind(token<any>('svc'), t => t.toFunction((_: unknown) => ({}), [kMissing]))
 
         let caught: ErrUnresolvableDependencies | undefined
         try {
@@ -526,19 +481,15 @@ describe('async singleton resolution timing (L-3)', function () {
           caught = e as ErrUnresolvableDependencies
         }
 
-        expect(caught)
-          .toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues)
-          .toHaveLength(1)
-        expect(caught!.issues[0])
-          .toContain(kMissing.toString())
+        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
+        expect(caught!.issues).toHaveLength(1)
+        expect(caught!.issues[0]).toContain(kMissing.toString())
       })
 
       it('should not throw when an optional dependency is missing', function () {
         const kOptional = token<any>(Symbol('arfr-optional'))
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(token<any>('svc'), t => t
-          .toFunction((_: unknown) => ({}), [$i.optional(kOptional)]))
+        di.bind(token<any>('svc'), t => t.toFunction((_: unknown) => ({}), [$i.optional(kOptional)]))
 
         expect(() => di.assertResolvable()).not.toThrow()
       })
@@ -548,14 +499,9 @@ describe('async singleton resolution timing (L-3)', function () {
         class ImplA {}
         class ImplB {}
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(ImplA, t => t
-          .toValue(new ImplA())
-          .names(kShared))
-        di.bind(ImplB, t => t
-          .toValue(new ImplB())
-          .names(kShared))
-        di.bind(token<any>('consumer'), t => t
-          .toFunction((_: unknown) => ({}), [$i.allOf(kShared)]))
+        di.bind(ImplA, t => t.toValue(new ImplA()).names(kShared))
+        di.bind(ImplB, t => t.toValue(new ImplB()).names(kShared))
+        di.bind(token<any>('consumer'), t => t.toFunction((_: unknown) => ({}), [$i.allOf(kShared)]))
 
         expect(() => di.assertResolvable()).not.toThrow()
       })
@@ -565,14 +511,9 @@ describe('async singleton resolution timing (L-3)', function () {
         class ImplA {}
         class ImplB {}
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(ImplA, t => t
-          .toValue(new ImplA())
-          .names(kShared))
-        di.bind(ImplB, t => t
-          .toValue(new ImplB())
-          .names(kShared))
-        di.bind(token<any>('consumer'), t => t
-          .toFunction((_: unknown) => ({}), [kShared]))
+        di.bind(ImplA, t => t.toValue(new ImplA()).names(kShared))
+        di.bind(ImplB, t => t.toValue(new ImplB()).names(kShared))
+        di.bind(token<any>('consumer'), t => t.toFunction((_: unknown) => ({}), [kShared]))
 
         let caught: ErrUnresolvableDependencies | undefined
         try {
@@ -581,18 +522,14 @@ describe('async singleton resolution timing (L-3)', function () {
           caught = e as ErrUnresolvableDependencies
         }
 
-        expect(caught)
-          .toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues)
-          .toHaveLength(1)
-        expect(caught!.issues[0])
-          .toContain('Ambiguous')
+        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
+        expect(caught!.issues).toHaveLength(1)
+        expect(caught!.issues[0]).toContain('Ambiguous')
       })
 
       it('should not throw when a primary binding disambiguates multiple candidates', async function () {
         const di = new CaffeineIoC({ profiles: [kArfrPrimaryNs] })
-        di.bind(token<any>('consumer'), t => t
-          .toFunction((_: unknown) => ({}), [kArfrPrimaryKey]))
+        di.bind(token<any>('consumer'), t => t.toFunction((_: unknown) => ({}), [kArfrPrimaryKey]))
 
         await di.compile()
         expect(() => di.assertResolvable()).not.toThrow()
@@ -601,13 +538,8 @@ describe('async singleton resolution timing (L-3)', function () {
       it('should not throw when a deferred dependency is resolvable', function () {
         const kDeferred = token<any>(Symbol('arfr-deferred'))
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(kDeferred, t => t
-          .toValue('val'))
-        di.bind(token<any>('svc'), t => t
-          .toFunction(
-            (_: unknown) => ({}),
-            [$i.defer(() => kDeferred)],
-          ))
+        di.bind(kDeferred, t => t.toValue('val'))
+        di.bind(token<any>('svc'), t => t.toFunction((_: unknown) => ({}), [$i.defer(() => kDeferred)]))
 
         expect(() => di.assertResolvable()).not.toThrow()
       })
@@ -615,20 +547,14 @@ describe('async singleton resolution timing (L-3)', function () {
       it('should throw when a deferred dependency is missing', function () {
         const kDeferred = token<any>(Symbol('arfr-deferred-missing'))
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(token<any>('svc'), t => t
-          .toFunction(
-            (_: unknown) => ({}),
-            [$i.defer(() => kDeferred)],
-          ))
+        di.bind(token<any>('svc'), t => t.toFunction((_: unknown) => ({}), [$i.defer(() => kDeferred)]))
 
-        expect(() => di.assertResolvable())
-          .toThrow(ErrUnresolvableDependencies)
+        expect(() => di.assertResolvable()).toThrow(ErrUnresolvableDependencies)
       })
 
       it('should throw when a property injection dependency is missing', function () {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(ArfrSvcWithPropInjection, t => t
-          .toSelf())
+        di.bind(ArfrSvcWithPropInjection, t => t.toSelf())
 
         let caught: ErrUnresolvableDependencies | undefined
         try {
@@ -637,18 +563,14 @@ describe('async singleton resolution timing (L-3)', function () {
           caught = e as ErrUnresolvableDependencies
         }
 
-        expect(caught)
-          .toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues)
-          .toHaveLength(1)
-        expect(caught!.issues[0])
-          .toContain(kArfrPropDep.toString())
+        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
+        expect(caught!.issues).toHaveLength(1)
+        expect(caught!.issues[0]).toContain(kArfrPropDep.toString())
       })
 
       it('should throw when a method injection dependency is missing', function () {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(ArfrSvcWithMethodInjection, t => t
-          .toSelf())
+        di.bind(ArfrSvcWithMethodInjection, t => t.toSelf())
 
         let caught: ErrUnresolvableDependencies | undefined
         try {
@@ -657,20 +579,16 @@ describe('async singleton resolution timing (L-3)', function () {
           caught = e as ErrUnresolvableDependencies
         }
 
-        expect(caught)
-          .toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues)
-          .toHaveLength(1)
-        expect(caught!.issues[0])
-          .toContain(kArfrMethodDep.toString())
+        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
+        expect(caught!.issues).toHaveLength(1)
+        expect(caught!.issues[0]).toContain(kArfrMethodDep.toString())
       })
 
       it('should collect all issues rather than stopping at the first', function () {
         const kA = token<any>(Symbol('arfr-multi-err-a'))
         const kB = token<any>(Symbol('arfr-multi-err-b'))
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(token<any>('svc'), t => t
-          .toFunction((_a: unknown, _b: unknown) => ({}), [kA, kB]))
+        di.bind(token<any>('svc'), t => t.toFunction((_a: unknown, _b: unknown) => ({}), [kA, kB]))
 
         let caught: ErrUnresolvableDependencies | undefined
         try {
@@ -679,21 +597,17 @@ describe('async singleton resolution timing (L-3)', function () {
           caught = e as ErrUnresolvableDependencies
         }
 
-        expect(caught)
-          .toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues)
-          .toHaveLength(2)
+        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
+        expect(caught!.issues).toHaveLength(2)
       })
 
       it('should resolve dependencies from a parent container', function () {
         const kDep = token<any>(Symbol('arfr-parent-dep'))
         const parent = new CaffeineIoC({ decorators: false })
-        parent.bind(kDep, t => t
-          .toValue('from-parent'))
+        parent.bind(kDep, t => t.toValue('from-parent'))
 
         const child = parent.newChild()
-        child.bind(token<any>('svc'), t => t
-          .toFunction((_: unknown) => ({}), [kDep]))
+        child.bind(token<any>('svc'), t => t.toFunction((_: unknown) => ({}), [kDep]))
 
         expect(() => child.assertResolvable()).not.toThrow()
       })
@@ -704,9 +618,11 @@ describe('async singleton resolution timing (L-3)', function () {
 describe('CaffeineIoC constructor — modules via options', function () {
   it('should accept a module function on Options.modules', async function () {
     const di = new CaffeineIoC({
-      modules: [(container: ContainerBindingOps) => {
-        container.bind(token<any>('greeting'), t => t.toValue('hello'))
-      }],
+      modules: [
+        (container: ContainerBindingOps) => {
+          container.bind(token<any>('greeting'), t => t.toValue('hello'))
+        },
+      ],
     })
     await di.init()
 

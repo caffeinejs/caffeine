@@ -1,12 +1,13 @@
 import { describe, it, beforeEach, expect, vi } from 'vitest'
-import { token } from '../key.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
-import { Provides } from '../decorators/provides.js'
-import { Injectable } from '../decorators/injectable.js'
+
 import { CaffeineIoC } from '../container.js'
-import { $i } from '../injection.js'
-import { Configuration } from '../decorators/configuration.js'
 import { ContainerBindingOps } from '../container_interface.js'
+import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Configuration } from '../decorators/configuration.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Provides } from '../decorators/provides.js'
+import { $i } from '../injection.js'
+import { token } from '../key.js'
 
 describe('Conditionals', function () {
   describe('using default conditional', function () {
@@ -48,46 +49,32 @@ describe('Conditionals', function () {
     it('should only register components that pass all provided conditionals', async function () {
       const di = new CaffeineIoC()
 
-      expect(di.has(Pass))
-        .toBeFalsy()
-      expect(di.has(NoPass))
-        .toBeFalsy()
-      expect(di.has(NoPassToo))
-        .toBeFalsy()
+      expect(di.has(Pass)).toBeFalsy()
+      expect(di.has(NoPass)).toBeFalsy()
+      expect(di.has(NoPassToo)).toBeFalsy()
 
       await di.init()
 
-      expect(di.has(Pass))
-        .toBeTruthy()
-      expect(di.has(NoPass))
-        .toBeFalsy()
-      expect(di.has(NoPassToo))
-        .toBeFalsy()
+      expect(di.has(Pass)).toBeTruthy()
+      expect(di.has(NoPass)).toBeFalsy()
+      expect(di.has(NoPassToo)).toBeFalsy()
     })
 
     it('should resolve components that pass conditionals and handle optional absent deps', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Managed, t => t
-        .toSelf())
-      di.bind(Pass, t => t
-        .toSelf())
-      di.bind(RefPassed, t => t
-        .toSelf([Pass]))
-      di.bind(RefNotPassedOptional, t => t
-        .toSelf([$i.optional(NoPass)]))
+      di.bind(Managed, t => t.toSelf())
+      di.bind(Pass, t => t.toSelf())
+      di.bind(RefPassed, t => t.toSelf([Pass]))
+      di.bind(RefNotPassedOptional, t => t.toSelf([$i.optional(NoPass)]))
       await di.init()
 
       const refPassed = di.get(RefPassed)
       const opt = di.get(RefNotPassedOptional)
 
-      expect(refPassed)
-        .toBeInstanceOf(RefPassed)
-      expect(refPassed.pass)
-        .toBeInstanceOf(Pass)
-      expect(opt)
-        .toBeInstanceOf(RefNotPassedOptional)
-      expect(opt.noPass)
-        .toBeUndefined()
+      expect(refPassed).toBeInstanceOf(RefPassed)
+      expect(refPassed.pass).toBeInstanceOf(Pass)
+      expect(opt).toBeInstanceOf(RefNotPassedOptional)
+      expect(opt.noPass).toBeUndefined()
     })
   })
 
@@ -100,16 +87,16 @@ describe('Conditionals', function () {
       class DependsOnModuleSvc {}
 
       const di = new CaffeineIoC({
-        modules: [(container: ContainerBindingOps) => {
-          container.bind(ModuleSvc, t => t
-            .toSelf())
-        }],
+        modules: [
+          (container: ContainerBindingOps) => {
+            container.bind(ModuleSvc, t => t.toSelf())
+          },
+        ],
       })
 
       await di.init()
 
-      expect(di.has(DependsOnModuleSvc))
-        .toBeTruthy()
+      expect(di.has(DependsOnModuleSvc)).toBeTruthy()
     })
 
     it('should not register a component when the checked binding is absent', async function () {
@@ -122,8 +109,7 @@ describe('Conditionals', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.has(DependsOnNeverBound))
-        .toBeFalsy()
+      expect(di.has(DependsOnNeverBound)).toBeFalsy()
     })
   })
 
@@ -136,8 +122,7 @@ describe('Conditionals', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.has(AsyncTrueBean))
-        .toBeTruthy()
+      expect(di.has(AsyncTrueBean)).toBeTruthy()
     })
 
     it('should not register a component when an async conditional resolves to false', async function () {
@@ -148,8 +133,7 @@ describe('Conditionals', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.has(AsyncFalseBean))
-        .toBeFalsy()
+      expect(di.has(AsyncFalseBean)).toBeFalsy()
     })
   })
 
@@ -159,17 +143,12 @@ describe('Conditionals', function () {
       class ConditionalSvc {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(PresenceSvc, t => t
-        .toSelf())
-      di.bind(ConditionalSvc, t => t
-        .toSelf()
-        .conditional(ctx => ctx.container.has(PresenceSvc)))
+      di.bind(PresenceSvc, t => t.toSelf())
+      di.bind(ConditionalSvc, t => t.toSelf().conditional(ctx => ctx.container.has(PresenceSvc)))
       await di.init()
 
-      expect(di.has(ConditionalSvc))
-        .toBeTruthy()
-      expect(di.get(ConditionalSvc))
-        .toBeInstanceOf(ConditionalSvc)
+      expect(di.has(ConditionalSvc)).toBeTruthy()
+      expect(di.get(ConditionalSvc)).toBeInstanceOf(ConditionalSvc)
     })
 
     it('should remove a manually-bound component when its conditional fails', async function () {
@@ -177,28 +156,21 @@ describe('Conditionals', function () {
       class ConditionalSvcFailing {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ConditionalSvcFailing, t => t
-        .toSelf()
-        .conditional(ctx => ctx.container.has(AbsentSvc)))
+      di.bind(ConditionalSvcFailing, t => t.toSelf().conditional(ctx => ctx.container.has(AbsentSvc)))
       await di.init()
 
-      expect(di.has(ConditionalSvcFailing))
-        .toBeFalsy()
+      expect(di.has(ConditionalSvcFailing)).toBeFalsy()
     })
 
     it('should support async conditional functions', async function () {
       class AsyncConditionalSvc {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(AsyncConditionalSvc, t => t
-        .toSelf()
-        .conditional(async () => true))
+      di.bind(AsyncConditionalSvc, t => t.toSelf().conditional(async () => true))
       await di.init()
 
-      expect(di.has(AsyncConditionalSvc))
-        .toBeTruthy()
-      expect(di.get(AsyncConditionalSvc))
-        .toBeInstanceOf(AsyncConditionalSvc)
+      expect(di.has(AsyncConditionalSvc)).toBeTruthy()
+      expect(di.get(AsyncConditionalSvc)).toBeInstanceOf(AsyncConditionalSvc)
     })
   })
 
@@ -219,10 +191,8 @@ describe('Conditionals', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.has(FailingConf))
-        .toBeFalsy()
-      expect(di.has(kCascadedProvide))
-        .toBeFalsy()
+      expect(di.has(FailingConf)).toBeFalsy()
+      expect(di.has(kCascadedProvide)).toBeFalsy()
     })
 
     it('should register all provides of a configuration class that passes its conditional', async function () {
@@ -241,12 +211,9 @@ describe('Conditionals', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.has(PassingConf))
-        .toBeTruthy()
-      expect(di.has(kPassingProvide))
-        .toBeTruthy()
-      expect(di.get(kPassingProvide))
-        .toEqual('value')
+      expect(di.has(PassingConf)).toBeTruthy()
+      expect(di.has(kPassingProvide)).toBeTruthy()
+      expect(di.get(kPassingProvide)).toEqual('value')
     })
   })
 
@@ -323,23 +290,15 @@ describe('Conditionals', function () {
         const di = new CaffeineIoC()
         await di.init()
 
-        expect(di.has(NoConf))
-          .toBeFalsy()
-        expect(di.has(kTxt))
-          .toBeFalsy()
-        expect(di.has(kVal))
-          .toBeFalsy()
-        expect(spy1)
-          .toHaveBeenCalledTimes(1)
+        expect(di.has(NoConf)).toBeFalsy()
+        expect(di.has(kTxt)).toBeFalsy()
+        expect(di.has(kVal)).toBeFalsy()
+        expect(spy1).toHaveBeenCalledTimes(1)
 
-        expect(di.has(Conf))
-          .toBeTruthy()
-        expect(di.has(kJSON))
-          .toBeTruthy()
-        expect(di.has(kXML))
-          .toBeFalsy()
-        expect(spy2)
-          .toHaveBeenCalledTimes(4)
+        expect(di.has(Conf)).toBeTruthy()
+        expect(di.has(kJSON)).toBeTruthy()
+        expect(di.has(kXML)).toBeFalsy()
+        expect(spy2).toHaveBeenCalledTimes(4)
       })
     })
   })

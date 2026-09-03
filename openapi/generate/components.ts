@@ -1,5 +1,6 @@
 import type { AnySchema } from '@caffeinejs/std'
 import { type SchemaIO, toJSONSchema } from '@caffeinejs/std/schema'
+
 import { ErrOpenAPISchemaConflict } from '../errors.js'
 import type { SchemaObject } from '../spec/spec.js'
 
@@ -82,9 +83,7 @@ export class ComponentRegistry {
         out[key] = isSchemaLike(key)
           ? this.#hoist(value)
           : isSchemaMap(key)
-            ? Object.fromEntries(
-                Object.entries(value).map(([k, v]) => [k, isRecord(v) ? this.#hoist(v) : v]),
-              )
+            ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, isRecord(v) ? this.#hoist(v) : v]))
             : value
       } else {
         out[key] = value
@@ -136,7 +135,10 @@ export function componentName(schema: SchemaObject): string | undefined {
     return undefined
   }
 
-  const segment = id.split(/[/#]/).filter(part => part !== '').pop()
+  const segment = id
+    .split(/[/#]/)
+    .filter(part => part !== '')
+    .pop()
 
   return segment === undefined || segment === '' ? undefined : segment
 }

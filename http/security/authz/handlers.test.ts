@@ -1,13 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+
 import type { Context } from '../../context.js'
 import { Claim, Identity, Principal, newAnonymousUser } from '../identity.js'
-import {
-  AssertionHandler,
-  AuthenticatedUserHandler,
-  ClaimHandler,
-  ResourceHandler,
-  RoleHandler,
-} from './handlers.js'
+import { AssertionHandler, AuthenticatedUserHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import type {
   AssertionRequirement,
   ClaimRequirement,
@@ -26,7 +21,12 @@ const ctx = {} as Context
 
 function user(claims: Array<[string, unknown]>, roleClaimType = 'roles'): Principal {
   return new Principal(true, [
-    new Identity('test', true, claims.map(([type, value]) => new Claim(type, value, '')), roleClaimType),
+    new Identity(
+      'test',
+      true,
+      claims.map(([type, value]) => new Claim(type, value, '')),
+      roleClaimType,
+    ),
   ])
 }
 
@@ -38,8 +38,7 @@ describe('AuthenticatedUserHandler', () => {
   })
 
   it('fails an anonymous principal with a reason', async () => {
-    expect(await handler.handle(ctx, newAnonymousUser()))
-      .toEqual({ ok: false, reason: 'User is not authenticated' })
+    expect(await handler.handle(ctx, newAnonymousUser())).toEqual({ ok: false, reason: 'User is not authenticated' })
   })
 })
 
@@ -76,8 +75,10 @@ describe('RoleHandler', () => {
   })
 
   it('fails with a reason', async () => {
-    expect(await handler.handle(ctx, user([['roles', 'viewer']]), requirement('admin')))
-      .toEqual({ ok: false, reason: 'User is in none of the required roles' })
+    expect(await handler.handle(ctx, user([['roles', 'viewer']]), requirement('admin'))).toEqual({
+      ok: false,
+      reason: 'User is in none of the required roles',
+    })
   })
 })
 
@@ -103,8 +104,10 @@ describe('ClaimHandler', () => {
   it('fails when the claim exists but holds none of the accepted values', async () => {
     const principal = user([['plan', 'trial']])
 
-    expect(await handler.handle(ctx, principal, requirement('plan', 'free', 'pro')))
-      .toEqual({ ok: false, reason: 'User does not have the required claim or claim value' })
+    expect(await handler.handle(ctx, principal, requirement('plan', 'free', 'pro'))).toEqual({
+      ok: false,
+      reason: 'User does not have the required claim or claim value',
+    })
   })
 })
 
@@ -114,17 +117,46 @@ describe('AssertionHandler', () => {
     ({ kind: 'assertion', assertion }) as AssertionRequirement
 
   it('passes when a synchronous predicate returns true', async () => {
-    expect((await handler.handle(ctx, user([]), requirement(() => true))).ok).toBe(true)
+    expect(
+      (
+        await handler.handle(
+          ctx,
+          user([]),
+          requirement(() => true),
+        )
+      ).ok,
+    ).toBe(true)
   })
 
   it('fails with a reason when the predicate returns false', async () => {
-    expect(await handler.handle(ctx, user([]), requirement(() => false)))
-      .toEqual({ ok: false, reason: 'Assertion failed' })
+    expect(
+      await handler.handle(
+        ctx,
+        user([]),
+        requirement(() => false),
+      ),
+    ).toEqual({ ok: false, reason: 'Assertion failed' })
   })
 
   it('awaits an asynchronous predicate', async () => {
-    expect((await handler.handle(ctx, user([]), requirement(async () => true))).ok).toBe(true)
-    expect((await handler.handle(ctx, user([]), requirement(async () => false))).ok).toBe(false)
+    expect(
+      (
+        await handler.handle(
+          ctx,
+          user([]),
+          requirement(async () => true),
+        )
+      ).ok,
+    ).toBe(true)
+    expect(
+      (
+        await handler.handle(
+          ctx,
+          user([]),
+          requirement(async () => false),
+        )
+      ).ok,
+    ).toBe(false)
   })
 
   it('receives the request context', async () => {
@@ -162,12 +194,27 @@ describe('ResourceHandler', () => {
   })
 
   it('fails with a reason when the callback denies', async () => {
-    expect(await handler.handle(ctx, user([]), requirement(() => false), {}))
-      .toEqual({ ok: false, reason: 'Resource authorization failed' })
+    expect(
+      await handler.handle(
+        ctx,
+        user([]),
+        requirement(() => false),
+        {},
+      ),
+    ).toEqual({ ok: false, reason: 'Resource authorization failed' })
   })
 
   it('awaits an asynchronous callback', async () => {
-    expect((await handler.handle(ctx, user([]), requirement(async () => true), {})).ok).toBe(true)
+    expect(
+      (
+        await handler.handle(
+          ctx,
+          user([]),
+          requirement(async () => true),
+          {},
+        )
+      ).ok,
+    ).toBe(true)
   })
 
   // A route guard never supplies a resource, so a resource requirement in a route policy sees `undefined`.

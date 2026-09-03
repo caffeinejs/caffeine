@@ -14,59 +14,59 @@ const schema = {
 }
 
 app.addHook('onRequest', (_req, reply, done) => {
-  reply.header('x-request-id',
-    Math
-      .random()
-      .toString(36)
-      .slice(2))
+  reply.header('x-request-id', Math.random().toString(36).slice(2))
   done()
 })
 
 app.get('/health', () => ({ ok: true }))
 
 app.post<{
-  Params: { text: string, num: number, bool: boolean }
-  Querystring: { text: string, num: number, bool: boolean }
-  Body: { text: string, num: number, bool: boolean }
-}>('/api/test/:text/:num/:bool', {
-  preHandler: (req, reply, done) => {
-    if (req.headers['x-api-key'] !== 'benchmark') {
-      reply.code(401).send({ error: 'Unauthorized' })
-      return
-    }
-    done()
-  },
-  schema: {
-    params: schema,
-    querystring: schema,
-    body: schema,
-    response: {
-      200: {
-        type: 'object',
-        properties: {
-          params: schema,
-          query: schema,
-          body: schema,
+  Params: { text: string; num: number; bool: boolean }
+  Querystring: { text: string; num: number; bool: boolean }
+  Body: { text: string; num: number; bool: boolean }
+}>(
+  '/api/test/:text/:num/:bool',
+  {
+    preHandler: (req, reply, done) => {
+      if (req.headers['x-api-key'] !== 'benchmark') {
+        reply.code(401).send({ error: 'Unauthorized' })
+        return
+      }
+      done()
+    },
+    schema: {
+      params: schema,
+      querystring: schema,
+      body: schema,
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            params: schema,
+            query: schema,
+            body: schema,
+          },
         },
       },
     },
   },
-}, (req, reply) => {
-  const p = req.params
-  const q = req.query
-  const h = req.headers
-  const b = req.body
+  (req, reply) => {
+    const p = req.params
+    const q = req.query
+    const h = req.headers
+    const b = req.body
 
-  reply.header('text', h.text)
-  reply.header('num', h.num)
-  reply.header('bool', h.bool)
+    reply.header('text', h.text)
+    reply.header('num', h.num)
+    reply.header('bool', h.bool)
 
-  reply.send({
-    params: { text: p.text, num: p.num, bool: p.bool },
-    query: { text: q.text, num: q.num, bool: q.bool },
-    body: { text: b.text, num: b.num, bool: b.bool },
-  })
-})
+    reply.send({
+      params: { text: p.text, num: p.num, bool: p.bool },
+      query: { text: q.text, num: q.num, bool: q.bool },
+      body: { text: b.text, num: b.num, bool: b.bool },
+    })
+  },
+)
 
 await app.ready()
 await app.listen({ port: PORT, host: '0.0.0.0' })

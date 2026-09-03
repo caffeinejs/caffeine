@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { generateKeyPair } from 'jose'
 import { CaffeineIoC, Configuration, Injectable, Profile, Provides, token } from '@caffeinejs/di'
+import { generateKeyPair } from 'jose'
+import { describe, it, expect } from 'vitest'
+
 import { JWTService, JWTServiceBuilder } from './jwt_service.js'
 import type { JWTKeyResolver } from './jwt_service_options.js'
 

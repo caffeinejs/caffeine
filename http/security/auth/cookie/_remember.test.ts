@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { formatRemember, hashToken, newSeries, newToken, parseRemember, tokenMatches } from './_remember.js'
 
 describe('remember-me helpers', () => {

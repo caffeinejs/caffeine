@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import { GracefulShutdown } from './shutdown.js'
 import { type SignalDispatcher, type ShutdownSignal, noopSignalDispatcher } from './signals.js'
 

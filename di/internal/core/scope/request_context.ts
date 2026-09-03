@@ -20,10 +20,9 @@ export class RequestScopeContext {
       return
     }
 
-    await Promise.all([...this._destroyCallbacks.values()].map(cb => Promise.resolve(cb())))
-      .finally(() => {
-        this._cachedInstances.clear()
-        this._destroyCallbacks = []
-      })
+    await Promise.all([...this._destroyCallbacks.values()].map(cb => Promise.resolve(cb()))).finally(() => {
+      this._cachedInstances.clear()
+      this._destroyCallbacks = []
+    })
   }
 }

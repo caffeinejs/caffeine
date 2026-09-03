@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+
 import type { AddressController } from './address.controller.js'
 
 export function createAddressRouter(ctrl: AddressController): Hono {

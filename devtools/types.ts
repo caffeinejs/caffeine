@@ -25,13 +25,13 @@ export interface RouteSnapshot {
   responseStatus?: number
 }
 
-export type DevtoolsEventKind
-  = | 'binding:registered'
-    | 'binding:initialized'
-    | 'binding:initialization-failed'
-    | 'module:registered'
-    | 'module:failed'
-    | 'container:disposed'
+export type DevtoolsEventKind =
+  | 'binding:registered'
+  | 'binding:initialized'
+  | 'binding:initialization-failed'
+  | 'module:registered'
+  | 'module:failed'
+  | 'container:disposed'
 
 export interface DevtoolsEvent {
   kind: DevtoolsEventKind
@@ -39,15 +39,15 @@ export interface DevtoolsEvent {
   payload: Record<string, unknown>
 }
 
-export type WsMessage
-  = | {
-    type: 'snapshot'
-    bindings: BindingSnapshot[]
-    graph: BindingGraph
-    routes: RouteSnapshot[]
-    events: DevtoolsEvent[]
-  }
+export type WsMessage =
   | {
-    type: 'event'
-    event: DevtoolsEvent
-  }
+      type: 'snapshot'
+      bindings: BindingSnapshot[]
+      graph: BindingGraph
+      routes: RouteSnapshot[]
+      events: DevtoolsEvent[]
+    }
+  | {
+      type: 'event'
+      event: DevtoolsEvent
+    }

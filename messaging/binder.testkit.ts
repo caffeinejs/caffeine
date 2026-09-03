@@ -9,7 +9,7 @@ import type { Message } from './message.js'
 export class InMemoryBroker {
   readonly #subscribers = new Map<string, Set<(message: Message) => void>>()
   /** Every message published, in order — for test assertions. */
-  readonly published: Array<{ destination: string, message: Message }> = []
+  readonly published: Array<{ destination: string; message: Message }> = []
 
   subscribe(destination: string, handler: (message: Message) => void): () => void {
     const set = this.#subscribers.get(destination) ?? new Set()

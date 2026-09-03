@@ -1,8 +1,12 @@
 import './_polyfill.js'
+import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } from './_checks.js'
+import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
+import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
-import { BindingSpec, kBuildBinding } from './binding_spec.js'
 import { newBinding, Binding } from './binding.js'
-import { Snapshot } from './snapshot.js'
+import { BindingSpec, kBuildBinding } from './binding_spec.js'
+import { Conditional, ConditionContext } from './conditional.js'
+import { BindingDescriptor, Container, Options, ScopeCheckMode } from './container_interface.js'
 import {
   getBindingConfigurations,
   getBindingConfiguration,
@@ -22,29 +26,25 @@ import {
   ErrInvalidContainerState,
   ErrInjectableBase,
 } from './errors.js'
-import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
-import { bindResolver, InjectionResolver } from './injection_resolver.js'
-import { builtInResolvers } from './injection_builtin_resolvers.js'
-import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scope/index.js'
-import { Scopes, scopeEntries, Scope } from './scope.js'
-import { checkScopes } from './internal/core/scope/validations.js'
-import { PostProcessor } from './post_processor.js'
-import { keyStr, InjectionToken, Identifier, token, TokenValue } from './key.js'
-import { notNil } from './internal/util/assert/index.js'
-import { MetadataReader } from './metadata_reader.js'
-import { Ctor } from './types.js'
-import { BindingDescriptor, Container, Options, ScopeCheckMode } from './container_interface.js'
 import { HookListener } from './hooks.js'
+import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
+import { builtInResolvers } from './injection_builtin_resolvers.js'
+import { bindResolver, InjectionResolver } from './injection_resolver.js'
+import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scope/index.js'
+import { checkScopes } from './internal/core/scope/validations.js'
+import { notNil } from './internal/util/assert/index.js'
+import { isConstructable } from './internal/util/clazz/clazz.js'
+import { keyStr, InjectionToken, Identifier, token, TokenValue } from './key.js'
+import { MetadataReader } from './metadata_reader.js'
 import { runModules, type Module, type ModuleFn } from './module.js'
-import { Conditional, ConditionContext } from './conditional.js'
+import { PostProcessor } from './post_processor.js'
+import { Provider } from './provider.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
-import { isConstructable } from './internal/util/clazz/clazz.js'
-import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } from './_checks.js'
-import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
-import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
-import { Provider } from './provider.js'
+import { Scopes, scopeEntries, Scope } from './scope.js'
+import { Snapshot } from './snapshot.js'
 import { Keys } from './symbols.js'
+import { Ctor } from './types.js'
 
 // Wiring the built-ins is a real dependency rather than a module side effect, so nothing here reads as removable.
 // Module scope runs once, which is what makes bindResolver's duplicate-name throw a non-issue.
@@ -145,9 +145,7 @@ export class CaffeineIoC implements Container {
       const refresher = { refresh: this.refresh.bind(this) }
 
       this.refresher = refresher
-      this.bind(Keys.kRefresher, t => t.toValue(refresher)
-        .byPassPostProcessors()
-        .internal())
+      this.bind(Keys.kRefresher, t => t.toValue(refresher).byPassPostProcessors().internal())
     }
 
     if (this.scopes.has(Scopes.REQUEST)) {
@@ -158,9 +156,7 @@ export class CaffeineIoC implements Container {
       }
 
       this.requestScopeManager = requestScopeManager
-      this.bind(Keys.kRequestScopeManager, t => t.toValue(requestScopeManager)
-        .byPassPostProcessors()
-        .internal())
+      this.bind(Keys.kRequestScopeManager, t => t.toValue(requestScopeManager).byPassPostProcessors().internal())
     }
   }
 
@@ -333,7 +329,9 @@ export class CaffeineIoC implements Container {
   wrap<T = unknown>(key: InjectionToken<T>): Provider<T> {
     const binding = this.getBinding(key)
     if (binding === undefined) {
-      throw new ErrNoResolutionForKey(`Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`)
+      throw new ErrNoResolutionForKey(
+        `Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`,
+      )
     }
 
     return {
@@ -352,7 +350,9 @@ export class CaffeineIoC implements Container {
   wrapMany<T = unknown>(key: InjectionToken<T>): Provider<T[]> {
     const bindings = this.getBindings<T>(key)
     if (bindings.length === 0) {
-      throw new ErrNoResolutionForKey(`Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`)
+      throw new ErrNoResolutionForKey(
+        `Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`,
+      )
     }
 
     if (bindings.length === 1) {
@@ -533,11 +533,13 @@ export class CaffeineIoC implements Container {
    */
   resolver<I extends Injection>(injection: I): () => ResolveInjection<I> {
     if (!this._ready && !this._initializing) {
-      throw new ErrInvalidContainerState('Cannot compile resolver: container has not been initialized — call init() first')
+      throw new ErrInvalidContainerState(
+        'Cannot compile resolver: container has not been initialized — call init() first',
+      )
     }
 
-    const descriptor: InjectionDescriptor
-      = typeof injection === 'object' ? injection as InjectionDescriptor : { key: injection }
+    const descriptor: InjectionDescriptor =
+      typeof injection === 'object' ? (injection as InjectionDescriptor) : { key: injection }
 
     // There is no consumer: the injection stands on its own rather than being a component's dependency. The
     // placeholder key says so, and keeps the "do not inject a component into itself" filter — which reads the
@@ -610,7 +612,7 @@ export class CaffeineIoC implements Container {
 
     const isClazz = isConstructable(ctor)
     if (injections.length === 0) {
-      return () => isClazz ? new ctor() : ctor() as T
+      return () => (isClazz ? new ctor() : (ctor() as T))
     }
 
     const resolvers = new Array<InjectionResolver>(injections.length)
@@ -833,21 +835,24 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      const isDerived
-        = typeof key === 'function'
-          || binding.type !== undefined
-          || binding.factoryCreator !== undefined
-          || binding.source !== undefined
+      const isDerived =
+        typeof key === 'function' ||
+        binding.type !== undefined ||
+        binding.factoryCreator !== undefined ||
+        binding.source !== undefined
 
-      entries.push([key, {
-        ...binding,
-        factory: isDerived ? undefined! : (binding.unscopedFactory ?? binding.factory),
-        unscopedFactory: undefined!,
-        ctx: undefined,
-        injectionResolvers: [],
-        propertyResolvers: new Map(),
-        methodResolvers: new Map(),
-      }])
+      entries.push([
+        key,
+        {
+          ...binding,
+          factory: isDerived ? undefined! : (binding.unscopedFactory ?? binding.factory),
+          unscopedFactory: undefined!,
+          ctx: undefined,
+          injectionResolvers: [],
+          propertyResolvers: new Map(),
+          methodResolvers: new Map(),
+        },
+      ])
     }
 
     return new Snapshot(entries)
@@ -887,9 +892,7 @@ export class CaffeineIoC implements Container {
 
     if (asyncBindings.length === 0) {
       await Promise.all(
-        bindings.map((b: Binding) => this.preDestroyBinding(b)
-          .finally(() => this.scopes.get(b.scopeID)
-            ?.reset(b))),
+        bindings.map((b: Binding) => this.preDestroyBinding(b).finally(() => this.scopes.get(b.scopeID)?.reset(b))),
       )
 
       return
@@ -897,16 +900,13 @@ export class CaffeineIoC implements Container {
 
     const asyncIds = new Set(asyncBindings.map(b => b.id))
     for (const [k, b] of this._sortedAsyncEntries.filter(([, b]) => asyncIds.has(b.id))) {
-      await this.preDestroyBinding(b)
-        .finally(() => this.resolveAsyncBinding(k, b))
+      await this.preDestroyBinding(b).finally(() => this.resolveAsyncBinding(k, b))
     }
 
     await Promise.all(
       bindings
         .filter(b => !b.async)
-        .map((b: Binding) => this.preDestroyBinding(b)
-          .finally(() => this.scopes.get(b.scopeID)
-            ?.reset(b))),
+        .map((b: Binding) => this.preDestroyBinding(b).finally(() => this.scopes.get(b.scopeID)?.reset(b))),
     )
 
     return
@@ -918,13 +918,10 @@ export class CaffeineIoC implements Container {
    */
   async resetBinding(binding: Binding): Promise<void> {
     if (binding.async) {
-      return this.preDestroyBinding(binding)
-        .finally(() => this.resolveAsyncBinding(binding.ctx!.key, binding))
+      return this.preDestroyBinding(binding).finally(() => this.resolveAsyncBinding(binding.ctx!.key, binding))
     }
 
-    return this.preDestroyBinding(binding)
-      .finally(() => this.scopes.get(binding.scopeID)
-        ?.reset(binding))
+    return this.preDestroyBinding(binding).finally(() => this.scopes.get(binding.scopeID)?.reset(binding))
   }
 
   /**
@@ -1118,10 +1115,7 @@ export class CaffeineIoC implements Container {
 
     for (const [, binding] of entries) {
       if (binding.preDestroy) {
-        disposers.push(
-          this
-            .preDestroyBinding(binding)
-            .finally(() => this.scopes.get(binding.scopeID)?.reset(binding)))
+        disposers.push(this.preDestroyBinding(binding).finally(() => this.scopes.get(binding.scopeID)?.reset(binding)))
       } else {
         disposers.push(Promise.resolve(this.scopes.get(binding.scopeID)?.reset(binding)))
       }
@@ -1170,27 +1164,25 @@ export class CaffeineIoC implements Container {
    */
   toString(): string {
     return (
-      `${this.constructor.name}(profiles=[${[...this.profiles].map(String)
-        .join(', ')}], count=${this.size}) {`
-        + '\n'
-        + Array.from(this.entries())
-          .map(
-            ([key, binding]) =>
-              `${keyStr(key)}: `
-              + `names=[${binding.names?.map(x => keyStr(x))
-                .join(', ')}], `
-                + `scope=${binding.scopeID.toString()}, `
-                + `injections=[${binding.injections
-                  ?.map(
-                    spec =>
-                      '[' + keyStr(spec.key) + `: optional=${spec.optional || false}, multiple=${spec.multiple || false}]`,
-                  )
-                  .join(', ')}], `
-                  + `lazy=${binding.lazy}, `
-                  + `factory=${binding.factory?.constructor?.name}`,
-          )
-          .join('\n, ')
-          + '\n}'
+      `${this.constructor.name}(profiles=[${[...this.profiles].map(String).join(', ')}], count=${this.size}) {` +
+      '\n' +
+      Array.from(this.entries())
+        .map(
+          ([key, binding]) =>
+            `${keyStr(key)}: ` +
+            `names=[${binding.names?.map(x => keyStr(x)).join(', ')}], ` +
+            `scope=${binding.scopeID.toString()}, ` +
+            `injections=[${binding.injections
+              ?.map(
+                spec =>
+                  '[' + keyStr(spec.key) + `: optional=${spec.optional || false}, multiple=${spec.multiple || false}]`,
+              )
+              .join(', ')}], ` +
+            `lazy=${binding.lazy}, ` +
+            `factory=${binding.factory?.constructor?.name}`,
+        )
+        .join('\n, ') +
+      '\n}'
     )
   }
 
@@ -1221,18 +1213,19 @@ export class CaffeineIoC implements Container {
         throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
       }
 
-      const allowed
-        = config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
+      const allowed =
+        config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
       if (!allowed) {
         throw new ErrInvalidBinding(
           `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
         )
       }
 
-      if (config.injectableProperties?.size || 0 > 0
-        || config.injectableMethods?.size || 0 > 0) {
-        throw new ErrInvalidBinding(`Cannot configure async binding for key "${keyStr(key)}":`
-          + `async bindings cannot have injectable properties or injectable methods.`)
+      if ((config.injectableProperties?.size ?? 0) > 0 || (config.injectableMethods?.size ?? 0) > 0) {
+        throw new ErrInvalidBinding(
+          `Cannot configure async binding for key "${keyStr(key)}":` +
+            `async bindings cannot have injectable properties or injectable methods.`,
+        )
       }
     }
 
@@ -1243,8 +1236,8 @@ export class CaffeineIoC implements Container {
     }
 
     const scopeID = binding.scopeID ? binding.scopeID : this.scopeID
-    const ctor: Ctor | undefined
-      = (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
+    const ctor: Ctor | undefined =
+      (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
     if (ctor !== undefined) {
       for (const [methodName, injections] of binding.injectableMethods) {
@@ -1264,9 +1257,9 @@ export class CaffeineIoC implements Container {
 
     binding.scopeID = scopeID
 
-    binding.lazy
-      = binding.lazy === undefined && this.lazy === undefined
-        ? scope?.lazy ?? true
+    binding.lazy =
+      binding.lazy === undefined && this.lazy === undefined
+        ? (scope?.lazy ?? true)
         : binding.lazy === undefined
           ? this.lazy
           : binding.lazy
@@ -1281,8 +1274,13 @@ export class CaffeineIoC implements Container {
       this._pendingConditionalKeys.add(key)
     }
 
-    if (queueProfileEval && !this._compiled && !this._evaluatingProfiles && canonical.profiles.size > 0
-      && !this._pendingManualProfileKeys.has(key)) {
+    if (
+      queueProfileEval &&
+      !this._compiled &&
+      !this._evaluatingProfiles &&
+      canonical.profiles.size > 0 &&
+      !this._pendingManualProfileKeys.has(key)
+    ) {
       this._pendingManualProfileKeys.add(key)
       this._pendingManualProfiles.push({
         key,
@@ -1727,7 +1725,7 @@ export class CaffeineIoC implements Container {
     if (hasAspects) {
       const aopInterceptors = buildAOPInterceptors(this)
       for (const [key, binding] of this.registry.entries()) {
-        const ctor = binding.type ?? (typeof key === 'function' ? key as Function : null)
+        const ctor = binding.type ?? (typeof key === 'function' ? (key as Function) : null)
         if (ctor) {
           const interceptor = aopInterceptors.get(ctor)
           if (interceptor) {
@@ -1792,9 +1790,7 @@ export class CaffeineIoC implements Container {
 
     for (const [key, binding] of asyncEntries) {
       const depKeys = new Set<InjectionToken>(
-        [
-          ...binding.injections.map(d => d.key as InjectionToken),
-        ].filter(k => asyncKeySet.has(k)),
+        [...binding.injections.map(d => d.key as InjectionToken)].filter(k => asyncKeySet.has(k)),
       )
 
       for (const dep of depKeys) {
@@ -1874,8 +1870,10 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      if (binding.conditionals.length > 0
-        && !await this.evalConditionals(binding.conditionals, { container: this, key, binding })) {
+      if (
+        binding.conditionals.length > 0 &&
+        !(await this.evalConditionals(binding.conditionals, { container: this, key, binding }))
+      ) {
         continue
       }
 
@@ -1887,7 +1885,7 @@ export class CaffeineIoC implements Container {
 
   private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
     for (const c of conditionals) {
-      if (!await c(ctx)) {
+      if (!(await c(ctx))) {
         return false
       }
     }

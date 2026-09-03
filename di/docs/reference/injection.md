@@ -47,11 +47,11 @@ class App { ... }
 
 ```ts
 type InjectionDescriptor<T = unknown> = {
-  key?: InjectionToken<any>  // lookup token (independent of T when a helper wraps the result)
-  multiple?: boolean         // inject all bindings for the key
-  optional?: boolean         // ok if missing — injects undefined instead of throwing
-  resolver?: symbol          // custom resolver (overrides the default)
-  args?: unknown             // extra arguments passed to the resolver
+  key?: InjectionToken<any> // lookup token (independent of T when a helper wraps the result)
+  multiple?: boolean // inject all bindings for the key
+  optional?: boolean // ok if missing — injects undefined instead of throwing
+  resolver?: symbol // custom resolver (overrides the default)
+  args?: unknown // extra arguments passed to the resolver
 }
 ```
 
@@ -255,7 +255,10 @@ Injects a constant value directly, without a container binding.
 ```ts
 @Injectable([$i.just('localhost'), $i.just(5432)])
 class DatabaseClient {
-  constructor(readonly host: string, readonly port: number) {}
+  constructor(
+    readonly host: string,
+    readonly port: number,
+  ) {}
 }
 ```
 

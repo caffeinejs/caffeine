@@ -1,15 +1,32 @@
 import 'reflect-metadata'
 import {
-  Body, CallHandler, CanActivate, Controller, ExecutionContext, Get,
-  Headers, HttpCode, Injectable, Module, NestInterceptor, Param, Post,
-  Query, Res, Scope, UnauthorizedException, UseGuards, UseInterceptors, ValidationPipe,
+  Body,
+  CallHandler,
+  CanActivate,
+  Controller,
+  ExecutionContext,
+  Get,
+  Headers,
+  HttpCode,
+  Injectable,
+  Module,
+  NestInterceptor,
+  Param,
+  Post,
+  Query,
+  Res,
+  Scope,
+  UnauthorizedException,
+  UseGuards,
+  UseInterceptors,
+  ValidationPipe,
 } from '@nestjs/common'
-import { Transform, Type } from 'class-transformer'
-import { IsBoolean, IsInt, IsNotEmpty, IsString } from 'class-validator'
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
-import { Observable } from 'rxjs'
+import { Transform, Type } from 'class-transformer'
+import { IsBoolean, IsInt, IsNotEmpty, IsString } from 'class-validator'
 import { FastifyReply } from 'fastify'
+import { Observable } from 'rxjs'
 
 const PORT = parseInt(process.env.PORT ?? '3031', 10)
 
@@ -31,8 +48,7 @@ class Schema {
 class RequestIdInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const res = context.switchToHttp().getResponse<{ header: (name: string, value: string) => void }>()
-    res.header('x-request-id', Math.random().toString(36)
-      .slice(2))
+    res.header('x-request-id', Math.random().toString(36).slice(2))
     return next.handle()
   }
 }
@@ -55,13 +71,17 @@ class AppConfig {
 @Injectable({ scope: Scope.REQUEST })
 class AppLogger {
   constructor(private readonly config: AppConfig) {}
-  log(_msg: string): void { /* no-op */ }
+  log(_msg: string): void {
+    /* no-op */
+  }
 }
 
 @Injectable()
 class TestRepository {
   constructor(private readonly config: AppConfig) {}
-  find(): unknown[] { return [] }
+  find(): unknown[] {
+    return []
+  }
 }
 
 // REQUEST-scoped due to NestJS scope propagation from AppLogger

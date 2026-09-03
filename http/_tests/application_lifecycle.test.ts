@@ -1,11 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { OnApplicationReady, OnApplicationRun, OnApplicationShutdown, OnPreApplicationShutdown } from '@caffeinejs/std'
 import fastify from 'fastify'
-import {
-  OnApplicationReady,
-  OnApplicationRun,
-  OnApplicationShutdown,
-  OnPreApplicationShutdown,
-} from '@caffeinejs/std'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('WebApplication lifecycle hooks', () => {

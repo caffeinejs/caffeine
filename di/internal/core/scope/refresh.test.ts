@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect, vi } from 'vitest'
-import { token } from '../../../key.js'
-import { Scopes } from '../../../scope.js'
+
 import { CaffeineIoC } from '../../../container.js'
-import { kSelfRefresh, SelfRefreshable } from '../../../refresher.js'
-import { Lifetime } from '../../../decorators/lifetime.js'
 import { Injectable } from '../../../decorators/injectable.js'
+import { Lifetime } from '../../../decorators/lifetime.js'
 import { PreDestroy } from '../../../decorators/pre_destroy.js'
+import { token } from '../../../key.js'
+import { kSelfRefresh, SelfRefreshable } from '../../../refresher.js'
+import { Scopes } from '../../../scope.js'
 
 describe('Refresh Scope', function () {
   @Injectable()
@@ -83,8 +85,7 @@ describe('Refresh Scope', function () {
 
     it('calls [kSelfRefresh] instead of recreating the instance', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(WithSelfRefresh, t => t.toSelf()
-        .lifetime(Scopes.REFRESH))
+      di.bind(WithSelfRefresh, t => t.toSelf().lifetime(Scopes.REFRESH))
       await di.init()
 
       const before = di.get(WithSelfRefresh)
@@ -170,20 +171,13 @@ describe('Refresh Scope', function () {
       const root = di.get(Root)
       const out = di.get(Out)
 
-      expect(scope)
-        .toBeDefined()
-      expect(root)
-        .toEqual(di.get(Root))
-      expect(root.id)
-        .toEqual(di.get(Root).id)
-      expect(root.msg())
-        .toEqual('test dev')
-      expect(out)
-        .toEqual(di.get(Out))
-      expect(out.id)
-        .toEqual(di.get(Out).id)
-      expect(out.hi())
-        .toEqual('tchau')
+      expect(scope).toBeDefined()
+      expect(root).toEqual(di.get(Root))
+      expect(root.id).toEqual(di.get(Root).id)
+      expect(root.msg()).toEqual('test dev')
+      expect(out).toEqual(di.get(Out))
+      expect(out.id).toEqual(di.get(Out).id)
+      expect(out.hi()).toEqual('tchau')
 
       await scope?.refresh()
 
@@ -192,14 +186,10 @@ describe('Refresh Scope', function () {
 
       expect(root).not.toEqual(rootAfter)
       expect(root.id).not.toEqual(rootAfter.id)
-      expect(root.msg())
-        .toEqual('test dev')
-      expect(out)
-        .toEqual(outAfter)
-      expect(out.id)
-        .toEqual(outAfter.id)
-      expect(out.hi())
-        .toEqual('tchau')
+      expect(root.msg()).toEqual('test dev')
+      expect(out).toEqual(outAfter)
+      expect(out.id).toEqual(outAfter.id)
+      expect(out.hi()).toEqual('tchau')
     })
   })
 })

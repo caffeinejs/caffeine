@@ -15,12 +15,7 @@ export class AuthorizationService {
    * Evaluates a named policy against a principal and an optional resource, returning the raw result.
    * Use {@link authorize} for the throwing, controller-facing variant.
    */
-  async check(
-    ctx: Context,
-    user: Principal,
-    policyName: string,
-    resource?: unknown,
-  ): Promise<AuthzResult> {
+  async check(ctx: Context, user: Principal, policyName: string, resource?: unknown): Promise<AuthzResult> {
     const evaluator = this.#evaluators.get(policyName)
     if (!evaluator) {
       throw new ErrAuthzPolicyNotFound(policyName, [...this.#evaluators.keys()])

@@ -1,8 +1,8 @@
-import { ErrInvalidDecorator } from '../errors.js'
-import { notNil } from '../internal/util/assert/index.js'
 import { DeferredCtor } from '../deferred_ctor.js'
-import { InjectionToken } from '../key.js'
+import { ErrInvalidDecorator } from '../errors.js'
 import { Injection, InjectionDescriptor } from '../injection.js'
+import { notNil } from '../internal/util/assert/index.js'
+import { InjectionToken } from '../key.js'
 import { defineMemberInjection } from './registrar/index.js'
 
 /**
@@ -41,9 +41,9 @@ export function Inject(
       case 'method': {
         if (!Array.isArray(keyOrDependencies)) {
           throw new ErrInvalidDecorator(
-            `When using the @${Inject.name} decorator on a method, parameter dependencies must be an array.\n`
-            + `Received: ${typeof keyOrDependencies}\n`
-            + `Check method ${String(context.name)}.`,
+            `When using the @${Inject.name} decorator on a method, parameter dependencies must be an array.\n` +
+              `Received: ${typeof keyOrDependencies}\n` +
+              `Check method ${String(context.name)}.`,
           )
         }
 

@@ -2,7 +2,9 @@ import { execSync, spawn, type ChildProcess } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
 import autocannon from 'autocannon'
+
 import { printMachineInfo } from '../../../machine-info.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -137,8 +139,7 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
       await access(server.builtPath)
     } catch {
       throw new Error(
-        `Compiled output not found at: ${server.builtPath}\n`
-        + `Run: npm run build -w @caffeinejs/benchmarks`,
+        `Compiled output not found at: ${server.builtPath}\n` + `Run: npm run build -w @caffeinejs/benchmarks`,
       )
     }
   }
@@ -186,28 +187,31 @@ async function runServer(server: ServerConfig): Promise<BenchResult> {
 }
 
 function printTable(results: BenchResult[]): void {
-  const c1 = 14, c2 = 14, c3 = 19, c4 = 23
+  const c1 = 14,
+    c2 = 14,
+    c3 = 19,
+    c4 = 23
   const line = `${'-'.repeat(c1)}+-${'-'.repeat(c2)}+-${'-'.repeat(c3)}+-${'-'.repeat(c4 - 2)}`
-  const header
-    = 'Framework'.padEnd(c1)
-      + '| '
-      + 'Req/sec avg'.padEnd(c2)
-      + '| '
-      + 'Latency avg (ms)'.padEnd(c3)
-      + '| '
-      + 'Throughput (MB/s)'
+  const header =
+    'Framework'.padEnd(c1) +
+    '| ' +
+    'Req/sec avg'.padEnd(c2) +
+    '| ' +
+    'Latency avg (ms)'.padEnd(c3) +
+    '| ' +
+    'Throughput (MB/s)'
 
   console.log(`\nRuntime: Bun\n\n${header}\n${line}`)
 
   for (const r of results) {
-    const row
-      = r.name.padEnd(c1)
-        + '| '
-        + r.reqPerSec.toLocaleString().padStart(c2 - 1)
-        + ' | '
-        + r.latencyMs.toFixed(2).padStart(c3 - 1)
-        + ' | '
-        + r.throughputMBs.toFixed(2).padStart(c4 - 3)
+    const row =
+      r.name.padEnd(c1) +
+      '| ' +
+      r.reqPerSec.toLocaleString().padStart(c2 - 1) +
+      ' | ' +
+      r.latencyMs.toFixed(2).padStart(c3 - 1) +
+      ' | ' +
+      r.throughputMBs.toFixed(2).padStart(c4 - 3)
     console.log(row)
   }
 

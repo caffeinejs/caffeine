@@ -51,7 +51,7 @@ const di = new CaffeineIoC({ profiles: ['test'] })
 await di.init()
 
 di.get(StubPaymentGateway) // resolves — 'test' is active
-di.get(StripeEUGateway)    // resolves — no profile, always active
+di.get(StripeEUGateway) // resolves — no profile, always active
 ```
 
 ```ts
@@ -66,7 +66,7 @@ When no profiles are active, only no-profile bindings are registered:
 const di = new CaffeineIoC()
 await di.init()
 
-di.get(StripeEUGateway)    // resolves
+di.get(StripeEUGateway) // resolves
 di.get(StubPaymentGateway) // throws ErrNoResolutionForKey — 'test' not active
 ```
 
@@ -148,12 +148,12 @@ di.bind(StubPaymentGateway, t => t.toSelf().profiles('test', 'development'))
 Both mechanisms control whether a binding is registered at `init()` time. The right
 choice depends on what drives the decision.
 
-| | `@Profile` / `.profiles()` | `@ConditionalOn` |
-|---|---|---|
-| Activation | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time |
-| Style | Declarative — name a group | Imperative — write a function |
-| Async support | No | Yes |
-| Best for | Environment / persona groupings | Feature flags, presence checks, env vars |
+|               | `@Profile` / `.profiles()`                     | `@ConditionalOn`                         |
+| ------------- | ---------------------------------------------- | ---------------------------------------- |
+| Activation    | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time         |
+| Style         | Declarative — name a group                     | Imperative — write a function            |
+| Async support | No                                             | Yes                                      |
+| Best for      | Environment / persona groupings                | Feature flags, presence checks, env vars |
 
 Use `@Profile` when a binding naturally belongs to a named environment or persona
 (`test`, `production`, `eu`, `staging`). The profile name is the complete activation
@@ -172,5 +172,7 @@ the binding is registered only when the profile is active **and** the predicate 
 @Profile('eu')
 @ConditionalOn(ctx => ctx.container.has(RedisClient))
 @Injectable()
-class RedisEUCache extends CacheStore { /* ... */ }
+class RedisEUCache extends CacheStore {
+  /* ... */
+}
 ```

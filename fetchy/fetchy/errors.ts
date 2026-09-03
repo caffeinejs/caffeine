@@ -45,10 +45,7 @@ export class ErrFetchyEmptyClient extends FetchyError {
  */
 export class ErrFetchyMissingAPIDecorator extends FetchyError {
   constructor(className: string) {
-    super(
-      `Cannot create client for "${className}": missing @API() class decorator`,
-      'ERR_FETCHY_MISSING_API_DECORATOR',
-    )
+    super(`Cannot create client for "${className}": missing @API() class decorator`, 'ERR_FETCHY_MISSING_API_DECORATOR')
     this.name = 'ErrFetchyMissingAPIDecorator'
   }
 }

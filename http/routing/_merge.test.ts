@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { RouteGroupBuilder, RouteBuilder } from './builder.js'
 
 const kSym = Symbol('test')
@@ -23,10 +24,7 @@ describe('RouteGroupBuilder cumulative merge', () => {
   })
 
   it('overwrites on primitive config key', () => {
-    const router = new RouteGroupBuilder()
-      .config('x', 1)
-      .config('x', 2)
-      .toRouteGroup()
+    const router = new RouteGroupBuilder().config('x', 1).config('x', 2).toRouteGroup()
 
     expect(router.config?.get('x')).toBe(2)
   })
@@ -52,28 +50,19 @@ describe('RouteBuilder cumulative merge', () => {
   })
 
   it('concats arrays on the same extras key', () => {
-    const route = new RouteBuilder()
-      .extras(kSym, [1, 2])
-      .extras(kSym, [3])
-      .toRoute()
+    const route = new RouteBuilder().extras(kSym, [1, 2]).extras(kSym, [3]).toRoute()
 
     expect(route.extras?.get(kSym)).toEqual([1, 2, 3])
   })
 
   it('overwrites on primitive extras key', () => {
-    const route = new RouteBuilder()
-      .extras(kSym, true)
-      .extras(kSym, false)
-      .toRoute()
+    const route = new RouteBuilder().extras(kSym, true).extras(kSym, false).toRoute()
 
     expect(route.extras?.get(kSym)).toBe(false)
   })
 
   it('overwrites on primitive config key', () => {
-    const route = new RouteBuilder()
-      .config('x', 1)
-      .config('x', 2)
-      .toRoute()
+    const route = new RouteBuilder().config('x', 1).config('x', 2).toRoute()
 
     expect(route.config?.get('x')).toBe(2)
   })

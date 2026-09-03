@@ -1,9 +1,10 @@
 import { $i, CaffeineIoC, Injectable, Scopes } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
-import { $t } from './schema/t.js'
-import { CONFIG_REFRESH_LABEL, ConfigPriority, MutableConfigProvider, InlineConfigProvider } from './config/index.js'
+
 import { Configuration, kConfiguration } from './config/configuration.js'
+import { CONFIG_REFRESH_LABEL, ConfigPriority, MutableConfigProvider, InlineConfigProvider } from './config/index.js'
 import { createApplication } from './index.js'
+import { $t } from './schema/t.js'
 
 const schema = $t.Object({
   database: $t.Object({
@@ -12,9 +13,9 @@ const schema = $t.Object({
   }),
 })
 
-type AppConfig = { database: { host: string, port: number } }
+type AppConfig = { database: { host: string; port: number } }
 
-function appWith(...sources: Array<{ provider: InlineConfigProvider | MutableConfigProvider, priority?: number }>) {
+function appWith(...sources: Array<{ provider: InlineConfigProvider | MutableConfigProvider; priority?: number }>) {
   const container = new CaffeineIoC({ decorators: false })
   const builder = createApplication({ container }).config(schema, c => {
     for (const { provider, priority } of sources) {
@@ -48,7 +49,10 @@ describe('configuration as the DI values provider', () => {
       $i.value<AppConfig, string>('database.missing', 'fallback'),
     ])
     class Repository {
-      constructor(readonly port: number, readonly missing: string) {}
+      constructor(
+        readonly port: number,
+        readonly missing: string,
+      ) {}
     }
 
     const { builder, container } = appWith({
@@ -71,8 +75,7 @@ describe('configuration as the DI values provider', () => {
       constructor(readonly host: string) {}
     }
 
-    const mutable = new MutableConfigProvider('test')
-      .set(['database'], { host: 'first', port: 5432 })
+    const mutable = new MutableConfigProvider('test').set(['database'], { host: 'first', port: 5432 })
 
     const { builder, container } = appWith({ provider: mutable, priority: ConfigPriority.ENV })
     container.bind(Holder, t => t.toSelf().lifetime(Scopes.TRANSIENT))

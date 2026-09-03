@@ -1,5 +1,6 @@
 import { RouteBuilder, type Route, type RouteGroup, type RouteGroupBuilder } from '@caffeinejs/http'
 import { getRouteGroup, registerRouteGroup } from '@caffeinejs/http/decorators/registrar'
+
 import type { OpenAPIOptions } from '../options.js'
 import { defaultOpenAPIOptions } from '../options.js'
 
@@ -13,7 +14,7 @@ import { defaultOpenAPIOptions } from '../options.js'
 export function fixtureRouter(
   path: string,
   configure: (router: RouteGroupBuilder) => void,
-  options: { prefix?: string, name?: string } = {},
+  options: { prefix?: string; name?: string } = {},
 ): RouteGroup<unknown> {
   // A fresh class per call: `registerRouteGroup` is get-or-create and `routes()` appends, so a shared key would
   // accumulate the routes of every previous fixture.

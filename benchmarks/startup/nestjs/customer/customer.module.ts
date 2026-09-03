@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common'
-import { SharedModule } from '../shared/shared.module.js'
+
 import { LoggerService } from '../shared/logger.service.js'
+import { SharedModule } from '../shared/shared.module.js'
+import { CustomerController } from './customer.controller.js'
 import { CustomerRepository } from './customer.repository.js'
 import { CustomerService } from './customer.service.js'
-import { CustomerController } from './customer.controller.js'
 
 @Module({
   imports: [SharedModule],
@@ -11,8 +12,7 @@ import { CustomerController } from './customer.controller.js'
     CustomerRepository,
     {
       provide: CustomerService,
-      useFactory: (repo: CustomerRepository, logger: LoggerService) =>
-        new CustomerService(repo, logger),
+      useFactory: (repo: CustomerRepository, logger: LoggerService) => new CustomerService(repo, logger),
       inject: [CustomerRepository, LoggerService],
     },
     {

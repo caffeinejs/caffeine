@@ -1,11 +1,12 @@
 import { $i, type InjectedOf, type InjectionToken, type ObjectInjectionSpec } from '@caffeinejs/di'
+
 import type { ErrorHandlerRef } from '../../error/error.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RouteValidationSchema } from '../../route.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteAuthzOptions } from '../spec.js'
-import type { RouteGroupExtension } from './extension.js'
 import { attachState, stateOf, type RouterState } from './_state.js'
+import type { RouteGroupExtension } from './extension.js'
 import { RouteChain } from './route_chain.js'
 import type { DeclaredRoute, JoinPath, MergeDeps, PrefixRoutePaths, RouteHandler, RoutesOf } from './types.js'
 
@@ -112,10 +113,7 @@ export class Router<V = Record<never, never>, GD = undefined, GP extends string 
     path: CP,
     configure: (router: Router<V, GD, JoinPath<GP, CP>>) => Router<any, any, any, CR>,
   ): Router<V, GD, GP, R | CR>
-  group<CP extends string>(
-    path: CP,
-    configure: (router: Router<V, GD, JoinPath<GP, CP>>) => unknown,
-  ): this
+  group<CP extends string>(path: CP, configure: (router: Router<V, GD, JoinPath<GP, CP>>) => unknown): this
   group<CP extends string>(path: CP, configure: (router: Router<V, GD, JoinPath<GP, CP>>) => unknown): this {
     const child = new Router<V, GD, JoinPath<GP, CP>>(path as unknown as JoinPath<GP, CP>)
     configure(child)
@@ -180,7 +178,10 @@ export class Router<V = Record<never, never>, GD = undefined, GP extends string 
   }
 
   post<P extends string>(path: P): Chain<'POST', P, V, GD, GP, R>
-  post<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'POST', P, Empty, O, V, GD, GP, R>
+  post<P extends string, O>(
+    path: P,
+    handler: Handler<Empty, P, V, GD, GP, O>,
+  ): Closed<'POST', P, Empty, O, V, GD, GP, R>
   post<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
@@ -202,7 +203,10 @@ export class Router<V = Record<never, never>, GD = undefined, GP extends string 
   }
 
   patch<P extends string>(path: P): Chain<'PATCH', P, V, GD, GP, R>
-  patch<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'PATCH', P, Empty, O, V, GD, GP, R>
+  patch<P extends string, O>(
+    path: P,
+    handler: Handler<Empty, P, V, GD, GP, O>,
+  ): Closed<'PATCH', P, Empty, O, V, GD, GP, R>
   patch<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
@@ -227,7 +231,10 @@ export class Router<V = Record<never, never>, GD = undefined, GP extends string 
   }
 
   head<P extends string>(path: P): Chain<'HEAD', P, V, GD, GP, R>
-  head<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'HEAD', P, Empty, O, V, GD, GP, R>
+  head<P extends string, O>(
+    path: P,
+    handler: Handler<Empty, P, V, GD, GP, O>,
+  ): Closed<'HEAD', P, Empty, O, V, GD, GP, R>
   head<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
@@ -409,13 +416,25 @@ type AnyRouteChain = RouteChain<any, any, any, any, any, any, any, any>
 type AnyRouteHandler = RouteHandler<any, any, any, any>
 
 /** What a verb answers when it was given no handler: the route, still open for configuration. */
-type Chain<M extends string, P extends string, V, GD, GP extends string, R>
-  = RouteChain<Empty, P, GD, V, GD, GP, M, R>
+type Chain<M extends string, P extends string, V, GD, GP extends string, R> = RouteChain<Empty, P, GD, V, GD, GP, M, R>
 
 /** What a verb answers when a handler closed the route there and then: the group, carrying the route. */
-type Closed<M extends string, P extends string, S extends RouteValidationSchema, O, V, GD, GP extends string, R>
-  = Router<V, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
+type Closed<
+  M extends string,
+  P extends string,
+  S extends RouteValidationSchema,
+  O,
+  V,
+  GD,
+  GP extends string,
+  R,
+> = Router<V, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
 
 /** A handler written inline on a verb, typed against the route's schema and its full path. */
-type Handler<S extends RouteValidationSchema, P extends string, V, GD, GP extends string, O>
-  = RouteHandler<S, JoinPath<GP, P>, V, GD, O>
+type Handler<S extends RouteValidationSchema, P extends string, V, GD, GP extends string, O> = RouteHandler<
+  S,
+  JoinPath<GP, P>,
+  V,
+  GD,
+  O
+>

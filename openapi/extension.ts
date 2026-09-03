@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { extname, resolve } from 'node:path'
-import { parse as fromYAML, stringify as toYAML } from 'yaml'
+
 import {
   type AuthSchemeDescriptor,
   AuthenticationSchemeProvider,
@@ -10,13 +10,15 @@ import {
   kAuthSchemeDescriptors,
   solutions,
 } from '@caffeinejs/http'
+import { parse as fromYAML, stringify as toYAML } from 'yaml'
+
 import type { OpenAPIDocumentStore } from './document_store.js'
 import type { EndpointPaths } from './endpoints.js'
 import { publicURL } from './endpoints.js'
 import { ErrOpenAPIConfiguration } from './errors.js'
 import { generateDocument, validateDocument } from './generate/generator.js'
-import type { OpenAPIDocument } from './spec/spec.js'
 import type { OpenAPIOptions, OpenAPISource } from './options.js'
+import type { OpenAPIDocument } from './spec/spec.js'
 import { readScalarBundle, scalarPage } from './ui/scalar.js'
 
 /**
@@ -54,15 +56,16 @@ export class OpenAPIExtension extends ServerExtension {
     this.#warnIfUnprotected(ctx)
 
     const warnings: string[] = []
-    const generated = options.source === undefined
-      ? generateDocument({
-          routeGroups: ctx.routeGroups as Array<RouteGroup<unknown>>,
-          options,
-          schemes: descriptors,
-          defaultScheme: ctx.services.auth.options?.defaultAuthenticateScheme,
-          onWarning: message => warnings.push(message),
-        })
-      : readDocument(options.source)
+    const generated =
+      options.source === undefined
+        ? generateDocument({
+            routeGroups: ctx.routeGroups as Array<RouteGroup<unknown>>,
+            options,
+            schemes: descriptors,
+            defaultScheme: ctx.services.auth.options?.defaultAuthenticateScheme,
+            onWarning: message => warnings.push(message),
+          })
+        : readDocument(options.source)
 
     // The transform runs in both modes, so it is equally the way to patch a generated document and to adjust
     // an imported one. Mutating in place and returning nothing is supported because it is the obvious thing
@@ -88,7 +91,7 @@ export class OpenAPIExtension extends ServerExtension {
   }
 
   /** Builds the documentation page and its bundle, or nothing when no UI is served. */
-  #ui(): { docsPage?: string, asset?: string } {
+  #ui(): { docsPage?: string; asset?: string } {
     const { docs, asset, json } = this.#paths
     if (docs === undefined || asset === undefined) {
       return {}
@@ -125,12 +128,12 @@ export class OpenAPIExtension extends ServerExtension {
     for (const name of wanted) {
       if (!known.includes(name)) {
         throw new ErrOpenAPIConfiguration(
-          `Cannot secure the OpenAPI endpoints: no authentication scheme named "${name}" is registered`
-          + solutions(
-            known.length === 0
-              ? 'Register a scheme with .authentication(auth => auth.addJWTBearer(...)) before securing the document'
-              : `Use one of the registered schemes: ${known.map(n => `"${n}"`).join(', ')}`,
-          ),
+          `Cannot secure the OpenAPI endpoints: no authentication scheme named "${name}" is registered` +
+            solutions(
+              known.length === 0
+                ? 'Register a scheme with .authentication(auth => auth.addJWTBearer(...)) before securing the document'
+                : `Use one of the registered schemes: ${known.map(n => `"${n}"`).join(', ')}`,
+            ),
         )
       }
     }
@@ -153,11 +156,11 @@ export class OpenAPIExtension extends ServerExtension {
     }
 
     process.emitWarning(
-      'The OpenAPI document is served publicly while authentication is configured'
-      + solutions(
-        'Call .secure(s => s.schemes("Bearer")) on the OpenAPI builder to require authentication',
-        'Call .public() to state that public access is intended and silence this warning',
-      ),
+      'The OpenAPI document is served publicly while authentication is configured' +
+        solutions(
+          'Call .secure(s => s.schemes("Bearer")) on the OpenAPI builder to require authentication',
+          'Call .public() to state that public access is intended and silence this warning',
+        ),
       'CaffeineOpenAPIWarning',
     )
   }
@@ -182,11 +185,11 @@ function readDocument(source: OpenAPISource): OpenAPIDocument {
     contents = readFileSync(path, 'utf8')
   } catch (cause) {
     throw new ErrOpenAPIConfiguration(
-      `Cannot read the OpenAPI specification at "${path}": ${describe(cause)}`
-      + solutions(
-        'Check the path — it is resolved against the process working directory unless absolute',
-        'Pass the document itself with .document(obj) instead of reading it from disk',
-      ),
+      `Cannot read the OpenAPI specification at "${path}": ${describe(cause)}` +
+        solutions(
+          'Check the path — it is resolved against the process working directory unless absolute',
+          'Pass the document itself with .document(obj) instead of reading it from disk',
+        ),
     )
   }
 

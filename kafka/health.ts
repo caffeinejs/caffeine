@@ -1,5 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { HealthIndicator, type HealthReport } from '@caffeinejs/std'
+
 import type { KafkaContainerStatus, KafkaListenerContainer } from './listener_container.js'
 import { Keys } from './symbols.js'
 

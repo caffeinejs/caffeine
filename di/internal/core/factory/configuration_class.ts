@@ -1,7 +1,7 @@
-import { Ctor } from '../../../types.js'
-import { ResolutionContext } from '../../../resolution_context.js'
-import { Factory } from '../../../factory.js'
 import { Binding } from '../../../binding.js'
+import { Factory } from '../../../factory.js'
+import { ResolutionContext } from '../../../resolution_context.js'
+import { Ctor } from '../../../types.js'
 
 export function configurationClassFactory<T>(target: Ctor, method: string | symbol, conf: Binding): Factory<T> {
   return (ctx: ResolutionContext): T => {

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory, BodyAsBuffer } from '../index.js'
 import { $p } from '../route_picker.js'
 
@@ -22,7 +23,11 @@ describe('BodyAsBuffer', () => {
 
     const payload = Buffer.from('hello raw world')
 
-    const res = await app.fetch('/raw/upload', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload })
+    const res = await app.fetch('/raw/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: payload,
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ size: payload.byteLength, isBuffer: true })
@@ -46,7 +51,11 @@ describe('BodyAsBuffer', () => {
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
 
-    const res = await app.fetch('/raw-binary/data', { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: payload })
+    const res = await app.fetch('/raw-binary/data', {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: payload,
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ bytes: [1, 2, 3, 255] })
@@ -70,7 +79,11 @@ describe('BodyAsBuffer', () => {
 
     const jsonStr = JSON.stringify({ key: 'value' })
 
-    const res = await app.fetch('/raw-json/data', { method: 'POST', headers: { 'content-type': 'application/json' }, body: jsonStr })
+    const res = await app.fetch('/raw-json/data', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: jsonStr,
+    })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ raw: jsonStr })
@@ -98,9 +111,17 @@ describe('BodyAsBuffer', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const rawRes = await app.fetch('/raw-mixed/raw', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'hello' })
+    const rawRes = await app.fetch('/raw-mixed/raw', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'hello',
+    })
 
-    const parsedRes = await app.fetch('/raw-mixed/parsed', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: 1 }) })
+    const parsedRes = await app.fetch('/raw-mixed/parsed', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ x: 1 }),
+    })
 
     expect(rawRes.status).toBe(200)
     expect(await rawRes.json()).toEqual({ isBuffer: true })

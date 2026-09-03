@@ -1,4 +1,5 @@
 import { $t } from '@caffeinejs/std'
+
 import type { RetryPolicy } from './error_handling.js'
 
 /** The default location of the messaging settings in the configuration tree. Instances sit beneath it by name. */

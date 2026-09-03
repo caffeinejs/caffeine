@@ -51,13 +51,13 @@ commands below if that is how you are running it.
 
 The OpenAPI document is generated from the routes themselves and served by the running app:
 
-| URL              | What                                              |
-| ---------------- | ------------------------------------------------- |
-| `/docs`          | Scalar API reference, served from this origin      |
-| `/openapi.json`  | The OpenAPI 3.2.0 document                         |
-| `/openapi.yaml`  | The same document as YAML                          |
+| URL             | What                                          |
+| --------------- | --------------------------------------------- |
+| `/docs`         | Scalar API reference, served from this origin |
+| `/openapi.json` | The OpenAPI 3.2.0 document                    |
+| `/openapi.yaml` | The same document as YAML                     |
 
-There is no endpoint table to maintain here any more, because there is nothing to maintain it *from*: the
+There is no endpoint table to maintain here any more, because there is nothing to maintain it _from_: the
 paths, parameters, request bodies, response schemas and security requirements are all read out of what the
 controllers already declare — `@Schema`, `@Status`, `@Authorize`/`@Roles`/`@AllowAnonymous`, and the `$p`
 pickers. `@APIGroup` and `@Operation` add only the parts none of those can express: the tag descriptions, the
@@ -77,10 +77,10 @@ modelled on, so a route added without an `@Operation` fails the build rather tha
 
 Two schemes, deliberately segregated:
 
-| Scheme | Covers | How a route selects it |
-| ------ | ------ | ---------------------- |
-| **GitHub** (OAuth 2.0) | every application route | it is the **default** — no controller names a scheme |
-| **Basic** | `/docs`, `/openapi.json`, `/openapi.yaml` | `.secure(s => s.schemes('Basic'))`, the one scheme-naming site |
+| Scheme                 | Covers                                    | How a route selects it                                         |
+| ---------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| **GitHub** (OAuth 2.0) | every application route                   | it is the **default** — no controller names a scheme           |
+| **Basic**              | `/docs`, `/openapi.json`, `/openapi.yaml` | `.secure(s => s.schemes('Basic'))`, the one scheme-naming site |
 
 A route accepts **only** the schemes it names. So a signed-in GitHub session does not open the documentation,
 and Basic credentials do not authenticate the API — which is what makes the split real rather than cosmetic.

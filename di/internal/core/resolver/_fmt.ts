@@ -1,5 +1,5 @@
-import { keyStr } from '../../../key.js'
 import { InjectionResolverFactoryContext } from '../../../injection_resolver.js'
+import { keyStr } from '../../../key.js'
 
 export function describeContext(ctx: InjectionResolverFactoryContext): string {
   let message = ''

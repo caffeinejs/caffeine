@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { $i, CaffeineIoC, ErrInvalidBinding, token } from '../index.js'
 
 class Repo {
@@ -60,22 +61,26 @@ function injectionTupleTypeChecks(di: CaffeineIoC): void {
   di.bind(Service, t => t.toClass(Service, [Repo, Logger]))
   di.bind(Service, t => t.toSelf([Repo, Logger]))
 
-  di.bind(Service, t => t.toClass(Service, [
-    // @ts-expect-error dependencies are checked by position, not as a set
-    Logger,
-    // @ts-expect-error same swap, seen from the second parameter
-    Repo,
-  ]))
+  di.bind(Service, t =>
+    t.toClass(Service, [
+      // @ts-expect-error dependencies are checked by position, not as a set
+      Logger,
+      // @ts-expect-error same swap, seen from the second parameter
+      Repo,
+    ]),
+  )
 
   // @ts-expect-error one injection for a two-parameter constructor
   di.bind(Service, t => t.toClass(Service, [Repo]))
 
-  di.bind(Service, t => t.toClass(Service, [
-    Repo,
-    Logger,
-    // @ts-expect-error more injections than constructor parameters
-    Repo,
-  ]))
+  di.bind(Service, t =>
+    t.toClass(Service, [
+      Repo,
+      Logger,
+      // @ts-expect-error more injections than constructor parameters
+      Repo,
+    ]),
+  )
 
   di.bind(OptionalDep, t => t.toSelf([Repo, $i.optional(Logger)]))
 
@@ -83,11 +88,13 @@ function injectionTupleTypeChecks(di: CaffeineIoC): void {
   // `$i.optional` dependency on a required parameter is accepted. Widening the parameter is the caller's call.
   di.bind(Service, t => t.toSelf([Repo, $i.optional(Logger)]))
 
-  di.bind(Service, t => t.toSelf([
-    Repo,
-    // @ts-expect-error a collection injection does not satisfy a single-instance parameter
-    $i.allOf(Logger),
-  ]))
+  di.bind(Service, t =>
+    t.toSelf([
+      Repo,
+      // @ts-expect-error a collection injection does not satisfy a single-instance parameter
+      $i.allOf(Logger),
+    ]),
+  )
 
   // `$i.defer` is how a genuine cycle is expressed, so it stays legal.
   di.bind(SelfDep, t => t.toSelf([$i.defer(() => SelfDep)]))
@@ -114,11 +121,13 @@ function injectionTupleTypeChecks(di: CaffeineIoC): void {
   // @ts-expect-error the function returns a type the token does not accept
   di.bind(kName, t => t.toFunction(() => 42))
 
-  di.bind(kName, t => t.toFunction(
-    // @ts-expect-error the parameter is typed from the injection list, and Repo has no such member
-    repo => repo.missingMember(),
-    [Repo],
-  ))
+  di.bind(kName, t =>
+    t.toFunction(
+      // @ts-expect-error the parameter is typed from the injection list, and Repo has no such member
+      repo => repo.missingMember(),
+      [Repo],
+    ),
+  )
 }
 
 void injectionTupleTypeChecks
@@ -127,25 +136,21 @@ describe('BindingSpec injection lists', function () {
   it('should still reject a mismatched injection count at run time, for callers without types', function () {
     const di = new CaffeineIoC({ decorators: false })
 
-    expect(() => di.bind(Service, t => t.toClass(Service, [Repo] as never)))
-      .toThrow(ErrInvalidBinding)
+    expect(() => di.bind(Service, t => t.toClass(Service, [Repo] as never))).toThrow(ErrInvalidBinding)
   })
 
   it('should reject a component listed among its own dependencies', function () {
     const di = new CaffeineIoC({ decorators: false })
 
-    expect(() => di.bind(SelfDep, t => t.toSelf([SelfDep])))
-      .toThrow(ErrInvalidBinding)
-    expect(() => di.bind(SelfDep, t => t.toClass(SelfDep, [SelfDep])))
-      .toThrow(ErrInvalidBinding)
+    expect(() => di.bind(SelfDep, t => t.toSelf([SelfDep]))).toThrow(ErrInvalidBinding)
+    expect(() => di.bind(SelfDep, t => t.toClass(SelfDep, [SelfDep]))).toThrow(ErrInvalidBinding)
   })
 
   it('should reject a component listed under the key it is bound to', function () {
     const di = new CaffeineIoC({ decorators: false })
 
     // The key and the implementation differ, but injecting the key is the same cycle.
-    expect(() => di.bind(SelfDep, t => t.toClass(SelfDepImpl, [SelfDep])))
-      .toThrow(ErrInvalidBinding)
+    expect(() => di.bind(SelfDep, t => t.toClass(SelfDepImpl, [SelfDep]))).toThrow(ErrInvalidBinding)
   })
 
   it('should accept a deferred self reference, which is how a cycle is expressed', async function () {

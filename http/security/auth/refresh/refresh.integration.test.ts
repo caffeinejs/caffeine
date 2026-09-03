@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   Authorize,
   Claim,
@@ -24,16 +25,20 @@ const SECRET = 'a-very-long-test-secret-key-32-bytes!'
 const ISSUER = 'https://test.example.com'
 
 function alicePrincipal(): Principal {
-  return new Principal(true, new Identity('Bearer', true, [
-    new Claim('sub', 'alice', ''),
-    new Claim('roles', ['admin'], ''),
-  ]))
+  return new Principal(
+    true,
+    new Identity('Bearer', true, [new Claim('sub', 'alice', ''), new Claim('roles', ['admin'], '')]),
+  )
 }
 
 class InMemoryRefreshStore extends RefreshTokenStore {
   readonly records = new Map<string, RefreshTokenRecord>()
-  create(record: RefreshTokenRecord): void { this.records.set(record.series, { ...record }) }
-  findBySeries(series: string): RefreshTokenRecord | null { return this.records.get(series) ?? null }
+  create(record: RefreshTokenRecord): void {
+    this.records.set(record.series, { ...record })
+  }
+  findBySeries(series: string): RefreshTokenRecord | null {
+    return this.records.get(series) ?? null
+  }
   updateToken(series: string, tokenHash: string, expiresAt: number): void {
     const r = this.records.get(series)
     if (r) {
@@ -42,7 +47,9 @@ class InMemoryRefreshStore extends RefreshTokenStore {
     }
   }
 
-  remove(series: string): void { this.records.delete(series) }
+  remove(series: string): void {
+    this.records.delete(series)
+  }
   removeBySubject(subject: string): void {
     for (const [k, v] of this.records) {
       if (v.subject === subject) {
@@ -52,12 +59,17 @@ class InMemoryRefreshStore extends RefreshTokenStore {
   }
 }
 
-interface RefreshDto { refreshToken: string }
+interface RefreshDto {
+  refreshToken: string
+}
 
 // Injects the refresh grant AND the shared JWTService directly (proves G1: same signer as the scheme).
 @Controller('/auth', [RefreshTokenService, JWTService])
 class AuthController {
-  constructor(private readonly refresh: RefreshTokenService, private readonly jwt: JWTService) {}
+  constructor(
+    private readonly refresh: RefreshTokenService,
+    private readonly jwt: JWTService,
+  ) {}
 
   @Post('/login')
   async login() {
@@ -100,11 +112,11 @@ async function buildApp() {
   const store = new InMemoryRefreshStore()
   container.bind(RefreshTokenStore, t => t.toValue(store))
   const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
-  builder.authentication(a => a
-    .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())
-    .addRefreshTokens(o => o
-      .refreshTTL('30d')
-      .resolve(sub => (sub === 'alice' ? alicePrincipal() : null))))
+  builder.authentication(a =>
+    a
+      .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())
+      .addRefreshTokens(o => o.refreshTTL('30d').resolve(sub => (sub === 'alice' ? alicePrincipal() : null))),
+  )
   const app = builder.build().useAuthenticationAndAuthorization()
   await app.ready()
   return { app, store }
@@ -122,7 +134,7 @@ describe('bearer refresh-token grant (application)', () => {
 
     const res = await postJSON(app, '/auth/login')
     expect(res.status).toBe(200)
-    const { accessToken, refreshToken } = await res.json() as Record<string, string>
+    const { accessToken, refreshToken } = (await res.json()) as Record<string, string>
     expect(accessToken).toBeTruthy()
     expect(refreshToken).toContain(':')
 
@@ -133,11 +145,11 @@ describe('bearer refresh-token grant (application)', () => {
 
   it('refresh rotates the refresh token and returns a working access token', async () => {
     const { app } = await buildApp()
-    const first = await (await postJSON(app, '/auth/login')).json() as Record<string, string>
+    const first = (await (await postJSON(app, '/auth/login')).json()) as Record<string, string>
 
     const res = await postJSON(app, '/auth/refresh', { refreshToken: first.refreshToken })
     expect(res.status).toBe(200)
-    const next = await res.json() as Record<string, string>
+    const next = (await res.json()) as Record<string, string>
     expect(next.refreshToken).not.toBe(first.refreshToken)
 
     const me = await app.fetch('/me', { headers: { authorization: `Bearer ${next.accessToken}` } })
@@ -146,7 +158,7 @@ describe('bearer refresh-token grant (application)', () => {
 
   it('replaying a pre-rotation refresh token is rejected (401) as theft', async () => {
     const { app } = await buildApp()
-    const first = await (await postJSON(app, '/auth/login')).json() as Record<string, string>
+    const first = (await (await postJSON(app, '/auth/login')).json()) as Record<string, string>
     await postJSON(app, '/auth/refresh', { refreshToken: first.refreshToken }) // rotate
 
     const replay = await postJSON(app, '/auth/refresh', { refreshToken: first.refreshToken })
@@ -155,7 +167,7 @@ describe('bearer refresh-token grant (application)', () => {
 
   it('server-side revoke (revokeAllForSubject) kills the refresh credential', async () => {
     const { app } = await buildApp()
-    const first = await (await postJSON(app, '/auth/login')).json() as Record<string, string>
+    const first = (await (await postJSON(app, '/auth/login')).json()) as Record<string, string>
 
     await postJSON(app, '/auth/logout-all', { refreshToken: first.refreshToken })
 
@@ -166,7 +178,7 @@ describe('bearer refresh-token grant (application)', () => {
   it('the shared JWTService is injectable and issues tokens the scheme verifies (G1)', async () => {
     const { app } = await buildApp()
 
-    const { token } = await (await postJSON(app, '/auth/guest')).json() as Record<string, string>
+    const { token } = (await (await postJSON(app, '/auth/guest')).json()) as Record<string, string>
     expect(token).toBeTruthy()
 
     // A self-issued guest token authenticates (valid JWT) but is not an admin.

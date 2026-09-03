@@ -1,4 +1,5 @@
 import { parseDuration } from '@caffeinejs/std'
+
 import { CacheOptions, ETagGenerator } from './cache.js'
 
 // RFC 7232 §3.2 — weak comparison: strip W/ prefix, handle comma-separated list and wildcard
@@ -7,18 +8,17 @@ export function matchesETag(ifNoneMatch: string, storedETag: string): boolean {
     return true
   }
 
-  const normalize = (e: string) => e.startsWith('W/') ? e.slice(2) : e
+  const normalize = (e: string) => (e.startsWith('W/') ? e.slice(2) : e)
   const stored = normalize(storedETag)
 
-  return ifNoneMatch.split(',')
+  return ifNoneMatch
+    .split(',')
     .map(e => normalize(e.trim()))
     .some(e => e === stored)
 }
 
 export async function generateETag(payload: string | Buffer, generator?: ETagGenerator): Promise<string> {
-  const buf = typeof payload === 'string'
-    ? Buffer.from(payload)
-    : payload
+  const buf = typeof payload === 'string' ? Buffer.from(payload) : payload
 
   if (generator) {
     return generator(buf)
@@ -33,10 +33,7 @@ export async function generateETag(payload: string | Buffer, generator?: ETagGen
   return `"${hex.slice(0, 16)}"`
 }
 
-export function buildCacheControl(
-  opts: CacheOptions,
-  privacyOverride?: 'private' | 'public',
-): string | null {
+export function buildCacheControl(opts: CacheOptions, privacyOverride?: 'private' | 'public'): string | null {
   if (opts.noStore) {
     return 'no-store'
   }

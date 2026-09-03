@@ -1,5 +1,5 @@
-import type { RemoteAuthenticationSession } from './session_store.js'
 import type { RemoteAuthenticationTokens } from './handler.js'
+import type { RemoteAuthenticationSession } from './session_store.js'
 
 /**
  * A session held server-side, addressed by an opaque key carried in the cookie.

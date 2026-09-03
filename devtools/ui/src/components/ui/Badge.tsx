@@ -36,28 +36,18 @@ const EVENT_STYLES: Record<string, string> = {
 
 export function MethodBadge({ method }: { method: string }) {
   const m = method.toUpperCase()
-  return (
-    <Badge className={METHOD_STYLES[m] ?? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'}>
-      {m}
-    </Badge>
-  )
+  return <Badge className={METHOD_STYLES[m] ?? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'}>{m}</Badge>
 }
 
 export function EventBadge({ kind }: { kind: string }) {
-  return (
-    <Badge className={EVENT_STYLES[kind] ?? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'}>
-      {kind}
-    </Badge>
-  )
+  return <Badge className={EVENT_STYLES[kind] ?? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'}>{kind}</Badge>
 }
 
 export function ScopeBadge({ scope }: { scope: string }) {
-  const label = scope
-    .replace(/^Symbol\((.+)\)$/, '$1')
-    .replace(/^@caffeinejs\/core:/, '')
+  const label = scope.replace(/^Symbol\((.+)\)$/, '$1').replace(/^@caffeinejs\/core:/, '')
 
-  const style
-    = label === 'singleton'
+  const style =
+    label === 'singleton'
       ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400'
       : label === 'request'
         ? 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20 dark:text-cyan-400'
@@ -66,7 +56,7 @@ export function ScopeBadge({ scope }: { scope: string }) {
   return <Badge className={style}>{label}</Badge>
 }
 
-export function FlagBadge({ value, label }: { value: boolean, label: string }) {
+export function FlagBadge({ value, label }: { value: boolean; label: string }) {
   if (!value) {
     return <span className="text-zinc-400 dark:text-zinc-600">—</span>
   }

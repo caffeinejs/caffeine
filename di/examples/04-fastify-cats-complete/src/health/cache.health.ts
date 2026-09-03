@@ -1,5 +1,6 @@
-import { Redis } from 'ioredis'
 import { Extends, Injectable } from '@caffeinejs/di'
+import { Redis } from 'ioredis'
+
 import { HealthCheck, type HealthResult } from './health.js'
 
 @Injectable([Redis])

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { MutableConfigProvider } from '../../providers/mutable_provider.js'
 import type { ResolutionContext } from '../../types.js'
 
@@ -50,9 +51,7 @@ describe('MutableConfigProvider', () => {
   })
 
   it('merges leaves from the root', async () => {
-    const provider = new MutableConfigProvider()
-      .set('server.port', 3000)
-      .merge({ server: { host: '127.0.0.1' } })
+    const provider = new MutableConfigProvider().set('server.port', 3000).merge({ server: { host: '127.0.0.1' } })
 
     expect(await entriesOf(provider)).toEqual({ 'server.port': 3000, 'server.host': '127.0.0.1' })
   })
@@ -71,9 +70,7 @@ describe('MutableConfigProvider', () => {
   })
 
   it('does not unset a sibling that merely shares a prefix', async () => {
-    const provider = new MutableConfigProvider()
-      .set('server.port', 3000)
-      .set('serverless.port', 1)
+    const provider = new MutableConfigProvider().set('server.port', 3000).set('serverless.port', 1)
 
     provider.unset('server')
     expect(await entriesOf(provider)).toEqual({ 'serverless.port': 1 })

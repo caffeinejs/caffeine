@@ -24,7 +24,9 @@ in the closure; callers receive a ready-to-call function.
 
 ```ts
 class EmailService {
-  send(to: string, body: string): void { /* ... */ }
+  send(to: string, body: string): void {
+    /* ... */
+  }
 }
 
 const SEND_WELCOME = Symbol('app:send-welcome')
@@ -88,12 +90,18 @@ The module pattern — a plain object with functions as properties — works wel
 
 ```ts
 class UserRepository {
-  findById(id: number) { /* ... */ }
-  save(user: unknown) { /* ... */ }
+  findById(id: number) {
+    /* ... */
+  }
+  save(user: unknown) {
+    /* ... */
+  }
 }
 
 class Logger {
-  info(msg: string) { /* ... */ }
+  info(msg: string) {
+    /* ... */
+  }
 }
 
 const USER_SERVICE = Symbol('app:user-service')
@@ -134,14 +142,16 @@ injection.
 ```ts
 import { optional, allOf, useValue } from '@caffeinejs/di'
 
-di.bind(PIPELINE, t => t.toFunction(
-  (validators, cache, maxItems) => createPipeline(validators, cache, maxItems),
-  [
-    allOf(Validator),         // array of all Validator bindings
-    optional(CacheService),   // undefined if not registered
-    useValue(100),            // literal
-  ],
-))
+di.bind(PIPELINE, t =>
+  t.toFunction(
+    (validators, cache, maxItems) => createPipeline(validators, cache, maxItems),
+    [
+      allOf(Validator), // array of all Validator bindings
+      optional(CacheService), // undefined if not registered
+      useValue(100), // literal
+    ],
+  ),
+)
 ```
 
 The injection count must equal the function's parameter count. CaffeineIoC throws at bind

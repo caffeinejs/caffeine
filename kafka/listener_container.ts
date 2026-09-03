@@ -1,9 +1,26 @@
 import { type Provider, Scopes } from '@caffeinejs/di'
-import type { ConsumerClient, ConsumerStream, DeserializationErrorRecord, KafkaAckMode, KafkaConsumerEvent, KafkaConsumerEventPayload, KafkaDeserializers, KafkaMessage, TopicSpec } from './config.js'
+
+import type {
+  ConsumerClient,
+  ConsumerStream,
+  DeserializationErrorRecord,
+  KafkaAckMode,
+  KafkaConsumerEvent,
+  KafkaConsumerEventPayload,
+  KafkaDeserializers,
+  KafkaMessage,
+  TopicSpec,
+} from './config.js'
 import { KafkaContext } from './context.js'
-import { type DeserError, extractDeserError, wrapDeserializers } from './deser.js'
 import { getHandlerListeners, type ListenerSpec } from './decorators/registrar.js'
-import { buildClassifier, deadLetterRecoverer, type ErrorClassifier, type KafkaRecoverer, sleep } from './error_handling.js'
+import { type DeserError, extractDeserError, wrapDeserializers } from './deser.js'
+import {
+  buildClassifier,
+  deadLetterRecoverer,
+  type ErrorClassifier,
+  type KafkaRecoverer,
+  sleep,
+} from './error_handling.js'
 import { ErrKafkaMissingGroupID, ErrKafkaMissingTopic } from './errors.js'
 import { compileArgs } from './pick_compiler.js'
 import { type DeadLetterManager, deadLetterManager } from './retry/dead_letter_manager.js'
@@ -45,7 +62,7 @@ interface Group {
   autocommit?: boolean | number
   routes: Map<string, Route[]>
   /** Retry topics (delay tiers) this group's strategies declare, keyed by retry-topic name, with their source. */
-  retryTopics: Map<string, { spec: RetryTopic, source: string }>
+  retryTopics: Map<string, { spec: RetryTopic; source: string }>
   /** Dead-letter topics this group's strategies target, keyed by DLT name → its source topic (for provisioning). */
   deadLetterTopics: Map<string, string>
 }
@@ -134,7 +151,13 @@ export class KafkaListenerContainer {
       if (group.retryTopics.size > 0) {
         const retryAutocommit = this.#runtime.config.ackMode === 'auto'
         const retryDeser = wrapDeserializers(this.#runtime.config.deserializers)
-        await this.#openConsumer(group, `${group.groupId}-retry`, [...group.retryTopics.keys()], retryAutocommit, retryDeser)
+        await this.#openConsumer(
+          group,
+          `${group.groupId}-retry`,
+          [...group.retryTopics.keys()],
+          retryAutocommit,
+          retryDeser,
+        )
       }
     }
 
@@ -169,7 +192,7 @@ export class KafkaListenerContainer {
     }
 
     // Each topic to create with its source (for inheritance) and any strategy-explicit partition override.
-    const wanted = new Map<string, { source: string, explicit?: number }>()
+    const wanted = new Map<string, { source: string; explicit?: number }>()
     const sources = new Set<string>()
     for (const group of plan.values()) {
       for (const { spec, source } of group.retryTopics.values()) {
@@ -192,7 +215,7 @@ export class KafkaListenerContainer {
       return
     }
     try {
-      const counts = await admin.partitionCounts?.([...sources]) ?? new Map<string, number>()
+      const counts = (await admin.partitionCounts?.([...sources])) ?? new Map<string, number>()
       const specs: TopicSpec[] = [...wanted].map(([topic, { source, explicit }]) => ({
         topic,
         partitions: explicit ?? provisioning.partitions ?? counts.get(source) ?? 1,
@@ -377,11 +400,11 @@ export class KafkaListenerContainer {
       recover = deadLetterRecoverer(this.#template, typeof deadLetter === 'object' ? deadLetter : {})
     }
 
-    const strategy
-      = spec.retryStrategy
-        ?? (spec.retry !== undefined ? blockingRetry(spec.retry) : undefined)
-        ?? config.retryStrategy
-        ?? blockingRetry(config.retry ?? { attempts: 1 })
+    const strategy =
+      spec.retryStrategy ??
+      (spec.retry !== undefined ? blockingRetry(spec.retry) : undefined) ??
+      config.retryStrategy ??
+      blockingRetry(config.retry ?? { attempts: 1 })
 
     return {
       strategy,

@@ -147,9 +147,7 @@ export class ConfigNotifier<T> {
         try {
           await delivery.listener(value, previous)
         } catch (error) {
-          this.#report(
-            `A configuration change listener for "${this.#describe()}" failed: ${messageOf(error)}`,
-          )
+          this.#report(`A configuration change listener for "${this.#describe()}" failed: ${messageOf(error)}`)
         }
 
         delivery.delivered = value

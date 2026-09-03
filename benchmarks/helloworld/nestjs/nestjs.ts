@@ -1,11 +1,7 @@
 import 'reflect-metadata'
-
 import { Controller, Get, Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
-import {
-  FastifyAdapter,
-  NestFastifyApplication,
-} from '@nestjs/platform-fastify'
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
 
 @Controller()
 class AppController {
@@ -16,18 +12,14 @@ class AppController {
 }
 
 @Module({ controllers: [AppController] })
-class AppModule { }
+class AppModule {}
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule,
-    new FastifyAdapter(),
-    { logger: false },
-  )
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
 
   await app.listen(PORT, '0.0.0.0')
 }
 
-bootstrap()
+void bootstrap()

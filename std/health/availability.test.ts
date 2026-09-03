@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { ApplicationAvailability } from './availability.js'
 
 describe('ApplicationAvailability', () => {

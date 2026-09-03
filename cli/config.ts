@@ -36,12 +36,7 @@ export function defineConfig(config: CaffeineConfig): CaffeineConfig {
   return config
 }
 
-const CONFIG_CANDIDATES = [
-  'caffeine.config.ts',
-  'caffeine.config.js',
-  'caffeine.config.mjs',
-  'caffeine.config.json',
-]
+const CONFIG_CANDIDATES = ['caffeine.config.ts', 'caffeine.config.js', 'caffeine.config.mjs', 'caffeine.config.json']
 
 export async function loadConfig(cwd: string, configPath?: string): Promise<CaffeineConfig> {
   if (configPath) {
@@ -64,9 +59,9 @@ export async function loadConfig(cwd: string, configPath?: string): Promise<Caff
 
 async function loadFile(path: string): Promise<CaffeineConfig> {
   if (path.endsWith('.json')) {
-    return await Bun.file(path).json() as CaffeineConfig
+    return (await Bun.file(path).json()) as CaffeineConfig
   }
-  const mod = await import(path) as { default?: CaffeineConfig } | CaffeineConfig
+  const mod = (await import(path)) as { default?: CaffeineConfig } | CaffeineConfig
   return unwrapDefault(mod)
 }
 

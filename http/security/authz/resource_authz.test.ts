@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../context.js'
 import { ErrHTTPForbidden } from '../../error/http.js'
 import { Claim, Identity, Principal, newAnonymousUser } from '../index.js'
@@ -7,7 +8,10 @@ import { AuthzRequirement, AuthzRequirementHandler, PolicyEvaluator, newPolicyEv
 import { PolicyBuilder } from './policy_builder.js'
 import { AuthorizationService } from './service.js'
 
-interface Order { id: string, ownerId: string }
+interface Order {
+  id: string
+  ownerId: string
+}
 
 function makeUser(sub: string): Principal {
   return new Principal(true, new Identity('jwt', true, [new Claim('sub', sub, '')]))
@@ -24,17 +28,15 @@ function serviceWith(policyName: string, build: (b: PolicyBuilder) => void): Aut
   ])
   const b = new PolicyBuilder()
   build(b)
-  const evaluators = new Map<string, PolicyEvaluator>([
-    [policyName, newPolicyEvaluator(b.build(policyName), handlers)],
-  ])
+  const evaluators = new Map<string, PolicyEvaluator>([[policyName, newPolicyEvaluator(b.build(policyName), handlers)]])
   return new AuthorizationService(evaluators)
 }
 
 describe('resource-based authorization', () => {
   const order: Order = { id: 'o1', ownerId: 'u1' }
-  const authz = serviceWith('CanEditOrder', b => b
-    .requireAuthenticated()
-    .resource((user, o: Order) => o.ownerId === user.findFirst('sub')?.value))
+  const authz = serviceWith('CanEditOrder', b =>
+    b.requireAuthenticated().resource((user, o: Order) => o.ownerId === user.findFirst('sub')?.value),
+  )
 
   it('authorizes the owner (no throw)', async () => {
     await expect(authz.authorize(ctxFor(makeUser('u1')), 'CanEditOrder', order)).resolves.toBeUndefined()
@@ -50,8 +52,9 @@ describe('resource-based authorization', () => {
   })
 
   it('fails the authenticated requirement first for an anonymous user', async () => {
-    await expect(authz.authorize(ctxFor(newAnonymousUser()), 'CanEditOrder', order))
-      .rejects.toThrow(/CanEditOrder.*not authenticated/)
+    await expect(authz.authorize(ctxFor(newAnonymousUser()), 'CanEditOrder', order)).rejects.toThrow(
+      /CanEditOrder.*not authenticated/,
+    )
   })
 
   it('passes the loaded resource through to the requirement', async () => {
@@ -64,6 +67,8 @@ describe('resource-based authorization', () => {
   })
 
   it('throws when the policy is unknown', async () => {
-    await expect(authz.authorize(ctxFor(makeUser('u1')), 'Nope', order)).rejects.toThrow(/no policy is registered under that name/)
+    await expect(authz.authorize(ctxFor(makeUser('u1')), 'Nope', order)).rejects.toThrow(
+      /no policy is registered under that name/,
+    )
   })
 })

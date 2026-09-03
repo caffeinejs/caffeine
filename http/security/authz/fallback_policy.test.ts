@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import {
   AllowAnonymous,
   AuthenticateResult,

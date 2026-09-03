@@ -1,5 +1,3 @@
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
 import {
   $p,
   Args,
@@ -14,6 +12,9 @@ import {
   type Context,
 } from '@caffeinejs/http'
 import type { ServiceAPI } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { HTML, HTMLBuilder, HTMLExt } from '../index.js'
 
 function Document({ title }: { title: string }) {
@@ -111,9 +112,7 @@ class HTMLErrorController {
 void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
 function htmlApp(configure?: (h: ServiceAPI<HTMLBuilder>) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(HTMLExt, configure)
-    .build()
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(HTMLExt, configure).build()
 }
 
 describe('HTML', () => {
@@ -174,8 +173,9 @@ describe('HTML', () => {
       const app = htmlApp()
       await app.ready()
 
-      expect(await (await app.fetch('/html/pre-doctyped')).text())
-        .toBe('<!doctype html><html><body>hello</body></html>')
+      expect(await (await app.fetch('/html/pre-doctyped')).text()).toBe(
+        '<!doctype html><html><body>hello</body></html>',
+      )
     })
   })
 
@@ -233,16 +233,14 @@ describe('HTML', () => {
       const app = htmlApp()
       await app.ready()
 
-      expect(await (await app.fetch('/html/escaped')).text())
-        .toBe('<div>&lt;script>alert(1)&lt;/script></div>')
+      expect(await (await app.fetch('/html/escaped')).text()).toBe('<div>&lt;script>alert(1)&lt;/script></div>')
     })
 
     it('does not escape children that are not marked safe', async () => {
       const app = htmlApp()
       await app.ready()
 
-      expect(await (await app.fetch('/html/unsafe')).text())
-        .toBe('<div><script>alert(1)</script></div>')
+      expect(await (await app.fetch('/html/unsafe')).text()).toBe('<div><script>alert(1)</script></div>')
     })
   })
 

@@ -1,10 +1,11 @@
 import type { Container } from '@caffeinejs/di'
 import { Keys, RouteBuilder, type RouteAuthzOptions } from '@caffeinejs/http'
 import { registerRouteGroup } from '@caffeinejs/http/decorators/registrar'
+
 import type { OpenAPIDocumentStore } from './document_store.js'
+import { joinPaths } from './generate/paths.js'
 import { kOpenAPISelf } from './keys.js'
 import type { OpenAPIOptions } from './options.js'
-import { joinPaths } from './generate/paths.js'
 
 /** The path the Scalar bundle is served from, relative to the documentation page. */
 const ASSET_SEGMENT = '/_scalar.js'
@@ -71,8 +72,7 @@ export function registerEndpoints(
       paths.docs === undefined ? undefined : route('GET', paths.docs, 'docs', 'text/html', authz),
       paths.asset === undefined
         ? undefined
-        : route('GET', paths.asset, 'asset', 'text/javascript', authz)
-            .header('cache-control', ASSET_CACHE_CONTROL),
+        : route('GET', paths.asset, 'asset', 'text/javascript', authz).header('cache-control', ASSET_CACHE_CONTROL),
     ].filter((value): value is RouteBuilder => value !== undefined)
 
     router.routes(routes)
@@ -96,11 +96,7 @@ function route(
   contentType: string,
   authz: RouteAuthzOptions | undefined,
 ): RouteBuilder {
-  const builder = new RouteBuilder()
-    .method(method)
-    .path(path)
-    .name(name)
-    .produces(contentType)
+  const builder = new RouteBuilder().method(method).path(path).name(name).produces(contentType)
 
   if (authz !== undefined) {
     builder.authorize(authz)

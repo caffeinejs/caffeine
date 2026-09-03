@@ -1,4 +1,5 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+
 import { FastifyContext } from '../context.js'
 import { Responder } from '../response.js'
 import { kErrorUnhandled, type RouteGroup } from '../route.js'
@@ -70,9 +71,8 @@ export function installRouteGroupErrorHandler(
   // handler) and resolves, most specific first: the route's @CatchWith, the group's @CatchWith, the
   // group's own handler, then the app-wide globalErrorHandler.
   const groupHandler = router.handleError
-  const hasScopedHandlers = groupHandler !== undefined
-    || !!router.catchBy?.size
-    || routes.some(route => route.catchBy?.size)
+  const hasScopedHandlers =
+    groupHandler !== undefined || !!router.catchBy?.size || routes.some(route => route.catchBy?.size)
 
   if (!hasScopedHandlers) {
     return
@@ -85,8 +85,9 @@ export function installRouteGroupErrorHandler(
 
     // routeOptions is populated before validation, so route-level handlers also see schema errors.
     const routeCatchBy = req.routeOptions.config?.caffeine?.catchBy
-    const handler = (routeCatchBy ? resolveByErrorChain(routeCatchBy, err) : undefined)
-      ?? (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)
+    const handler =
+      (routeCatchBy ? resolveByErrorChain(routeCatchBy, err) : undefined) ??
+      (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)
 
     if (handler) {
       return respond(req.httpContext, await handler.get().handle(req.httpContext, err))

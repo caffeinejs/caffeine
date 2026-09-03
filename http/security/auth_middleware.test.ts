@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   AllowAnonymous,
   AuthenticateResult,
@@ -79,11 +80,9 @@ function newApp() {
   const second = new HeaderSchemeHandler('Second', 'x-second')
 
   const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-  builder.authentication(auth => auth
-    .addStrategy('Default', byDefault)
-    .addStrategy('First', first)
-    .addStrategy('Second', second)
-    .default('Default'))
+  builder.authentication(auth =>
+    auth.addStrategy('Default', byDefault).addStrategy('First', first).addStrategy('Second', second).default('Default'),
+  )
 
   return { app: builder.build().useAuthenticationAndAuthorization(), byDefault, first, second }
 }
@@ -101,15 +100,15 @@ describe('authentication middleware — start-up', () => {
     void [MissingController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addStrategy('Header', new HeaderSchemeHandler('Header', 'x-user')).default('Header'))
+    builder.authentication(auth =>
+      auth.addStrategy('Header', new HeaderSchemeHandler('Header', 'x-user')).default('Header'),
+    )
 
     await expect(builder.build().ready()).rejects.toThrow(ErrAuthenticationMiddlewareMissing)
   })
 
   it('refuses to start when the middleware is registered without authentication configured', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .build()
-      .useAuthenticationAndAuthorization()
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build().useAuthenticationAndAuthorization()
 
     await expect(app.ready()).rejects.toThrow(ErrAuthenticationNotConfigured)
   })

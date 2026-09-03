@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
+
+import { CaffeineIoC } from '../container.js'
 import { DeferredCtor } from '../deferred_ctor.js'
 import { isNamedKey, isValidKey, keyStr, token } from '../key.js'
-import { CaffeineIoC } from '../container.js'
 
 describe('keyStr()', function () {
   it('should return "(undefined)" when key is undefined', function () {

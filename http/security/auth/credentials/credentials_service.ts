@@ -14,10 +14,7 @@ export interface CredentialsServiceOptions {
  * extra claims the provider supplied. Shared by {@link CredentialsService.attempt} and the cookie
  * remember-me refresh, so both produce identically-shaped principals.
  */
-export function buildCredentialPrincipal(
-  user: CredentialUser,
-  options: CredentialsServiceOptions = {},
-): Principal {
+export function buildCredentialPrincipal(user: CredentialUser, options: CredentialsServiceOptions = {}): Principal {
   const claims = [new Claim('sub', user.id, ''), ...(user.claims ?? [])]
   const identity = new Identity(options.scheme ?? 'Credentials', true, claims, options.roleClaimType ?? 'roles')
   return new Principal(true, identity)
@@ -79,7 +76,7 @@ export class CredentialsService {
   async attemptWithRehash(
     identifier: string,
     password: string,
-  ): Promise<{ principal: Principal, userID: string, needsRehash: boolean } | null> {
+  ): Promise<{ principal: Principal; userID: string; needsRehash: boolean } | null> {
     const user = await this.#provider.findByIdentifier(identifier)
 
     if (!user) {

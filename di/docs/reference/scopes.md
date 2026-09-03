@@ -24,12 +24,12 @@ Every binding has exactly one scope.
 import { Scopes } from '@caffeinejs/di'
 ```
 
-| Identifier | Decorator | Description |
-|---|---|---|
-| `Scopes.SINGLETON` | `@Lifetime(Scopes.SINGLETON)` | One instance per container. **Default.** |
-| `Scopes.TRANSIENT` | `@Lifetime(Scopes.TRANSIENT)` | New instance on every resolution. |
-| `Scopes.REQUEST` | `@Lifetime(Scopes.REQUEST)` | One instance per `AsyncLocalStorage` context. Node.js only. |
-| `Scopes.REFRESH` | `@Lifetime(Scopes.REFRESH)` | Singleton that can be refreshed via `container.refresher`. |
+| Identifier         | Decorator                     | Description                                                 |
+| ------------------ | ----------------------------- | ----------------------------------------------------------- |
+| `Scopes.SINGLETON` | `@Lifetime(Scopes.SINGLETON)` | One instance per container. **Default.**                    |
+| `Scopes.TRANSIENT` | `@Lifetime(Scopes.TRANSIENT)` | New instance on every resolution.                           |
+| `Scopes.REQUEST`   | `@Lifetime(Scopes.REQUEST)`   | One instance per `AsyncLocalStorage` context. Node.js only. |
+| `Scopes.REFRESH`   | `@Lifetime(Scopes.REFRESH)`   | Singleton that can be refreshed via `container.refresher`.  |
 
 Set a scope with the `@Lifetime` decorator or the fluent binder:
 
@@ -81,7 +81,6 @@ class EmailMessage {
 ```
 
 ---
-
 
 ## Request scope
 
@@ -143,9 +142,9 @@ rule is violated.
 Behaviour is controlled by the `checks.scopes` option:
 
 ```ts
-new CaffeineIoC({ checks: { scopes: 'no-mix' } })                    // strict: exact scope match
-new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' } })    // default
-new CaffeineIoC({ checks: { scopes: 'off' } })                       // no validation
+new CaffeineIoC({ checks: { scopes: 'no-mix' } }) // strict: exact scope match
+new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' } }) // default
+new CaffeineIoC({ checks: { scopes: 'off' } }) // no validation
 ```
 
 To inject a shorter-lived dependency into a longer-lived one, use
@@ -239,14 +238,14 @@ interface Scope {
 }
 ```
 
-| Member | Description |
-|---|---|
-| `lazy` | When `true`, the container does not eagerly instantiate this scope's bindings during `init()`. |
-| `durable` | When `true`, the scope is compatible with other durable scopes during scope validation. Singleton-like scopes are durable; request-like scopes are not. |
-| `provide(ctx, factory)` | Returns an instance for the resolution context. Call `factory(ctx)` to create an uncached instance, or cache the result by `ctx.binding.id`. |
-| `cachedInstance(binding)` | Returns the cached instance for `binding`, or `undefined` if none exists or the scope does not cache instances. |
-| `reset(binding)` | Clears the cached instance for `binding` when the scope supports reset. |
-| `configure(binding)` | Runs once for each binding during container initialization so the scope can track managed bindings. |
+| Member                    | Description                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lazy`                    | When `true`, the container does not eagerly instantiate this scope's bindings during `init()`.                                                          |
+| `durable`                 | When `true`, the scope is compatible with other durable scopes during scope validation. Singleton-like scopes are durable; request-like scopes are not. |
+| `provide(ctx, factory)`   | Returns an instance for the resolution context. Call `factory(ctx)` to create an uncached instance, or cache the result by `ctx.binding.id`.            |
+| `cachedInstance(binding)` | Returns the cached instance for `binding`, or `undefined` if none exists or the scope does not cache instances.                                         |
+| `reset(binding)`          | Clears the cached instance for `binding` when the scope supports reset.                                                                                 |
+| `configure(binding)`      | Runs once for each binding during container initialization so the scope can track managed bindings.                                                     |
 
 ---
 
@@ -271,7 +270,7 @@ already bound.
 ```ts
 import { bindScope } from '@caffeinejs/di'
 
-bindScope(MY_SCOPE, (container) => new MyCustomScope())
+bindScope(MY_SCOPE, container => new MyCustomScope())
 ```
 
 ### hasScope

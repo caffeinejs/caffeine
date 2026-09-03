@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std'
+import { describe, expect, it } from 'vitest'
+
 import { ErrHealthIndicatorNotSingleton } from './errors.js'
 import { loadHealthIndicators } from './load.js'
 

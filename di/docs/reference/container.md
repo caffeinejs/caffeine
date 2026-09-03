@@ -56,17 +56,17 @@ constructor to pick up all `@Injectable` classes registered so far.
 
 ### Options
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `profiles` | `Identifier[]` | `[]` | Active profiles. Bindings restricted with `@Profile` or `.profiles()` are included only when their profile is in this list. Can be extended with `addProfiles()` until compile. |
-| `defaultScopeId` | `Identifier` | `Scopes.SINGLETON` | Scope used for bindings that do not specify one. |
-| `parent` | `Container` | — | Parent container. Unresolved keys are looked up in the parent. |
-| `lazy` | `boolean` | `false` | When `true`, singletons are not instantiated during `init()` — they are created on first access. |
-| `metadataReader` | `MetadataReader` | — | Custom reader for overriding binding defaults from external metadata. |
-| `checks.scopes` | `ScopeCheckMode` | `'compatible-scopes-only'` | Scope compatibility validation mode. |
-| `checks.circularReferences` | `boolean` | `true` | Detect circular dependencies during `init()`. |
-| `decorators` | `boolean` | `true` | When `true`, calls `autoWire()` automatically in the constructor. |
-| `modules` | `Array<Module \| ModuleFn>` | `[]` | Modules to load during `compile()` / `init()`. |
+| Option                      | Type                        | Default                    | Description                                                                                                                                                                     |
+| --------------------------- | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profiles`                  | `Identifier[]`              | `[]`                       | Active profiles. Bindings restricted with `@Profile` or `.profiles()` are included only when their profile is in this list. Can be extended with `addProfiles()` until compile. |
+| `defaultScopeId`            | `Identifier`                | `Scopes.SINGLETON`         | Scope used for bindings that do not specify one.                                                                                                                                |
+| `parent`                    | `Container`                 | —                          | Parent container. Unresolved keys are looked up in the parent.                                                                                                                  |
+| `lazy`                      | `boolean`                   | `false`                    | When `true`, singletons are not instantiated during `init()` — they are created on first access.                                                                                |
+| `metadataReader`            | `MetadataReader`            | —                          | Custom reader for overriding binding defaults from external metadata.                                                                                                           |
+| `checks.scopes`             | `ScopeCheckMode`            | `'compatible-scopes-only'` | Scope compatibility validation mode.                                                                                                                                            |
+| `checks.circularReferences` | `boolean`                   | `true`                     | Detect circular dependencies during `init()`.                                                                                                                                   |
+| `decorators`                | `boolean`                   | `true`                     | When `true`, calls `autoWire()` automatically in the constructor.                                                                                                               |
+| `modules`                   | `Array<Module \| ModuleFn>` | `[]`                       | Modules to load during `compile()` / `init()`.                                                                                                                                  |
 
 **`ScopeCheckMode`** values:
 
@@ -326,7 +326,8 @@ resetInstances(): Promise<void>
 ```
 
 Resets all instances. On the next resolution, fresh
-instances are created.  
+instances are created.
+
 > Note that async bindings are automatically reloaded after being disposed.
 
 ### resetInstance
@@ -335,7 +336,8 @@ instances are created.
 resetInstance(key: InjectionToken): Promise<void>
 ```
 
-Resets the bindings associated with the given key.  
+Resets the bindings associated with the given key.
+
 > Note that async bindings are automatically reloaded after being disposed.
 
 ---
@@ -445,13 +447,13 @@ instances are discarded.
 
 ## Properties
 
-| Property | Type | Description |
-|---|---|---|
-| `ready` | `boolean` | `true` after `init()` completes. |
-| `size` | `number` | Number of bindings registered. |
-| `profiles` | `ReadonlySet<Identifier>` | Active profiles. |
-| `parent` | `Container \| undefined` | Parent container. |
-| `hooks` | `HookListener` | Container lifecycle event emitter. See [Hooks](./hooks.md). |
-| `postProcessors` | `Set<PostProcessor>` | Post-init hooks run on every instance. |
-| `refresher` | `Refresher` | Controls `REFRESH` scope resets. |
-| `requestScopeManager` | `RequestScopeManager` | Controls `REQUEST` scope contexts. |
+| Property              | Type                      | Description                                                 |
+| --------------------- | ------------------------- | ----------------------------------------------------------- |
+| `ready`               | `boolean`                 | `true` after `init()` completes.                            |
+| `size`                | `number`                  | Number of bindings registered.                              |
+| `profiles`            | `ReadonlySet<Identifier>` | Active profiles.                                            |
+| `parent`              | `Container \| undefined`  | Parent container.                                           |
+| `hooks`               | `HookListener`            | Container lifecycle event emitter. See [Hooks](./hooks.md). |
+| `postProcessors`      | `Set<PostProcessor>`      | Post-init hooks run on every instance.                      |
+| `refresher`           | `Refresher`               | Controls `REFRESH` scope resets.                            |
+| `requestScopeManager` | `RequestScopeManager`     | Controls `REQUEST` scope contexts.                          |

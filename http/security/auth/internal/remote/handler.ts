@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto'
+
 import type { Context } from '../../../../context.js'
 import { Claim, Identity, Principal } from '../../../index.js'
-import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
 import { BaseAuthenticationHandler } from '../../handler.js'
+import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
 import { challengeHeaders, type ChallengeMode, isSafeReturnPath, shouldRedirectChallenge } from './config.js'
+import { ErrOAuthCallback, ErrOAuthSession } from './errors.js'
 import { redactPii } from './pii.js'
 import { generateCodeChallenge, generateCodeVerifier } from './pkce.js'
-import { decodeState, encodeState, STATE_TTL_SECONDS } from './state_store.js'
-import type { RemoteAuthenticationState } from './state_store.js'
 import {
   assertValidSession,
   claimsToSession,
@@ -17,8 +17,9 @@ import {
   encodeTicketRef,
 } from './session_store.js'
 import type { RemoteAuthenticationSession } from './session_store.js'
+import { decodeState, encodeState, STATE_TTL_SECONDS } from './state_store.js'
+import type { RemoteAuthenticationState } from './state_store.js'
 import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from './ticket_store.js'
-import { ErrOAuthCallback, ErrOAuthSession } from './errors.js'
 
 /** Raw tokens from the token endpoint. */
 export interface RemoteAuthenticationTokens {
@@ -134,9 +135,11 @@ export abstract class RemoteAuthenticationHandler<
   protected abstract resolveAuthorizationEndpoint(): Promise<string>
 
   /** Parameters beyond the ones every provider needs. */
-  protected abstract authorizationParams(
-    args: { state: string, nonce: string, codeChallenge: string },
-  ): Promise<Record<string, string>> | Record<string, string>
+  protected abstract authorizationParams(args: {
+    state: string
+    nonce: string
+    codeChallenge: string
+  }): Promise<Record<string, string>> | Record<string, string>
 
   /** Exchanges the code, then turns the response into claims. Protocol-specific throughout. */
   protected abstract exchangeAndBuildIdentity(
@@ -312,7 +315,8 @@ export abstract class RemoteAuthenticationHandler<
     // CORS-safelisted, so a SPA served from a different origin than its API — the exact deployment this
     // mode exists for — received a 401 it could not read the URL out of. The body is the reliable channel
     // and the header stays for callers already reading it.
-    ctx.status(401)
+    ctx
+      .status(401)
       .header('location', authorizationURL)
       .header('access-control-expose-headers', 'location')
       .body({ error: 'authentication_required', loginURL: authorizationURL })
@@ -347,15 +351,7 @@ export abstract class RemoteAuthenticationHandler<
    * PKCE, and a replaced `state` unbinds the callback from this browser.
    */
   protected guardedAuthorizationParams(): string[] {
-    return [
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'code_challenge',
-      'code_challenge_method',
-    ]
+    return ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'code_challenge', 'code_challenge_method']
   }
 
   /**
@@ -497,9 +493,8 @@ export abstract class RemoteAuthenticationHandler<
       // error_description is provider-authored free text of unconstrained content — it can
       // name the user or the reason they were denied — so it is treated as PII.
       const description = ctx.req.query('error_description')
-      const detail = description === undefined
-        ? ''
-        : `: ${redactPii('error_description', description, this.options.showPii)}`
+      const detail =
+        description === undefined ? '' : `: ${redactPii('error_description', description, this.options.showPii)}`
       throw this.callbackFailure(`provider returned "${error}"${detail}`)
     }
 
@@ -571,11 +566,10 @@ export abstract class RemoteAuthenticationHandler<
     await this.writeSession(ctx, identity)
 
     const fallback = this.options.defaultRedirectPath
-    const returnTo = stored.returnTo
-      && stored.returnTo !== this.#callbackPath
-      && isSafeReturnPath(stored.returnTo)
-      ? stored.returnTo
-      : fallback
+    const returnTo =
+      stored.returnTo && stored.returnTo !== this.#callbackPath && isSafeReturnPath(stored.returnTo)
+        ? stored.returnTo
+        : fallback
 
     ctx.redirect(returnTo, 302)
   }

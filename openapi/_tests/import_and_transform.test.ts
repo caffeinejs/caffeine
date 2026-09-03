@@ -1,9 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
-import { $t, type ServiceAPI } from '@caffeinejs/std'
+
 import {
   AllowAnonymous,
   Controller,
@@ -15,6 +13,10 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
+import { $t, type ServiceAPI } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { OpenAPIBuilder } from '../builder.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
@@ -52,7 +54,7 @@ function build(configure: (o: ServiceAPI<OpenAPIBuilder>) => void): WebApplicati
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {
-  return await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
+  return (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
 }
 
 describe('imported specifications', () => {
@@ -139,18 +141,20 @@ describe('transformDocument', () => {
   })
 
   it('runs on a generated document', async () => {
-    app = build(o => o.transformDocument(doc => {
-      doc.info.title = 'Renamed'
-    }))
+    app = build(o =>
+      o.transformDocument(doc => {
+        doc.info.title = 'Renamed'
+      }),
+    )
     await app.ready()
 
     expect((await documentOf(app)).info.title).toBe('Renamed')
   })
 
   it('runs on an imported document too', async () => {
-    app = build(o => o
-      .document(HAND_WRITTEN)
-      .transformDocument(doc => ({ ...doc, info: { ...doc.info, title: 'Patched' } })))
+    app = build(o =>
+      o.document(HAND_WRITTEN).transformDocument(doc => ({ ...doc, info: { ...doc.info, title: 'Patched' } })),
+    )
     await app.ready()
 
     expect((await documentOf(app)).info.title).toBe('Patched')
@@ -159,12 +163,14 @@ describe('transformDocument', () => {
   // The answer to the generator's blind spot: a route registered straight onto the server never reaches the
   // router table, so this is the only way to document it.
   it('can add a path the generator cannot see', async () => {
-    app = build(o => o.transformDocument(doc => {
-      doc.paths = {
-        ...doc.paths,
-        '/plugin-route': { get: { operationId: 'pluginRoute', responses: { 200: { description: 'OK' } } } },
-      }
-    }))
+    app = build(o =>
+      o.transformDocument(doc => {
+        doc.paths = {
+          ...doc.paths,
+          '/plugin-route': { get: { operationId: 'pluginRoute', responses: { 200: { description: 'OK' } } } },
+        }
+      }),
+    )
     await app.ready()
 
     const document = await documentOf(app)
@@ -189,18 +195,20 @@ describe('derived response detail', () => {
     await app.ready()
 
     const document = await documentOf(app)
-    const operation = (document.paths?.['/widgets'] as Record<string, OperationObject>).get
+    const operation = (document.paths!['/widgets'] as Record<string, OperationObject>).get
 
     expect(operation.responses?.['200'].headers).toEqual({ 'x-request-id': { schema: { type: 'string' } } })
   })
 
   it('lets a schemaName override resolve what would otherwise be a colliding $id', async () => {
-    app = build(o => o.schemaName(schema => {
-      const id = String(schema.$id ?? '')
-      // Keep the version segment, so v1/Widget and v2/Widget are distinguishable.
-      const match = /\/(v\d+)\/([^/]+)$/.exec(id)
-      return match === null ? undefined : `${match[2]}${match[1].toUpperCase()}`
-    }))
+    app = build(o =>
+      o.schemaName(schema => {
+        const id = String(schema.$id ?? '')
+        // Keep the version segment, so v1/Widget and v2/Widget are distinguishable.
+        const match = /\/(v\d+)\/([^/]+)$/.exec(id)
+        return match === null ? undefined : `${match[2]}${match[1].toUpperCase()}`
+      }),
+    )
     await app.ready()
 
     const names = Object.keys((await documentOf(app)).components?.schemas ?? {})
@@ -209,10 +217,12 @@ describe('derived response detail', () => {
   })
 
   it('merges raw components the generator never produces', async () => {
-    app = build(o => o.components({
-      responses: { NotFound: { description: 'Nothing there' } },
-      parameters: { page: { name: 'page', in: 'query', schema: { type: 'integer' } } },
-    }))
+    app = build(o =>
+      o.components({
+        responses: { NotFound: { description: 'Nothing there' } },
+        parameters: { page: { name: 'page', in: 'query', schema: { type: 'integer' } } },
+      }),
+    )
     await app.ready()
 
     const components = (await documentOf(app)).components

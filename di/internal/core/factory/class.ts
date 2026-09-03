@@ -1,7 +1,7 @@
-import { Ctor } from '../../../types.js'
-import { ResolutionContext } from '../../../resolution_context.js'
 import { Factory } from '../../../factory.js'
 import { InjectionResolver } from '../../../injection_resolver.js'
+import { ResolutionContext } from '../../../resolution_context.js'
+import { Ctor } from '../../../types.js'
 
 export function classFactory<T = any>(clazz: Ctor<T>, resolvers: InjectionResolver<unknown>[] = []): Factory<T> {
   switch (resolvers.length) {

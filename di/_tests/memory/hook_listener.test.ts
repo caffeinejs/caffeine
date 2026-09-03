@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
-import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
+import { forceGC } from './_gc.js'
 
 describe('HookListener memory', function () {
   it('container is GC-able after dispose when no external references remain', async function () {
@@ -17,8 +18,7 @@ describe('HookListener memory', function () {
     await run()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
   })
 
   it('container is GC-able when a hook listener was registered', async function () {
@@ -36,8 +36,7 @@ describe('HookListener memory', function () {
     await run()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
   })
 
   it('once() listener is removed after firing', async function () {
@@ -49,11 +48,9 @@ describe('HookListener memory', function () {
     await di.init()
     await di.dispose()
 
-    expect(fired)
-      .toBe(1)
+    expect(fired).toBe(1)
     const listenerMapSize = (di.hooks as any)._listeners.get('onDisposed')?.size ?? 0
-    expect(listenerMapSize)
-      .toBe(0)
+    expect(listenerMapSize).toBe(0)
   })
 
   it('container registered as hook target does not form a retain cycle preventing GC', async function () {
@@ -72,7 +69,6 @@ describe('HookListener memory', function () {
     await run()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
   })
 })

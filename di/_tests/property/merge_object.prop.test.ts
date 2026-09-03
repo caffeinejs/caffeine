@@ -1,9 +1,9 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { mergeObject } from '../../internal/util/objects/objects.js'
 
-const safeKey = fc.string()
-  .filter(s => s !== '__proto__' && s !== 'constructor' && s !== 'prototype')
+const safeKey = fc.string().filter(s => s !== '__proto__' && s !== 'constructor' && s !== 'prototype')
 
 describe('mergeObject (property)', function () {
   it.prop([fc.dictionary(safeKey, fc.string()), fc.dictionary(safeKey, fc.string())])(
@@ -13,8 +13,7 @@ describe('mergeObject (property)', function () {
 
       for (const key of Object.keys(other)) {
         if (other[key] !== undefined) {
-          expect(result[key])
-            .toBe(other[key])
+          expect(result[key]).toBe(other[key])
         }
       }
     },
@@ -27,8 +26,7 @@ describe('mergeObject (property)', function () {
 
       for (const key of Object.keys(value)) {
         if (other[key] === undefined) {
-          expect(result[key])
-            .toBe(value[key])
+          expect(result[key]).toBe(value[key])
         }
       }
     },
@@ -40,9 +38,7 @@ describe('mergeObject (property)', function () {
       const result = mergeObject<Record<string, string>>(value, other)
       const keys = new Set([...Object.keys(value), ...Object.keys(other)])
 
-      expect(Object.keys(result)
-        .sort())
-        .toEqual([...keys].sort())
+      expect(Object.keys(result).sort()).toEqual([...keys].sort())
     },
   )
 
@@ -67,16 +63,14 @@ describe('mergeObject (property)', function () {
       for (let i = 0; i < valueSyms.length; i++) {
         const sym = valueSyms[i]!
         if (other[sym] === undefined) {
-          expect(result[sym])
-            .toBe(valueNums[i])
+          expect(result[sym]).toBe(valueNums[i])
         }
       }
 
       for (let i = 0; i < otherSyms.length; i++) {
         const sym = otherSyms[i]!
         if (other[sym] !== undefined) {
-          expect(result[sym])
-            .toBe(otherNums[i])
+          expect(result[sym]).toBe(otherNums[i])
         }
       }
     },

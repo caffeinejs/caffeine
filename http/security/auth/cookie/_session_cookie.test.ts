@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+
 import { sealSession, unsealSession } from './_session_cookie.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
@@ -10,7 +11,7 @@ afterEach(() => {
 describe('session cookie sealing', () => {
   it('round-trips a payload', async () => {
     const sealed = await sealSession({ scheme: 'Cookie', sub: 'u1' }, SECRET, 'Cookie', 3600)
-    const payload = await unsealSession<{ scheme: string, sub: string }>(sealed, SECRET, 'Cookie')
+    const payload = await unsealSession<{ scheme: string; sub: string }>(sealed, SECRET, 'Cookie')
     expect(payload.scheme).toBe('Cookie')
     expect(payload.sub).toBe('u1')
   })

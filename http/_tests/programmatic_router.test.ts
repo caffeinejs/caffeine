@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
+import { describe, expect, it } from 'vitest'
+
 import { Controller, Get, Router, blend, createWebApplication } from '../index.js'
 
 class Greeter {
@@ -104,8 +105,11 @@ describe('programmatic router', () => {
       expect(await (await app.fetch('/pets/3', { method: 'PUT' })).json()).toEqual({ replaced: '3' })
       expect((await app.fetch('/pets/3', { method: 'DELETE' })).status).toBe(204)
 
-      expect(app.routeGroups.flatMap(group => group.routes.map(route => route.name)))
-        .toEqual(['get_index', 'put_id', 'delete_id'])
+      expect(app.routeGroups.flatMap(group => group.routes.map(route => route.name))).toEqual([
+        'get_index',
+        'put_id',
+        'delete_id',
+      ])
 
       await app.close()
     })
@@ -127,7 +131,9 @@ describe('programmatic router', () => {
         .inject({ greeter: Greeter })
         .get('/:name', (ctx, deps) => ctx.body({ message: deps.greeter.greet(ctx.req.param().name) }))
 
-      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf()))
+        .build()
+        .mount(router)
       await app.ready()
 
       expect(await (await app.fetch('/greet/ada')).json()).toEqual({ message: 'hello ada' })
@@ -173,37 +179,47 @@ describe('programmatic router', () => {
       const router = new Router('/greet')
       router
         .get('/:name')
-        .inject({ greeter: Greeter, missing: $i.optional(class Absent { }) })
-        .handler((ctx, deps) => ctx.body({
-          message: deps.greeter.greet(ctx.req.param('name')!),
-          missing: deps.missing === undefined,
-        }))
+        .inject({ greeter: Greeter, missing: $i.optional(class Absent {}) })
+        .handler((ctx, deps) =>
+          ctx.body({
+            message: deps.greeter.greet(ctx.req.param('name')!),
+            missing: deps.missing === undefined,
+          }),
+        )
 
-      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf()))
+        .build()
+        .mount(router)
       await app.ready()
 
-      expect(await (await app.fetch('/greet/ada')).json())
-        .toEqual({ message: 'hello ada', missing: true })
+      expect(await (await app.fetch('/greet/ada')).json()).toEqual({ message: 'hello ada', missing: true })
 
       await app.close()
     })
 
     it('should resolve the same bag when the spec was built from the helpers handed over', async () => {
       const router = new Router('/greet')
-        .inject(i => ({ greeter: Greeter, missing: i.optional(class Absent { }) }))
+        .inject(i => ({ greeter: Greeter, missing: i.optional(class Absent {}) }))
         .get('/:name')
         .inject(i => ({ label: i.just('greeter') }))
-        .handler((ctx, deps) => ctx.body({
-          message: deps.greeter.greet(ctx.req.param().name),
-          missing: deps.missing === undefined,
-          label: deps.label,
-        }))
+        .handler((ctx, deps) =>
+          ctx.body({
+            message: deps.greeter.greet(ctx.req.param().name),
+            missing: deps.missing === undefined,
+            label: deps.label,
+          }),
+        )
 
-      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf()))
+        .build()
+        .mount(router)
       await app.ready()
 
-      expect(await (await app.fetch('/greet/ada')).json())
-        .toEqual({ message: 'hello ada', missing: true, label: 'greeter' })
+      expect(await (await app.fetch('/greet/ada')).json()).toEqual({
+        message: 'hello ada',
+        missing: true,
+        label: 'greeter',
+      })
 
       await app.close()
     })
@@ -212,16 +228,21 @@ describe('programmatic router', () => {
       Counter.created = 0
 
       const router = new Router('/provided')
-      router.get('/').inject(i => ({ counter: i.provide(Counter) })).handler((_ctx, deps) => ({
-        first: deps.counter.get().id,
-        second: deps.counter.get().id,
-      }))
+      router
+        .get('/')
+        .inject(i => ({ counter: i.provide(Counter) }))
+        .handler((_ctx, deps) => ({
+          first: deps.counter.get().id,
+          second: deps.counter.get().id,
+        }))
 
-      const app = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST))).build().mount(router)
+      const app = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST)))
+        .build()
+        .mount(router)
       await app.ready()
 
-      const one = await (await app.fetch('/provided')).json() as { first: number, second: number }
-      const two = await (await app.fetch('/provided')).json() as { first: number, second: number }
+      const one = (await (await app.fetch('/provided')).json()) as { first: number; second: number }
+      const two = (await (await app.fetch('/provided')).json()) as { first: number; second: number }
 
       expect(one.first).toBe(one.second)
       expect(one.first).not.toBe(two.first)
@@ -245,24 +266,34 @@ describe('programmatic router', () => {
       Counter.created = 0
 
       const scopedRouter = new Router('/scoped')
-      scopedRouter.get('/').inject({ counter: Counter }).handler((_ctx, deps) => ({ id: deps.counter.id }))
+      scopedRouter
+        .get('/')
+        .inject({ counter: Counter })
+        .handler((_ctx, deps) => ({ id: deps.counter.id }))
 
-      const scoped = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST))).build().mount(scopedRouter)
+      const scoped = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST)))
+        .build()
+        .mount(scopedRouter)
       await scoped.ready()
 
-      const first = await (await scoped.fetch('/scoped')).json() as { id: number }
-      const second = await (await scoped.fetch('/scoped')).json() as { id: number }
+      const first = (await (await scoped.fetch('/scoped')).json()) as { id: number }
+      const second = (await (await scoped.fetch('/scoped')).json()) as { id: number }
       expect(first.id).not.toBe(second.id)
       await scoped.close()
 
       const singletonRouter = new Router('/singleton')
-      singletonRouter.get('/').inject({ counter: Counter }).handler((_ctx, deps) => ({ id: deps.counter.id }))
+      singletonRouter
+        .get('/')
+        .inject({ counter: Counter })
+        .handler((_ctx, deps) => ({ id: deps.counter.id }))
 
-      const singleton = newApp(c => c.bind(Counter, t => t.toSelf())).build().mount(singletonRouter)
+      const singleton = newApp(c => c.bind(Counter, t => t.toSelf()))
+        .build()
+        .mount(singletonRouter)
       await singleton.ready()
 
-      const third = await (await singleton.fetch('/singleton')).json() as { id: number }
-      const fourth = await (await singleton.fetch('/singleton')).json() as { id: number }
+      const third = (await (await singleton.fetch('/singleton')).json()) as { id: number }
+      const fourth = (await (await singleton.fetch('/singleton')).json()) as { id: number }
       expect(third.id).toBe(fourth.id)
       await singleton.close()
     })
@@ -286,7 +317,9 @@ describe('programmatic router', () => {
         })
       })
 
-      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).build().mount(router)
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf()))
+        .build()
+        .mount(router)
       await app.ready()
 
       const root = await app.fetch('/api/root')
@@ -394,7 +427,9 @@ describe('programmatic router', () => {
       const orders = new Router('/orders')
       orders.get('/').handler(() => ({ orders: true }))
 
-      const app = newApp().build().mount(new Router('/api').mount('/v1', pets, orders))
+      const app = newApp()
+        .build()
+        .mount(new Router('/api').mount('/v1', pets, orders))
       await app.ready()
 
       expect(await (await app.fetch('/api/v1/pets')).json()).toEqual({ pets: true })

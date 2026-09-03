@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { describe, it, expect } from 'vitest'
+
 import { Keys } from '../symbols.js'
 import { KafkaHandler } from './kafka_handler.js'
 import { KafkaListener } from './kafka_listener.js'

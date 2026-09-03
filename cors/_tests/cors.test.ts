@@ -1,5 +1,3 @@
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
 import {
   Controller,
   Get,
@@ -10,11 +8,13 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import type { ServiceAPI } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { CORS, CorsBuilder, cors, CORSExt } from '../index.js'
 
 function corsApp(configure: (c: ServiceAPI<CorsBuilder>) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(CORSExt, configure)
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CORSExt, configure)
 }
 
 describe('CORS', () => {
@@ -23,7 +23,9 @@ describe('CORS', () => {
       @Controller('/cors-global')
       class GlobalCorsController {
         @Get('/resource')
-        get() { return { ok: true } }
+        get() {
+          return { ok: true }
+        }
       }
       void [GlobalCorsController]
 
@@ -40,17 +42,22 @@ describe('CORS', () => {
       @Controller('/cors-preflight')
       class PreflightController {
         @Get('/endpoint')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
       void [PreflightController]
 
       const app = corsApp(c => c.options({ origin: 'https://allowed.com', methods: ['GET', 'POST'] })).build()
       await app.ready()
 
-      const res = await app.fetch('/cors-preflight/endpoint', { method: 'OPTIONS', headers: {
-        origin: 'https://allowed.com',
-        'access-control-request-method': 'GET',
-      } })
+      const res = await app.fetch('/cors-preflight/endpoint', {
+        method: 'OPTIONS',
+        headers: {
+          origin: 'https://allowed.com',
+          'access-control-request-method': 'GET',
+        },
+      })
 
       expect(res.status).toBe(204)
       expect(res.headers.get('access-control-allow-origin')).toBe('https://allowed.com')
@@ -61,7 +68,9 @@ describe('CORS', () => {
       @Controller('/no-cors')
       class NoCorsController {
         @Get('/resource')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
       void [NoCorsController]
 
@@ -85,13 +94,17 @@ describe('CORS', () => {
       @Controller('/cors-specific')
       class SpecificCorsController {
         @Get('/data')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
 
       @Controller('/cors-default')
       class DefaultCorsController {
         @Get('/data')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
 
       void [SpecificCorsController, DefaultCorsController]
@@ -114,13 +127,17 @@ describe('CORS', () => {
       @Controller('/cors-disabled')
       class CorsDisabledController {
         @Get('/resource')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
 
       @Controller('/cors-enabled')
       class CorsEnabledController {
         @Get('/resource')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
 
       void [CorsDisabledController, CorsEnabledController]
@@ -144,13 +161,17 @@ describe('CORS', () => {
       @Controller('/cors-off-actual')
       class CorsOffActualController {
         @Get('/endpoint')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
 
       @Controller('/cors-on-actual')
       class CorsOnActualController {
         @Get('/endpoint')
-        get() { return {} }
+        get() {
+          return {}
+        }
       }
 
       void [CorsOffActualController, CorsOnActualController]
@@ -187,12 +208,17 @@ describe('CORS', () => {
 
     it('overrides the global origin on a programmatic route', async () => {
       const specific = new Router('/cors-fluent-specific')
-      specific.get('/data').with(cors({ origin: 'https://trusted.com' })).handler(() => ({}))
+      specific
+        .get('/data')
+        .with(cors({ origin: 'https://trusted.com' }))
+        .handler(() => ({}))
 
       const fallback = new Router('/cors-fluent-default')
       fallback.get('/data').handler(() => ({}))
 
-      const app = corsApp(c => c.options({ origin: 'https://global.com' })).build().mount(specific, fallback)
+      const app = corsApp(c => c.options({ origin: 'https://global.com' }))
+        .build()
+        .mount(specific, fallback)
       await app.ready()
 
       const resSpecific = await app.fetch('/cors-fluent-specific/data', {

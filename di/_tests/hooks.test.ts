@@ -1,18 +1,20 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect, vi } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Async } from '../decorators/async.js'
+import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
+import { Lazy } from '../decorators/index.js'
+import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
-import { Profile } from '../decorators/profile.js'
 import { PostConstruct } from '../decorators/post_construct.js'
 import { PreDestroy } from '../decorators/pre_destroy.js'
+import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
-import { CaffeineIoC } from '../container.js'
-import { Inject } from '../decorators/inject.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
 import { HookListener } from '../hooks.js'
-import { Lazy } from '../decorators/index.js'
+import { token } from '../key.js'
 
 describe('Hooks', function () {
   describe('Pre Destroy', function () {
@@ -54,28 +56,24 @@ describe('Hooks', function () {
 
     it('should call method marked as on destroy when instance is a singleton', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['hooks-pre-destroy'] })
-      di.bind(Dep, t => t
-        .toSelf())
+      di.bind(Dep, t => t.toSelf())
       await di.init()
       di.get(Dep)
 
       await di.dispose()
 
-      expect(destroySpy)
-        .toHaveBeenCalledTimes(1)
+      expect(destroySpy).toHaveBeenCalledTimes(1)
     })
 
     it('should accept async destroy method', async function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['hooks-pre-destroy'] })
-      di.bind(AsyncDep, t => t
-        .toSelf())
+      di.bind(AsyncDep, t => t.toSelf())
       await di.init()
       di.get(AsyncDep)
 
       await di.dispose()
 
-      expect(destroyAsyncSpy)
-        .toHaveBeenCalledTimes(1)
+      expect(destroyAsyncSpy).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -107,24 +105,18 @@ describe('Hooks', function () {
 
       constructor(readonly dep: Dep) {
         stack.push('ctor')
-        expect(this.dep)
-          .toBeDefined()
-        expect(this.prop)
-          .toBeUndefined()
-        expect(this.svc)
-          .toBeUndefined()
+        expect(this.dep).toBeDefined()
+        expect(this.prop).toBeUndefined()
+        expect(this.svc).toBeUndefined()
       }
 
       @PostConstruct()
       init() {
         spy()
         stack.push('init')
-        expect(this.dep)
-          .toBeDefined()
-        expect(this.svc)
-          .toBeDefined()
-        expect(this.prop)
-          .toBeDefined()
+        expect(this.dep).toBeDefined()
+        expect(this.svc).toBeDefined()
+        expect(this.prop).toBeDefined()
       }
 
       @Inject([Svc])
@@ -141,10 +133,8 @@ describe('Hooks', function () {
       di.get(Component)
       di.get(Component)
 
-      expect(spy)
-        .toHaveBeenCalledTimes(1)
-      expect(stack)
-        .toEqual(['ctor', 'method', 'init'])
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(stack).toEqual(['ctor', 'method', 'init'])
     })
   })
 
@@ -167,12 +157,9 @@ describe('Hooks', function () {
         await expect(di.init()).rejects.toThrow('sync fail')
 
         const event = failListener.mock.calls.find(([e]) => e.key === FailSvc)?.[0]
-        expect(event)
-          .toBeDefined()
-        expect(event.async)
-          .toBe(false)
-        expect(event.error)
-          .toBeInstanceOf(Error)
+        expect(event).toBeDefined()
+        expect(event.async).toBe(false)
+        expect(event.error).toBeInstanceOf(Error)
       })
     })
 
@@ -200,12 +187,9 @@ describe('Hooks', function () {
 
         const event = failListener.mock.calls.find(([e]) => e.key === FailAsyncSvc)?.[0]
 
-        expect(event)
-          .toBeDefined()
-        expect(event.async)
-          .toBe(true)
-        expect(event.error)
-          .toBeInstanceOf(Error)
+        expect(event).toBeDefined()
+        expect(event.async).toBe(true)
+        expect(event.error).toBeInstanceOf(Error)
       })
     })
   })
@@ -224,12 +208,9 @@ describe('Hooks', function () {
         await di.init()
 
         const event = listener.mock.calls.find(([e]) => e.key === SyncSvc)?.[0]
-        expect(event)
-          .toBeDefined()
-        expect(event.async)
-          .toBe(false)
-        expect(event.instance)
-          .toBe(di.get(SyncSvc))
+        expect(event).toBeDefined()
+        expect(event.async).toBe(false)
+        expect(event.instance).toBe(di.get(SyncSvc))
       })
     })
 
@@ -256,12 +237,9 @@ describe('Hooks', function () {
         await di.init()
 
         const event = listener.mock.calls.find(([e]) => e.key === AsyncSvc)?.[0]
-        expect(event)
-          .toBeDefined()
-        expect(event.async)
-          .toBe(true)
-        expect(event.instance)
-          .toBe(di.get(AsyncSvc))
+        expect(event).toBeDefined()
+        expect(event.async).toBe(true)
+        expect(event.instance).toBe(di.get(AsyncSvc))
       })
     })
 
@@ -279,8 +257,7 @@ describe('Hooks', function () {
         await di.init()
 
         const event = listener.mock.calls.find(([e]) => e.key === LazySvc)
-        expect(event)
-          .toBeUndefined()
+        expect(event).toBeUndefined()
       })
     })
   })
@@ -345,8 +322,7 @@ describe('Hooks', function () {
 
       await di.dispose()
 
-      expect(spy)
-        .toHaveBeenCalledTimes(12)
+      expect(spy).toHaveBeenCalledTimes(12)
     })
   })
 
@@ -367,12 +343,9 @@ describe('Hooks', function () {
       hooks.emit('onSetupComplete')
       hooks.emit('onSetupComplete')
 
-      expect(spy1)
-        .toHaveBeenCalledTimes(2)
-      expect(spy2)
-        .toHaveBeenCalledTimes(2)
-      expect(spy3)
-        .toHaveBeenCalledTimes(1)
+      expect(spy1).toHaveBeenCalledTimes(2)
+      expect(spy2).toHaveBeenCalledTimes(2)
+      expect(spy3).toHaveBeenCalledTimes(1)
       expect(spy4).not.toHaveBeenCalled()
 
       spy1.mockReset()
@@ -388,11 +361,9 @@ describe('Hooks', function () {
       hooks.emit('onDisposed')
 
       expect(spy1).not.toHaveBeenCalled()
-      expect(spy2)
-        .toHaveBeenCalledTimes(2)
+      expect(spy2).toHaveBeenCalledTimes(2)
       expect(spy3).not.toHaveBeenCalled()
-      expect(spy4)
-        .toHaveBeenCalled()
+      expect(spy4).toHaveBeenCalled()
 
       spy1.mockReset()
       spy2.mockReset()
@@ -409,8 +380,7 @@ describe('Hooks', function () {
       expect(spy1).not.toHaveBeenCalled()
       expect(spy2).not.toHaveBeenCalled()
       expect(spy3).not.toHaveBeenCalled()
-      expect(spy4)
-        .toHaveBeenCalledTimes(2)
+      expect(spy4).toHaveBeenCalledTimes(2)
     })
 
     it('should fail trying to register the same function for the same event', function () {
@@ -419,10 +389,8 @@ describe('Hooks', function () {
 
       hooks.on('onSetupComplete', spy)
 
-      expect(() => hooks.on('onSetupComplete', spy))
-        .toThrow()
-      expect(() => hooks.once('onSetupComplete', spy))
-        .toThrow()
+      expect(() => hooks.on('onSetupComplete', spy)).toThrow()
+      expect(() => hooks.once('onSetupComplete', spy)).toThrow()
     })
 
     describe('once() duplicate check', function () {
@@ -432,8 +400,7 @@ describe('Hooks', function () {
 
         listener.once('onSetup', handler)
 
-        expect(() => listener.once('onSetup', handler))
-          .toThrow()
+        expect(() => listener.once('onSetup', handler)).toThrow()
       })
 
       it('should throw when on() is followed by once() with the same listener', function () {
@@ -442,8 +409,7 @@ describe('Hooks', function () {
 
         listener.on('onSetup', handler)
 
-        expect(() => listener.once('onSetup', handler))
-          .toThrow()
+        expect(() => listener.once('onSetup', handler)).toThrow()
       })
 
       it('should throw when once() is followed by on() with the same listener', function () {
@@ -452,8 +418,7 @@ describe('Hooks', function () {
 
         listener.once('onSetup', handler)
 
-        expect(() => listener.on('onSetup', handler))
-          .toThrow()
+        expect(() => listener.on('onSetup', handler)).toThrow()
       })
 
       it('should allow re-registering the same listener after it has fired', function () {
@@ -467,8 +432,7 @@ describe('Hooks', function () {
 
         listener.emit('onSetup', {} as any)
 
-        expect(handler)
-          .toHaveBeenCalledTimes(2)
+        expect(handler).toHaveBeenCalledTimes(2)
       })
     })
   })

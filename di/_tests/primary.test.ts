@@ -1,14 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { Provides } from '../decorators/provides.js'
-import { Configuration } from '../decorators/configuration.js'
-import { CaffeineIoC } from '../container.js'
-import { ErrMultiplePrimary } from '../errors.js'
 import { Profile } from '../decorators/profile.js'
+import { Provides } from '../decorators/provides.js'
+import { ErrMultiplePrimary } from '../errors.js'
+import { token } from '../key.js'
 
 describe('@Primary', function () {
   describe('when two @Injectable classes share a named key and both are marked @Primary', function () {
@@ -96,10 +97,8 @@ describe('@Primary', function () {
       await di.init()
       const result = di.get<Active>(kActive)
 
-      expect(result)
-        .toBeInstanceOf(Active)
-      expect(result.name())
-        .toEqual('active')
+      expect(result).toBeInstanceOf(Active)
+      expect(result.name()).toEqual('active')
     })
   })
 })

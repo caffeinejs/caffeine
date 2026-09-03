@@ -21,7 +21,10 @@ export class ErrShutdownTimeout extends ErrCaffeineWebApplication {
   readonly timeoutMs: number
 
   constructor(timeoutMs: number) {
-    super(`Cannot complete graceful shutdown: in-flight requests did not finish within ${timeoutMs}ms`, 'ERR_SHUTDOWN_TIMEOUT')
+    super(
+      `Cannot complete graceful shutdown: in-flight requests did not finish within ${timeoutMs}ms`,
+      'ERR_SHUTDOWN_TIMEOUT',
+    )
     this.name = 'ErrShutdownTimeout'
     this.timeoutMs = timeoutMs
   }

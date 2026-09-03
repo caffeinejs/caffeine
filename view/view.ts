@@ -1,5 +1,6 @@
-import type { FastifyViewOptions } from '@fastify/view'
 import { FastifyContext, Responder, ActionResult, type Context } from '@caffeinejs/http'
+import type { FastifyViewOptions } from '@fastify/view'
+
 import { renderView, type ViewCapableReply } from './render_view.js'
 
 /**

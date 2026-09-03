@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   AllowAnonymous,
   Authorize,
@@ -35,8 +36,12 @@ class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
   }
 }
 
-function successTicket(claims: Array<{ type: string, value: string }> = [], scheme = 'default'): AuthenticateResult {
-  const identity = new Identity(scheme, true, claims.map(c => new Claim(c.type, c.value, '')))
+function successTicket(claims: Array<{ type: string; value: string }> = [], scheme = 'default'): AuthenticateResult {
+  const identity = new Identity(
+    scheme,
+    true,
+    claims.map(c => new Claim(c.type, c.value, '')),
+  )
   const principal = new Principal(true, [identity])
   return AuthenticateResult.success(new AuthenticationTicket(principal, scheme))
 }
@@ -316,7 +321,9 @@ describe('auth configurer (fake handler)', () => {
 
   it('custom challenge() on handler is called and can set custom headers', async () => {
     class CustomChallengeHandler extends BaseAuthenticationHandler<{}> {
-      constructor() { super({}) }
+      constructor() {
+        super({})
+      }
 
       async authenticate(_ctx: Context): Promise<AuthenticateResult> {
         return AuthenticateResult.none()
@@ -349,7 +356,9 @@ describe('auth configurer (fake handler)', () => {
 
   it('custom forbid() on handler is called and can set custom headers', async () => {
     class CustomForbidHandler extends BaseAuthenticationHandler<{}> {
-      constructor() { super({}) }
+      constructor() {
+        super({})
+      }
 
       async authenticate(_ctx: Context): Promise<AuthenticateResult> {
         return successTicket([{ type: 'roles', value: 'viewer' }])
@@ -402,7 +411,7 @@ describe('auth configurer (fake handler)', () => {
 
     const res = await app.fetch('/auth-ctx-user')
     expect(res.status).toBe(200)
-    const body = await res.json() as Record<string, unknown>
+    const body = (await res.json()) as Record<string, unknown>
     expect(body.sub).toBe('alice')
   })
 })

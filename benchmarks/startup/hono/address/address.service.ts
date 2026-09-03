@@ -9,8 +9,12 @@ export class AddressService {
     private readonly logger: LoggerService,
   ) {}
 
-  findAll(): unknown[] { return this.repo.findAll() }
-  findById(id: string): unknown { return this.repo.findById(id) }
+  findAll(): unknown[] {
+    return this.repo.findAll()
+  }
+  findById(id: string): unknown {
+    return this.repo.findById(id)
+  }
   create(data: unknown): unknown {
     this.logger.log('address.create')
     void this.customerService.findById((data as Record<string, string>).customerId)

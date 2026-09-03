@@ -20,10 +20,16 @@ export function mergeValue(existing: unknown, incoming: unknown): unknown {
   }
 
   if (
-    typeof incoming === 'object' && incoming !== null && !Array.isArray(incoming)
-    && typeof existing === 'object' && existing !== null && !Array.isArray(existing)
-    && !(incoming instanceof Map) && !(incoming instanceof Set)
-    && !(existing instanceof Map) && !(existing instanceof Set)
+    typeof incoming === 'object' &&
+    incoming !== null &&
+    !Array.isArray(incoming) &&
+    typeof existing === 'object' &&
+    existing !== null &&
+    !Array.isArray(existing) &&
+    !(incoming instanceof Map) &&
+    !(incoming instanceof Set) &&
+    !(existing instanceof Map) &&
+    !(existing instanceof Set)
   ) {
     return Object.assign({}, existing, incoming)
   }

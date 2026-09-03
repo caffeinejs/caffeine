@@ -1,7 +1,14 @@
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
 import { Injectable } from '@caffeinejs/di'
-import { type Context, ErrConfiguration, ErrorHandler, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
+import {
+  type Context,
+  ErrConfiguration,
+  ErrorHandler,
+  createWebApplication,
+  fastifyAdapterFactory,
+} from '../../index.js'
 
 // Isolated: extends the base handler but forgets @Catch. This poisons every app build in its
 // module, so it must be the only error-handler concern in this file.

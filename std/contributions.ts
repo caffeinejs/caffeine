@@ -40,10 +40,7 @@ function nameOf(key: symbol): string {
 
 export class ErrContributionConflict extends ErrCaffeine {
   constructor(key: symbol) {
-    super(
-      `Cannot contribute "${nameOf(key)}": a contribution for that key already exists`,
-      'ERR_CONTRIBUTION_CONFLICT',
-    )
+    super(`Cannot contribute "${nameOf(key)}": a contribution for that key already exists`, 'ERR_CONTRIBUTION_CONFLICT')
   }
 }
 

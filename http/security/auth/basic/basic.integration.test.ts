@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   Authorize,
   Claim,
@@ -32,16 +33,21 @@ describe('BasicAuthenticationHandler (application)', () => {
     void [BasicOkController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addBasic(b => b.validate((_ctx, user, pass) =>
-      user === 'alice' && pass === 'secret'
-        ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
-        : null)))
+    builder.authentication(auth =>
+      auth.addBasic(b =>
+        b.validate((_ctx, user, pass) =>
+          user === 'alice' && pass === 'secret'
+            ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
+            : null,
+        ),
+      ),
+    )
     const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
     const res = await app.fetch('/basic-ok', { headers: { authorization: basicHeader('alice', 'secret') } })
     expect(res.status).toBe(200)
-    expect((await res.json() as Record<string, unknown>).sub).toBe('alice')
+    expect(((await res.json()) as Record<string, unknown>).sub).toBe('alice')
   })
 
   it('challenges with 401 and WWW-Authenticate: Basic when no credentials are sent', async () => {

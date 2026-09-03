@@ -1,5 +1,6 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { accessTokenHash, assertAccessTokenHash } from './_at_hash.js'
 
 /**
@@ -25,13 +26,10 @@ describe('accessTokenHash (property)', () => {
     expect(accessTokenHash(token, alg)).toMatch(/^[A-Za-z0-9_-]+$/)
   })
 
-  it.prop([fc.string(), fc.string(), algArb])(
-    'distinct tokens hash differently',
-    (a, b, alg) => {
-      fc.pre(a !== b)
-      expect(accessTokenHash(a, alg)).not.toBe(accessTokenHash(b, alg))
-    },
-  )
+  it.prop([fc.string(), fc.string(), algArb])('distinct tokens hash differently', (a, b, alg) => {
+    fc.pre(a !== b)
+    expect(accessTokenHash(a, alg)).not.toBe(accessTokenHash(b, alg))
+  })
 
   it.prop([fc.string()])('the three digest families disagree on the same token', token => {
     const hashes = new Set(['RS256', 'RS384', 'RS512'].map(alg => accessTokenHash(token, alg)))
@@ -53,21 +51,18 @@ describe('assertAccessTokenHash (property)', () => {
     expect(() => assertAccessTokenHash(token, accessTokenHash(token, alg), alg)).not.toThrow()
   })
 
-  it.prop([fc.string(), fc.string(), algArb])(
-    'rejects a hash computed over a different token',
-    (a, b, alg) => {
-      fc.pre(a !== b)
-      expect(() => assertAccessTokenHash(a, accessTokenHash(b, alg), alg))
-        .toThrow('at_hash does not match')
-    },
-  )
+  it.prop([fc.string(), fc.string(), algArb])('rejects a hash computed over a different token', (a, b, alg) => {
+    fc.pre(a !== b)
+    expect(() => assertAccessTokenHash(a, accessTokenHash(b, alg), alg)).toThrow('at_hash does not match')
+  })
 
   it.prop([fc.string(), fc.constantFrom('256', '384', '512'), fc.constantFrom('256', '384', '512')])(
     'rejects a hash taken under a different digest size',
     (token, produced, verified) => {
       fc.pre(produced !== verified)
-      expect(() => assertAccessTokenHash(token, accessTokenHash(token, `RS${produced}`), `RS${verified}`))
-        .toThrow('at_hash does not match')
+      expect(() => assertAccessTokenHash(token, accessTokenHash(token, `RS${produced}`), `RS${verified}`)).toThrow(
+        'at_hash does not match',
+      )
     },
   )
 

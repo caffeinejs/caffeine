@@ -1,8 +1,9 @@
+import { afterEach, describe, expect, it } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { mkdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'bun:test'
+
 import { generateModuleGraph } from './module_graph_generator.js'
 
 function tempDir(): string {
@@ -33,13 +34,14 @@ describe('generateModuleGraph()', () => {
     await writeTree(dir, {
       'src/app.ts': '@Injectable()\nexport class App {}\n',
       'src/app.di.ts': '@Injectable()\nexport class AppDi {}\n',
-      'src/orders/order.service.ts': 'import { User } from \'../users/user.service.js\'\n@Injectable()\nexport class OrderService { constructor(private user: User) {} }\n',
+      'src/orders/order.service.ts':
+        "import { User } from '../users/user.service.js'\n@Injectable()\nexport class OrderService { constructor(private user: User) {} }\n",
       'src/users/user.service.ts': '@Injectable()\nexport class User {}\n',
       'src/libs/db/client.ts': '@Injectable()\nexport class Db {}\n',
       'src/libs/cache/cache.ts': '@Injectable()\nexport class Cache {}\n',
       'src/libs/util.ts': '@Injectable()\nexport class Util {}\n',
       'src/vendor/skip.ts': '@Injectable()\nexport class Skip {}\n',
-      'src/orders/orders.mod.ts': 'export const extraOrdersModule = { name: \'extra\' }\n',
+      'src/orders/orders.mod.ts': "export const extraOrdersModule = { name: 'extra' }\n",
     })
 
     const result = await generateModuleGraph({
@@ -67,45 +69,38 @@ describe('generateModuleGraph()', () => {
     expect(await Bun.file(join(dir, 'src/libs/libs.generated.mod.ts')).exists()).toBe(false)
     expect(await Bun.file(join(dir, 'src/orders/orders.mod.ts')).text()).toContain('extraOrdersModule')
 
-    expect(orders).toContain('import \'./order.service.js\'')
+    expect(orders).toContain("import './order.service.js'")
     expect(orders).not.toContain('OrderService')
-    expect(orders).toContain('import { usersModule } from \'../users/users.generated.mod.js\'')
-    expect(orders).toContain('import { extraOrdersModule } from \'./orders.mod.js\'')
-    expect(orders.indexOf('\'../users/users.generated.mod.js\'')).toBeLessThan(
-      orders.indexOf('\'./order.service.js\''),
-    )
-    expect(orders.indexOf('\'./order.service.js\'')).toBeLessThan(
-      orders.indexOf('\'./orders.mod.js\''),
-    )
-    expect(orders).toContain([
-      '  needs: () => [',
-      '    usersModule,',
-      '    extraOrdersModule,',
-      '  ],',
-    ].join('\n'))
-    expect(orders).toContain('name: \'orders\'')
+    expect(orders).toContain("import { usersModule } from '../users/users.generated.mod.js'")
+    expect(orders).toContain("import { extraOrdersModule } from './orders.mod.js'")
+    expect(orders.indexOf("'../users/users.generated.mod.js'")).toBeLessThan(orders.indexOf("'./order.service.js'"))
+    expect(orders.indexOf("'./order.service.js'")).toBeLessThan(orders.indexOf("'./orders.mod.js'"))
+    expect(orders).toContain(['  needs: () => [', '    usersModule,', '    extraOrdersModule,', '  ],'].join('\n'))
+    expect(orders).toContain("name: 'orders'")
 
-    expect(users).toContain('export const usersModule: Module = mod({ name: \'users\' })')
-    expect(users).toContain('import \'./user.service.js\'')
+    expect(users).toContain("export const usersModule: Module = mod({ name: 'users' })")
+    expect(users).toContain("import './user.service.js'")
 
-    expect(db).toContain('mod({ name: \'db\' })')
-    expect(cache).toContain('mod({ name: \'cache\' })')
+    expect(db).toContain("mod({ name: 'db' })")
+    expect(cache).toContain("mod({ name: 'cache' })")
 
-    expect(app).toContain('import \'./app.js\'')
-    expect(app).toContain('import \'./libs/util.js\'')
+    expect(app).toContain("import './app.js'")
+    expect(app).toContain("import './libs/util.js'")
     expect(app).not.toContain('app.di')
-    expect(app).toContain('mod({ name: \'app\' })')
+    expect(app).toContain("mod({ name: 'app' })")
 
-    expect(root).toContain('name: \'root\'')
-    expect(root).toContain([
-      '  provides: () => [',
-      '    appModule,',
-      '    cacheModule,',
-      '    dbModule,',
-      '    ordersModule,',
-      '    usersModule,',
-      '  ],',
-    ].join('\n'))
+    expect(root).toContain("name: 'root'")
+    expect(root).toContain(
+      [
+        '  provides: () => [',
+        '    appModule,',
+        '    cacheModule,',
+        '    dbModule,',
+        '    ordersModule,',
+        '    usersModule,',
+        '  ],',
+      ].join('\n'),
+    )
     expect(root).not.toContain('needs:')
     expect(root).toContain('appModule')
     expect(root).toContain('ordersModule')
@@ -119,7 +114,7 @@ describe('generateModuleGraph()', () => {
   it('does not overwrite handwritten *.mod.ts', async () => {
     const dir = tempDir()
     dirs.push(dir)
-    const handwritten = 'export const ordersModule = { name: \'hand\' }\n'
+    const handwritten = "export const ordersModule = { name: 'hand' }\n"
     await writeTree(dir, {
       'src/orders/order.service.ts': '@Injectable()\nexport class OrderService {}\n',
       'src/orders/orders.mod.ts': handwritten,
@@ -170,7 +165,7 @@ describe('generateModuleGraph()', () => {
     })
 
     const orders = await Bun.file(join(dir, 'src/orders/orders.generated.mod.ts')).text()
-    expect(orders).toContain('name: \'ORDERS\'')
+    expect(orders).toContain("name: 'ORDERS'")
     expect(orders).toContain('export const ordersModule')
   })
 

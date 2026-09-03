@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
-import fastify from 'fastify'
 import FastifyCookie from '@fastify/cookie'
+import fastify from 'fastify'
+import { describe, it, expect, beforeAll, vi } from 'vitest'
+
 import {
   Authorize,
   AuthenticationService,
@@ -45,8 +46,12 @@ class TestUserProvider extends UserProvider {
 class InMemoryRememberStore extends RememberMeTokenStore {
   readonly records = new Map<string, RememberMeRecord>()
   rotations = 0
-  create(record: RememberMeRecord): void { this.records.set(record.series, { ...record }) }
-  findBySeries(series: string): RememberMeRecord | null { return this.records.get(series) ?? null }
+  create(record: RememberMeRecord): void {
+    this.records.set(record.series, { ...record })
+  }
+  findBySeries(series: string): RememberMeRecord | null {
+    return this.records.get(series) ?? null
+  }
   updateToken(series: string, rotation: RememberMeRotation): void {
     this.rotations++
     const r = this.records.get(series)
@@ -58,7 +63,9 @@ class InMemoryRememberStore extends RememberMeTokenStore {
     }
   }
 
-  remove(series: string): void { this.records.delete(series) }
+  remove(series: string): void {
+    this.records.delete(series)
+  }
   removeBySubject(subject: string): void {
     for (const [k, v] of this.records) {
       if (v.subject === subject) {
@@ -68,11 +75,18 @@ class InMemoryRememberStore extends RememberMeTokenStore {
   }
 }
 
-interface LoginDto { email: string, password: string, rememberMe?: boolean }
+interface LoginDto {
+  email: string
+  password: string
+  rememberMe?: boolean
+}
 
 @Controller('/auth', [CredentialsService, AuthenticationService])
 class SessionController {
-  constructor(private readonly creds: CredentialsService, private readonly auth: AuthenticationService) {}
+  constructor(
+    private readonly creds: CredentialsService,
+    private readonly auth: AuthenticationService,
+  ) {}
 
   @Args([$p.body(), $p.context()])
   @Post('/login')
@@ -126,9 +140,7 @@ async function buildApp() {
   // Fast hasher keeps the test snappy; overrides the fallback ScryptPasswordHasher from addCredentials.
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
-  builder.authentication(auth => auth
-    .addCookie(o => o.sessionSecret(SECRET).secure(false))
-    .addCredentials())
+  builder.authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials())
   const app = builder.build().useAuthenticationAndAuthorization()
   await app.ready()
   return app
@@ -164,7 +176,7 @@ describe('cookie session login (application)', () => {
 
     const me = await app.fetch('/me', { headers: { cookie } })
     expect(me.status).toBe(200)
-    const body = await me.json() as Record<string, unknown>
+    const body = (await me.json()) as Record<string, unknown>
     expect(body.sub).toBe('alice')
     expect(body.admin).toBe(true)
   })
@@ -225,14 +237,16 @@ async function buildDurableApp(graceSeconds?: number) {
   container.bind(RememberMeTokenStore, t => t.toValue(store))
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
-  builder.authentication(auth => auth
-    .addCookie(o => {
-      o.sessionSecret(SECRET).secure(false).rememberMe()
-      if (graceSeconds !== undefined) {
-        o.rememberMeRotationGraceSeconds(graceSeconds)
-      }
-    })
-    .addCredentials())
+  builder.authentication(auth =>
+    auth
+      .addCookie(o => {
+        o.sessionSecret(SECRET).secure(false).rememberMe()
+        if (graceSeconds !== undefined) {
+          o.rememberMeRotationGraceSeconds(graceSeconds)
+        }
+      })
+      .addCredentials(),
+  )
   const app = builder.build().useAuthenticationAndAuthorization()
   await app.ready()
   return { app, store }
@@ -260,7 +274,7 @@ describe('durable remember-me (server-side revocable)', () => {
     // Only the remember cookie — the session cookie is "expired"/absent.
     const me = await app.fetch('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
     expect(me.status).toBe(200)
-    expect((await me.json() as Record<string, unknown>).admin).toBe(true)
+    expect(((await me.json()) as Record<string, unknown>).admin).toBe(true)
 
     // The token was rotated: a fresh remember cookie, different value.
     const rotated = cookiesFrom(me)['caf.remember']
@@ -282,7 +296,9 @@ describe('durable remember-me (server-side revocable)', () => {
     // Grace disabled — strict single-use, which is what a deployment that would rather sign a user out
     // than tolerate any replay window configures.
     const { app } = await buildDurableApp(0)
-    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
+    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))[
+      'caf.remember'
+    ]
 
     // First use rotates the token.
     const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
@@ -305,11 +321,13 @@ describe('durable remember-me (server-side revocable)', () => {
     // call used to replay the token the first had just spent — self-inflicted theft detection that signed
     // the user out. The per-request memo in AuthenticationService is what collapses this to one call.
     const { app, store } = await buildDurableApp(0)
-    const remember = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
+    const remember = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))[
+      'caf.remember'
+    ]
 
     const res = await app.fetch('/scoped-me', { headers: { cookie: `caf.remember=${remember}` } })
     expect(res.status).toBe(200)
-    expect((await res.json() as Record<string, unknown>).sub).toBe('alice')
+    expect(((await res.json()) as Record<string, unknown>).sub).toBe('alice')
 
     // One rotation, not two — and the series is still alive.
     expect(store.rotations).toBe(1)
@@ -326,7 +344,9 @@ describe('durable remember-me (server-side revocable)', () => {
     // of them rotates, and the rest arrive holding a token that is already superseded. Treating those as
     // theft would sign the user out every time a session expired mid-page-load.
     const { app, store } = await buildDurableApp()
-    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
+    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))[
+      'caf.remember'
+    ]
 
     const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
     expect(first.status).toBe(200)
@@ -347,7 +367,9 @@ describe('durable remember-me (server-side revocable)', () => {
 
   it('treats a superseded token as theft once the grace window has passed', async () => {
     const { app } = await buildDurableApp()
-    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))['caf.remember']
+    const original = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))[
+      'caf.remember'
+    ]
 
     const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
     expect(first.status).toBe(200)

@@ -1,6 +1,7 @@
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
-import type { KafkaContext } from './context.js'
+
 import type { KafkaMessage } from './config.js'
+import type { KafkaContext } from './context.js'
 
 type Extractor = (message: KafkaMessage, context: KafkaContext) => unknown
 

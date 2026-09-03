@@ -1,8 +1,12 @@
 import { Ctor } from '@caffeinejs/di'
+
 import type { Context } from '../context.js'
 
 export class GuardResult {
-  constructor(readonly ok: boolean, readonly reason: string) {}
+  constructor(
+    readonly ok: boolean,
+    readonly reason: string,
+  ) {}
 
   static ok(): GuardResult {
     return new GuardResult(true, '')

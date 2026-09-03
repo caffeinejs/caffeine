@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import type { KafkaMessage } from '../config.js'
 import { blockingRetry, type RetryDelivery, retryTopics, sharedRetryTopic } from './strategy.js'
 
@@ -31,7 +32,7 @@ class FakeDelivery implements RetryDelivery {
 
   invocations = 0
   currentAttempt = 0
-  readonly forwards: Array<{ topic: string, headers?: Record<string, string> }> = []
+  readonly forwards: Array<{ topic: string; headers?: Record<string, string> }> = []
   readonly recovered: unknown[] = []
   readonly commits: Array<'success' | 'advance'> = []
   slept = false

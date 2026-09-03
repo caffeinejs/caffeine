@@ -1,4 +1,5 @@
 import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/std'
+
 import { CorsExtension, type CorsOptions } from './extension.js'
 
 /**

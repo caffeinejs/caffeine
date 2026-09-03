@@ -1,4 +1,11 @@
-import { defineKeyedFeature, type KeyedFeature, type PluginContext, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
+import {
+  defineKeyedFeature,
+  type KeyedFeature,
+  type PluginContext,
+  type ServiceAPI,
+  type TypeLambda,
+} from '@caffeinejs/std'
+
 import { defaultKafkaClients } from './clients.js'
 import type { KafkaClients } from './config.js'
 import { ErrKafkaUnknownInstance } from './errors.js'

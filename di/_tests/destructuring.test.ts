@@ -1,9 +1,10 @@
 import { describe, it, expect, expectTypeOf } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { $i, type InjectedOf } from '../injection.js'
-import { CaffeineIoC } from '../container.js'
+import { token } from '../key.js'
 
 describe('Destructuring', function () {
   const kDep = token<any>(Symbol('test'))
@@ -37,7 +38,7 @@ describe('Destructuring', function () {
     }),
   ])
   class Root {
-    constructor(readonly args: { dep1: Dep1, dep2?: Dep2, dep3: Dep3, base: Base[] }) {}
+    constructor(readonly args: { dep1: Dep1; dep2?: Dep2; dep3: Dep3; base: Base[] }) {}
   }
 
   @Injectable([
@@ -69,7 +70,7 @@ describe('Destructuring', function () {
     }),
   ])
   class Nested {
-    constructor(readonly args: { services: { db: Dep1, cache?: Dep2 }, config: { auth: { token: Dep3 } } }) {}
+    constructor(readonly args: { services: { db: Dep1; cache?: Dep2 }; config: { auth: { token: Dep3 } } }) {}
   }
 
   @Injectable([
@@ -86,7 +87,7 @@ describe('Destructuring', function () {
       dep1: Dep1,
       dep2: $i.optional(Dep2),
     }
-    expectTypeOf<InjectedOf<typeof spec>>().toEqualTypeOf<{ dep1: Dep1, dep2: Dep2 | undefined }>()
+    expectTypeOf<InjectedOf<typeof spec>>().toEqualTypeOf<{ dep1: Dep1; dep2: Dep2 | undefined }>()
   })
 
   it('should resolve argument bag in same well it would resolve normal args', async function () {
@@ -94,18 +95,12 @@ describe('Destructuring', function () {
     await di.init()
     const root = di.get(Root)
 
-    expect(root)
-      .toBeInstanceOf(Root)
-    expect(root.args.dep1)
-      .toBeInstanceOf(Dep1)
-    expect(root.args.dep2)
-      .toBeUndefined()
-    expect(root.args.dep3)
-      .toBeInstanceOf(Dep3)
-    expect(root.args.base)
-      .toHaveLength(2)
-    expect(root.args.base.every(x => x instanceof Base))
-      .toBeTruthy()
+    expect(root).toBeInstanceOf(Root)
+    expect(root.args.dep1).toBeInstanceOf(Dep1)
+    expect(root.args.dep2).toBeUndefined()
+    expect(root.args.dep3).toBeInstanceOf(Dep3)
+    expect(root.args.base).toHaveLength(2)
+    expect(root.args.base.every(x => x instanceof Base)).toBeTruthy()
   })
 
   it('should resolve constructor mixing different argument types', async function () {
@@ -113,22 +108,14 @@ describe('Destructuring', function () {
     await di.init()
     const diff = di.get(DiffTypes)
 
-    expect(diff)
-      .toBeInstanceOf(DiffTypes)
-    expect(diff.args.dep1)
-      .toBeInstanceOf(Dep1)
-    expect(diff.dep2)
-      .toBeUndefined()
-    expect(diff.other.dep3)
-      .toBeInstanceOf(Dep3)
-    expect(diff.base)
-      .toHaveLength(2)
-    expect(diff.base.every(x => x instanceof Base))
-      .toBeTruthy()
-    expect(diff.another.base)
-      .toHaveLength(2)
-    expect(diff.another.base.every(x => x instanceof Base))
-      .toBeTruthy()
+    expect(diff).toBeInstanceOf(DiffTypes)
+    expect(diff.args.dep1).toBeInstanceOf(Dep1)
+    expect(diff.dep2).toBeUndefined()
+    expect(diff.other.dep3).toBeInstanceOf(Dep3)
+    expect(diff.base).toHaveLength(2)
+    expect(diff.base.every(x => x instanceof Base)).toBeTruthy()
+    expect(diff.another.base).toHaveLength(2)
+    expect(diff.another.base.every(x => x instanceof Base)).toBeTruthy()
   })
 
   it('should resolve deep nested destructuring bags', async function () {
@@ -136,14 +123,10 @@ describe('Destructuring', function () {
     await di.init()
     const nested = di.get(Nested)
 
-    expect(nested)
-      .toBeInstanceOf(Nested)
-    expect(nested.args.services.db)
-      .toBeInstanceOf(Dep1)
-    expect(nested.args.services.cache)
-      .toBeUndefined()
-    expect(nested.args.config.auth.token)
-      .toBeInstanceOf(Dep3)
+    expect(nested).toBeInstanceOf(Nested)
+    expect(nested.args.services.db).toBeInstanceOf(Dep1)
+    expect(nested.args.services.cache).toBeUndefined()
+    expect(nested.args.config.auth.token).toBeInstanceOf(Dep3)
   })
 
   it('should resolve symbol-keyed fields in destructuring bag', async function () {
@@ -151,9 +134,7 @@ describe('Destructuring', function () {
     await di.init()
     const sym = di.get(SymbolKeyed)
 
-    expect(sym)
-      .toBeInstanceOf(SymbolKeyed)
-    expect(sym.args[kSymbolField])
-      .toBeInstanceOf(Dep1)
+    expect(sym).toBeInstanceOf(SymbolKeyed)
+    expect(sym.args[kSymbolField]).toBeInstanceOf(Dep1)
   })
 })

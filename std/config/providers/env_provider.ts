@@ -51,15 +51,11 @@ export class EnvConfigProvider implements ConfigProvider {
     this.#env = options.env
     this.#prefix = options.prefix
     this.#separator = options.separator ?? '__'
-    this.#transformKey
-      = options.transformKey
-        ?? (key => defaultTransformKey(key, this.#separator))
+    this.#transformKey = options.transformKey ?? (key => defaultTransformKey(key, this.#separator))
   }
 
   async load(_ctx: ResolutionContext): Promise<PropertySource[]> {
-    const env = this.#env === undefined
-      ? process.env
-      : typeof this.#env === 'function' ? this.#env() : this.#env
+    const env = this.#env === undefined ? process.env : typeof this.#env === 'function' ? this.#env() : this.#env
     const entries = new Map<string, ConfigEntry>()
 
     for (const [rawKey, rawValue] of Object.entries(env)) {

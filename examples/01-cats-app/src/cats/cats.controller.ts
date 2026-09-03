@@ -1,4 +1,5 @@
 import { Controller, Delete, Get, Args, Post, Put, Status, $p, ErrHTTPNotFound, Context } from '@caffeinejs/http'
+
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsService } from './cats.service.js'
 

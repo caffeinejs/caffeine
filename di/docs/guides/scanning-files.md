@@ -44,8 +44,8 @@ const rootDir = fileURLToPath(new URL('.', import.meta.url))
 await scan({
   dir: rootDir,
   exclude: [
-    import.meta.url,                          // app.container.ts itself
-    new URL('./index.ts', import.meta.url),   // process entry point
+    import.meta.url, // app.container.ts itself
+    new URL('./index.ts', import.meta.url), // process entry point
   ],
 })
 ```
@@ -54,14 +54,14 @@ await scan({
 
 ```ts
 type ScanOptions = {
-  dir: string                          // root directory to scan (required)
-  exclude?: string | URL | (string | URL)[]  // paths to exclude
-  matchFilter?: PathFilter             // include only paths matching this filter
-  ignoreFilter?: PathFilter            // exclude paths matching this filter
-  ignorePattern?: RegExp               // exclude file/dir names matching this pattern
-  scriptPattern?: RegExp               // custom file extension pattern
-  maxDepth?: number                    // default: Infinity
-  forceESM?: boolean                   // default: true
+  dir: string // root directory to scan (required)
+  exclude?: string | URL | (string | URL)[] // paths to exclude
+  matchFilter?: PathFilter // include only paths matching this filter
+  ignoreFilter?: PathFilter // exclude paths matching this filter
+  ignorePattern?: RegExp // exclude file/dir names matching this pattern
+  scriptPattern?: RegExp // custom file extension pattern
+  maxDepth?: number // default: Infinity
+  forceESM?: boolean // default: true
 }
 ```
 
@@ -79,13 +79,13 @@ Accepts a glob string, a `RegExp`, a predicate function, or an array of these:
 
 ```ts
 await scan({ dir: rootDir, matchFilter: /services\// })
-await scan({ dir: rootDir, matchFilter: (path) => path.includes('/services/') })
+await scan({ dir: rootDir, matchFilter: path => path.includes('/services/') })
 ```
 
 **`ignoreFilter`** — exclude files whose path satisfies this filter.
 
 **`ignorePattern`** — a `RegExp` tested against each file and directory
-*name* (not the full path). Directories matching this pattern are not
+_name_ (not the full path). Directories matching this pattern are not
 descended into. Defaults to `/^\.|^node_modules$/u` (dotfiles and
 `node_modules`).
 
@@ -162,10 +162,7 @@ by an entry point (e.g. `index.ts`), exclude both:
 ```ts
 await scan({
   dir: rootDir,
-  exclude: [
-    import.meta.url,
-    new URL('./index.ts', import.meta.url),
-  ],
+  exclude: [import.meta.url, new URL('./index.ts', import.meta.url)],
 })
 ```
 

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   Authorize,
   Claim,
@@ -19,16 +20,16 @@ import {
 class FakeOpaqueStore extends OpaqueTokenStore {
   validate(token: string): Principal | null {
     if (token === 'good-token') {
-      return new Principal(true, new Identity('OpaqueToken', true, [
-        new Claim('sub', 'user-1', ''),
-        new Claim('scope', 'orders:write', ''),
-      ]))
+      return new Principal(
+        true,
+        new Identity('OpaqueToken', true, [new Claim('sub', 'user-1', ''), new Claim('scope', 'orders:write', '')]),
+      )
     }
     if (token === 'reader-token') {
-      return new Principal(true, new Identity('OpaqueToken', true, [
-        new Claim('sub', 'user-2', ''),
-        new Claim('scope', 'orders:read', ''),
-      ]))
+      return new Principal(
+        true,
+        new Identity('OpaqueToken', true, [new Claim('sub', 'user-2', ''), new Claim('scope', 'orders:read', '')]),
+      )
     }
     return null
   }
@@ -40,7 +41,9 @@ function opaqueBuilder() {
   const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
   // Only the policy this file's own controller references — no cross-section superset needed, since
   // each test file has an isolated decorator registrar.
-  builder.authorization(authz => authz.addPolicy('WriteOrders', b => b.requireAuthenticated().claim('scope', 'orders:write')))
+  builder.authorization(authz =>
+    authz.addPolicy('WriteOrders', b => b.requireAuthenticated().claim('scope', 'orders:write')),
+  )
   return builder
 }
 
@@ -64,7 +67,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
 
     const res = await app.fetch('/opaque-ok', { headers: { authorization: 'Bearer good-token' } })
     expect(res.status).toBe(200)
-    const body = await res.json() as Record<string, unknown>
+    const body = (await res.json()) as Record<string, unknown>
     expect(body.sub).toBe('user-1')
     expect(body.scope).toBe('orders:write')
   })

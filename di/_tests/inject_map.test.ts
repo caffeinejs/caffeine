@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Named } from '../decorators/named.js'
+
 import { CaffeineIoC } from '../container.js'
-import { $i } from '../injection.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
+import { Named } from '../decorators/named.js'
+import { $i } from '../injection.js'
+import { token } from '../key.js'
 
 describe('Inject Into Map', function () {
   const kMap = token<any>(Symbol('map'))
@@ -82,12 +83,9 @@ describe('Inject Into Map', function () {
 
       const welcome = di.get(Welcome)
 
-      expect(welcome.greeters.get(token<any>('hi')))
-        .toBeInstanceOf(Hi)
-      expect(welcome.greeters.get(token<any>('bye')))
-        .toBeInstanceOf(Bye)
-      expect(welcome.greeters.get(token<any>('tschuss')))
-        .toBeUndefined()
+      expect(welcome.greeters.get(token<any>('hi'))).toBeInstanceOf(Hi)
+      expect(welcome.greeters.get(token<any>('bye'))).toBeInstanceOf(Bye)
+      expect(welcome.greeters.get(token<any>('tschuss'))).toBeUndefined()
     })
   })
 })

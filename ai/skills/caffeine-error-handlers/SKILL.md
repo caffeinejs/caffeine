@@ -38,7 +38,9 @@ Per-controller:
 
 ```ts
 @Catch(ErrHTTPNotFound, { global: false })
-class PetsNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> { /* ... */ }
+class PetsNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
+  /* ... */
+}
 
 @CatchWith(PetsNotFoundHandler)
 @Controller('/pets')

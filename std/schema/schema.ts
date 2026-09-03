@@ -20,10 +20,11 @@ export type AnySchema = TSchema | StandardSchemaV1
  * caller sees must be what validation *produced*, not what it was willing to accept. For a schema declaring no
  * codec the two are the same type.
  */
-export type InferSchema<S extends AnySchema>
-  = S extends TSchema ? StaticDecode<S>
-    : S extends StandardSchemaV1 ? StandardSchemaV1.InferOutput<S>
-      : never
+export type InferSchema<S extends AnySchema> = S extends TSchema
+  ? StaticDecode<S>
+  : S extends StandardSchemaV1
+    ? StandardSchemaV1.InferOutput<S>
+    : never
 
 /** A normalized validation failure. Paths are dotted (`server.port`) whatever the source library. */
 export interface SchemaIssue {

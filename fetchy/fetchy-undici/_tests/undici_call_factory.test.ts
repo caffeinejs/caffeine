@@ -18,7 +18,7 @@ describe('UndiciCallFactory', () => {
     const call = factory.provide(server.baseURL)
 
     const response = await call.execute(new Request(`${server.baseURL}/ping?x=1`))
-    const body = (await response.json()) as { method: string, url: string }
+    const body = (await response.json()) as { method: string; url: string }
 
     expect(response.status).toBe(200)
     expect(body.method).toBe('GET')
@@ -36,7 +36,7 @@ describe('UndiciCallFactory', () => {
         body: JSON.stringify({ name: 'Ada' }),
       }),
     )
-    const body = (await response.json()) as { method: string, body: string }
+    const body = (await response.json()) as { method: string; body: string }
 
     expect(body.method).toBe('POST')
     expect(body.body).toBe(JSON.stringify({ name: 'Ada' }))

@@ -101,8 +101,7 @@ export class ConfigSources {
       return this.#cache
     }
 
-    const sorted = [...this.#registrations].sort((a, b) =>
-      b.priority - a.priority || a.seq - b.seq)
+    const sorted = [...this.#registrations].sort((a, b) => b.priority - a.priority || a.seq - b.seq)
 
     this.#cache = sorted.map(r => r.provider)
     this.#cachedRevision = this.#revision

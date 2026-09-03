@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
+
 import { describe, it, expect } from 'vitest'
+
 import { generateCodeVerifier, generateCodeChallenge, selectPKCEMethod } from './pkce.js'
 
 describe('generateCodeVerifier()', () => {

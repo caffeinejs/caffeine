@@ -1,6 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import type { ConfigHandle } from '../../accessor.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
@@ -52,8 +53,16 @@ describe('ConfigModule', () => {
     let appData = { http: { host: 'app', port: 80 }, db: { url: 'u' } }
     let dbData = { db: { url: 'postgres://a' } }
 
-    const appProvider: ConfigProvider = { id: 'app', reloadable: true, load: async () => new InlineConfigProvider(appData as never).load({ app: 'test', profiles: ['default'] }) }
-    const dbProvider: ConfigProvider = { id: 'db', reloadable: true, load: async () => new InlineConfigProvider(dbData as never).load({ app: 'test', profiles: ['default'] }) }
+    const appProvider: ConfigProvider = {
+      id: 'app',
+      reloadable: true,
+      load: async () => new InlineConfigProvider(appData as never).load({ app: 'test', profiles: ['default'] }),
+    }
+    const dbProvider: ConfigProvider = {
+      id: 'db',
+      reloadable: true,
+      load: async () => new InlineConfigProvider(dbData as never).load({ app: 'test', profiles: ['default'] }),
+    }
 
     const container = new CaffeineIoC()
     container.addModules(
@@ -90,9 +99,7 @@ describe('ConfigModule', () => {
     }
 
     const container = new CaffeineIoC()
-    container.addModules(
-      ConfigModule<AppConfig>({ token: APP_CONFIG, schema, providers: [mutableProvider] }),
-    )
+    container.addModules(ConfigModule<AppConfig>({ token: APP_CONFIG, schema, providers: [mutableProvider] }))
     await container.init()
 
     const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)

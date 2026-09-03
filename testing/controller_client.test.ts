@@ -1,25 +1,36 @@
+import { Injectable } from '@caffeinejs/di'
+import {
+  WebApplication,
+  Controller,
+  Delete,
+  Get,
+  Post,
+  Args,
+  createWebApplication,
+  $p,
+  fastifyAdapterFactory,
+} from '@caffeinejs/http'
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Delete, Get, Post, Args, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
+
 import { ErrNoRoutesForController, newURL, controllerClient } from './index.js'
 
 @Injectable()
 class TaskStore {
-  #tasks: { id: number, name: string }[] = []
+  #tasks: { id: number; name: string }[] = []
   #next = 1
 
-  add(name: string): { id: number, name: string } {
+  add(name: string): { id: number; name: string } {
     const task = { id: this.#next++, name }
     this.#tasks.push(task)
     return task
   }
 
-  list(): { id: number, name: string }[] {
+  list(): { id: number; name: string }[] {
     return this.#tasks
   }
 
-  find(id: number): { id: number, name: string } | undefined {
+  find(id: number): { id: number; name: string } | undefined {
     return this.#tasks.find(t => t.id === id)
   }
 
@@ -144,10 +155,12 @@ describe('controllerClient()', () => {
 
   it('reaches a path-param route via a newURL-built Request', async () => {
     const client = controllerClient(TaskController, app)
-    const created = await (await client.create({
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'findme' }),
-    })).json() as { id: number }
+    const created = (await (
+      await client.create({
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'findme' }),
+      })
+    ).json()) as { id: number }
 
     const res = await client.find(new Request(newURL('/tasks/:id').param('id', created.id).build()))
 

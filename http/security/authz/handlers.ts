@@ -1,7 +1,13 @@
 import { Context } from '../../context.js'
 import { Principal } from '../index.js'
-import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, ResourceRequirement, RoleRequirement } from './policy_requirement.js'
 import { AuthzPolicyResult, AuthzRequirementHandler } from './policy.js'
+import type {
+  AssertionRequirement,
+  AuthenticatedUserRequirement,
+  ClaimRequirement,
+  ResourceRequirement,
+  RoleRequirement,
+} from './policy_requirement.js'
 
 export class AuthenticatedUserHandler extends AuthzRequirementHandler<AuthenticatedUserRequirement> {
   get kind(): string {
@@ -78,7 +84,11 @@ export class ResourceHandler extends AuthzRequirementHandler<ResourceRequirement
   }
 
   async handle(
-    ctx: Context, user: Principal, requirement: ResourceRequirement, resource?: unknown): Promise<AuthzPolicyResult> {
+    ctx: Context,
+    user: Principal,
+    requirement: ResourceRequirement,
+    resource?: unknown,
+  ): Promise<AuthzPolicyResult> {
     const passed = await requirement.authorize(user, resource, ctx)
     if (passed) {
       return { ok: true }

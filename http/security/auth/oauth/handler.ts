@@ -1,11 +1,11 @@
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
+import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
 import type { RemoteAuthenticationIdentity, RemoteAuthenticationTokens } from '../internal/remote/handler.js'
+import { redactPii } from '../internal/remote/pii.js'
 import type { RemoteAuthenticationState } from '../internal/remote/state_store.js'
 import { fetchUserInfo } from '../internal/remote/userinfo.js'
-import { redactPii } from '../internal/remote/pii.js'
-import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import type { OAuth2AuthenticationOptions, ResolvedOAuth2AuthenticationOptions } from './options.js'
 import { resolveOAuth2Options } from './options.js'
 
@@ -73,8 +73,8 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
     const subject = userInfo[this.options.subjectClaim]
     if (subject === undefined || subject === null || String(subject).length === 0) {
       throw this.callbackFailure(
-        `user info has no "${this.options.subjectClaim}" field`
-        + ` (fields present: ${redactPii('user info fields', Object.keys(userInfo).join(', '), this.options.showPii)})`,
+        `user info has no "${this.options.subjectClaim}" field` +
+          ` (fields present: ${redactPii('user info fields', Object.keys(userInfo).join(', '), this.options.showPii)})`,
       )
     }
 
@@ -121,9 +121,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
       // Most often a provider that answered `application/x-www-form-urlencoded` because the
       // Accept header did not ask for JSON. Say that rather than "no access token", which
       // sends the reader looking at scopes and credentials instead of at content negotiation.
-      throw this.callbackFailure(
-        `token endpoint returned a non-JSON body (status ${response.status})`,
-      )
+      throw this.callbackFailure(`token endpoint returned a non-JSON body (status ${response.status})`)
     }
 
     const tokenResponse = (parsed ?? {}) as {
@@ -137,15 +135,14 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
     }
 
     if (!response.ok && !tokenResponse.error) {
-      throw this.callbackFailure(
-        `token endpoint returned ${response.status}`,
-      )
+      throw this.callbackFailure(`token endpoint returned ${response.status}`)
     }
 
     if (tokenResponse.error) {
-      const detail = tokenResponse.error_description !== undefined
-        ? redactPii('error_description', tokenResponse.error_description, this.options.showPii)
-        : tokenResponse.error
+      const detail =
+        tokenResponse.error_description !== undefined
+          ? redactPii('error_description', tokenResponse.error_description, this.options.showPii)
+          : tokenResponse.error
       throw this.callbackFailure(detail)
     }
 

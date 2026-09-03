@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticationTicket } from '../ticket.js'
@@ -42,13 +43,13 @@ function makeCtx(cookieValue?: string, url?: string, headers: Record<string, str
 }
 
 function principal(): Principal {
-  return new Principal(true, new Identity('Cookie', true, [
-    new Claim('sub', 'u1', ''),
-    new Claim('roles', 'admin', ''),
-  ]))
+  return new Principal(
+    true,
+    new Identity('Cookie', true, [new Claim('sub', 'u1', ''), new Claim('roles', 'admin', '')]),
+  )
 }
 
-async function sealedFor(rememberMe: boolean): Promise<{ value: string, opts: Record<string, unknown> }> {
+async function sealedFor(rememberMe: boolean): Promise<{ value: string; opts: Record<string, unknown> }> {
   const handler = makeHandler()
   const { ctx, setCookie } = makeCtx()
   await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: rememberMe }))
@@ -153,9 +154,7 @@ describe('CookieAuthenticationHandler', () => {
       await makeHandler(o => o.loginPath('/login')).challenge(ctx)
 
       expect(status).toHaveBeenCalledWith(401)
-      expect(body).toHaveBeenCalledWith(
-        { error: 'authentication_required', loginURL: '/login?returnUrl=%2Freports' },
-      )
+      expect(body).toHaveBeenCalledWith({ error: 'authentication_required', loginURL: '/login?returnUrl=%2Freports' })
       expect(header).toHaveBeenCalledWith('access-control-expose-headers', 'location')
     })
 

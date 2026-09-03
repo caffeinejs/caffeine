@@ -1,4 +1,5 @@
 import { STATUS_CODES } from 'node:http'
+
 import { ErrCaffeineWebApplication } from './common.js'
 
 export interface ErrHTTPOptions {
@@ -13,7 +14,11 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
   readonly body?: unknown
   readonly headers?: Record<string, string>
 
-  constructor(readonly statusCode: number, message: string, options?: ErrHTTPOptions) {
+  constructor(
+    readonly statusCode: number,
+    message: string,
+    options?: ErrHTTPOptions,
+  ) {
     super(message, options?.code ?? 'ERR_HTTP')
     this.name = 'ErrHTTP'
     this.cause = options?.cause
@@ -216,7 +221,7 @@ export class ErrHTTPUnsupportedMediaType extends ErrHTTP {
 }
 
 export class ErrHTTPImATeapot extends ErrHTTP {
-  constructor(message: string = 'I\'m a Teapot', options?: ErrHTTPOptions) {
+  constructor(message: string = "I'm a Teapot", options?: ErrHTTPOptions) {
     super(418, message, { code: 'ERR_HTTP_IM_A_TEAPOT', ...options })
     this.name = 'ErrHTTPImATeapot'
   }

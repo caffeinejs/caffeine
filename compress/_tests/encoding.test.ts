@@ -1,19 +1,14 @@
-import { createGzip, createBrotliCompress } from 'node:zlib'
 import { Readable } from 'node:stream'
-import { describe, it, expect } from 'vitest'
+import { createGzip, createBrotliCompress } from 'node:zlib'
+
+import { Controller, Post, RouteBuilder, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import fastify from 'fastify'
-import {
-  Controller,
-  Post,
-  RouteBuilder,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '@caffeinejs/http'
+import { describe, it, expect } from 'vitest'
+
 import { Encoding, encoding, CompressExt } from '../index.js'
 
 function encodingApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(CompressExt)
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CompressExt)
 }
 
 async function gzip(data: string): Promise<Buffer> {
@@ -54,7 +49,11 @@ describe('Encoding', () => {
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const res = await app.fetch('/encoding-single/upload', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: payload })
+    const res = await app.fetch('/encoding-single/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
+      body: payload,
+    })
 
     expect(res.status).toBe(415)
   })
@@ -77,9 +76,17 @@ describe('Encoding', () => {
     const gzipPayload = await gzip(JSON.stringify({ msg: 'hello' }))
     const brotliPayload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const resGzip = await app.fetch('/encoding-multi/upload', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: gzipPayload })
+    const resGzip = await app.fetch('/encoding-multi/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+      body: gzipPayload,
+    })
 
-    const resBrotli = await app.fetch('/encoding-multi/upload', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: brotliPayload })
+    const resBrotli = await app.fetch('/encoding-multi/upload', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
+      body: brotliPayload,
+    })
 
     expect(resGzip.status).toBe(200)
     expect(resBrotli.status).toBe(200)
@@ -107,9 +114,17 @@ describe('Encoding', () => {
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const resA = await app.fetch('/encoding-class/a', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: payload })
+    const resA = await app.fetch('/encoding-class/a', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
+      body: payload,
+    })
 
-    const resB = await app.fetch('/encoding-class/b', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'br' }, body: payload })
+    const resB = await app.fetch('/encoding-class/b', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
+      body: payload,
+    })
 
     expect(resA.status).toBe(415)
     expect(resB.status).toBe(415)

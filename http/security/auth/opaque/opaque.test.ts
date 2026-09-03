@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
 import { ApplicationAvailability, Contributions, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
+import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'

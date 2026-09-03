@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../container.js'
 import { ErrInvalidContainerState } from '../errors.js'
 import { Scopes } from '../scope.js'
@@ -15,16 +16,11 @@ describe('init() ready state', function () {
       }
     }
 
-    di.bind(EagerBean, t => t
-      .toSelf()
-      .lifetime(Scopes.SINGLETON)
-      .lazy(false))
+    di.bind(EagerBean, t => t.toSelf().lifetime(Scopes.SINGLETON).lazy(false))
     await di.init()
 
-    expect(readyDuringConstruction)
-      .toBe(false)
-    expect(di.ready)
-      .toBe(true)
+    expect(readyDuringConstruction).toBe(false)
+    expect(di.ready).toBe(true)
   })
 
   it('should keep container not ready when eager singleton construction throws', async function () {
@@ -36,14 +32,10 @@ describe('init() ready state', function () {
       }
     }
 
-    di.bind(BrokenBean, t => t
-      .toSelf()
-      .lifetime(Scopes.SINGLETON)
-      .lazy(false))
+    di.bind(BrokenBean, t => t.toSelf().lifetime(Scopes.SINGLETON).lazy(false))
 
     await expect(di.init()).rejects.toThrow('init failed')
-    expect(di.ready)
-      .toBe(false)
+    expect(di.ready).toBe(false)
   })
 })
 

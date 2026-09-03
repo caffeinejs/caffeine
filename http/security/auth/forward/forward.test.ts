@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../../context.js'
-import { AuthenticateResult, type AuthenticationTicket } from '../ticket.js'
 import { ErrAuthSchemeNotFound } from '../errors.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
+import { AuthenticateResult, type AuthenticationTicket } from '../ticket.js'
 import { ForwardAuthenticationHandler } from './forward.js'
 
 const ctx = {} as unknown as Context

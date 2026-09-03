@@ -1,13 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWTVerifyGetKey, KeyLike } from 'jose'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { claimsToSession, encodeSession, encodeTicketRef } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
-import type { OIDCAuthenticationOptions } from './options.js'
 import { OIDCAuthenticationHandler } from './handler.js'
+import type { OIDCAuthenticationOptions } from './options.js'
 
 /** The strategy name these handlers are registered under; cookies are sealed per scheme. */
 const SCHEME = 'OIDC'
@@ -68,11 +69,13 @@ function makeBaseOptions(overrides: Partial<OIDCAuthenticationOptions> = {}): OI
   }
 }
 
-function makeCtx(overrides: Partial<{
-  url: string
-  cookies: Record<string, string>
-  query: Record<string, string>
-}> = {}) {
+function makeCtx(
+  overrides: Partial<{
+    url: string
+    cookies: Record<string, string>
+    query: Record<string, string>
+  }> = {},
+) {
   const cookies = overrides.cookies ?? {}
   const query = overrides.query ?? {}
   const cookie = vi.fn().mockReturnThis()
@@ -83,8 +86,8 @@ function makeCtx(overrides: Partial<{
   const ctx = {
     req: {
       url: overrides.url ?? '/dashboard',
-      cookie: (name?: string) => name === undefined ? cookies : cookies[name],
-      query: (key?: string) => key === undefined ? query : query[key],
+      cookie: (name?: string) => (name === undefined ? cookies : cookies[name]),
+      query: (key?: string) => (key === undefined ? query : query[key]),
       header: () => undefined,
     },
     cookie,
@@ -123,33 +126,42 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
   })
 
   function mockFetch(nonce: string) {
-    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('.well-known')) {
-        return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-      }
-      if (opts?.method === 'POST') {
-        const idToken = await new SignJWT({ sub: SUBJECT, email: EMAIL, nonce })
-          .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-          .setIssuer(ISSUER)
-          .setAudience(CLIENT_ID)
-          .setExpirationTime('1h')
-          .sign(privateKey)
-        return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
-      }
-      return { ok: false, status: 404 }
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, opts?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('.well-known')) {
+          return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+        }
+        if (opts?.method === 'POST') {
+          const idToken = await new SignJWT({ sub: SUBJECT, email: EMAIL, nonce })
+            .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+            .setIssuer(ISSUER)
+            .setAudience(CLIENT_ID)
+            .setExpirationTime('1h')
+            .sign(privateKey)
+          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+        }
+        return { ok: false, status: 404 }
+      }),
+    )
   }
 
   /** Runs a full authorization callback and returns the session cookie value it set. */
-  async function signIn(
-    handler: OIDCAuthenticationHandler,
-    existingSessionCookie?: string,
-  ): Promise<string> {
+  async function signIn(handler: OIDCAuthenticationHandler, existingSessionCookie?: string): Promise<string> {
     const nonce = 'test-nonce'
     mockFetch(nonce)
     const stateCookie = await encodeState(
-      { state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/dashboard', scheme: SCHEME, issuer: ISSUER },
-      SESSION_SECRET, SCHEME,
+      {
+        state: 'st',
+        nonce,
+        codeVerifier: 'cv',
+        pkceMethod: 'S256',
+        returnTo: '/dashboard',
+        scheme: SCHEME,
+        issuer: ISSUER,
+      },
+      SESSION_SECRET,
+      SCHEME,
     )
 
     const { ctx, cookie } = makeCtx({
@@ -327,9 +339,7 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
 
     it('fails when the reference cookie points at an unknown key', async () => {
       const orphan = await encodeTicketRef('never-stored', SESSION_SECRET, SCHEME, 3600)
-      const result = await handlerWith(store).authenticate(
-        makeCtx({ cookies: { __oidc_session: orphan } }).ctx,
-      )
+      const result = await handlerWith(store).authenticate(makeCtx({ cookies: { __oidc_session: orphan } }).ctx)
 
       expect(result.succeeded).toBe(false)
       expect(result.error).toBeInstanceOf(Error)
@@ -340,7 +350,7 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
         makeCtx({ cookies: { __oidc_session: await encodeTicketRef('gone', SESSION_SECRET, SCHEME, 3600) } }).ctx,
       )
 
-      const error = result.error as { publicMessage?: string, message: string }
+      const error = result.error as { publicMessage?: string; message: string }
       expect(error.publicMessage).toBe('Authentication required')
       expect(error.message).toContain('Cannot read session cookie for "OIDC"')
     })
@@ -361,18 +371,14 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
         3600,
       )
 
-      const result = await handlerWith(store).authenticate(
-        makeCtx({ cookies: { __oidc_session: inline } }).ctx,
-      )
+      const result = await handlerWith(store).authenticate(makeCtx({ cookies: { __oidc_session: inline } }).ctx)
       expect(result.succeeded).toBe(false)
     })
 
     it('does not accept a ticket reference when no store is configured', async () => {
       const ref = await encodeTicketRef('some-key', SESSION_SECRET, SCHEME, 3600)
 
-      const result = await handlerWith(undefined).authenticate(
-        makeCtx({ cookies: { __oidc_session: ref } }).ctx,
-      )
+      const result = await handlerWith(undefined).authenticate(makeCtx({ cookies: { __oidc_session: ref } }).ctx)
       expect(result.succeeded).toBe(false)
     })
   })
@@ -382,9 +388,7 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
       const handler = handlerWith(undefined)
       const sessionCookie = await signIn(handler)
 
-      const result = await handler.authenticate(
-        makeCtx({ cookies: { __oidc_session: sessionCookie } }).ctx,
-      )
+      const result = await handler.authenticate(makeCtx({ cookies: { __oidc_session: sessionCookie } }).ctx)
       expect(result.succeeded).toBe(true)
       expect(result.ticket!.principal.findFirst('sub')?.value).toBe(SUBJECT)
     })
@@ -406,29 +410,46 @@ describe('ticket key generation', () => {
     const pair = await generateKeyPair('RS256')
     const jwk = await exportJWK(pair.publicKey)
     const localJwks = createLocalJWKSet({ keys: [{ ...jwk, kid: 'k1', use: 'sig' }] })
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver: () => localJwks as JWTVerifyGetKey,
-      ticketStore: capturing,
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver: () => localJwks as JWTVerifyGetKey,
+        ticketStore: capturing,
+      }),
+    )
 
     for (let i = 0; i < 3; i++) {
-      vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-        if (typeof url === 'string' && url.includes('.well-known')) {
-          return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-        }
-        if (opts?.method === 'POST') {
-          const idToken = await new SignJWT({ sub: SUBJECT, nonce: 'n' })
-            .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-            .setIssuer(ISSUER).setAudience(CLIENT_ID).setExpirationTime('1h')
-            .sign(pair.privateKey)
-          return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-        }
-        return { ok: false, status: 404 }
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, opts?: RequestInit) => {
+          if (typeof url === 'string' && url.includes('.well-known')) {
+            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+          }
+          if (opts?.method === 'POST') {
+            const idToken = await new SignJWT({ sub: SUBJECT, nonce: 'n' })
+              .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+              .setIssuer(ISSUER)
+              .setAudience(CLIENT_ID)
+              .setExpirationTime('1h')
+              .sign(pair.privateKey)
+            return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+          }
+          return { ok: false, status: 404 }
+        }),
+      )
 
       const stateCookie = await encodeState(
-        { state: 'st', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
-        SESSION_SECRET, SCHEME,
+        {
+          state: 'st',
+          nonce: 'n',
+          codeVerifier: 'cv',
+          pkceMethod: 'S256',
+          returnTo: '/',
+          scheme: SCHEME,
+          issuer: ISSUER,
+        },
+        SESSION_SECRET,
+        SCHEME,
       )
       const { ctx } = makeCtx({
         url: CALLBACK_PATH,
@@ -462,31 +483,48 @@ describe('RemoteAuthenticationTicket shape', () => {
     const jwk = await exportJWK(pair.publicKey)
     const localJwks = createLocalJWKSet({ keys: [{ ...jwk, kid: 'k1', use: 'sig' }] })
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('.well-known')) {
-        return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-      }
-      if (opts?.method === 'POST') {
-        const idToken = await new SignJWT({ sub: SUBJECT, email: EMAIL, nonce: 'n' })
-          .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-          .setIssuer(ISSUER).setAudience(CLIENT_ID).setExpirationTime('1h')
-          .sign(pair.privateKey)
-        return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-      }
-      return { ok: false, status: 404 }
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, opts?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('.well-known')) {
+          return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+        }
+        if (opts?.method === 'POST') {
+          const idToken = await new SignJWT({ sub: SUBJECT, email: EMAIL, nonce: 'n' })
+            .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+            .setIssuer(ISSUER)
+            .setAudience(CLIENT_ID)
+            .setExpirationTime('1h')
+            .sign(pair.privateKey)
+          return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+        }
+        return { ok: false, status: 404 }
+      }),
+    )
 
     // A claimMapper may legitimately drop `sub`, so the subject must come from the validated
     // id_token payload — otherwise the ticket would be unrevocable by user.
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver: () => localJwks as JWTVerifyGetKey,
-      ticketStore: capturing,
-      claimMapper: () => [new Claim('email', EMAIL, ISSUER)],
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver: () => localJwks as JWTVerifyGetKey,
+        ticketStore: capturing,
+        claimMapper: () => [new Claim('email', EMAIL, ISSUER)],
+      }),
+    )
 
     const stateCookie = await encodeState(
-      { state: 'st', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
-      SESSION_SECRET, SCHEME,
+      {
+        state: 'st',
+        nonce: 'n',
+        codeVerifier: 'cv',
+        pkceMethod: 'S256',
+        returnTo: '/',
+        scheme: SCHEME,
+        issuer: ISSUER,
+      },
+      SESSION_SECRET,
+      SCHEME,
     )
     const { ctx } = makeCtx({
       url: CALLBACK_PATH,
@@ -520,31 +558,35 @@ describe('RP-initiated logout', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   function mockFetch(nonce: string, discovery: Record<string, unknown> = {}) {
-    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('.well-known')) {
-        return {
-          ok: true,
-          json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, end_session_endpoint: END_SESSION, ...discovery }),
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, opts?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('.well-known')) {
+          return {
+            ok: true,
+            json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, end_session_endpoint: END_SESSION, ...discovery }),
+          }
         }
-      }
-      if (opts?.method === 'POST') {
-        const idToken = await new SignJWT({ sub: SUBJECT, email: EMAIL, nonce })
-          .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-          .setIssuer(ISSUER)
-          .setAudience(CLIENT_ID)
-          .setExpirationTime('1h')
-          .sign(privateKey)
-        return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
-      }
-      return { ok: false, status: 404 }
-    }))
+        if (opts?.method === 'POST') {
+          const idToken = await new SignJWT({ sub: SUBJECT, email: EMAIL, nonce })
+            .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+            .setIssuer(ISSUER)
+            .setAudience(CLIENT_ID)
+            .setExpirationTime('1h')
+            .sign(privateKey)
+          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+        }
+        return { ok: false, status: 404 }
+      }),
+    )
   }
 
   async function signIn(handler: OIDCAuthenticationHandler, nonce = 'n', discovery = {}) {
     mockFetch(nonce, discovery)
     const stateCookie = await encodeState(
       { state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
-      SESSION_SECRET, SCHEME,
+      SESSION_SECRET,
+      SCHEME,
     )
     const { ctx, cookie } = makeCtx({
       url: CALLBACK_PATH,
@@ -557,8 +599,9 @@ describe('RP-initiated logout', () => {
 
   it('refuses to configure saveTokens without a ticket store', () => {
     // The alternative home for a refresh token is the session cookie, which the client holds.
-    expect(() => new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ saveTokens: true })))
-      .toThrow('saveTokens requires a ticketStore')
+    expect(() => new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ saveTokens: true }))).toThrow(
+      'saveTokens requires a ticketStore',
+    )
   })
 
   it('does not keep tokens unless asked', async () => {
@@ -570,12 +613,15 @@ describe('RP-initiated logout', () => {
   })
 
   it('redirects to the provider with the id_token_hint', async () => {
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver,
-      ticketStore: store,
-      saveTokens: true,
-      postLogoutRedirectURI: 'https://app.example.com/goodbye',
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver,
+        ticketStore: store,
+        saveTokens: true,
+        postLogoutRedirectURI: 'https://app.example.com/goodbye',
+      }),
+    )
     const sessionCookie = await signIn(handler)
 
     const { ctx, redirect } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
@@ -594,9 +640,14 @@ describe('RP-initiated logout', () => {
    * signed out — on a shared machine the next person is one click from their account.
    */
   it('drops the local session as well as redirecting', async () => {
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver, ticketStore: store, saveTokens: true,
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver,
+        ticketStore: store,
+        saveTokens: true,
+      }),
+    )
     const sessionCookie = await signIn(handler)
     expect(store.tickets.size).toBe(1)
 
@@ -611,9 +662,13 @@ describe('RP-initiated logout', () => {
   })
 
   it('still signs out locally when no tokens were saved', async () => {
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver, ticketStore: store,
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver,
+        ticketStore: store,
+      }),
+    )
     const sessionCookie = await signIn(handler)
 
     const { ctx, redirect } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
@@ -626,13 +681,16 @@ describe('RP-initiated logout', () => {
   })
 
   it('reports a provider that advertises no end_session_endpoint', async () => {
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver, ticketStore: store,
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver,
+        ticketStore: store,
+      }),
+    )
     await signIn(handler, 'n', { end_session_endpoint: undefined })
 
-    await expect(handler.signOutRedirect(makeCtx().ctx))
-      .rejects.toThrow('advertises no end_session_endpoint')
+    await expect(handler.signOutRedirect(makeCtx().ctx)).rejects.toThrow('advertises no end_session_endpoint')
   })
 
   /**
@@ -641,20 +699,26 @@ describe('RP-initiated logout', () => {
    * a down /.well-known left the user fully authenticated behind a 500.
    */
   it('signs out locally even when the discovery endpoint is unreachable', async () => {
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver,
-      ticketStore: store,
-      saveTokens: true,
-      discoveryCacheTtlSeconds: 0,
-      endSessionEndpoint: END_SESSION,
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver,
+        ticketStore: store,
+        saveTokens: true,
+        discoveryCacheTtlSeconds: 0,
+        endSessionEndpoint: END_SESSION,
+      }),
+    )
     const sessionCookie = await signIn(handler)
     expect(store.tickets.size).toBe(1)
 
     // The discovery endpoint is now down; a configured end-session URL must make it irrelevant.
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new Error('discovery endpoint is down')
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('discovery endpoint is down')
+      }),
+    )
 
     const { ctx, redirect, deleteCookie } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
     await handler.signOutRedirect(ctx)
@@ -665,9 +729,13 @@ describe('RP-initiated logout', () => {
   })
 
   it('drops the local session even when no logout endpoint can be resolved', async () => {
-    const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-      jwksResolver, ticketStore: store,
-    }))
+    const handler = new OIDCAuthenticationHandler(
+      'OIDC',
+      makeBaseOptions({
+        jwksResolver,
+        ticketStore: store,
+      }),
+    )
     const sessionCookie = await signIn(handler, 'n', { end_session_endpoint: undefined })
     expect(store.tickets.size).toBe(1)
 

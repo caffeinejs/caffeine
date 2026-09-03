@@ -155,7 +155,7 @@ export function sharedRetryTopic(policy: RetryPolicy, options: RetryTopicOptions
 
   return {
     topics: (source: string) =>
-      (attempts > 1 ? [{ topic: namer(source, 0), delay: 0, partitions: options.partitions }] : []),
+      attempts > 1 ? [{ topic: namer(source, 0), delay: 0, partitions: options.partitions }] : [],
     deadLetterTopic: (source: string) => dltNamer(source),
     dispatch: forwardingDispatch(policy, attempts, source => namer(source, 0)),
   }

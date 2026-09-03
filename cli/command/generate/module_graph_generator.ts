@@ -1,8 +1,26 @@
 import { join, relative } from 'node:path'
+
 import type { ModuleGraphConfig } from '../../config.js'
-import { renderFolderModule, renderRootModule, resolveSpecifier, toImportPath, writeIfChanged, type NamedImport } from './_module_graph_emit.js'
+import {
+  renderFolderModule,
+  renderRootModule,
+  resolveSpecifier,
+  toImportPath,
+  writeIfChanged,
+  type NamedImport,
+} from './_module_graph_emit.js'
 import { hasDecorator, parseExportedConsts, parseRelativeImports } from './_module_graph_parse.js'
-import { bucketFiles, DEFAULT_DEPTH, DEFAULT_GRAPH_ROOT, DEFAULT_MAX_DEPTH, dirOf, GENERATED_MOD_SUFFIX, isHandwrittenMod, moduleDir, toRootRel } from './_module_graph_partition.js'
+import {
+  bucketFiles,
+  DEFAULT_DEPTH,
+  DEFAULT_GRAPH_ROOT,
+  DEFAULT_MAX_DEPTH,
+  dirOf,
+  GENERATED_MOD_SUFFIX,
+  isHandwrittenMod,
+  moduleDir,
+  toRootRel,
+} from './_module_graph_partition.js'
 
 export interface GenerateModuleGraphOptions {
   cwd: string
@@ -11,7 +29,7 @@ export interface GenerateModuleGraphOptions {
 
 export async function generateModuleGraph(
   opts: GenerateModuleGraphOptions,
-): Promise<{ changed: boolean, modules: number }> {
+): Promise<{ changed: boolean; modules: number }> {
   const root = opts.config.root ?? DEFAULT_GRAPH_ROOT
   const importExtension = opts.config.importExtension ?? '.js'
   const depth = opts.config.depth ?? DEFAULT_DEPTH
@@ -52,26 +70,28 @@ export async function generateModuleGraph(
     imports: string[]
   }
   const fileInfo = new Map<string, FileInfo>()
-  await Promise.all(rootRels.map(async rel => {
-    if (!bucketed.has(rel)) {
-      return
-    }
-    const cwdRel = cwdByRootRel.get(rel)
-    if (!cwdRel) {
-      return
-    }
-    const abs = join(opts.cwd, cwdRel)
-    const text = await Bun.file(abs).text()
-    const handwritten = isHandwrittenMod(rel)
-    fileInfo.set(rel, {
-      abs,
-      text,
-      decorated: !handwritten && hasDecorator(text),
-      handwritten,
-      exports: handwritten ? parseExportedConsts(text) : [],
-      imports: parseRelativeImports(text),
-    })
-  }))
+  await Promise.all(
+    rootRels.map(async rel => {
+      if (!bucketed.has(rel)) {
+        return
+      }
+      const cwdRel = cwdByRootRel.get(rel)
+      if (!cwdRel) {
+        return
+      }
+      const abs = join(opts.cwd, cwdRel)
+      const text = await Bun.file(abs).text()
+      const handwritten = isHandwrittenMod(rel)
+      fileInfo.set(rel, {
+        abs,
+        text,
+        decorated: !handwritten && hasDecorator(text),
+        handwritten,
+        exports: handwritten ? parseExportedConsts(text) : [],
+        imports: parseRelativeImports(text),
+      })
+    }),
+  )
 
   type Bucket = {
     dir: string
@@ -80,14 +100,14 @@ export async function generateModuleGraph(
     fileDir: string
     outPath: string
     decorated: string[]
-    handwritten: Array<{ rel: string, exports: string[] }>
+    handwritten: Array<{ rel: string; exports: string[] }>
     needDirs: Set<string>
   }
 
   const used = new Map<string, Bucket>()
   for (const [dir, files] of buckets) {
     const decorated: string[] = []
-    const handwritten: Array<{ rel: string, exports: string[] }> = []
+    const handwritten: Array<{ rel: string; exports: string[] }> = []
     for (const rel of files) {
       const info = fileInfo.get(rel)
       if (!info) {
@@ -171,12 +191,17 @@ export async function generateModuleGraph(
       })
     }
 
-    writes.push(writeIfChanged(bucket.outPath, renderFolderModule({
-      exportName: bucket.exportName,
-      moduleName: bucket.moduleName,
-      sideEffectImports,
-      needs,
-    })))
+    writes.push(
+      writeIfChanged(
+        bucket.outPath,
+        renderFolderModule({
+          exportName: bucket.exportName,
+          moduleName: bucket.moduleName,
+          sideEffectImports,
+          needs,
+        }),
+      ),
+    )
   }
 
   const rootDir = rootAbs
@@ -192,10 +217,7 @@ export async function generateModuleGraph(
     })
   }
 
-  writes.push(writeIfChanged(
-    join(rootDir, `root${GENERATED_MOD_SUFFIX}`),
-    renderRootModule({ modules: rootModules }),
-  ))
+  writes.push(writeIfChanged(join(rootDir, `root${GENERATED_MOD_SUFFIX}`), renderRootModule({ modules: rootModules })))
 
   const results = await Promise.all(writes)
   return { changed: results.some(Boolean), modules: used.size }
@@ -217,7 +239,7 @@ async function globFiles(cwd: string, include: string[], exclude: string[]): Pro
 }
 
 function collectHandwrittenNeeds(
-  bucket: { fileDir: string, handwritten: Array<{ rel: string, exports: string[] }> },
+  bucket: { fileDir: string; handwritten: Array<{ rel: string; exports: string[] }> },
   rootAbs: string,
   importExtension: '.js' | '.ts' | '',
   aliases: Set<string>,
@@ -250,9 +272,7 @@ function toExportName(base: string): string {
 }
 
 function toIdent(value: string): string {
-  const camel = value
-    .replace(/[^A-Za-z0-9]+(.)/gu, (_, c: string) => c.toUpperCase())
-    .replace(/[^A-Za-z0-9]/gu, '')
+  const camel = value.replace(/[^A-Za-z0-9]+(.)/gu, (_, c: string) => c.toUpperCase()).replace(/[^A-Za-z0-9]/gu, '')
   if (!camel) {
     return 'm'
   }

@@ -1,5 +1,5 @@
-import { InjectionToken } from './key.js'
 import { Binding } from './binding.js'
+import { InjectionToken } from './key.js'
 
 /**
  * Context for a {@link Conditional} function.

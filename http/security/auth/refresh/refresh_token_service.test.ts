@@ -1,16 +1,19 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import { Claim, Identity, Principal } from '../../index.js'
-import { JWTService } from '../jwt/jwt_service.js'
 import { parseToken } from '../internal/series_token.js'
+import { JWTService } from '../jwt/jwt_service.js'
+import type { RefreshPrincipalResolver } from './refresh_options.js'
 import { ErrRefreshTokenRejected, RefreshTokenService } from './refresh_token_service.js'
 import { type RefreshTokenRecord, RefreshTokenStore } from './refresh_token_store.js'
-import type { RefreshPrincipalResolver } from './refresh_options.js'
 
 const jwt = new JWTService({ secret: 'a-very-long-test-secret-key-32-bytes!', issuer: 'test' })
 
 class FakeStore extends RefreshTokenStore {
   readonly map = new Map<string, RefreshTokenRecord>()
-  create = vi.fn((r: RefreshTokenRecord) => { this.map.set(r.series, { ...r }) })
+  create = vi.fn((r: RefreshTokenRecord) => {
+    this.map.set(r.series, { ...r })
+  })
   findBySeries = vi.fn((s: string) => this.map.get(s) ?? null)
   updateToken = vi.fn((s: string, tokenHash: string, expiresAt: number) => {
     const r = this.map.get(s)
@@ -20,7 +23,9 @@ class FakeStore extends RefreshTokenStore {
     }
   })
 
-  remove = vi.fn((s: string) => { this.map.delete(s) })
+  remove = vi.fn((s: string) => {
+    this.map.delete(s)
+  })
   removeBySubject = vi.fn((sub: string) => {
     for (const [k, v] of this.map) {
       if (v.subject === sub) {

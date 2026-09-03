@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Field } from '../decorators/params/field.js'
 import { Header } from '../decorators/params/header.js'
@@ -7,7 +8,6 @@ import { Param } from '../decorators/params/param.js'
 import { Query } from '../decorators/params/query.js'
 import { QueryName } from '../decorators/params/query_name.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
-import { Params } from '../decorators/params.js'
 import { getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { GET, POST } from '../decorators/verbs.js'
 import { captureMetadata } from './capture_metadata.js'
@@ -20,13 +20,7 @@ describe('@Params', () => {
     class API {
       @GET('/users/{id}')
       @Params([Param('id'), Query('active'), QueryName(), Header('x-trace'), SignalParam()])
-      get!: (
-        _id: string,
-        _active: boolean,
-        _flag: unknown,
-        _trace: string,
-        _signal: AbortSignal,
-      ) => Promise<unknown>
+      get!: (_id: string, _active: boolean, _flag: unknown, _trace: string, _signal: AbortSignal) => Promise<unknown>
     }
 
     const spec = getMethodBuilders(metadata()).get('get')?.toMethodSpec()

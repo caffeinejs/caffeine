@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   AuthenticateResult,
   Authorize,
@@ -45,7 +46,8 @@ describe('authentication middleware — unknown scheme', () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('Header', new NeverAuthenticates()).default('Header'))
 
-    await expect(builder.build().useAuthenticationAndAuthorization().ready())
-      .rejects.toThrow('Cannot resolve authentication scheme "Typo"')
+    await expect(builder.build().useAuthenticationAndAuthorization().ready()).rejects.toThrow(
+      'Cannot resolve authentication scheme "Typo"',
+    )
   })
 })

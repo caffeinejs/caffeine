@@ -1,28 +1,28 @@
-import { notNil } from './internal/util/assert/index.js'
 import { Binding } from './binding.js'
+import { notNil } from './internal/util/assert/index.js'
 import { InjectionToken } from './key.js'
 
 /**
  * Represents a set of hooks that can be used to listen to events within a {@link Container} instance.
  */
 interface Hooks {
-  onSetup: { key: InjectionToken, binding: Binding }
+  onSetup: { key: InjectionToken; binding: Binding }
 
-  onBindingRegistered: { key: InjectionToken, binding: Binding }
+  onBindingRegistered: { key: InjectionToken; binding: Binding }
 
-  onBindingNotRegistered: { key: InjectionToken, binding: Binding }
+  onBindingNotRegistered: { key: InjectionToken; binding: Binding }
 
   onSetupComplete: {}
 
-  onModuleRegistered: { name: string, index: number }
+  onModuleRegistered: { name: string; index: number }
 
-  onModuleRegistrationFailed: { name: string, index: number, error: Error }
+  onModuleRegistrationFailed: { name: string; index: number; error: Error }
 
   onDisposed: {}
 
-  onBindingInitialized: { key: InjectionToken, binding: Binding, instance: unknown, async: boolean }
+  onBindingInitialized: { key: InjectionToken; binding: Binding; instance: unknown; async: boolean }
 
-  onBindingInitializationFailed: { key: InjectionToken, binding: Binding, error: unknown, async: boolean }
+  onBindingInitializationFailed: { key: InjectionToken; binding: Binding; error: unknown; async: boolean }
 }
 
 /**

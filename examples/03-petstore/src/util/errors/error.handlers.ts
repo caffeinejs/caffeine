@@ -1,24 +1,18 @@
-import {
-  Catch,
-  type ActionResult,
-  type Context,
-  ErrHTTP,
-  ErrorHandler,
-} from "@caffeinejs/http";
-import { $t } from "@caffeinejs/std";
-import { View } from "@caffeinejs/view";
+import { Catch, type ActionResult, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std'
+import { View } from '@caffeinejs/view'
 
 // A simple, conventional error body: a machine-readable `code`, a human-readable `message`, and —
 // for validation failures — a list of the offending fields. Rendered as plain application/json.
 export interface ErrorBody {
-  code: string;
-  message: string;
-  errors?: FieldError[];
+  code: string
+  message: string
+  errors?: FieldError[]
 }
 
 export interface FieldError {
-  field: string;
-  message: string;
+  field: string
+  message: string
 }
 
 // The same body as a schema, so the OpenAPI document describes what these handlers actually return. The `$id`
@@ -28,8 +22,8 @@ export const fieldErrorSchema = $t.Object(
     field: $t.String(),
     message: $t.String(),
   },
-  { $id: "FieldError" },
-);
+  { $id: 'FieldError' },
+)
 
 export const apiErrorSchema = $t.Object(
   {
@@ -37,67 +31,59 @@ export const apiErrorSchema = $t.Object(
     message: $t.String(),
     errors: $t.Optional($t.Array(fieldErrorSchema)),
   },
-  { $id: "ApiError" },
-);
+  { $id: 'ApiError' },
+)
 
 // HTTP status → short, stable error code. Anything not listed falls back to a generic 'ERROR'.
 const CODES: Record<number, string> = {
-  400: "BAD_REQUEST",
-  401: "UNAUTHORIZED",
-  403: "FORBIDDEN",
-  404: "NOT_FOUND",
-  405: "METHOD_NOT_ALLOWED",
-  409: "CONFLICT",
-  422: "VALIDATION_ERROR",
-  429: "RATE_LIMITED",
-  500: "INTERNAL_ERROR",
-};
+  400: 'BAD_REQUEST',
+  401: 'UNAUTHORIZED',
+  403: 'FORBIDDEN',
+  404: 'NOT_FOUND',
+  405: 'METHOD_NOT_ALLOWED',
+  409: 'CONFLICT',
+  422: 'VALIDATION_ERROR',
+  429: 'RATE_LIMITED',
+  500: 'INTERNAL_ERROR',
+}
 
 function codeFor(status: number): string {
-  return CODES[status] ?? "ERROR";
+  return CODES[status] ?? 'ERROR'
 }
 
 // Browser requests (Accept: text/html) get an HTML error page; API clients get JSON. Content negotiation
 // lives here in the app, not the framework — the framework just renders whatever the handler returns.
 function wantsHTML(ctx: Context): boolean {
-  return ctx.req.header("accept")?.includes("text/html") ?? false;
+  return ctx.req.header('accept')?.includes('text/html') ?? false
 }
 
 // Returns the JSON body, or a rendered error view when the client asked for HTML. `ctx.status(...)` sets
 // the response code either way; the returned value is finalized by the framework (JSON or HTML).
-function respond(
-  ctx: Context,
-  status: number,
-  body: ErrorBody,
-): ErrorBody | ReturnType<typeof View> {
-  ctx.status(status);
-  return wantsHTML(ctx)
-    ? View("error", { ...body, status, title: `Error ${status}` })
-    : body;
+function respond(ctx: Context, status: number, body: ErrorBody): ErrorBody | ReturnType<typeof View> {
+  ctx.status(status)
+  return wantsHTML(ctx) ? View('error', { ...body, status, title: `Error ${status}` }) : body
 }
 
 // Shape of a Fastify schema-validation failure. Fastify attaches `validation` (the Ajv errors) and
 // `validationContext` (which part of the request failed) to the thrown error.
 interface ValidationError extends Error {
   validation: Array<{
-    instancePath?: string;
-    message?: string;
-    params?: { missingProperty?: string };
-  }>;
-  validationContext?: "body" | "params" | "querystring" | "headers";
+    instancePath?: string
+    message?: string
+    params?: { missingProperty?: string }
+  }>
+  validationContext?: 'body' | 'params' | 'querystring' | 'headers'
 }
 
 function isValidationError(err: Error): err is ValidationError {
-  return Array.isArray((err as Partial<ValidationError>).validation);
+  return Array.isArray((err as Partial<ValidationError>).validation)
 }
 
 function fieldErrors(err: ValidationError): FieldError[] {
-  return err.validation.map((v) => ({
-    field: v.instancePath
-      ? v.instancePath.replace(/^\//, "").replace(/\//g, ".")
-      : (v.params?.missingProperty ?? ""),
-    message: v.message ?? "Invalid value",
-  }));
+  return err.validation.map(v => ({
+    field: v.instancePath ? v.instancePath.replace(/^\//, '').replace(/\//g, '.') : (v.params?.missingProperty ?? ''),
+    message: v.message ?? 'Invalid value',
+  }))
 }
 
 // Renders any thrown ErrHTTP (e.g. ErrHTTPNotFound → 404) as { code, message } — JSON, or an HTML error
@@ -108,7 +94,7 @@ export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
     return respond(ctx, err.statusCode, {
       code: codeFor(err.statusCode),
       message: err.message,
-    });
+    })
   }
 }
 
@@ -118,25 +104,25 @@ export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
 export class FallbackErrorHandler extends ErrorHandler<Error> {
   async handle(ctx: Context, err: Error): Promise<ActionResult> {
     if (isValidationError(err)) {
-      if (err.validationContext === "body") {
+      if (err.validationContext === 'body') {
         return respond(ctx, 422, {
-          code: "VALIDATION_ERROR",
-          message: "The request body is invalid",
+          code: 'VALIDATION_ERROR',
+          message: 'The request body is invalid',
           errors: fieldErrors(err),
-        });
+        })
       }
 
       return respond(ctx, 400, {
-        code: "BAD_REQUEST",
-        message: "The request contains invalid parameters",
-      });
+        code: 'BAD_REQUEST',
+        message: 'The request contains invalid parameters',
+      })
     }
 
-    console.error("Unhandled error while processing request:", err);
+    console.error('Unhandled error while processing request:', err)
 
     return respond(ctx, 500, {
-      code: "INTERNAL_ERROR",
-      message: "An unexpected error occurred. Please try again later",
-    });
+      code: 'INTERNAL_ERROR',
+      message: 'An unexpected error occurred. Please try again later',
+    })
   }
 }

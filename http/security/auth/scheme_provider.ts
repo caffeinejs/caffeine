@@ -1,4 +1,5 @@
 import { Provider } from '@caffeinejs/di'
+
 import type { AuthenticationOptions } from './builder.js'
 import type { AuthenticationHandler } from './handler.js'
 

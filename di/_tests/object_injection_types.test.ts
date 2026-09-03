@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest'
+
 import { $i, type InjectedOf } from '../injection.js'
 import { token } from '../key.js'
 import type { Provider } from '../provider.js'
@@ -7,7 +8,7 @@ abstract class Plugin {
   abstract id(): string
 }
 
-class Service { }
+class Service {}
 
 const kMovie = token<{ title: string }>('movie')
 
@@ -15,18 +16,18 @@ const kMovie = token<{ title: string }>('movie')
 // a counterpart in object_injection.test.ts resolving the same spec, so the two cannot drift apart unnoticed.
 describe('InjectedOf', function () {
   it('gives each helper the result that helper documents', function () {
-    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.provide<typeof Service>> }>['x']>()
-      .toEqualTypeOf<Provider<Service>>()
-    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.allOf<typeof Plugin>> }>['x']>()
-      .toEqualTypeOf<Plugin[]>()
-    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.ordered<typeof Plugin>> }>['x']>()
-      .toEqualTypeOf<Plugin[]>()
-    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.optional<typeof Service>> }>['x']>()
-      .toEqualTypeOf<Service | undefined>()
-    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.mapped<typeof kMovie>> }>['x']>()
-      .toEqualTypeOf<Map<string, { title: string }>>()
-    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.defer<typeof Service>> }>['x']>()
-      .toEqualTypeOf<Service>()
+    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.provide<typeof Service>> }>['x']>().toEqualTypeOf<
+      Provider<Service>
+    >()
+    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.allOf<typeof Plugin>> }>['x']>().toEqualTypeOf<Plugin[]>()
+    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.ordered<typeof Plugin>> }>['x']>().toEqualTypeOf<Plugin[]>()
+    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.optional<typeof Service>> }>['x']>().toEqualTypeOf<
+      Service | undefined
+    >()
+    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.mapped<typeof kMovie>> }>['x']>().toEqualTypeOf<
+      Map<string, { title: string }>
+    >()
+    expectTypeOf<InjectedOf<{ x: ReturnType<typeof $i.defer<typeof Service>> }>['x']>().toEqualTypeOf<Service>()
   })
 
   it('gives a constant the type it was given', function () {

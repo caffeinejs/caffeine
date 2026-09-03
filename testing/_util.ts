@@ -16,7 +16,7 @@ export function resolveRouteURL(baseURL: string, router: RouterDescriptor, route
   return new URL(path, `${origin}/`).toString()
 }
 
-export function mergeRequest(request: Request, overrides: { method: string, url: string }): Request {
+export function mergeRequest(request: Request, overrides: { method: string; url: string }): Request {
   return new Request(overrides.url, {
     method: overrides.method,
     headers: request.headers,

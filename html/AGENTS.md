@@ -8,7 +8,7 @@ JSX server-side rendering on `@kitajs/html`. A handler returns `HTML(<Page />)`;
 the markup under `text/html; charset=utf-8`.
 
 `@kitajs/html` has no render step: its `JSX.Element` is `string | Promise<string>`, so a JSX expression
-*is* the markup. That is why `HTMLNode` is `string | Promise<string>` and why this package's own sources
+_is_ the markup. That is why `HTMLNode` is `string | Promise<string>` and why this package's own sources
 need no JSX compiler options — only its tests do.
 
 `@kitajs/fastify-html-plugin` is a behavioural reference, not a dependency. Do not add it.
@@ -22,8 +22,8 @@ An application authoring `.tsx` needs all three:
   "compilerOptions": {
     "jsx": "react-jsx",
     "jsxImportSource": "@kitajs/html",
-    "plugins": [{ "name": "@kitajs/ts-html-plugin" }]
-  }
+    "plugins": [{ "name": "@kitajs/ts-html-plugin" }],
+  },
 }
 ```
 

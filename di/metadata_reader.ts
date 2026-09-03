@@ -1,5 +1,5 @@
-import { InjectionToken } from './key.js'
 import { Binding } from './binding.js'
+import { InjectionToken } from './key.js'
 
 /**
  * MetadataReader allows reading metadata from a key.

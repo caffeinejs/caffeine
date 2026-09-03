@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
+
 import { MediaType } from '../media.js'
 
 const FORM_BODY_LIMIT = 1_048_576
@@ -15,15 +16,11 @@ export function installFormBodyParser(server: FastifyInstance): void {
   )
 }
 
-function formBodyParser(
-  _req: FastifyRequest,
-  body: string,
-  done: (err: Error | null, value?: unknown) => void,
-): void {
+function formBodyParser(_req: FastifyRequest, body: string, done: (err: Error | null, value?: unknown) => void): void {
   try {
     done(null, parseFormURLEncoded(body))
   } catch (err) {
-    (err as { statusCode?: number }).statusCode = 400
+    ;(err as { statusCode?: number }).statusCode = 400
     done(err as Error)
   }
 }

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
-import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
+import { forceGC } from './_gc.js'
 
 describe('Child container memory', function () {
   it('releases child-only singleton instance after child dispose()', async function () {
@@ -14,8 +15,7 @@ describe('Child container memory', function () {
 
     const runChild = async () => {
       const child = parent.newChild()
-      child.bind(ChildOnlySvc, t => t
-        .toSelf())
+      child.bind(ChildOnlySvc, t => t.toSelf())
       await child.init()
       isCollected = trackForCollection(child.get(ChildOnlySvc)!)
       await child.dispose()
@@ -24,8 +24,7 @@ describe('Child container memory', function () {
     await runChild()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
     await parent.dispose()
   })
 
@@ -45,8 +44,7 @@ describe('Child container memory', function () {
     await runChild()
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
     await parent.dispose()
   })
 
@@ -54,8 +52,7 @@ describe('Child container memory', function () {
     class SharedSvc {}
 
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(SharedSvc, t => t
-      .toSelf())
+    parent.bind(SharedSvc, t => t.toSelf())
     await parent.init()
 
     const parentInstance = parent.get(SharedSvc)!
@@ -67,10 +64,8 @@ describe('Child container memory', function () {
 
     await forceGC()
 
-    expect(isParentCollected())
-      .toBe(false)
-    expect(parent.get(SharedSvc))
-      .toBe(parentInstance)
+    expect(isParentCollected()).toBe(false)
+    expect(parent.get(SharedSvc)).toBe(parentInstance)
     await parent.dispose()
   })
 
@@ -84,8 +79,7 @@ describe('Child container memory', function () {
 
     for (let i = 0; i < 20; i++) {
       const child = parent.newChild()
-      child.bind(Svc, t => t
-        .toSelf())
+      child.bind(Svc, t => t.toSelf())
       await child.init()
       refs.push(trackForCollection(child.get(Svc)!))
       await child.dispose()
@@ -93,8 +87,7 @@ describe('Child container memory', function () {
 
     await forceGC()
 
-    expect(refs.every(r => r()))
-      .toBe(true)
+    expect(refs.every(r => r())).toBe(true)
     await parent.dispose()
   })
 })

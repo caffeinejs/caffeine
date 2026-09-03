@@ -1,6 +1,6 @@
+import { solutions } from './internal/util/errutil/index.js'
 import { keyStr, InjectionToken, Identifier } from './key.js'
 import { Ctor } from './types.js'
-import { solutions } from './internal/util/errutil/index.js'
 
 /**
  * CaffeineIoCError is the base error class for all errors thrown by the CaffeineIoC library.
@@ -21,13 +21,13 @@ export class CaffeineIoCError extends Error {
 export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
   constructor(key: InjectionToken, message?: string) {
     super(
-      (message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`)
-      + solutions(
-        `Use allOf(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
-        `Use @Named providing a name to differentiate injectables and inject the dependency using it`,
-        `Use @Primary to specify an unique injectable`,
-        `Use @ConditionalOn to conditionally register injectables, leaving only one for the given key`,
-      ),
+      (message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`) +
+        solutions(
+          `Use allOf(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
+          `Use @Named providing a name to differentiate injectables and inject the dependency using it`,
+          `Use @Primary to specify an unique injectable`,
+          `Use @ConditionalOn to conditionally register injectables, leaving only one for the given key`,
+        ),
       'ERR_NO_UNIQUE_INJECTION',
     )
     this.name = 'ErrNoUniqueInjectionForKey'
@@ -113,8 +113,8 @@ export class ErrInjectableBase extends CaffeineIoCError {
 
   constructor(child: string, base: string) {
     super(
-      `Cannot register "${child}" extending "${base}": "${base}" is marked as @Injectable and cannot be used as an extension base. `
-      + `Remove @Injectable from "${base}" or make it abstract.`,
+      `Cannot register "${child}" extending "${base}": "${base}" is marked as @Injectable and cannot be used as an extension base. ` +
+        `Remove @Injectable from "${base}" or make it abstract.`,
       ErrInjectableBase.code,
     )
     this.name = 'ErrInjectableBase'
@@ -140,11 +140,11 @@ export class ErrOrphanedBindingConfig extends CaffeineIoCError {
 export class ErrMultiplePrimary extends CaffeineIoCError {
   constructor(key: InjectionToken | Identifier) {
     super(
-      `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditionals reduce the candidates to exactly one`
-      + solutions(
-        `Use @ConditionalOn(condition) to ensure only one primary injectable is active at a time`,
-        `Leave only one injectable decorated with @Primary()`,
-      ),
+      `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditionals reduce the candidates to exactly one` +
+        solutions(
+          `Use @ConditionalOn(condition) to ensure only one primary injectable is active at a time`,
+          `Leave only one injectable decorated with @Primary()`,
+        ),
       'ERR_MULTIPLE_PRIMARY_SAME_COMPONENT',
     )
     this.name = 'ErrMultiplePrimary'
@@ -179,11 +179,11 @@ export class ErrOutOfScope extends CaffeineIoCError {
 export class ErrScopeMismatchInConfiguration extends CaffeineIoCError {
   constructor(className: string, methodName: string, configScopeID: Identifier, methodScopeID: Identifier) {
     super(
-      `Cannot configure provider "${methodName}" in "${className}": the @Configuration class declares scope "${String(configScopeID)}" but the method declares scope "${String(methodScopeID)}"`
-      + solutions(
-        `Remove the scope configuration from the "${methodName}" method and let the @Configuration class scope apply to all provided components`,
-        `Remove the scope from @Configuration and decorate each @Provides method individually with @Lifetime()`,
-      ),
+      `Cannot configure provider "${methodName}" in "${className}": the @Configuration class declares scope "${String(configScopeID)}" but the method declares scope "${String(methodScopeID)}"` +
+        solutions(
+          `Remove the scope configuration from the "${methodName}" method and let the @Configuration class scope apply to all provided components`,
+          `Remove the scope from @Configuration and decorate each @Provides method individually with @Lifetime()`,
+        ),
       'ERR_SCOPE_MISMATCH_IN_CONFIGURATION',
     )
     this.name = 'ErrScopeMismatchInConfiguration'
@@ -258,7 +258,6 @@ export class ErrUnresolvableDependencies extends CaffeineIoCError {
       'ERR_UNRESOLVABLE_DEPENDENCIES',
     )
     this.name = 'ErrUnresolvableDependencies'
-    this.issues = issues
   }
 }
 
@@ -289,18 +288,16 @@ export class ErrCircularDependency extends CaffeineIoCError {
 export class ErrScopeMismatch extends CaffeineIoCError {
   constructor(readonly violations: string[]) {
     super(
-      `Scope check detected ${violations.length} violation(s)\n\n`
-      + violations.map(v => `  - ${v}`)
-        .join('\n')
-        + solutions(
+      `Scope check detected ${violations.length} violation(s)\n\n` +
+        violations.map(v => `  - ${v}`).join('\n') +
+        solutions(
           'Use $i.provide(key) injection function and declare the parameter as Provider<T> to inject different-scoped dependencies',
           'Or align the scopes: make the dependency use the same scope as the consumer',
-          'Or disable scope checks with { checks: { scopes: \'off\' } } in the container options',
+          "Or disable scope checks with { checks: { scopes: 'off' } } in the container options",
         ),
       'ERR_SCOPE_MISMATCH',
     )
     this.name = 'ErrScopeMismatch'
-    this.violations = violations
   }
 }
 
@@ -311,9 +308,9 @@ export class ErrScopeMismatch extends CaffeineIoCError {
 export class ErrNoRequestStorageSet extends CaffeineIoCError {
   constructor() {
     super(
-      'No request scope storage has been set.\n'
-      + 'Request scope is platform specific and must be manually set.\n'
-      + 'See the documentation for more information.',
+      'No request scope storage has been set.\n' +
+        'Request scope is platform specific and must be manually set.\n' +
+        'See the documentation for more information.',
       'ERR_NO_REQUEST_SCOPE_STORAGE_SET',
     )
     this.name = 'ErrNoRequestScopeStorageSet'

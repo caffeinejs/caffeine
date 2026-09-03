@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import { createApplication } from '@caffeinejs/std'
+import { describe, expect, it } from 'vitest'
+
 import { deferred, FakeBroker } from '../broker.testkit.js'
 import { KafkaHandler } from '../decorators/kafka_handler.js'
 import { KafkaListener } from '../decorators/kafka_listener.js'
@@ -15,7 +16,7 @@ class ErrBoom extends Error {
 const GROUP = 'nb-group'
 
 // Fails twice, then succeeds — proves a record walks the retry topics in-process without blocking the main topic.
-let flowState: { attempts: number, done: ReturnType<typeof deferred<number>> }
+let flowState: { attempts: number; done: ReturnType<typeof deferred<number>> }
 
 @KafkaHandler()
 class FlowConsumer {
@@ -47,7 +48,9 @@ describe('non-blocking retry topics (end to end)', () => {
   it('walks a failing record through the retry topics until it succeeds', async () => {
     flowState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k.brokers('b').groupId(GROUP),
+    )
     const built = app.build()
     await built.run()
 
@@ -65,7 +68,9 @@ describe('non-blocking retry topics (end to end)', () => {
     poisonSeen = deferred()
     const dltReceived = deferred<Record<string, string>>()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('b').groupId(GROUP).deadLetter())
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k.brokers('b').groupId(GROUP).deadLetter(),
+    )
     const built = app.build()
     await built.run()
 

@@ -1,6 +1,6 @@
 import { Factory } from '../factory.js'
-import { Ctor } from '../types.js'
 import { notNil } from '../internal/util/assert/not_nil.js'
+import { Ctor } from '../types.js'
 import { extendInjectableAttributes } from './registrar/index.js'
 
 /**
@@ -19,8 +19,6 @@ export function UseFactory<T>(factory: Factory<T>) {
   notNil(factory, `@${UseFactory.name}(): parameter factory is required.`)
 
   return function (target: Ctor, context: ClassDecoratorContext) {
-    extendInjectableAttributes<T>(context.metadata, target,
-      config => config.factory(factory),
-    )
+    extendInjectableAttributes<T>(context.metadata, target, config => config.factory(factory))
   }
 }

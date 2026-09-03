@@ -53,8 +53,7 @@ class TodoService {
   }
 
   complete(id) {
-    const todo = this.storage.findAll()
-      .find(t => t.id === id)
+    const todo = this.storage.findAll().find(t => t.id === id)
     if (!todo) {
       this.logger.error(`Todo #${id} not found`)
       return null
@@ -81,12 +80,9 @@ const kTodoService = 'todo-service'
 
 const di = new CaffeineIoC()
 
-di.bind(kLogger)
-  .toClass(Logger)
-di.bind(kStorage)
-  .toClass(Storage, [kLogger])
-di.bind(kTodoService)
-  .toClass(TodoService, [kStorage, kLogger])
+di.bind(kLogger).toClass(Logger)
+di.bind(kStorage).toClass(Storage, [kLogger])
+di.bind(kTodoService).toClass(TodoService, [kStorage, kLogger])
 
 // --- Run ---
 

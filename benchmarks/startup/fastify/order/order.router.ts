@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+
 import type { OrderController } from './order.controller.js'
 
 export function createOrderRouter(ctrl: OrderController) {

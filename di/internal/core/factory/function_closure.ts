@@ -1,5 +1,5 @@
-import { ResolutionContext } from '../../../resolution_context.js'
 import { Factory } from '../../../factory.js'
+import { ResolutionContext } from '../../../resolution_context.js'
 
 export function functionFactory<T = unknown>(fn: (...args: unknown[]) => T): Factory<T> {
   return (ctx: ResolutionContext): T => {

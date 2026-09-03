@@ -1,5 +1,6 @@
 import { token } from '@caffeinejs/di'
 import { contributionKey } from '@caffeinejs/std'
+
 import type { AuthenticationOptions } from './builder.js'
 import type { AuthSchemeDescriptor } from './descriptor.js'
 import type { OIDCMeta } from './oidc/index.js'

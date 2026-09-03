@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads'
-import { Keys, type Provider, type Refresher } from '@caffeinejs/di'
-import { $i, Injectable, PostConstruct, PreDestroy } from '@caffeinejs/di'
+
+import { Keys, type Provider, type Refresher, $i, Injectable, PostConstruct, PreDestroy } from '@caffeinejs/di'
+
 import { AppConfig } from '../../app.config.js'
 import { DataConfig } from './data.config.js'
 import { WorkerData, WorkerMessage } from './gcs.watcher.worker.js'
@@ -13,7 +14,7 @@ export class GcsWatcher {
     private readonly config: AppConfig,
     private readonly refresher: Refresher,
     private readonly dataConfig: Provider<DataConfig>,
-  ) { }
+  ) {}
 
   @PostConstruct()
   start(): void {
@@ -40,11 +41,14 @@ export class GcsWatcher {
         return
       }
 
-      this.refresher.refresh()
+      this.refresher
+        .refresh()
         .then(() => {
           const config = this.dataConfig.get()
           if (config) {
-            console.log(`DataConfig refreshed (generation=${msg.generation}, loadedAt=${config.loadedAt.toISOString()})`)
+            console.log(
+              `DataConfig refreshed (generation=${msg.generation}, loadedAt=${config.loadedAt.toISOString()})`,
+            )
           } else {
             console.log(`DataConfig refreshed (generation=${msg.generation})`)
           }

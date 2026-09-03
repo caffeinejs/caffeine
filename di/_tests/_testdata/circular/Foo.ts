@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
+
 import { Injectable } from '../../../decorators/injectable.js'
+import { Lifetime } from '../../../decorators/lifetime.js'
 import { $i } from '../../../injection.js'
 import { Scopes } from '../../../scope.js'
-import { Lifetime } from '../../../decorators/lifetime.js'
 import { Bar, BarTransient } from './Bar.js'
 
 @Injectable([$i.defer(() => Bar)])

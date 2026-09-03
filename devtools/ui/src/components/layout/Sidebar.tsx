@@ -29,9 +29,7 @@ export function Sidebar({ tab, onTab, connected, counts }: Props) {
     },
     {
       title: 'Endpoints',
-      items: [
-        { id: 'routes', label: 'Routes', count: counts.routes },
-      ],
+      items: [{ id: 'routes', label: 'Routes', count: counts.routes }],
     },
   ]
 
@@ -47,17 +45,9 @@ export function Sidebar({ tab, onTab, connected, counts }: Props) {
 
       <div className="border-b border-zinc-200 px-4 py-2.5 dark:border-zinc-800">
         <div className="flex items-center gap-2">
+          <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-red-400'}`} />
           <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              connected ? 'bg-emerald-400' : 'bg-red-400'
-            }`}
-          />
-          <span
-            className={`text-xs ${
-              connected
-                ? 'text-zinc-600 dark:text-zinc-400'
-                : 'text-zinc-400 dark:text-zinc-500'
-            }`}
+            className={`text-xs ${connected ? 'text-zinc-600 dark:text-zinc-400' : 'text-zinc-400 dark:text-zinc-500'}`}
           >
             {connected ? 'Connected' : 'Disconnected'}
           </span>
@@ -85,9 +75,7 @@ export function Sidebar({ tab, onTab, connected, counts }: Props) {
                   >
                     <span>{item.label}</span>
                     <span
-                      className={`tabular-nums text-xs ${
-                        active ? 'text-red-500' : 'text-zinc-400 dark:text-zinc-600'
-                      }`}
+                      className={`tabular-nums text-xs ${active ? 'text-red-500' : 'text-zinc-400 dark:text-zinc-600'}`}
                     >
                       {item.count}
                     </span>

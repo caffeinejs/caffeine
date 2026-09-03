@@ -1,7 +1,9 @@
 import { fileURLToPath } from 'node:url'
-import fastify, { FastifyRequest } from 'fastify'
+
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { scan } from '@caffeinejs/scan'
+import fastify, { FastifyRequest } from 'fastify'
+
 import { RouteParam } from './util/decorators/params.js'
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url))
@@ -22,7 +24,11 @@ const controllers = container.getBindingsByLabel(token<any>(Symbol.for('controll
 for (const controller of controllers) {
   const tags = controller.binding.tags
   const path = tags.get(token<any>(Symbol.for('controller:base'))) as string
-  const routes = tags.get(token<any>(Symbol.for('controller:routes'))) as { handler: string, path: string, method: string }[]
+  const routes = tags.get(token<any>(Symbol.for('controller:routes'))) as {
+    handler: string
+    path: string
+    method: string
+  }[]
   const routeParams = tags.get(token<any>(Symbol.for('controller:params'))) as Map<string, RouteParam[]>
 
   for (const route of routes) {

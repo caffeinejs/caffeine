@@ -13,7 +13,7 @@ export interface DeadLetterRecord {
   value: unknown
   headers: Map<string, string>
   /** Exception class/message parsed from the `x-exception-*` headers stamped at recovery time. */
-  error?: { class?: string, message?: string }
+  error?: { class?: string; message?: string }
 }
 
 /**
@@ -27,7 +27,7 @@ export interface DeadLetterManager {
   /** Deletes and recreates the dead-letter topic, dropping its backlog. Returns the number of records drained. */
   purge(dltTopic: string): Promise<number>
   /** Re-publishes records back into the retry chain (default `${original}-retry-0`). Returns the count. */
-  reprocess(dltTopic: string, opts?: { to?: string, limit?: number }): Promise<number>
+  reprocess(dltTopic: string, opts?: { to?: string; limit?: number }): Promise<number>
 }
 
 /** Tuning for the builtin {@link deadLetterManager}. */
@@ -134,9 +134,8 @@ function toRecord(message: KafkaMessage): DeadLetterRecord {
     key: message.key,
     value: message.value,
     headers: message.headers,
-    error: errorClass !== undefined || errorMessage !== undefined
-      ? { class: errorClass, message: errorMessage }
-      : undefined,
+    error:
+      errorClass !== undefined || errorMessage !== undefined ? { class: errorClass, message: errorMessage } : undefined,
   }
 }
 

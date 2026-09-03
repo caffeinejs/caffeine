@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { createApplication } from '@caffeinejs/std'
+import { describe, it, expect } from 'vitest'
+
 import type { ConsumerClient, KafkaClients, KafkaMessage, KafkaOutboundMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'

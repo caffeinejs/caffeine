@@ -1,4 +1,5 @@
 import { Ctor, ErrInvalidDecorator, Injectable, Injection, Tag } from '@caffeinejs/di'
+
 import { CatchMetadata, kErrorHandler } from '../error/index.js'
 import { configureControllerErrorHandler } from './registrar/registrar.js'
 
@@ -79,8 +80,8 @@ export function Catch(
     if (context.kind === 'method') {
       if (hasClassOnlyArgs) {
         throw new ErrInvalidDecorator(
-          `@${Catch.name}() on method "${String(context.name)}" only accepts error types: `
-          + 'dependencies and options apply to handler classes',
+          `@${Catch.name}() on method "${String(context.name)}" only accepts error types: ` +
+            'dependencies and options apply to handler classes',
         )
       }
 

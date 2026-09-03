@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "arrowParens": "avoid",
+  "quoteProps": "as-needed",
+  "printWidth": 120,
+  "tabWidth": 2,
+  "sortPackageJson": false,
+  "sortImports": {
+    "newlinesBetween": true
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/*.generated.mod.ts",
+    "prisma/migrations/**",
+    "**/*.hbs",
+    "benchmarks/di/testdata/third_party_legacy/**",
+    "di/_tests/deno/**",
+    "fetchy/fetchy/_benchmarks/generated/**",
+    "package-lock.json"
+  ]
+}

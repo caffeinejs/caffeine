@@ -1,17 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { Injectable } from '../decorators/injectable.js'
+
 import { CaffeineIoC } from '../container.js'
+import { Injectable } from '../decorators/injectable.js'
 import { ErrInjectableBase } from '../errors.js'
 
 describe('@Injectable — extending an @Injectable base', function () {
   @Injectable()
   class Base {
-    greet(): string { return 'base' }
+    greet(): string {
+      return 'base'
+    }
   }
 
   @Injectable()
   class Child extends Base {
-    greet(): string { return 'child' }
+    greet(): string {
+      return 'child'
+    }
   }
 
   void Child

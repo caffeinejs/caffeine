@@ -1,7 +1,8 @@
 import type { FastifyContextConfig, FastifyReply, FastifyRequest } from 'fastify'
-import type { ServerExtensionContext } from '../server_extension.js'
-import { joinPaths } from '../internal/paths/paths.js'
+
 import { solutions } from '../error/util.js'
+import { joinPaths } from '../internal/paths/paths.js'
+import type { ServerExtensionContext } from '../server_extension.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { kHealthRoute } from './keys.js'
 import type { ProbeQuery, ProbeResponse } from './probes.js'
@@ -35,11 +36,7 @@ export function installHealthProbes(ctx: ServerExtensionContext): void {
   mount(ctx, paths.startup, query => probes.startup(query))
 }
 
-function mount(
-  ctx: ServerExtensionContext,
-  path: string,
-  handle: (query: ProbeQuery) => Promise<ProbeResponse>,
-): void {
+function mount(ctx: ServerExtensionContext, path: string, handle: (query: ProbeQuery) => Promise<ProbeResponse>): void {
   ctx.server.route({
     method: ['GET', 'HEAD'],
     url: path,
@@ -60,9 +57,14 @@ function mount(
 // `?verbose` counts as true when present at all, with or without a value, matching kube-apiserver. `?exclude`
 // accepts both repetition and a comma-separated list.
 function probeQuery(query: ProbeRequestQuery): ProbeQuery {
-  const exclude = query.exclude === undefined
-    ? undefined
-    : ([] as string[]).concat(query.exclude).flatMap(value => value.split(',')).map(value => value.trim()).filter(Boolean)
+  const exclude =
+    query.exclude === undefined
+      ? undefined
+      : ([] as string[])
+          .concat(query.exclude)
+          .flatMap(value => value.split(','))
+          .map(value => value.trim())
+          .filter(Boolean)
 
   return {
     verbose: query.verbose !== undefined && query.verbose !== 'false',
@@ -79,11 +81,8 @@ function assertNoCollision(ctx: ServerExtensionContext, probePaths: readonly str
 
       if (taken.has(path)) {
         throw new ErrHealthConfiguration(
-          `Cannot mount health probes: a route is already registered at "${path}"`
-          + solutions(
-            'Move the probe with app.health(h => h.paths({ ... }))',
-            'Change the conflicting route path',
-          ),
+          `Cannot mount health probes: a route is already registered at "${path}"` +
+            solutions('Move the probe with app.health(h => h.paths({ ... }))', 'Change the conflicting route path'),
         )
       }
     }

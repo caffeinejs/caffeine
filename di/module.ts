@@ -3,9 +3,7 @@ import type { Ctor } from './types.js'
 
 export const kModule = Symbol('@caffeinejs/di:module')
 
-export type ModuleFn
-  = | ((container: ContainerBindingOps) => void)
-    | ((container: ContainerBindingOps) => Promise<void>)
+export type ModuleFn = ((container: ContainerBindingOps) => void) | ((container: ContainerBindingOps) => Promise<void>)
 
 /**
  * Module organizes binding registrations for a {@link Container}.
@@ -87,8 +85,7 @@ async function runModule(module: Module, container: Container, index: number): P
     throw error
   }
 
-  return Promise
-    .resolve(result)
+  return Promise.resolve(result)
     .then(() => {
       container.hooks.emit('onModuleRegistered', { name, index })
     })
@@ -117,7 +114,7 @@ function collectModules(roots: Array<Module | ModuleFn>): Module[] {
   const queued = new Set<ModuleFn | Module>()
   const path = new Set<ModuleFn | Module>()
   const order: Module[] = []
-  const stack: Array<{ input: Module | ModuleFn, module?: Module, phase: 'enter' | 'exit' }> = []
+  const stack: Array<{ input: Module | ModuleFn; module?: Module; phase: 'enter' | 'exit' }> = []
 
   for (let i = roots.length - 1; i >= 0; i--) {
     stack.push({ input: roots[i], phase: 'enter' })

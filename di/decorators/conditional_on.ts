@@ -1,6 +1,6 @@
-import { notNil } from '../internal/util/assert/not_nil.js'
-import { check } from '../internal/util/assert/check.js'
 import { Conditional } from '../conditional.js'
+import { check } from '../internal/util/assert/check.js'
+import { notNil } from '../internal/util/assert/not_nil.js'
 import { extendMemberInjectableAttributes, extendInjectableAttributes } from './registrar/index.js'
 import { defineClassOrMemberDecorator } from './util/index.js'
 

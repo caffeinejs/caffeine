@@ -1,6 +1,6 @@
 import { ErrInvalidDecorator } from '../errors.js'
-import { extendMemberInjectableAttributes } from './registrar/index.js'
 import { Configuration } from './configuration.js'
+import { extendMemberInjectableAttributes } from './registrar/index.js'
 
 /**
  * Configures a pre-destroy callback for a bean produced by a `@Provides` method.
@@ -24,15 +24,11 @@ import { Configuration } from './configuration.js'
 export function OnPreDestroy<T>(fn: (instance: T) => void | unknown | Promise<void | unknown>) {
   return function (_target: Function, context: DecoratorContext) {
     if (context.kind !== 'method') {
-      throw new ErrInvalidDecorator(
-        `@OnPreDestroy can only be used on a method inside a @${Configuration.name} class`,
-      )
+      throw new ErrInvalidDecorator(`@OnPreDestroy can only be used on a method inside a @${Configuration.name} class`)
     }
 
-    extendMemberInjectableAttributes(
-      context.metadata,
-      context.name,
-      config => config.preDestroy(fn as (value: unknown) => void | Promise<void>),
+    extendMemberInjectableAttributes(context.metadata, context.name, config =>
+      config.preDestroy(fn as (value: unknown) => void | Promise<void>),
     )
   }
 }

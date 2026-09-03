@@ -1,5 +1,6 @@
 import { Lifetime, Scopes, type Binding, type Container } from '@caffeinejs/di'
 import { HealthIndicator } from '@caffeinejs/std'
+
 import { solutions } from '../error/util.js'
 import { ErrHealthIndicatorNotSingleton } from './errors.js'
 
@@ -15,11 +16,11 @@ export function loadHealthIndicators(container: Container): HealthIndicator[] {
     if (binding.scopeID !== Scopes.SINGLETON) {
       const name = nameOf(binding)
       throw new ErrHealthIndicatorNotSingleton(
-        `Cannot load health indicator "${name}": lifetime must be singleton`
-        + solutions(
-          `Remove @${Lifetime.name}(...) or .lifetime(...) so the default singleton applies, or set it to Scopes.SINGLETON`,
-          'Inject a narrower-scoped dependency as Provider<T> with $i.provide(Dep) instead of changing the indicator lifetime',
-        ),
+        `Cannot load health indicator "${name}": lifetime must be singleton` +
+          solutions(
+            `Remove @${Lifetime.name}(...) or .lifetime(...) so the default singleton applies, or set it to Scopes.SINGLETON`,
+            'Inject a narrower-scoped dependency as Provider<T> with $i.provide(Dep) instead of changing the indicator lifetime',
+          ),
       )
     }
   }

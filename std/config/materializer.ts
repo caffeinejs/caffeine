@@ -35,12 +35,7 @@ function setByPath(obj: Record<string, unknown>, parts: string[], value: unknown
   const last = parts[parts.length - 1]
   const existing = node[last]
   // Indexed children already present — do not let a whole-array leaf overwrite them.
-  if (
-    Array.isArray(value)
-    && existing !== null
-    && typeof existing === 'object'
-    && !Array.isArray(existing)
-  ) {
+  if (Array.isArray(value) && existing !== null && typeof existing === 'object' && !Array.isArray(existing)) {
     return
   }
   node[last] = value

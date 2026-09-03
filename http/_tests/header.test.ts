@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Get, Header, MediaType, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Header', () => {
@@ -8,10 +9,14 @@ describe('Header', () => {
     @Controller('/versioned')
     class VersionedController {
       @Get('/a')
-      a() { return {} }
+      a() {
+        return {}
+      }
 
       @Get('/b')
-      b() { return {} }
+      b() {
+        return {}
+      }
     }
 
     void [VersionedController]
@@ -31,10 +36,14 @@ describe('Header', () => {
     class TargetedController {
       @Header('x-custom', 'yes')
       @Get('/with-header')
-      withHeader() { return {} }
+      withHeader() {
+        return {}
+      }
 
       @Get('/without-header')
-      withoutHeader() { return {} }
+      withoutHeader() {
+        return {}
+      }
     }
 
     void [TargetedController]
@@ -54,7 +63,9 @@ describe('Header', () => {
     @Controller('/multi-class')
     class MultiClassController {
       @Get('/route')
-      route() { return {} }
+      route() {
+        return {}
+      }
     }
 
     void [MultiClassController]
@@ -73,7 +84,9 @@ describe('Header', () => {
     class MultiMethodController {
       @Header('x-flags', ['read', 'write'])
       @Get('/route')
-      route() { return {} }
+      route() {
+        return {}
+      }
     }
 
     void [MultiMethodController]
@@ -92,7 +105,9 @@ describe('Header', () => {
     class OverrideController {
       @Header('x-tier', 'method')
       @Get('/route')
-      route() { return {} }
+      route() {
+        return {}
+      }
     }
 
     void [OverrideController]
@@ -111,7 +126,9 @@ describe('Header', () => {
     class CharsetController {
       @Header('x-media', MediaType.APPLICATION_JSON, 'utf-8')
       @Get('/route')
-      route() { return {} }
+      route() {
+        return {}
+      }
     }
 
     void [CharsetController]
@@ -129,7 +146,9 @@ describe('Header', () => {
     class NoCharsetController {
       @Header('x-media', MediaType.APPLICATION_JSON)
       @Get('/route')
-      route() { return {} }
+      route() {
+        return {}
+      }
     }
 
     void [NoCharsetController]
@@ -147,7 +166,9 @@ describe('Header', () => {
     class CharsetArrayController {
       @Header('x-media-list', ['application/json', 'application/xml'], 'utf-8')
       @Get('/route')
-      route() { return {} }
+      route() {
+        return {}
+      }
     }
 
     void [CharsetArrayController]
@@ -157,7 +178,6 @@ describe('Header', () => {
 
     const res = await app.fetch('/charset-array/route')
 
-    expect(res.headers.get('x-media-list'))
-      .toBe('application/json; charset=utf-8, application/xml; charset=utf-8')
+    expect(res.headers.get('x-media-list')).toBe('application/json; charset=utf-8, application/xml; charset=utf-8')
   })
 })

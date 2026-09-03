@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { OIDCAuthenticationOptionsBuilder } from './options.js'
 
 /** Cookie defaults are namespaced by strategy, so build() needs the scheme. */
@@ -18,7 +19,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
   it('throws without clientID', () => {
     expect(() =>
       new OIDCAuthenticationOptionsBuilder()
-        .clientSecret('s').sessionSecret('s'.repeat(32)).callbackURL('https://x.com/cb')
+        .clientSecret('s')
+        .sessionSecret('s'.repeat(32))
+        .callbackURL('https://x.com/cb')
         .discoveryURL('https://x.com')
         .issuer('https://x.com')
         .build(SCHEME),
@@ -28,7 +31,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
   it('throws without clientSecret', () => {
     expect(() =>
       new OIDCAuthenticationOptionsBuilder()
-        .clientID('id').sessionSecret('s'.repeat(32)).callbackURL('https://x.com/cb')
+        .clientID('id')
+        .sessionSecret('s'.repeat(32))
+        .callbackURL('https://x.com/cb')
         .discoveryURL('https://x.com')
         .issuer('https://x.com')
         .build(SCHEME),
@@ -38,7 +43,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
   it('throws without sessionSecret', () => {
     expect(() =>
       new OIDCAuthenticationOptionsBuilder()
-        .clientID('id').clientSecret('s').callbackURL('https://x.com/cb')
+        .clientID('id')
+        .clientSecret('s')
+        .callbackURL('https://x.com/cb')
         .discoveryURL('https://x.com')
         .issuer('https://x.com')
         .build(SCHEME),
@@ -48,7 +55,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
   it('throws without callbackURL', () => {
     expect(() =>
       new OIDCAuthenticationOptionsBuilder()
-        .clientID('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .clientID('id')
+        .clientSecret('s')
+        .sessionSecret('s'.repeat(32))
         .discoveryURL('https://x.com')
         .issuer('https://x.com')
         .build(SCHEME),
@@ -58,7 +67,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
   it('throws without discoveryURL or manual endpoints', () => {
     expect(() =>
       new OIDCAuthenticationOptionsBuilder()
-        .clientID('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .clientID('id')
+        .clientSecret('s')
+        .sessionSecret('s'.repeat(32))
         .callbackURL('https://x.com/cb')
         .build(SCHEME),
     ).toThrow('provide discoveryURL or all of')
@@ -67,7 +78,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
   it('throws with only partial manual endpoints', () => {
     expect(() =>
       new OIDCAuthenticationOptionsBuilder()
-        .clientID('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .clientID('id')
+        .clientSecret('s')
+        .sessionSecret('s'.repeat(32))
         .callbackURL('https://x.com/cb')
         .authorizationEndpoint('https://x.com/auth')
         .tokenEndpoint('https://x.com/token')
@@ -83,7 +96,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
 
   it('succeeds with full manual endpoints', () => {
     const opts = new OIDCAuthenticationOptionsBuilder()
-      .clientID('cid').clientSecret('s').sessionSecret('s'.repeat(32))
+      .clientID('cid')
+      .clientSecret('s')
+      .sessionSecret('s'.repeat(32))
       .callbackURL('https://app.example.com/cb')
       .authorizationEndpoint('https://x.com/auth')
       .tokenEndpoint('https://x.com/token')
@@ -117,7 +132,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
     it('throws when sessionSecret is shorter than 32 characters', () => {
       expect(() =>
         new OIDCAuthenticationOptionsBuilder()
-          .clientID('id').clientSecret('s').sessionSecret('s'.repeat(31))
+          .clientID('id')
+          .clientSecret('s')
+          .sessionSecret('s'.repeat(31))
           .callbackURL('https://x.com/cb')
           .discoveryURL('https://x.com')
           .issuer('https://x.com')
@@ -127,7 +144,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
 
     it('accepts a sessionSecret of exactly 32 characters', () => {
       const opts = new OIDCAuthenticationOptionsBuilder()
-        .clientID('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .clientID('id')
+        .clientSecret('s')
+        .sessionSecret('s'.repeat(32))
         .callbackURL('https://x.com/cb')
         .discoveryURL('https://x.com')
         .issuer('https://x.com')
@@ -148,16 +167,12 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
 
     it('honours an explicit override over the derived default', () => {
       expect(minimal().secureCookie(false).build(SCHEME).secureCookie).toBe(false)
-      const forced = minimal()
-        .callbackURL('http://localhost:3000/auth/callback')
-        .secureCookie(true)
-        .build(SCHEME)
+      const forced = minimal().callbackURL('http://localhost:3000/auth/callback').secureCookie(true).build(SCHEME)
       expect(forced.secureCookie).toBe(true)
     })
 
     it('throws when callbackURL is not a valid URL', () => {
-      expect(() => minimal().callbackURL('/auth/callback').build(SCHEME))
-        .toThrow('is not a valid URL')
+      expect(() => minimal().callbackURL('/auth/callback').build(SCHEME)).toThrow('is not a valid URL')
     })
   })
 
@@ -185,7 +200,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
     it('rejects a plain http issuer', () => {
       expect(() =>
         new OIDCAuthenticationOptionsBuilder()
-          .clientID('id').clientSecret('s').sessionSecret('s'.repeat(32))
+          .clientID('id')
+          .clientSecret('s')
+          .sessionSecret('s'.repeat(32))
           .callbackURL('https://x.com/cb')
           .authorizationEndpoint('http://x.com/auth')
           .tokenEndpoint('https://x.com/token')
@@ -197,7 +214,9 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
 
     it('allows http on loopback for local development', () => {
       const opts = new OIDCAuthenticationOptionsBuilder()
-        .clientID('id').clientSecret('s').sessionSecret('s'.repeat(32))
+        .clientID('id')
+        .clientSecret('s')
+        .sessionSecret('s'.repeat(32))
         .callbackURL('http://localhost:3000/cb')
         .authorizationEndpoint('http://localhost:8080/auth')
         .tokenEndpoint('http://localhost:8080/token')
@@ -210,13 +229,15 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
 
   describe('defaultRedirectPath', () => {
     it('rejects a protocol-relative path', () => {
-      expect(() => minimal().defaultRedirectPath('//evil.com').build(SCHEME))
-        .toThrow('must be a same-site absolute path')
+      expect(() => minimal().defaultRedirectPath('//evil.com').build(SCHEME)).toThrow(
+        'must be a same-site absolute path',
+      )
     })
 
     it('rejects an absolute off-site URL', () => {
-      expect(() => minimal().defaultRedirectPath('https://evil.com').build(SCHEME))
-        .toThrow('must be a same-site absolute path')
+      expect(() => minimal().defaultRedirectPath('https://evil.com').build(SCHEME)).toThrow(
+        'must be a same-site absolute path',
+      )
     })
 
     it('accepts a same-site absolute path', () => {
@@ -228,8 +249,7 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
     it.each(['/\t/evil.com', '/\n/evil.com', '/\r/evil.com'])(
       'rejects a control character smuggling a protocol-relative prefix (%j)',
       path => {
-        expect(() => minimal().defaultRedirectPath(path).build(SCHEME))
-          .toThrow('must be a same-site absolute path')
+        expect(() => minimal().defaultRedirectPath(path).build(SCHEME)).toThrow('must be a same-site absolute path')
       },
     )
   })

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { defineFeature, type Service } from '@caffeinejs/std'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Get, createWebApplication } from '../index.js'
 
 describe('createWebApplication default Fastify form', () => {
@@ -8,7 +9,9 @@ describe('createWebApplication default Fastify form', () => {
     @Controller('/default-app')
     class DefaultAppController {
       @Get('/data')
-      data() { return { ok: true } }
+      data() {
+        return { ok: true }
+      }
     }
     void [DefaultAppController]
 
@@ -31,7 +34,9 @@ describe('createWebApplication default Fastify form', () => {
     @Controller('/default-app-container')
     class DefaultContainerController {
       @Get('/data')
-      data() { return { via: 'container' } }
+      data() {
+        return { via: 'container' }
+      }
     }
     void [DefaultContainerController]
 

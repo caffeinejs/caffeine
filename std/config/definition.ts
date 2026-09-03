@@ -1,10 +1,11 @@
 import { token, type NamedToken } from '@caffeinejs/di'
+
+import { ConfigShard } from './integration/shard.js'
+import { MutableConfigProvider } from './providers/mutable_provider.js'
+import { type ConfigSchema, passthroughConfigSchema } from './schema.js'
 import { secretPaths } from './secrets.js'
 import { ConfigSlice, type ConfigSliceSpec } from './slice.js'
 import { ConfigPriority, ConfigSources } from './sources.js'
-import { MutableConfigProvider } from './providers/mutable_provider.js'
-import { type ConfigSchema, passthroughConfigSchema } from './schema.js'
-import { ConfigShard } from './integration/shard.js'
 import type { ResolutionContext } from './types.js'
 
 /** DI key for the {@link ConfigDefinition} the application builder owns. Features resolve it to register a slice. */

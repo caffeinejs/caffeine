@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
+
 import { describe, it, expect } from 'vitest'
+
 import { accessTokenHash, assertAccessTokenHash } from './_at_hash.js'
 
 // OpenID Connect Core 1.0, Appendix A.3 — the specification's own at_hash example.
@@ -50,18 +52,21 @@ describe('assertAccessTokenHash()', () => {
 
   it('rejects a hash computed over a different token', () => {
     const wrong = accessTokenHash('another-access-token', 'RS256')
-    expect(() => assertAccessTokenHash(SPEC_ACCESS_TOKEN, wrong, 'RS256'))
-      .toThrow('at_hash does not match the access token')
+    expect(() => assertAccessTokenHash(SPEC_ACCESS_TOKEN, wrong, 'RS256')).toThrow(
+      'at_hash does not match the access token',
+    )
   })
 
   it('rejects a hash of the right token under the wrong algorithm', () => {
     const wrongAlg = accessTokenHash(SPEC_ACCESS_TOKEN, 'RS512')
-    expect(() => assertAccessTokenHash(SPEC_ACCESS_TOKEN, wrongAlg, 'RS256'))
-      .toThrow('at_hash does not match the access token')
+    expect(() => assertAccessTokenHash(SPEC_ACCESS_TOKEN, wrongAlg, 'RS256')).toThrow(
+      'at_hash does not match the access token',
+    )
   })
 
   it('rejects a truncated hash without throwing on the length mismatch', () => {
-    expect(() => assertAccessTokenHash(SPEC_ACCESS_TOKEN, SPEC_AT_HASH.slice(0, -1), 'RS256'))
-      .toThrow('at_hash does not match the access token')
+    expect(() => assertAccessTokenHash(SPEC_ACCESS_TOKEN, SPEC_AT_HASH.slice(0, -1), 'RS256')).toThrow(
+      'at_hash does not match the access token',
+    )
   })
 })

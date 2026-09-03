@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/graceful_shutdown_app.mjs', import.meta.url))
@@ -8,7 +9,7 @@ interface Running {
   child: ChildProcess
   port: number
   output: () => string
-  exit: Promise<{ code: number | null, signal: NodeJS.Signals | null }>
+  exit: Promise<{ code: number | null; signal: NodeJS.Signals | null }>
 }
 
 let running: Running | undefined
@@ -38,7 +39,7 @@ async function launch(env: Record<string, string> = {}): Promise<Running> {
     stderr += chunk
   })
 
-  const exit = new Promise<{ code: number | null, signal: NodeJS.Signals | null }>(resolve => {
+  const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
     child.on('exit', (code, signal) => resolve({ code, signal }))
   })
 

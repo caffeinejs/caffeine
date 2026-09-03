@@ -1,6 +1,7 @@
 import type { ApplicationAvailability } from '@caffeinejs/std'
-import type { GroupOutcome, HealthRegistry, IndicatorOutcome } from './registry.js'
+
 import type { HealthOptions } from './options.js'
+import type { GroupOutcome, HealthRegistry, IndicatorOutcome } from './registry.js'
 
 /** The query a probe request carries. Both parameters are honoured only when enabled in {@link HealthOptions}. */
 export interface ProbeQuery {
@@ -59,9 +60,7 @@ export class ProbeEndpoint {
       { name: 'live', ok: availability.live === 'correct', detail: availability.livenessReason },
     ]
 
-    const outcome = availability.live === 'correct'
-      ? await this.#evaluate('liveness', query)
-      : undefined
+    const outcome = availability.live === 'correct' ? await this.#evaluate('liveness', query) : undefined
 
     return this.#render('livez', state, outcome, query)
   }
@@ -78,9 +77,7 @@ export class ProbeEndpoint {
       { name: 'live', ok: availability.live === 'correct', detail: availability.livenessReason },
     ]
 
-    const outcome = state.every(line => line.ok)
-      ? await this.#evaluate('readiness', query)
-      : undefined
+    const outcome = state.every(line => line.ok) ? await this.#evaluate('readiness', query) : undefined
 
     return this.#render('readyz', state, outcome, query)
   }
@@ -92,9 +89,7 @@ export class ProbeEndpoint {
       { name: 'started', ok: availability.started, detail: availability.started ? undefined : 'starting' },
     ]
 
-    const outcome = availability.started
-      ? await this.#evaluate('startup', query)
-      : undefined
+    const outcome = availability.started ? await this.#evaluate('startup', query) : undefined
 
     return this.#render('startupz', state, outcome, query)
   }
@@ -106,9 +101,7 @@ export class ProbeEndpoint {
 
     // An unhonoured `exclude` only ever makes the check stricter, which is the safe direction to fail in. Rejecting
     // the request instead would let a caller's query string take the pod out of the routing table.
-    const exclude = this.#options.exclude && query.exclude !== undefined
-      ? new Set(query.exclude)
-      : undefined
+    const exclude = this.#options.exclude && query.exclude !== undefined ? new Set(query.exclude) : undefined
 
     return this.#registry.evaluate(group, exclude)
   }

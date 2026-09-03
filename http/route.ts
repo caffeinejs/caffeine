@@ -2,12 +2,13 @@ import { Ctor, Provider } from '@caffeinejs/di'
 import type { AnySchema } from '@caffeinejs/std'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import { FastifyRequest } from 'fastify'
+
 import type { Context } from './context.js'
 import type { ErrorHandler } from './error/error.js'
-import { AuthzRouteService } from './security/authz/index.js'
-import { RouteAuthzOptions } from './routing/spec.js'
-import type { RouteDispatch, RouteGroupHook } from './routing/dispatch.js'
 import type { CompiledGuard } from './guards/compile.js'
+import type { RouteDispatch, RouteGroupHook } from './routing/dispatch.js'
+import { RouteAuthzOptions } from './routing/spec.js'
+import { AuthzRouteService } from './security/authz/index.js'
 
 /** Error types mapped to the handler class that renders them, as declared by `@CatchWith`. */
 export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
@@ -50,8 +51,11 @@ export interface RouteGroup<R = FastifyRequest> {
  * A group's own error handling. Returns {@link kErrorUnhandled} — not `undefined`, which is a legitimate
  * result meaning "responded, with no body" — when it declines the error.
  */
-export type RouteGroupErrorHandler<R = FastifyRequest>
-  = (req: R, ctx: Context, err: Error) => unknown | Promise<unknown>
+export type RouteGroupErrorHandler<R = FastifyRequest> = (
+  req: R,
+  ctx: Context,
+  err: Error,
+) => unknown | Promise<unknown>
 
 /** Returned by a {@link RouteGroupErrorHandler} that does not handle the error. */
 export const kErrorUnhandled: unique symbol = Symbol('caffeine.http.errorUnhandled')

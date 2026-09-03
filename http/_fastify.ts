@@ -1,7 +1,7 @@
 import { type FastifyContext } from './context.js'
 import { type CatchByMap } from './route.js'
-import { type Principal } from './security/identity.js'
 import { type AuthzRouteService } from './security/authz/route_service.js'
+import { type Principal } from './security/identity.js'
 
 declare module 'fastify' {
   interface FastifyRequest {

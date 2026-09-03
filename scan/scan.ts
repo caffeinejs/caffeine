@@ -2,8 +2,9 @@ import { readdir, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, extname, join, relative, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { ErrCannotLoadTypeScriptModule } from './errors.js'
+
 import { Runtime } from './_runtime.js'
+import { ErrCannotLoadTypeScriptModule } from './errors.js'
 
 export type SinglePathFilter = string | RegExp | ((path: string) => boolean)
 export type PathFilter = SinglePathFilter | SinglePathFilter[]
@@ -24,8 +25,8 @@ type ModuleEntry = {
   type: 'module' | 'commonjs'
 }
 
-type ResolvedDefaultFinderOptions = Required<Pick<ScanOptions, 'scriptPattern' | 'maxDepth'>>
-  & Pick<ScanOptions, 'matchFilter' | 'ignoreFilter' | 'ignorePattern'>
+type ResolvedDefaultFinderOptions = Required<Pick<ScanOptions, 'scriptPattern' | 'maxDepth'>> &
+  Pick<ScanOptions, 'matchFilter' | 'ignoreFilter' | 'ignorePattern'>
 
 const packageTypeCache = new Map<string, string | undefined>()
 
@@ -186,7 +187,7 @@ function normalizeExclude(exclude: ScanOptions['exclude']): Set<string> {
 async function buildTree(
   files: string[],
   dir: string,
-  ctx: { opts: ResolvedDefaultFinderOptions, depth: number, rootDir: string },
+  ctx: { opts: ResolvedDefaultFinderOptions; depth: number; rootDir: string },
 ): Promise<void> {
   const { opts, depth, rootDir } = ctx
   const dirEntries = await readdir(dir, { withFileTypes: true })
@@ -218,8 +219,7 @@ function accumulateFile(ctx: {
 }): void {
   const { files, file, opts, rootDir } = ctx
 
-  const filePath = '/' + relative(rootDir, file)
-    .replace(/\\/gu, '/')
+  const filePath = '/' + relative(rootDir, file).replace(/\\/gu, '/')
   if (opts.matchFilter && !filterPath(filePath, opts.matchFilter)) {
     return
   }
@@ -295,8 +295,7 @@ async function getPackageType(cwd: string): Promise<string | undefined> {
 
   while (directories.length > 0) {
     const filePath = join(...directories, 'package.json')
-    const fileContents = await readFile(filePath, 'utf-8')
-      .catch(() => null)
+    const fileContents = await readFile(filePath, 'utf-8').catch(() => null)
 
     if (fileContents) {
       result = JSON.parse(fileContents).type

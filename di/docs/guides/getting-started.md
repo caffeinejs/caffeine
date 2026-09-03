@@ -72,6 +72,7 @@ import { Injectable } from '@caffeinejs/di/decorators'
 @Injectable()
 export class ProductRepository {}
 ```
+
 ```ts
 // file: product.controller.ts
 import { Injectable } from '@caffeinejs/di/decorators'
@@ -81,6 +82,7 @@ export class ProductController {
   constructor(private readonly repository: ProductRepository)
 }
 ```
+
 ```ts
 // file: app.container.ts
 import { CaffeineIoC } from '@caffeinejs/di'
@@ -249,7 +251,10 @@ Injects a constant value directly, with no container binding required.
 ```ts
 @Injectable([useValue('localhost'), useValue(5432)])
 class DatabaseClient {
-  constructor(readonly host: string, readonly port: number) {}
+  constructor(
+    readonly host: string,
+    readonly port: number,
+  ) {}
 }
 ```
 

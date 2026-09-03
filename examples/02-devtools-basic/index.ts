@@ -1,22 +1,22 @@
-import fastify from 'fastify'
+import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
 import { Controller, Delete, Get, Post, Args, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
-import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
+import fastify from 'fastify'
 
 // --- services ---
 
 @Injectable()
 class TaskStore {
-  #tasks: { id: number, name: string }[] = []
+  #tasks: { id: number; name: string }[] = []
   #next = 1
 
-  add(name: string): { id: number, name: string } {
+  add(name: string): { id: number; name: string } {
     const task = { id: this.#next++, name }
     this.#tasks.push(task)
     return task
   }
 
-  list(): { id: number, name: string }[] {
+  list(): { id: number; name: string }[] {
     return this.#tasks
   }
 

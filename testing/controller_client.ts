@@ -1,6 +1,7 @@
 import { getRouteGroup } from '@caffeinejs/http'
-import { ErrNoRouter } from './error.js'
+
 import { mergeRequest, resolveRouteURL } from './_util.js'
+import { ErrNoRouter } from './error.js'
 import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
 
 export type ControllerTestClient<C extends RouterCtor> = {

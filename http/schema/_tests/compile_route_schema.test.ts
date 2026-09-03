@@ -1,6 +1,7 @@
 import { ErrSchemaConversion, $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import { compileRouteSchema } from '../compile_route_schema.js'
 
 describe('compileRouteSchema', () => {
@@ -51,20 +52,26 @@ describe('per-slot additionalProperties policy', () => {
   })
 
   it('leaves querystring and params exactly as authored', () => {
-    const compiled = compileRouteSchema({
-      querystring: $t.Object({ page: $t.Integer() }),
-      params: $t.Object({ id: $t.String() }),
-    }, 'GET /pets')
+    const compiled = compileRouteSchema(
+      {
+        querystring: $t.Object({ page: $t.Integer() }),
+        params: $t.Object({ id: $t.String() }),
+      },
+      'GET /pets',
+    )
 
     expect(compiled?.querystring).not.toHaveProperty('additionalProperties')
     expect(compiled?.params).not.toHaveProperty('additionalProperties')
   })
 
   it('honours an explicit choice by the author', () => {
-    const compiled = compileRouteSchema({
-      headers: $t.Object({ authorization: $t.String() }, { additionalProperties: false }),
-      body: $t.Object({ name: $t.String() }, { additionalProperties: true }),
-    }, 'POST /pets')
+    const compiled = compileRouteSchema(
+      {
+        headers: $t.Object({ authorization: $t.String() }, { additionalProperties: false }),
+        body: $t.Object({ name: $t.String() }, { additionalProperties: true }),
+      },
+      'POST /pets',
+    )
 
     expect(compiled?.headers).toMatchObject({ additionalProperties: false })
     expect(compiled?.body).toMatchObject({ additionalProperties: true })
@@ -87,19 +94,25 @@ describe('per-slot additionalProperties policy', () => {
 
 describe('response slot', () => {
   it('keeps the status-code map Fastify expects', () => {
-    const compiled = compileRouteSchema({
-      response: { 200: $t.Object({ id: $t.String() }), '4xx': $t.Object({ message: $t.String() }) },
-    }, 'GET /pets/:id')
+    const compiled = compileRouteSchema(
+      {
+        response: { 200: $t.Object({ id: $t.String() }), '4xx': $t.Object({ message: $t.String() }) },
+      },
+      'GET /pets/:id',
+    )
 
-    expect(Object.keys(compiled?.response as object)).toEqual(['200', '4xx'])
-    expect((compiled?.response as Record<string, unknown>)[200]).toMatchObject({ type: 'object' })
+    expect(Object.keys(compiled!.response as object)).toEqual(['200', '4xx'])
+    expect((compiled!.response as Record<string, unknown>)[200]).toMatchObject({ type: 'object' })
   })
 
   it('leaves a file body uncompiled, since its parts are streamed and never reach request.body', () => {
-    const compiled = compileRouteSchema({
-      params: $t.Object({ id: $t.String() }),
-      body: $t.Object({ avatar: $t.File(), caption: $t.String() }),
-    }, 'POST /pets/:id/images')
+    const compiled = compileRouteSchema(
+      {
+        params: $t.Object({ id: $t.String() }),
+        body: $t.Object({ avatar: $t.File(), caption: $t.String() }),
+      },
+      'POST /pets/:id/images',
+    )
 
     // An Ajv validator built from this body would answer 400 to every valid upload.
     expect(compiled?.body).toBeUndefined()
@@ -108,13 +121,16 @@ describe('response slot', () => {
   })
 
   it('projects a Standard Schema response from its output side', () => {
-    const compiled = compileRouteSchema({
-      body: z.object({ limit: z.number().default(10) }),
-      response: { 200: z.object({ limit: z.number().default(10) }) },
-    }, 'POST /pets')
+    const compiled = compileRouteSchema(
+      {
+        body: z.object({ limit: z.number().default(10) }),
+        response: { 200: z.object({ limit: z.number().default(10) }) },
+      },
+      'POST /pets',
+    )
 
     // On the way in the client may omit a defaulted property; on the way out it is always there.
     expect(compiled?.body).not.toHaveProperty('required')
-    expect((compiled?.response as Record<string, { required?: string[] }>)[200].required).toEqual(['limit'])
+    expect((compiled!.response as Record<string, { required?: string[] }>)[200].required).toEqual(['limit'])
   })
 })

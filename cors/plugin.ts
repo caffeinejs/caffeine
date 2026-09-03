@@ -1,4 +1,5 @@
 import { defineFeature, type Feature, type ServiceAPI } from '@caffeinejs/std'
+
 import { CorsBuilder } from './builder.js'
 
 /**

@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
 import type { Container } from '@caffeinejs/di'
 import { $t, createApplication } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import { describe, expect, it } from 'vitest'
+
 import { inMemoryBinder } from './binder.testkit.js'
-import type { MessagingRuntime } from './runtime.js'
 import { messaging } from './plugin.js'
+import type { MessagingRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
 
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
@@ -18,14 +19,13 @@ describe('messaging configuration', () => {
   // environment exactly the way a broker list does.
   it('lets the environment override a builder-set destination', async () => {
     const app = createApplication({})
-      .config(c => c.source(
-        env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }),
-        ConfigPriority.ENV,
-      ))
-      .extend(messaging, m => m
-        .use('primary', inMemoryBinder())
-        .in('orders', { destination: 'orders', via: 'primary' })
-        .out('notify', { destination: 'notify', via: 'primary' }))
+      .config(c => c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV))
+      .extend(messaging, m =>
+        m
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary' })
+          .out('notify', { destination: 'notify', via: 'primary' }),
+      )
 
     const built = app.build()
     await built.ready()
@@ -40,12 +40,16 @@ describe('messaging configuration', () => {
 
   it('reads a consumer group from the configuration tree', async () => {
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        messaging: { default: { in: { orders: { group: 'from-config' } } } },
-      })))
-      .extend(messaging, m => m
-        .use('primary', inMemoryBinder())
-        .in('orders', { destination: 'orders', via: 'primary' }))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            messaging: { default: { in: { orders: { group: 'from-config' } } } },
+          }),
+        ),
+      )
+      .extend(messaging, m =>
+        m.use('primary', inMemoryBinder()).in('orders', { destination: 'orders', via: 'primary' }),
+      )
 
     const built = app.build()
     await built.ready()
@@ -57,11 +61,17 @@ describe('messaging configuration', () => {
 
   it('keeps named instances apart, the unnamed one at messaging.default', async () => {
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        messaging: { audit: { out: { log: { destination: 'audit.v2' } } } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            messaging: { audit: { out: { log: { destination: 'audit.v2' } } } },
+          }),
+        ),
+      )
       .extend(messaging, m => m.use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }))
-      .extend(messaging('audit'), m => m.use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }))
+      .extend(messaging('audit'), m =>
+        m.use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }),
+      )
 
     const built = app.build()
     await built.ready()
@@ -77,12 +87,16 @@ describe('messaging configuration', () => {
     const schema = $t.Object({ id: $t.Number() })
 
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        messaging: { default: { in: { orders: { destination: 'orders.v2' } } } },
-      })))
-      .extend(messaging, m => m
-        .use('primary', inMemoryBinder())
-        .in('orders', { destination: 'orders', via: 'primary', schema }))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            messaging: { default: { in: { orders: { destination: 'orders.v2' } } } },
+          }),
+        ),
+      )
+      .extend(messaging, m =>
+        m.use('primary', inMemoryBinder()).in('orders', { destination: 'orders', via: 'primary', schema }),
+      )
 
     const built = app.build()
     await built.ready()
@@ -104,14 +118,20 @@ describe('messaging configuration', () => {
     })
 
     const app = createApplication({})
-      .config(schema, c => c.source(new InlineConfigProvider({
-        app: { events: { in: { orders: { destination: 'moved.orders' } } } },
-      })))
+      .config(schema, c =>
+        c.source(
+          new InlineConfigProvider({
+            app: { events: { in: { orders: { destination: 'moved.orders' } } } },
+          }),
+        ),
+      )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(messaging, m => m
-        .config(c => c.app.events)
-        .use('primary', inMemoryBinder())
-        .in('orders', { destination: 'orders', via: 'primary' }))
+      .extend(messaging, m =>
+        m
+          .config(c => c.app.events)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary' }),
+      )
 
     const built = app.build()
     await built.ready()
@@ -124,12 +144,16 @@ describe('messaging configuration', () => {
   // Activation is the builder call, never the tree.
   it('creates no binding the application never declared', async () => {
     const app = createApplication({})
-      .config(c => c.source(new InlineConfigProvider({
-        messaging: { default: { in: { ghost: { destination: 'ghost', via: 'primary' } } } },
-      })))
-      .extend(messaging, m => m
-        .use('primary', inMemoryBinder())
-        .in('orders', { destination: 'orders', via: 'primary' }))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            messaging: { default: { in: { ghost: { destination: 'ghost', via: 'primary' } } } },
+          }),
+        ),
+      )
+      .extend(messaging, m =>
+        m.use('primary', inMemoryBinder()).in('orders', { destination: 'orders', via: 'primary' }),
+      )
 
     const built = app.build()
     await built.ready()

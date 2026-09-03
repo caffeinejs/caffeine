@@ -4,9 +4,5 @@
     "noEmit": true,
     "types": ["bun", "node"]
   },
-  "include": [
-    "request/**/*.ts",
-    "../../request/hono/app.ts",
-    "../../machine-info.ts"
-  ]
+  "include": ["request/**/*.ts", "../../request/hono/app.ts", "../../machine-info.ts"]
 }

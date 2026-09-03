@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
-import { Configuration } from '../decorators/configuration.js'
-import { Async } from '../decorators/async.js'
-import { Provides } from '../decorators/provides.js'
-import { Injectable } from '../decorators/injectable.js'
-import { UseAsyncFactory } from '../decorators/use_async_factory.js'
+
 import { CaffeineIoC } from '../container.js'
+import { Async } from '../decorators/async.js'
+import { Configuration } from '../decorators/configuration.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Provides } from '../decorators/provides.js'
+import { UseAsyncFactory } from '../decorators/use_async_factory.js'
 import { ErrInvalidBinding } from '../errors.js'
-import { Scopes } from '../scope.js'
+import { token } from '../key.js'
 import { PostProcessor } from '../post_processor.js'
 import { ResolutionContext } from '../resolution_context.js'
+import { Scopes } from '../scope.js'
 
 describe('Async bindings via decorators', function () {
   it('should pre-cache async provided binding and return T synchronously after initInstances()', async function () {
@@ -31,10 +32,8 @@ describe('Async bindings via decorators', function () {
 
     const db = di.get(DatabaseConnection)
 
-    expect(db)
-      .toBeInstanceOf(DatabaseConnection)
-    expect((db as DatabaseConnection).url)
-      .toEqual('postgres://localhost')
+    expect(db).toBeInstanceOf(DatabaseConnection)
+    expect((db as DatabaseConnection).url).toEqual('postgres://localhost')
   })
 
   it('should support a mix of sync and async dependencies', async function () {
@@ -81,19 +80,14 @@ describe('Async bindings via decorators', function () {
 
     const db = di.get(DbConnection)
 
-    expect(db)
-      .toBeInstanceOf(DbConnection)
-    expect((db as DbConnection).cfg.url)
-      .toEqual('postgres://db')
+    expect(db).toBeInstanceOf(DbConnection)
+    expect((db as DbConnection).cfg.url).toEqual('postgres://db')
 
     const repo = di.get(Repo)
 
-    expect(repo)
-      .toBeInstanceOf(Repo)
-    expect(repo.db)
-      .toBeInstanceOf(DbConnection)
-    expect(repo.db.cfg.url)
-      .toEqual('postgres://db')
+    expect(repo).toBeInstanceOf(Repo)
+    expect(repo.db).toBeInstanceOf(DbConnection)
+    expect(repo.db.cfg.url).toEqual('postgres://db')
   })
 
   it('should support async dependencies regardless of @Provides declaration order', async function () {
@@ -133,12 +127,9 @@ describe('Async bindings via decorators', function () {
     await di.init()
 
     const db = di.get(Db)
-    expect(db)
-      .toBeInstanceOf(Db)
-    expect(db.cfg)
-      .toBeInstanceOf(Cfg)
-    expect(db.cfg.url)
-      .toEqual('postgres://db')
+    expect(db).toBeInstanceOf(Db)
+    expect(db.cfg).toBeInstanceOf(Cfg)
+    expect(db.cfg.url).toEqual('postgres://db')
   })
 })
 
@@ -150,19 +141,18 @@ describe('Async bindings via manual binding', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(Connection, t => t
-      .toAsyncFactory(async () => {
+    di.bind(Connection, t =>
+      t.toAsyncFactory(async () => {
         return new Promise<Connection>(resolve => setTimeout(() => resolve(new Connection('localhost')), 10))
-      }))
+      }),
+    )
 
     await di.init()
 
     const conn = di.get(Connection)
 
-    expect(conn)
-      .toBeInstanceOf(Connection)
-    expect((conn as Connection).host)
-      .toEqual('localhost')
+    expect(conn).toBeInstanceOf(Connection)
+    expect((conn as Connection).host).toEqual('localhost')
   })
 
   it('should allow container.get() calls from within an async factory', async function () {
@@ -175,22 +165,19 @@ describe('Async bindings via manual binding', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(SyncDep, t => t
-      .toSelf()
-      .lifetime(Scopes.SINGLETON))
-    di.bind(AsyncSvc, t => t
-      .toAsyncFactory(async ctx => {
+    di.bind(SyncDep, t => t.toSelf().lifetime(Scopes.SINGLETON))
+    di.bind(AsyncSvc, t =>
+      t.toAsyncFactory(async ctx => {
         const dep = ctx.container.get(SyncDep)
         return new AsyncSvc(dep)
-      }))
+      }),
+    )
 
     await di.init()
 
     const svc = di.get(AsyncSvc)
-    expect(svc)
-      .toBeInstanceOf(AsyncSvc)
-    expect((svc as AsyncSvc).dep.value)
-      .toBe('sync-dep')
+    expect(svc).toBeInstanceOf(AsyncSvc)
+    expect((svc as AsyncSvc).dep.value).toBe('sync-dep')
   })
 
   it('should throw when an explicit non-singleton scope is applied to an async binding', function () {
@@ -200,11 +187,8 @@ describe('Async bindings via manual binding', function () {
     di.autoWire()
 
     expect(() => {
-      di.bind(MyService, t => t
-        .toAsyncFactory(async () => new MyService())
-        .lifetime(Scopes.TRANSIENT))
-    })
-      .toThrow(ErrInvalidBinding)
+      di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lifetime(Scopes.TRANSIENT))
+    }).toThrow(ErrInvalidBinding)
   })
 
   it('should throw when lazy() is called on an async binding', function () {
@@ -214,16 +198,11 @@ describe('Async bindings via manual binding', function () {
     di.autoWire()
 
     expect(() => {
-      di.bind(MyService, t => t
-        .toAsyncFactory(async () => new MyService())
-        .lazy())
-    })
-      .toThrow(ErrInvalidBinding)
+      di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lazy())
+    }).toThrow(ErrInvalidBinding)
 
     expect(() => {
-      di.bind(MyService, t => t
-        .toAsyncFactory(async () => new MyService())
-        .lazy(false))
+      di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lazy(false))
     }).not.toThrow()
   })
 })
@@ -236,9 +215,7 @@ describe('Async bindings with RefreshScope', function () {
     di.autoWire()
 
     expect(() => {
-      di.bind(MyService, t => t
-        .toAsyncFactory(async () => new MyService())
-        .lifetime(Scopes.REFRESH))
+      di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lifetime(Scopes.REFRESH))
     }).not.toThrow()
   })
 
@@ -249,18 +226,14 @@ describe('Async bindings with RefreshScope', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(APIToken, t => t
-      .toAsyncFactory(async () => new APIToken('token-v1'))
-      .lifetime(Scopes.REFRESH))
+    di.bind(APIToken, t => t.toAsyncFactory(async () => new APIToken('token-v1')).lifetime(Scopes.REFRESH))
 
     await di.init()
 
     const token = di.get(APIToken)
 
-    expect(token)
-      .toBeInstanceOf(APIToken)
-    expect((token as APIToken).value)
-      .toEqual('token-v1')
+    expect(token).toBeInstanceOf(APIToken)
+    expect((token as APIToken).value).toEqual('token-v1')
   })
 
   it('should produce a new instance after scope.refresh()', async function () {
@@ -271,23 +244,19 @@ describe('Async bindings with RefreshScope', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(APIToken, t => t
-      .toAsyncFactory(async () => new APIToken(`token-v${++counter}`))
-      .lifetime(Scopes.REFRESH))
+    di.bind(APIToken, t => t.toAsyncFactory(async () => new APIToken(`token-v${++counter}`)).lifetime(Scopes.REFRESH))
 
     await di.init()
     const t1 = di.get(APIToken)
 
-    expect((t1 as APIToken).value)
-      .toEqual('token-v1')
+    expect((t1 as APIToken).value).toEqual('token-v1')
 
     await di.refresher.refresh()
 
     const t2 = di.get(APIToken)
 
     expect(t2).not.toBe(t1)
-    expect((t2 as APIToken).value)
-      .toEqual('token-v2')
+    expect((t2 as APIToken).value).toEqual('token-v2')
   })
 
   it('should not re-resolve singleton async bindings after a refresh', async function () {
@@ -304,25 +273,20 @@ describe('Async bindings with RefreshScope', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(DbConn, t => t
-      .toAsyncFactory(async () => new DbConn(++singletonCount)))
-    di.bind(RefreshedToken, t => t
-      .toAsyncFactory(async () => new RefreshedToken(++refreshCount))
-      .lifetime(Scopes.REFRESH))
+    di.bind(DbConn, t => t.toAsyncFactory(async () => new DbConn(++singletonCount)))
+    di.bind(RefreshedToken, t =>
+      t.toAsyncFactory(async () => new RefreshedToken(++refreshCount)).lifetime(Scopes.REFRESH),
+    )
 
     await di.init()
 
-    expect(singletonCount)
-      .toEqual(1)
-    expect(refreshCount)
-      .toEqual(1)
+    expect(singletonCount).toEqual(1)
+    expect(refreshCount).toEqual(1)
 
     await di.refresher.refresh()
 
-    expect(singletonCount)
-      .toEqual(1)
-    expect(refreshCount)
-      .toEqual(2)
+    expect(singletonCount).toEqual(1)
+    expect(refreshCount).toEqual(2)
   })
 })
 
@@ -335,24 +299,19 @@ describe('resetInstance() with async bindings', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(Token, t => t
-      .toAsyncFactory(async () => new Token(++counter)))
+    di.bind(Token, t => t.toAsyncFactory(async () => new Token(++counter)))
 
     await di.init()
 
     const t1 = di.get(Token)
-    expect(t1)
-      .toBeInstanceOf(Token)
-    expect((t1 as Token).value)
-      .toEqual(1)
+    expect(t1).toBeInstanceOf(Token)
+    expect((t1 as Token).value).toEqual(1)
 
     await di.resetInstance(Token)
 
     const t2 = di.get(Token)
-    expect(t2)
-      .toBeInstanceOf(Token)
-    expect((t2 as Token).value)
-      .toEqual(2)
+    expect(t2).toBeInstanceOf(Token)
+    expect((t2 as Token).value).toEqual(2)
     expect(t2).not.toBe(t1)
   })
 
@@ -364,23 +323,18 @@ describe('resetInstance() with async bindings', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(RefreshToken, t => t
-      .toAsyncFactory(async () => new RefreshToken(++counter))
-      .lifetime(Scopes.REFRESH))
+    di.bind(RefreshToken, t => t.toAsyncFactory(async () => new RefreshToken(++counter)).lifetime(Scopes.REFRESH))
 
     await di.init()
 
     const t1 = di.get(RefreshToken)
-    expect((t1 as RefreshToken).value)
-      .toEqual(1)
+    expect((t1 as RefreshToken).value).toEqual(1)
 
     await di.resetInstance(RefreshToken)
 
     const t2 = di.get(RefreshToken)
-    expect(t2)
-      .toBeInstanceOf(RefreshToken)
-    expect((t2 as RefreshToken).value)
-      .toEqual(2)
+    expect(t2).toBeInstanceOf(RefreshToken)
+    expect((t2 as RefreshToken).value).toEqual(2)
     expect(t2).not.toBe(t1)
   })
 
@@ -396,20 +350,20 @@ describe('resetInstance() with async bindings', function () {
     let counter = 0
     const di = new CaffeineIoC({ decorators: false })
     di.autoWire()
-    di.bind(Conn, t => t
-      .toAsyncFactory(async () => {
-        order.push(`init-${++counter}`)
-        return new Conn()
-      })
-      .preDestroy(v => v.close()))
+    di.bind(Conn, t =>
+      t
+        .toAsyncFactory(async () => {
+          order.push(`init-${++counter}`)
+          return new Conn()
+        })
+        .preDestroy(v => v.close()),
+    )
 
     await di.init()
-    expect(order)
-      .toEqual(['init-1'])
+    expect(order).toEqual(['init-1'])
 
     await di.resetInstance(Conn)
-    expect(order)
-      .toEqual(['init-1', 'destroy', 'init-2'])
+    expect(order).toEqual(['init-1', 'destroy', 'init-2'])
   })
 
   it('should re-initialize only the reset binding when it has an async dependency', async function () {
@@ -450,28 +404,20 @@ describe('resetInstance() with async bindings', function () {
     const a1 = di.get(DepA) as DepA
     const b1 = di.get(DepB) as DepB
 
-    expect(a1.id)
-      .toEqual(1)
-    expect(b1.id)
-      .toEqual(1)
-    expect(b1.dep)
-      .toBe(a1)
+    expect(a1.id).toEqual(1)
+    expect(b1.id).toEqual(1)
+    expect(b1.dep).toBe(a1)
 
     await di.resetInstance(DepB)
 
     const a2 = di.get(DepA) as DepA
     const b2 = di.get(DepB) as DepB
 
-    expect(aCount)
-      .toEqual(1)
-    expect(a2)
-      .toBe(a1)
-    expect(b2)
-      .toBeInstanceOf(DepB)
-    expect(b2.id)
-      .toEqual(2)
-    expect(b2.dep)
-      .toBe(a1)
+    expect(aCount).toEqual(1)
+    expect(a2).toBe(a1)
+    expect(b2).toBeInstanceOf(DepB)
+    expect(b2.id).toEqual(2)
+    expect(b2.dep).toBe(a1)
   })
 })
 
@@ -490,10 +436,8 @@ describe('@UseAsyncFactory()', function () {
 
     const cfg = di.get(Config2)
 
-    expect(cfg)
-      .toBeInstanceOf(Config)
-    expect((cfg as Config).dsn)
-      .toEqual('redis://localhost')
+    expect(cfg).toBeInstanceOf(Config)
+    expect((cfg as Config).dsn).toEqual('redis://localhost')
   })
 })
 
@@ -519,23 +463,17 @@ describe('async bindings with post-processors', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
-    di.bind(Token, t => t
-      .toAsyncFactory(async () => new Token('hello')))
+    di.bind(Token, t => t.toAsyncFactory(async () => new Token('hello')))
 
     await di.init()
 
-    expect(receivedByBeforeInit)
-      .toHaveLength(1)
-    expect(receivedByBeforeInit[0])
-      .toBeInstanceOf(Token)
+    expect(receivedByBeforeInit).toHaveLength(1)
+    expect(receivedByBeforeInit[0]).toBeInstanceOf(Token)
     expect(receivedByBeforeInit[0]).not.toBeInstanceOf(Promise)
-    expect(receivedByAfterInit)
-      .toHaveLength(1)
-    expect(receivedByAfterInit[0])
-      .toBeInstanceOf(Token)
+    expect(receivedByAfterInit).toHaveLength(1)
+    expect(receivedByAfterInit[0]).toBeInstanceOf(Token)
     expect(receivedByAfterInit[0]).not.toBeInstanceOf(Promise)
-    expect(di.get(Token) as Token)
-      .toBeInstanceOf(Token)
+    expect(di.get(Token) as Token).toBeInstanceOf(Token)
   })
 
   it('should allow afterInit to replace the resolved instance', async function () {
@@ -559,16 +497,13 @@ describe('async bindings with post-processors', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
-    di.bind(Svc, t => t
-      .toAsyncFactory(async () => new Svc(99)))
+    di.bind(Svc, t => t.toAsyncFactory(async () => new Svc(99)))
 
     await di.init()
 
     const result = di.get(Svc)
-    expect(result)
-      .toBeInstanceOf(WrappedSvc)
-    expect((result as Svc).id)
-      .toBe(99)
+    expect(result).toBeInstanceOf(WrappedSvc)
+    expect((result as Svc).id).toBe(99)
   })
 
   it('should fire postConstruct on the resolved instance', async function () {
@@ -581,16 +516,12 @@ describe('async bindings with post-processors', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AsyncBean, t => t
-      .toAsyncFactory(async () => new AsyncBean())
-      .postConstruct(v => v.onInit()))
+    di.bind(AsyncBean, t => t.toAsyncFactory(async () => new AsyncBean()).postConstruct(v => v.onInit()))
 
     await di.init()
 
-    expect(initiated)
-      .toEqual(['postConstruct'])
-    expect(di.get(AsyncBean))
-      .toBeInstanceOf(AsyncBean)
+    expect(initiated).toEqual(['postConstruct'])
+    expect(di.get(AsyncBean)).toBeInstanceOf(AsyncBean)
   })
 
   it('should apply user interceptor, then beforeInit, then postConstruct, then afterInit', async function () {
@@ -615,18 +546,19 @@ describe('async bindings with post-processors', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.postProcessors.add(pp)
-    di.bind(Ordered, t => t
-      .toAsyncFactory(async () => new Ordered())
-      .intercept((_ctx, instance) => {
-        order.push('interceptor')
-        return instance
-      })
-      .postConstruct(v => v.onInit()))
+    di.bind(Ordered, t =>
+      t
+        .toAsyncFactory(async () => new Ordered())
+        .intercept((_ctx, instance) => {
+          order.push('interceptor')
+          return instance
+        })
+        .postConstruct(v => v.onInit()),
+    )
 
     await di.init()
 
-    expect(order)
-      .toEqual(['interceptor', 'beforeInit', 'postConstruct', 'afterInit'])
+    expect(order).toEqual(['interceptor', 'beforeInit', 'postConstruct', 'afterInit'])
   })
 })
 
@@ -636,7 +568,9 @@ describe('resolveAsyncBindings() — cached skip on repeated init()', function (
 
     class DbConn {
       readonly id: number
-      constructor() { this.id = ++callCount }
+      constructor() {
+        this.id = ++callCount
+      }
     }
 
     const di = new CaffeineIoC({ decorators: false })
@@ -656,7 +590,9 @@ describe('resetBinding() — async path', function () {
 
     class Cache {
       readonly version: number
-      constructor() { this.version = ++callCount }
+      constructor() {
+        this.version = ++callCount
+      }
     }
 
     const di = new CaffeineIoC({ decorators: false })
@@ -684,19 +620,21 @@ describe('resetInstance() — mixed async + sync bindings under the same key', f
 
     class AsyncSvc {
       readonly id: number
-      constructor() { this.id = ++asyncCallCount }
+      constructor() {
+        this.id = ++asyncCallCount
+      }
     }
 
     class SyncSvc {
       readonly id: number
-      constructor() { this.id = ++syncCallCount }
+      constructor() {
+        this.id = ++syncCallCount
+      }
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(AsyncSvc, t => t.toAsyncFactory(async () => new AsyncSvc())
-      .names(kShared))
-    di.bind(SyncSvc, t => t.toSelf()
-      .names(kShared))
+    di.bind(AsyncSvc, t => t.toAsyncFactory(async () => new AsyncSvc()).names(kShared))
+    di.bind(SyncSvc, t => t.toSelf().names(kShared))
     await di.init()
 
     di.get(AsyncSvc)

@@ -1,5 +1,25 @@
-import { Admin, Consumer, jsonDeserializer, jsonSerializer, Producer, stringDeserializer, stringSerializer } from '@platformatic/kafka'
-import type { AdminClient, ConsumerClient, ConsumerStream, KafkaClients, KafkaConsumerEvent, KafkaDeserializers, KafkaSerializers, ProducerClient, ResolvedKafkaConfig, TopicSpec } from './config.js'
+import {
+  Admin,
+  Consumer,
+  jsonDeserializer,
+  jsonSerializer,
+  Producer,
+  stringDeserializer,
+  stringSerializer,
+} from '@platformatic/kafka'
+
+import type {
+  AdminClient,
+  ConsumerClient,
+  ConsumerStream,
+  KafkaClients,
+  KafkaConsumerEvent,
+  KafkaDeserializers,
+  KafkaSerializers,
+  ProducerClient,
+  ResolvedKafkaConfig,
+  TopicSpec,
+} from './config.js'
 
 /**
  * Default producer serializers: string keys, JSON values, and string header keys/values so the retry-journey
@@ -62,7 +82,7 @@ export const defaultKafkaClients: KafkaClients = {
         if (options.deserializers !== undefined) {
           consumeOptions.deserializers = options.deserializers
         }
-        return await consumer.consume(consumeOptions as never) as unknown as ConsumerStream
+        return (await consumer.consume(consumeOptions as never)) as unknown as ConsumerStream
       },
       close(force?: boolean): Promise<void> {
         return consumer.close(force)
@@ -93,7 +113,7 @@ export const defaultKafkaClients: KafkaClients = {
           return counts
         }
         try {
-          const metadata = await admin.metadata({ topics }) as { topics: Map<string, { partitionsCount: number }> }
+          const metadata = (await admin.metadata({ topics })) as { topics: Map<string, { partitionsCount: number }> }
           for (const [topic, info] of metadata.topics) {
             counts.set(topic, info.partitionsCount)
           }

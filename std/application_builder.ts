@@ -1,6 +1,7 @@
 import { CaffeineIoC, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
-import { Application, type ApplicationInit, type BaseApplication, type HookBinding } from './application.js'
+
 import { AppConfigBuilder, kAppConfig } from './app_config.js'
+import { Application, type ApplicationInit, type BaseApplication, type HookBinding } from './application.js'
 import {
   ConfigDefinition,
   ConfigModule,
@@ -8,12 +9,12 @@ import {
   type ConfigSchema,
   type InferConfig,
 } from './config/index.js'
-import { ApplicationHooks } from './hooks.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
-import type { BuilderOf, Feature, PluginContext } from './plugin.js'
-import type { Service } from './service.js'
 import { type ShutdownConfig, resolveShutdownOptions } from './health/shutdown_options.js'
 import { detectSignalDispatcher } from './health/signals.js'
+import { ApplicationHooks } from './hooks.js'
+import type { BuilderOf, Feature, PluginContext } from './plugin.js'
+import type { Service } from './service.js'
 
 export interface ApplicationBuilderOptions {
   container?: Container | Options
@@ -119,10 +120,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
    * to features (e.g. `.server(s => s.config(c => c.server))`); concrete builders expose this as `config()` and
    * re-type themselves to carry the resulting config type. Declare it first so features see the typed config.
    */
-  protected applyConfigDefinition<T>(
-    schema: ConfigSchema<T>,
-    configure?: (c: AppConfigBuilder<T>) => void,
-  ): void {
+  protected applyConfigDefinition<T>(schema: ConfigSchema<T>, configure?: (c: AppConfigBuilder<T>) => void): void {
     this.#config.schema = schema as ConfigSchema<unknown>
     configure?.(new AppConfigBuilder<T>(this.#config))
   }
@@ -164,7 +162,9 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     configure?: (b: BuilderOf<NoInfer<F>, ConfigTypeOf<this>>) => void,
   ): this {
     const ctx: PluginContext = {
-      addService: service => { this.addService(service) },
+      addService: service => {
+        this.addService(service)
+      },
       container: this.container,
       on: (event, listener) => {
         this.on(event, listener as (app: App) => void | Promise<void>)
@@ -223,7 +223,8 @@ export interface ApplicationConfigMarker<T> {
 /** A headless application builder. */
 export class ApplicationBuilder<TConfig = unknown>
   extends BaseApplicationBuilder<Application>
-  implements ApplicationConfigMarker<TConfig> {
+  implements ApplicationConfigMarker<TConfig>
+{
   /** Phantom — names the application config type for {@link ConfigTypeOf}. Never assigned, never read. */
   declare readonly __config?: TConfig
 

@@ -1,4 +1,5 @@
 import { token } from '@caffeinejs/di'
+
 import type { JWTService } from './jwt_service.js'
 
 /**

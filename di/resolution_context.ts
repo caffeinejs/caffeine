@@ -1,6 +1,6 @@
-import { InjectionToken } from './key.js'
 import { Binding } from './binding.js'
 import { ContainerOps } from './container_interface.js'
+import { InjectionToken } from './key.js'
 
 /**
  * ResolutionContext is a context object passed to many components.

@@ -1,4 +1,5 @@
 import { token } from '@caffeinejs/di'
+
 import type { AuthorizationOptions } from './authz.js'
 import type { AuthzRequirement, AuthzRequirementHandler, PolicyEvaluator } from './policy.js'
 

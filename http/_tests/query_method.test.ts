@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import Fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Args, Query, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { $p } from '../route_picker.js'
 

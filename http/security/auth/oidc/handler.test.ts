@@ -1,12 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWTVerifyGetKey, KeyLike } from 'jose'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { decodeSession, encodeSession, claimsToSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
-import { OIDCAuthenticationHandler } from './handler.js'
 import { accessTokenHash } from './_at_hash.js'
+import { OIDCAuthenticationHandler } from './handler.js'
 import type { OIDCAuthenticationOptions } from './options.js'
 
 /** The strategy name these handlers are registered under; cookies are sealed per scheme. */
@@ -36,12 +37,14 @@ function makeBaseOptions(overrides: Partial<OIDCAuthenticationOptions> = {}): OI
   }
 }
 
-function makeCtx(overrides: Partial<{
-  url: string
-  cookies: Record<string, string>
-  query: Record<string, string>
-  headers: Record<string, string>
-}> = {}): {
+function makeCtx(
+  overrides: Partial<{
+    url: string
+    cookies: Record<string, string>
+    query: Record<string, string>
+    headers: Record<string, string>
+  }> = {},
+): {
   ctx: Context
   cookie: ReturnType<typeof vi.fn>
   deleteCookie: ReturnType<typeof vi.fn>
@@ -65,9 +68,9 @@ function makeCtx(overrides: Partial<{
   const ctx = {
     req: {
       url: overrides.url ?? '/dashboard',
-      cookie: (name?: string) => name === undefined ? cookies : cookies[name],
-      query: (key?: string) => key === undefined ? query : query[key],
-      header: (name?: string) => name === undefined ? headers : headers[name],
+      cookie: (name?: string) => (name === undefined ? cookies : cookies[name]),
+      query: (key?: string) => (key === undefined ? query : query[key]),
+      header: (name?: string) => (name === undefined ? headers : headers[name]),
     },
     cookie,
     deleteCookie,
@@ -124,8 +127,17 @@ describe('OIDCAuthenticationHandler', () => {
 
     it('returns fail() when a state cookie is replayed as a session cookie', async () => {
       const stateJWT = await encodeState(
-        { state: 's', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
-        SESSION_SECRET, SCHEME,
+        {
+          state: 's',
+          nonce: 'n',
+          codeVerifier: 'cv',
+          pkceMethod: 'S256',
+          returnTo: '/',
+          scheme: SCHEME,
+          issuer: ISSUER,
+        },
+        SESSION_SECRET,
+        SCHEME,
       )
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx } = makeCtx({ cookies: { __oidc_session: stateJWT } })
@@ -162,10 +174,13 @@ describe('OIDCAuthenticationHandler', () => {
 
   describe('challenge()', () => {
     beforeEach(() => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(DISCOVERY_DOCUMENT),
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve(DISCOVERY_DOCUMENT),
+        }),
+      )
     })
 
     afterEach(() => {
@@ -214,10 +229,13 @@ describe('OIDCAuthenticationHandler', () => {
     })
 
     it('rejects a provider that advertises only plain pkce', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
+        }),
+      )
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
       const { ctx } = makeCtx()
@@ -226,10 +244,13 @@ describe('OIDCAuthenticationHandler', () => {
     })
 
     it('uses plain pkce when discovery only lists plain and it is explicitly allowed', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
+        }),
+      )
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ allowPlainPKCE: true }))
       const { ctx, redirect } = makeCtx()
@@ -240,10 +261,13 @@ describe('OIDCAuthenticationHandler', () => {
     })
 
     it('throws when the discovery issuer does not match the configured issuer', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, issuer: 'https://attacker.example.com' }),
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, issuer: 'https://attacker.example.com' }),
+        }),
+      )
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ issuer: ISSUER }))
       const { ctx } = makeCtx()
@@ -365,7 +389,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         await handler.challenge(ctx)
 
-        const [payload] = body.mock.calls[0] as [{ error: string, loginURL: string }]
+        const [payload] = body.mock.calls[0] as [{ error: string; loginURL: string }]
         expect(payload.error).toBe('authentication_required')
         expect(payload.loginURL).toContain(`${ISSUER}/auth`)
         expect(header).toHaveBeenCalledWith('access-control-expose-headers', 'location')
@@ -415,10 +439,7 @@ describe('OIDCAuthenticationHandler', () => {
       // The hook is the last word on the response, so it must run whichever branch the mode would have taken.
       it('onChallenge still wins over the mode', async () => {
         const onChallenge = vi.fn()
-        const handler = new OIDCAuthenticationHandler(
-          'OIDC',
-          makeBaseOptions({ onChallenge, challengeMode: 'status' }),
-        )
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ onChallenge, challengeMode: 'status' }))
         const { ctx, redirect, status } = makeCtx({ headers: {} })
 
         await handler.challenge(ctx)
@@ -445,10 +466,13 @@ describe('OIDCAuthenticationHandler', () => {
     // Constructs the handler directly from a raw options object, bypassing the builder —
     // the path where a fail-open default would actually bite.
     beforeEach(() => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(DISCOVERY_DOCUMENT),
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve(DISCOVERY_DOCUMENT),
+        }),
+      )
     })
 
     afterEach(() => {
@@ -559,16 +583,19 @@ describe('OIDCAuthenticationHandler', () => {
       extraClaims: Record<string, unknown> = {},
       discovery: Record<string, unknown> = {},
     ) {
-      vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-        if (typeof url === 'string' && url.includes('.well-known')) {
-          return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, ...discovery }) }
-        }
-        if (opts?.method === 'POST') {
-          const idToken = await signIDToken(nonce, extraClaims)
-          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
-        }
-        return { ok: false, status: 404 }
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, opts?: RequestInit) => {
+          if (typeof url === 'string' && url.includes('.well-known')) {
+            return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, ...discovery }) }
+          }
+          if (opts?.method === 'POST') {
+            const idToken = await signIDToken(nonce, extraClaims)
+            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+          }
+          return { ok: false, status: 404 }
+        }),
+      )
     }
 
     afterEach(() => {
@@ -577,7 +604,15 @@ describe('OIDCAuthenticationHandler', () => {
 
     async function makeStateCookie(nonce: string, state = 'st') {
       return encodeState(
-        { state, nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/dashboard', scheme: SCHEME, issuer: ISSUER },
+        {
+          state,
+          nonce,
+          codeVerifier: 'cv',
+          pkceMethod: 'S256',
+          returnTo: '/dashboard',
+          scheme: SCHEME,
+          issuer: ISSUER,
+        },
         SESSION_SECRET,
         SCHEME,
       )
@@ -629,7 +664,7 @@ describe('OIDCAuthenticationHandler', () => {
             query: { error: 'access_denied', error_description: 'jane.doe@example.com denied consent' },
           })
 
-          const error = await handler.processCallback(ctx).catch((e: unknown) => e) as { publicMessage: string }
+          const error = (await handler.processCallback(ctx).catch((e: unknown) => e)) as { publicMessage: string }
           expect(error.publicMessage).toBe('Authentication failed')
           expect(error.publicMessage).not.toContain('jane.doe@example.com')
         }
@@ -723,9 +758,11 @@ describe('OIDCAuthenticationHandler', () => {
         for (const advertised of [undefined, true]) {
           const nonce = `iss-wrong-${String(advertised)}`
           const stateCookieJWT = await makeStateCookie(nonce)
-          mockFetch(nonce, {}, advertised === undefined
-            ? {}
-            : { authorization_response_iss_parameter_supported: advertised })
+          mockFetch(
+            nonce,
+            {},
+            advertised === undefined ? {} : { authorization_response_iss_parameter_supported: advertised },
+          )
 
           const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
           const { ctx } = makeCtx({
@@ -741,17 +778,20 @@ describe('OIDCAuthenticationHandler', () => {
     describe('discovery cache', () => {
       function countingFetch(nonce: string) {
         const calls = { discovery: 0 }
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            calls.discovery++
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await signIDToken(nonce)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              calls.discovery++
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await signIDToken(nonce)
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
         return calls
       }
 
@@ -791,10 +831,13 @@ describe('OIDCAuthenticationHandler', () => {
       // process lifetime means a handler can keep using terms the issuer has retired.
       it('refetches once the ttl has elapsed', async () => {
         const calls = countingFetch('n')
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          discoveryCacheTtlSeconds: 0,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            discoveryCacheTtlSeconds: 0,
+          }),
+        )
 
         await handler.challenge(makeCtx().ctx)
         await handler.challenge(makeCtx().ctx)
@@ -806,24 +849,30 @@ describe('OIDCAuthenticationHandler', () => {
         let jwksURI = `${ISSUER}/.well-known/jwks.json`
         const seen: string[] = []
 
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('openid-configuration')) {
-            return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, jwks_uri: jwksURI }) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await signIDToken('n')
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('openid-configuration')) {
+              return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, jwks_uri: jwksURI }) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await signIDToken('n')
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver: (uri: string) => {
-            seen.push(uri)
-            return jwksResolver(uri)
-          },
-          discoveryCacheTtlSeconds: 0,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver: (uri: string) => {
+              seen.push(uri)
+              return jwksResolver(uri)
+            },
+            discoveryCacheTtlSeconds: 0,
+          }),
+        )
 
         const callback = async () => {
           const { ctx } = makeCtx({
@@ -843,10 +892,7 @@ describe('OIDCAuthenticationHandler', () => {
         jwksURI = `${ISSUER}/.well-known/jwks-2.json`
         await callback()
 
-        expect(seen).toEqual([
-          `${ISSUER}/.well-known/jwks.json`,
-          `${ISSUER}/.well-known/jwks-2.json`,
-        ])
+        expect(seen).toEqual([`${ISSUER}/.well-known/jwks.json`, `${ISSUER}/.well-known/jwks-2.json`])
       })
 
       // The converse of the rotation test: when jwks_uri is unchanged across a refresh, the
@@ -854,24 +900,30 @@ describe('OIDCAuthenticationHandler', () => {
       // user-facing callback after each TTL rollover, for keys createRemoteJWKSet already caches.
       it('keeps the JWKS resolver when jwks_uri is unchanged across a refresh', async () => {
         const seen: string[] = []
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('openid-configuration')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await signIDToken('n')
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('openid-configuration')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await signIDToken('n')
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver: (uri: string) => {
-            seen.push(uri)
-            return jwksResolver(uri)
-          },
-          discoveryCacheTtlSeconds: 0,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver: (uri: string) => {
+              seen.push(uri)
+              return jwksResolver(uri)
+            },
+            discoveryCacheTtlSeconds: 0,
+          }),
+        )
 
         const callback = async () => {
           const { ctx } = makeCtx({
@@ -895,11 +947,14 @@ describe('OIDCAuthenticationHandler', () => {
        * and send a PKCE-less request with code_challenge_method=undefined.
        */
       it('does not cache a document whose PKCE derivation throws', async () => {
-        vi.stubGlobal('fetch', vi.fn(async () => ({
-          ok: true,
-          // plain only, and allowPlainPKCE defaults off -> selectPKCEMethod throws.
-          json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
-        })))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async () => ({
+            ok: true,
+            // plain only, and allowPlainPKCE defaults off -> selectPKCEMethod throws.
+            json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: ['plain'] }),
+          })),
+        )
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
 
@@ -910,17 +965,23 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('re-validates the issuer on every refetch', async () => {
         let issuer = ISSUER
-        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, issuer }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, issuer }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          discoveryCacheTtlSeconds: 0,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            discoveryCacheTtlSeconds: 0,
+          }),
+        )
         await expect(handler.challenge(makeCtx().ctx)).resolves.toBeUndefined()
 
         // A document swapped under us must not silently redefine the issuer that every
@@ -936,19 +997,25 @@ describe('OIDCAuthenticationHandler', () => {
      */
     describe('id_token trust boundary', () => {
       async function callbackWithToken(idToken: string, nonce: string, resolver?: JWTVerifyGetKey) {
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver: resolver ? () => resolver : jwksResolver,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver: resolver ? () => resolver : jwksResolver,
+          }),
+        )
         const { ctx } = makeCtx({
           cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
           query: { code: 'c', state: 'st' },
@@ -990,17 +1057,19 @@ describe('OIDCAuthenticationHandler', () => {
         // itself verifies: only the algorithm restriction stands between this and a session.
         const resolver = (async () => secret) as unknown as JWTVerifyGetKey
 
-        await expect(callbackWithToken(symmetric, nonce, resolver))
-          .rejects.toThrow('id_token validation failed')
+        await expect(callbackWithToken(symmetric, nonce, resolver)).rejects.toThrow('id_token validation failed')
       })
     })
 
     describe('authorization parameters', () => {
       async function challengeURL(overrides: Record<string, unknown>) {
-        vi.stubGlobal('fetch', vi.fn(async () => ({
-          ok: true,
-          json: () => Promise.resolve(DISCOVERY_DOCUMENT),
-        })))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async () => ({
+            ok: true,
+            json: () => Promise.resolve(DISCOVERY_DOCUMENT),
+          })),
+        )
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, ...overrides }))
         const { ctx, redirect } = makeCtx()
         await handler.challenge(ctx)
@@ -1114,17 +1183,17 @@ describe('OIDCAuthenticationHandler', () => {
     })
 
     describe('max_age and auth_time (OIDC Core §2)', () => {
-      async function callbackWith(
-        extraClaims: Record<string, unknown>,
-        options: Record<string, unknown> = {},
-      ) {
+      async function callbackWith(extraClaims: Record<string, unknown>, options: Record<string, unknown> = {}) {
         const nonce = 'age'
         mockFetch(nonce, extraClaims)
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          maxAgeSeconds: 300,
-          ...options,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            maxAgeSeconds: 300,
+            ...options,
+          }),
+        )
         const { ctx } = makeCtx({
           cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
           query: { code: 'c', state: 'st' },
@@ -1149,10 +1218,7 @@ describe('OIDCAuthenticationHandler', () => {
       })
 
       it('allows clock drift within the configured tolerance', async () => {
-        await expect(callbackWith(
-          { auth_time: now() - 330 },
-          { clockToleranceSeconds: 60 },
-        )).resolves.toBeUndefined()
+        await expect(callbackWith({ auth_time: now() - 330 }, { clockToleranceSeconds: 60 })).resolves.toBeUndefined()
       })
 
       it('does not require auth_time when max_age was not requested', async () => {
@@ -1165,23 +1231,26 @@ describe('OIDCAuthenticationHandler', () => {
 
       function mockWithUserInfo(nonce: string, userInfo: unknown, status = 200) {
         const seen: string[] = []
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return {
-              ok: true,
-              json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, userinfo_endpoint: USERINFO }),
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return {
+                ok: true,
+                json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, userinfo_endpoint: USERINFO }),
+              }
             }
-          }
-          if (url === USERINFO) {
-            seen.push((opts?.headers as Record<string, string>)?.Authorization ?? '')
-            return { ok: status < 400, status, json: () => Promise.resolve(userInfo) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await signIDToken(nonce)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+            if (url === USERINFO) {
+              seen.push((opts?.headers as Record<string, string>)?.Authorization ?? '')
+              return { ok: status < 400, status, json: () => Promise.resolve(userInfo) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await signIDToken(nonce)
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
         return seen
       }
 
@@ -1206,10 +1275,13 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('merges user info claims with the access token', async () => {
         const seen = mockWithUserInfo('n', { sub: 'user123', name: 'Jane Doe', groups: ['admin'] })
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          getClaimsFromUserInfoEndpoint: true,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            getClaimsFromUserInfoEndpoint: true,
+          }),
+        )
 
         const session = await runCallback(handler, 'n')
 
@@ -1226,10 +1298,13 @@ describe('OIDCAuthenticationHandler', () => {
        */
       it('does not let user info overwrite an id_token claim', async () => {
         mockWithUserInfo('n', { sub: 'user123', email: 'attacker@evil.example.com' })
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          getClaimsFromUserInfoEndpoint: true,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            getClaimsFromUserInfoEndpoint: true,
+          }),
+        )
 
         const session = await runCallback(handler, 'n')
 
@@ -1241,10 +1316,13 @@ describe('OIDCAuthenticationHandler', () => {
       // session. The spec says MUST NOT be used; using nothing at all is the safe reading.
       it('rejects a user info response whose sub does not match the id_token', async () => {
         mockWithUserInfo('n', { sub: 'someone-else', name: 'Mallory' })
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          getClaimsFromUserInfoEndpoint: true,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            getClaimsFromUserInfoEndpoint: true,
+          }),
+        )
         const { ctx } = makeCtx({
           cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
@@ -1255,10 +1333,13 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('does not leak either sub when showPii is off', async () => {
         mockWithUserInfo('n', { sub: 'someone-else' })
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          getClaimsFromUserInfoEndpoint: true,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            getClaimsFromUserInfoEndpoint: true,
+          }),
+        )
         const { ctx } = makeCtx({
           cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
@@ -1270,10 +1351,13 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('reports a provider that advertises no userinfo_endpoint', async () => {
         mockFetch('n')
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          getClaimsFromUserInfoEndpoint: true,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            getClaimsFromUserInfoEndpoint: true,
+          }),
+        )
         const { ctx } = makeCtx({
           cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
@@ -1284,10 +1368,13 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('fails the sign-in when the endpoint errors', async () => {
         mockWithUserInfo('n', {}, 503)
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          getClaimsFromUserInfoEndpoint: true,
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            getClaimsFromUserInfoEndpoint: true,
+          }),
+        )
         const { ctx } = makeCtx({
           cookies: { '__oidc_state.st': await makeStateCookie('n') },
           query: { code: 'c', state: 'st' },
@@ -1303,14 +1390,14 @@ describe('OIDCAuthenticationHandler', () => {
         const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce)
 
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          claimMapper: () => [
-            new Claim('sub', 'u1', ISSUER),
-            new Claim('birthdate', '1985-07-04', ISSUER),
-          ],
-          claimActions: { remove: ['birthdate'] },
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            claimMapper: () => [new Claim('sub', 'u1', ISSUER), new Claim('birthdate', '1985-07-04', ISSUER)],
+            claimActions: { remove: ['birthdate'] },
+          }),
+        )
         const { ctx, cookie } = makeCtx({
           cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
@@ -1330,10 +1417,13 @@ describe('OIDCAuthenticationHandler', () => {
         const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce)
 
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          claimMapper: () => [new Claim('sub', 'u1', ISSUER), new Claim('sid', 'session-1', ISSUER)],
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            claimMapper: () => [new Claim('sub', 'u1', ISSUER), new Claim('sid', 'session-1', ISSUER)],
+          }),
+        )
         const { ctx, cookie } = makeCtx({
           cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
@@ -1355,8 +1445,13 @@ describe('OIDCAuthenticationHandler', () => {
         // payload binding is what rejects it.
         const stateCookieJWT = await encodeState(
           {
-            state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256',
-            returnTo: '/dashboard', scheme: 'SomeOtherStrategy', issuer: ISSUER,
+            state: 'st',
+            nonce,
+            codeVerifier: 'cv',
+            pkceMethod: 'S256',
+            returnTo: '/dashboard',
+            scheme: 'SomeOtherStrategy',
+            issuer: ISSUER,
           },
           SESSION_SECRET,
           SCHEME,
@@ -1376,8 +1471,13 @@ describe('OIDCAuthenticationHandler', () => {
         mockFetch(nonce)
         const stateCookieJWT = await encodeState(
           {
-            state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256',
-            returnTo: '/dashboard', scheme: SCHEME, issuer: 'https://old-provider.example.com',
+            state: 'st',
+            nonce,
+            codeVerifier: 'cv',
+            pkceMethod: 'S256',
+            returnTo: '/dashboard',
+            scheme: SCHEME,
+            issuer: 'https://old-provider.example.com',
           },
           SESSION_SECRET,
           SCHEME,
@@ -1436,7 +1536,15 @@ describe('OIDCAuthenticationHandler', () => {
     it('clears the state cookie even when the callback fails', async () => {
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const stateCookieJWT = await encodeState(
-        { state: 'st', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: 'https://other.example' },
+        {
+          state: 'st',
+          nonce: 'n',
+          codeVerifier: 'cv',
+          pkceMethod: 'S256',
+          returnTo: '/',
+          scheme: SCHEME,
+          issuer: 'https://other.example',
+        },
         SESSION_SECRET,
         SCHEME,
       )
@@ -1464,8 +1572,17 @@ describe('OIDCAuthenticationHandler', () => {
 
     it('throws when state param does not match stored state', async () => {
       const stateCookieJWT = await encodeState(
-        { state: 'correct', nonce: 'n', codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/', scheme: SCHEME, issuer: ISSUER },
-        SESSION_SECRET, SCHEME,
+        {
+          state: 'correct',
+          nonce: 'n',
+          codeVerifier: 'cv',
+          pkceMethod: 'S256',
+          returnTo: '/',
+          scheme: SCHEME,
+          issuer: ISSUER,
+        },
+        SESSION_SECRET,
+        SCHEME,
       )
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
@@ -1528,27 +1645,31 @@ describe('OIDCAuthenticationHandler', () => {
 
     describe('token exposure', () => {
       function mockFullTokenResponse(nonce: string, extra: Record<string, unknown> = {}) {
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await signIDToken(nonce)
-            return {
-              ok: true,
-              json: () => Promise.resolve({
-                id_token: idToken,
-                access_token: 'the-access-token',
-                refresh_token: 'the-refresh-token',
-                token_type: 'Bearer',
-                expires_in: 3599,
-                scope: 'openid email',
-                ...extra,
-              }),
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
             }
-          }
-          return { ok: false, status: 404 }
-        }))
+            if (opts?.method === 'POST') {
+              const idToken = await signIDToken(nonce)
+              return {
+                ok: true,
+                json: () =>
+                  Promise.resolve({
+                    id_token: idToken,
+                    access_token: 'the-access-token',
+                    refresh_token: 'the-refresh-token',
+                    token_type: 'Bearer',
+                    expires_in: 3599,
+                    scope: 'openid email',
+                    ...extra,
+                  }),
+              }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
       }
 
       it('hands the full token set to onTokenValidated', async () => {
@@ -1601,16 +1722,19 @@ describe('OIDCAuthenticationHandler', () => {
       it('rejects an id_token whose at_hash does not bind the access token', async () => {
         const nonce = 'at-hash-bad'
         const stateCookieJWT = await makeStateCookie(nonce)
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('a-different-token', 'RS256') })
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('a-different-token', 'RS256') })
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
@@ -1624,16 +1748,19 @@ describe('OIDCAuthenticationHandler', () => {
       it('accepts an id_token whose at_hash binds the access token', async () => {
         const nonce = 'at-hash-ok'
         const stateCookieJWT = await makeStateCookie(nonce)
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('the-access-token', 'RS256') })
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('the-access-token', 'RS256') })
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
@@ -1671,13 +1798,11 @@ describe('OIDCAuthenticationHandler', () => {
         })
         await handler.processCallback(ctx)
 
-        const post = fetchMock.mock.calls.find(
-          ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
-        )!
+        const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST')!
         const init = post[1] as RequestInit
         return {
           headers: init.headers as Record<string, string>,
-          body: (init.body as URLSearchParams),
+          body: init.body as URLSearchParams,
         }
       }
 
@@ -1692,7 +1817,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('form-urlencodes the credentials before base64, per RFC 6749 §2.3.1', async () => {
         // encodeURIComponent leaves !~'() alone; the form serializer does not.
-        const secret = 's3cret:with+odd ~chars!\'()'
+        const secret = "s3cret:with+odd ~chars!'()"
         const { headers } = await exchangeWith({ clientSecret: secret })
 
         const decoded = Buffer.from(headers.Authorization.slice('Basic '.length), 'base64').toString()
@@ -1713,29 +1838,40 @@ describe('OIDCAuthenticationHandler', () => {
       })
 
       it('auto-selects post when the provider advertises only post', async () => {
-        const { headers, body } = await exchangeWith({}, {
-          ...DISCOVERY_DOCUMENT,
-          token_endpoint_auth_methods_supported: ['client_secret_post'],
-        })
+        const { headers, body } = await exchangeWith(
+          {},
+          {
+            ...DISCOVERY_DOCUMENT,
+            token_endpoint_auth_methods_supported: ['client_secret_post'],
+          },
+        )
 
         expect(headers.Authorization).toBeUndefined()
         expect(body.get('client_secret')).toBe('test-client-secret')
       })
 
       it('auto-selects basic when the provider advertises both', async () => {
-        const { headers } = await exchangeWith({}, {
-          ...DISCOVERY_DOCUMENT,
-          token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
-        })
+        const { headers } = await exchangeWith(
+          {},
+          {
+            ...DISCOVERY_DOCUMENT,
+            token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic'],
+          },
+        )
 
         expect(headers.Authorization).toMatch(/^Basic /)
       })
 
       it('throws when the provider advertises neither basic nor post', async () => {
-        await expect(exchangeWith({}, {
-          ...DISCOVERY_DOCUMENT,
-          token_endpoint_auth_methods_supported: ['private_key_jwt'],
-        })).rejects.toThrow('supports neither client_secret_basic nor client_secret_post')
+        await expect(
+          exchangeWith(
+            {},
+            {
+              ...DISCOVERY_DOCUMENT,
+              token_endpoint_auth_methods_supported: ['private_key_jwt'],
+            },
+          ),
+        ).rejects.toThrow('supports neither client_secret_basic nor client_secret_post')
       })
     })
 
@@ -1767,7 +1903,7 @@ describe('OIDCAuthenticationHandler', () => {
         const error = await nonceMismatch(false)
 
         expect(error.message).toContain('nonce mismatch')
-        expect(error.message).toContain('[PII of type \'nonce\' is hidden')
+        expect(error.message).toContain("[PII of type 'nonce' is hidden")
         expect(error.message).not.toContain('the-real-nonce')
         expect(error.message).not.toContain('the-wrong-nonce')
       })
@@ -1790,19 +1926,24 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('redacts the claim listing when sub is missing', async () => {
         const stateCookieJWT = await makeStateCookie('sub-nonce')
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await new SignJWT({ email: 'jane@example.com', nonce: 'sub-nonce' })
-              .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-              .setIssuer(ISSUER).setAudience(CLIENT_ID).setExpirationTime('1h')
-              .sign(privateKey)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await new SignJWT({ email: 'jane@example.com', nonce: 'sub-nonce' })
+                .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+                .setIssuer(ISSUER)
+                .setAudience(CLIENT_ID)
+                .setExpirationTime('1h')
+                .sign(privateKey)
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
@@ -1823,10 +1964,13 @@ describe('OIDCAuthenticationHandler', () => {
         const stateCookieJWT = await makeStateCookie(nonce)
         mockFetch(nonce, { name: 'Jane Doe', picture: 'https://x/p.jpg', birthdate: '1985-07-04' })
 
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({
-          jwksResolver,
-          claimActions: { remove: ['picture', 'birthdate'] },
-        }))
+        const handler = new OIDCAuthenticationHandler(
+          'OIDC',
+          makeBaseOptions({
+            jwksResolver,
+            claimActions: { remove: ['picture', 'birthdate'] },
+          }),
+        )
         const { ctx, cookie } = makeCtx({
           cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
@@ -1850,21 +1994,24 @@ describe('OIDCAuthenticationHandler', () => {
         const nonce = 'no-sub'
         const stateCookieJWT = await makeStateCookie(nonce)
         // signIDToken always sets sub, so sign one explicitly without it.
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await new SignJWT({ email: 'u@x.com', nonce })
-              .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-              .setIssuer(ISSUER)
-              .setAudience(CLIENT_ID)
-              .setExpirationTime('1h')
-              .sign(privateKey)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await new SignJWT({ email: 'u@x.com', nonce })
+                .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+                .setIssuer(ISSUER)
+                .setAudience(CLIENT_ID)
+                .setExpirationTime('1h')
+                .sign(privateKey)
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
@@ -1878,25 +2025,28 @@ describe('OIDCAuthenticationHandler', () => {
       async function callbackWithAudience(aud: string[], azp?: string) {
         const nonce = 'aud-nonce'
         const stateCookieJWT = await makeStateCookie(nonce)
-        vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-          if (typeof url === 'string' && url.includes('.well-known')) {
-            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-          }
-          if (opts?.method === 'POST') {
-            const idToken = await new SignJWT({
-              sub: 'u1',
-              nonce,
-              ...(azp !== undefined ? { azp } : {}),
-            })
-              .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
-              .setIssuer(ISSUER)
-              .setAudience(aud)
-              .setExpirationTime('1h')
-              .sign(privateKey)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
-          }
-          return { ok: false, status: 404 }
-        }))
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await new SignJWT({
+                sub: 'u1',
+                nonce,
+                ...(azp !== undefined ? { azp } : {}),
+              })
+                .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+                .setIssuer(ISSUER)
+                .setAudience(aud)
+                .setExpirationTime('1h')
+                .sign(privateKey)
+              return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
 
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
         const { ctx } = makeCtx({
@@ -1911,8 +2061,7 @@ describe('OIDCAuthenticationHandler', () => {
       })
 
       it('rejects multiple audiences whose azp is another client', async () => {
-        await expect(callbackWithAudience([CLIENT_ID, 'other'], 'other'))
-          .rejects.toThrow('azp does not match clientID')
+        await expect(callbackWithAudience([CLIENT_ID, 'other'], 'other')).rejects.toThrow('azp does not match clientID')
       })
 
       it('accepts multiple audiences when azp matches this client', async () => {
@@ -1923,15 +2072,18 @@ describe('OIDCAuthenticationHandler', () => {
     it('throws when the token endpoint returns a non-ok status with no error body', async () => {
       const nonce = 'bad-status'
       const stateCookieJWT = await makeStateCookie(nonce)
-      vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-        if (typeof url === 'string' && url.includes('.well-known')) {
-          return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-        }
-        if (opts?.method === 'POST') {
-          return { ok: false, status: 503, json: () => Promise.reject(new Error('not json')) }
-        }
-        return { ok: false, status: 404 }
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, opts?: RequestInit) => {
+          if (typeof url === 'string' && url.includes('.well-known')) {
+            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+          }
+          if (opts?.method === 'POST') {
+            return { ok: false, status: 503, json: () => Promise.reject(new Error('not json')) }
+          }
+          return { ok: false, status: 404 }
+        }),
+      )
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
@@ -1946,15 +2098,18 @@ describe('OIDCAuthenticationHandler', () => {
     // name like every other callback failure — a bare ErrOIDCCallback would have dropped it.
     it('brands a token-endpoint failure with the strategy name', async () => {
       const stateCookieJWT = await makeStateCookie('n')
-      vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-        if (typeof url === 'string' && url.includes('.well-known')) {
-          return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-        }
-        if (opts?.method === 'POST') {
-          return { ok: false, status: 503, json: () => Promise.reject(new Error('not json')) }
-        }
-        return { ok: false, status: 404 }
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, opts?: RequestInit) => {
+          if (typeof url === 'string' && url.includes('.well-known')) {
+            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+          }
+          if (opts?.method === 'POST') {
+            return { ok: false, status: 503, json: () => Promise.reject(new Error('not json')) }
+          }
+          return { ok: false, status: 404 }
+        }),
+      )
 
       const handler = new OIDCAuthenticationHandler('Okta', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({
@@ -1969,15 +2124,18 @@ describe('OIDCAuthenticationHandler', () => {
     // from becoming a TypeError, matching the OAuth2 handler.
     it('handles a null token-endpoint body without crashing', async () => {
       const stateCookieJWT = await makeStateCookie('n')
-      vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: RequestInit) => {
-        if (typeof url === 'string' && url.includes('.well-known')) {
-          return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
-        }
-        if (opts?.method === 'POST') {
-          return { ok: false, status: 502, json: () => Promise.resolve(null) }
-        }
-        return { ok: false, status: 404 }
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string, opts?: RequestInit) => {
+          if (typeof url === 'string' && url.includes('.well-known')) {
+            return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+          }
+          if (opts?.method === 'POST') {
+            return { ok: false, status: 502, json: () => Promise.resolve(null) }
+          }
+          return { ok: false, status: 404 }
+        }),
+      )
 
       const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
       const { ctx } = makeCtx({

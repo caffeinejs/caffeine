@@ -16,10 +16,7 @@ export default defineConfig({
   test: {
     name: 'scan',
     include: ['**/*.test.ts'],
-    exclude: [
-      'node_modules/**',
-      'dist/**',
-    ],
+    exclude: ['node_modules/**', 'dist/**'],
     environment: 'node',
     passWithNoTests: true,
     pool: 'forks',

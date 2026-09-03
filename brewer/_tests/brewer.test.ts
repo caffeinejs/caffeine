@@ -1,13 +1,15 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { $t } from '@caffeinejs/std'
 import { Router, bodyAsBuffer, createWebApplication } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
 import { brewer, type Fetchable } from '../brewer.js'
 import { ErrBrewPathParam } from '../errors.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
 
 const pets = new Router('/pets')
-  .get('/').handler(() => [{ id: 1, name: 'Rex' }])
+  .get('/')
+  .handler(() => [{ id: 1, name: 'Rex' }])
   .post('/')
   .schema({ body: petSchema })
   .status(201)
@@ -49,8 +51,10 @@ describe('brewer against a running server', () => {
       const client = brewer<typeof app>(origin)
 
       expect(await (await client.pets({ id: 7 }).get()).json()).toEqual({ id: 7, name: 'Rex' })
-      expect(await (await client.pets({ petID: 'p1' }).orders({ orderID: 'o2' }).get()).json())
-        .toEqual({ petID: 'p1', orderID: 'o2' })
+      expect(await (await client.pets({ petID: 'p1' }).orders({ orderID: 'o2' }).get()).json()).toEqual({
+        petID: 'p1',
+        orderID: 'o2',
+      })
     })
 
     it('should URI-encode a value that needs it', async () => {
@@ -112,8 +116,9 @@ describe('brewer against a running server', () => {
       })
 
       expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'from-client' })
-      expect(await (await client.pets.search.get({ headers: { 'x-tenant': 'from-call' } })).json())
-        .toMatchObject({ tenant: 'from-call' })
+      expect(await (await client.pets.search.get({ headers: { 'x-tenant': 'from-call' } })).json()).toMatchObject({
+        tenant: 'from-call',
+      })
       expect(calls).toBe(2)
     })
   })
@@ -155,7 +160,7 @@ describe('brewer against a running server', () => {
   })
 
   describe('given a client typed from a single router', () => {
-    it('should call that router\'s routes', async () => {
+    it("should call that router's routes", async () => {
       const client = brewer<typeof pets>(origin)
 
       expect(await (await client.pets.get()).json()).toEqual([{ id: 1, name: 'Rex' }])
@@ -234,8 +239,7 @@ describe('fillPath', () => {
     it('should say which one, and where', async () => {
       const client = brewer<typeof app>(origin)
 
-      expect(() => client.$request('GET', '/pets/:id', { params: {} as never }))
-        .toThrow(ErrBrewPathParam)
+      expect(() => client.$request('GET', '/pets/:id', { params: {} as never })).toThrow(ErrBrewPathParam)
     })
   })
 })

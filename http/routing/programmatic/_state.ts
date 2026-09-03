@@ -1,4 +1,5 @@
 import type { ObjectInjectionSpec } from '@caffeinejs/di'
+
 import type { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteInvoker } from '../dispatch.js'
 

@@ -25,8 +25,12 @@ bag type; `$i.object(spec)` returns `InjectionDescriptor<InjectedOf<typeof spec>
 import { Injectable } from '@caffeinejs/di/decorators'
 import { $i, type InjectedOf } from '@caffeinejs/di'
 
-class UserRepository { /* ... */ }
-class EmailService { /* ... */ }
+class UserRepository {
+  /* ... */
+}
+class EmailService {
+  /* ... */
+}
 
 const spec = { repository: UserRepository, email: EmailService }
 

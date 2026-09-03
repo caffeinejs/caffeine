@@ -29,11 +29,11 @@ interface ConditionContext {
 }
 ```
 
-| `ctx` field | Description |
-|---|---|
+| `ctx` field          | Description                                                                                                 |
+| -------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `container.has(key)` | Whether another binding is registered. Safe to call — all bindings are collected before any predicate runs. |
-| `key` | The key of the binding being tested. |
-| `binding` | Decorator config (scope, name, labels) of the binding being tested. |
+| `key`                | The key of the binding being tested.                                                                        |
+| `binding`            | Decorator config (scope, name, labels) of the binding being tested.                                         |
 
 Predicate evaluation order: all bindings are registered first, then predicates are
 evaluated during `init()`. This means `ctx.container.has()` can safely check for
@@ -139,12 +139,12 @@ See the [Profiles guide](./profiles.md) for full documentation.
 
 **Quick comparison:**
 
-| | `@Profile` | `@ConditionalOn` |
-|---|---|---|
-| Activation | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time |
-| Style | Declarative — name a group | Imperative — write a function |
-| Async support | No | Yes |
-| Best for | Environment / persona groupings | Feature flags, presence checks, env vars |
+|               | `@Profile`                                     | `@ConditionalOn`                         |
+| ------------- | ---------------------------------------------- | ---------------------------------------- |
+| Activation    | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time         |
+| Style         | Declarative — name a group                     | Imperative — write a function            |
+| Async support | No                                             | Yes                                      |
+| Best for      | Environment / persona groupings                | Feature flags, presence checks, env vars |
 
 ---
 
@@ -265,20 +265,21 @@ import { CaffeineIoC } from '@caffeinejs/di'
 
 const di = new CaffeineIoC({ decorators: false })
 
-di.bind(StripeEUGateway, t => t
-  .toSelf()
-  .extends(PaymentGateway)
-  .conditional(() => process.env.REGION === 'eu'))
+di.bind(StripeEUGateway, t =>
+  t
+    .toSelf()
+    .extends(PaymentGateway)
+    .conditional(() => process.env.REGION === 'eu'),
+)
 
-di.bind(BraintreeUSGateway, t => t
-  .toSelf()
-  .extends(PaymentGateway)
-  .conditional(() => process.env.REGION === 'us'))
+di.bind(BraintreeUSGateway, t =>
+  t
+    .toSelf()
+    .extends(PaymentGateway)
+    .conditional(() => process.env.REGION === 'us'),
+)
 
-di.bind(MockPaymentGateway, t => t
-  .toSelf()
-  .extends(PaymentGateway)
-  .fallback())
+di.bind(MockPaymentGateway, t => t.toSelf().extends(PaymentGateway).fallback())
 
 await di.init()
 ```

@@ -138,11 +138,8 @@ function isNullOnlySchema(schema: unknown): boolean {
 }
 
 /** `{ const, type }` and nothing else. A description or minLength on a branch is enough to refuse the collapse. */
-function isLiteralBranch(schema: unknown): schema is JSONSchema & { const: unknown, type: string } {
-  return isSchema(schema)
-    && 'const' in schema
-    && typeof schema.type === 'string'
-    && Object.keys(schema).length === 2
+function isLiteralBranch(schema: unknown): schema is JSONSchema & { const: unknown; type: string } {
+  return isSchema(schema) && 'const' in schema && typeof schema.type === 'string' && Object.keys(schema).length === 2
 }
 
 function isSchema(value: unknown): value is JSONSchema {

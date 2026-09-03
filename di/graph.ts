@@ -60,8 +60,8 @@ export function graphToMarkdown(input: Iterable<[InjectionToken, Binding]> | Bin
   const depNodes = graph.nodes.filter(n =>
     graph.edges.some(
       e =>
-        e.fromID === n.id
-        && (e.kind === 'injection' || e.kind === 'property-injection' || e.kind === 'method-injection'),
+        e.fromID === n.id &&
+        (e.kind === 'injection' || e.kind === 'property-injection' || e.kind === 'method-injection'),
     ),
   )
 
@@ -115,7 +115,7 @@ export function graphToMarkdown(input: Iterable<[InjectionToken, Binding]> | Bin
 }
 
 function escapeMermaid(text: string): string {
-  return text.replace(/"/g, '\'')
+  return text.replace(/"/g, "'")
 }
 
 /**
@@ -139,10 +139,7 @@ export function graphToMermaid(input: Iterable<[InjectionToken, Binding]> | Bind
   for (const node of graph.nodes) {
     const deps = nodeDependencyLabels(node.id, graph.edges, nodeByIDMermaid)
     const primaryTag = node.primary ? '\\n[primary]' : ''
-    const depsTag = deps.length > 0
-      ? `\\n---\\n${deps.map(escapeMermaid)
-        .join('\\n')}`
-      : ''
+    const depsTag = deps.length > 0 ? `\\n---\\n${deps.map(escapeMermaid).join('\\n')}` : ''
     const label = `${escapeMermaid(node.label)}\\n${node.scopeID}${primaryTag}${depsTag}`
     lines.push(`  n${node.id}["${label}"]`)
   }
@@ -158,8 +155,7 @@ export function graphToMermaid(input: Iterable<[InjectionToken, Binding]> | Bind
 }
 
 function escapeDot(text: string): string {
-  return text.replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
+  return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
 /**
@@ -187,10 +183,7 @@ export function graphToDot(input: Iterable<[InjectionToken, Binding]> | BindingG
   for (const node of graph.nodes) {
     const deps = nodeDependencyLabels(node.id, graph.edges, nodeByIDDot)
     const primaryTag = node.primary ? '\\n[primary]' : ''
-    const depsTag = deps.length > 0
-      ? `\\n---\\n${deps.map(escapeDot)
-        .join('\\n')}`
-      : ''
+    const depsTag = deps.length > 0 ? `\\n---\\n${deps.map(escapeDot).join('\\n')}` : ''
     const label = `${escapeDot(node.label)}\\n${node.scopeID}${primaryTag}${depsTag}`
     lines.push(`  n${node.id} [label="${label}"]`)
   }
@@ -251,8 +244,7 @@ export function graphToText(input: Iterable<[InjectionToken, Binding]> | Binding
     lines.push('')
   }
 
-  return lines.join('\n')
-    .trimEnd()
+  return lines.join('\n').trimEnd()
 }
 
 // Graph Internal Utilities
@@ -266,12 +258,12 @@ function scopeStr(scopeID: string | symbol): string {
 
 function isBindingGraph(input: Iterable<[InjectionToken, Binding]> | BindingGraph): input is BindingGraph {
   return (
-    typeof input === 'object'
-    && input !== null
-    && 'nodes' in input
-    && 'edges' in input
-    && Array.isArray((input as BindingGraph).nodes)
-    && Array.isArray((input as BindingGraph).edges)
+    typeof input === 'object' &&
+    input !== null &&
+    'nodes' in input &&
+    'edges' in input &&
+    Array.isArray((input as BindingGraph).nodes) &&
+    Array.isArray((input as BindingGraph).edges)
   )
 }
 
@@ -304,8 +296,8 @@ function nodeDependencyLabels(
 ): string[] {
   const injEdges = edges.filter(
     e =>
-      e.fromID === nodeID
-      && (e.kind === 'injection' || e.kind === 'property-injection' || e.kind === 'method-injection'),
+      e.fromID === nodeID &&
+      (e.kind === 'injection' || e.kind === 'property-injection' || e.kind === 'method-injection'),
   )
 
   if (injEdges.length === 0) {
@@ -328,11 +320,10 @@ function nodeDependencyLabels(
         labels.push(fmtNode(target))
       }
     } else {
-      const targets = targetIds.map(id => nodeByID.get(id))
-        .filter((n): n is GraphNode => n != null)
+      const targets = targetIds.map(id => nodeByID.get(id)).filter((n): n is GraphNode => n != null)
       if (targets.length > 0) {
         const sharedNames = targets.reduce<string[]>(
-          (acc, node, i) => i === 0 ? [...node.names] : acc.filter(n => node.names.includes(n)),
+          (acc, node, i) => (i === 0 ? [...node.names] : acc.filter(n => node.names.includes(n))),
           [],
         )
         if (sharedNames.length > 0) {

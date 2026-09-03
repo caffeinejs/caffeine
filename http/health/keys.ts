@@ -1,4 +1,5 @@
 import { contributionKey } from '@caffeinejs/std'
+
 import type { HealthOptions } from './options.js'
 
 /**

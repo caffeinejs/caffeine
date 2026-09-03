@@ -18,10 +18,9 @@ export type OpenQuery = Record<
   string | number | boolean | null | undefined | ReadonlyArray<string | number | boolean>
 >
 
-type Slot<Name extends string, T, Optional extends boolean>
-  = Optional extends true
-    ? { [K in Name]?: T }
-    : { [K in Name]: T }
+type Slot<Name extends string, T, Optional extends boolean> = Optional extends true
+  ? { [K in Name]?: T }
+  : { [K in Name]: T }
 
 /**
  * What a call takes: the request slots the route declared, plus anything `RequestInit` accepts.
@@ -33,17 +32,15 @@ type Slot<Name extends string, T, Optional extends boolean>
  *
  * Path parameters are absent by construction: the segment calls supplied them.
  */
-export type CallInit<R extends RouteContract>
-  = Omit<RequestInit, 'method' | 'body' | 'headers'>
-    & Slot<'query', IsOpenRecord<R['query']> extends true ? OpenQuery : R['query'], IsOpenRecord<R['query']>>
-    & Slot<'headers', R['headers'], IsOpenRecord<R['headers']>>
-    & Slot<'body', R['body'], IsUnknown<R['body']>>
+export type CallInit<R extends RouteContract> = Omit<RequestInit, 'method' | 'body' | 'headers'> &
+  Slot<'query', IsOpenRecord<R['query']> extends true ? OpenQuery : R['query'], IsOpenRecord<R['query']>> &
+  Slot<'headers', R['headers'], IsOpenRecord<R['headers']>> &
+  Slot<'body', R['body'], IsUnknown<R['body']>>
 
 /** Whether every slot of an init is optional, and so whether the argument may be left out entirely. */
 type AllOptional<T> = Partial<T> extends T ? true : false
 
 /** The call one verb makes: the init argument disappears when the route needs nothing from it. */
-export type VerbCall<R extends RouteContract>
-  = (...args: AllOptional<CallInit<R>> extends true
-    ? [init?: CallInit<R>]
-    : [init: CallInit<R>]) => Promise<BrewResponse<R['output']>>
+export type VerbCall<R extends RouteContract> = (
+  ...args: AllOptional<CallInit<R>> extends true ? [init?: CallInit<R>] : [init: CallInit<R>]
+) => Promise<BrewResponse<R['output']>>

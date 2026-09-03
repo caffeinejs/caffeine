@@ -1,4 +1,5 @@
 import { validateSchema } from '@caffeinejs/std/schema'
+
 import type { BoundConsumer, DeliveryControl } from './binder.js'
 import type { ConsumerBinding } from './binding.js'
 import type { MessageBus } from './bus.js'

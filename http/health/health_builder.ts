@@ -8,6 +8,7 @@ import {
   type ServiceBootstrapIn,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+
 import { kHealthContribution } from './keys.js'
 import {
   HEALTH_CONFIG_NAMESPACE,
@@ -159,7 +160,8 @@ export class HealthBuilder<C = unknown> implements Service {
 
     // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
     this.#options = slice.derive(config =>
-      finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })))
+      finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })),
+    )
   }
 
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {

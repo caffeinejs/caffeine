@@ -1,5 +1,6 @@
 import type { RouteGroupExtension } from '@caffeinejs/http'
 import { configureRouteGroup } from '@caffeinejs/http/decorators/registrar'
+
 import type { APIGroupDetail } from './detail.js'
 import { kAPIGroup } from './keys.js'
 

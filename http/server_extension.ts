@@ -1,5 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import type { FastifyInstance } from 'fastify'
+
 import type { RouteGroup } from './route.js'
 import type { Services } from './service.js'
 
@@ -38,7 +39,7 @@ export abstract class ServerExtension {
   readonly dependencies?: readonly string[]
 
   /** Decorators this extension needs in place. A missing one fails start-up naming the decorator. */
-  readonly decorators?: { fastify?: string[], request?: string[], reply?: string[] }
+  readonly decorators?: { fastify?: string[]; request?: string[]; reply?: string[] }
 
   /** Accepted Fastify version range, e.g. `'5.x'`. */
   readonly fastify?: string

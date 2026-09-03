@@ -9,11 +9,15 @@ import { createWebApplication, fastifyAdapterFactory, Controller, Get, Post, Arg
 @Controller('/examples')
 export class ExampleController {
   @Get('/')
-  getAll() { return this.list.execute() }
+  getAll() {
+    return this.list.execute()
+  }
 
   @Post('/')
   @Args([$p.body()])
-  createOne(input: { name: string }) { return this.create.execute(input.name) }
+  createOne(input: { name: string }) {
+    return this.create.execute(input.name)
+  }
 }
 
 const app = createWebApplication(fastifyAdapterFactory(Fastify({ logger: true }))).build()
@@ -25,6 +29,7 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 - `@Args` / `$p` pick body, params, query — same idea as Kafka `$k`.
 - `@Prefix` is a Fastify plugin prefix; `@Controller('/api/pets')` is the URL path, not a 404-scoped `/api` bubble.
 - Errors: throw `ErrHTTPNotFound` (etc.). Render with `@Catch(ErrType)` on an `ErrorHandler` class, `{ global: false }` + `@CatchWith`, or a `@Catch` method on the controller. Duplicate global `@Catch` for the same class fails at boot. See [errors.md](errors.md).
+
 ## Programmatic routers
 
 The second way to declare routes. Same compilation as a controller — same guards, authorization, validation, error
@@ -36,19 +41,23 @@ import { $t } from '@caffeinejs/std'
 import { Router } from '@caffeinejs/http'
 
 const pets = new Router('/pets')
-  .inject({ svc: PetService })          // every route of the group, and of groups nested in it
+  .inject({ svc: PetService }) // every route of the group, and of groups nested in it
   .authorize({ schemes: ['Bearer'] })
 
 pets
-  .get('/:id')                          // opens the route; ctx.req.param() is { id: string }
-  .inject($i => ({ audit: $i.optional(Audit) }))         // or a plain spec, as the group above
-  .schema({ params: $t.Object({ id: $t.Integer() }) })   // now { id: number }
+  .get('/:id') // opens the route; ctx.req.param() is { id: string }
+  .inject($i => ({ audit: $i.optional(Audit) })) // or a plain spec, as the group above
+  .schema({ params: $t.Object({ id: $t.Integer() }) }) // now { id: number }
   .handler((ctx, deps) => deps.svc.find(ctx.req.param().id))
 
-pets.group('/:petID/orders', r => r
-  .post('/').schema({ body: CreateOrder }).handler((ctx, deps) => deps.svc.order(ctx.req.body())))
+pets.group('/:petID/orders', r =>
+  r
+    .post('/')
+    .schema({ body: CreateOrder })
+    .handler((ctx, deps) => deps.svc.order(ctx.req.body())),
+)
 
-app.mount(pets)                         // before app.ready()
+app.mount(pets) // before app.ready()
 ```
 
 - A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. With a handler the route is closed there
@@ -88,10 +97,13 @@ app.mount(pets)                         // before app.ready()
 ```ts
 export const pets = new Router('/pets')
   .with(apiGroup({ name: 'Pets' }))
-  .get('/').handler(list)
-  .get('/:id').with(operation({ operationId: 'getPet' })).handler(find)
+  .get('/')
+  .handler(list)
+  .get('/:id')
+  .with(operation({ operationId: 'getPet' }))
+  .handler(find)
 
-type API = RoutesOf<typeof pets>   // { method: 'GET', path: '/pets', ... } | { method: 'GET', path: '/pets/:id', ... }
+type API = RoutesOf<typeof pets> // { method: 'GET', path: '/pets', ... } | { method: 'GET', path: '/pets/:id', ... }
 
 // the same surface, written as statements
 const owner = new Router('/pets')
@@ -103,17 +115,17 @@ export const petsRouter = blend(all, one)
 
 ## Typed client — `@caffeinejs/brewer`
 
-The front-end half of the same types. No codegen, no schema file: the server's type *is* the client's contract.
+The front-end half of the same types. No codegen, no schema file: the server's type _is_ the client's contract.
 
 ```ts
 import { brewer } from '@caffeinejs/brewer'
-import type { App } from './server/app.js'      // export type App = typeof app
+import type { App } from './server/app.js' // export type App = typeof app
 
 const client = brewer<App>('http://localhost:3000')
 
-const res = await client.pets({ id: 1 }).get()  // GET /pets/1
+const res = await client.pets({ id: 1 }).get() // GET /pets/1
 if (res.ok) {
-  const pet = await res.json()                  // typed from the route's 200 schema
+  const pet = await res.json() // typed from the route's 200 schema
 }
 
 await client.pets.post({ body: { name: 'Rex' } })
@@ -133,11 +145,12 @@ await client.pets.post({ body: { name: 'Rex' } })
   const client = brewer(app)
   await client.pets({ id: 1 }).get()
 
-  brewer<typeof petsRouter>(app)   // one router's surface, driven through the application
+  brewer<typeof petsRouter>(app) // one router's surface, driven through the application
   ```
 
   The target is structural — anything with a matching `fetch` works, a stub included — and `options.fetch` still
   wins over it.
+
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to
   resolve the `App` type — `import type` is erased, so nothing ships.
 - Escape hatch for a path built at run time, or a segment named after a verb:

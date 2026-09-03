@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Inject } from '../decorators/inject.js'
+
 import { CaffeineIoC } from '../container.js'
-import { $i } from '../injection.js'
+import { Inject } from '../decorators/inject.js'
+import { Injectable } from '../decorators/injectable.js'
 import { ErrInvalidBinding } from '../errors.js'
+import { $i } from '../injection.js'
+import { token } from '../key.js'
 
 describe('class field injection', function () {
   // Shared deps registered via @Injectable at describe scope — visible to all tests in this file
@@ -69,12 +70,9 @@ describe('class field injection', function () {
 
       constructor() {
         // All members are undefined at construction time — injection runs after factory
-        expect(this._setter)
-          .toBeUndefined()
-        expect(this.field)
-          .toBeUndefined()
-        expect(this.#getter)
-          .toBeUndefined()
+        expect(this._setter).toBeUndefined()
+        expect(this.field).toBeUndefined()
+        expect(this.#getter).toBeUndefined()
       }
     }
 
@@ -84,22 +82,14 @@ describe('class field injection', function () {
 
       const mixed = di.get(Mixed)
 
-      expect(mixed)
-        .toBeInstanceOf(Mixed)
-      expect(mixed.setter)
-        .toBeInstanceOf(DepA)
-      expect(mixed.setter.greet())
-        .toEqual('hello')
-      expect(mixed.field)
-        .toBeInstanceOf(DepB)
-      expect(mixed.field.farewell())
-        .toEqual('bye')
-      expect(mixed.getter)
-        .toBeInstanceOf(DepC)
-      expect(mixed.getter.ping())
-        .toEqual('pong')
-      expect(mixed.accessorDep)
-        .toBeInstanceOf(DepA)
+      expect(mixed).toBeInstanceOf(Mixed)
+      expect(mixed.setter).toBeInstanceOf(DepA)
+      expect(mixed.setter.greet()).toEqual('hello')
+      expect(mixed.field).toBeInstanceOf(DepB)
+      expect(mixed.field.farewell()).toEqual('bye')
+      expect(mixed.getter).toBeInstanceOf(DepC)
+      expect(mixed.getter.ping()).toEqual('pong')
+      expect(mixed.accessorDep).toBeInstanceOf(DepA)
     })
   })
 
@@ -136,12 +126,9 @@ describe('class field injection', function () {
 
       const instance = di.get(PartiallyOptional)
 
-      expect(instance.fieldDep)
-        .toBeInstanceOf(DepA)
-      expect(instance.optionalDep)
-        .toBeUndefined()
-      expect(instance.setterDep)
-        .toBeInstanceOf(DepB)
+      expect(instance.fieldDep).toBeInstanceOf(DepA)
+      expect(instance.optionalDep).toBeUndefined()
+      expect(instance.setterDep).toBeInstanceOf(DepB)
     })
   })
 
@@ -152,20 +139,14 @@ describe('class field injection', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA, t => t
-        .toSelf())
-      di.bind(ManualSvc, t => t
-        .toSelf()
-        .injectProperty('dep', DepA))
+      di.bind(DepA, t => t.toSelf())
+      di.bind(ManualSvc, t => t.toSelf().injectProperty('dep', DepA))
       await di.init()
 
       const svc = di.get(ManualSvc)
-      expect(svc)
-        .toBeInstanceOf(ManualSvc)
-      expect(svc.dep)
-        .toBeInstanceOf(DepA)
-      expect(svc.dep.greet())
-        .toEqual('hello')
+      expect(svc).toBeInstanceOf(ManualSvc)
+      expect(svc.dep).toBeInstanceOf(DepA)
+      expect(svc.dep.greet()).toEqual('hello')
     })
 
     it('should support chaining multiple injectProperty() calls', async function () {
@@ -182,21 +163,14 @@ describe('class field injection', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA, t => t
-        .toSelf())
-      di.bind(DepB, t => t
-        .toSelf())
-      di.bind(MultiField, t => t
-        .toSelf()
-        .injectProperty('fieldA', DepA)
-        .injectProperty('fieldB', DepB))
+      di.bind(DepA, t => t.toSelf())
+      di.bind(DepB, t => t.toSelf())
+      di.bind(MultiField, t => t.toSelf().injectProperty('fieldA', DepA).injectProperty('fieldB', DepB))
       await di.init()
 
       const instance = di.get(MultiField)
-      expect(instance.fieldA)
-        .toBeInstanceOf(DepA)
-      expect(instance.fieldB)
-        .toBeInstanceOf(DepB)
+      expect(instance.fieldA).toBeInstanceOf(DepA)
+      expect(instance.fieldB).toBeInstanceOf(DepB)
     })
 
     it('should work alongside constructor injections', async function () {
@@ -207,20 +181,14 @@ describe('class field injection', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA, t => t
-        .toSelf())
-      di.bind(DepB, t => t
-        .toSelf())
-      di.bind(WithCtor, t => t
-        .toSelf([DepA])
-        .injectProperty('fieldDep', DepB))
+      di.bind(DepA, t => t.toSelf())
+      di.bind(DepB, t => t.toSelf())
+      di.bind(WithCtor, t => t.toSelf([DepA]).injectProperty('fieldDep', DepB))
       await di.init()
 
       const instance = di.get(WithCtor)
-      expect(instance.ctorDep)
-        .toBeInstanceOf(DepA)
-      expect(instance.fieldDep)
-        .toBeInstanceOf(DepB)
+      expect(instance.ctorDep).toBeInstanceOf(DepA)
+      expect(instance.fieldDep).toBeInstanceOf(DepB)
     })
 
     it('should leave optional absent dep undefined', async function () {
@@ -230,20 +198,16 @@ describe('class field injection', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA, t => t
-        .toSelf())
+      di.bind(DepA, t => t.toSelf())
       // DepC is intentionally NOT bound
-      di.bind(WithOptional, t => t
-        .toSelf()
-        .injectProperty('required', DepA)
-        .injectProperty('absent', $i.optional(DepC)))
+      di.bind(WithOptional, t =>
+        t.toSelf().injectProperty('required', DepA).injectProperty('absent', $i.optional(DepC)),
+      )
       await di.init()
 
       const instance = di.get(WithOptional)
-      expect(instance.required)
-        .toBeInstanceOf(DepA)
-      expect(instance.absent)
-        .toBeUndefined()
+      expect(instance.required).toBeInstanceOf(DepA)
+      expect(instance.absent).toBeUndefined()
     })
   })
 
@@ -253,22 +217,16 @@ describe('class field injection', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
-        di.bind(kSym, t => t
-          .toValue('x')
-          .injectProperty('prop', DepA))
-      })
-        .toThrow(ErrInvalidBinding)
+        di.bind(kSym, t => t.toValue('x').injectProperty('prop', DepA))
+      }).toThrow(ErrInvalidBinding)
     })
 
     it('should throw ErrInvalidBinding when key is a string', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
-        di.bind(token<any>('stringKey'), t => t
-          .toValue('x')
-          .injectProperty('prop', DepA))
-      })
-        .toThrow(ErrInvalidBinding)
+        di.bind(token<any>('stringKey'), t => t.toValue('x').injectProperty('prop', DepA))
+      }).toThrow(ErrInvalidBinding)
     })
   })
 })

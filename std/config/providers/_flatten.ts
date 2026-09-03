@@ -1,11 +1,6 @@
 import type { ConfigEntry, ConfigValue } from '../types.js'
 
-export function flattenObject(
-  obj: unknown,
-  origin: string,
-  prefix: string,
-  out: Map<string, ConfigEntry>,
-): void {
+export function flattenObject(obj: unknown, origin: string, prefix: string, out: Map<string, ConfigEntry>): void {
   if (Array.isArray(obj)) {
     if (obj.length === 0) {
       // Empty arrays must remain discoverable — indexing alone would emit zero keys.

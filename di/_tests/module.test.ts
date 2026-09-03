@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
 import { ErrInvalidContainerState } from '../errors.js'
+import { token } from '../key.js'
 import { kModule, mod, type Module, type ModuleFn } from '../module.js'
 import { alphaModule } from './_testdata/circular_modules/nested/alpha.mod.js'
 import { betaModule } from './_testdata/circular_modules/nested/beta.mod.js'
@@ -30,15 +31,13 @@ describe('Module', function () {
   describe('new CaffeineIoC({ modules })', function () {
     it('should execute a single module and register its bindings', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(Svc, t => t
-          .toSelf())
+        container.bind(Svc, t => t.toSelf())
       }
 
       const di = new CaffeineIoC({ decorators: false, modules: [module] })
       await di.init()
 
-      expect(di.get(Svc))
-        .toBeInstanceOf(Svc)
+      expect(di.get(Svc)).toBeInstanceOf(Svc)
     })
 
     it('should execute multiple modules in order', async function () {
@@ -57,21 +56,18 @@ describe('Module', function () {
       const di = new CaffeineIoC({ decorators: false, modules: [mod1, mod2, mod3] })
       await di.init()
 
-      expect(order)
-        .toEqual([1, 2, 3])
+      expect(order).toEqual([1, 2, 3])
     })
 
     it('should give each module access to the container', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(token<any>('key'), t => t
-          .toValue('value'))
+        container.bind(token<any>('key'), t => t.toValue('value'))
       }
 
       const di = new CaffeineIoC({ decorators: false, modules: [module] })
       await di.init()
 
-      expect(di.get(token<any>('key')))
-        .toBe('value')
+      expect(di.get(token<any>('key'))).toBe('value')
     })
 
     it('should execute modules during init', async function () {
@@ -84,27 +80,22 @@ describe('Module', function () {
       const di = new CaffeineIoC({ decorators: false, modules: [module] })
       await di.init()
 
-      expect(moduleCalled)
-        .toBe(true)
+      expect(moduleCalled).toBe(true)
     })
 
     it('should support multiple modules each registering different bindings', async function () {
       const modA: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(Svc, t => t
-          .toSelf())
+        container.bind(Svc, t => t.toSelf())
       }
       const modB: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(OtherSvc, t => t
-          .toSelf())
+        container.bind(OtherSvc, t => t.toSelf())
       }
 
       const di = new CaffeineIoC({ decorators: false, modules: [modA, modB] })
       await di.init()
 
-      expect(di.get(Svc))
-        .toBeInstanceOf(Svc)
-      expect(di.get(OtherSvc))
-        .toBeInstanceOf(OtherSvc)
+      expect(di.get(Svc)).toBeInstanceOf(Svc)
+      expect(di.get(OtherSvc)).toBeInstanceOf(OtherSvc)
     })
 
     it('should work with no modules', async function () {
@@ -114,36 +105,34 @@ describe('Module', function () {
 
     it('should execute modules after autoWire', async function () {
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(token<any>('manual-key'), t => t
-          .toValue('manual-value'))
+        container.bind(token<any>('manual-key'), t => t.toValue('manual-value'))
       }
 
       const di = new CaffeineIoC({ modules: [module] })
       await di.init()
 
-      expect(di.get(token<any>('manual-key')))
-        .toBe('manual-value')
+      expect(di.get(token<any>('manual-key'))).toBe('manual-value')
     })
 
     it('should coexist with auto-wired bindings', async function () {
       const kToken = token<any>(Symbol('module-test-token'))
       const module: ModuleFn = (container: ContainerBindingOps) => {
-        container.bind(kToken, t => t
-          .toValue(42))
+        container.bind(kToken, t => t.toValue(42))
       }
 
       const di = new CaffeineIoC({ modules: [module] })
       await di.init()
 
-      expect(di.get(kToken))
-        .toBe(42)
+      expect(di.get(kToken)).toBe(42)
     })
 
     it('should copy options.modules so later mutation of the caller array is ignored', async function () {
       const order: number[] = []
-      const modules: ModuleFn[] = [() => {
-        order.push(1)
-      }]
+      const modules: ModuleFn[] = [
+        () => {
+          order.push(1)
+        },
+      ]
 
       const di = new CaffeineIoC({ decorators: false, modules })
       modules.push(() => {
@@ -151,8 +140,7 @@ describe('Module', function () {
       })
       await di.init()
 
-      expect(order)
-        .toEqual([1])
+      expect(order).toEqual([1])
     })
   })
 
@@ -209,11 +197,14 @@ describe('Module', function () {
       di.addModules(() => {
         order.push(1)
       })
-      di.addModules(() => {
-        order.push(2)
-      }, () => {
-        order.push(3)
-      })
+      di.addModules(
+        () => {
+          order.push(2)
+        },
+        () => {
+          order.push(3)
+        },
+      )
       await di.init()
 
       expect(order).toEqual([1, 2, 3])
@@ -227,7 +218,7 @@ describe('Module', function () {
     })
 
     it('should emit onModuleRegistered for module added via addModules', async function () {
-      const events: { name: string, index: number }[] = []
+      const events: { name: string; index: number }[] = []
       const namedMod = mod('AddedModule', () => {})
 
       const di = new CaffeineIoC({ decorators: false })
@@ -273,14 +264,13 @@ describe('Module', function () {
       const di = new CaffeineIoC({ decorators: false, modules: [module] })
       await di.init()
 
-      expect(resolved)
-        .toBe(true)
+      expect(resolved).toBe(true)
     })
   })
 
   describe('module hooks', function () {
     it('should emit onModuleRegistered after a successful module', async function () {
-      const events: { name: string, index: number }[] = []
+      const events: { name: string; index: number }[] = []
 
       const module: ModuleFn = () => {}
 
@@ -288,14 +278,12 @@ describe('Module', function () {
       di.hooks.on('onModuleRegistered', e => events.push(e))
       await di.init()
 
-      expect(events)
-        .toHaveLength(1)
-      expect(events[0])
-        .toMatchObject({ index: 0 })
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({ index: 0 })
     })
 
     it('should emit onModuleRegistered with mod() name', async function () {
-      const events: { name: string, index: number }[] = []
+      const events: { name: string; index: number }[] = []
 
       const module = mod('PaymentModule', () => {})
 
@@ -303,12 +291,11 @@ describe('Module', function () {
       di.hooks.on('onModuleRegistered', e => events.push(e))
       await di.init()
 
-      expect(events[0])
-        .toMatchObject({ name: 'PaymentModule', index: 0 })
+      expect(events[0]).toMatchObject({ name: 'PaymentModule', index: 0 })
     })
 
     it('should emit onModuleRegistered for each module in order', async function () {
-      const events: { name: string, index: number }[] = []
+      const events: { name: string; index: number }[] = []
 
       const mod1 = mod('Mod1', () => {})
       const mod2 = mod('Mod2', () => {})
@@ -318,17 +305,14 @@ describe('Module', function () {
       di.hooks.on('onModuleRegistered', e => events.push(e))
       await di.init()
 
-      expect(events)
-        .toHaveLength(3)
-      expect(events.map(e => e.index))
-        .toEqual([0, 1, 2])
-      expect(events.map(e => e.name))
-        .toEqual(['Mod1', 'Mod2', 'Mod3'])
+      expect(events).toHaveLength(3)
+      expect(events.map(e => e.index)).toEqual([0, 1, 2])
+      expect(events.map(e => e.name)).toEqual(['Mod1', 'Mod2', 'Mod3'])
     })
 
     it('should emit onModuleRegistrationFailed when module rejects', async function () {
       const error = new Error('module failure')
-      const failures: { name: string, index: number, error: Error }[] = []
+      const failures: { name: string; index: number; error: Error }[] = []
 
       const module: ModuleFn = () => Promise.reject(error)
 
@@ -337,15 +321,13 @@ describe('Module', function () {
 
       await expect(di.init()).rejects.toThrow(error)
 
-      expect(failures)
-        .toHaveLength(1)
-      expect(failures[0])
-        .toMatchObject({ index: 0, error })
+      expect(failures).toHaveLength(1)
+      expect(failures[0]).toMatchObject({ index: 0, error })
     })
 
     it('should emit onModuleRegistrationFailed with mod() name when module rejects', async function () {
       const error = new Error('module failure')
-      const failures: { name: string, index: number, error: Error }[] = []
+      const failures: { name: string; index: number; error: Error }[] = []
 
       const module = mod('FailingModule', () => Promise.reject(error))
 
@@ -354,8 +336,7 @@ describe('Module', function () {
 
       await expect(di.init()).rejects.toThrow(error)
 
-      expect(failures[0])
-        .toMatchObject({ name: 'FailingModule', index: 0, error })
+      expect(failures[0]).toMatchObject({ name: 'FailingModule', index: 0, error })
     })
 
     it('should not emit onModuleRegistered when module rejects', async function () {
@@ -368,13 +349,12 @@ describe('Module', function () {
 
       await expect(di.init()).rejects.toThrow()
 
-      expect(registered)
-        .toHaveLength(0)
+      expect(registered).toHaveLength(0)
     })
 
     it('should emit onModuleRegistrationFailed when module throws synchronously', async function () {
       const error = new Error('sync failure')
-      const failures: { name: string, index: number, error: Error }[] = []
+      const failures: { name: string; index: number; error: Error }[] = []
 
       const module: ModuleFn = () => {
         throw error
@@ -385,10 +365,8 @@ describe('Module', function () {
 
       await expect(di.init()).rejects.toThrow(error)
 
-      expect(failures)
-        .toHaveLength(1)
-      expect(failures[0])
-        .toMatchObject({ index: 0, error })
+      expect(failures).toHaveLength(1)
+      expect(failures[0]).toMatchObject({ index: 0, error })
     })
 
     it('should not emit onModuleRegistered when module throws synchronously', async function () {
@@ -403,8 +381,7 @@ describe('Module', function () {
 
       await expect(di.init()).rejects.toThrow()
 
-      expect(registered)
-        .toHaveLength(0)
+      expect(registered).toHaveLength(0)
     })
   })
 
@@ -637,13 +614,15 @@ describe('Module', function () {
       const chain: Module[] = []
       for (let i = 0; i < 64; i++) {
         const index = i
-        chain.push(mod({
-          name: `n${index}`,
-          needs: () => (index === 0 ? [] : [chain[index - 1]]),
-          fn: () => {
-            order.push(index)
-          },
-        }))
+        chain.push(
+          mod({
+            name: `n${index}`,
+            needs: () => (index === 0 ? [] : [chain[index - 1]]),
+            fn: () => {
+              order.push(index)
+            },
+          }),
+        )
       }
       const root = mod({
         name: 'root',

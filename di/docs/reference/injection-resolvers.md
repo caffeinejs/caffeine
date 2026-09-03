@@ -50,8 +50,7 @@ scopes it is once per `get()` call.
 ## InjectionResolverFactory
 
 ```ts
-type InjectionResolverFactory<T = unknown> =
-  (ctx: InjectionResolverFactoryContext<T>) => InjectionResolver<T>
+type InjectionResolverFactory<T = unknown> = (ctx: InjectionResolverFactoryContext<T>) => InjectionResolver<T>
 ```
 
 A factory that receives context about the injection site and returns an
@@ -76,14 +75,14 @@ type InjectionResolverFactoryContext<T = unknown> = {
 Passed to every `InjectionResolverFactory` when the container wires an injection
 site.
 
-| Property | Description |
-|---|---|
-| `container` | The container instance. Use it to call `get()`, `getMany()`, or `has()` during resolver setup. |
-| `descriptor` | The full `InjectionDescriptor` for this injection, including `key`, `optional`, `multiple`, and any custom `args`. |
-| `key` | The key of the **component** that declares this injection (i.e. the class that has the dependency, not the dependency itself). |
-| `kind` | Where the injection appears: constructor parameter, class property, or method parameter. |
-| `member` | The member name for property and method injections. Empty string for constructor injections. |
-| `index` | Parameter position for constructor and method injections. `-1` when position is not tracked. |
+| Property     | Description                                                                                                                    |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `container`  | The container instance. Use it to call `get()`, `getMany()`, or `has()` during resolver setup.                                 |
+| `descriptor` | The full `InjectionDescriptor` for this injection, including `key`, `optional`, `multiple`, and any custom `args`.             |
+| `key`        | The key of the **component** that declares this injection (i.e. the class that has the dependency, not the dependency itself). |
+| `kind`       | Where the injection appears: constructor parameter, class property, or method parameter.                                       |
+| `member`     | The member name for property and method injections. Empty string for constructor injections.                                   |
+| `index`      | Parameter position for constructor and method injections. `-1` when position is not tracked.                                   |
 
 ---
 
@@ -91,26 +90,26 @@ site.
 
 ```ts
 const BuiltInResolvers = {
-  DEFAULT:  Symbol('@caffeinejs/di:resolver.default'),
-  MAP:      Symbol('@caffeinejs/di:resolver.map'),
-  DEFER:    Symbol('@caffeinejs/di:resolver.defer'),
-  OBJECT:   Symbol('@caffeinejs/di:resolver.object'),
+  DEFAULT: Symbol('@caffeinejs/di:resolver.default'),
+  MAP: Symbol('@caffeinejs/di:resolver.map'),
+  DEFER: Symbol('@caffeinejs/di:resolver.defer'),
+  OBJECT: Symbol('@caffeinejs/di:resolver.object'),
   PROVIDER: Symbol('@caffeinejs/di:resolver.provider'),
-  VALUE:    Symbol('@caffeinejs/di:resolver.value'),
+  VALUE: Symbol('@caffeinejs/di:resolver.value'),
 } as const
 ```
 
 Symbols for the built-in resolver factories. These are the resolver identifiers
 used by the injection helpers in the [Injection reference](./injection.md):
 
-| Symbol | Used by |
-|---|---|
-| `DEFAULT` | Plain key injection — the resolver used when no `resolver` field is set. |
-| `MAP` | `mapped()` |
-| `DEFER` | `defer()` |
-| `OBJECT` | `object()` |
-| `PROVIDER` | `provide()` |
-| `VALUE` | `useValue()` |
+| Symbol     | Used by                                                                  |
+| ---------- | ------------------------------------------------------------------------ |
+| `DEFAULT`  | Plain key injection — the resolver used when no `resolver` field is set. |
+| `MAP`      | `mapped()`                                                               |
+| `DEFER`    | `defer()`                                                                |
+| `OBJECT`   | `object()`                                                               |
+| `PROVIDER` | `provide()`                                                              |
+| `VALUE`    | `useValue()`                                                             |
 
 ---
 

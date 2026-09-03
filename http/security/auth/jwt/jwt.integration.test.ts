@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
+import { describe, it, expect, vi } from 'vitest'
+
 import {
   AllowAnonymous,
   Authorize,
@@ -20,12 +21,9 @@ const secretBytes = new TextEncoder().encode(TEST_SECRET)
 
 async function signToken(
   payload: Record<string, unknown>,
-  opts: { issuer?: string, audience?: string } = {},
+  opts: { issuer?: string; audience?: string } = {},
 ): Promise<string> {
-  let builder = new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('1h')
+  let builder = new SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
 
   if (opts.issuer) {
     builder = builder.setIssuer(opts.issuer)
@@ -147,9 +145,14 @@ describe('JWTBearerHandler', () => {
     void [JWTWrongIssController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addJWTBearer(b =>
-      b.secret(TEST_SECRET).jwtOptions({ issuer: 'https://expected.example.com', algorithms: ['HS256'] }).allowAnyAudience(),
-    ))
+    builder.authentication(auth =>
+      auth.addJWTBearer(b =>
+        b
+          .secret(TEST_SECRET)
+          .jwtOptions({ issuer: 'https://expected.example.com', algorithms: ['HS256'] })
+          .allowAnyAudience(),
+      ),
+    )
     const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
@@ -172,9 +175,14 @@ describe('JWTBearerHandler', () => {
     void [JWTWrongAudController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addJWTBearer(b =>
-      b.secret(TEST_SECRET).jwtOptions({ audience: 'my-api', algorithms: ['HS256'] }).allowAnyIssuer(),
-    ))
+    builder.authentication(auth =>
+      auth.addJWTBearer(b =>
+        b
+          .secret(TEST_SECRET)
+          .jwtOptions({ audience: 'my-api', algorithms: ['HS256'] })
+          .allowAnyIssuer(),
+      ),
+    )
     const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
@@ -207,7 +215,7 @@ describe('JWTBearerHandler', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(200)
-    const body = await res.json() as Record<string, unknown>
+    const body = (await res.json()) as Record<string, unknown>
     expect(body.sub).toBe('alice-123')
   })
 
@@ -271,10 +279,17 @@ describe('JWTBearerHandler', () => {
     void [JWTOnValidatedController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addJWTBearer(b =>
-      b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()
-        .onTokenValidated((_ctx, payload) => { onTokenValidated(payload) }),
-    ))
+    builder.authentication(auth =>
+      auth.addJWTBearer(b =>
+        b
+          .secret(TEST_SECRET)
+          .allowAnyIssuer()
+          .allowAnyAudience()
+          .onTokenValidated((_ctx, payload) => {
+            onTokenValidated(payload)
+          }),
+      ),
+    )
     const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
@@ -302,9 +317,17 @@ describe('JWTBearerHandler', () => {
     void [JWTOnFailController]
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth => auth.addJWTBearer(b =>
-      b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience().onFail((_ctx, err) => { onFail(err) }),
-    ))
+    builder.authentication(auth =>
+      auth.addJWTBearer(b =>
+        b
+          .secret(TEST_SECRET)
+          .allowAnyIssuer()
+          .allowAnyAudience()
+          .onFail((_ctx, err) => {
+            onFail(err)
+          }),
+      ),
+    )
     const app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 

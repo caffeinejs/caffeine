@@ -1,37 +1,37 @@
 import type { Readable } from 'node:stream'
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
+
 import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory, $p } from '@caffeinejs/http'
-import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { $multipart, MultipartExt } from './index.js'
+import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
 const BOUNDARY = '----TestBoundary123'
 
-type ME = { name: string, value: string } | { name: string, filename: string, content: string, mime?: string }
+type ME = { name: string; value: string } | { name: string; filename: string; content: string; mime?: string }
 
 function multipartApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(MultipartExt)
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(MultipartExt)
 }
 
-function multipartBody(
-  entries: Array<ME>): Uint8Array {
+function multipartBody(entries: Array<ME>): Uint8Array {
   const parts: string[] = []
   for (const entry of entries) {
     if ('filename' in entry) {
       parts.push(
-        `--${BOUNDARY}\r\n`
-        + `Content-Disposition: form-data; name="${entry.name}"; filename="${entry.filename}"\r\n`
-        + `Content-Type: ${entry.mime ?? 'application/octet-stream'}\r\n`
-        + `\r\n`
-        + `${entry.content}\r\n`,
+        `--${BOUNDARY}\r\n` +
+          `Content-Disposition: form-data; name="${entry.name}"; filename="${entry.filename}"\r\n` +
+          `Content-Type: ${entry.mime ?? 'application/octet-stream'}\r\n` +
+          `\r\n` +
+          `${entry.content}\r\n`,
       )
     } else {
       parts.push(
-        `--${BOUNDARY}\r\n`
-        + `Content-Disposition: form-data; name="${entry.name}"\r\n`
-        + `\r\n`
-        + `${entry.value}\r\n`,
+        `--${BOUNDARY}\r\n` +
+          `Content-Disposition: form-data; name="${entry.name}"\r\n` +
+          `\r\n` +
+          `${entry.value}\r\n`,
       )
     }
   }
@@ -126,7 +126,9 @@ describe('Multipart file upload', () => {
     const res = await app.fetch('/up2/upload', {
       method: 'POST',
       headers: multipartHeaders(),
-      body: multipartBody([{ name: 'document', filename: 'report.pdf', content: 'pdf-content', mime: 'application/pdf' }]),
+      body: multipartBody([
+        { name: 'document', filename: 'report.pdf', content: 'pdf-content', mime: 'application/pdf' },
+      ]),
     })
 
     expect(res.status).toBe(200)
@@ -578,7 +580,9 @@ describe('Multipart file upload', () => {
         for await (const chunk of stream) {
           const node = chunk as MultipartFileNode
           received.push(node)
-          for await (const _ of node.stream) { /* drain so busboy can advance */ }
+          for await (const _ of node.stream) {
+            /* drain so busboy can advance */
+          }
         }
         return {}
       }
@@ -617,7 +621,9 @@ describe('Multipart file upload', () => {
           const part = chunk as MultipartFileNode | MultipartField
           received.push(part)
           if (part.type === 'file') {
-            for await (const _ of (part as MultipartFileNode).stream) { /* drain so busboy can advance */ }
+            for await (const _ of (part as MultipartFileNode).stream) {
+              /* drain so busboy can advance */
+            }
           }
         }
         return {}

@@ -1,5 +1,5 @@
-import { ClassBuilder, MethodBuilder } from './builders.js'
 import type { ClassSpec } from './builders.definition.js'
+import { ClassBuilder, MethodBuilder } from './builders.js'
 
 const MethodRegistry = new WeakMap<object, Map<string | symbol, MethodBuilder>>()
 const ClassRegistry = new WeakMap<object, ClassBuilder>()

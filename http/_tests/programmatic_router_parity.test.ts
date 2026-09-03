@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import fastify from 'fastify'
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
+import fastify from 'fastify'
+import { describe, expect, it } from 'vitest'
+
 import {
   AuthenticateResult,
   AuthenticationTicket,
@@ -32,8 +33,12 @@ class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
   }
 }
 
-function successTicket(claims: Array<{ type: string, value: string }> = [], scheme = 'default'): AuthenticateResult {
-  const identity = new Identity(scheme, true, claims.map(c => new Claim(c.type, c.value, '')))
+function successTicket(claims: Array<{ type: string; value: string }> = [], scheme = 'default'): AuthenticateResult {
+  const identity = new Identity(
+    scheme,
+    true,
+    claims.map(c => new Claim(c.type, c.value, '')),
+  )
   return AuthenticateResult.success(new AuthenticationTicket(new Principal(true, [identity]), scheme))
 }
 
@@ -59,7 +64,10 @@ describe('programmatic router parity with the decorator feature set', () => {
 
       const router = new Router('/guarded').guards([TraceGuard])
       router.get('/open').handler(() => ({ ok: true }))
-      router.get('/closed').guards([DenyGuard]).handler(() => ({ ok: true }))
+      router
+        .get('/closed')
+        .guards([DenyGuard])
+        .handler(() => ({ ok: true }))
 
       const container = new CaffeineIoC()
       container.bind(TraceGuard, t => t.toSelf())
@@ -80,7 +88,10 @@ describe('programmatic router parity with the decorator feature set', () => {
     it('should protect every route under it, and let a route opt out', async () => {
       const router = new Router('/secure').authorize({})
       router.get('/private').handler(() => ({ ok: true }))
-      router.get('/public').authorize({ allowAnonymous: true }).handler(() => ({ ok: true }))
+      router
+        .get('/public')
+        .authorize({ allowAnonymous: true })
+        .handler(() => ({ ok: true }))
 
       const handler = new FakeAuthHandler()
       handler.result = AuthenticateResult.none()
@@ -101,7 +112,10 @@ describe('programmatic router parity with the decorator feature set', () => {
 
     it('should union the roles a group and a route each require', async () => {
       const router = new Router('/roles').authorize({ roles: ['staff'] })
-      router.get('/admin').authorize({ roles: ['admin'] }).handler(() => ({ ok: true }))
+      router
+        .get('/admin')
+        .authorize({ roles: ['admin'] })
+        .handler(() => ({ ok: true }))
 
       const handler = new FakeAuthHandler()
       const builder = createWebApplication(fastifyAdapterFactory(fastify()))
@@ -149,9 +163,7 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given response shaping declared on a group and a route', () => {
     it('should apply status, headers and content type the way the decorators do', async () => {
-      const router = new Router('/shaped')
-        .header('x-group', 'yes')
-        .produces('application/json')
+      const router = new Router('/shaped').header('x-group', 'yes').produces('application/json')
 
       router.get('/plain').handler(() => ({ ok: true }))
       router
@@ -182,7 +194,10 @@ describe('programmatic router parity with the decorator feature set', () => {
   describe('given a body limit on a route', () => {
     it('should reject a body over it', async () => {
       const router = new Router('/limited')
-      router.post('/small').bodyLimit(16).handler(ctx => ctx.body(ctx.req.body()))
+      router
+        .post('/small')
+        .bodyLimit(16)
+        .handler(ctx => ctx.body(ctx.req.body()))
 
       const app = createWebApplication().build().mount(router)
       await app.ready()

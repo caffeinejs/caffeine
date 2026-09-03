@@ -1,17 +1,19 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { JWTVerifyGetKey } from 'jose'
+
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
-import { REGISTERED_CLAIMS } from '../registered_claims.js'
 import type { RemoteAuthenticationIdentity } from '../internal/remote/handler.js'
 import { redactPii, redactPiiList } from '../internal/remote/pii.js'
 import { selectPKCEMethod } from '../internal/remote/pkce.js'
 import type { RemoteAuthenticationState } from '../internal/remote/state_store.js'
 import { fetchUserInfo } from '../internal/remote/userinfo.js'
+import { REGISTERED_CLAIMS } from '../registered_claims.js'
+import { assertAccessTokenHash } from './_at_hash.js'
 import { fetchDiscovery } from './discovery.js'
 import type { OIDCDiscoveryDocument } from './discovery.js'
-import { assertAccessTokenHash } from './_at_hash.js'
+import { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession } from './errors.js'
 import { resolveOIDCOptions } from './options.js'
 import type {
   OIDCAuthenticationOptions,
@@ -19,22 +21,11 @@ import type {
   ResolvedOIDCAuthenticationOptions,
   TokenEndpointAuthMethod,
 } from './options.js'
-import { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession } from './errors.js'
 
 /**
  * id_tokens are signed with the provider's asymmetric key — never accept a symmetric alg.
  */
-const ID_TOKEN_ALGORITHMS = [
-  'RS256',
-  'RS384',
-  'RS512',
-  'ES256',
-  'ES384',
-  'ES512',
-  'PS256',
-  'PS384',
-  'PS512',
-]
+const ID_TOKEN_ALGORITHMS = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512', 'PS256', 'PS384', 'PS512']
 
 export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<ResolvedOIDCAuthenticationOptions> {
   #discovery: OIDCDiscoveryDocument | undefined
@@ -155,17 +146,17 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
 
     if (payload.nonce !== stored.nonce) {
       throw this.callbackFailure(
-        'nonce mismatch'
-        + ` (expected ${redactPii('nonce', stored.nonce, showPii)},`
-        + ` received ${redactPii('nonce', payload.nonce, showPii)})`,
+        'nonce mismatch' +
+          ` (expected ${redactPii('nonce', stored.nonce, showPii)},` +
+          ` received ${redactPii('nonce', payload.nonce, showPii)})`,
       )
     }
 
     // OIDC Core §2: sub is REQUIRED and is the only stable identifier for the user.
     if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
       throw this.callbackFailure(
-        'id_token is missing the sub claim'
-        + ` (claims present: ${redactPiiList('claims', Object.keys(payload), showPii)})`,
+        'id_token is missing the sub claim' +
+          ` (claims present: ${redactPiiList('claims', Object.keys(payload), showPii)})`,
       )
     }
 
@@ -174,16 +165,14 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     // a freshness control while a provider that ignores max_age passes silently.
     if (this.options.maxAgeSeconds !== undefined) {
       if (typeof payload.auth_time !== 'number') {
-        throw this.callbackFailure(
-          'id_token has no auth_time claim, which is required when max_age is requested',
-        )
+        throw this.callbackFailure('id_token has no auth_time claim, which is required when max_age is requested')
       }
 
       const age = Math.floor(Date.now() / 1000) - payload.auth_time
       if (age > this.options.maxAgeSeconds + this.options.clockToleranceSeconds) {
         throw this.callbackFailure(
-          `the provider authenticated the user ${age}s ago, older than the requested max_age`
-          + ` of ${this.options.maxAgeSeconds}s`,
+          `the provider authenticated the user ${age}s ago, older than the requested max_age` +
+            ` of ${this.options.maxAgeSeconds}s`,
         )
       }
     }
@@ -196,8 +185,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       }
       if (payload.azp !== this.options.clientID) {
         throw this.callbackFailure(
-          'id_token azp does not match clientID'
-          + ` (azp ${redactPii('azp', payload.azp, showPii)})`,
+          'id_token azp does not match clientID' + ` (azp ${redactPii('azp', payload.azp, showPii)})`,
         )
       }
     }
@@ -257,12 +245,9 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
 
     // Prefer the explicitly configured endpoint, and only reach for discovery when it is
     // absent — a configured logout URL must not drag in a discovery fetch that can fail.
-    const endpoint = this.options.endSessionEndpoint
-      ?? (await this.#resolveDiscovery()).end_session_endpoint
+    const endpoint = this.options.endSessionEndpoint ?? (await this.#resolveDiscovery()).end_session_endpoint
     if (!endpoint) {
-      throw new ErrOIDCConfiguration(
-        'Cannot sign out: the provider advertises no end_session_endpoint',
-      )
+      throw new ErrOIDCConfiguration('Cannot sign out: the provider advertises no end_session_endpoint')
     }
 
     const url = new URL(endpoint)
@@ -301,9 +286,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     }
 
     if (!tokens.accessToken) {
-      throw this.callbackFailure(
-        'getClaimsFromUserInfoEndpoint is set but the token response carried no access token',
-      )
+      throw this.callbackFailure('getClaimsFromUserInfoEndpoint is set but the token response carried no access token')
     }
 
     let userInfo: Record<string, unknown>
@@ -321,20 +304,16 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     // that would let one account's claims be attached to another's session.
     if (userInfo.sub !== payload.sub) {
       throw this.callbackFailure(
-        'user info sub does not match the id_token sub'
-        + ` (id_token ${redactPii('sub', payload.sub, this.options.showPii)},`
-        + ` user info ${redactPii('sub', userInfo.sub, this.options.showPii)})`,
+        'user info sub does not match the id_token sub' +
+          ` (id_token ${redactPii('sub', payload.sub, this.options.showPii)},` +
+          ` user info ${redactPii('sub', userInfo.sub, this.options.showPii)})`,
       )
     }
 
     return { ...userInfo, ...payload }
   }
 
-  async #exchangeCode(
-    code: string,
-    codeVerifier: string,
-    discovery: OIDCDiscoveryDocument,
-  ): Promise<OIDCTokens> {
+  async #exchangeCode(code: string, codeVerifier: string, discovery: OIDCDiscoveryDocument): Promise<OIDCTokens> {
     const method = this.#resolveTokenAuthMethod(discovery)
 
     const body = new URLSearchParams({
@@ -373,7 +352,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     // defensively so a proxy error page does not surface as a parse failure. The `?? {}` also
     // covers a literal `null` body, which parses without throwing and would otherwise make the
     // `.error` access below a TypeError — the OAuth2 handler guards the same spot the same way.
-    const tokenResponse = (await response.json().catch(() => ({})) ?? {}) as {
+    const tokenResponse = ((await response.json().catch(() => ({}))) ?? {}) as {
       id_token?: string
       access_token?: string
       refresh_token?: string
@@ -391,9 +370,10 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     if (tokenResponse.error || !tokenResponse.id_token) {
       // error_description is provider-authored free text of unconstrained content, so it is
       // treated as potentially carrying user data.
-      const detail = tokenResponse.error_description !== undefined
-        ? redactPii('error_description', tokenResponse.error_description, this.options.showPii)
-        : tokenResponse.error ?? 'no id_token in response'
+      const detail =
+        tokenResponse.error_description !== undefined
+          ? redactPii('error_description', tokenResponse.error_description, this.options.showPii)
+          : (tokenResponse.error ?? 'no id_token in response')
       throw this.callbackFailure(detail)
     }
 
@@ -414,23 +394,23 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
 
     const configured = this.options.tokenEndpointAuthMethod
     if (configured !== 'auto') {
-      return this.#tokenAuthMethod = configured
+      return (this.#tokenAuthMethod = configured)
     }
 
     const supported = discovery.token_endpoint_auth_methods_supported
     // OIDC Discovery §3: absent means client_secret_basic, which RFC 6749 §2.3.1 also
     // prefers over sending credentials in the body.
     if (!supported || supported.includes('client_secret_basic')) {
-      return this.#tokenAuthMethod = 'client_secret_basic'
+      return (this.#tokenAuthMethod = 'client_secret_basic')
     }
 
     if (supported.includes('client_secret_post')) {
-      return this.#tokenAuthMethod = 'client_secret_post'
+      return (this.#tokenAuthMethod = 'client_secret_post')
     }
 
     throw new ErrOIDCConfiguration(
-      'Cannot configure OIDC: provider supports neither client_secret_basic nor client_secret_post '
-      + `(advertised: ${supported.join(', ')})`,
+      'Cannot configure OIDC: provider supports neither client_secret_basic nor client_secret_post ' +
+        `(advertised: ${supported.join(', ')})`,
     )
   }
 
@@ -451,9 +431,9 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       return Promise.resolve(this.#discovery)
     }
 
-    return this.#inflight ??= this.#fetchDiscovery().finally(() => {
+    return (this.#inflight ??= this.#fetchDiscovery().finally(() => {
       this.#inflight = undefined
-    })
+    }))
   }
 
   async #fetchDiscovery(): Promise<OIDCDiscoveryDocument> {
@@ -515,9 +495,8 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
   }
 
   #resolveJwks(jwksURI: string): JWTVerifyGetKey {
-    return this.#jwks ??= (
-      this.options.jwksResolver?.(jwksURI) ?? createRemoteJWKSet(new URL(jwksURI)) as JWTVerifyGetKey
-    )
+    return (this.#jwks ??=
+      this.options.jwksResolver?.(jwksURI) ?? (createRemoteJWKSet(new URL(jwksURI)) as JWTVerifyGetKey))
   }
 }
 

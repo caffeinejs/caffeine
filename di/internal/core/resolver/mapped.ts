@@ -18,10 +18,8 @@ export const mappedFactory: InjectionResolverFactory = ctx => {
     }
 
     throw new ErrNoResolutionForKey(
-      `${describeContext(ctx)}: no bindings registered for key "${keyStr(key)}"`
-      + solutions(
-        `- Register a binding for key "${keyStr(key)}"`,
-      ),
+      `${describeContext(ctx)}: no bindings registered for key "${keyStr(key)}"` +
+        solutions(`- Register a binding for key "${keyStr(key)}"`),
     )
   }
 

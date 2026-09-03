@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest'
 import { token } from '@caffeinejs/di'
+import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
+
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider } from './config/index.js'
-import { type Service } from './service.js'
 import { defineFeature, defineKeyedFeature, ErrFeatureAlreadyInstalled } from './plugin.js'
+import { type Service } from './service.js'
 
 const kSentinel = token<any>(Symbol('extend-sentinel'))
 
@@ -96,8 +97,9 @@ describe('BaseApplicationBuilder.extend', () => {
     })
 
     expect(() => createApplication().extend(feature).extend(feature)).toThrow(ErrFeatureAlreadyInstalled)
-    expect(() => createApplication().extend(feature('orders')).extend(feature('orders')))
-      .toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().extend(feature('orders')).extend(feature('orders'))).toThrow(
+      ErrFeatureAlreadyInstalled,
+    )
   })
 
   it('allows distinct keyed instances', () => {

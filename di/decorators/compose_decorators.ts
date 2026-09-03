@@ -52,8 +52,7 @@ export function composeDecorators(
 ): (target: any, context: any) => any {
   return (target: any, context: any) => {
     if (context.kind === 'field') {
-      const initializers = decorators.map(dec => dec(undefined, context))
-        .filter(Boolean)
+      const initializers = decorators.map(dec => dec(undefined, context)).filter(Boolean)
       return initializers.length === 0 ? undefined : (v: any) => initializers.reduce((acc, fn) => fn(acc), v)
     }
     let current = target

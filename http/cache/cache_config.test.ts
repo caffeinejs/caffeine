@@ -1,14 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
 import { $t } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { kCacheStatusHeader } from './keys.js'
 
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
 
-const headerOf = (app: WebApplication): string | undefined =>
-  app.container.getOptional<string>(kCacheStatusHeader)
+const headerOf = (app: WebApplication): string | undefined => app.container.getOptional<string>(kCacheStatusHeader)
 
 describe('cache configuration', () => {
   let app: WebApplication | undefined
@@ -46,9 +46,13 @@ describe('cache configuration', () => {
     })
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(schema, c => c.source(new InlineConfigProvider({
-        app: { cache: { statusHeader: 'X-Moved' } },
-      })))
+      .config(schema, c =>
+        c.source(
+          new InlineConfigProvider({
+            app: { cache: { statusHeader: 'X-Moved' } },
+          }),
+        ),
+      )
       .cache(c => c.config(x => x.app.cache).statusHeader('X-From-Code'))
       .build()
 

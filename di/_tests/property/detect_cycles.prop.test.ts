@@ -1,9 +1,10 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { token } from '../../key.js'
+import { describe, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
 import { ErrCircularDependency } from '../../errors.js'
 import { $i } from '../../injection.js'
+import { token } from '../../key.js'
 import { addBackEdge, buildAcyclicEdges, buildDiFromEdges } from './helpers/cycle_di_builder.js'
 
 function maxAcyclicEdges(nodeCount: number): number {
@@ -35,8 +36,7 @@ describe('detectCycles via init (property)', function () {
     'closing a dependency chain with a back-edge creates a cycle',
     async nodeCount => {
       const keys = Array.from({ length: nodeCount }, (_, i) => `n${i}`)
-      const chain = keys.slice(1)
-        .map((key, i) => ({ from: key, to: keys[i]! }))
+      const chain = keys.slice(1).map((key, i) => ({ from: key, to: keys[i]! }))
       const cyclic = addBackEdge(chain, keys[0]!, keys[nodeCount - 1]!)
       const di = buildDiFromEdges(cyclic)
 
@@ -55,25 +55,16 @@ describe('detectCycles via init (property)', function () {
 
   it('optional closing edge does not trigger ErrCircularDependency at init', async function () {
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(token<any>('a'), t => t
-      .toFunction((_b: unknown) => ({}), [$i.optional(token<any>('b'))])
-      .lazy())
-    di.bind(token<any>('b'), t => t
-      .toFunction((_a: unknown) => ({}), [token<any>('a')])
-      .lazy())
+    di.bind(token<any>('a'), t => t.toFunction((_b: unknown) => ({}), [$i.optional(token<any>('b'))]).lazy())
+    di.bind(token<any>('b'), t => t.toFunction((_a: unknown) => ({}), [token<any>('a')]).lazy())
 
     await expect(di.init()).resolves.toBeUndefined()
   })
 
   it('defer closing edge does not trigger ErrCircularDependency at init', async function () {
     const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(token<any>('a'), t => t
-      .toFunction(
-        (_b: unknown) => ({}),
-        [$i.defer(() => token<any>('b'))],
-      ))
-    di.bind(token<any>('b'), t => t
-      .toFunction((_a: unknown) => ({}), [token<any>('a')]))
+    di.bind(token<any>('a'), t => t.toFunction((_b: unknown) => ({}), [$i.defer(() => token<any>('b'))]))
+    di.bind(token<any>('b'), t => t.toFunction((_a: unknown) => ({}), [token<any>('a')]))
 
     await expect(di.init()).resolves.toBeUndefined()
   })

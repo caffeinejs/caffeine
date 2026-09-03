@@ -1,5 +1,5 @@
-import fastifyCors from '@fastify/cors'
 import { ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
+import fastifyCors from '@fastify/cors'
 
 export type CorsOptions = NonNullable<Parameters<typeof fastifyCors>[1]>
 

@@ -1,4 +1,5 @@
 import { isMainThread, parentPort, workerData } from 'node:worker_threads'
+
 import { Storage } from '@google-cloud/storage'
 
 export type WorkerData = {
@@ -9,9 +10,7 @@ export type WorkerData = {
   projectID: string
 }
 
-export type WorkerMessage
-  = | { type: 'config:available', generation: string }
-    | { type: 'error', message: string }
+export type WorkerMessage = { type: 'config:available'; generation: string } | { type: 'error'; message: string }
 
 if (!isMainThread && parentPort) {
   const port = parentPort

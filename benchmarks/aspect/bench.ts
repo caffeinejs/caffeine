@@ -1,14 +1,18 @@
-import { bench, group, run } from 'mitata'
 import { $aop, Aspect, CaffeineIoC, Injectable, Order, type JoinPoint, type MethodAspect } from '@caffeinejs/di'
+import { bench, group, run } from 'mitata'
 
 @Injectable()
 class Plain {
-  add(a: number, b: number): number { return a + b }
+  add(a: number, b: number): number {
+    return a + b
+  }
 }
 
 @Injectable()
 class WithBeforeAspect {
-  add(a: number, b: number): number { return a + b }
+  add(a: number, b: number): number {
+    return a + b
+  }
 }
 
 @Aspect([$aop.forClass(WithBeforeAspect, 'add')])
@@ -21,7 +25,9 @@ void BeforeAspect
 
 @Injectable()
 class WithAroundAspect {
-  add(a: number, b: number): number { return a + b }
+  add(a: number, b: number): number {
+    return a + b
+  }
 }
 
 @Aspect([$aop.forClass(WithAroundAspect, 'add')])
@@ -34,7 +40,9 @@ void AroundAspect
 
 @Injectable()
 class WithStackedAspects {
-  add(a: number, b: number): number { return a + b }
+  add(a: number, b: number): number {
+    return a + b
+  }
 }
 
 @Order(1)

@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import {
   AllowAnonymous,
   AuthenticateResult,
@@ -59,13 +60,20 @@ class DefaultSchemeHandler extends BaseAuthenticationHandler<object> {
 function buildApp(): WebApplication {
   const builder = createWebApplication(fastifyAdapterFactory(fastify()))
 
-  builder.authentication(auth => auth
-    .addStrategy('Default', new DefaultSchemeHandler())
-    .addBasic('Basic', b => b.realm('Docs').validate((_ctx, user, pass) =>
-      user === 'admin' && pass === 'admin123'
-        ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', 'admin', '')])])
-        : null))
-    .default('Default'))
+  builder.authentication(auth =>
+    auth
+      .addStrategy('Default', new DefaultSchemeHandler())
+      .addBasic('Basic', b =>
+        b
+          .realm('Docs')
+          .validate((_ctx, user, pass) =>
+            user === 'admin' && pass === 'admin123'
+              ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', 'admin', '')])])
+              : null,
+          ),
+      )
+      .default('Default'),
+  )
 
   return builder.build().useAuthenticationAndAuthorization() as WebApplication
 }
@@ -98,7 +106,7 @@ describe('per-route authentication schemes', () => {
     const res = await app.fetch('/docs-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
 
     expect(res.status).toBe(200)
-    expect((await res.json() as Record<string, unknown>).sub).toBe('admin')
+    expect(((await res.json()) as Record<string, unknown>).sub).toBe('admin')
   })
 
   it('challenges with the named scheme, not the application default', async () => {
@@ -161,12 +169,12 @@ describe('per-route authentication schemes', () => {
 
     const viaBasic = await app.fetch('/multi', { headers: { authorization: basicHeader('admin', 'admin123') } })
     expect(viaBasic.status).toBe(200)
-    expect((await viaBasic.json() as Record<string, unknown>).sub).toBe('admin')
+    expect(((await viaBasic.json()) as Record<string, unknown>).sub).toBe('admin')
 
     // The second scheme still authenticates when the first cannot.
     const viaDefault = await app.fetch('/multi', { headers: { 'x-default-user': 'dana' } })
     expect(viaDefault.status).toBe(200)
-    expect((await viaDefault.json() as Record<string, unknown>).sub).toBe('dana')
+    expect(((await viaDefault.json()) as Record<string, unknown>).sub).toBe('dana')
   })
 
   it('leaves a route naming no scheme on the application default', async () => {
@@ -186,7 +194,7 @@ describe('per-route authentication schemes', () => {
 
     const authenticated = await app.fetch('/plain', { headers: { 'x-default-user': 'dana' } })
     expect(authenticated.status).toBe(200)
-    expect((await authenticated.json() as Record<string, unknown>).sub).toBe('dana')
+    expect(((await authenticated.json()) as Record<string, unknown>).sub).toBe('dana')
 
     expect((await app.fetch('/plain')).status).toBe(401)
   })
@@ -212,7 +220,7 @@ describe('per-route authentication schemes', () => {
     const res = await app.fetch('/anon', { headers: { 'x-default-user': 'dana' } })
 
     expect(res.status).toBe(200)
-    expect((await res.json() as Record<string, unknown>).sub).toBe('dana')
+    expect(((await res.json()) as Record<string, unknown>).sub).toBe('dana')
   })
 
   // Guards the effective-authz merge in buildRouting: only the route's own options used to be surfaced, so a
@@ -266,7 +274,7 @@ describe('per-route authentication schemes', () => {
 
     expect(res.status).toBe(200)
     // Both, in the order the decorator named them.
-    expect((await res.json() as { types: string[] }).types).toEqual(['Default', 'Basic'])
+    expect(((await res.json()) as { types: string[] }).types).toEqual(['Default', 'Basic'])
   })
 
   it('still authenticates when only one of the named schemes is satisfied', async () => {
@@ -286,7 +294,7 @@ describe('per-route authentication schemes', () => {
 
     const res = await app.fetch('/either-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
     expect(res.status).toBe(200)
-    expect((await res.json() as { types: string[] }).types).toEqual(['Basic'])
+    expect(((await res.json()) as { types: string[] }).types).toEqual(['Basic'])
   })
 
   it('refuses to start when a route names a scheme that was never registered', async () => {

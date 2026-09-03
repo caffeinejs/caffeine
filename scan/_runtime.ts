@@ -37,16 +37,16 @@ export const Runtime = {
   },
 
   get swc(): boolean {
-    cache.swc
-      ??= checkPreloadModules('@swc/register')
-        || checkPreloadModules('@swc-node/register')
-        || checkProcessArgv('.bin/swc-node')
+    cache.swc ??=
+      checkPreloadModules('@swc/register') ||
+      checkPreloadModules('@swc-node/register') ||
+      checkProcessArgv('.bin/swc-node')
     return cache.swc
   },
 
   get tsNode(): boolean {
-    cache.tsNode
-      ??= Symbol.for('ts-node.register.instance') in process || checkProcessArgv('ts-node/esm') || !!process.env.TS_NODE_DEV
+    cache.tsNode ??=
+      Symbol.for('ts-node.register.instance') in process || checkProcessArgv('ts-node/esm') || !!process.env.TS_NODE_DEV
     return cache.tsNode
   },
 
@@ -67,25 +67,25 @@ export const Runtime = {
   },
 
   get supportNativeTypeScript(): boolean {
-    cache.supportNativeTypeScript
-      ??= process.features?.typescript !== undefined && process.features.typescript !== false
+    cache.supportNativeTypeScript ??=
+      process.features?.typescript !== undefined && process.features.typescript !== false
     return cache.supportNativeTypeScript
   },
 
   get supportTypeScript(): boolean {
-    cache.supportTypeScript
-      ??= checkEnvVariable('CAFFEINEJS_AUTOLOAD_TYPESCRIPT')
-        || Runtime.bun
-        || Runtime.deno
-        || Runtime.tsNode
-        || Runtime.vitest
-        || Runtime.babelNode
-        || Runtime.jest
-        || Runtime.swc
-        || Runtime.tsm
-        || Runtime.tsx
-        || Runtime.esbuild
-        || Runtime.supportNativeTypeScript
+    cache.supportTypeScript ??=
+      checkEnvVariable('CAFFEINEJS_AUTOLOAD_TYPESCRIPT') ||
+      Runtime.bun ||
+      Runtime.deno ||
+      Runtime.tsNode ||
+      Runtime.vitest ||
+      Runtime.babelNode ||
+      Runtime.jest ||
+      Runtime.swc ||
+      Runtime.tsm ||
+      Runtime.tsx ||
+      Runtime.esbuild ||
+      Runtime.supportNativeTypeScript
     return cache.supportTypeScript
   },
 }

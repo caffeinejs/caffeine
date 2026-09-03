@@ -54,8 +54,12 @@ abstract class Cache {
 @Extends()
 class InMemoryCache extends Cache {
   private readonly store = new Map<string, unknown>()
-  get(key: string) { return this.store.get(key) }
-  set(key: string, value: unknown) { this.store.set(key, value) }
+  get(key: string) {
+    return this.store.get(key)
+  }
+  set(key: string, value: unknown) {
+    this.store.set(key, value)
+  }
 }
 
 // --- application code (optional override) ---
@@ -64,8 +68,12 @@ class InMemoryCache extends Cache {
 @Extends()
 class RedisCache extends Cache {
   constructor(private readonly client: RedisClient) {}
-  get(key: string) { return this.client.get(key) }
-  set(key: string, value: unknown) { this.client.set(key, JSON.stringify(value)) }
+  get(key: string) {
+    return this.client.get(key)
+  }
+  set(key: string, value: unknown) {
+    this.client.set(key, JSON.stringify(value))
+  }
 }
 ```
 
@@ -91,12 +99,12 @@ class LibConfig {
   @Fallback()
   @Provides(kCache)
   cache(): Cache {
-    return new InMemoryCache()   // overridable default
+    return new InMemoryCache() // overridable default
   }
 
   @Provides(kMetrics)
   metrics(): Metrics {
-    return new NoopMetrics()     // always registered — not a fallback
+    return new NoopMetrics() // always registered — not a fallback
   }
 }
 
@@ -105,7 +113,7 @@ class LibConfig {
 class AppConfig {
   @Provides(kCache)
   cache(): Cache {
-    return new RedisCache(process.env.REDIS_URL!)  // takes precedence
+    return new RedisCache(process.env.REDIS_URL!) // takes precedence
   }
 }
 ```
@@ -147,13 +155,10 @@ import { CaffeineIoC } from '@caffeinejs/di'
 const di = new CaffeineIoC({ decorators: false })
 
 // Library registers its default
-di.bind(Cache, t => t
-  .toClass(InMemoryCache)
-  .fallback())
+di.bind(Cache, t => t.toClass(InMemoryCache).fallback())
 
 // Application optionally registers an override — wins over fallback
-di.bind(Cache, t => t
-  .toClass(RedisCache))
+di.bind(Cache, t => t.toClass(RedisCache))
 
 await di.init()
 
@@ -182,12 +187,12 @@ explicit `bind()` is an override, so only calling `.fallback()` makes it a fallb
 
 Both can suppress a binding, but the mechanism differs.
 
-| | `@Fallback` | `@ConditionalOn` |
-|---|---|---|
-| Trigger | Another non-fallback binding exists for the key | A predicate returns `false` |
-| Resolution point | After all bindings are collected | During `init()` predicate evaluation |
-| Combines with `@ConditionalOn` | Yes — both checks apply | — |
-| Best for | Optional library defaults, safe overrides | Environment flags, presence checks |
+|                                | `@Fallback`                                     | `@ConditionalOn`                     |
+| ------------------------------ | ----------------------------------------------- | ------------------------------------ |
+| Trigger                        | Another non-fallback binding exists for the key | A predicate returns `false`          |
+| Resolution point               | After all bindings are collected                | During `init()` predicate evaluation |
+| Combines with `@ConditionalOn` | Yes — both checks apply                         | —                                    |
+| Best for                       | Optional library defaults, safe overrides       | Environment flags, presence checks   |
 
 Use `@Fallback` when the suppression condition is "something else already handles this."
 Use `@ConditionalOn` when the suppression condition is "a runtime fact is not met."

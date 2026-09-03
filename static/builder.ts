@@ -1,6 +1,7 @@
+import { NotFoundFallback } from '@caffeinejs/http'
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, ServiceBootstrapIn } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
-import { NotFoundFallback } from '@caffeinejs/http'
+
 import { STATIC_CONFIG_NAMESPACE, staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
 import { StaticExtension } from './extension.js'
@@ -116,16 +117,10 @@ export class StaticBuilder<C = unknown> implements Service {
     // and registers it as a Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings
     // are handed to it directly: the builder is holding them right here, and routing them through a container
     // key only to read them back at server setup adds a lookup and a key without adding a decision.
-    kit.container
-      .bind(StaticExtension, t => t
-        .toValue(new StaticExtension(resolved.config.mounts, spa))
-        .extends())
+    kit.container.bind(StaticExtension, t => t.toValue(new StaticExtension(resolved.config.mounts, spa)).extends())
 
     if (spa !== undefined) {
-      kit.container
-        .bind(SPAFallback, t => t
-          .toValue(new SPAFallback(spa))
-          .extends(NotFoundFallback))
+      kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
     }
 
     return Promise.resolve()

@@ -29,7 +29,10 @@ function checkNoMix(ctx: ScopeValidationContext, entries: IterableIterator<[Inje
   runCheck(entries, ctx, (ownerScopeID, depScopeID) => ownerScopeID !== depScopeID)
 }
 
-function checkCompatibleScopes(ctx: ScopeValidationContext, entries: IterableIterator<[InjectionToken, Binding]>): void {
+function checkCompatibleScopes(
+  ctx: ScopeValidationContext,
+  entries: IterableIterator<[InjectionToken, Binding]>,
+): void {
   runCheck(entries, ctx, (ownerScopeID, depScopeID) => isDurable(ownerScopeID, ctx) && !isDurable(depScopeID, ctx))
 }
 
@@ -144,7 +147,13 @@ function checkObjectInjection(
 
     if ('children' in child) {
       checkObjectInjection(
-        ownerKey, ownerScopeID, child as ObjectInjections, childLocation, violations, ctx, isViolation,
+        ownerKey,
+        ownerScopeID,
+        child as ObjectInjections,
+        childLocation,
+        violations,
+        ctx,
+        isViolation,
       )
     } else {
       checkInjection(ownerKey, ownerScopeID, child as InjectionDescriptor, childLocation, violations, ctx, isViolation)

@@ -1,7 +1,9 @@
 import { writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
 import { afterEach, describe, expect, it } from 'vitest'
+
 import { FileConfigProvider, type ConfigFileParser } from '../../providers/file_provider.js'
 import { JSONConfigProvider } from '../../providers/json_provider.js'
 import type { ResolutionContext } from '../../types.js'
@@ -62,9 +64,13 @@ describe('JSONConfigProvider', () => {
 
 describe('FileConfigProvider', () => {
   // The format seam: any parser at all, no extension registry and no library shipped by std.
-  const ini: ConfigFileParser = text => Object.fromEntries(
-    text.split('\n').filter(line => line !== '').map(line => line.split('=') as [string, string]),
-  )
+  const ini: ConfigFileParser = text =>
+    Object.fromEntries(
+      text
+        .split('\n')
+        .filter(line => line !== '')
+        .map(line => line.split('=') as [string, string]),
+    )
 
   it('uses the parser it was given, whatever the extension says', async () => {
     const path = await writeTmp('custom-config.ini', 'db.host=localhost\ndb.port=5432')

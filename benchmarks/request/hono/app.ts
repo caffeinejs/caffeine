@@ -41,8 +41,7 @@ const stringify = fastJsonStringify({
 export const app = new Hono()
 
 app.use('*', async (c, next) => {
-  c.header('x-request-id', Math.random().toString(36)
-    .slice(2))
+  c.header('x-request-id', Math.random().toString(36).slice(2))
   await next()
 })
 

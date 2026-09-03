@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+
 import { hasDecorator, parseExportedConsts, parseRelativeImports } from './_module_graph_parse.js'
 
 describe('module graph parse', () => {
@@ -10,24 +11,19 @@ describe('module graph parse', () => {
 
   it('collects relative runtime imports and skips import type', () => {
     const text = [
-      'import { Foo } from \'../users/user.js\'',
-      'import type { Bar } from \'../users/types.js\'',
-      'import \'./local.js\'',
-      'export { Baz } from \'../orders/baz.js\'',
-      'import { X } from \'@caffeinejs/di\'',
-      'import {\n  Q\n} from \'../cache/q.js\'',
+      "import { Foo } from '../users/user.js'",
+      "import type { Bar } from '../users/types.js'",
+      "import './local.js'",
+      "export { Baz } from '../orders/baz.js'",
+      "import { X } from '@caffeinejs/di'",
+      "import {\n  Q\n} from '../cache/q.js'",
     ].join('\n')
 
-    expect(parseRelativeImports(text)).toEqual([
-      '../users/user.js',
-      '../orders/baz.js',
-      '../cache/q.js',
-      './local.js',
-    ])
+    expect(parseRelativeImports(text)).toEqual(['../users/user.js', '../orders/baz.js', '../cache/q.js', './local.js'])
   })
 
   it('skips export type from', () => {
-    expect(parseRelativeImports('export type { Foo } from \'../users/foo.js\'')).toEqual([])
+    expect(parseRelativeImports("export type { Foo } from '../users/foo.js'")).toEqual([])
   })
 
   it('collects exported const names', () => {

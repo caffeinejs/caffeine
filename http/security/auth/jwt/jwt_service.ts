@@ -1,5 +1,6 @@
 import { SignJWT, decodeJwt, jwtVerify } from 'jose'
 import type { JWTPayload, JWTVerifyGetKey, JWTVerifyOptions, KeyLike } from 'jose'
+
 import type { JWTKeyResolver, JWTServiceOptions } from './jwt_service_options.js'
 
 // Per-call overrides for sign(). Any field left unset falls back to the service defaults.
@@ -34,9 +35,7 @@ export class JWTService {
     }
 
     if (options.secret != null) {
-      const key = typeof options.secret === 'string'
-        ? new TextEncoder().encode(options.secret)
-        : options.secret
+      const key = typeof options.secret === 'string' ? new TextEncoder().encode(options.secret) : options.secret
       this.#signKey = key
       this.#verifyKey = key
       this.#algorithm = options.algorithm ?? 'HS256'
@@ -61,9 +60,7 @@ export class JWTService {
    * @throws Error when the service has no signing key (verify-only configuration).
    */
   async sign(payload: JWTPayload, options: JWTSignOptions = {}): Promise<string> {
-    const jwt = new SignJWT(payload)
-      .setProtectedHeader({ ...options.header, alg: this.#algorithm })
-      .setIssuedAt()
+    const jwt = new SignJWT(payload).setProtectedHeader({ ...options.header, alg: this.#algorithm }).setIssuedAt()
 
     const issuer = options.issuer ?? this.#options.issuer
     if (issuer != null) {
@@ -118,7 +115,11 @@ export class JWTService {
     // Split calls so each matches a jwtVerify overload (a union arg satisfies neither).
     const resolver = this.#resolver
     const { payload } = resolver
-      ? await jwtVerify(token, (protectedHeader => resolver({ operation: 'verify', protectedHeader })) as JWTVerifyGetKey, verifyOptions)
+      ? await jwtVerify(
+          token,
+          (protectedHeader => resolver({ operation: 'verify', protectedHeader })) as JWTVerifyGetKey,
+          verifyOptions,
+        )
       : await jwtVerify(token, this.#verifyKey!, verifyOptions)
 
     return payload as T

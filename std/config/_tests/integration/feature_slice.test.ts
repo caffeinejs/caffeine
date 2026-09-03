@@ -1,18 +1,22 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+
 import { $t } from '../../../schema/t.js'
-import { ConfigDefinition } from '../../definition.js'
-import { ConfigPriority } from '../../sources.js'
 import { Configuration, kConfiguration } from '../../configuration.js'
+import { ConfigDefinition } from '../../definition.js'
 import { ErrConfigSlices, ErrConfigValidation } from '../../errors.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { MutableConfigProvider } from '../../providers/mutable_provider.js'
+import { ConfigPriority } from '../../sources.js'
 
 const APP_CONFIG = token<any>(Symbol('app.config'))
 
-interface ServerSlice { port: number, host: string }
+interface ServerSlice {
+  port: number
+  host: string
+}
 
 const serverSlice = $t.Object({
   port: $t.Number({ default: 0 }),
@@ -32,10 +36,12 @@ describe('feature slices', () => {
     // The application describes only `db` — under a stripping schema (zod and TypeBox both drop undeclared
     // keys) the `server` namespace would never reach the feature if slices read the validated root.
     definition.schema = z.object({ db: z.object({ url: z.string() }) })
-    definition.sources.add(new InlineConfigProvider({
-      db: { url: 'postgres://x' },
-      server: { port: 8080, host: '127.0.0.1' },
-    }))
+    definition.sources.add(
+      new InlineConfigProvider({
+        db: { url: 'postgres://x' },
+        server: { port: 8080, host: '127.0.0.1' },
+      }),
+    )
 
     const slice = definition.slice<ServerSlice>(['server'], serverSlice)
     await containerFor(definition)
@@ -139,7 +145,7 @@ describe('feature slices', () => {
     // either route to a write fails.
     expect(Object.isFrozen(slice.snapshot())).toBe(true)
     expect(() => {
-      (slice.config as { port: number }).port = 1
+      ;(slice.config as { port: number }).port = 1
     }).toThrow(TypeError)
   })
 
@@ -182,10 +188,13 @@ describe('feature slices', () => {
     mutable.set('other.port', 1)
     definition.sources.add(mutable, ConfigPriority.ENV)
 
-    const server = definition.slice<ServerSlice>(['server'], $t.Object({
-      port: $t.Number({ maximum: 5000 }),
-      host: $t.String({ default: '0.0.0.0' }),
-    }))
+    const server = definition.slice<ServerSlice>(
+      ['server'],
+      $t.Object({
+        port: $t.Number({ maximum: 5000 }),
+        host: $t.String({ default: '0.0.0.0' }),
+      }),
+    )
     const other = definition.slice<{ port: number }>(['other'], $t.Object({ port: $t.Number() }))
 
     const container = await containerFor(definition)
@@ -234,10 +243,13 @@ describe('feature slices', () => {
     mutable.set('server.port', 3000)
     definition.sources.add(mutable, ConfigPriority.ENV)
 
-    definition.slice<ServerSlice>(['server'], $t.Object({
-      port: $t.Number({ maximum: 5000 }),
-      host: $t.String({ default: '0.0.0.0' }),
-    }))
+    definition.slice<ServerSlice>(
+      ['server'],
+      $t.Object({
+        port: $t.Number({ maximum: 5000 }),
+        host: $t.String({ default: '0.0.0.0' }),
+      }),
+    )
 
     const container = await containerFor(definition)
     const configuration = container.get<Configuration<unknown>>(kConfiguration)
@@ -318,10 +330,13 @@ describe('feature slices', () => {
     mutable.set('other.port', 1)
     definition.sources.add(mutable, ConfigPriority.ENV)
 
-    const server = definition.slice<ServerSlice>(['server'], $t.Object({
-      port: $t.Number({ maximum: 5000 }),
-      host: $t.String({ default: '0.0.0.0' }),
-    }))
+    const server = definition.slice<ServerSlice>(
+      ['server'],
+      $t.Object({
+        port: $t.Number({ maximum: 5000 }),
+        host: $t.String({ default: '0.0.0.0' }),
+      }),
+    )
     const other = definition.slice<{ port: number }>(['other'], $t.Object({ port: $t.Number({ default: 0 }) }))
 
     const container = await containerFor(definition)

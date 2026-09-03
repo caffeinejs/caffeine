@@ -58,10 +58,7 @@ export interface FeatureConfigSpec<T> {
  * object so it lands as a unit; `values` goes in key by key, because {@link MutableConfigProvider.set} clears
  * everything under the path it writes and a single whole-object write would have each key erase the last.
  */
-export function defineFeatureConfig<T>(
-  definition: ConfigDefinition,
-  spec: FeatureConfigSpec<T>,
-): ConfigSlice<T> {
+export function defineFeatureConfig<T>(definition: ConfigDefinition, spec: FeatureConfigSpec<T>): ConfigSlice<T> {
   const parts = spec.selector === undefined ? spec.namespace : selectorPath(spec.selector)
 
   if (spec.defaults !== undefined) {

@@ -1,4 +1,6 @@
 import { $t } from '@caffeinejs/std'
+
+import type { ErrorStatusOptions, InferenceOptions } from './options.js'
 import type {
   ExternalDocumentationObject,
   InfoObject,
@@ -8,7 +10,6 @@ import type {
   ServerObject,
   TagObject,
 } from './spec/spec.js'
-import type { ErrorStatusOptions, InferenceOptions } from './options.js'
 
 /** The default location of the OpenAPI settings in the configuration tree. */
 export const OPENAPI_CONFIG_NAMESPACE: readonly string[] = ['openapi']
@@ -82,13 +83,15 @@ const specObject = (): ReturnType<typeof $t.Record> => $t.Record($t.String(), $t
 
 /** The schema governing the OpenAPI slice. Nothing is defaulted — `defaultOpenAPIOptions` already is. */
 export const openapiConfigSchema = $t.Object({
-  routes: $t.Optional($t.Object({
-    base: $t.Optional($t.String()),
-    json: $t.Optional($t.String()),
-    // `false` switches the endpoint off, and is what an env var spelled `=false` coerces to.
-    yaml: $t.Optional($t.Union([$t.String(), $t.Boolean()])),
-    docs: $t.Optional($t.Union([$t.String(), $t.Boolean()])),
-  })),
+  routes: $t.Optional(
+    $t.Object({
+      base: $t.Optional($t.String()),
+      json: $t.Optional($t.String()),
+      // `false` switches the endpoint off, and is what an env var spelled `=false` coerces to.
+      yaml: $t.Optional($t.Union([$t.String(), $t.Boolean()])),
+      docs: $t.Optional($t.Union([$t.String(), $t.Boolean()])),
+    }),
+  ),
   version: $t.Optional($t.String()),
   info: $t.Optional(specObject()),
   servers: $t.Optional($t.Array(specObject())),
@@ -101,13 +104,17 @@ export const openapiConfigSchema = $t.Object({
   dedupeComponents: $t.Optional($t.Boolean()),
   validate: $t.Optional($t.Boolean()),
   ui: $t.Optional(specObject()),
-  infer: $t.Optional($t.Object({
-    validation: $t.Optional($t.Boolean()),
-    auth: $t.Optional($t.Boolean()),
-  })),
-  errors: $t.Optional($t.Object({
-    validation: $t.Optional($t.Number()),
-    unauthorized: $t.Optional($t.Number()),
-    forbidden: $t.Optional($t.Number()),
-  })),
+  infer: $t.Optional(
+    $t.Object({
+      validation: $t.Optional($t.Boolean()),
+      auth: $t.Optional($t.Boolean()),
+    }),
+  ),
+  errors: $t.Optional(
+    $t.Object({
+      validation: $t.Optional($t.Number()),
+      unauthorized: $t.Optional($t.Number()),
+      forbidden: $t.Optional($t.Number()),
+    }),
+  ),
 })

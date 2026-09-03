@@ -17,8 +17,8 @@ export class ErrSchemaNotRepresentable extends ErrCaffeine {
     ...solutions: string[]
   ) {
     super(
-      `Cannot represent the "${context}" schema as JSON Schema: ${path === '' ? 'the root schema' : `"${path}"`}`
-      + ` has type "${jsonType}", which JSON Schema does not define`,
+      `Cannot represent the "${context}" schema as JSON Schema: ${path === '' ? 'the root schema' : `"${path}"`}` +
+        ` has type "${jsonType}", which JSON Schema does not define`,
       'ERR_SCHEMA_NOT_REPRESENTABLE',
       undefined,
       ...solutions,
@@ -44,8 +44,8 @@ export class ErrSchemaConversion extends ErrCaffeine {
       'ERR_SCHEMA_CONVERSION',
       cause,
       'Declare the schema with the "$t" dialect from "@caffeinejs/std", which is JSON Schema already',
-      `Keep the "${vendor}" schema free of constructs that have no JSON Schema equivalent, such as transforms`
-      + ' and custom refinements',
+      `Keep the "${vendor}" schema free of constructs that have no JSON Schema equivalent, such as transforms` +
+        ' and custom refinements',
       'Move validation that cannot be expressed as JSON Schema into the handler',
     )
   }

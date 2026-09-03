@@ -1,6 +1,6 @@
 import { notNil } from '../internal/util/assert/not_nil.js'
-import { Ctor } from '../types.js'
 import { Identifier } from '../key.js'
+import { Ctor } from '../types.js'
 import { extendInjectableAttributes } from './registrar/index.js'
 
 /**

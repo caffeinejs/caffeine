@@ -1,7 +1,9 @@
 import { connect } from 'node:net'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { Admin } from '@platformatic/kafka'
+
 import { createApplication } from '@caffeinejs/std'
+import { Admin } from '@platformatic/kafka'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
 import type { KafkaMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
@@ -24,7 +26,7 @@ class ErrBoom extends Error {
 }
 
 // Fails a fixed number of times per delivery, then succeeds — proves in-process retry over a real broker.
-let retryState!: { attempts: number, done: { promise: Promise<number>, resolve: (n: number) => void } }
+let retryState!: { attempts: number; done: { promise: Promise<number>; resolve: (n: number) => void } }
 function resetRetry(): void {
   let resolve!: (n: number) => void
   const promise = new Promise<number>(res => {
@@ -50,7 +52,7 @@ class RetryingConsumer {
 const RETRY_TOPICS_TOPIC = 'caffeine-kafka-it-rt'
 
 // Fails twice then succeeds, but through non-blocking retry TOPICS (the record traverses -retry-0/-retry-1).
-let rtState!: { attempts: number, done: { promise: Promise<number>, resolve: (n: number) => void } }
+let rtState!: { attempts: number; done: { promise: Promise<number>; resolve: (n: number) => void } }
 function resetRt(): void {
   let resolve!: (n: number) => void
   const promise = new Promise<number>(res => {
@@ -96,7 +98,7 @@ async function brokerUp(): Promise<boolean> {
 
 // A handler capturing the next delivery on the integration topic into a resolvable promise. Uses @KafkaParams
 // to prove argument extraction (value + key) works over a real broker, while still keeping the raw message.
-let received!: { promise: Promise<Delivered>, resolve: (d: Delivered) => void }
+let received!: { promise: Promise<Delivered>; resolve: (d: Delivered) => void }
 function resetReceived(): void {
   let resolve!: (d: Delivered) => void
   const promise = new Promise<Delivered>(res => {
@@ -118,11 +120,13 @@ class IntegrationConsumer {
 const up = await brokerUp()
 
 describe.skipIf(!up)('kafka integration (real broker)', () => {
-  const app = createApplication({}).extend(kafka, k => k
-    .brokers(BROKER)
-    .clientId('caffeine-kafka-it')
-    // Fresh group per run so the consumer reads messages produced after it joins.
-    .groupId(`caffeine-kafka-it-${Date.now()}`))
+  const app = createApplication({}).extend(kafka, k =>
+    k
+      .brokers(BROKER)
+      .clientId('caffeine-kafka-it')
+      // Fresh group per run so the consumer reads messages produced after it joins.
+      .groupId(`caffeine-kafka-it-${Date.now()}`),
+  )
   const built = app.build()
 
   beforeAll(async () => {

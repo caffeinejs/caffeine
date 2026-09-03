@@ -1,8 +1,9 @@
 import type { JWTPayload } from 'jose'
+
 import { ErrHTTPUnauthorized } from '../../../error/http.js'
 import type { Principal } from '../../index.js'
-import { JWTService } from '../jwt/jwt_service.js'
 import { formatToken, hashToken, newSeries, newToken, parseToken, tokenMatches } from '../internal/series_token.js'
+import { JWTService } from '../jwt/jwt_service.js'
 import type { RefreshPrincipalResolver, RefreshTokenOptions } from './refresh_options.js'
 import type { RefreshTokenStore } from './refresh_token_store.js'
 

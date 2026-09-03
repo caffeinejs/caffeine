@@ -1,10 +1,10 @@
 import { Binding } from '../../../binding.js'
-import { keyStr } from '../../../key.js'
-import { Factory } from '../../../factory.js'
-import { Scope } from '../../../scope.js'
-import { ResolutionContext } from '../../../resolution_context.js'
 import { ErrIllegalScopeState, ErrNoRequestStorageSet, ErrOutOfScope } from '../../../errors.js'
+import { Factory } from '../../../factory.js'
+import { keyStr } from '../../../key.js'
 import { RequestScopeStorage } from '../../../request_scope_manager.js'
+import { ResolutionContext } from '../../../resolution_context.js'
+import { Scope } from '../../../scope.js'
 import { RequestScopeContext } from './request_context.js'
 
 export class RequestScope implements Scope {
@@ -33,17 +33,16 @@ export class RequestScope implements Scope {
       throw new ErrIllegalScopeState('A request scope block is already in progress: only one is allowed at a time')
     }
 
-    return (this._storage! as RequestScopeStorage<RequestScopeContext>)
-      .run(new RequestScopeContext(), async () => {
-        try {
-          return await Promise.resolve(fn())
-        } finally {
-          const store = this._storage!.getStore()
-          if (store) {
-            await store.destroy()
-          }
+    return (this._storage! as RequestScopeStorage<RequestScopeContext>).run(new RequestScopeContext(), async () => {
+      try {
+        return await Promise.resolve(fn())
+      } finally {
+        const store = this._storage!.getStore()
+        if (store) {
+          await store.destroy()
         }
-      })
+      }
+    })
   }
 
   provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {
@@ -72,8 +71,7 @@ export class RequestScope implements Scope {
   cachedInstance<T>(binding: Binding<T>): T | undefined {
     this.checkAndthrowIfNoStorageIsSet()
 
-    return this._storage!.getStore()
-      ?.get(binding.id) as T | undefined
+    return this._storage!.getStore()?.get(binding.id) as T | undefined
   }
 
   reset(_binding: Binding): void {

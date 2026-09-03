@@ -79,9 +79,8 @@ export function resolveShutdownOptions(config: ShutdownConfig = {}, env: EnvLike
 
   return {
     drainDelayMs: config.drainDelay === undefined ? defaults.drainDelayMs : toMillis(config.drainDelay),
-    shutdownTimeoutMs: config.shutdownTimeout === undefined
-      ? defaults.shutdownTimeoutMs
-      : toMillis(config.shutdownTimeout),
+    shutdownTimeoutMs:
+      config.shutdownTimeout === undefined ? defaults.shutdownTimeoutMs : toMillis(config.shutdownTimeout),
     signals: config.signals ?? defaults.signals,
     dispatcher: config.dispatcher ?? defaults.dispatcher,
   }

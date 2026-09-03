@@ -1,9 +1,25 @@
-import { describe, it, expect } from 'vitest'
-import fastify from 'fastify'
 import type { Ctor, Provider } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std'
 import { Injectable, Lifetime, Named, Primary, Scopes, token } from '@caffeinejs/di'
-import { Catch, CatchWith, type Context, Controller, ErrHTTPNotFound, ErrorHandler, ErrorHandlerProvider, Get, Args, Post, Schema, createWebApplication, fastifyAdapterFactory, $p } from '../index.js'
+import { $t } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
+import {
+  Catch,
+  CatchWith,
+  type Context,
+  Controller,
+  ErrHTTPNotFound,
+  ErrorHandler,
+  ErrorHandlerProvider,
+  Get,
+  Args,
+  Post,
+  Schema,
+  createWebApplication,
+  fastifyAdapterFactory,
+  $p,
+} from '../index.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
 // ---------------------------------------------------------------------------

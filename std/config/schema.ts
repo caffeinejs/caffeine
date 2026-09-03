@@ -1,5 +1,6 @@
 import type { TSchema } from '@sinclair/typebox'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
+
 import type { AnySchema, InferSchema } from '../schema/schema.js'
 import { validateSchema } from '../schema/validate.js'
 import { ErrConfigValidation } from './errors.js'

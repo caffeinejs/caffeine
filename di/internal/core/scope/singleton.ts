@@ -1,9 +1,9 @@
 import { Binding } from '../../../binding.js'
-import { Scope } from '../../../scope.js'
-import { Factory } from '../../../factory.js'
-import { ResolutionContext } from '../../../resolution_context.js'
 import { ErrIllegalScopeState } from '../../../errors.js'
+import { Factory } from '../../../factory.js'
 import { keyStr } from '../../../key.js'
+import { ResolutionContext } from '../../../resolution_context.js'
+import { Scope } from '../../../scope.js'
 
 export class SingletonScope implements Scope {
   protected readonly _cachedInstances = new Map<number, unknown>()
@@ -24,8 +24,8 @@ export class SingletonScope implements Scope {
 
     if (ctx.binding.async) {
       throw new ErrIllegalScopeState(
-        'Async provided instances must be provided externally by the container.\n'
-        + `Check the key ${keyStr(ctx.key)}. In case you really need the instance to be undefined, use "null" instead.`,
+        'Async provided instances must be provided externally by the container.\n' +
+          `Check the key ${keyStr(ctx.key)}. In case you really need the instance to be undefined, use "null" instead.`,
       )
     }
 

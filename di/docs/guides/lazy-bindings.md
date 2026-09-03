@@ -12,11 +12,11 @@ import { Lazy } from '@caffeinejs/di/decorators'
 
 ## Default behaviour by scope
 
-| Scope | Default |
-|---|---|
-| `SINGLETON` | Eager — constructed during `init()` |
-| `CONTAINER` | Eager — constructed during `init()` |
-| `REFRESH` | Eager — constructed during `init()` |
+| Scope       | Default                                                                     |
+| ----------- | --------------------------------------------------------------------------- |
+| `SINGLETON` | Eager — constructed during `init()`                                         |
+| `CONTAINER` | Eager — constructed during `init()`                                         |
+| `REFRESH`   | Eager — constructed during `init()`                                         |
 | `TRANSIENT` | Always lazy — a new instance is created on every `get()`, never pre-created |
 
 `@Lazy()` overrides the scope default for any scope. `TRANSIENT` ignores the lazy flag
@@ -139,13 +139,9 @@ import { CaffeineIoC } from '@caffeinejs/di'
 
 const di = new CaffeineIoC({ decorators: false })
 
-di.bind(HeavyService, t => t
-  .toSelf()
-  .lazy())                  // deferred to first get()
+di.bind(HeavyService, t => t.toSelf().lazy()) // deferred to first get()
 
-di.bind(CriticalService, t => t
-  .toSelf()
-  .lazy(false))             // constructed during init()
+di.bind(CriticalService, t => t.toSelf().lazy(false)) // constructed during init()
 
 await di.init()
 ```

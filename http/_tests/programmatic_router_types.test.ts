@@ -1,19 +1,19 @@
-import { describe, expectTypeOf, it } from 'vitest'
 import { $i, type Provider } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
+import { describe, expectTypeOf, it } from 'vitest'
+
 import { Router, blend, createWebApplication, fst } from '../index.js'
 import type { PathParams, RoutesOf } from '../routing/programmatic/types.js'
 
-class Greeter { }
-class Audit { }
-abstract class Validator { }
+class Greeter {}
+class Audit {}
+abstract class Validator {}
 
 describe('path parameters', () => {
   it('reads them off a literal path', () => {
     expectTypeOf<PathParams<'/pets'>>().toEqualTypeOf<Record<never, never>>()
     expectTypeOf<PathParams<'/pets/:id'>>().toEqualTypeOf<{ id: string }>()
-    expectTypeOf<PathParams<'/pets/:petID/orders/:orderID'>>()
-      .toEqualTypeOf<{ petID: string } & { orderID: string }>()
+    expectTypeOf<PathParams<'/pets/:petID/orders/:orderID'>>().toEqualTypeOf<{ petID: string } & { orderID: string }>()
   })
 
   it('treats a matching constraint as part of the pattern, not the name', () => {
@@ -43,7 +43,7 @@ describe('handler context', () => {
     const router = new Router('/pets/:petID')
 
     router.get('/orders/:orderID').handler(ctx => {
-      expectTypeOf(ctx.req.param()).toEqualTypeOf<{ petID: string, orderID: string }>()
+      expectTypeOf(ctx.req.param()).toEqualTypeOf<{ petID: string; orderID: string }>()
       return ctx.body()
     })
   })
@@ -115,23 +115,29 @@ describe('injected dependencies', () => {
   it('merges a route injection over the group one, letting a name be re-bound', () => {
     const router = new Router('/merged').inject({ greeter: Greeter, audit: Audit })
 
-    router.get('/').inject({ audit: $i.optional(Audit) }).handler((_ctx, deps) => {
-      expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
-      expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
-      return null
-    })
+    router
+      .get('/')
+      .inject({ audit: $i.optional(Audit) })
+      .handler((_ctx, deps) => {
+        expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
+        expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
+        return null
+      })
   })
 
   it('passes a group injection down into a nested group', () => {
     const router = new Router('/outer').inject({ greeter: Greeter })
 
     router.group('/inner', inner => {
-      inner.inject({ audit: Audit }).get('/:id').handler((ctx, deps) => {
-        expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
-        expectTypeOf(deps.audit).toEqualTypeOf<Audit>()
-        expectTypeOf(ctx.req.param()).toEqualTypeOf<{ id: string }>()
-        return null
-      })
+      inner
+        .inject({ audit: Audit })
+        .get('/:id')
+        .handler((ctx, deps) => {
+          expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
+          expectTypeOf(deps.audit).toEqualTypeOf<Audit>()
+          expectTypeOf(ctx.req.param()).toEqualTypeOf<{ id: string }>()
+          return null
+        })
     })
   })
 })
@@ -164,18 +170,24 @@ describe('a spec built from the helpers handed to inject', () => {
   it('merges over the group one whichever form each was written in', () => {
     const router = new Router('/merged').inject(i => ({ greeter: Greeter, audit: i.allOf(Audit) }))
 
-    router.get('/').inject({ audit: $i.optional(Audit) }).handler((_ctx, deps) => {
-      expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
-      expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
-      return null
-    })
+    router
+      .get('/')
+      .inject({ audit: $i.optional(Audit) })
+      .handler((_ctx, deps) => {
+        expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
+        expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
+        return null
+      })
 
     const other = new Router('/other').inject({ greeter: Greeter })
 
-    other.get('/').inject(i => ({ greeter: i.provide(Greeter) })).handler((_ctx, deps) => {
-      expectTypeOf(deps.greeter).toEqualTypeOf<Provider<Greeter>>()
-      return null
-    })
+    other
+      .get('/')
+      .inject(i => ({ greeter: i.provide(Greeter) }))
+      .handler((_ctx, deps) => {
+        expectTypeOf(deps.greeter).toEqualTypeOf<Provider<Greeter>>()
+        return null
+      })
   })
 
   it('carries a constant, which no container binding backs', () => {
@@ -191,11 +203,14 @@ describe('a spec built from the helpers handed to inject', () => {
     const router = new Router('/outer').inject(i => ({ all: i.allOf(Validator) }))
 
     router.group('/inner', inner => {
-      inner.inject(i => ({ audit: i.optional(Audit) })).get('/').handler((_ctx, deps) => {
-        expectTypeOf(deps.all).toEqualTypeOf<Validator[]>()
-        expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
-        return null
-      })
+      inner
+        .inject(i => ({ audit: i.optional(Audit) }))
+        .get('/')
+        .handler((_ctx, deps) => {
+          expectTypeOf(deps.all).toEqualTypeOf<Validator[]>()
+          expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
+          return null
+        })
     })
   })
 })
@@ -209,8 +224,10 @@ describe('route accumulation', () => {
 
   it('carries one descriptor per route of a chained declaration', () => {
     const pets = new Router('/pets')
-      .get('/').handler(() => [] as Array<{ id: string }>)
-      .post('/:id').schema({ params: $t.Object({ id: $t.Integer() }), body: petSchema })
+      .get('/')
+      .handler(() => [] as Array<{ id: string }>)
+      .post('/:id')
+      .schema({ params: $t.Object({ id: $t.Integer() }), body: petSchema })
       .handler(() => 1)
 
     type Routes = RoutesOf<typeof pets>
@@ -221,7 +238,7 @@ describe('route accumulation', () => {
     type Created = Extract<Routes, { method: 'POST' }>
     expectTypeOf<Created['path']>().toEqualTypeOf<'/pets/:id'>()
     expectTypeOf<Created['params']>().toEqualTypeOf<{ id: number }>()
-    expectTypeOf<Created['body']>().toEqualTypeOf<{ id: string, name: string }>()
+    expectTypeOf<Created['body']>().toEqualTypeOf<{ id: string; name: string }>()
     expectTypeOf<Created['output']>().toEqualTypeOf<number>()
   })
 
@@ -231,28 +248,25 @@ describe('route accumulation', () => {
       .schema({ response: { 200: petSchema } })
       .handler(() => 'not the contract')
 
-    expectTypeOf<RoutesOf<typeof pets>['output']>().toEqualTypeOf<{ id: string, name: string }>()
+    expectTypeOf<RoutesOf<typeof pets>['output']>().toEqualTypeOf<{ id: string; name: string }>()
   })
 
   it('reports unknown for a handler that answered through the context', () => {
-    const pets = new Router('/pets')
-      .get('/:id')
-      .handler(ctx => ctx.body({ id: 1 }))
+    const pets = new Router('/pets').get('/:id').handler(ctx => ctx.body({ id: 1 }))
 
     expectTypeOf<RoutesOf<typeof pets>['output']>().toEqualTypeOf<unknown>()
   })
 
   it('unwraps an async handler', () => {
-    const pets = new Router('/pets')
-      .get('/:id')
-      .handler(async () => ({ id: 'a' }))
+    const pets = new Router('/pets').get('/:id').handler(async () => ({ id: 'a' }))
 
     expectTypeOf<RoutesOf<typeof pets>['output']>().toEqualTypeOf<{ id: string }>()
   })
 
   it('folds a nested group in, with its full path', () => {
     const api = new Router('/api')
-      .get('/health').handler(() => ({ ok: true }))
+      .get('/health')
+      .handler(() => ({ ok: true }))
       .group('/v1', v1 => v1.get('/pets').handler(() => []))
 
     type Routes = RoutesOf<typeof api>
@@ -263,12 +277,9 @@ describe('route accumulation', () => {
   it('folds a mounted router in, re-based under the host path', () => {
     const inner = new Router('/inner').get('/ping').handler(() => ({ pong: true }))
 
-    const outer = new Router('/outer')
-      .mount(inner)
-      .mount('/v2', inner)
+    const outer = new Router('/outer').mount(inner).mount('/v2', inner)
 
-    expectTypeOf<RoutesOf<typeof outer>['path']>()
-      .toEqualTypeOf<'/outer/inner/ping' | '/outer/v2/inner/ping'>()
+    expectTypeOf<RoutesOf<typeof outer>['path']>().toEqualTypeOf<'/outer/inner/ping' | '/outer/v2/inner/ping'>()
   })
 
   it('folds every mounted router into the application', () => {
@@ -293,9 +304,7 @@ describe('route accumulation', () => {
 
 describe('a handler written inline on the verb', () => {
   it('closes the route and hands the group back, so the next route chains off it', () => {
-    const pets = new Router('/pets')
-      .get('/', () => [{ id: 1 }])
-      .post('/:id', () => ({ created: true }))
+    const pets = new Router('/pets').get('/', () => [{ id: 1 }]).post('/:id', () => ({ created: true }))
 
     type Routes = RoutesOf<typeof pets>
 
@@ -336,20 +345,17 @@ describe('a handler written inline on the verb', () => {
   })
 
   it('answers with the declared response schema over the handler return', () => {
-    const pets = new Router('/pets')
-      .get('/', { response: { 200: $t.Object({ id: $t.Integer() }) } }, () => 'ignored')
+    const pets = new Router('/pets').get('/', { response: { 200: $t.Object({ id: $t.Integer() }) } }, () => 'ignored')
 
     expectTypeOf<RoutesOf<typeof pets>['output']>().toEqualTypeOf<{ id: number }>()
   })
 
   it('hands the group dependencies over as the second argument', () => {
-    new Router('/pets')
-      .inject({ greeter: Greeter, audit: $i.optional(Audit) })
-      .get('/', (_ctx, deps) => {
-        expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
-        expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
-        return null
-      })
+    new Router('/pets').inject({ greeter: Greeter, audit: $i.optional(Audit) }).get('/', (_ctx, deps) => {
+      expectTypeOf(deps.greeter).toEqualTypeOf<Greeter>()
+      expectTypeOf(deps.audit).toEqualTypeOf<Audit | undefined>()
+      return null
+    })
   })
 
   it('hands undefined over when nothing was injected', () => {
@@ -475,7 +481,7 @@ describe('fst options', () => {
 })
 
 describe('request variables', () => {
-  type Vars = { tenant: string, count: number }
+  type Vars = { tenant: string; count: number }
 
   it('types what the handler reads back, as possibly unwritten', () => {
     const router = new Router('/pets').vars<Vars>()
@@ -513,7 +519,7 @@ describe('request variables', () => {
     const router = new Router('/pets/:petID').vars<Vars>()
 
     router.get('/:id').handler(ctx => {
-      expectTypeOf(ctx.req.param()).toEqualTypeOf<{ petID: string, id: string }>()
+      expectTypeOf(ctx.req.param()).toEqualTypeOf<{ petID: string; id: string }>()
       return ctx.body()
     })
   })
@@ -530,16 +536,20 @@ describe('request variables', () => {
         return ctx.body()
       })
 
-    router.group('/nested', r => r.get('/x').handler(ctx => {
-      expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
-      return ctx.body()
-    }))
+    router.group('/nested', r =>
+      r.get('/x').handler(ctx => {
+        expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
+        return ctx.body()
+      }),
+    )
 
     const one = router.get('/a').handler(ctx => ctx.body())
 
-    blend(one).get('/b').handler(ctx => {
-      expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
-      return ctx.body()
-    })
+    blend(one)
+      .get('/b')
+      .handler(ctx => {
+        expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
+        return ctx.body()
+      })
   })
 })

@@ -1,4 +1,14 @@
-import { Controller, Get, createWebApplication, Args, Post, Schema, $p, fastifyAdapterFactory, FastifyContext } from '@caffeinejs/http'
+import {
+  Controller,
+  Get,
+  createWebApplication,
+  Args,
+  Post,
+  Schema,
+  $p,
+  fastifyAdapterFactory,
+  FastifyContext,
+} from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 
@@ -58,11 +68,7 @@ void [AppController]
 const server = fastify({ logger: false })
 
 server.addHook('onRequest', (req, reply, done) => {
-  reply.header('x-request-id',
-    Math
-      .random()
-      .toString(36)
-      .slice(2))
+  reply.header('x-request-id', Math.random().toString(36).slice(2))
   done()
 })
 

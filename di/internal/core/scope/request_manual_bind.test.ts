@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
 import { CaffeineIoC } from '../../../container.js'
 import { bindScope, Scopes, unbindScope } from '../../../scope.js'
 import { RequestScope } from './index.js'
@@ -17,9 +19,7 @@ describe('REQUEST scope — manual bindScope', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc, t => t
-      .toSelf()
-      .lifetime(Scopes.REQUEST))
+    di.bind(Svc, t => t.toSelf().lifetime(Scopes.REQUEST))
     await di.init()
 
     let resolved: Svc | undefined
@@ -28,8 +28,7 @@ describe('REQUEST scope — manual bindScope', function () {
       resolved = di.get(Svc)
     })
 
-    expect(resolved)
-      .toBeInstanceOf(Svc)
+    expect(resolved).toBeInstanceOf(Svc)
     await di.dispose()
   })
 
@@ -37,13 +36,10 @@ describe('REQUEST scope — manual bindScope', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Svc, t => t
-      .toSelf()
-      .lifetime(Scopes.REQUEST))
+    di.bind(Svc, t => t.toSelf().lifetime(Scopes.REQUEST))
     await di.init()
 
-    expect(() => di.get(Svc))
-      .toThrow()
+    expect(() => di.get(Svc)).toThrow()
     await di.dispose()
   })
 })

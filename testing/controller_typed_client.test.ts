@@ -1,12 +1,29 @@
+import { Injectable } from '@caffeinejs/di'
+import {
+  WebApplication,
+  Controller,
+  Get,
+  Post,
+  Args,
+  createWebApplication,
+  $p,
+  fastifyAdapterFactory,
+} from '@caffeinejs/http'
 import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
-import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Get, Post, Args, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
+
 import { ErrFetchFailed, controllerTypedClient } from './index.js'
 import type { Fetchable } from './index.js'
 
-interface Pet { id: number, species: string, name: string }
-interface PetSummary { id: number, name: string }
+interface Pet {
+  id: number
+  species: string
+  name: string
+}
+interface PetSummary {
+  id: number
+  name: string
+}
 
 @Injectable()
 class PetStore {
@@ -39,7 +56,7 @@ class PetsRouter {
 
   @Post('/')
   @Args([$p.body()])
-  adopt(data: { species: string, name: string }): Pet {
+  adopt(data: { species: string; name: string }): Pet {
     return this.#store.add(data.species, data.name)
   }
 
@@ -110,10 +127,11 @@ describe('controllerTypedClient()', () => {
 
   it('throws ErrFetchFailed when response is not ok', async () => {
     const mockAdapter: Fetchable = {
-      fetch: async () => new Response(JSON.stringify({ error: 'internal' }), {
-        status: 500,
-        headers: { 'content-type': 'application/json' },
-      }),
+      fetch: async () =>
+        new Response(JSON.stringify({ error: 'internal' }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        }),
     }
 
     const client = controllerTypedClient(PetsRouter, mockAdapter)
@@ -123,10 +141,11 @@ describe('controllerTypedClient()', () => {
 
   it('ErrFetchFailed carries status, headers, and parsed body', async () => {
     const mockAdapter: Fetchable = {
-      fetch: async () => new Response(JSON.stringify({ error: 'not found' }), {
-        status: 404,
-        headers: { 'content-type': 'application/json; charset=utf-8' },
-      }),
+      fetch: async () =>
+        new Response(JSON.stringify({ error: 'not found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+        }),
     }
 
     const client = controllerTypedClient(PetsRouter, mockAdapter)
@@ -148,10 +167,11 @@ describe('controllerTypedClient()', () => {
 
   it('ErrFetchFailed with non-JSON error body captures text', async () => {
     const mockAdapter: Fetchable = {
-      fetch: async () => new Response('Service Unavailable', {
-        status: 503,
-        headers: { 'content-type': 'text/plain' },
-      }),
+      fetch: async () =>
+        new Response('Service Unavailable', {
+          status: 503,
+          headers: { 'content-type': 'text/plain' },
+        }),
     }
 
     const client = controllerTypedClient(PetsRouter, mockAdapter)

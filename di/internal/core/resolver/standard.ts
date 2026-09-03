@@ -1,7 +1,7 @@
 import { ErrMissingInjectionKey, ErrNoResolutionForKey } from '../../../errors.js'
-import { solutions } from '../../util/errutil/index.js'
 import { InjectionResolverFactory } from '../../../injection_resolver.js'
 import { TypedKey, keyStr } from '../../../key.js'
+import { solutions } from '../../util/errutil/index.js'
 import { excludeSelf, uniqueBindingOrThrow } from './_binding_util.js'
 import { describeContext } from './_fmt.js'
 
@@ -12,11 +12,11 @@ export const standardFactory: InjectionResolverFactory = ctx => {
 
   if (!ctx.descriptor.key) {
     throw new ErrMissingInjectionKey(
-      `${describeContext(ctx)}: no injection key provided`
-      + solutions(
-        `- Provide an injection key`,
-        `- For circular dependencies, use defer(() => key) to defer resolution`,
-      ),
+      `${describeContext(ctx)}: no injection key provided` +
+        solutions(
+          `- Provide an injection key`,
+          `- For circular dependencies, use defer(() => key) to defer resolution`,
+        ),
     )
   }
 
@@ -27,11 +27,11 @@ export const standardFactory: InjectionResolverFactory = ctx => {
     }
 
     throw new ErrNoResolutionForKey(
-      `${describeContext(ctx)}: no binding registered for key "${keyStr(ctx.descriptor.key)}"`
-      + solutions(
-        `- Register a binding for key "${keyStr(ctx.descriptor.key)}"`,
-        `- If the dependency is optional, use optional(key)`,
-      ),
+      `${describeContext(ctx)}: no binding registered for key "${keyStr(ctx.descriptor.key)}"` +
+        solutions(
+          `- Register a binding for key "${keyStr(ctx.descriptor.key)}"`,
+          `- If the dependency is optional, use optional(key)`,
+        ),
     )
   }
 
@@ -41,11 +41,11 @@ export const standardFactory: InjectionResolverFactory = ctx => {
 const multipleFactory: InjectionResolverFactory = ctx => {
   if (!ctx.descriptor.key) {
     throw new ErrMissingInjectionKey(
-      `${describeContext(ctx)}: no injection key provided`
-      + solutions(
-        `- Provide an injection key`,
-        `- For circular dependencies, use allOf(defer(() => key)) to defer resolution`,
-      ),
+      `${describeContext(ctx)}: no injection key provided` +
+        solutions(
+          `- Provide an injection key`,
+          `- For circular dependencies, use allOf(defer(() => key)) to defer resolution`,
+        ),
     )
   }
 

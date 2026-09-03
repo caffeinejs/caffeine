@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
-import { CaffeineIoC } from '../container.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 
 describe('given multiple named injectables sharing the same name', function () {
   describe('and one of them asking to inject all others via that shared name', function () {
@@ -36,8 +37,7 @@ describe('given multiple named injectables sharing the same name', function () {
       constructor(readonly processors: Processor[]) {}
 
       process(): string {
-        return this.processors.map(p => p.process())
-          .join(', ')
+        return this.processors.map(p => p.process()).join(', ')
       }
     }
 
@@ -46,11 +46,8 @@ describe('given multiple named injectables sharing the same name', function () {
       await di.init()
 
       const root = di.get(Root)
-      expect(root.processors)
-        .toHaveLength(2)
-      expect(root.processors.map(p => p.process())
-        .sort())
-        .toEqual(['ProcessorA', 'ProcessorB'])
+      expect(root.processors).toHaveLength(2)
+      expect(root.processors.map(p => p.process()).sort()).toEqual(['ProcessorA', 'ProcessorB'])
     })
   })
 })
@@ -83,8 +80,7 @@ describe('given multiple injectables extending the same abstract class', functio
       }
 
       process(): string {
-        return this.processors.map(p => p.process())
-          .join(', ')
+        return this.processors.map(p => p.process()).join(', ')
       }
     }
 
@@ -93,11 +89,8 @@ describe('given multiple injectables extending the same abstract class', functio
       await di.init()
 
       const root = di.get(Root)
-      expect(root.processors)
-        .toHaveLength(2)
-      expect(root.processors.map(p => p.process())
-        .sort())
-        .toEqual(['ProcessorA', 'ProcessorB'])
+      expect(root.processors).toHaveLength(2)
+      expect(root.processors.map(p => p.process()).sort()).toEqual(['ProcessorA', 'ProcessorB'])
     })
   })
 })

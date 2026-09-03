@@ -10,6 +10,7 @@ import {
   JavaScriptTypeBuilder,
 } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
+
 import { DEFAULT_LIST_SEPARATOR, textList } from './text.js'
 
 type LiteralsOf<T extends readonly TLiteralValue[]> = {
@@ -21,9 +22,7 @@ export const SECRET_KEYWORD = 'x-caffeine-secret'
 
 /** Whether a schema node was marked with {@link caffeineT.Secret}. */
 export function isSecretSchema(schema: unknown): boolean {
-  return typeof schema === 'object'
-    && schema !== null
-    && (schema as Record<string, unknown>)[SECRET_KEYWORD] === true
+  return typeof schema === 'object' && schema !== null && (schema as Record<string, unknown>)[SECRET_KEYWORD] === true
 }
 
 /**
@@ -31,9 +30,7 @@ export function isSecretSchema(schema: unknown): boolean {
  * {@link caffeineT.Files}.
  */
 export function isFileSchema(schema: unknown): boolean {
-  return typeof schema === 'object'
-    && schema !== null
-    && (schema as Record<string, unknown>).format === 'binary'
+  return typeof schema === 'object' && schema !== null && (schema as Record<string, unknown>).format === 'binary'
 }
 
 /**
@@ -52,7 +49,7 @@ export function hasFileSchema(schema: unknown): boolean {
     return false
   }
 
-  const { items, properties } = schema as { items?: unknown, properties?: unknown }
+  const { items, properties } = schema as { items?: unknown; properties?: unknown }
 
   if (isFileSchema(items)) {
     return true
@@ -62,8 +59,9 @@ export function hasFileSchema(schema: unknown): boolean {
     return false
   }
 
-  return Object.values(properties)
-    .some(property => isFileSchema(property) || isFileSchema((property as { items?: unknown }).items))
+  return Object.values(properties).some(
+    property => isFileSchema(property) || isFileSchema((property as { items?: unknown }).items),
+  )
 }
 
 /** Options for {@link caffeineT.List}. */
@@ -91,10 +89,7 @@ const caffeineT = {
    * `TLiteralValue` is `boolean | number | string`. For `null`, wrap with `$t.Nullable`:
    * `$t.Nullable($t.UnionEnum(['A', 'B']))`.
    */
-  UnionEnum: <const T extends readonly TLiteralValue[]>(
-    values: T,
-    options?: SchemaOptions,
-  ): TUnion<LiteralsOf<T>> =>
+  UnionEnum: <const T extends readonly TLiteralValue[]>(values: T, options?: SchemaOptions): TUnion<LiteralsOf<T>> =>
     Type.Union(values.map(value => Type.Literal(value)) as LiteralsOf<T>, options) as TUnion<LiteralsOf<T>>,
 
   /**
@@ -103,8 +98,7 @@ const caffeineT = {
    * Emitted as an `anyOf` union rather than the OpenAPI 3.0 `nullable: true` keyword: `nullable` is not JSON
    * Schema, and Ajv in strict mode rejects keywords it does not know.
    */
-  Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) =>
-    Type.Union([schema, Type.Null()], options),
+  Nullable: <T extends TSchema>(schema: T, options?: SchemaOptions) => Type.Union([schema, Type.Null()], options),
 
   /**
    * The value, or `null`, or absent altogether.
@@ -143,13 +137,15 @@ const caffeineT = {
     const target = Type.Array(items)
 
     return Type.Transform(Type.Union([Type.String(), target], schemaOptions))
-      .Decode(value => decodeInto(target, value, {
-        // Delimited text carries no types of its own, so the elements are converted the way every other value
-        // from an environment variable is: `$t.List($t.Number())` must yield numbers, not numeric strings.
-        convert: true,
-        parse: raw => (parse === undefined ? textList(raw, separator) : parse(raw)),
-        complaint: 'is not a list of the declared item type',
-      }))
+      .Decode(value =>
+        decodeInto(target, value, {
+          // Delimited text carries no types of its own, so the elements are converted the way every other value
+          // from an environment variable is: `$t.List($t.Number())` must yield numbers, not numeric strings.
+          convert: true,
+          parse: raw => (parse === undefined ? textList(raw, separator) : parse(raw)),
+          complaint: 'is not a list of the declared item type',
+        }),
+      )
       .Encode(value => value) as never
   },
 
@@ -215,13 +211,15 @@ const caffeineT = {
    */
   JSON: <T extends TSchema>(inner: T, options: SchemaOptions = {}): Codec<T> =>
     Type.Transform(Type.Union([Type.String(), inner], options))
-      .Decode(value => decodeInto(inner, value, {
-        // JSON carries its own types, so nothing is coerced: `{"host":123}` against a string field is a
-        // mistake worth reporting, not something to quietly turn into `"123"`.
-        convert: false,
-        parse: raw => JSON.parse(raw) as unknown,
-        complaint: 'is not the declared shape',
-      }))
+      .Decode(value =>
+        decodeInto(inner, value, {
+          // JSON carries its own types, so nothing is coerced: `{"host":123}` against a string field is a
+          // mistake worth reporting, not something to quietly turn into `"123"`.
+          convert: false,
+          parse: raw => JSON.parse(raw) as unknown,
+          complaint: 'is not the declared shape',
+        }),
+      )
       .Encode(value => JSON.stringify(value)) as never,
 }
 
@@ -239,7 +237,7 @@ const caffeineT = {
 function decodeInto<T extends TSchema>(
   target: T,
   value: unknown,
-  how: { convert: boolean, parse: (raw: string) => unknown, complaint: string },
+  how: { convert: boolean; parse: (raw: string) => unknown; complaint: string },
 ): Static<T> {
   if (typeof value !== 'string') {
     return value as Static<T>

@@ -16,12 +16,12 @@ export class ErrAuthSchemeNotFound extends ErrCaffeineWebApplication {
   // with an inscrutable one.
   constructor(scheme: string, registered?: readonly string[]) {
     super(
-      `Cannot resolve authentication scheme "${scheme}": no handler is registered under that name`
-      + (registered === undefined
-        ? ''
-        : registered.length > 0
-          ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
-          : ' (no schemes are registered)'),
+      `Cannot resolve authentication scheme "${scheme}": no handler is registered under that name` +
+        (registered === undefined
+          ? ''
+          : registered.length > 0
+            ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
+            : ' (no schemes are registered)'),
       'ERR_AUTH_SCHEME_NOT_FOUND',
     )
     this.name = 'ErrAuthSchemeNotFound'

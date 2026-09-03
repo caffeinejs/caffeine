@@ -1,8 +1,10 @@
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { CaffeineIoC } from '@caffeinejs/di'
 import { globby } from 'globby'
 import { describe, expect, it } from 'vitest'
-import { CaffeineIoC } from '@caffeinejs/di'
+
 import { AppRepository } from './_testdata/app/nested/repo.js'
 import { AppService } from './_testdata/app/service.js'
 import { JsxTsxService } from './_testdata/jsx-tsx/service.js'
@@ -17,29 +19,20 @@ describe('scan()', function () {
       dir: join(dir, '_testdata/app'),
     })
 
-    expect(loaded.length)
-      .toBeGreaterThanOrEqual(4)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('helper.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('repo.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('ignored.spec.ts')))
-      .toBe(false)
+    expect(loaded.length).toBeGreaterThanOrEqual(4)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('helper.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('repo.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('ignored.spec.ts'))).toBe(false)
 
     const di = new CaffeineIoC()
     await di.init()
 
     const service = di.get(AppService)
-    expect(service)
-      .toBeInstanceOf(AppService)
-    expect(service.message)
-      .toBe('autoload-app')
-    expect(di.get(AppRepository))
-      .toBeInstanceOf(AppRepository)
+    expect(service).toBeInstanceOf(AppService)
+    expect(service.message).toBe('autoload-app')
+    expect(di.get(AppRepository)).toBeInstanceOf(AppRepository)
   })
 
   it('restricts loading with matchFilter', async function () {
@@ -48,10 +41,8 @@ describe('scan()', function () {
       matchFilter: '/nested/',
     })
 
-    expect(loaded)
-      .toHaveLength(1)
-    expect(loaded[0]!.endsWith('repo.ts'))
-      .toBe(true)
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0]!.endsWith('repo.ts')).toBe(true)
   })
 
   it('restricts loading with a function matchFilter', async function () {
@@ -60,10 +51,8 @@ describe('scan()', function () {
       matchFilter: p => p.includes('/nested/'),
     })
 
-    expect(loaded)
-      .toHaveLength(1)
-    expect(loaded[0]!.endsWith('repo.ts'))
-      .toBe(true)
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0]!.endsWith('repo.ts')).toBe(true)
   })
 
   it('restricts loading with an array matchFilter using OR semantics', async function () {
@@ -72,12 +61,9 @@ describe('scan()', function () {
       matchFilter: ['/nested/', p => p.endsWith('config.ts')],
     })
 
-    expect(loaded)
-      .toHaveLength(2)
-    expect(loaded.some(m => m.endsWith('repo.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(true)
+    expect(loaded).toHaveLength(2)
+    expect(loaded.some(m => m.endsWith('repo.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(true)
   })
 
   it('skips files with a function ignoreFilter', async function () {
@@ -86,10 +72,8 @@ describe('scan()', function () {
       ignoreFilter: p => p.endsWith('.spec.ts'),
     })
 
-    expect(loaded.some(m => m.endsWith('ignored.spec.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('ignored.spec.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(true)
   })
 
   it('skips files with an array ignoreFilter using OR semantics', async function () {
@@ -98,12 +82,9 @@ describe('scan()', function () {
       ignoreFilter: [/\.spec\.ts$/u, '/nested/'],
     })
 
-    expect(loaded.some(m => m.endsWith('ignored.spec.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('repo.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('ignored.spec.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('repo.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(true)
   })
 
   it('respects maxDepth', async function () {
@@ -112,18 +93,14 @@ describe('scan()', function () {
       maxDepth: 0,
     })
 
-    expect(loaded)
-      .toHaveLength(1)
-    expect(loaded[0]!.endsWith('root.ts'))
-      .toBe(true)
+    expect(loaded).toHaveLength(1)
+    expect(loaded[0]!.endsWith('root.ts')).toBe(true)
 
     const di = new CaffeineIoC()
     await di.init()
 
-    expect(di.get(ShallowRootService))
-      .toBeInstanceOf(ShallowRootService)
-    expect(loaded.some(m => m.endsWith('deep.ts')))
-      .toBe(false)
+    expect(di.get(ShallowRootService)).toBeInstanceOf(ShallowRootService)
+    expect(loaded.some(m => m.endsWith('deep.ts'))).toBe(false)
   })
 
   it('loads .tsx files', async function () {
@@ -131,14 +108,12 @@ describe('scan()', function () {
       dir: join(dir, '_testdata/jsx-tsx'),
     })
 
-    expect(loaded.some(m => m.endsWith('service.tsx')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('service.tsx'))).toBe(true)
 
     const di = new CaffeineIoC()
     await di.init()
 
-    expect(di.get(JsxTsxService))
-      .toBeInstanceOf(JsxTsxService)
+    expect(di.get(JsxTsxService)).toBeInstanceOf(JsxTsxService)
   })
 
   it('loads .jsx files', async function () {
@@ -146,8 +121,7 @@ describe('scan()', function () {
       dir: join(dir, '_testdata/jsx-tsx'),
     })
 
-    expect(loaded.some(m => m.endsWith('helper.jsx')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('helper.jsx'))).toBe(true)
   })
 
   it('excludes a file given as a file:// URL string', async function () {
@@ -158,10 +132,8 @@ describe('scan()', function () {
       exclude: serviceURL,
     })
 
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(true)
   })
 
   it('excludes a file given as a URL object', async function () {
@@ -172,10 +144,8 @@ describe('scan()', function () {
       exclude: serviceURL,
     })
 
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(true)
   })
 
   it('excludes multiple files given as an array', async function () {
@@ -187,12 +157,9 @@ describe('scan()', function () {
       exclude: [serviceURL, configURL],
     })
 
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('helper.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('helper.ts'))).toBe(true)
   })
 
   it('excludes a file given as an absolute path string', async function () {
@@ -203,10 +170,8 @@ describe('scan()', function () {
       exclude: servicePath,
     })
 
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(true)
   })
 })
 
@@ -227,14 +192,10 @@ describe('scan() with pre-resolved files', function () {
     const appDir = join(dir, '_testdata/app')
     const loaded = await scan(globby(`${appDir}/**/*.ts`, { ignore: ['**/*.spec.ts', '**/*.test.ts'] }))
 
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('helper.ts')))
-      .toBe(true)
-    expect(loaded.some(m => m.endsWith('repo.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('helper.ts'))).toBe(true)
+    expect(loaded.some(m => m.endsWith('repo.ts'))).toBe(true)
   })
 
   it('loads modules from a pre-filtered string[]', async function () {
@@ -243,9 +204,7 @@ describe('scan() with pre-resolved files', function () {
     const files = await globby(`${appDir}/**/*.ts`)
     const loaded = await scan(files.filter(f => f !== servicePath))
 
-    expect(loaded.some(m => m.endsWith('service.ts')))
-      .toBe(false)
-    expect(loaded.some(m => m.endsWith('config.ts')))
-      .toBe(true)
+    expect(loaded.some(m => m.endsWith('service.ts'))).toBe(false)
+    expect(loaded.some(m => m.endsWith('config.ts'))).toBe(true)
   })
 })

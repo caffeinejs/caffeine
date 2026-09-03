@@ -25,12 +25,9 @@ The production container is **never initialized directly** in tests. Instead:
 export const appContainer = new CaffeineIoC({ modules: [databaseModule, emailModule] })
 
 // test
-const di = new TestContainer(appContainer)
-  .focus(OrderService)
-  .overrideWithMock(OrderRepository, fakeRepo)
-  .build()                    // uninitialized — app hooks do init() / dispose()
+const di = new TestContainer(appContainer).focus(OrderService).overrideWithMock(OrderRepository, fakeRepo).build() // uninitialized — app hooks do init() / dispose()
 
-const app = buildApp(di)      // app owns the container lifecycle from here
+const app = buildApp(di) // app owns the container lifecycle from here
 await app.ready()
 
 const svc = di.get(OrderService)
@@ -42,10 +39,7 @@ test can import a single feature module instead of the whole application graph.
 ```ts
 import { ordersModule } from './orders.generated.mod.js'
 
-const di = new TestContainer()
-  .modules(ordersModule)
-  .overrideWithMock(OrderRepository, fakeRepo)
-  .build()
+const di = new TestContainer().modules(ordersModule).overrideWithMock(OrderRepository, fakeRepo).build()
 ```
 
 The container that comes out of `.build()` is a real CaffeineIoC container with all
@@ -64,10 +58,7 @@ const snap = appContainer.snapshot()
 const di = new TestContainer(snap).build()
 
 // from scratch — no application graph; import a feature module instead
-const di = new TestContainer()
-  .modules(ordersModule)
-  .overrideWithMock(OrderRepository, fakeRepo)
-  .build()
+const di = new TestContainer().modules(ordersModule).overrideWithMock(OrderRepository, fakeRepo).build()
 ```
 
 When the production container is cheap to construct, passing it directly is fine.
@@ -82,9 +73,7 @@ via the feature module register on the test container.
 `.override()` substitutes any binding while leaving the rest of the tree intact:
 
 ```ts
-const di = new TestContainer(appContainer)
-  .override(EmailClient, b => b.toClass(InMemoryEmailClient))
-  .build()
+const di = new TestContainer(appContainer).override(EmailClient, b => b.toClass(InMemoryEmailClient)).build()
 ```
 
 `.overrideWithMock()` is the shorthand for replacing with a mock or ready-made value.
@@ -92,9 +81,7 @@ The mock argument is typed loosely enough that a vitest mock or a duck-typed fak
 does not need a double assertion:
 
 ```ts
-const di = new TestContainer(appContainer)
-  .overrideWithMock(EmailClient, noOpEmailClient)
-  .build()
+const di = new TestContainer(appContainer).overrideWithMock(EmailClient, noOpEmailClient).build()
 ```
 
 Overrides are always exempt from `.skipAsyncBindings()` filters — an overridden
@@ -107,18 +94,13 @@ root keys. Every binding not in that dependency tree is dropped.
 
 ```ts
 // test only OrderService and the components it pulls in
-const di = new TestContainer(appContainer)
-  .focus(OrderService)
-  .build()
+const di = new TestContainer(appContainer).focus(OrderService).build()
 ```
 
 Multiple roots accumulate — the container keeps the union of all their trees:
 
 ```ts
-const di = new TestContainer(appContainer)
-  .focus(OrderService)
-  .focus(InvoiceService)
-  .build()
+const di = new TestContainer(appContainer).focus(OrderService).focus(InvoiceService).build()
 ```
 
 `.focus()` dramatically reduces init time in large applications: instead of
@@ -132,14 +114,10 @@ binding and also want to drop its original dependencies from the container, use
 
 ```ts
 // replace Database and prune only its exclusive deps (not shared with others)
-const di = new TestContainer(appContainer)
-  .isolate(Database, false, b => b.toValue(inMemoryDb))
-  .build()
+const di = new TestContainer(appContainer).isolate(Database, false, b => b.toValue(inMemoryDb)).build()
 
 // replace Database and prune ALL its transitive deps, shared or not
-const di = new TestContainer(appContainer)
-  .isolate(Database, true, b => b.toValue(inMemoryDb))
-  .build()
+const di = new TestContainer(appContainer).isolate(Database, true, b => b.toValue(inMemoryDb)).build()
 ```
 
 Pass `false` to preserve bindings that other parts of the tree also depend on.
@@ -148,9 +126,7 @@ Pass `true` to force-prune everything reachable from the replaced key.
 `.isolateWithMock()` is the shorthand:
 
 ```ts
-const di = new TestContainer(appContainer)
-  .isolateWithMock(Database, true, inMemoryDb)
-  .build()
+const di = new TestContainer(appContainer).isolateWithMock(Database, true, inMemoryDb).build()
 ```
 
 ## Removing bindings
@@ -159,9 +135,7 @@ const di = new TestContainer(appContainer)
 meaningful role in a particular test (analytics, telemetry, background jobs):
 
 ```ts
-const di = new TestContainer(appContainer)
-  .skip(Analytics, MetricsReporter)
-  .build()
+const di = new TestContainer(appContainer).skip(Analytics, MetricsReporter).build()
 ```
 
 ## Dropping async bindings
@@ -173,14 +147,10 @@ not needed.
 
 ```ts
 // drop all async bindings
-const di = new TestContainer(appContainer)
-  .skipAsyncBindings()
-  .build()
+const di = new TestContainer(appContainer).skipAsyncBindings().build()
 
 // drop all async except the in-memory message bus you still need
-const di = new TestContainer(appContainer)
-  .skipAsyncBindings(MessageBus)
-  .build()
+const di = new TestContainer(appContainer).skipAsyncBindings(MessageBus).build()
 ```
 
 Bindings registered through `.override()` or `.isolate()` are always kept,
@@ -189,9 +159,7 @@ regardless of this filter.
 ## Activating profiles
 
 ```ts
-const di = new TestContainer(appContainer)
-  .profiles('test', 'no-cache')
-  .build()
+const di = new TestContainer(appContainer).profiles('test', 'no-cache').build()
 
 await di.init()
 ```
@@ -202,9 +170,7 @@ Pass extra modules to inject test-specific bindings that do not exist in the
 production container:
 
 ```ts
-const di = new TestContainer(appContainer)
-  .modules(testHelpersModule)
-  .build()
+const di = new TestContainer(appContainer).modules(testHelpersModule).build()
 
 await di.init()
 ```
@@ -215,10 +181,7 @@ generated feature module:
 ```ts
 import { ordersModule } from './orders.generated.mod.js'
 
-const di = new TestContainer()
-  .modules(ordersModule)
-  .overrideWithMock(OrderRepository, fakeRepo)
-  .build()
+const di = new TestContainer().modules(ordersModule).overrideWithMock(OrderRepository, fakeRepo).build()
 ```
 
 ## Lazy loading
@@ -231,9 +194,7 @@ Turn it off when a test depends on eager side-effects (e.g. event listeners
 registered inside a constructor):
 
 ```ts
-const di = new TestContainer(appContainer)
-  .lazy(false)
-  .build()
+const di = new TestContainer(appContainer).lazy(false).build()
 
 await di.init()
 ```
@@ -267,12 +228,12 @@ describe('POST /orders', () => {
       .skipAsyncBindings()
       .build()
 
-    app = buildApp(di)    // app calls di.init() in onReady, di.dispose() in onClose
+    app = buildApp(di) // app calls di.init() in onReady, di.dispose() in onClose
     await app.ready()
   })
 
   afterAll(async () => {
-    await app.close()     // triggers onClose → di.dispose(); no manual dispose needed
+    await app.close() // triggers onClose → di.dispose(); no manual dispose needed
   })
 
   it('creates an order and returns 201', async () => {
@@ -287,7 +248,7 @@ describe('POST /orders', () => {
   })
 
   it('calls repository.save with the submitted payload', async () => {
-    const di = app.diContainer           // however the app exposes the container
+    const di = app.diContainer // however the app exposes the container
     const repo = di.get(OrderRepository)
 
     await app.inject({
@@ -321,7 +282,7 @@ into the data layer.
 
 ### Project Structure
 
-To ensure that the core components of your application are "testable", 
+To ensure that the core components of your application are "testable",
 we recommend following the structure below, organizing the basic application components into three files with distinct responsibilities:
 
 ```
@@ -400,11 +361,11 @@ When `buildApp()` hooks `di.init()` into `onReady` and `di.dispose()` into
 ```ts
 beforeAll(async () => {
   app = buildApp(di)
-  await app.ready()   // triggers onReady → di.init()
+  await app.ready() // triggers onReady → di.init()
 })
 
 afterAll(async () => {
-  await app.close()   // triggers onClose → di.dispose()
+  await app.close() // triggers onClose → di.dispose()
 })
 ```
 

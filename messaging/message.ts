@@ -44,10 +44,10 @@ export function message<T>(payload: T, init: MessageInit = {}): Message<T> {
 /** Narrows a `payload | Message` argument (the `MessageBus.send` overload) to a full {@link Message}. */
 export function isMessage(value: unknown): value is Message {
   return (
-    typeof value === 'object'
-    && value !== null
-    && 'payload' in value
-    && 'headers' in value
-    && (value as { headers: unknown }).headers instanceof Map
+    typeof value === 'object' &&
+    value !== null &&
+    'payload' in value &&
+    'headers' in value &&
+    (value as { headers: unknown }).headers instanceof Map
   )
 }

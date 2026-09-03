@@ -1,10 +1,16 @@
 import type { Container } from '@caffeinejs/di'
-import { FastifyRequest } from 'fastify'
 import { Duration, parseDuration } from '@caffeinejs/std'
+import { FastifyRequest } from 'fastify'
+
 import { FastifyContextRequest } from '../context.js'
-import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '../internal/route_hooks.js'
-import { kCacheStatusHeader, kETagGenerator } from './keys.js'
+import {
+  addRouteHook,
+  type AdapterReply,
+  type AdapterRequest,
+  type AdapterRouteOptions,
+} from '../internal/route_hooks.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
+import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { CacheStore } from './store.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
@@ -108,7 +114,12 @@ export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptio
       // RFC 7234 §5.2.1.4 — bypass cache when client requests fresh response
       const reqCC = request.headers['cache-control']
       const reqMaxAge0 = reqCC != null && /(?:^|,)\s*max-age\s*=\s*0(?:\s*,|$)/.test(reqCC)
-      if (reqCC?.includes('no-cache') || reqCC?.includes('no-store') || reqMaxAge0 || request.headers['pragma'] === 'no-cache') {
+      if (
+        reqCC?.includes('no-cache') ||
+        reqCC?.includes('no-store') ||
+        reqMaxAge0 ||
+        request.headers['pragma'] === 'no-cache'
+      ) {
         reply.header(statusHeader, CACHE_BYPASS)
         return
       }
@@ -142,7 +153,8 @@ export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptio
       if (ifNoneMatch) {
         if (cached.etag && matchesETag(ifNoneMatch, cached.etag)) {
           request.responseCached = true
-          return reply.code(304)
+          return reply
+            .code(304)
             .headers(cached.headers)
             .header(statusHeader, CACHE_HIT)
             .header('Age', String(age))
@@ -153,7 +165,8 @@ export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptio
         if (ifModifiedSince && cached.lastModified) {
           if (Date.parse(cached.lastModified) <= Date.parse(ifModifiedSince)) {
             request.responseCached = true
-            return reply.code(304)
+            return reply
+              .code(304)
               .headers(cached.headers)
               .header(statusHeader, CACHE_HIT)
               .header('Age', String(age))
@@ -221,13 +234,14 @@ export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptio
     // ETag and storage are independent — etag: false must not prevent caching
     // Private responses must not be stored in the shared server-side cache
     // RFC 7234 §4.1 — Vary: * means the response must never be cached
-    const shouldCache = opts.ttl !== undefined
-      && !opts.noStore
-      && effectivePrivacy !== 'private'
-      && !opts.vary?.includes('*')
-      && isCacheableMethod
-      && isCacheableStatus
-      && isStringOrBuffer
+    const shouldCache =
+      opts.ttl !== undefined &&
+      !opts.noStore &&
+      effectivePrivacy !== 'private' &&
+      !opts.vary?.includes('*') &&
+      isCacheableMethod &&
+      isCacheableStatus &&
+      isStringOrBuffer
 
     if (shouldCache) {
       const headers: Record<string, string> = {}
@@ -260,13 +274,18 @@ export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptio
 
       const segment = opts.segment ?? ''
 
-      await store.set(key, segment, {
-        payload: payload as string | Buffer,
-        etag,
-        lastModified,
-        storedAt: Date.now(),
-        headers,
-      }, parseDuration(opts.ttl!))
+      await store.set(
+        key,
+        segment,
+        {
+          payload: payload as string | Buffer,
+          etag,
+          lastModified,
+          storedAt: Date.now(),
+          headers,
+        },
+        parseDuration(opts.ttl!),
+      )
     }
 
     return payload
@@ -289,9 +308,7 @@ function canonicalizeUrl(url: string): string {
 
   const query = params.toString()
 
-  return query
-    ? `${path}?${query}`
-    : path
+  return query ? `${path}?${query}` : path
 }
 
 // GET and HEAD have equivalent representations — they share the same cache entry.
@@ -300,9 +317,7 @@ function canonicalizeUrl(url: string): string {
 // so that different header combinations produce separate cache entries (RFC 7234 §4.1).
 function defaultCacheKey(request: AdapterRequest, vary?: string[]): string {
   const url = canonicalizeUrl(request.url)
-  const base = request.method === 'GET' || request.method === 'HEAD'
-    ? url
-    : `${request.method}:${url}`
+  const base = request.method === 'GET' || request.method === 'HEAD' ? url : `${request.method}:${url}`
   if (!vary?.length) {
     return encodeURIComponent(base)
   }

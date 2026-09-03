@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
-import { $t } from '@caffeinejs/std'
 import { Router, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { apiGroup, operation } from '../decorators/index.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
@@ -45,7 +46,7 @@ describe('openapi from a programmatic router', () => {
 
     await app.ready()
 
-    const document = await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
+    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
 
     const get = operationAt(document, '/documented-pets/{id}')
     expect(get?.operationId).toBe('getDocumentedPet')
@@ -57,7 +58,7 @@ describe('openapi from a programmatic router', () => {
     expect(document.paths?.['/documented-pets/hidden']).toBeUndefined()
   })
 
-  it('describes routes declared with a router the same way it describes a controller\'s', async () => {
+  it("describes routes declared with a router the same way it describes a controller's", async () => {
     const pets = new Router('/programmatic-pets').name('ProgrammaticPets')
 
     pets
@@ -82,7 +83,7 @@ describe('openapi from a programmatic router', () => {
 
     await app.ready()
 
-    const document = await (await app.fetch('/openapi.json')).json() as OpenAPIDocument
+    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
 
     const list = operationAt(document, '/programmatic-pets')
     expect(list?.operationId).toBe('ProgrammaticPets_list')
@@ -91,9 +92,7 @@ describe('openapi from a programmatic router', () => {
     // Unnamed routes are still identified, from the method and the path they answer.
     const create = operationAt(document, '/programmatic-pets/{id}', 'post')
     expect(create?.operationId).toBe('ProgrammaticPets_post_id')
-    expect(create?.parameters).toContainEqual(
-      expect.objectContaining({ name: 'id', in: 'path', required: true }),
-    )
+    expect(create?.parameters).toContainEqual(expect.objectContaining({ name: 'id', in: 'path', required: true }))
     expect(create?.requestBody).toBeDefined()
     expect(Object.keys(create?.responses ?? {})).toContain('201')
   })

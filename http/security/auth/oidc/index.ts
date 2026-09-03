@@ -8,8 +8,16 @@ export {
   encodeTicketRef,
   type RemoteAuthenticationSession,
 } from '../internal/remote/session_store.js'
-export { decodeState, encodeState, type RemoteAuthenticationState, STATE_TTL_SECONDS } from '../internal/remote/state_store.js'
-export { type RemoteAuthenticationTicket, type RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
+export {
+  decodeState,
+  encodeState,
+  type RemoteAuthenticationState,
+  STATE_TTL_SECONDS,
+} from '../internal/remote/state_store.js'
+export {
+  type RemoteAuthenticationTicket,
+  type RemoteAuthenticationTicketStore,
+} from '../internal/remote/ticket_store.js'
 export { fetchDiscovery, type OIDCDiscoveryDocument } from './discovery.js'
 export {
   ErrOIDCCallback,

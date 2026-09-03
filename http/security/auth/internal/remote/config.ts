@@ -34,9 +34,7 @@ export interface ChallengeRequestHeaders {
 }
 
 /** Reads the headers {@link shouldRedirectChallenge} needs off a request context. */
-export function challengeHeaders(ctx: {
-  req: { header(key: string): string | undefined }
-}): ChallengeRequestHeaders {
+export function challengeHeaders(ctx: { req: { header(key: string): string | undefined } }): ChallengeRequestHeaders {
   return {
     secFetchMode: ctx.req.header('sec-fetch-mode'),
     secFetchDest: ctx.req.header('sec-fetch-dest'),
@@ -87,7 +85,7 @@ export function defaultSecureCookie(callbackURL: string): boolean {
  * `//evil.com`, sending the browser off-origin. Tab, LF and CR are the stripped set; the
  * rest are rejected because a control character has no business in a redirect target.
  */
-// eslint-disable-next-line no-control-regex -- matching control characters is the point
+// oxlint-disable-next-line no-control-regex -- matching control characters is the point
 const CONTROL_CHARACTERS = /[\x00-\x1F\x7F]/
 
 /**
@@ -97,10 +95,7 @@ const CONTROL_CHARACTERS = /[\x00-\x1F\x7F]/
  * control character can smuggle that same prefix past the check.
  */
 export function isSafeReturnPath(path: string): boolean {
-  return path.startsWith('/')
-    && !path.startsWith('//')
-    && !path.startsWith('/\\')
-    && !CONTROL_CHARACTERS.test(path)
+  return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\') && !CONTROL_CHARACTERS.test(path)
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
@@ -115,9 +110,7 @@ export function assertSecureEndpoint(label: string, value: string): void {
   try {
     url = new URL(value)
   } catch {
-    throw new ErrOAuthConfiguration(
-      `Cannot configure authentication: ${label} "${value}" is not a valid URL`,
-    )
+    throw new ErrOAuthConfiguration(`Cannot configure authentication: ${label} "${value}" is not a valid URL`)
   }
 
   if (url.protocol === 'https:') {
@@ -158,12 +151,7 @@ export function sanitizeSchemeName(scheme: string): string {
  * provider later would break the first without touching its configuration. `__Host-` binds the
  * cookie to the exact origin with `Path=/` and no `Domain`, and is only legal on a Secure cookie.
  */
-export function cookieName(
-  kind: 'session' | 'state',
-  scheme: string,
-  secure: boolean,
-  protocol: string,
-): string {
+export function cookieName(kind: 'session' | 'state', scheme: string, secure: boolean, protocol: string): string {
   const prefix = secure ? `__Host-${protocol}` : `__${protocol}`
   return `${prefix}_${sanitizeSchemeName(scheme)}_${kind}`
 }

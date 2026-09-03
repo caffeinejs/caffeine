@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
 import { fetchDiscovery } from './discovery.js'
 
 const DISCOVERY: Record<string, unknown> = {
@@ -9,10 +10,13 @@ const DISCOVERY: Record<string, unknown> = {
 }
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    json: () => Promise.resolve(DISCOVERY),
-  }))
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(DISCOVERY),
+    }),
+  )
 })
 
 afterEach(() => {
@@ -51,23 +55,31 @@ describe('fetchDiscovery()', () => {
 
   it('throws when the response is not ok', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
-    await expect(fetchDiscovery('https://example.com')).rejects.toThrow('"https://example.com/.well-known/openid-configuration" returned 404')
+    await expect(fetchDiscovery('https://example.com')).rejects.toThrow(
+      '"https://example.com/.well-known/openid-configuration" returned 404',
+    )
   })
 
   it('throws when a required field is missing', async () => {
     const { jwks_uri: _omitted, ...incomplete } = DISCOVERY
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(incomplete),
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(incomplete),
+      }),
+    )
     await expect(fetchDiscovery('https://example.com')).rejects.toThrow('is missing "jwks_uri"')
   })
 
   it('rejects a document advertising a non-https endpoint', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ ...DISCOVERY, token_endpoint: 'http://evil.example.com/token' }),
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...DISCOVERY, token_endpoint: 'http://evil.example.com/token' }),
+      }),
+    )
     await expect(fetchDiscovery('https://example.com')).rejects.toThrow('must use https')
   })
 
@@ -75,10 +87,13 @@ describe('fetchDiscovery()', () => {
   // UserInfo request carries the access token in an Authorization header, and over plain http
   // that hands a live credential to anyone on the path.
   it('rejects a non-https userinfo_endpoint', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ ...DISCOVERY, userinfo_endpoint: 'http://evil.example.com/userinfo' }),
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...DISCOVERY, userinfo_endpoint: 'http://evil.example.com/userinfo' }),
+      }),
+    )
     await expect(fetchDiscovery('https://example.com')).rejects.toThrow('must use https')
   })
 
@@ -86,28 +101,39 @@ describe('fetchDiscovery()', () => {
   // outside the parse catch, surfacing as a 500 rather than a typed discovery error.
   it('rejects a document body that is not a JSON object', async () => {
     for (const body of [null, [1, 2], 'a string']) {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(body),
-      }))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve(body),
+        }),
+      )
       await expect(fetchDiscovery('https://example.com')).rejects.toThrow('is not a JSON object')
     }
   })
 
   it('rejects a non-array code_challenge_methods_supported', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ ...DISCOVERY, code_challenge_methods_supported: {} }),
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...DISCOVERY, code_challenge_methods_supported: {} }),
+      }),
+    )
     await expect(fetchDiscovery('https://example.com')).rejects.toThrow('malformed "code_challenge_methods_supported"')
   })
 
   it('rejects a token_endpoint_auth_methods_supported that is not an array of strings', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ ...DISCOVERY, token_endpoint_auth_methods_supported: [1, 2] }),
-    }))
-    await expect(fetchDiscovery('https://example.com')).rejects.toThrow('malformed "token_endpoint_auth_methods_supported"')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ...DISCOVERY, token_endpoint_auth_methods_supported: [1, 2] }),
+      }),
+    )
+    await expect(fetchDiscovery('https://example.com')).rejects.toThrow(
+      'malformed "token_endpoint_auth_methods_supported"',
+    )
   })
 
   it('allows an http loopback endpoint for local development', async () => {
@@ -117,10 +143,13 @@ describe('fetchDiscovery()', () => {
       token_endpoint: 'http://localhost:8080/token',
       jwks_uri: 'http://localhost:8080/jwks',
     }
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(local),
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(local),
+      }),
+    )
     await expect(fetchDiscovery('http://localhost:8080')).resolves.toEqual(local)
   })
 

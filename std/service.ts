@@ -1,4 +1,5 @@
 import type { Container, ContainerBindingOps } from '@caffeinejs/di'
+
 import type { ConfigDefinition } from './config/index.js'
 import type { Contributions } from './contributions.js'
 import type { ApplicationAvailability } from './health/availability.js'

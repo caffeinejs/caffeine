@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Post, createWebApplication, BodyLimit, fastifyAdapterFactory } from '../index.js'
 
 describe('BodyLimit', () => {
@@ -18,7 +19,11 @@ describe('BodyLimit', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
     await app.ready()
 
-    const over = await app.fetch('/limited/data', { method: 'POST', headers: { 'content-type': 'text/plain' }, body: 'x'.repeat(20) })
+    const over = await app.fetch('/limited/data', {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain' },
+      body: 'x'.repeat(20),
+    })
 
     expect(over.status).toBe(413)
   })

@@ -1,13 +1,13 @@
 // reflect-metadata is necessary for the legacy third party implementations
 import 'reflect-metadata'
-
 import { bench, group, run } from 'mitata'
+
 import { Root, di, RootSingleton } from './testdata/di.js'
 import { inferdi, inferdiFast } from './testdata/inferdi.js'
 import { inv, InvRootSingleton as InvSingletonRoot, InvRoot } from './testdata/third_party_legacy/dist/inversify.js'
-import { tsy, TsySingletonRoot, TsyRoot } from './testdata/third_party_legacy/dist/tsy.js'
-import { bootstrap, NestRoot } from './testdata/third_party_legacy/dist/nest.js'
 import { loopCtx, LoopSingletonRoot, LoopRoot } from './testdata/third_party_legacy/dist/loopback.js'
+import { bootstrap, NestRoot } from './testdata/third_party_legacy/dist/nest.js'
+import { tsy, TsySingletonRoot, TsyRoot } from './testdata/third_party_legacy/dist/tsy.js'
 import { typeContainer, TypeRoot, TypeSingletonRoot } from './testdata/third_party_legacy/dist/typedi.js'
 
 const nestApp = await bootstrap()

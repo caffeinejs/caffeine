@@ -1,6 +1,12 @@
-import { describe, it, expect, vi } from 'vitest'
 import { CaffeineIoC, Aspect, Profile, createAnnotation, reflect, $aop } from '@caffeinejs/di'
-import type { JoinPoint, MethodAspect, PointcutClassPredicate, PointcutMethodPredicate, InjectionToken } from '@caffeinejs/di'
+import type {
+  JoinPoint,
+  MethodAspect,
+  PointcutClassPredicate,
+  PointcutMethodPredicate,
+  InjectionToken,
+} from '@caffeinejs/di'
+import { describe, it, expect, vi } from 'vitest'
 
 // ─── Guard interface ──────────────────────────────────────────────────────────
 
@@ -80,19 +86,27 @@ function makeContainer(...extra: Array<(di: CaffeineIoC) => void>) {
 // ─── guard implementations ────────────────────────────────────────────────────
 
 class AllowGuard implements Guard {
-  guard(_jp: JoinPoint): boolean { return true }
+  guard(_jp: JoinPoint): boolean {
+    return true
+  }
 }
 
 class DenyGuard implements Guard {
-  guard(_jp: JoinPoint): boolean { return false }
+  guard(_jp: JoinPoint): boolean {
+    return false
+  }
 }
 
 class AsyncAllowGuard implements Guard {
-  async guard(_jp: JoinPoint): Promise<boolean> { return true }
+  async guard(_jp: JoinPoint): Promise<boolean> {
+    return true
+  }
 }
 
 class AsyncDenyGuard implements Guard {
-  async guard(_jp: JoinPoint): Promise<boolean> { return false }
+  async guard(_jp: JoinPoint): Promise<boolean> {
+    return false
+  }
 }
 
 // ─── tests ────────────────────────────────────────────────────────────────────
@@ -100,8 +114,12 @@ class AsyncDenyGuard implements Guard {
 describe('AOP guard — class-level annotation', function () {
   @UseGuard(AllowGuard)
   class Resource {
-    get(id: number): number { return id }
-    create(name: string): string { return `created:${name}` }
+    get(id: number): number {
+      return id
+    }
+    create(name: string): string {
+      return `created:${name}`
+    }
   }
 
   it('allows access when class-level guard returns true', async function () {
@@ -119,7 +137,9 @@ describe('AOP guard — class-level annotation', function () {
   it('denies access when class-level guard returns false', async function () {
     @UseGuard(DenyGuard)
     class Restricted {
-      action(): string { return 'done' }
+      action(): string {
+        return 'done'
+      }
     }
 
     const di = makeContainer(d => {
@@ -143,8 +163,12 @@ describe('AOP guard — class-level annotation', function () {
 
     @UseGuard(TrackingGuard)
     class TrackedResource {
-      get(): string { return 'get' }
-      create(): string { return 'create' }
+      get(): string {
+        return 'get'
+      }
+      create(): string {
+        return 'create'
+      }
     }
 
     const di = makeContainer(d => {
@@ -165,9 +189,13 @@ describe('AOP guard — class-level annotation', function () {
 describe('AOP guard — method-level annotation', function () {
   class PartialService {
     @UseGuard(DenyGuard)
-    sensitive(): string { return 'secret' }
+    sensitive(): string {
+      return 'secret'
+    }
 
-    open(): string { return 'public' }
+    open(): string {
+      return 'public'
+    }
   }
 
   it('guards only the annotated method', async function () {
@@ -186,14 +214,20 @@ describe('AOP guard — method-level annotation', function () {
     const guardSpy = vi.fn(() => true)
 
     class SpyGuard implements Guard {
-      guard(_jp: JoinPoint): boolean { return guardSpy() }
+      guard(_jp: JoinPoint): boolean {
+        return guardSpy()
+      }
     }
 
     class SemiGuarded {
       @UseGuard(SpyGuard)
-      guarded(): string { return 'guarded' }
+      guarded(): string {
+        return 'guarded'
+      }
 
-      free(): string { return 'free' }
+      free(): string {
+        return 'free'
+      }
     }
 
     const di = makeContainer(d => {
@@ -214,9 +248,13 @@ describe('AOP guard — method-level annotation', function () {
 describe('AOP guard — method-level overrides class-level', function () {
   class TwoGuardService {
     @UseGuard(AllowGuard)
-    allowed(): string { return 'allowed' }
+    allowed(): string {
+      return 'allowed'
+    }
 
-    blocked(): string { return 'blocked' }
+    blocked(): string {
+      return 'blocked'
+    }
   }
   Object.defineProperty(TwoGuardService, 'name', { value: 'TwoGuardService' })
 
@@ -224,9 +262,13 @@ describe('AOP guard — method-level overrides class-level', function () {
     @UseGuard(DenyGuard)
     class OverrideService {
       @UseGuard(AllowGuard)
-      allowed(): string { return 'allowed' }
+      allowed(): string {
+        return 'allowed'
+      }
 
-      blocked(): string { return 'blocked' }
+      blocked(): string {
+        return 'blocked'
+      }
     }
 
     const di = makeContainer(d => {
@@ -246,7 +288,9 @@ describe('AOP guard — async guards', function () {
   it('async guard returning true allows the call', async function () {
     @UseGuard(AsyncAllowGuard)
     class AsyncResource {
-      fetch(): string { return 'data' }
+      fetch(): string {
+        return 'data'
+      }
     }
 
     const di = makeContainer(d => {
@@ -261,7 +305,9 @@ describe('AOP guard — async guards', function () {
   it('async guard returning false denies the call', async function () {
     @UseGuard(AsyncDenyGuard)
     class AsyncRestricted {
-      action(): string { return 'done' }
+      action(): string {
+        return 'done'
+      }
     }
 
     const di = makeContainer(d => {
@@ -279,11 +325,15 @@ describe('AOP guard — unannotated class is not intercepted', function () {
     const guardSpy = vi.fn(() => true)
 
     class NoGuardService {
-      run(): string { return 'running' }
+      run(): string {
+        return 'running'
+      }
     }
 
     class UnusedGuard implements Guard {
-      guard(_jp: JoinPoint): boolean { return guardSpy() }
+      guard(_jp: JoinPoint): boolean {
+        return guardSpy()
+      }
     }
 
     const di = makeContainer(d => {
@@ -299,7 +349,7 @@ describe('AOP guard — unannotated class is not intercepted', function () {
 
 describe('AOP guard — JoinPoint fields inside guard', function () {
   it('guard receives correct methodName, args, and cls', async function () {
-    const captured: { methodName: string | symbol, args: unknown[], cls: unknown }[] = []
+    const captured: { methodName: string | symbol; args: unknown[]; cls: unknown }[] = []
 
     class InspectGuard implements Guard {
       guard(jp: JoinPoint): boolean {
@@ -310,7 +360,9 @@ describe('AOP guard — JoinPoint fields inside guard', function () {
 
     @UseGuard(InspectGuard)
     class InspectedService {
-      compute(x: number, y: number): number { return x + y }
+      compute(x: number, y: number): number {
+        return x + y
+      }
     }
 
     const di = makeContainer(d => {
@@ -331,19 +383,27 @@ describe('AOP guard — JoinPoint fields inside guard', function () {
 describe('AOP guard — multiple guard implementations', function () {
   it('different guards protect different methods independently', async function () {
     class AdminGuard implements Guard {
-      guard(_jp: JoinPoint): boolean { return true }
+      guard(_jp: JoinPoint): boolean {
+        return true
+      }
     }
 
     class OwnerGuard implements Guard {
-      guard(_jp: JoinPoint): boolean { return false }
+      guard(_jp: JoinPoint): boolean {
+        return false
+      }
     }
 
     class MultiGuardedService {
       @UseGuard(AdminGuard)
-      adminAction(): string { return 'admin' }
+      adminAction(): string {
+        return 'admin'
+      }
 
       @UseGuard(OwnerGuard)
-      ownerAction(): string { return 'owner' }
+      ownerAction(): string {
+        return 'owner'
+      }
     }
 
     const di = makeContainer(d => {
@@ -362,13 +422,19 @@ describe('AOP guard — multiple guard implementations', function () {
     let instanceCount = 0
 
     class CountingGuard implements Guard {
-      constructor() { instanceCount++ }
-      guard(_jp: JoinPoint): boolean { return true }
+      constructor() {
+        instanceCount++
+      }
+      guard(_jp: JoinPoint): boolean {
+        return true
+      }
     }
 
     @UseGuard(CountingGuard)
     class RepeatService {
-      ping(): string { return 'pong' }
+      ping(): string {
+        return 'pong'
+      }
     }
 
     const di = makeContainer(d => {

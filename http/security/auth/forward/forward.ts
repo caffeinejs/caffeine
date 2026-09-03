@@ -1,11 +1,10 @@
 import { Context } from '../../../context.js'
-import type { AuthenticationHandler } from '../handler.js'
 import { ErrAuthConfiguration, ErrAuthSchemeNotFound } from '../errors.js'
+import type { AuthenticationHandler } from '../handler.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
 
-export type AuthenticationHandlerSelector
-  = (ctx: Context, scheme: string) => Promise<string> | string
+export type AuthenticationHandlerSelector = (ctx: Context, scheme: string) => Promise<string> | string
 
 export class ForwardAuthenticationHandler implements AuthenticationHandler {
   readonly #selector: AuthenticationHandlerSelector

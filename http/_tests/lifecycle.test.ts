@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect, vi } from 'vitest'
+
 import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Adapter Lifecycle', () => {
@@ -35,7 +36,9 @@ describe('Adapter Lifecycle', () => {
     @Controller('/lc2')
     class Lc2Controller {
       @Get('/ping')
-      ping() { return {} }
+      ping() {
+        return {}
+      }
     }
 
     void [Lc2Controller]
@@ -44,9 +47,15 @@ describe('Adapter Lifecycle', () => {
 
     const order: number[] = []
     app
-      .onReady(async () => { order.push(1) })
-      .onReady(async () => { order.push(2) })
-      .onReady(async () => { order.push(3) })
+      .onReady(async () => {
+        order.push(1)
+      })
+      .onReady(async () => {
+        order.push(2)
+      })
+      .onReady(async () => {
+        order.push(3)
+      })
 
     await app.ready()
 
@@ -57,7 +66,9 @@ describe('Adapter Lifecycle', () => {
     @Controller('/lc3')
     class Lc3Controller {
       @Get('/ping')
-      ping() { return {} }
+      ping() {
+        return {}
+      }
     }
 
     void [Lc3Controller]
@@ -79,7 +90,9 @@ describe('Adapter Lifecycle', () => {
     @Controller('/lc4')
     class Lc4Controller {
       @Get('/ping')
-      ping() { return {} }
+      ping() {
+        return {}
+      }
     }
 
     void [Lc4Controller]
@@ -92,8 +105,6 @@ describe('Adapter Lifecycle', () => {
 
     await app.close()
 
-    await expect(
-      app.fetch('/lc4/ping'),
-    ).rejects.toThrow()
+    await expect(app.fetch('/lc4/ping')).rejects.toThrow()
   })
 })

@@ -1,7 +1,4 @@
-import { describe, expect, it } from 'vitest'
 import { token } from '@caffeinejs/di'
-import fastify from 'fastify'
-import { SignJWT } from 'jose'
 import { $t } from '@caffeinejs/std'
 import {
   ConfigPriority,
@@ -10,6 +7,10 @@ import {
   kConfiguration,
   type Configuration,
 } from '@caffeinejs/std/config'
+import fastify from 'fastify'
+import { SignJWT } from 'jose'
+import { describe, expect, it } from 'vitest'
+
 import {
   AllowAnonymous,
   Authorize,
@@ -18,8 +19,8 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '../../../index.js'
-import { kAuthContribution, kAuthSchemeDescriptors } from '../keys.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
+import { kAuthContribution, kAuthSchemeDescriptors } from '../keys.js'
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
 const ENV_SECRET = 'env-secret-key-must-be-at-least-32-chars!!'
@@ -123,9 +124,13 @@ describe('authentication configuration', () => {
   // Building last is what puts each scheme's own validation on the merged options.
   it('validates the merged options, not the code half', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c => c.source(new InlineConfigProvider({
-        auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } },
+          }),
+        ),
+      )
       .authentication(a => a.addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')))
       .build()
 
@@ -134,18 +139,24 @@ describe('authentication configuration', () => {
 
   it('configures a basic realm and a cookie name from the tree', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c => c.source(new InlineConfigProvider({
-        auth: {
-          schemes: {
-            Basic: { realm: 'From Config' },
-            Cookie: { cookieName: 'configured.session' },
-          },
-        },
-      })))
-      .authentication(a => a
-        .addBasic(b => b.realm('From Code').validate(() => null))
-        .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
-        .default('Basic'))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            auth: {
+              schemes: {
+                Basic: { realm: 'From Config' },
+                Cookie: { cookieName: 'configured.session' },
+              },
+            },
+          }),
+        ),
+      )
+      .authentication(a =>
+        a
+          .addBasic(b => b.realm('From Code').validate(() => null))
+          .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
+          .default('Basic'),
+      )
       .build()
       .useAuthenticationAndAuthorization()
 
@@ -156,7 +167,11 @@ describe('authentication configuration', () => {
 
     // The descriptor is computed from the merged options too, so the document describes the real cookie.
     const descriptors = app.container.get<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
-    expect(descriptors.get(token<any>('Cookie'))).toMatchObject({ kind: 'apiKey', in: 'cookie', name: 'configured.session' })
+    expect(descriptors.get(token<any>('Cookie'))).toMatchObject({
+      kind: 'apiKey',
+      in: 'cookie',
+      name: 'configured.session',
+    })
 
     await app.close()
   })
@@ -164,9 +179,11 @@ describe('authentication configuration', () => {
   it('takes the default scheme from the tree', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .config(c => c.source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }), ConfigPriority.ENV))
-      .authentication(a => a
-        .addBasic(b => b.validate(() => null))
-        .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
+      .authentication(a =>
+        a
+          .addBasic(b => b.validate(() => null))
+          .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      )
       .build()
       .useAuthenticationAndAuthorization()
 
@@ -182,15 +199,21 @@ describe('authentication configuration', () => {
     let validated = 0
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c => c.source(new InlineConfigProvider({
-        auth: { schemes: { Basic: { realm: 'Configured' } } },
-      })))
-      .authentication(a => a.addBasic(b => b
-        .realm('Coded')
-        .validate(() => {
-          validated++
-          return null
-        })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            auth: { schemes: { Basic: { realm: 'Configured' } } },
+          }),
+        ),
+      )
+      .authentication(a =>
+        a.addBasic(b =>
+          b.realm('Coded').validate(() => {
+            validated++
+            return null
+          }),
+        ),
+      )
       .build()
       .useAuthenticationAndAuthorization()
 
@@ -214,12 +237,16 @@ describe('authentication configuration', () => {
     })
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(schema, c => c.source(new InlineConfigProvider({
-        app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } },
-      })))
-      .authentication(a => a
-        .config(c => c.app.auth)
-        .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
+      .config(schema, c =>
+        c.source(
+          new InlineConfigProvider({
+            app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } },
+          }),
+        ),
+      )
+      .authentication(a =>
+        a.config(c => c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      )
       .build()
       .useAuthenticationAndAuthorization()
 

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { describe, expect } from 'vitest'
+
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
 import { Scopes } from '../../scope.js'
 
@@ -17,9 +19,7 @@ describe('scope semantics (property)', function () {
     'singleton returns the same instance on repeated get',
     async runs => {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(SingletonSvc, t => t
-        .toSelf()
-        .lifetime(Scopes.SINGLETON))
+      di.bind(SingletonSvc, t => t.toSelf().lifetime(Scopes.SINGLETON))
       await di.init()
 
       let first: SingletonSvc | undefined
@@ -28,8 +28,7 @@ describe('scope semantics (property)', function () {
         if (first === undefined) {
           first = instance
         } else {
-          expect(instance)
-            .toBe(first)
+          expect(instance).toBe(first)
         }
       }
     },
@@ -39,9 +38,7 @@ describe('scope semantics (property)', function () {
     'transient returns distinct instances on repeated get',
     async runs => {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(TransientSvc, t => t
-        .toSelf()
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(TransientSvc, t => t.toSelf().lifetime(Scopes.TRANSIENT))
       await di.init()
 
       const instances = new Set<string>()
@@ -49,8 +46,7 @@ describe('scope semantics (property)', function () {
         instances.add(di.get(TransientSvc).id)
       }
 
-      expect(instances.size)
-        .toBe(runs)
+      expect(instances.size).toBe(runs)
     },
   )
 
@@ -61,15 +57,12 @@ describe('scope semantics (property)', function () {
 
       for (let i = 0; i < containerCount; i++) {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(SingletonSvc, t => t
-          .toSelf()
-          .lifetime(Scopes.SINGLETON))
+        di.bind(SingletonSvc, t => t.toSelf().lifetime(Scopes.SINGLETON))
         await di.init()
         ids.push(di.get(SingletonSvc).id)
       }
 
-      expect(new Set(ids).size)
-        .toBe(containerCount)
+      expect(new Set(ids).size).toBe(containerCount)
     },
   )
 })

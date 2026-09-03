@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import { $t } from '../../schema/t.js'
 import { textList } from '../../schema/text.js'
 import { ErrConfigValidation } from '../errors.js'

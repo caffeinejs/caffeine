@@ -1,5 +1,6 @@
 import { type AnySchema, type JSONSchema, hasFileSchema, toJSONSchema } from '@caffeinejs/std/schema'
 import type { FastifySchema } from 'fastify'
+
 import type { RouteValidationSchema } from '../route.js'
 import { normalizeForAjv } from './_normalize.js'
 
@@ -42,9 +43,7 @@ export function compileRouteSchema(
   if (schema.response !== undefined) {
     const response: Record<string, JSONSchema> = {}
     for (const [status, authored] of Object.entries(schema.response)) {
-      response[status] = normalizeForAjv(
-        toJSONSchema(authored as AnySchema, 'output', `${context} response.${status}`),
-      )
+      response[status] = normalizeForAjv(toJSONSchema(authored as AnySchema, 'output', `${context} response.${status}`))
     }
     compiled.response = response
   }
@@ -67,7 +66,7 @@ export function compileRouteSchema(
  *   through `ctx.req.query()` or by a plugin.
  * - `response` stays as authored; fast-json-stringify emits only declared properties regardless.
  */
-function applySlotPolicy(schema: JSONSchema, slot: typeof REQUEST_SLOTS[number]): JSONSchema {
+function applySlotPolicy(schema: JSONSchema, slot: (typeof REQUEST_SLOTS)[number]): JSONSchema {
   if (slot !== 'headers' && slot !== 'body') {
     return schema
   }

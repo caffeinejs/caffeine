@@ -1,7 +1,13 @@
 import { Context } from '../../context.js'
 import type { Principal } from '../index.js'
 import { AuthzPolicy, type AuthzRequirement } from './policy.js'
-import type { AssertionRequirement, AuthenticatedUserRequirement, ClaimRequirement, ResourceRequirement, RoleRequirement } from './policy_requirement.js'
+import type {
+  AssertionRequirement,
+  AuthenticatedUserRequirement,
+  ClaimRequirement,
+  ResourceRequirement,
+  RoleRequirement,
+} from './policy_requirement.js'
 
 export class PolicyBuilder {
   readonly #requirements: AuthzRequirement[] = []

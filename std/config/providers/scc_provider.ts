@@ -5,7 +5,7 @@ export interface SpringCloudConfigProviderOptions {
   baseURLs: string[]
   headers?: Record<string, string>
   authToken?: string
-  basicAuth?: { username: string, password: string }
+  basicAuth?: { username: string; password: string }
   dispatcher?: RequestInit['dispatcher']
   beforeRequest?: (url: string, init: RequestInit) => RequestInit | Promise<RequestInit>
   retries?: number
@@ -18,7 +18,7 @@ interface ResolvedOptions {
   baseURLs: string[]
   headers: Record<string, string>
   authToken: string
-  basicAuth?: { username: string, password: string }
+  basicAuth?: { username: string; password: string }
   dispatcher?: RequestInit['dispatcher']
   beforeRequest?: (url: string, init: RequestInit) => RequestInit | Promise<RequestInit>
   retries: number
@@ -33,7 +33,7 @@ interface SCCResponse {
   label?: string
   version?: string
   state?: string
-  propertySources?: Array<{ name: string, source: Record<string, unknown> }>
+  propertySources?: Array<{ name: string; source: Record<string, unknown> }>
 }
 
 export class SpringCloudConfigProvider implements ConfigProvider {
@@ -93,16 +93,12 @@ export class SpringCloudConfigProvider implements ConfigProvider {
       }
 
       // Per-attempt interceptor: dynamic auth (token refresh, SigV4, etc.)
-      const resolvedInit = this.#options.beforeRequest
-        ? await this.#options.beforeRequest(url, baseInit)
-        : baseInit
+      const resolvedInit = this.#options.beforeRequest ? await this.#options.beforeRequest(url, baseInit) : baseInit
 
       // Timeout starts here — only the HTTP call counts against it
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), this.#options.timeoutMs)
-      const combinedSignal = signal
-        ? AbortSignal.any([signal, controller.signal])
-        : controller.signal
+      const combinedSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
 
       let nonRetriable: Error | undefined
 

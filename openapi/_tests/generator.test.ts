@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
 import { $p } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std'
+import { describe, expect, it } from 'vitest'
+
+import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { ErrOpenAPIOperationConflict } from '../errors.js'
 import { generateDocument } from '../generate/generator.js'
-import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { kOpenAPISelf } from '../keys.js'
 import type { OperationObject } from '../spec/spec.js'
 import { fixtureOptions, fixtureRoute, fixtureRouter } from './_fixtures.js'
@@ -54,69 +55,70 @@ describe('generateDocument', () => {
   })
 
   it('throws on a duplicate operationId, naming both sites', () => {
-    const a = fixtureRouter('/a', r => r.routes([
-      fixtureRoute('GET', '/', 'list').extras(kOperation, { operationId: 'listThings' }),
-    ]), { name: 'AController' })
-    const b = fixtureRouter('/b', r => r.routes([
-      fixtureRoute('GET', '/', 'index').extras(kOperation, { operationId: 'listThings' }),
-    ]), { name: 'BController' })
+    const a = fixtureRouter(
+      '/a',
+      r => r.routes([fixtureRoute('GET', '/', 'list').extras(kOperation, { operationId: 'listThings' })]),
+      { name: 'AController' },
+    )
+    const b = fixtureRouter(
+      '/b',
+      r => r.routes([fixtureRoute('GET', '/', 'index').extras(kOperation, { operationId: 'listThings' })]),
+      { name: 'BController' },
+    )
 
-    expect(() => generateDocument({ routeGroups: [a, b], options: fixtureOptions() }))
-      .toThrow(ErrOpenAPIOperationConflict)
-    expect(() => generateDocument({ routeGroups: [a, b], options: fixtureOptions() }))
-      .toThrow(/AController\.list.*BController\.index/s)
+    expect(() => generateDocument({ routeGroups: [a, b], options: fixtureOptions() })).toThrow(
+      ErrOpenAPIOperationConflict,
+    )
+    expect(() => generateDocument({ routeGroups: [a, b], options: fixtureOptions() })).toThrow(
+      /AController\.list.*BController\.index/s,
+    )
   })
 
   it('hoists a schema carrying $id into components and references it', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/:id', 'get').schema({ params: petIdParams, response: { 200: petSchema } }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('GET', '/:id', 'get').schema({ params: petIdParams, response: { 200: petSchema } })]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
 
     expect(document.components?.schemas?.Pet).toMatchObject({ type: 'object' })
-    expect(operationAt(document, '/pets/{id}')?.responses?.['200'].content?.['application/json'].schema)
-      .toEqual({ $ref: '#/components/schemas/Pet' })
+    expect(operationAt(document, '/pets/{id}')?.responses?.['200'].content?.['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/Pet',
+    })
   })
 
   it('explodes @Schema slots into parameters with the right required flags', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/', 'list').schema({
-        querystring: $t.Object({ page: $t.Optional($t.Integer()), status: $t.String() }),
-      }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('GET', '/', 'list').schema({
+          querystring: $t.Object({ page: $t.Optional($t.Integer()), status: $t.String() }),
+        }),
+      ]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const parameters = operationAt(document, '/pets')?.parameters ?? []
 
-    expect(parameters).toContainEqual(
-      expect.objectContaining({ name: 'page', in: 'query', required: false }),
-    )
-    expect(parameters).toContainEqual(
-      expect.objectContaining({ name: 'status', in: 'query', required: true }),
-    )
+    expect(parameters).toContainEqual(expect.objectContaining({ name: 'page', in: 'query', required: false }))
+    expect(parameters).toContainEqual(expect.objectContaining({ name: 'status', in: 'query', required: true }))
   })
 
   it('falls back to $p pickers when a slot has no schema', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/:id', 'get').parameters([$p.param('id'), $p.query('page')]),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('GET', '/:id', 'get').parameters([$p.param('id'), $p.query('page')])]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const parameters = operationAt(document, '/pets/{id}')?.parameters ?? []
 
-    expect(parameters).toContainEqual(
-      expect.objectContaining({ name: 'id', in: 'path', required: true }),
-    )
-    expect(parameters).toContainEqual(
-      expect.objectContaining({ name: 'page', in: 'query', required: false }),
-    )
+    expect(parameters).toContainEqual(expect.objectContaining({ name: 'id', in: 'path', required: true }))
+    expect(parameters).toContainEqual(expect.objectContaining({ name: 'page', in: 'query', required: false }))
   })
 
   it('marks a path parameter required even when the schema says otherwise', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/:id', 'get').schema({ params: $t.Object({ id: $t.Optional($t.String()) }) }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('GET', '/:id', 'get').schema({ params: $t.Object({ id: $t.Optional($t.String()) }) })]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const id = operationAt(document, '/pets/{id}')?.parameters?.find(p => p.name === 'id')
@@ -125,11 +127,13 @@ describe('generateDocument', () => {
   })
 
   it('never documents credential headers as parameters', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/', 'list').schema({
-        headers: $t.Object({ authorization: $t.String(), 'x-trace-id': $t.Optional($t.String()) }),
-      }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('GET', '/', 'list').schema({
+          headers: $t.Object({ authorization: $t.String(), 'x-trace-id': $t.Optional($t.String()) }),
+        }),
+      ]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const names = (operationAt(document, '/pets')?.parameters ?? []).map(p => p.name)
@@ -139,23 +143,22 @@ describe('generateDocument', () => {
   })
 
   it('builds a request body from @Schema({ body })', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).statusCode(201),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).statusCode(201)]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const operation = operationAt(document, '/pets', 'post')
 
     expect(operation?.requestBody?.required).toBe(true)
-    expect(operation?.requestBody?.content['application/json'].schema)
-      .toEqual({ $ref: '#/components/schemas/Pet' })
+    expect(operation?.requestBody?.content['application/json'].schema).toEqual({ $ref: '#/components/schemas/Pet' })
     expect(Object.keys(operation?.responses ?? {})).toContain('201')
   })
 
   it('synthesizes a multipart body from file pickers', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/:id/images', 'upload').parameters([$p.param('id'), $multipart.file('file')]),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/:id/images', 'upload').parameters([$p.param('id'), $multipart.file('file')])]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const body = operationAt(document, '/pets/{id}/images', 'post')?.requestBody
@@ -168,10 +171,13 @@ describe('generateDocument', () => {
   })
 
   it('documents a $t.File body as multipart, which is all a handler taking no pickers can declare', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/:id/images', 'upload')
-        .schema({ body: $t.Object({ file: $t.File(), caption: $t.String() }) }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('POST', '/:id/images', 'upload').schema({
+          body: $t.Object({ file: $t.File(), caption: $t.String() }),
+        }),
+      ]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const body = operationAt(document, '/pets/{id}/images', 'post')?.requestBody
@@ -187,9 +193,7 @@ describe('generateDocument', () => {
   })
 
   it('omits a request body on a GET', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/', 'list').parameters([$p.body()]),
-    ]))
+    const router = fixtureRouter('/pets', r => r.routes([fixtureRoute('GET', '/', 'list').parameters([$p.body()])]))
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
 
@@ -197,9 +201,7 @@ describe('generateDocument', () => {
   })
 
   it('emits no content for a 204', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('DELETE', '/:id', 'remove').statusCode(204),
-    ]))
+    const router = fixtureRouter('/pets', r => r.routes([fixtureRoute('DELETE', '/:id', 'remove').statusCode(204)]))
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const responses = operationAt(document, '/pets/{id}', 'delete')?.responses
@@ -210,9 +212,9 @@ describe('generateDocument', () => {
 
 describe('response inference', () => {
   it('adds the validation status when a request slot has a schema', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').schema({ body: petSchema }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
+    )
 
     const document = generateDocument({
       routeGroups: [router],
@@ -223,9 +225,9 @@ describe('response inference', () => {
   })
 
   it('honours a configured validation status', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').schema({ body: petSchema }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema })]),
+    )
 
     const document = generateDocument({
       routeGroups: [router],
@@ -238,9 +240,9 @@ describe('response inference', () => {
   })
 
   it('adds 401 and 403 on a protected route', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').authorize({ roles: ['write:pets'] }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').authorize({ roles: ['write:pets'] })]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const statuses = Object.keys(operationAt(document, '/pets', 'post')?.responses ?? {})
@@ -250,9 +252,9 @@ describe('response inference', () => {
   })
 
   it('infers nothing when inference is off', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).authorize({}),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).authorize({})]),
+    )
 
     const document = generateDocument({
       routeGroups: [router],
@@ -264,12 +266,14 @@ describe('response inference', () => {
   })
 
   it('lets a declared response win over an inferred one', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').schema({
-        body: petSchema,
-        response: { 400: $t.Object({ detail: $t.String() }) },
-      }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('POST', '/', 'create').schema({
+          body: petSchema,
+          response: { 400: $t.Object({ detail: $t.String() }) },
+        }),
+      ]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const declared = operationAt(document, '/pets', 'post')?.responses?.['400']
@@ -280,9 +284,9 @@ describe('response inference', () => {
   })
 
   it('normalizes a lowercase wildcard status to the spec form', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/', 'list').schema({ response: { '4xx': errorSchema } }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('GET', '/', 'list').schema({ response: { '4xx': errorSchema } })]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
 
@@ -298,14 +302,17 @@ describe('security', () => {
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions(), schemes })
 
-    expect(document.components?.securitySchemes?.Bearer)
-      .toEqual({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
+    expect(document.components?.securitySchemes?.Bearer).toEqual({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    })
   })
 
   it('emits a security requirement from @Authorize', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').authorize({ schemes: ['Bearer'] }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').authorize({ schemes: ['Bearer'] })]),
+    )
 
     const document = generateDocument({
       routeGroups: [router],
@@ -318,9 +325,9 @@ describe('security', () => {
   })
 
   it('emits an empty requirement for @AllowAnonymous, opting out of the document default', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/', 'list').authorize({ allowAnonymous: true }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('GET', '/', 'list').authorize({ allowAnonymous: true })]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions(), schemes })
 
@@ -328,9 +335,9 @@ describe('security', () => {
   })
 
   it('falls back to the default scheme when the route names none', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').authorize({ roles: ['ops'] }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').authorize({ roles: ['ops'] })]),
+    )
 
     const document = generateDocument({
       routeGroups: [router],
@@ -343,9 +350,9 @@ describe('security', () => {
   })
 
   it('records roles in the description, since an http scheme has no scopes', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('POST', '/', 'create').authorize({ schemes: ['Bearer'], roles: ['write:pets'] }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([fixtureRoute('POST', '/', 'create').authorize({ schemes: ['Bearer'], roles: ['write:pets'] })]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions(), schemes })
 
@@ -355,14 +362,16 @@ describe('security', () => {
 
 describe('decorator detail', () => {
   it('lets @Operation override the derived values', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/:id', 'get').extras(kOperation, {
-        summary: 'Get a pet',
-        operationId: 'getPet',
-        tags: ['Animals'],
-        deprecated: true,
-      }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('GET', '/:id', 'get').extras(kOperation, {
+          summary: 'Get a pet',
+          operationId: 'getPet',
+          tags: ['Animals'],
+          deprecated: true,
+        }),
+      ]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const operation = operationAt(document, '/pets/{id}')
@@ -374,10 +383,12 @@ describe('decorator detail', () => {
   })
 
   it('omits an operation marked hidden', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/', 'list'),
-      fixtureRoute('GET', '/secret', 'secret').extras(kOperation, { hidden: true }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('GET', '/', 'list'),
+        fixtureRoute('GET', '/secret', 'secret').extras(kOperation, { hidden: true }),
+      ]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
 
@@ -419,11 +430,13 @@ describe('decorator detail', () => {
   })
 
   it('merges an authored parameter description over the derived parameter', () => {
-    const router = fixtureRouter('/pets', r => r.routes([
-      fixtureRoute('GET', '/:id', 'get')
-        .schema({ params: petIdParams })
-        .extras(kOperation, { parameters: [{ name: 'id', in: 'path', description: 'The pet ID' }] }),
-    ]))
+    const router = fixtureRouter('/pets', r =>
+      r.routes([
+        fixtureRoute('GET', '/:id', 'get')
+          .schema({ params: petIdParams })
+          .extras(kOperation, { parameters: [{ name: 'id', in: 'path', description: 'The pet ID' }] }),
+      ]),
+    )
 
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions() })
     const id = operationAt(document, '/pets/{id}')?.parameters?.find(p => p.name === 'id')
@@ -459,7 +472,7 @@ describe('version differences', () => {
 })
 
 describe('self-exclusion', () => {
-  it('skips the package\'s own document endpoints by default', () => {
+  it("skips the package's own document endpoints by default", () => {
     const self = fixtureRouter('/', r => {
       r.extras(kOpenAPISelf, true)
       r.routes([fixtureRoute('GET', '/openapi.json', 'json')])

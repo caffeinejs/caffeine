@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '@caffeinejs/di'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import {
   Args,
   Catch,

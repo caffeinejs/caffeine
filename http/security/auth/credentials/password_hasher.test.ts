@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { ScryptPasswordHasher } from './password_hasher.js'
 
 // Small cost parameters keep the suite fast; production defaults are far higher.

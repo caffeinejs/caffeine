@@ -1,6 +1,7 @@
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import { compileRouteSchema } from '../compile_route_schema.js'
 
 const bodyOf = (schema: Parameters<typeof compileRouteSchema>[0]) =>
@@ -8,18 +9,24 @@ const bodyOf = (schema: Parameters<typeof compileRouteSchema>[0]) =>
 
 describe('nullable union normalization', () => {
   it('collapses a nullable union into a type array', () => {
-    expect(bodyOf({ body: $t.Object({ note: $t.Nullable($t.String()) }) }).properties.note)
-      .toEqual({ type: ['string', 'null'] })
+    expect(bodyOf({ body: $t.Object({ note: $t.Nullable($t.String()) }) }).properties.note).toEqual({
+      type: ['string', 'null'],
+    })
   })
 
   it('keeps the branch constraints when collapsing', () => {
-    expect(bodyOf({ body: $t.Object({ note: $t.Nullable($t.String({ minLength: 3 })) }) }).properties.note)
-      .toEqual({ type: ['string', 'null'], minLength: 3 })
+    expect(bodyOf({ body: $t.Object({ note: $t.Nullable($t.String({ minLength: 3 })) }) }).properties.note).toEqual({
+      type: ['string', 'null'],
+      minLength: 3,
+    })
   })
 
   it('collapses a nullable object', () => {
-    expect(bodyOf({ body: $t.Object({ meta: $t.Nullable($t.Object({ a: $t.String() })) }) }).properties.meta)
-      .toEqual({ type: ['object', 'null'], required: ['a'], properties: { a: { type: 'string' } } })
+    expect(bodyOf({ body: $t.Object({ meta: $t.Nullable($t.Object({ a: $t.String() })) }) }).properties.meta).toEqual({
+      type: ['object', 'null'],
+      required: ['a'],
+      properties: { a: { type: 'string' } },
+    })
   })
 
   it('collapses inside arrays and nested objects', () => {
@@ -35,8 +42,9 @@ describe('nullable union normalization', () => {
   })
 
   it('normalizes a Standard Schema nullable too', () => {
-    expect(bodyOf({ body: z.object({ note: z.string().nullable() }) }).properties.note)
-      .toEqual({ type: ['string', 'null'] })
+    expect(bodyOf({ body: z.object({ note: z.string().nullable() }) }).properties.note).toEqual({
+      type: ['string', 'null'],
+    })
   })
 
   it('refuses to collapse a nullable literal, where hoisting const would reject null', () => {
@@ -95,24 +103,28 @@ describe('nullable union normalization', () => {
 
 describe('literal union collapse', () => {
   it('collapses a same-type literal union into a typed enum', () => {
-    expect(bodyOf({ body: $t.Object({ status: $t.UnionEnum(['draft', 'live']) }) }).properties.status)
-      .toEqual({ type: 'string', enum: ['draft', 'live'] })
+    expect(bodyOf({ body: $t.Object({ status: $t.UnionEnum(['draft', 'live']) }) }).properties.status).toEqual({
+      type: 'string',
+      enum: ['draft', 'live'],
+    })
   })
 
   it('collapses $t.Union of literals the same way, so existing schemas benefit', () => {
-    expect(bodyOf({
-      body: $t.Object({ status: $t.Union([$t.Literal('draft'), $t.Literal('live')]) }),
-    }).properties.status).toEqual({ type: 'string', enum: ['draft', 'live'] })
+    expect(
+      bodyOf({
+        body: $t.Object({ status: $t.Union([$t.Literal('draft'), $t.Literal('live')]) }),
+      }).properties.status,
+    ).toEqual({ type: 'string', enum: ['draft', 'live'] })
   })
 
   it('collapses $t.Enum too, which TypeBox also emits as anyOf of consts', () => {
-    expect(bodyOf({ body: $t.Object({ status: $t.Enum({ Draft: 'draft', Live: 'live' }) }) }).properties.status)
-      .toEqual({ type: 'string', enum: ['draft', 'live'] })
+    expect(
+      bodyOf({ body: $t.Object({ status: $t.Enum({ Draft: 'draft', Live: 'live' }) }) }).properties.status,
+    ).toEqual({ type: 'string', enum: ['draft', 'live'] })
   })
 
   it('collapses mixed-type literals into a bare enum, so Ajv cannot coerce between members', () => {
-    expect(bodyOf({ body: $t.Object({ value: $t.UnionEnum([1, 'a']) }) }).properties.value)
-      .toEqual({ enum: [1, 'a'] })
+    expect(bodyOf({ body: $t.Object({ value: $t.UnionEnum([1, 'a']) }) }).properties.value).toEqual({ enum: [1, 'a'] })
   })
 
   it('refuses when a branch carries an extra keyword', () => {
@@ -126,8 +138,10 @@ describe('literal union collapse', () => {
   })
 
   it('keeps options set on the union itself', () => {
-    expect(bodyOf({
-      body: $t.Object({ status: $t.UnionEnum(['draft', 'live'], { description: 'lifecycle' }) }),
-    }).properties.status).toEqual({ type: 'string', enum: ['draft', 'live'], description: 'lifecycle' })
+    expect(
+      bodyOf({
+        body: $t.Object({ status: $t.UnionEnum(['draft', 'live'], { description: 'lifecycle' }) }),
+      }).properties.status,
+    ).toEqual({ type: 'string', enum: ['draft', 'live'], description: 'lifecycle' })
   })
 })

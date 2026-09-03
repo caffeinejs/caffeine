@@ -1,5 +1,5 @@
-import { postBench } from '../generated/orval/client.js'
 import { benchBody, benchFilter, benchId } from '../config.js'
+import { postBench } from '../generated/orval/client.js'
 import type { BenchClient } from './bench_client.js'
 
 export const orvalClient: BenchClient = {

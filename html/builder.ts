@@ -1,4 +1,5 @@
 import { ServiceBootstrapIn, type Service, type ServiceAPI } from '@caffeinejs/std'
+
 import { HTMLExtension, HTML_DEFAULTS, type HTMLDefaults } from './extension.js'
 
 /**

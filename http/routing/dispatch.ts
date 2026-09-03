@@ -22,13 +22,13 @@ export interface RouteCompilers<REQ = unknown, RES = unknown> {
  * a singleton instance, one resolved per request, a plain function — chooses between them here, so the request
  * path never branches on which source declared the route.
  */
-export type RouteDispatch<REQ = unknown, RES = unknown>
-  = (compilers: RouteCompilers<REQ, RES>) => (req: REQ, res: RES) => unknown
+export type RouteDispatch<REQ = unknown, RES = unknown> = (
+  compilers: RouteCompilers<REQ, RES>,
+) => (req: REQ, res: RES) => unknown
 
 /**
  * A request hook covering every route of one group, supplied by the source that built it.
  *
  * Registered by the adapter exactly as given, so it costs what the equivalent hand-written hook costs.
  */
-export type RouteGroupHook<REQ = unknown, RES = unknown>
-  = (req: REQ, res: RES, done: (err?: Error) => void) => void
+export type RouteGroupHook<REQ = unknown, RES = unknown> = (req: REQ, res: RES, done: (err?: Error) => void) => void

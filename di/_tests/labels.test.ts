@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
-import { Provides } from '../decorators/provides.js'
-import { Configuration } from '../decorators/configuration.js'
+
+import { CaffeineIoC } from '../container.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Label } from '../decorators/label.js'
 import { Profile } from '../decorators/profile.js'
-import { CaffeineIoC } from '../container.js'
+import { Provides } from '../decorators/provides.js'
+import { token } from '../key.js'
 
 describe('Label', function () {
   it('should tag a class and return its binding via getBy', function () {
@@ -19,10 +20,8 @@ describe('Label', function () {
     const di = new CaffeineIoC()
 
     const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
-    expect(result)
-      .toHaveLength(1)
-    expect(result[0].key)
-      .toBe(Svc)
+    expect(result).toHaveLength(1)
+    expect(result[0].key).toBe(Svc)
   })
 
   it('should support multiple labels on a single class', function () {
@@ -35,10 +34,8 @@ describe('Label', function () {
 
     const di = new CaffeineIoC()
 
-    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1)))
-      .toHaveLength(1)
-    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2)))
-      .toHaveLength(1)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))).toHaveLength(1)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2))).toHaveLength(1)
   })
 
   it('should accumulate labels when @Label is stacked', function () {
@@ -52,12 +49,9 @@ describe('Label', function () {
 
     const di = new CaffeineIoC()
 
-    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1)))
-      .toHaveLength(1)
-    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2)))
-      .toHaveLength(1)
-    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))[0].key)
-      .toBe(Stacked)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))).toHaveLength(1)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2))).toHaveLength(1)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))[0].key).toBe(Stacked)
   })
 
   it('should return a BindingDescriptor with the correct key and labels', function () {
@@ -70,12 +64,9 @@ describe('Label', function () {
     const di = new CaffeineIoC()
     const descriptors = di.getBindingsByLabel(sym)
 
-    expect(descriptors)
-      .toHaveLength(1)
-    expect(descriptors[0].key)
-      .toBe(Resolved)
-    expect(descriptors[0].binding.labels)
-      .toContain(sym)
+    expect(descriptors).toHaveLength(1)
+    expect(descriptors[0].key).toBe(Resolved)
+    expect(descriptors[0].binding.labels).toContain(sym)
   })
 
   it('should return BindingDescriptor[] from getBindingsBy, not resolved instances', function () {
@@ -89,8 +80,7 @@ describe('Label', function () {
     const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
 
     expect(result[0]).not.toBeInstanceOf(Target)
-    expect(typeof result[0].key)
-      .toBe('function')
+    expect(typeof result[0].key).toBe('function')
   })
 
   it('should not return the binding of a class that fails its conditional', function () {
@@ -103,10 +93,8 @@ describe('Label', function () {
 
     const di = new CaffeineIoC()
 
-    expect(di.has(Excluded))
-      .toBe(false)
-    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
-      .toHaveLength(0)
+    expect(di.has(Excluded)).toBe(false)
+    expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))).toHaveLength(0)
   })
 
   it('should respect profile when querying labels via child container', async function () {
@@ -122,10 +110,8 @@ describe('Label', function () {
     await root.init()
     await child.init()
 
-    expect(root.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
-      .toHaveLength(0)
-    expect(child.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym)))
-      .toHaveLength(1)
+    expect(root.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))).toHaveLength(0)
+    expect(child.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))).toHaveLength(1)
   })
 
   describe('on @Provides methods inside @Configuration', function () {
@@ -145,10 +131,8 @@ describe('Label', function () {
       const di = new CaffeineIoC()
 
       const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
-      expect(result)
-        .toHaveLength(1)
-      expect(result[0].binding.labels)
-        .toContain(sym)
+      expect(result).toHaveLength(1)
+      expect(result[0].binding.labels).toContain(sym)
     })
 
     it('should return a BindingDescriptor with the correct key and labels when label is on @Provides method', function () {
@@ -167,12 +151,9 @@ describe('Label', function () {
       const di = new CaffeineIoC()
       const descriptors = di.getBindingsByLabel(sym)
 
-      expect(descriptors)
-        .toHaveLength(1)
-      expect(descriptors[0].key)
-        .toBe(kItem)
-      expect(descriptors[0].binding.labels)
-        .toContain(sym)
+      expect(descriptors).toHaveLength(1)
+      expect(descriptors[0].key).toBe(kItem)
+      expect(descriptors[0].binding.labels).toContain(sym)
     })
   })
 })

@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
 import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
 import { ApplicationAvailability, Contributions, type ServiceBootstrapIn } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
+import { describe, it, expect, vi } from 'vitest'
+
 import { AuthenticationBuilder } from './builder.js'
 
 function makeKit(): ServiceBootstrapIn {
@@ -47,9 +48,7 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
 
   it('does not throw when an explicit default is set with one strategy', async () => {
     const builder = new AuthenticationBuilder()
-    builder
-      .addBasic(o => o.validate(vi.fn()))
-      .default('Basic')
+    builder.addBasic(o => o.validate(vi.fn())).default('Basic')
 
     await expect(builder.bootstrap(makeKit())).resolves.toBeUndefined()
   })

@@ -1,5 +1,6 @@
 import { token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
+
 import { $t } from '../../schema/t.js'
 import { bootstrapConfig } from '../bootstrap.js'
 import { ConfigDefinition } from '../definition.js'
@@ -94,9 +95,7 @@ describe('defineFeatureConfig', () => {
       values: { size: 7, label: 'from-code' },
     })
 
-    await resolve(definition, [
-      new EnvConfigProvider({ prefix: 'APP_', env: { APP_WIDGET__SIZE: '99' } }),
-    ])
+    await resolve(definition, [new EnvConfigProvider({ prefix: 'APP_', env: { APP_WIDGET__SIZE: '99' } })])
 
     expect(slice.config.size).toBe(99)
     // Untouched by the environment, so the code value still stands.

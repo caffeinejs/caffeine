@@ -2,7 +2,14 @@ import { Binding } from './binding.js'
 import { Container } from './container_interface.js'
 import { ErrConfigurationBindingNotFound, ErrInvalidBinding } from './errors.js'
 import { Factory, AsyncFactory } from './factory.js'
-import { chainedFactory, scopedFactory, classFactory, configurationClassFactory } from './internal/core/factory/index.js'
+import { InjectionDescriptor } from './injection.js'
+import { defaultResolverFor, InjectionResolver, resolverFor } from './injection_resolver.js'
+import {
+  chainedFactory,
+  scopedFactory,
+  classFactory,
+  configurationClassFactory,
+} from './internal/core/factory/index.js'
 import {
   propertyInjectorInterceptor,
   methodInjectorInterceptor,
@@ -10,8 +17,6 @@ import {
   beforeInitInterceptor,
   afterInitInterceptor,
 } from './internal/core/interceptor/index.js'
-import { InjectionDescriptor } from './injection.js'
-import { defaultResolverFor, InjectionResolver, resolverFor } from './injection_resolver.js'
 import { keyStr, InjectionToken, Identifier } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { Scope, Scopes } from './scope.js'
@@ -32,13 +37,22 @@ export function compileInjectionResolvers(container: Container, key: InjectionTo
   if (binding.injections.length > 0) {
     binding.injectionResolvers = new Array(binding.injections.length)
     for (let i = 0; i < binding.injections.length; i++) {
-      binding.injectionResolvers[i]
-        = compileDescriptorResolver(container, key, binding.injections[i], 'constructor', '', i)
+      binding.injectionResolvers[i] = compileDescriptorResolver(
+        container,
+        key,
+        binding.injections[i],
+        'constructor',
+        '',
+        i,
+      )
     }
   }
 
   for (const [prop, desc] of binding.injectableProperties) {
-    binding.propertyResolvers.set(prop, compileDescriptorResolver(container, key, desc, 'property', prop as Identifier, -1))
+    binding.propertyResolvers.set(
+      prop,
+      compileDescriptorResolver(container, key, desc, 'property', prop as Identifier, -1),
+    )
   }
 
   for (const [method, specs] of binding.injectableMethods) {
@@ -59,8 +73,8 @@ export function compileFactory<T>(
 ): void {
   const scopeID = binding.scopeID
   const scope = scopeID !== Scopes.TRANSIENT ? scopes.get(scopeID)! : undefined
-  const ctor: Ctor | undefined
-    = (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
+  const ctor: Ctor | undefined =
+    (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
   let rawFactory: Factory<T> | AsyncFactory<T> | undefined
   if (binding.factory) {
@@ -74,11 +88,7 @@ export function compileFactory<T>(
         throw new ErrConfigurationBindingNotFound(binding.source.ctor)
       }
 
-      rawFactory = configurationClassFactory<T>(
-        binding.source.ctor as Ctor<T>,
-        binding.source.method,
-        conf,
-      )
+      rawFactory = configurationClassFactory<T>(binding.source.ctor as Ctor<T>, binding.source.method, conf)
     } else {
       if (ctor !== undefined) {
         rawFactory = classFactory<T>(ctor as Ctor<T>, binding.injectionResolvers)

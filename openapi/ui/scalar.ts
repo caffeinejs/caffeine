@@ -1,7 +1,9 @@
-import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+
 import { solutions } from '@caffeinejs/http'
+
 import { ErrOpenAPIConfiguration } from '../errors.js'
 
 /**
@@ -50,11 +52,11 @@ export function readScalarBundle(): string {
 
 function notInstalled(reason: string): ErrOpenAPIConfiguration {
   return new ErrOpenAPIConfiguration(
-    `Cannot serve the OpenAPI documentation UI: ${reason}`
-    + solutions(
-      'Install it with "npm install --save-dev @scalar/api-reference"',
-      'Call .docs(false) on the OpenAPI builder to serve the document without a UI',
-    ),
+    `Cannot serve the OpenAPI documentation UI: ${reason}` +
+      solutions(
+        'Install it with "npm install --save-dev @scalar/api-reference"',
+        'Call .docs(false) on the OpenAPI builder to serve the document without a UI',
+      ),
   )
 }
 
@@ -100,9 +102,5 @@ export function scalarPage(options: {
 }
 
 function escapeHTML(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }

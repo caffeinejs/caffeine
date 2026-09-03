@@ -2,6 +2,7 @@ import { ErrSchemaNotRepresentable, $t } from '@caffeinejs/std/schema'
 import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import {
   $p,
   AllowAnonymous,

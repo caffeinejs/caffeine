@@ -2,12 +2,12 @@
 
 User-facing files for coding agents that **write Caffeine apps**. Not contributor rules for this repository — those stay in the root [`AGENTS.md`](../AGENTS.md) and [`CONVENTIONS.md`](../CONVENTIONS.md).
 
-| Path | Role |
-|---|---|
-| `llms.txt` | Index (llmstxt.org). Start here, then follow links. |
-| `docs/` | Short how-tos. `rules.md` is the anti-hallucination list. |
-| `templates/` | `AGENTS.md` / `CLAUDE.md` copied into new apps. |
-| `skills/` | Workflows (Agent Skills). Copied to `.agents/skills/` on scaffold. |
+| Path         | Role                                                               |
+| ------------ | ------------------------------------------------------------------ |
+| `llms.txt`   | Index (llmstxt.org). Start here, then follow links.                |
+| `docs/`      | Short how-tos. `rules.md` is the anti-hallucination list.          |
+| `templates/` | `AGENTS.md` / `CLAUDE.md` copied into new apps.                    |
+| `skills/`    | Workflows (Agent Skills). Copied to `.agents/skills/` on scaffold. |
 
 Do not copy this repo’s root `CLAUDE.md` into an application.
 

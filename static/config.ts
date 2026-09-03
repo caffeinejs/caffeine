@@ -1,4 +1,5 @@
 import { $t } from '@caffeinejs/std'
+
 import type { SPAOptions } from './spa.js'
 import type { StaticMount } from './static.js'
 
@@ -48,16 +49,18 @@ const spaCacheSchema = $t.Union([
  */
 export const staticConfigSchema = $t.Object({
   mounts: $t.Optional($t.Array(optionBag())),
-  spa: $t.Optional($t.Object({
-    root: $t.String(),
-    index: $t.Optional($t.String()),
-    prefix: $t.Optional($t.String()),
-    exclude: $t.Optional($t.List($t.String())),
-    include: $t.Optional($t.List($t.String())),
-    derive: $t.Optional($t.Boolean()),
-    navigationOnly: $t.Optional($t.Boolean()),
-    onMissingIndex: $t.Optional($t.UnionEnum(['error', 'skip'])),
-    cache: $t.Optional(spaCacheSchema),
-    static: $t.Optional(optionBag()),
-  })),
+  spa: $t.Optional(
+    $t.Object({
+      root: $t.String(),
+      index: $t.Optional($t.String()),
+      prefix: $t.Optional($t.String()),
+      exclude: $t.Optional($t.List($t.String())),
+      include: $t.Optional($t.List($t.String())),
+      derive: $t.Optional($t.Boolean()),
+      navigationOnly: $t.Optional($t.Boolean()),
+      onMissingIndex: $t.Optional($t.UnionEnum(['error', 'skip'])),
+      cache: $t.Optional(spaCacheSchema),
+      static: $t.Optional(optionBag()),
+    }),
+  ),
 })

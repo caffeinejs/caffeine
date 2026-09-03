@@ -8,7 +8,7 @@
 export async function fetchUserInfo(
   endpoint: string,
   accessToken: string,
-  options: { timeoutMs: number, headers?: Record<string, string> },
+  options: { timeoutMs: number; headers?: Record<string, string> },
 ): Promise<Record<string, unknown>> {
   let response: Response
   try {

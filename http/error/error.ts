@@ -1,5 +1,6 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
+
 import { Context } from '../context.js'
 import { ActionResult } from '../response.js'
 import { ErrConfiguration } from './common.js'
@@ -62,9 +63,7 @@ export type ErrorHandlerRef = InjectionToken<ErrorHandler<Error>>
 // ErrorHandlerProvider holds the mapping of error types to their handlers.
 // It's used to resolve the most specific handler for an error by walking its prototype chain.
 export class ErrorHandlerProvider {
-  constructor(
-    private readonly handlers: Map<Ctor<Error>, Provider<ErrorHandler<Error>>>,
-  ) {}
+  constructor(private readonly handlers: Map<Ctor<Error>, Provider<ErrorHandler<Error>>>) {}
 
   /**
    * Resolves the most specific handler for an error by walking its prototype chain: the error's own
@@ -89,11 +88,11 @@ export class ErrorHandlingServiceConfigurer implements Service {
       if (!meta) {
         const name = errorHandler.type?.name ?? '<anonymous>'
         throw new ErrConfiguration(
-          `Error handler "${name}" does not declare an error type`
-          + solutions(
-            `Decorate "${name}" with "@Catch(ErrorType)" to bind it to a specific error`,
-            'Use "@Catch(Error)" to register it as a catch-all handler',
-          ),
+          `Error handler "${name}" does not declare an error type` +
+            solutions(
+              `Decorate "${name}" with "@Catch(ErrorType)" to bind it to a specific error`,
+              'Use "@Catch(Error)" to register it as a catch-all handler',
+            ),
         )
       }
 
@@ -107,11 +106,11 @@ export class ErrorHandlingServiceConfigurer implements Service {
       for (const err of meta.errors) {
         if (handlers.has(err)) {
           throw new ErrConfiguration(
-            `Ambiguous error handler: multiple handlers registered for "${err.name}"`
-            + solutions(
-              `Remove the duplicate "@Catch(${err.name})" handler so only one handles this error type`,
-              `Mark one of them "@Catch(${err.name}, { global: false })" and attach it with "@CatchWith" on the controller or route that needs it`,
-            ),
+            `Ambiguous error handler: multiple handlers registered for "${err.name}"` +
+              solutions(
+                `Remove the duplicate "@Catch(${err.name})" handler so only one handles this error type`,
+                `Mark one of them "@Catch(${err.name}, { global: false })" and attach it with "@CatchWith" on the controller or route that needs it`,
+              ),
           )
         }
 
@@ -119,10 +118,9 @@ export class ErrorHandlingServiceConfigurer implements Service {
       }
     }
 
-    kit.container.bind(ErrorHandlerProvider, t => t
-      .toValue(new ErrorHandlerProvider(handlers))
-      .lifetime(Scopes.SINGLETON)
-      .internal())
+    kit.container.bind(ErrorHandlerProvider, t =>
+      t.toValue(new ErrorHandlerProvider(handlers)).lifetime(Scopes.SINGLETON).internal(),
+    )
 
     return Promise.resolve()
   }

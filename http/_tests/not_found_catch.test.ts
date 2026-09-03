@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import fastify from 'fastify'
+import { describe, expect, it } from 'vitest'
+
 import {
   type ActionResult,
   Catch,
@@ -29,8 +30,9 @@ describe('@Catch and unmatched routes', () => {
 
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ caught: true })
-    expect((await (await app.fetch('/another-miss')).json() as Record<string, unknown>).message)
-      .toContain('/another-miss')
+    expect(((await (await app.fetch('/another-miss')).json()) as Record<string, unknown>).message).toContain(
+      '/another-miss',
+    )
 
     await app.close()
   })

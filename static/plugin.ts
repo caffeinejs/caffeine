@@ -1,4 +1,5 @@
 import { defineFeature, type Feature, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
+
 import { StaticBuilder } from './builder.js'
 
 interface StaticBuilderF extends TypeLambda {

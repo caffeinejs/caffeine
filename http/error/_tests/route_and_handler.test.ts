@@ -1,6 +1,15 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
-import { Catch, Controller, ErrConfiguration, ErrHTTPNotFound, Get, createWebApplication, fastifyAdapterFactory } from '../../index.js'
+import { describe, it, expect } from 'vitest'
+
+import {
+  Catch,
+  Controller,
+  ErrConfiguration,
+  ErrHTTPNotFound,
+  Get,
+  createWebApplication,
+  fastifyAdapterFactory,
+} from '../../index.js'
 
 // Isolated: a single method is both a route (@Get) and an error handler (@Catch). buildRouting
 // rejects at ready(), poisoning every app build in the module — so it lives alone.

@@ -1,4 +1,5 @@
 import { type Ctor, type Injection, Injectable, Label } from '@caffeinejs/di'
+
 import { Keys } from '../symbols.js'
 import { registerHandler } from './registrar.js'
 

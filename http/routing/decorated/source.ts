@@ -1,13 +1,14 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
+
+import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
 import { solutions } from '../../error/util.js'
 import { kErrorUnhandled, type RouteGroup, type RouteGroupErrorHandler } from '../../route.js'
-import type { RouteDispatch } from '../dispatch.js'
+import { Keys } from '../../symbols.js'
 import type { RouteGroupMeta } from '../compile.js'
+import type { RouteDispatch } from '../dispatch.js'
 import type { RouteBuildContext, RouteSource } from '../source.js'
 import type { RouteSpec, RouteGroupSpec } from '../spec.js'
-import { Keys } from '../../symbols.js'
-import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 
 /** The instance a route is dispatched on, as the adapter stashes it for the request. */
 interface RequestWithTarget {
@@ -58,11 +59,7 @@ function meta<R>(
   provider: Provider<ControllerInstance>,
 ): RouteGroupMeta<R> {
   const name = typeof key === 'function' ? key.name : String(key)
-  const errorHandlers = buildErrorHandlerMap(
-    spec.errorHandlers,
-    key,
-    new Set(spec.routes.map(route => route.name)),
-  )
+  const errorHandlers = buildErrorHandlerMap(spec.errorHandlers, key, new Set(spec.routes.map(route => route.name)))
 
   // The `@Catch` method form needs the controller instance that threw, so when it is in play the instance is
   // resolved once per request (inside the live request scope) and reused by the route dispatch — correct for
@@ -81,7 +78,7 @@ function meta<R>(
     name,
     target: typeof key === 'function' ? key : undefined,
     onRequest: (req, _res, done) => {
-      (req as RequestWithTarget).routeTarget = ref ?? provider.get()
+      ;(req as RequestWithTarget).routeTarget = ref ?? provider.get()
       done()
     },
     handleError: sharedTargetErrorHandler<R>(errorHandlers),
@@ -106,10 +103,11 @@ function directDispatch<R>(
     return compilers => compilers.handler(route.parameters, fn)
   }
 
-  return compilers => compilers.handler(route.parameters, (...args) => {
-    const ctrl = provider.get()
-    return (ctrl[handlerKey] as (...args: unknown[]) => unknown).apply(ctrl, args)
-  })
+  return compilers =>
+    compilers.handler(route.parameters, (...args) => {
+      const ctrl = provider.get()
+      return (ctrl[handlerKey] as (...args: unknown[]) => unknown).apply(ctrl, args)
+    })
 }
 
 /** Dispatch onto the instance the group's `onRequest` resolved, so the error handler sees the same one. */
@@ -128,9 +126,7 @@ function sharedTargetDispatch<R>(route: RouteSpec<R>): RouteDispatch<R, unknown>
   }
 }
 
-function sharedTargetErrorHandler<R>(
-  errorHandlers: Map<Ctor<Error>, string | symbol>,
-): RouteGroupErrorHandler<R> {
+function sharedTargetErrorHandler<R>(errorHandlers: Map<Ctor<Error>, string | symbol>): RouteGroupErrorHandler<R> {
   return (req, ctx, err) => {
     // Null when the error came from a hook that ran before the group's own — a rejected authentication, say.
     // There is no instance to dispatch on, so the error belongs to the application-wide handler.
@@ -163,15 +159,15 @@ function buildErrorHandlerMap(
   for (const [errorType, methodKey] of handlers) {
     if (routeHandlers.has(methodKey)) {
       throw new ErrConfiguration(
-        `Method "${String(methodKey)}" in "${String(controllerKey)}" cannot be both a route and an error handler`
-        + solutions(`Move the "@Catch(${errorType.name})" handler to a method without a route verb decorator`),
+        `Method "${String(methodKey)}" in "${String(controllerKey)}" cannot be both a route and an error handler` +
+          solutions(`Move the "@Catch(${errorType.name})" handler to a method without a route verb decorator`),
       )
     }
 
     if (map.has(errorType)) {
       throw new ErrConfiguration(
-        `Ambiguous controller error handler: multiple handlers registered for "${errorType.name}" in "${String(controllerKey)}"`
-        + solutions(`Keep a single "@Catch(${errorType.name})" method per controller`),
+        `Ambiguous controller error handler: multiple handlers registered for "${errorType.name}" in "${String(controllerKey)}"` +
+          solutions(`Keep a single "@Catch(${errorType.name})" method per controller`),
       )
     }
 

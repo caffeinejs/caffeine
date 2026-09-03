@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common'
-import { SharedModule } from '../shared/shared.module.js'
-import { CustomerModule } from '../customer/customer.module.js'
+
 import { CartModule } from '../cart/cart.module.js'
-import { NotifierService } from '../shared/notifier.service.js'
-import { CustomerService } from '../customer/customer.service.js'
 import { CartService } from '../cart/cart.service.js'
+import { CustomerModule } from '../customer/customer.module.js'
+import { CustomerService } from '../customer/customer.service.js'
+import { NotifierService } from '../shared/notifier.service.js'
+import { SharedModule } from '../shared/shared.module.js'
+import { OrderController } from './order.controller.js'
 import { OrderRepository } from './order.repository.js'
 import { OrderService } from './order.service.js'
-import { OrderController } from './order.controller.js'
 
 @Module({
   imports: [SharedModule, CustomerModule, CartModule],

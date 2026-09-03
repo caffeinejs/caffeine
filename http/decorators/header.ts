@@ -11,9 +11,7 @@ export function Header(name: string, value: string | string[], charset?: string)
 }
 
 function appendCharset(value: string | string[], charset: string): string | string[] {
-  return Array.isArray(value)
-    ? value.map(v => `${v}; charset=${charset}`)
-    : `${value}; charset=${charset}`
+  return Array.isArray(value) ? value.map(v => `${v}; charset=${charset}`) : `${value}; charset=${charset}`
 }
 
 // Header names attached to the decorator,

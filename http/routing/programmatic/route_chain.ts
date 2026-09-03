@@ -1,10 +1,11 @@
 import { $i, type InjectedOf, type InjectionToken, type ObjectInjectionSpec } from '@caffeinejs/di'
+
 import type { ErrorHandlerRef } from '../../error/error.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RouteValidationSchema } from '../../route.js'
 import type { RouteAuthzOptions } from '../spec.js'
-import type { RouteExtension } from './extension.js'
 import type { RouteState } from './_state.js'
+import type { RouteExtension } from './extension.js'
 import type { Router } from './router.js'
 import type { DeclaredRoute, JoinPath, MergeDeps, RouteHandler } from './types.js'
 

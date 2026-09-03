@@ -184,10 +184,7 @@ export class HealthRegistry {
     })
 
     try {
-      const report: HealthReport = await Promise.race([
-        Promise.resolve(indicator.check(controller.signal)),
-        aborted,
-      ])
+      const report: HealthReport = await Promise.race([Promise.resolve(indicator.check(controller.signal)), aborted])
 
       return {
         name: indicator.name,

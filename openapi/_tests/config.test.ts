@@ -1,8 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import fastify from 'fastify'
+import {
+  AllowAnonymous,
+  Controller,
+  Get,
+  WebApplication,
+  createWebApplication,
+  fastifyAdapterFactory,
+} from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
-import { AllowAnonymous, Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { OpenAPIExtension } from '../extension.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
@@ -21,7 +29,7 @@ const env = (values: Record<string, string>) => new EnvConfigProvider({ env: val
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {
   const res = await app.fetch('/openapi.json')
-  return await res.json() as OpenAPIDocument
+  return (await res.json()) as OpenAPIDocument
 }
 
 describe('openapi configuration', () => {
@@ -48,9 +56,13 @@ describe('openapi configuration', () => {
 
   it('reads the info block from the configuration tree', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(new InlineConfigProvider({
-        openapi: { info: { title: 'From Config', version: '9.9.9' } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            openapi: { info: { title: 'From Config', version: '9.9.9' } },
+          }),
+        ),
+      )
       .extend(OpenAPIExt, o => o.info({ title: 'From Code', version: '1.0.0' }).public())
       .build()
 
@@ -64,9 +76,13 @@ describe('openapi configuration', () => {
   // A partial nested override must not wipe the sibling defaults.
   it('merges a partial errors block over the defaults', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(new InlineConfigProvider({
-        openapi: { errors: { validation: 422 } },
-      })))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            openapi: { errors: { validation: 422 } },
+          }),
+        ),
+      )
       .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
       .build()
 
@@ -118,11 +134,20 @@ describe('openapi configuration', () => {
     })
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(schema, c => c.source(new InlineConfigProvider({
-        app: { docs: { info: { title: 'Moved', version: '2.0.0' } } },
-      })))
+      .config(schema, c =>
+        c.source(
+          new InlineConfigProvider({
+            app: { docs: { info: { title: 'Moved', version: '2.0.0' } } },
+          }),
+        ),
+      )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(OpenAPIExt, o => o.config(c => c.app.docs).info({ title: 'Code', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.app.docs)
+          .info({ title: 'Code', version: '1.0.0' })
+          .public(),
+      )
       .build()
 
     await app.ready()
@@ -134,12 +159,18 @@ describe('openapi configuration', () => {
   // `transformDocument` edits the document in place, and the values now come from a deep-frozen tree.
   it('still lets transformDocument mutate a config-sourced info block', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(new InlineConfigProvider({
-        openapi: { info: { title: 'From Config', version: '1.0.0' } },
-      })))
-      .extend(OpenAPIExt, o => o.public().transformDocument(document => {
-        document.info.title = 'Renamed'
-      }))
+      .config(c =>
+        c.source(
+          new InlineConfigProvider({
+            openapi: { info: { title: 'From Config', version: '1.0.0' } },
+          }),
+        ),
+      )
+      .extend(OpenAPIExt, o =>
+        o.public().transformDocument(document => {
+          document.info.title = 'Renamed'
+        }),
+      )
       .build()
 
     await app.ready()

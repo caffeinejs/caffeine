@@ -1,4 +1,5 @@
 import type { BindingGraph } from '@caffeinejs/di'
+
 import type { BindingSnapshot, DevtoolsEvent, RouteSnapshot } from './types.js'
 
 const EVENT_RING_SIZE = 500

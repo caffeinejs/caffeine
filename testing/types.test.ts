@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest'
+
 import type { ControllerTestClient } from './controller_client.js'
 import type { RouteMethods } from './types.js'
 

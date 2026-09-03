@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import type { RemoteAuthenticationTicket } from '@caffeinejs/http'
+import { describe, it, expect } from 'vitest'
+
 import { TestOIDCTicketStore } from './oidc_ticket_store.js'
 
 /**

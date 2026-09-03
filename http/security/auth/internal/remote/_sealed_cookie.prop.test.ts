@@ -1,15 +1,10 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { Claim } from '../../../index.js'
+import { claimsToSession, decodeSession, decodeTicketRef, encodeSession, encodeTicketRef } from './session_store.js'
 import { decodeState, encodeState } from './state_store.js'
 import type { RemoteAuthenticationState } from './state_store.js'
-import {
-  claimsToSession,
-  decodeSession,
-  decodeTicketRef,
-  encodeSession,
-  encodeTicketRef,
-} from './session_store.js'
 
 /** Cookies are sealed per strategy, so every codec call needs the scheme it belongs to. */
 const SCHEME = 'OIDC'
@@ -62,7 +57,11 @@ describe('state cookie codec (property)', () => {
    * The guarantee is over the decoded bytes, not the encoding.
    */
   function decodesIdentically(a: string, b: string): boolean {
-    const bytes = (s: string) => s.split('.').map(seg => Buffer.from(seg, 'base64url').toString('hex')).join('.')
+    const bytes = (s: string) =>
+      s
+        .split('.')
+        .map(seg => Buffer.from(seg, 'base64url').toString('hex'))
+        .join('.')
     return bytes(a) === bytes(b)
   }
 
@@ -87,7 +86,10 @@ describe('session cookie codec (property)', () => {
   it.prop([fc.array(claimArb, { maxLength: 6 }), fc.string(), secretArb])(
     'encode then decode preserves claims and scheme',
     async (claims, scheme, secret) => {
-      const session = claimsToSession(claims.map(c => new Claim(c.type, c.value, c.issuer)), scheme)
+      const session = claimsToSession(
+        claims.map(c => new Claim(c.type, c.value, c.issuer)),
+        scheme,
+      )
       const decoded = await decodeSession(await encodeSession(session, secret, SCHEME, 3600), secret, SCHEME)
 
       expect(decoded.scheme).toBe(scheme)
@@ -99,7 +101,10 @@ describe('session cookie codec (property)', () => {
     'decoding with any other secret always fails',
     async (claims, secret, other) => {
       fc.pre(secret !== other)
-      const session = claimsToSession(claims.map(c => new Claim(c.type, c.value, c.issuer)), 'OIDC')
+      const session = claimsToSession(
+        claims.map(c => new Claim(c.type, c.value, c.issuer)),
+        'OIDC',
+      )
       const token = await encodeSession(session, secret, SCHEME, 3600)
       await expect(decodeSession(token, other, SCHEME)).rejects.toThrow()
     },
@@ -119,7 +124,10 @@ describe('cookie type separation (property)', () => {
   it.prop([fc.array(claimArb, { maxLength: 4 }), secretArb])(
     'a session token is never accepted as state',
     async (claims, secret) => {
-      const session = claimsToSession(claims.map(c => new Claim(c.type, c.value, c.issuer)), 'OIDC')
+      const session = claimsToSession(
+        claims.map(c => new Claim(c.type, c.value, c.issuer)),
+        'OIDC',
+      )
       const token = await encodeSession(session, secret, SCHEME, 3600)
       await expect(decodeState(token, secret, SCHEME)).rejects.toThrow()
     },
@@ -145,19 +153,19 @@ describe('cookie type separation (property)', () => {
   it.prop([fc.array(claimArb, { maxLength: 4 }), secretArb])(
     'a session token is never accepted as a ticket reference',
     async (claims, secret) => {
-      const session = claimsToSession(claims.map(c => new Claim(c.type, c.value, c.issuer)), 'OIDC')
+      const session = claimsToSession(
+        claims.map(c => new Claim(c.type, c.value, c.issuer)),
+        'OIDC',
+      )
       const token = await encodeSession(session, secret, SCHEME, 3600)
       await expect(decodeTicketRef(token, secret, SCHEME)).rejects.toThrow()
     },
   )
 
-  it.prop([stateArb, secretArb])(
-    'a state token is never accepted as a ticket reference',
-    async (state, secret) => {
-      const token = await encodeState(state, secret, SCHEME)
-      await expect(decodeTicketRef(token, secret, SCHEME)).rejects.toThrow()
-    },
-  )
+  it.prop([stateArb, secretArb])('a state token is never accepted as a ticket reference', async (state, secret) => {
+    const token = await encodeState(state, secret, SCHEME)
+    await expect(decodeTicketRef(token, secret, SCHEME)).rejects.toThrow()
+  })
 })
 
 describe('ticket reference codec (property)', () => {
@@ -167,20 +175,14 @@ describe('ticket reference codec (property)', () => {
     expect(await decodeTicketRef(await encodeTicketRef(key, secret, SCHEME, 3600), secret, SCHEME)).toBe(key)
   })
 
-  it.prop([keyArb, secretArb, secretArb])(
-    'decoding with any other secret always fails',
-    async (key, secret, other) => {
-      fc.pre(secret !== other)
-      await expect(decodeTicketRef(await encodeTicketRef(key, secret, SCHEME, 3600), other, SCHEME)).rejects.toThrow()
-    },
-  )
+  it.prop([keyArb, secretArb, secretArb])('decoding with any other secret always fails', async (key, secret, other) => {
+    fc.pre(secret !== other)
+    await expect(decodeTicketRef(await encodeTicketRef(key, secret, SCHEME, 3600), other, SCHEME)).rejects.toThrow()
+  })
 
   // The reference is opaque by construction, but the cookie must not become a place a key
   // could be read from in cleartext the way the pre-JWE session cookie leaked its claims.
-  it.prop([fc.string({ minLength: 8 }), secretArb])(
-    'the key never appears in the token',
-    async (key, secret) => {
-      expect(await encodeTicketRef(key, secret, SCHEME, 3600)).not.toContain(key)
-    },
-  )
+  it.prop([fc.string({ minLength: 8 }), secretArb])('the key never appears in the token', async (key, secret) => {
+    expect(await encodeTicketRef(key, secret, SCHEME, 3600)).not.toContain(key)
+  })
 })

@@ -5,10 +5,7 @@ export class InlineConfigProvider implements ConfigProvider {
   readonly id: string
   readonly #data: Record<string, ConfigValue>
 
-  constructor(
-    data: Record<string, ConfigValue>,
-    id = 'inline',
-  ) {
+  constructor(data: Record<string, ConfigValue>, id = 'inline') {
     this.#data = data
     this.id = id
   }

@@ -1,8 +1,19 @@
 import { fileURLToPath } from 'node:url'
-import { describe, it, expect } from 'vitest'
+
+import {
+  Catch,
+  type ActionResult,
+  type Context,
+  Controller,
+  ErrorHandler,
+  Get,
+  createWebApplication,
+  fastifyAdapterFactory,
+} from '@caffeinejs/http'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
-import { Catch, type ActionResult, type Context, Controller, ErrorHandler, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { describe, it, expect } from 'vitest'
+
 import { View, ViewExt } from '../index.js'
 
 // An error handler, like a controller handler, may RETURN a View() which the framework renders as HTML.
@@ -23,7 +34,9 @@ class ReturnViewHandler extends ErrorHandler<ErrReturnView> {
 @Controller('/err-return-view')
 class ErrReturnController {
   @Get('/view')
-  view(): unknown { throw new ErrReturnView('as html') }
+  view(): unknown {
+    throw new ErrReturnView('as html')
+  }
 }
 
 void [ReturnViewHandler, ErrReturnController]

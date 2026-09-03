@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+
 import { PetsController } from './pets.controller.js'
 import { PetsRepository } from './pets.repo.js'
 
@@ -10,8 +11,7 @@ describe('PetsController', function () {
     const mockRepo: PetsRepository = {
       all: vi.fn(),
       byID: vi.fn(),
-      create: vi.fn()
-        .mockReturnValue(created),
+      create: vi.fn().mockReturnValue(created),
       update: vi.fn(),
       delete: vi.fn(),
     }
@@ -19,9 +19,7 @@ describe('PetsController', function () {
     const controller = new PetsController(mockRepo)
     const result = controller.create(pet)
 
-    expect(mockRepo.create)
-      .toHaveBeenCalledWith(pet)
-    expect(result)
-      .toEqual(created)
+    expect(mockRepo.create).toHaveBeenCalledWith(pet)
+    expect(result).toEqual(created)
   })
 })

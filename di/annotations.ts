@@ -80,8 +80,7 @@ export function annotate(
 export function createAnnotation<C, M = C>(): Annotator<C, M>
 export function createAnnotation<Args extends unknown[], T>(
   transform: (...args: Args) => T,
-): ((...args: Args) =>
-(target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => void) & {
+): ((...args: Args) => (target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => void) & {
   readonly _c?: T
   readonly _m?: T
 }

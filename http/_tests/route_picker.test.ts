@@ -1,6 +1,5 @@
-import { describe, expect, it } from 'vitest'
-
 import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/std/framework'
+import { describe, expect, it } from 'vitest'
 
 function compose<R>(req: R, ...fns: Array<(req: R) => Array<unknown>>): Array<unknown> {
   return fns.reduce((acc, fn) => [...acc, ...fn(req)], [] as Array<unknown>)
@@ -14,18 +13,22 @@ describe('Request Parameter', () => {
   }
 
   function testTransformer(parameters: Array<ParameterPickOptions<Request>>): ParameterPicker<Request> {
-    return (req: Request) => compose<Request>(req, ...parameters.map(parameter => {
-      switch (parameter.type) {
-        case 'path':
-          return (req: Request) => [req.path[parameter.name as string]]
-        case 'query':
-          return (req: Request) => [req.query[parameter.name as string]]
-        case 'body':
-          return (req: Request) => [req.body[parameter.name as string]]
-        default:
-          return (_req: Request) => []
-      }
-    }))
+    return (req: Request) =>
+      compose<Request>(
+        req,
+        ...parameters.map(parameter => {
+          switch (parameter.type) {
+            case 'path':
+              return (req: Request) => [req.path[parameter.name as string]]
+            case 'query':
+              return (req: Request) => [req.query[parameter.name as string]]
+            case 'body':
+              return (req: Request) => [req.body[parameter.name as string]]
+            default:
+              return (_req: Request) => []
+          }
+        }),
+      )
   }
 
   describe('given a request expressed as an object', () => {
@@ -48,9 +51,7 @@ describe('Request Parameter', () => {
     it('should return empty array for unhandled parameter types', () => {
       const req: Request = { path: {}, query: {}, body: {} }
 
-      const result = testTransformer([
-        { name: 'token', type: 'header' },
-      ])(req)
+      const result = testTransformer([{ name: 'token', type: 'header' }])(req)
 
       expect(result).toEqual([])
     })

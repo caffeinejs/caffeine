@@ -21,9 +21,11 @@ const COLUMNS: Column<BindingSnapshot>[] = [
     key: 'names',
     header: 'Names',
     render: b =>
-      b.names.length > 0
-        ? <span className="font-mono text-zinc-600 dark:text-zinc-400">{b.names.join(', ')}</span>
-        : <span className="text-zinc-400 dark:text-zinc-600">—</span>,
+      b.names.length > 0 ? (
+        <span className="font-mono text-zinc-600 dark:text-zinc-400">{b.names.join(', ')}</span>
+      ) : (
+        <span className="text-zinc-400 dark:text-zinc-600">—</span>
+      ),
   },
   {
     key: 'primary',
@@ -50,19 +52,10 @@ export function Bindings({ bindings }: Props) {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Bindings</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          {visible.length}
-          {' '}
-          {visible.length === 1 ? 'binding' : 'bindings'}
-          {' '}
-          registered in the container
+          {visible.length} {visible.length === 1 ? 'binding' : 'bindings'} registered in the container
         </p>
       </div>
-      <Table
-        columns={COLUMNS}
-        rows={visible}
-        keyFn={b => b.id}
-        empty="No bindings registered yet."
-      />
+      <Table columns={COLUMNS} rows={visible} keyFn={b => b.id} empty="No bindings registered yet." />
     </div>
   )
 }

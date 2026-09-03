@@ -1,5 +1,6 @@
-import type { AnySchema } from '@caffeinejs/std'
 import type { Route, RouteAuthzOptions, RouteGroup } from '@caffeinejs/http'
+import type { AnySchema } from '@caffeinejs/std'
+
 import type {
   ComponentsObject,
   ExternalDocumentationObject,
@@ -126,9 +127,7 @@ export interface OpenAPIOptions {
 }
 
 /** Where an imported document comes from. */
-export type OpenAPISource
-  = { kind: 'document', document: OpenAPIDocument }
-    | { kind: 'file', path: string }
+export type OpenAPISource = { kind: 'document'; document: OpenAPIDocument } | { kind: 'file'; path: string }
 
 /** Everything the generator needs, with nothing left to default. */
 export const DEFAULT_OPENAPI_VERSION: OpenAPIVersion = '3.1.1'

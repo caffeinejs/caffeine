@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+
 import {
   WARNING_TYPE,
   detectSignalDispatcher,

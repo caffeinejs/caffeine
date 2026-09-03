@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import type { Context } from '../../context.js'
 import { Claim, Identity, Principal } from '../index.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
-import { AuthenticateResult, AuthenticationTicket } from './ticket.js'
+import type { AuthenticationHandler } from './handler.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
-import type { AuthenticationHandler } from './handler.js'
+import { AuthenticateResult, AuthenticationTicket } from './ticket.js'
 
 const ctx = {} as unknown as Context
 
@@ -15,9 +16,7 @@ function makeProvider(
   challengeScheme?: string,
   forbidScheme?: string,
 ) {
-  const schemes = new Map(
-    Object.entries(handlers).map(([name, h]) => [name, { get: () => h }]),
-  )
+  const schemes = new Map(Object.entries(handlers).map(([name, h]) => [name, { get: () => h }]))
   return new AuthenticationSchemeProvider(schemes, {
     defaultAuthenticateScheme: defaultScheme,
     defaultChallengeScheme: challengeScheme,
@@ -87,10 +86,7 @@ describe('AuthenticationCoordinator', () => {
       const ticket = new AuthenticationTicket(original, 'Bearer')
       const handler = makeHandler(AuthenticateResult.success(ticket))
       const mapperFn = vi.fn().mockReturnValue(mapped)
-      const coordinator = new AuthenticationService(
-        makeProvider({ Bearer: handler }),
-        { get: () => mapperFn },
-      )
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }), { get: () => mapperFn })
 
       const result = await coordinator.authenticate(ctx, 'Bearer')
 
@@ -103,10 +99,9 @@ describe('AuthenticationCoordinator', () => {
       const props = {}
       const ticket = new AuthenticationTicket(makePrincipal(), 'Bearer', props)
       const handler = makeHandler(AuthenticateResult.success(ticket))
-      const coordinator = new AuthenticationService(
-        makeProvider({ Bearer: handler }),
-        { get: () => vi.fn().mockReturnValue(makePrincipal('mapped')) },
-      )
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }), {
+        get: () => vi.fn().mockReturnValue(makePrincipal('mapped')),
+      })
 
       const result = await coordinator.authenticate(ctx, 'Bearer')
 
@@ -116,10 +111,7 @@ describe('AuthenticationCoordinator', () => {
     it('does not call mapper when authentication does not succeed', async () => {
       const mapperFn = vi.fn()
       const handler = makeHandler(AuthenticateResult.fail(new Error('expired')))
-      const coordinator = new AuthenticationService(
-        makeProvider({ Bearer: handler }),
-        { get: () => mapperFn },
-      )
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }), { get: () => mapperFn })
 
       await coordinator.authenticate(ctx, 'Bearer')
 

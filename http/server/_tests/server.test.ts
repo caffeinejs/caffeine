@@ -1,6 +1,8 @@
 import type { AddressInfo } from 'node:net'
-import { afterEach, describe, expect, it } from 'vitest'
+
 import fastify from 'fastify'
+import { afterEach, describe, expect, it } from 'vitest'
+
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '../../index.js'
 
 describe('server builder + run()', () => {
@@ -17,7 +19,9 @@ describe('server builder + run()', () => {
     @Controller('/srv-configured')
     class ConfiguredController {
       @Get('/ping')
-      ping() { return { ok: true } }
+      ping() {
+        return { ok: true }
+      }
     }
 
     void [ConfiguredController]
@@ -37,7 +41,9 @@ describe('server builder + run()', () => {
     @Controller('/srv-default')
     class DefaultController {
       @Get('/ping')
-      ping() { return { ok: true } }
+      ping() {
+        return { ok: true }
+      }
     }
 
     void [DefaultController]
@@ -55,7 +61,9 @@ describe('server builder + run()', () => {
     @Controller('/auto')
     class AutoController {
       @Get('/ready')
-      ready() { return { ready: true } }
+      ready() {
+        return { ready: true }
+      }
     }
 
     void [AutoController]
@@ -75,7 +83,9 @@ describe('server builder + run()', () => {
     @Controller('/srv-twice')
     class TwiceController {
       @Get('/ping')
-      ping() { return { ok: true } }
+      ping() {
+        return { ok: true }
+      }
     }
 
     void [TwiceController]

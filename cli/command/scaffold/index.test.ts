@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { scaffold } from './scaffolder.js'
 
 let tmpDir: string
@@ -31,7 +32,10 @@ describe('scaffold()', () => {
   test('injects projectName into package.json', async () => {
     const templateDir = join(tmpDir, 'tpl-pkg')
     await mkdir(templateDir, { recursive: true })
-    await writeFile(join(templateDir, 'package.json'), JSON.stringify({ name: 'my-app', version: '1.2.3', type: 'module' }))
+    await writeFile(
+      join(templateDir, 'package.json'),
+      JSON.stringify({ name: 'my-app', version: '1.2.3', type: 'module' }),
+    )
 
     const outDir = join(tmpDir, 'out-pkg')
     await scaffold({ templateDir, outDir, projectName: 'my-real-project', agentsMd: false })
@@ -88,12 +92,15 @@ describe('scaffold() agent files', () => {
     const agents = await readFile(join(outDir, 'AGENTS.md'), 'utf-8')
     expect(agents).toContain('BEGIN:caffeine-agent-rules')
     expect(await readFile(join(outDir, 'CLAUDE.md'), 'utf-8')).toBe('@AGENTS.md\n')
-    expect(await readFile(join(outDir, '.agents', 'skills', 'caffeine-http-controller', 'SKILL.md'), 'utf-8'))
-      .toBe('# http\n')
-    expect(await readFile(join(outDir, '.agents', 'skills', 'caffeine-error-handlers', 'SKILL.md'), 'utf-8'))
-      .toBe('# errors\n')
-    expect(await readFile(join(outDir, '.agents', 'skills', 'caffeine-kafka-listener', 'SKILL.md'), 'utf-8'))
-      .toBe('# kafka\n')
+    expect(await readFile(join(outDir, '.agents', 'skills', 'caffeine-http-controller', 'SKILL.md'), 'utf-8')).toBe(
+      '# http\n',
+    )
+    expect(await readFile(join(outDir, '.agents', 'skills', 'caffeine-error-handlers', 'SKILL.md'), 'utf-8')).toBe(
+      '# errors\n',
+    )
+    expect(await readFile(join(outDir, '.agents', 'skills', 'caffeine-kafka-listener', 'SKILL.md'), 'utf-8')).toBe(
+      '# kafka\n',
+    )
   })
 
   test('agentsMd: false writes no agent files', async () => {

@@ -1,8 +1,9 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
-import { token } from '../../key.js'
+import { describe, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
 import { ErrUnresolvableDependencies } from '../../errors.js'
+import { token } from '../../key.js'
 import { buildAcyclicEdges, buildDiFromEdges } from './helpers/cycle_di_builder.js'
 
 function maxAcyclicEdges(nodeCount: number): number {
@@ -32,8 +33,7 @@ describe('ensureResolvable (property)', function () {
     'missing required dependency produces an issue mentioning the key',
     missingKey => {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(token<any>('svc'), t => t
-        .toFunction((_: unknown) => ({}), [token<any>(missingKey)]))
+      di.bind(token<any>('svc'), t => t.toFunction((_: unknown) => ({}), [token<any>(missingKey)]))
 
       let caught: ErrUnresolvableDependencies | undefined
       try {
@@ -42,19 +42,17 @@ describe('ensureResolvable (property)', function () {
         caught = e as ErrUnresolvableDependencies
       }
 
-      expect(caught)
-        .toBeInstanceOf(ErrUnresolvableDependencies)
-      expect(caught!.issues)
-        .toHaveLength(1)
-      expect(caught!.issues[0])
-        .toContain(missingKey)
+      expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
+      expect(caught!.issues).toHaveLength(1)
+      expect(caught!.issues[0]).toContain(missingKey)
     },
   )
 
   it('optional missing dependency does not throw', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc'), t => t
-      .toFunction((_: unknown) => ({}), [{ key: token<any>('missing'), optional: true }]))
+    di.bind(token<any>('svc'), t =>
+      t.toFunction((_: unknown) => ({}), [{ key: token<any>('missing'), optional: true }]),
+    )
 
     expect(() => di.assertResolvable()).not.toThrow()
   })

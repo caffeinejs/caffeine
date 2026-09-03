@@ -1,8 +1,16 @@
+import {
+  ApplicationAvailability,
+  HealthIndicator,
+  type HealthGroup,
+  type HealthReport,
+  down,
+  up,
+} from '@caffeinejs/std'
 import { describe, it, expect } from 'vitest'
-import { ApplicationAvailability, HealthIndicator, type HealthGroup, type HealthReport, down, up } from '@caffeinejs/std'
-import { HealthRegistry } from './registry.js'
-import { ProbeEndpoint } from './probes.js'
+
 import { type HealthOptions, defaultHealthOptions } from './options.js'
+import { ProbeEndpoint } from './probes.js'
+import { HealthRegistry } from './registry.js'
 
 class Stub extends HealthIndicator {
   constructor(
@@ -31,7 +39,10 @@ class Stub extends HealthIndicator {
   }
 }
 
-function endpoint(indicators: HealthIndicator[] = [], overrides: Partial<HealthOptions> = {}): {
+function endpoint(
+  indicators: HealthIndicator[] = [],
+  overrides: Partial<HealthOptions> = {},
+): {
   probes: ProbeEndpoint
   availability: ApplicationAvailability
 } {
@@ -42,7 +53,10 @@ function endpoint(indicators: HealthIndicator[] = [], overrides: Partial<HealthO
   return { probes: new ProbeEndpoint(availability, registry, options), availability }
 }
 
-function running(indicators: HealthIndicator[] = [], overrides: Partial<HealthOptions> = {}): {
+function running(
+  indicators: HealthIndicator[] = [],
+  overrides: Partial<HealthOptions> = {},
+): {
   probes: ProbeEndpoint
   availability: ApplicationAvailability
 } {
@@ -170,21 +184,19 @@ describe('ProbeEndpoint', () => {
 
       const response = await probes.ready({ verbose: true })
 
-      expect(response.body).toBe([
-        '[+]started ok',
-        '[+]accepting ok',
-        '[+]live ok',
-        '[+]db ok',
-        'readyz check passed',
-        '',
-      ].join('\n'))
+      expect(response.body).toBe(
+        ['[+]started ok', '[+]accepting ok', '[+]live ok', '[+]db ok', 'readyz check passed', ''].join('\n'),
+      )
     })
 
     it('names the failing indicator and its reason', async () => {
-      const { probes } = running([
-        new Stub('db', () => down('connection refused')),
-        new Stub('metrics', () => down('unreachable'), undefined, false),
-      ], { verbose: true })
+      const { probes } = running(
+        [
+          new Stub('db', () => down('connection refused')),
+          new Stub('metrics', () => down('unreachable'), undefined, false),
+        ],
+        { verbose: true },
+      )
 
       const response = await probes.ready({ verbose: true })
 

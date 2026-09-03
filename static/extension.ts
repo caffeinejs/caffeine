@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
-import fastifyStatic from '@fastify/static'
+
 import { deriveServerOwnedPaths, ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
+import fastifyStatic from '@fastify/static'
+
 import { ErrSPAIndexMissing } from './errors.js'
 import { normalizePrefix, underPrefix, type SPASettings } from './spa.js'
 import { SPAFallback } from './spa_fallback.js'
@@ -113,12 +115,10 @@ export class StaticExtension extends ServerExtension {
       .filter(prefix => !spa.include.some(included => underPrefix(prefix, included)))
       .sort()
 
+    ctx.server.log.info(`[static] SPA shell ${spa.prefix || '/'} -> ${join(spa.root, spa.index)}`)
     ctx.server.log.info(
-      `[static] SPA shell ${spa.prefix || '/'} -> ${join(spa.root, spa.index)}`,
-    )
-    ctx.server.log.info(
-      `[static]   never shell: ${neverShell.join(', ') || '(none)'} `
-      + `(derived: ${derived.length}, explicit: ${spa.exclude.length})`,
+      `[static]   never shell: ${neverShell.join(', ') || '(none)'} ` +
+        `(derived: ${derived.length}, explicit: ${spa.exclude.length})`,
     )
 
     if (spa.cache !== false) {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+
 import { newBinding, Binding } from '../../../binding.js'
 import { ResolutionContext } from '../../../resolution_context.js'
 import {
@@ -84,7 +85,12 @@ describe('propertyInjectorInterceptor', () => {
     const resolverB = vi.fn().mockReturnValue('b')
     const instance: Record<string, unknown> = {}
     const ctx = makeCtx(
-      newBinding({ propertyResolvers: new Map([['propA', resolverA], ['propB', resolverB]]) }),
+      newBinding({
+        propertyResolvers: new Map([
+          ['propA', resolverA],
+          ['propB', resolverB],
+        ]),
+      }),
     )
     intercept(ctx, instance)
     expect(instance.propA).toBe('a')

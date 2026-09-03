@@ -1,16 +1,18 @@
 import { writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
 import { afterEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import { $t } from '../../../schema/t.js'
 import { bootstrapConfig } from '../../bootstrap.js'
-import { ConfigPriority, ConfigSources } from '../../sources.js'
 import { ArgsConfigProvider } from '../../providers/args_provider.js'
 import { EnvConfigProvider } from '../../providers/env_provider.js'
 import { FileConfigProvider } from '../../providers/file_provider.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { JSONConfigProvider } from '../../providers/json_provider.js'
+import { ConfigPriority, ConfigSources } from '../../sources.js'
 import type { ConfigProvider, ResolutionContext } from '../../types.js'
 
 // `server` is present in every scenario below. `db` and `app` may be absent from all sources, so they carry an
@@ -38,7 +40,7 @@ afterEach(async () => {
 
 describe('config multi-source precedence & provenance', () => {
   // server.host: in env + file + inline. server.port: in file + inline. db.url: inline only. app.name: nowhere.
-  async function providers(): Promise<{ env: ConfigProvider, file: ConfigProvider, inline: ConfigProvider }> {
+  async function providers(): Promise<{ env: ConfigProvider; file: ConfigProvider; inline: ConfigProvider }> {
     const filePath = await writeTmp('multi-source.json', JSON.stringify({ server: { port: 8080, host: 'file-host' } }))
     return {
       env: new EnvConfigProvider({ prefix: 'APP_', env: ENV }),
@@ -96,9 +98,13 @@ describe('config multi-source precedence & provenance', () => {
   it('loads a source in a format std does not know, from a parser the caller supplies', async () => {
     const iniPath = await writeTmp('multi-source.ini', 'server.host=ini-host\nserver.port=9090\n')
     const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
-    const ini = (text: string): Record<string, unknown> => Object.fromEntries(
-      text.split('\n').filter(line => line !== '').map(line => line.split('=') as [string, string]),
-    )
+    const ini = (text: string): Record<string, unknown> =>
+      Object.fromEntries(
+        text
+          .split('\n')
+          .filter(line => line !== '')
+          .map(line => line.split('=') as [string, string]),
+      )
 
     const { config, diagnostics } = await bootstrapConfig({
       providers: [new FileConfigProvider(iniPath, ini)],
@@ -141,10 +147,7 @@ describe('config array flatten + typed handle', () => {
   })
 
   it('replaces a whole array from the higher-priority source rather than patching an element', async () => {
-    const filePath = await writeTmp(
-      'array-override.json',
-      JSON.stringify({ tags: ['a', 'b'], items: [] }),
-    )
+    const filePath = await writeTmp('array-override.json', JSON.stringify({ tags: ['a', 'b'], items: [] }))
     const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
@@ -175,8 +178,7 @@ describe('config array flatten + typed handle', () => {
 describe('a list set as text', () => {
   const listSchema = $t.Object({ tags: $t.List($t.String()) })
 
-  const envSource = (env: Record<string, string>): EnvConfigProvider =>
-    new EnvConfigProvider({ env })
+  const envSource = (env: Record<string, string>): EnvConfigProvider => new EnvConfigProvider({ env })
 
   const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
 

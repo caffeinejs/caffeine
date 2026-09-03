@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
+
 import type { Plugin } from 'vite'
 
 export interface CaffeineViteOptions {

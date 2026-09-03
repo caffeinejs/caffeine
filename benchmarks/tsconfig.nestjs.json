@@ -14,6 +14,11 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["helloworld/nestjs/nestjs.ts", "request/nestjs/nestjs.ts", "request/shared.ts", "mixedscopes/nestjs/nestjs.ts"],
+  "include": [
+    "helloworld/nestjs/nestjs.ts",
+    "request/nestjs/nestjs.ts",
+    "request/shared.ts",
+    "mixedscopes/nestjs/nestjs.ts"
+  ],
   "exclude": ["dist", "node_modules"]
 }

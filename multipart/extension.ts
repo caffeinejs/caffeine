@@ -1,5 +1,5 @@
-import fastifyMultipart from '@fastify/multipart'
 import { ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
+import fastifyMultipart from '@fastify/multipart'
 
 export type MultipartOptions = NonNullable<Parameters<typeof fastifyMultipart>[1]>
 

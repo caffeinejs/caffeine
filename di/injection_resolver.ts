@@ -16,7 +16,6 @@ export type InjectionResolver<T = any> = () => T
  * The contextual object passed to the {@link InjectionResolverFactory}.
  */
 export type InjectionResolverFactoryContext<T = unknown> = {
-
   /**
    * Expose {@link Container} operations.
    *
@@ -161,6 +160,7 @@ export function resolverFor(name: symbol): InjectionResolverFactory {
  * resolver is treated identically wherever it is compiled.
  */
 export function defaultResolverFor(descriptor: InjectionDescriptor): symbol {
-  return descriptor.resolver
-    ?? (descriptor.key instanceof DeferredCtor ? BuiltInResolvers.DEFER : BuiltInResolvers.DEFAULT)
+  return (
+    descriptor.resolver ?? (descriptor.key instanceof DeferredCtor ? BuiltInResolvers.DEFER : BuiltInResolvers.DEFAULT)
+  )
 }

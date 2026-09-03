@@ -1,26 +1,31 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
-import { token } from '../key.js'
-import { CaffeineIoC } from '../container.js'
-import { Inject } from '../decorators/inject.js'
-import { Aspect } from '../decorators/aspect.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Label } from '../decorators/label.js'
-import { Profile } from '../decorators/profile.js'
-import { Order } from '../decorators/order.js'
-import { Tag } from '../decorators/tag.js'
+
+import { createAnnotation } from '../annotations.js'
 import { $aop } from '../aop.js'
 import type { JoinPoint, MethodAspect } from '../aop.js'
-import { createAnnotation } from '../annotations.js'
-import { reflect } from '../reflect.js'
+import { CaffeineIoC } from '../container.js'
+import { Aspect } from '../decorators/aspect.js'
+import { Inject } from '../decorators/inject.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Label } from '../decorators/label.js'
 import { Lifetime } from '../decorators/lifetime.js'
+import { Order } from '../decorators/order.js'
+import { Profile } from '../decorators/profile.js'
+import { Tag } from '../decorators/tag.js'
 import { ErrInvalidAspect, ErrInvalidContainerState, ErrInvalidDecorator } from '../errors.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 import type { Provider } from '../provider.js'
+import { reflect } from '../reflect.js'
 import { Scopes } from '../scope.js'
 
 class Calculator {
-  add(a: number, b: number): number { return a + b }
-  fail(): never { throw new Error('boom') }
+  add(a: number, b: number): number {
+    return a + b
+  }
+  fail(): never {
+    throw new Error('boom')
+  }
 }
 
 describe('AOP', function () {
@@ -102,14 +107,18 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(Calculator, 'fail')])
     @Profile('aop-swallow')
     class SwallowAspect implements MethodAspect<Calculator> {
-      afterThrow() { /* swallow */ }
+      afterThrow() {
+        /* swallow */
+      }
     }
     void SwallowAspect
 
     @Aspect([$aop.forClass(Calculator, 'fail')])
     @Profile('aop-propagate')
     class NoopBeforeAspect implements MethodAspect<Calculator> {
-      before() { /* noop */ }
+      before() {
+        /* noop */
+      }
     }
     void NoopBeforeAspect
 
@@ -147,7 +156,9 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(Calculator, 'fail')])
     @Profile('aop-after-failure')
     class AfterFailureAspect implements MethodAspect<Calculator> {
-      afterThrow() { /* swallow so after() still runs */ }
+      afterThrow() {
+        /* swallow so after() still runs */
+      }
       after(_jp: JoinPoint<Calculator>, result: unknown, error: Error | undefined) {
         afterFailureSpy(result, error)
       }
@@ -187,13 +198,17 @@ describe('AOP', function () {
     const greetSpy = vi.fn()
 
     class Greeter {
-      greet(): string { return greetSpy() }
+      greet(): string {
+        return greetSpy()
+      }
     }
 
     @Aspect([$aop.forClass(Greeter, 'greet')])
     @Profile('aop-short-circuit')
     class ShortCircuitAspect implements MethodAspect<Greeter> {
-      around() { return 'intercepted' }
+      around() {
+        return 'intercepted'
+      }
     }
     void ShortCircuitAspect
 
@@ -230,7 +245,9 @@ describe('AOP', function () {
 
   describe('priority', function () {
     class Svc {
-      run(): void { /* intentionally empty */ }
+      run(): void {
+        /* intentionally empty */
+      }
     }
 
     const priorityOrder: string[] = []
@@ -239,8 +256,12 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(Svc, 'run')])
     @Profile('aop-priority')
     class OuterAspect implements MethodAspect<Svc> {
-      before() { priorityOrder.push('outer-before') }
-      after() { priorityOrder.push('outer-after') }
+      before() {
+        priorityOrder.push('outer-before')
+      }
+      after() {
+        priorityOrder.push('outer-after')
+      }
     }
     void OuterAspect
 
@@ -248,8 +269,12 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(Svc, 'run')])
     @Profile('aop-priority')
     class InnerAspect implements MethodAspect<Svc> {
-      before() { priorityOrder.push('inner-before') }
-      after() { priorityOrder.push('inner-after') }
+      before() {
+        priorityOrder.push('inner-before')
+      }
+      after() {
+        priorityOrder.push('inner-after')
+      }
     }
     void InnerAspect
 
@@ -262,24 +287,27 @@ describe('AOP', function () {
 
       di.get(Svc).run()
 
-      expect(priorityOrder).toEqual([
-        'outer-before',
-        'inner-before',
-        'inner-after',
-        'outer-after',
-      ])
+      expect(priorityOrder).toEqual(['outer-before', 'inner-before', 'inner-after', 'outer-after'])
     })
   })
 
   describe('method targeting', function () {
     class MultiMethod {
-      foo() { return 'foo' }
-      bar() { return 'bar' }
+      foo() {
+        return 'foo'
+      }
+      bar() {
+        return 'bar'
+      }
     }
 
     class AllMethods {
-      alpha() { return 'a' }
-      beta() { return 'b' }
+      alpha() {
+        return 'a'
+      }
+      beta() {
+        return 'b'
+      }
     }
 
     const methodListSpy = vi.fn()
@@ -287,7 +315,9 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(MultiMethod, 'foo')])
     @Profile('aop-method-list')
     class FooOnlyAspect implements MethodAspect<MultiMethod> {
-      before(jp: JoinPoint<MultiMethod>) { methodListSpy(jp.methodName) }
+      before(jp: JoinPoint<MultiMethod>) {
+        methodListSpy(jp.methodName)
+      }
     }
     void FooOnlyAspect
 
@@ -296,7 +326,9 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(AllMethods)])
     @Profile('aop-all-methods')
     class AllMethodsAspect implements MethodAspect<AllMethods> {
-      before(jp: JoinPoint<AllMethods>) { allMethodsSpy(jp.methodName) }
+      before(jp: JoinPoint<AllMethods>) {
+        allMethodsSpy(jp.methodName)
+      }
     }
     void AllMethodsAspect
 
@@ -333,7 +365,9 @@ describe('AOP', function () {
 
   describe('injected dependency', function () {
     class Target {
-      work() { return 42 }
+      work() {
+        return 42
+      }
     }
 
     const kLogPrefix = token<any>(Symbol('log-prefix'))
@@ -367,7 +401,9 @@ describe('AOP', function () {
 
   describe('async method', function () {
     class AsyncTarget {
-      async fetch(id: number): Promise<string> { return `item-${id}` }
+      async fetch(id: number): Promise<string> {
+        return `item-${id}`
+      }
     }
 
     const asyncBeforeSpy = vi.fn()
@@ -404,11 +440,15 @@ describe('AOP', function () {
     const kGreetSvc = token<any>(Symbol('greet-svc'))
 
     class GreetSvc {
-      msg() { return 'hello-from-svc' }
+      msg() {
+        return 'hello-from-svc'
+      }
     }
 
     class InjTarget {
-      work() { return 'done' }
+      work() {
+        return 'done'
+      }
     }
 
     const ctorInjSpy = vi.fn()
@@ -418,7 +458,9 @@ describe('AOP', function () {
     @Profile('aop-ctor-inject')
     class CtorInjAspect implements MethodAspect<InjTarget> {
       constructor(private svc: GreetSvc) {}
-      before() { ctorInjSpy(this.svc.msg()) }
+      before() {
+        ctorInjSpy(this.svc.msg())
+      }
     }
     void CtorInjAspect
 
@@ -426,7 +468,9 @@ describe('AOP', function () {
     @Profile('aop-injectable-first')
     class InjFirstAspect implements MethodAspect<InjTarget> {
       constructor(private svc: GreetSvc) {}
-      before() { injFirstSpy(this.svc.msg()) }
+      before() {
+        injFirstSpy(this.svc.msg())
+      }
     }
     void InjFirstAspect
 
@@ -465,9 +509,13 @@ describe('AOP', function () {
     @Injectable()
     class TxTarget {
       @Transactional(true)
-      save() { return 'saved' }
+      save() {
+        return 'saved'
+      }
 
-      query() { return 'queried' }
+      query() {
+        return 'queried'
+      }
     }
 
     const txPredSpy = vi.fn()
@@ -475,19 +523,27 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(TxTarget, (name, _desc, cls) => reflect.get(cls, Transactional, name) !== undefined)])
     @Profile('aop-method-pred')
     class TxAspect implements MethodAspect<TxTarget> {
-      before(jp: JoinPoint<TxTarget>) { txPredSpy(jp.methodName) }
+      before(jp: JoinPoint<TxTarget>) {
+        txPredSpy(jp.methodName)
+      }
     }
     void TxAspect
 
     @Injectable()
     class MultiTagTarget {
       @Transactional(true)
-      alpha() { return 'a' }
+      alpha() {
+        return 'a'
+      }
 
       @Transactional(true)
-      beta() { return 'b' }
+      beta() {
+        return 'b'
+      }
 
-      gamma() { return 'c' }
+      gamma() {
+        return 'c'
+      }
     }
 
     const multiTagSpy = vi.fn()
@@ -497,7 +553,9 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(MultiTagTarget, multiTagPred)])
     @Profile('aop-multi-tag')
     class MultiTagAspect implements MethodAspect<MultiTagTarget> {
-      before(jp: JoinPoint<MultiTagTarget>) { multiTagSpy(jp.methodName) }
+      before(jp: JoinPoint<MultiTagTarget>) {
+        multiTagSpy(jp.methodName)
+      }
     }
     void MultiTagAspect
 
@@ -506,9 +564,13 @@ describe('AOP', function () {
     @Injectable()
     class CacheTarget {
       @CacheAnnotation({ ttl: 60 })
-      fetch() { return 'data' }
+      fetch() {
+        return 'data'
+      }
 
-      noop() { return 'noop' }
+      noop() {
+        return 'noop'
+      }
     }
 
     const cacheSpy = vi.fn()
@@ -529,7 +591,9 @@ describe('AOP', function () {
     @SvcLogAnnotation({ prefix: 'REPORT' })
     @Injectable()
     class ReportSvc {
-      generate() { return 'report' }
+      generate() {
+        return 'report'
+      }
     }
 
     const classAnnSpy = vi.fn()
@@ -607,10 +671,18 @@ describe('AOP', function () {
 
   describe('pattern method matching', function () {
     class PatternTarget {
-      findUser(): string { return 'user' }
-      findOrder(): string { return 'order' }
-      saveUser(): string { return 'saved' }
-      deleteOrder(): string { return 'deleted' }
+      findUser(): string {
+        return 'user'
+      }
+      findOrder(): string {
+        return 'order'
+      }
+      saveUser(): string {
+        return 'saved'
+      }
+      deleteOrder(): string {
+        return 'deleted'
+      }
     }
 
     const patternSpy = vi.fn()
@@ -618,7 +690,9 @@ describe('AOP', function () {
     @Profile('aop-pattern-regex')
     @Aspect([$aop.forClass(PatternTarget, $aop.matchMethodPattern(/^find/))])
     class RegexAspect implements MethodAspect<PatternTarget> {
-      before(jp: JoinPoint<PatternTarget>) { patternSpy('regex', jp.methodName) }
+      before(jp: JoinPoint<PatternTarget>) {
+        patternSpy('regex', jp.methodName)
+      }
     }
     void RegexAspect
 
@@ -627,7 +701,9 @@ describe('AOP', function () {
     @Profile('aop-pattern-starts')
     @Aspect([$aop.forClass(PatternTarget, $aop.methodHasPrefix('save'))])
     class StartsWithAspect implements MethodAspect<PatternTarget> {
-      before(jp: JoinPoint<PatternTarget>) { startsSpy(jp.methodName) }
+      before(jp: JoinPoint<PatternTarget>) {
+        startsSpy(jp.methodName)
+      }
     }
     void StartsWithAspect
 
@@ -636,7 +712,9 @@ describe('AOP', function () {
     @Profile('aop-pattern-ends')
     @Aspect([$aop.forClass(PatternTarget, $aop.methodHasSuffix('Order'))])
     class EndsWithAspect implements MethodAspect<PatternTarget> {
-      before(jp: JoinPoint<PatternTarget>) { endsSpy(jp.methodName) }
+      before(jp: JoinPoint<PatternTarget>) {
+        endsSpy(jp.methodName)
+      }
     }
     void EndsWithAspect
 
@@ -693,11 +771,15 @@ describe('AOP', function () {
 
   describe('pointcut', function () {
     class SvcA {
-      run() { return 'a' }
+      run() {
+        return 'a'
+      }
     }
 
     class SvcB {
-      run() { return 'b' }
+      run() {
+        return 'b'
+      }
     }
 
     const matchClassSpy = vi.fn()
@@ -705,7 +787,9 @@ describe('AOP', function () {
     @Aspect([$aop.pointcut($aop.matchClass(SvcA, SvcB), 'run')])
     @Profile('aop-match-class')
     class MatchClassAspect implements MethodAspect {
-      before(jp: JoinPoint) { matchClassSpy((jp.target as any).constructor.name) }
+      before(jp: JoinPoint) {
+        matchClassSpy((jp.target as any).constructor.name)
+      }
     }
     void MatchClassAspect
 
@@ -714,13 +798,17 @@ describe('AOP', function () {
     @Label(kSvcLabel)
     @Injectable()
     class LabelSvcA {
-      run() { return 'a' }
+      run() {
+        return 'a'
+      }
     }
 
     @Label(kSvcLabel)
     @Injectable()
     class LabelSvcB {
-      run() { return 'b' }
+      run() {
+        return 'b'
+      }
     }
 
     const matchLabelSpy = vi.fn()
@@ -728,7 +816,9 @@ describe('AOP', function () {
     @Aspect([$aop.pointcut($aop.matchLabel(kSvcLabel), 'run')])
     @Profile('aop-match-label')
     class LabelAspect implements MethodAspect {
-      before(jp: JoinPoint) { matchLabelSpy((jp.target as any).constructor.name) }
+      before(jp: JoinPoint) {
+        matchLabelSpy((jp.target as any).constructor.name)
+      }
     }
     void LabelAspect
 
@@ -739,9 +829,13 @@ describe('AOP', function () {
     @Injectable()
     class TaggedSvc {
       @TaggedMethodAnn(true)
-      tagged() { return 'tagged' }
+      tagged() {
+        return 'tagged'
+      }
 
-      untagged() { return 'untagged' }
+      untagged() {
+        return 'untagged'
+      }
     }
 
     const combinedSpy = vi.fn()
@@ -751,7 +845,9 @@ describe('AOP', function () {
     @Aspect([$aop.pointcut($aop.matchTag(kTagSvc), combinedMethodPred)])
     @Profile('aop-combined')
     class CombinedAspect implements MethodAspect {
-      before(jp: JoinPoint) { combinedSpy(jp.methodName) }
+      before(jp: JoinPoint) {
+        combinedSpy(jp.methodName)
+      }
     }
     void CombinedAspect
 
@@ -800,11 +896,15 @@ describe('AOP', function () {
 
   describe('multiple targets', function () {
     class ArrayTargetA {
-      run() { return 'a' }
+      run() {
+        return 'a'
+      }
     }
 
     class ArrayTargetB {
-      run() { return 'b' }
+      run() {
+        return 'b'
+      }
     }
 
     const arraySpy = vi.fn()
@@ -812,7 +912,9 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(ArrayTargetA, 'run'), $aop.forClass(ArrayTargetB, 'run')])
     @Profile('aop-array-target')
     class ArrayTargetAspect implements MethodAspect {
-      before(jp: JoinPoint) { arraySpy((jp.target as any).constructor.name) }
+      before(jp: JoinPoint) {
+        arraySpy((jp.target as any).constructor.name)
+      }
     }
     void ArrayTargetAspect
 
@@ -847,11 +949,17 @@ describe('AOP', function () {
     @Injectable()
     class LogTarget {
       @Log({ level: 'info' })
-      process(input: string) { return `processed:${input}` }
+      process(input: string) {
+        return `processed:${input}`
+      }
 
-      plain() { return 'plain' }
+      plain() {
+        return 'plain'
+      }
 
-      fail(): never { throw new Error('log-error') }
+      fail(): never {
+        throw new Error('log-error')
+      }
     }
 
     const logEntrySpy = vi.fn()
@@ -863,7 +971,9 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(LogTarget, 'process')])
     @Profile('aop-log-entry-exit')
     class LogEntryExitAspect implements MethodAspect<LogTarget> {
-      before(jp: JoinPoint<LogTarget>) { logEntrySpy(jp.methodName, jp.args) }
+      before(jp: JoinPoint<LogTarget>) {
+        logEntrySpy(jp.methodName, jp.args)
+      }
 
       afterReturn(jp: JoinPoint<LogTarget>, result: unknown) {
         logReturnSpy(jp.methodName, result)
@@ -907,7 +1017,9 @@ describe('AOP', function () {
     @LogClass({ prefix: 'SVC' })
     @Injectable()
     class ClassLogTarget {
-      process() { return 'ok' }
+      process() {
+        return 'ok'
+      }
     }
 
     const classLogSpy = vi.fn()
@@ -992,9 +1104,13 @@ describe('AOP', function () {
 
   describe('async correctness', function () {
     class AsyncHookTarget {
-      async compute(x: number): Promise<number> { return x * 2 }
+      async compute(x: number): Promise<number> {
+        return x * 2
+      }
 
-      async reject(): Promise<never> { throw new Error('async-fail') }
+      async reject(): Promise<never> {
+        throw new Error('async-fail')
+      }
     }
 
     const asyncAfterReturnSpy = vi.fn()
@@ -1033,7 +1149,9 @@ describe('AOP', function () {
     @Aspect([$aop.forClass(AsyncHookTarget, 'reject')])
     @Profile('aop-async-after-fail')
     class AsyncAfterFailAspect implements MethodAspect<AsyncHookTarget> {
-      afterThrow() { /* swallow */ }
+      afterThrow() {
+        /* swallow */
+      }
 
       after(_jp: JoinPoint<AsyncHookTarget>, result: unknown, error: Error | undefined) {
         asyncAfterFailSpy(result, error)
@@ -1099,7 +1217,9 @@ describe('AOP', function () {
 
   describe('validations', function () {
     class NonSingletonTarget {
-      run(): string { return 'ok' }
+      run(): string {
+        return 'ok'
+      }
     }
 
     @Profile('aop-non-singleton')
@@ -1127,7 +1247,9 @@ describe('AOP', function () {
     const providerCallSpy = vi.fn()
 
     class ProviderTarget {
-      run(): string { return 'done' }
+      run(): string {
+        return 'done'
+      }
     }
 
     @Injectable()
@@ -1181,17 +1303,23 @@ describe('AOP', function () {
     const manualSpy = vi.fn()
 
     class ManualTarget {
-      run(): string { return 'manual-result' }
+      run(): string {
+        return 'manual-result'
+      }
     }
 
     class ManualAspect implements MethodAspect<ManualTarget> {
-      before() { manualSpy() }
+      before() {
+        manualSpy()
+      }
     }
 
     const manualDepSpy = vi.fn()
 
     class ManualDepTarget {
-      run(): string { return 'dep-result' }
+      run(): string {
+        return 'dep-result'
+      }
     }
 
     class ManualDep {
@@ -1200,43 +1328,63 @@ describe('AOP', function () {
 
     class ManualDepAspect implements MethodAspect<ManualDepTarget> {
       constructor(readonly dep: ManualDep) {}
-      before() { manualDepSpy(this.dep.tag) }
+      before() {
+        manualDepSpy(this.dep.tag)
+      }
     }
 
     const manualOrderLog: string[] = []
 
     class ManualOrderTarget {
-      run(): string { return 'ordered' }
+      run(): string {
+        return 'ordered'
+      }
     }
 
     class ManualOuterAspect implements MethodAspect<ManualOrderTarget> {
-      before() { manualOrderLog.push('outer-before') }
-      after() { manualOrderLog.push('outer-after') }
+      before() {
+        manualOrderLog.push('outer-before')
+      }
+      after() {
+        manualOrderLog.push('outer-after')
+      }
     }
 
     class ManualInnerAspect implements MethodAspect<ManualOrderTarget> {
-      before() { manualOrderLog.push('inner-before') }
-      after() { manualOrderLog.push('inner-after') }
+      before() {
+        manualOrderLog.push('inner-before')
+      }
+      after() {
+        manualOrderLog.push('inner-after')
+      }
     }
 
     const condSpy = vi.fn()
 
     class CondTarget {
-      run(): string { return 'cond-result' }
+      run(): string {
+        return 'cond-result'
+      }
     }
 
     class CondAspect implements MethodAspect<CondTarget> {
-      before() { condSpy() }
+      before() {
+        condSpy()
+      }
     }
 
     const asyncFactorySpy = vi.fn()
 
     class AsyncFactoryTarget {
-      run(): string { return 'async-factory-result' }
+      run(): string {
+        return 'async-factory-result'
+      }
     }
 
     class AsyncFactoryAspect implements MethodAspect<AsyncFactoryTarget> {
-      before() { asyncFactorySpy() }
+      before() {
+        asyncFactorySpy()
+      }
     }
 
     it('aspect().toSelf().pointcuts() weaves and intercepts the target method', async function () {
@@ -1258,9 +1406,7 @@ describe('AOP', function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(ManualDepTarget, t => t.toSelf())
       di.bind(ManualDep, t => t.toSelf())
-      di.aspect(ManualDepAspect, t => t
-        .toSelf([ManualDep])
-        .pointcuts($aop.forClass(ManualDepTarget, 'run')))
+      di.aspect(ManualDepAspect, t => t.toSelf([ManualDep]).pointcuts($aop.forClass(ManualDepTarget, 'run')))
       await di.init()
 
       di.get(ManualDepTarget).run()
@@ -1304,10 +1450,12 @@ describe('AOP', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(CondTarget, t => t.toSelf())
-      di.aspect(CondAspect, t => t
-        .toSelf()
-        .pointcuts($aop.forClass(CondTarget, 'run'))
-        .conditional(() => false))
+      di.aspect(CondAspect, t =>
+        t
+          .toSelf()
+          .pointcuts($aop.forClass(CondTarget, 'run'))
+          .conditional(() => false),
+      )
       await di.init()
 
       di.get(CondTarget).run()
@@ -1319,9 +1467,9 @@ describe('AOP', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(AsyncFactoryTarget, t => t.toSelf())
-      di.aspect(AsyncFactoryAspect, t => t
-        .toAsyncFactory(async () => new AsyncFactoryAspect())
-        .pointcuts($aop.forClass(AsyncFactoryTarget, 'run')))
+      di.aspect(AsyncFactoryAspect, t =>
+        t.toAsyncFactory(async () => new AsyncFactoryAspect()).pointcuts($aop.forClass(AsyncFactoryTarget, 'run')),
+      )
       await di.init()
 
       di.get(AsyncFactoryTarget).run()
@@ -1335,8 +1483,12 @@ describe('AOP', function () {
 describe('this binding and instanceof', function () {
   // (a) self-call: this.methodB() inside intercepted methodA goes through the proxy
   class SelfCallTarget {
-    methodA(): string { return 'a:' + this.methodB() }
-    methodB(): string { return 'b' }
+    methodA(): string {
+      return 'a:' + this.methodB()
+    }
+    methodB(): string {
+      return 'b'
+    }
   }
 
   const selfCallSpy = vi.fn()
@@ -1344,7 +1496,9 @@ describe('this binding and instanceof', function () {
   @Aspect([$aop.forClass(SelfCallTarget)])
   @Profile('aop-self-call')
   class SelfCallAspect implements MethodAspect<SelfCallTarget> {
-    before(jp: JoinPoint<SelfCallTarget>) { selfCallSpy(jp.methodName) }
+    before(jp: JoinPoint<SelfCallTarget>) {
+      selfCallSpy(jp.methodName)
+    }
   }
   void SelfCallAspect
 
@@ -1370,7 +1524,9 @@ describe('this binding and instanceof', function () {
       return this
     }
 
-    getName(): string { return this._name }
+    getName(): string {
+      return this._name
+    }
   }
 
   const builderSpy = vi.fn()
@@ -1378,7 +1534,9 @@ describe('this binding and instanceof', function () {
   @Aspect([$aop.forClass(BuilderTarget)])
   @Profile('aop-builder-chain')
   class BuilderAspect implements MethodAspect<BuilderTarget> {
-    before(jp: JoinPoint<BuilderTarget>) { builderSpy(jp.methodName) }
+    before(jp: JoinPoint<BuilderTarget>) {
+      builderSpy(jp.methodName)
+    }
   }
   void BuilderAspect
 
@@ -1398,13 +1556,17 @@ describe('this binding and instanceof', function () {
 
   // (c) instanceof: Proxy has no getPrototypeOf trap; prototype chain is preserved
   class InstanceofTarget {
-    run(): string { return 'ok' }
+    run(): string {
+      return 'ok'
+    }
   }
 
   @Aspect([$aop.forClass(InstanceofTarget, 'run')])
   @Profile('aop-instanceof')
   class InstanceofAspect implements MethodAspect<InstanceofTarget> {
-    before() { /* noop */ }
+    before() {
+      /* noop */
+    }
   }
   void InstanceofAspect
 
@@ -1422,9 +1584,15 @@ describe('this binding and instanceof', function () {
 
 describe('multiple aspects on the same method', function () {
   class MultiAspectTarget {
-    add(a: number, b: number): number { return a + b }
-    fail(): never { throw new Error('multi-fail') }
-    async asyncFail(): Promise<never> { throw new Error('async-multi-fail') }
+    add(a: number, b: number): number {
+      return a + b
+    }
+    fail(): never {
+      throw new Error('multi-fail')
+    }
+    async asyncFail(): Promise<never> {
+      throw new Error('async-multi-fail')
+    }
   }
 
   // 1. no explicit order — both fire
@@ -1433,16 +1601,24 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
   @Profile('aop-multi-no-order')
   class NoOrderAspectA implements MethodAspect<MultiAspectTarget> {
-    before() { noOrderLog.push('A-before') }
-    after() { noOrderLog.push('A-after') }
+    before() {
+      noOrderLog.push('A-before')
+    }
+    after() {
+      noOrderLog.push('A-after')
+    }
   }
   void NoOrderAspectA
 
   @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
   @Profile('aop-multi-no-order')
   class NoOrderAspectB implements MethodAspect<MultiAspectTarget> {
-    before() { noOrderLog.push('B-before') }
-    after() { noOrderLog.push('B-after') }
+    before() {
+      noOrderLog.push('B-before')
+    }
+    after() {
+      noOrderLog.push('B-after')
+    }
   }
   void NoOrderAspectB
 
@@ -1565,7 +1741,9 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
   @Profile('aop-multi-short-circuit')
   class ShortCircuitOuterAspect implements MethodAspect<MultiAspectTarget> {
-    around() { return -1 }
+    around() {
+      return -1
+    }
   }
   void ShortCircuitOuterAspect
 
@@ -1573,8 +1751,12 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
   @Profile('aop-multi-short-circuit')
   class ShortCircuitInnerAspect implements MethodAspect<MultiAspectTarget> {
-    before() { shortCircuitLog.push('inner-before') }
-    after() { shortCircuitLog.push('inner-after') }
+    before() {
+      shortCircuitLog.push('inner-before')
+    }
+    after() {
+      shortCircuitLog.push('inner-after')
+    }
   }
   void ShortCircuitInnerAspect
 
@@ -1606,7 +1788,9 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'fail')])
   @Profile('aop-multi-swallow-inner')
   class SwallowInnerAspect implements MethodAspect<MultiAspectTarget> {
-    afterThrow() { /* swallow */ }
+    afterThrow() {
+      /* swallow */
+    }
   }
   void SwallowInnerAspect
 
@@ -1629,7 +1813,9 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'fail')])
   @Profile('aop-multi-outer-swallow')
   class OuterSwallowAspect implements MethodAspect<MultiAspectTarget> {
-    afterThrow() { /* swallow */ }
+    afterThrow() {
+      /* swallow */
+    }
   }
   void OuterSwallowAspect
 
@@ -1637,7 +1823,9 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'fail')])
   @Profile('aop-multi-outer-swallow')
   class InnerNoHandlerAspect implements MethodAspect<MultiAspectTarget> {
-    before() { /* noop */ }
+    before() {
+      /* noop */
+    }
   }
   void InnerNoHandlerAspect
 
@@ -1674,8 +1862,12 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
   @Profile('aop-three-aspects')
   class ThreeOuterAspect implements MethodAspect<MultiAspectTarget> {
-    before() { threeAspectLog.push('outer-before') }
-    after() { threeAspectLog.push('outer-after') }
+    before() {
+      threeAspectLog.push('outer-before')
+    }
+    after() {
+      threeAspectLog.push('outer-after')
+    }
   }
   void ThreeOuterAspect
 
@@ -1683,8 +1875,12 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
   @Profile('aop-three-aspects')
   class ThreeMidAspect implements MethodAspect<MultiAspectTarget> {
-    before() { threeAspectLog.push('mid-before') }
-    after() { threeAspectLog.push('mid-after') }
+    before() {
+      threeAspectLog.push('mid-before')
+    }
+    after() {
+      threeAspectLog.push('mid-after')
+    }
   }
   void ThreeMidAspect
 
@@ -1692,8 +1888,12 @@ describe('multiple aspects on the same method', function () {
   @Aspect([$aop.forClass(MultiAspectTarget, 'add')])
   @Profile('aop-three-aspects')
   class ThreeInnerAspect implements MethodAspect<MultiAspectTarget> {
-    before() { threeAspectLog.push('inner-before') }
-    after() { threeAspectLog.push('inner-after') }
+    before() {
+      threeAspectLog.push('inner-before')
+    }
+    after() {
+      threeAspectLog.push('inner-after')
+    }
   }
   void ThreeInnerAspect
 

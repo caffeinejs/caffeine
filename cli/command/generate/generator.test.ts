@@ -1,8 +1,9 @@
+import { afterEach, describe, expect, it } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'bun:test'
+
 import { generate } from './generator.js'
 
 function tempDir(): string {
@@ -32,12 +33,12 @@ describe('generate()', () => {
 
     expect(changed).toBe(true)
     const content = await Bun.file(output).text()
-    expect(content).toContain('import \'./a.js\'')
-    expect(content).toContain('import \'./b.js\'')
-    expect(content).toContain('import \'./c.js\'')
-    const aIdx = content.indexOf('import \'./a.js\'')
-    const bIdx = content.indexOf('import \'./b.js\'')
-    const cIdx = content.indexOf('import \'./c.js\'')
+    expect(content).toContain("import './a.js'")
+    expect(content).toContain("import './b.js'")
+    expect(content).toContain("import './c.js'")
+    const aIdx = content.indexOf("import './a.js'")
+    const bIdx = content.indexOf("import './b.js'")
+    const cIdx = content.indexOf("import './c.js'")
     expect(aIdx).toBeLessThan(bIdx)
     expect(bIdx).toBeLessThan(cIdx)
   })
@@ -51,7 +52,7 @@ describe('generate()', () => {
     await generate({ files: [join(dir, 'foo.ts')], output, importExtension: '.ts' })
 
     const content = await Bun.file(output).text()
-    expect(content).toContain('import \'./foo.ts\'')
+    expect(content).toContain("import './foo.ts'")
   })
 
   it('strips extension when importExtension is empty string', async () => {
@@ -63,7 +64,7 @@ describe('generate()', () => {
     await generate({ files: [join(dir, 'foo.ts')], output, importExtension: '' })
 
     const content = await Bun.file(output).text()
-    expect(content).toContain('import \'./foo\'')
+    expect(content).toContain("import './foo'")
   })
 
   it('includes auto-generated header', async () => {

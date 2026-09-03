@@ -1,11 +1,12 @@
 import { $t } from '@caffeinejs/std'
 import type { ConfigSchema } from '@caffeinejs/std/config'
+
 import type { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
 import type { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
-import type { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
-import type { OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import type { OAuth2AuthenticationOptionsBuilder } from './oauth/index.js'
+import type { OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
+import type { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
 import type { RefreshTokenOptionsBuilder } from './refresh/refresh_options.js'
 
 /** The default location of the authentication settings in the configuration tree. */

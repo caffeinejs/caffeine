@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../container.js'
 import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJSON, graphToText } from '../graph.js'
 import { Scopes } from '../scope.js'
@@ -32,8 +33,7 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToText shows node label and scope for single binding', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceB, t => t.toSelf()
-      .lifetime(Scopes.TRANSIENT))
+    di.bind(ServiceB, t => t.toSelf().lifetime(Scopes.TRANSIENT))
 
     const output = graphToText(di)
 
@@ -60,10 +60,8 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToMermaid shows named-group edge for shared qualifier', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceA, t => t.toClass(ServiceA, [ServiceB, ServiceC])
-      .names('handler'))
-    di.bind(ServiceB, t => t.toSelf()
-      .names('handler'))
+    di.bind(ServiceA, t => t.toClass(ServiceA, [ServiceB, ServiceC]).names('handler'))
+    di.bind(ServiceB, t => t.toSelf().names('handler'))
     di.bind(ServiceC, t => t.toSelf())
 
     const output = graphToMermaid(di)
@@ -75,8 +73,7 @@ describe('graph functions with container as iterable', function () {
 
   it('graphToDot marks primary binding', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ServiceB, t => t.toSelf()
-      .primary())
+    di.bind(ServiceB, t => t.toSelf().primary())
 
     const output = graphToDot(di)
 

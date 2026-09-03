@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+
 import { notNil } from './not_nil.js'
 
 describe('notNil', function () {
@@ -9,9 +10,7 @@ describe('notNil', function () {
     expect(() => notNil([])).not.toThrow()
     expect(() => notNil({})).not.toThrow()
     expect(() => notNil(() => '')).not.toThrow()
-    expect(() => notNil(null, 'fail'))
-      .toThrow('fail')
-    expect(() => notNil(undefined))
-      .toThrow()
+    expect(() => notNil(null, 'fail')).toThrow('fail')
+    expect(() => notNil(undefined)).toThrow()
   })
 })

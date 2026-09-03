@@ -74,7 +74,9 @@ import { Scopes } from '@caffeinejs/di'
 @Injectable()
 @Lifetime(Scopes.TRANSIENT)
 class EmailSender {
-  send(to: string, body: string) { /* ... */ }
+  send(to: string, body: string) {
+    /* ... */
+  }
 }
 
 @Injectable([provide(EmailSender)])

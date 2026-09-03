@@ -1,11 +1,12 @@
 import { Keys, mod, token, type Module, type NamedToken, Scopes } from '@caffeinejs/di'
-import type { BootstrapOptions } from '../bootstrap.js'
+
 import type { ConfigHandle } from '../accessor.js'
+import type { BootstrapOptions } from '../bootstrap.js'
+import { Configuration, kConfiguration } from '../configuration.js'
 import type { ConfigDefinition } from '../definition.js'
+import type { ConfigSchema } from '../schema.js'
 import type { ConfigSliceSpec } from '../slice.js'
 import type { ConfigSources } from '../sources.js'
-import { Configuration, kConfiguration } from '../configuration.js'
-import type { ConfigSchema } from '../schema.js'
 import type { ConfigProvider, ResolutionContext } from '../types.js'
 import { ConfigShard } from './shard.js'
 
@@ -42,24 +43,26 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
 
   // A definition resolves itself, so the fields it holds are read when *it* bootstraps rather than captured
   // here. Only the options-object form needs its arguments assembled up front.
-  const bootstrapOpts: BootstrapOptions<T> | undefined = definition !== undefined
-    ? undefined
-    : {
-        sources: (options as ConfigModuleOptions<T>).sources,
-        providers: (options as ConfigModuleOptions<T>).providers,
-        schema: (options as ConfigModuleOptions<T>).schema,
-        slices: (options as ConfigModuleOptions<T>).slices,
-        context: (options as ConfigModuleOptions<T>).context,
-        failFast: (options as ConfigModuleOptions<T>).failFast,
-        secrets: (options as ConfigModuleOptions<T>).secrets,
-      }
+  const bootstrapOpts: BootstrapOptions<T> | undefined =
+    definition !== undefined
+      ? undefined
+      : {
+          sources: (options as ConfigModuleOptions<T>).sources,
+          providers: (options as ConfigModuleOptions<T>).providers,
+          schema: (options as ConfigModuleOptions<T>).schema,
+          slices: (options as ConfigModuleOptions<T>).slices,
+          context: (options as ConfigModuleOptions<T>).context,
+          failFast: (options as ConfigModuleOptions<T>).failFast,
+          secrets: (options as ConfigModuleOptions<T>).secrets,
+        }
 
   return mod('ConfigModule', async container => {
     // Idempotent, so the usual path — the application bootstrapped between the two service steps — hands back
     // the shard it already built rather than resolving a second time.
-    const shard = definition !== undefined
-      ? await definition.bootstrap() as ConfigShard<T>
-      : await ConfigShard.bootstrap<T>(bootstrapOpts!)
+    const shard =
+      definition !== undefined
+        ? ((await definition.bootstrap()) as ConfigShard<T>)
+        : await ConfigShard.bootstrap<T>(bootstrapOpts!)
 
     const shardKey = token<ConfigShard<T>>(Symbol('@caffeinejs/config:shard'))
 
@@ -78,31 +81,35 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
       container.bindValuesProvider<ConfigHandle<T>>(t => t.toValue(shard.handle))
     }
 
-    container
-      .bind(kConfiguration, t => t
-        .toValue(new Configuration<T>({
-          get handle() {
-            return shard.handle
-          },
-          get validated() {
-            return shard.validated
-          },
-          get revision() {
-            return shard.revision
-          },
-          get diagnostics() {
-            return shard.diagnostics
-          },
-          onChange: listener => shard.onChange(listener),
-          settled: () => shard.settled(),
-        }))
-        .internal())
+    container.bind(kConfiguration, t =>
+      t
+        .toValue(
+          new Configuration<T>({
+            get handle() {
+              return shard.handle
+            },
+            get validated() {
+              return shard.validated
+            },
+            get revision() {
+              return shard.revision
+            },
+            get diagnostics() {
+              return shard.diagnostics
+            },
+            onChange: listener => shard.onChange(listener),
+            settled: () => shard.settled(),
+          }),
+        )
+        .internal(),
+    )
 
-    container
-      .bind(shardKey, t => t
+    container.bind(shardKey, t =>
+      t
         .toValue(shard)
         .lifetime(Scopes.REFRESH)
-        .labels(CONFIG_REFRESH_LABEL as symbol))
+        .labels(CONFIG_REFRESH_LABEL as symbol),
+    )
 
     container.hooks.on('onDisposed', async () => {
       await shard.dispose()

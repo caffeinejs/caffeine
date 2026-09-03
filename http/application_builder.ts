@@ -1,4 +1,3 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
 import {
   AppConfigBuilder,
   BaseApplicationBuilder,
@@ -8,21 +7,24 @@ import {
   type ServiceAPI,
 } from '@caffeinejs/std'
 import type { ConfigSchema, InferConfig } from '@caffeinejs/std/config'
-import { AdapterFactory, WebApplication, type Adapter } from './application.js'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
+
 import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
+import { AdapterFactory, WebApplication, type Adapter } from './application.js'
+import { CacheBuilder } from './cache/cache_builder.js'
+import { GuardsBuilder } from './guards/builder.js'
+import { HealthBuilder } from './health/health_builder.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
-import { CacheBuilder } from './cache/cache_builder.js'
 import { ServerBuilder } from './server/index.js'
-import { HealthBuilder } from './health/health_builder.js'
-import { GuardsBuilder } from './guards/builder.js'
 
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
 export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>, TConfig = unknown>
   extends BaseApplicationBuilder<WebApplication<I, REQ, A>>
-  implements ApplicationConfigMarker<TConfig> {
+  implements ApplicationConfigMarker<TConfig>
+{
   /** Phantom — names the application config type for `ConfigTypeOf`. Never assigned, never read. */
   declare readonly __config?: TConfig
 
@@ -105,11 +107,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   config<S extends ConfigSchema>(
     schema: S,
     configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): Reconfigured<
-    this,
-    WebApplicationBuilder<I, REQ, A>,
-    WebApplicationBuilder<I, REQ, A, InferConfig<S>>
-  >
+  ): Reconfigured<this, WebApplicationBuilder<I, REQ, A>, WebApplicationBuilder<I, REQ, A, InferConfig<S>>>
   config<S extends ConfigSchema>(
     first: S | ((c: AppConfigBuilder<TConfig>) => void),
     second?: (c: AppConfigBuilder<InferConfig<S>>) => void,

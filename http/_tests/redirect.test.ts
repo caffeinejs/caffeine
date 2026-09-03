@@ -1,6 +1,16 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import fastify from 'fastify'
-import { type Context, Controller, Get, Header, createWebApplication, Args, Post, fastifyAdapterFactory } from '../index.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import {
+  type Context,
+  Controller,
+  Get,
+  Header,
+  createWebApplication,
+  Args,
+  Post,
+  fastifyAdapterFactory,
+} from '../index.js'
 import { $p } from '../route_picker.js'
 
 describe('Redirect', () => {
@@ -40,7 +50,7 @@ describe('Redirect', () => {
     })
 
     it('should redirect to the given location with the given response specification', async () => {
-      const res = await app.fetch ('/redirect/test', { method: 'POST' })
+      const res = await app.fetch('/redirect/test', { method: 'POST' })
 
       expect(res.status).toBe(307)
       expect(res.headers.get('location')).toBe('http://localhost/another-place')

@@ -1,13 +1,14 @@
 import { describe, it, beforeAll, expect, vi } from 'vitest'
-import { token } from '../key.js'
-import { Provides } from '../decorators/provides.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Profile } from '../decorators/profile.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+
 import { CaffeineIoC } from '../container.js'
-import { ErrNoResolutionForKey, ErrInvalidContainerState } from '../errors.js'
+import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
+import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
+import { Profile } from '../decorators/profile.js'
+import { Provides } from '../decorators/provides.js'
+import { ErrNoResolutionForKey, ErrInvalidContainerState } from '../errors.js'
+import { token } from '../key.js'
 
 describe('Profile', function () {
   @Injectable()
@@ -71,22 +72,17 @@ describe('Profile', function () {
     })
 
     it('should return components matching the active profile', function () {
-      expect(di.get(Prof2))
-        .toBeInstanceOf(Prof2)
-      expect(di.get(ProfSameRef))
-        .toBeInstanceOf(ProfSameRef)
-      expect(di.get(ProfSameRef).prof2)
-        .toBeInstanceOf(Prof2)
+      expect(di.get(Prof2)).toBeInstanceOf(Prof2)
+      expect(di.get(ProfSameRef)).toBeInstanceOf(ProfSameRef)
+      expect(di.get(ProfSameRef).prof2).toBeInstanceOf(Prof2)
     })
 
     it('should include no-profile components (Docker Compose semantics)', function () {
-      expect(di.get(ProfNone))
-        .toBeInstanceOf(ProfNone)
+      expect(di.get(ProfNone)).toBeInstanceOf(ProfNone)
     })
 
     it('should throw when requesting a component belonging to a different profile', function () {
-      expect(() => di.get(Prof1))
-        .toThrow(ErrNoResolutionForKey)
+      expect(() => di.get(Prof1)).toThrow(ErrNoResolutionForKey)
     })
   })
 
@@ -98,14 +94,10 @@ describe('Profile', function () {
     })
 
     it('should only resolve no-profile components and throw for profile-specific ones', function () {
-      expect(di.get(ProfNone))
-        .toBeInstanceOf(ProfNone)
-      expect(() => di.get(Prof1))
-        .toThrow(ErrNoResolutionForKey)
-      expect(() => di.get(Prof2))
-        .toThrow(ErrNoResolutionForKey)
-      expect(() => di.get(ProfCrossRef))
-        .toThrow(ErrNoResolutionForKey)
+      expect(di.get(ProfNone)).toBeInstanceOf(ProfNone)
+      expect(() => di.get(Prof1)).toThrow(ErrNoResolutionForKey)
+      expect(() => di.get(Prof2)).toThrow(ErrNoResolutionForKey)
+      expect(() => di.get(ProfCrossRef)).toThrow(ErrNoResolutionForKey)
     })
   })
 
@@ -117,22 +109,17 @@ describe('Profile', function () {
     })
 
     it('should return components from all active profiles', function () {
-      expect(di.get(Prof1))
-        .toBeInstanceOf(Prof1)
-      expect(di.get(Prof2))
-        .toBeInstanceOf(Prof2)
+      expect(di.get(Prof1)).toBeInstanceOf(Prof1)
+      expect(di.get(Prof2)).toBeInstanceOf(Prof2)
     })
 
     it('should include no-profile components', function () {
-      expect(di.get(ProfNone))
-        .toBeInstanceOf(ProfNone)
+      expect(di.get(ProfNone)).toBeInstanceOf(ProfNone)
     })
 
     it('should resolve cross-profile dependencies when both profiles are active', function () {
-      expect(di.get(ProfCrossRef))
-        .toBeTruthy()
-      expect(di.get(ProfCrossRef).prof1)
-        .toBeInstanceOf(Prof1)
+      expect(di.get(ProfCrossRef)).toBeTruthy()
+      expect(di.get(ProfCrossRef).prof1).toBeInstanceOf(Prof1)
     })
   })
 
@@ -150,12 +137,9 @@ describe('Profile', function () {
       })
 
       it('should return components according to active profile', function () {
-        expect(di.get(kDep))
-          .toEqual('dep')
-        expect(() => di.get(Prof1))
-          .toThrow(ErrNoResolutionForKey)
-        expect(di.get(ProfBean))
-          .toBeInstanceOf(ProfBean)
+        expect(di.get(kDep)).toEqual('dep')
+        expect(() => di.get(Prof1)).toThrow(ErrNoResolutionForKey)
+        expect(di.get(ProfBean)).toBeInstanceOf(ProfBean)
       })
     })
   })
@@ -166,9 +150,7 @@ describe('BindingSpec.profiles()', function () {
     class FluentProfPass {}
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-pass'] })
-    di.bind(FluentProfPass, t => t
-      .toSelf()
-      .profiles('fluent-pass'))
+    di.bind(FluentProfPass, t => t.toSelf().profiles('fluent-pass'))
     await di.init()
 
     expect(di.has(FluentProfPass)).toBe(true)
@@ -179,9 +161,7 @@ describe('BindingSpec.profiles()', function () {
     class FluentProfFail {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(FluentProfFail, t => t
-      .toSelf()
-      .profiles('fluent-fail'))
+    di.bind(FluentProfFail, t => t.toSelf().profiles('fluent-fail'))
     await di.init()
 
     expect(di.has(FluentProfFail)).toBe(false)
@@ -191,9 +171,7 @@ describe('BindingSpec.profiles()', function () {
     class FluentProfOr {}
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-b'] })
-    di.bind(FluentProfOr, t => t
-      .toSelf()
-      .profiles('fluent-a', 'fluent-b'))
+    di.bind(FluentProfOr, t => t.toSelf().profiles('fluent-a', 'fluent-b'))
     await di.init()
 
     expect(di.has(FluentProfOr)).toBe(true)
@@ -203,10 +181,12 @@ describe('BindingSpec.profiles()', function () {
     class FluentProfCond {}
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-both'] })
-    di.bind(FluentProfCond, t => t
-      .toSelf()
-      .profiles('fluent-both')
-      .conditional(() => false))
+    di.bind(FluentProfCond, t =>
+      t
+        .toSelf()
+        .profiles('fluent-both')
+        .conditional(() => false),
+    )
     await di.init()
 
     expect(di.has(FluentProfCond)).toBe(false)

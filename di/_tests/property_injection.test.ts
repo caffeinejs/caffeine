@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Named } from '../decorators/named.js'
-import { CaffeineIoC } from '../container.js'
+import { token } from '../key.js'
 
 describe('Property Injection', function () {
   const kValue = token<any>(Symbol('value'))
@@ -43,33 +44,24 @@ describe('Property Injection', function () {
       namedDep!: Contract
 
       constructor() {
-        expect(this.dep)
-          .toBeUndefined()
-        expect(this.value)
-          .toBeUndefined()
-        expect(this.namedDep)
-          .toBeUndefined()
+        expect(this.dep).toBeUndefined()
+        expect(this.value).toBeUndefined()
+        expect(this.namedDep).toBeUndefined()
       }
     }
 
     it('should construct class and resolve property dependencies', async function () {
       const di = new CaffeineIoC()
-      di.bind(kValue, t => t
-        .toValue('test'))
+      di.bind(kValue, t => t.toValue('test'))
       await di.init()
 
       const root = di.get(PropertyOnly)
 
-      expect(root)
-        .toBeInstanceOf(PropertyOnly)
-      expect(root.dep)
-        .toBeInstanceOf(Dep)
-      expect(root.dep.test())
-        .toEqual('ok')
-      expect(root.value)
-        .toEqual('test')
-      expect(root.namedDep.run())
-        .toEqual('ran')
+      expect(root).toBeInstanceOf(PropertyOnly)
+      expect(root.dep).toBeInstanceOf(Dep)
+      expect(root.dep.test()).toEqual('ok')
+      expect(root.value).toEqual('test')
+      expect(root.namedDep.run()).toEqual('ran')
     })
   })
 
@@ -84,33 +76,24 @@ describe('Property Injection', function () {
       value!: string
 
       constructor(readonly namedDep: Contract) {
-        expect(this.dep)
-          .toBeUndefined()
-        expect(this.value)
-          .toBeUndefined()
-        expect(this.namedDep)
-          .toBeDefined()
+        expect(this.dep).toBeUndefined()
+        expect(this.value).toBeUndefined()
+        expect(this.namedDep).toBeDefined()
       }
     }
 
     it('should instantiate class injecting constructor dependencies and then inject property dependencies', async function () {
       const di = new CaffeineIoC()
-      di.bind(kValue, t => t
-        .toValue('test'))
+      di.bind(kValue, t => t.toValue('test'))
       await di.init()
 
       const root = di.get(CtorAndProperties)
 
-      expect(root)
-        .toBeInstanceOf(CtorAndProperties)
-      expect(root.dep)
-        .toBeInstanceOf(Dep)
-      expect(root.dep.test())
-        .toEqual('ok')
-      expect(root.value)
-        .toEqual('test')
-      expect(root.namedDep.run())
-        .toEqual('ran')
+      expect(root).toBeInstanceOf(CtorAndProperties)
+      expect(root.dep).toBeInstanceOf(Dep)
+      expect(root.dep.test()).toEqual('ok')
+      expect(root.value).toEqual('test')
+      expect(root.namedDep.run()).toEqual('ran')
     })
   })
 
@@ -127,12 +110,9 @@ describe('Property Injection', function () {
       #namedDep!: Contract
 
       constructor() {
-        expect(this._dep)
-          .toBeUndefined()
-        expect(this._value)
-          .toBeUndefined()
-        expect(this.#namedDep)
-          .toBeUndefined()
+        expect(this._dep).toBeUndefined()
+        expect(this._value).toBeUndefined()
+        expect(this.#namedDep).toBeUndefined()
       }
 
       get dep(): Dep {
@@ -155,22 +135,16 @@ describe('Property Injection', function () {
 
     it('should inject values any type of private property', async function () {
       const di = new CaffeineIoC()
-      di.bind(kValue, t => t
-        .toValue('test'))
+      di.bind(kValue, t => t.toValue('test'))
       await di.init()
 
       const root = di.get(PrivateTest)
 
-      expect(root)
-        .toBeInstanceOf(PrivateTest)
-      expect(root.dep)
-        .toBeInstanceOf(Dep)
-      expect(root.dep.test())
-        .toEqual('ok')
-      expect(root.value)
-        .toEqual('test')
-      expect(root.namedDep.run())
-        .toEqual('ran')
+      expect(root).toBeInstanceOf(PrivateTest)
+      expect(root.dep).toBeInstanceOf(Dep)
+      expect(root.dep.test()).toEqual('ok')
+      expect(root.value).toEqual('test')
+      expect(root.namedDep.run()).toEqual('ran')
     })
   })
 })

@@ -1,6 +1,6 @@
 import { AsyncFactory, Factory } from '../factory.js'
-import { Ctor } from '../types.js'
 import { notNil } from '../internal/util/assert/not_nil.js'
+import { Ctor } from '../types.js'
 import { extendInjectableAttributes } from './registrar/index.js'
 
 /**
@@ -23,10 +23,8 @@ export function UseAsyncFactory<T>(factory: AsyncFactory<T>) {
   notNil(factory, `@${UseAsyncFactory.name}(): parameter factory is required.`)
 
   return function (target: Ctor, context: ClassDecoratorContext) {
-    extendInjectableAttributes<T>(context.metadata, target,
-      config => config
-        .async(true)
-        .factory(factory as unknown as Factory<T>),
+    extendInjectableAttributes<T>(context.metadata, target, config =>
+      config.async(true).factory(factory as unknown as Factory<T>),
     )
   }
 }

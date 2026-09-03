@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
-import { Profile } from '../decorators/profile.js'
-import { Named } from '../decorators/named.js'
 import { Lifetime } from '../decorators/lifetime.js'
-import { CaffeineIoC } from '../container.js'
-import { Scopes } from '../scope.js'
-import { $i } from '../injection.js'
+import { Named } from '../decorators/named.js'
+import { Profile } from '../decorators/profile.js'
 import { ErrInvalidBinding } from '../errors.js'
+import { $i } from '../injection.js'
+import { token } from '../key.js'
 import { Provider } from '../provider.js'
+import { Scopes } from '../scope.js'
 
 describe('Method Injections', function () {
   const kVal = token<any>(Symbol('testVal'))
@@ -69,14 +71,10 @@ describe('Method Injections', function () {
       const r2 = di.get(SingleInject)
       const id2 = r2.transient.get()?.id
 
-      expect(r1)
-        .toBeInstanceOf(SingleInject)
-      expect(r1.id)
-        .toEqual(r2.id)
-      expect(r1.transient.get())
-        .toBeInstanceOf(TransientDep)
-      expect(r2.transient.get())
-        .toBeInstanceOf(TransientDep)
+      expect(r1).toBeInstanceOf(SingleInject)
+      expect(r1.id).toEqual(r2.id)
+      expect(r1.transient.get()).toBeInstanceOf(TransientDep)
+      expect(r2.transient.get()).toBeInstanceOf(TransientDep)
       expect(r1.transient.get()?.id).not.toEqual(r2.transient.get()?.id)
       expect(id1).not.toEqual(id2)
     })
@@ -101,13 +99,10 @@ describe('Method Injections', function () {
       const res1 = di.get(Tr)
       const res2 = di.get(Tr)
 
-      expect(res1)
-        .toBeInstanceOf(Tr)
-      expect(res2)
-        .toBeInstanceOf(Tr)
+      expect(res1).toBeInstanceOf(Tr)
+      expect(res2).toBeInstanceOf(Tr)
       expect(res1.id).not.toEqual(res2.id)
-      expect(res1.dep.get()?.id)
-        .toEqual(res2.dep.get()?.id)
+      expect(res1.dep.get()?.id).toEqual(res2.dep.get()?.id)
     })
   })
 
@@ -179,10 +174,13 @@ describe('Method Injections', function () {
       di.bind(B1, t => t.toSelf().names(kBs))
       di.bind(B2, t => t.toSelf().names(kBs, kBase))
       di.bind(kVal, t => t.toValue('test'))
-      di.bind(Test, t => t.toSelf()
-        .injectMethod('setTransient', $i.provide(TransientDep))
-        .injectMethod('setValue', kVal)
-        .injectMethod('setBase', $i.allOf(kBs), kBase))
+      di.bind(Test, t =>
+        t
+          .toSelf()
+          .injectMethod('setTransient', $i.provide(TransientDep))
+          .injectMethod('setValue', kVal)
+          .injectMethod('setBase', $i.allOf(kBs), kBase),
+      )
 
       await di.init()
 
@@ -217,8 +215,7 @@ describe('Method Injections', function () {
 
       @Inject([kMethodValue])
       setMethodValue(methodValue: string) {
-        expect(this.value)
-          .toEqual('test')
+        expect(this.value).toEqual('test')
         this.methodValue = methodValue
       }
     }
@@ -227,9 +224,7 @@ describe('Method Injections', function () {
       const di = new CaffeineIoC({ decorators: false, profiles: ['method-injections-dep'] })
       di.bind(kValue, t => t.toValue('test'))
       di.bind(kMethodValue, t => t.toValue('method_test'))
-      di.bind(Dep, t => t.toSelf()
-        .injectProperty('value', kValue)
-        .injectMethod('setMethodValue', kMethodValue))
+      di.bind(Dep, t => t.toSelf().injectProperty('value', kValue).injectMethod('setMethodValue', kMethodValue))
 
       await di.init()
 
@@ -274,20 +269,14 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kA, t => t
-        .toValue('foo'))
-      di.bind(kB, t => t
-        .toValue(42))
-      di.bind(Svc, t => t
-        .toSelf()
-        .injectMethod('setDeps', kA, kB))
+      di.bind(kA, t => t.toValue('foo'))
+      di.bind(kB, t => t.toValue(42))
+      di.bind(Svc, t => t.toSelf().injectMethod('setDeps', kA, kB))
       await di.init()
 
       const instance = di.get(Svc)
-      expect(instance.a)
-        .toEqual('foo')
-      expect(instance.b)
-        .toEqual(42)
+      expect(instance.a).toEqual('foo')
+      expect(instance.b).toEqual(42)
     })
 
     it('should inject deps into multiple methods via chaining', async function () {
@@ -307,21 +296,14 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kA, t => t
-        .toValue('foo'))
-      di.bind(kB, t => t
-        .toValue(42))
-      di.bind(Svc, t => t
-        .toSelf()
-        .injectMethod('setA', kA)
-        .injectMethod('setB', kB))
+      di.bind(kA, t => t.toValue('foo'))
+      di.bind(kB, t => t.toValue(42))
+      di.bind(Svc, t => t.toSelf().injectMethod('setA', kA).injectMethod('setB', kB))
       await di.init()
 
       const instance = di.get(Svc)
-      expect(instance.a)
-        .toEqual('foo')
-      expect(instance.b)
-        .toEqual(42)
+      expect(instance.a).toEqual('foo')
+      expect(instance.b).toEqual(42)
     })
 
     it('should work alongside constructor injections', async function () {
@@ -337,20 +319,14 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(DepA, t => t
-        .toSelf())
-      di.bind(DepB, t => t
-        .toSelf())
-      di.bind(Svc, t => t
-        .toSelf([DepA])
-        .injectMethod('setDepB', DepB))
+      di.bind(DepA, t => t.toSelf())
+      di.bind(DepB, t => t.toSelf())
+      di.bind(Svc, t => t.toSelf([DepA]).injectMethod('setDepB', DepB))
       await di.init()
 
       const instance = di.get(Svc)
-      expect(instance.depA)
-        .toBeInstanceOf(DepA)
-      expect(instance.depB)
-        .toBeInstanceOf(DepB)
+      expect(instance.depA).toBeInstanceOf(DepA)
+      expect(instance.depB).toBeInstanceOf(DepB)
     })
 
     it('should leave optional dep as undefined when absent from container', async function () {
@@ -364,13 +340,10 @@ describe('Method Injections', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc, t => t
-        .toSelf()
-        .injectMethod('setOpt', $i.optional(kOpt)))
+      di.bind(Svc, t => t.toSelf().injectMethod('setOpt', $i.optional(kOpt)))
       await di.init()
 
-      expect(di.get(Svc).opt)
-        .toBeUndefined()
+      expect(di.get(Svc).opt).toBeUndefined()
     })
   })
 
@@ -378,18 +351,14 @@ describe('Method Injections', function () {
     it('should throw ErrInvalidBinding for a symbol key', function () {
       const k = token<any>(Symbol('x'))
       const di = new CaffeineIoC({ decorators: false })
-      expect(() => di.bind(k, t => t
-        .toValue('v')
-        .injectMethod('setVal', k)))
-        .toThrow(ErrInvalidBinding)
+      expect(() => di.bind(k, t => t.toValue('v').injectMethod('setVal', k))).toThrow(ErrInvalidBinding)
     })
 
     it('should throw ErrInvalidBinding for a string key', function () {
       const di = new CaffeineIoC({ decorators: false })
-      expect(() => di.bind(token<any>('key'), t => t
-        .toValue('v')
-        .injectMethod('setVal', token<any>('key'))))
-        .toThrow(ErrInvalidBinding)
+      expect(() => di.bind(token<any>('key'), t => t.toValue('v').injectMethod('setVal', token<any>('key')))).toThrow(
+        ErrInvalidBinding,
+      )
     })
   })
 })

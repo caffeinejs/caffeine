@@ -36,7 +36,7 @@ interface Reflect {
    */
   getOverride<TClass extends AnyClass, C, M>(
     cls: TClass,
-    annotation: { readonly _c?: C, readonly _m?: M },
+    annotation: { readonly _c?: C; readonly _m?: M },
     member: ClassMember<TClass>,
   ): C | M | undefined
 
@@ -50,7 +50,7 @@ interface Reflect {
    */
   merge<TClass extends AnyClass, T>(
     cls: TClass,
-    annotation: { readonly _c?: T[], readonly _m?: T[] },
+    annotation: { readonly _c?: T[]; readonly _m?: T[] },
     member: ClassMember<TClass>,
   ): T[]
 
@@ -150,7 +150,8 @@ function entry(cls: unknown, annotation: unknown): AnnotationEntry | undefined {
 }
 
 function metadataEntry(cls: Function, key: symbol): MetadataEntry | undefined {
-  const map = (cls as unknown as { [Symbol.metadata]?: Record<symbol, unknown> })[Symbol.metadata]
-    ?.[Keys.kMetadata] as Map<symbol, MetadataEntry> | undefined
+  const map = (cls as unknown as { [Symbol.metadata]?: Record<symbol, unknown> })[Symbol.metadata]?.[Keys.kMetadata] as
+    | Map<symbol, MetadataEntry>
+    | undefined
   return map?.get(key)
 }

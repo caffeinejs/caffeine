@@ -1,13 +1,14 @@
 import { describe, it, beforeEach, expect, vi } from 'vitest'
+
+import { CaffeineIoC } from '../container.js'
+import { Async } from '../decorators/async.js'
+import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Interceptor } from '../decorators/interceptor.js'
 import { Profile } from '../decorators/profile.js'
-import { PostResolutionInterceptor } from '../post_resolution_interceptor.js'
-import { CaffeineIoC } from '../container.js'
 import { Provides } from '../decorators/provides.js'
-import { Configuration } from '../decorators/configuration.js'
-import { Async } from '../decorators/async.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
+import { PostResolutionInterceptor } from '../post_resolution_interceptor.js'
 
 describe('Post Resolution Interceptor', function () {
   const spy1 = vi.fn()
@@ -54,12 +55,9 @@ describe('Post Resolution Interceptor', function () {
       await di.init()
       const dep = di.get(Dep)
 
-      expect(dep)
-        .toBeInstanceOf(Dep)
-      expect(spy1)
-        .toHaveBeenCalledTimes(1)
-      expect(spy2)
-        .toHaveBeenCalledTimes(1)
+      expect(dep).toBeInstanceOf(Dep)
+      expect(spy1).toHaveBeenCalledTimes(1)
+      expect(spy2).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -69,12 +67,9 @@ describe('Post Resolution Interceptor', function () {
       await di.init()
       const dep = di.get(Comp)
 
-      expect(dep)
-        .toBeInstanceOf(Comp)
-      expect(spy1)
-        .toHaveBeenCalledTimes(1)
-      expect(spy2)
-        .toHaveBeenCalledTimes(1)
+      expect(dep).toBeInstanceOf(Comp)
+      expect(spy1).toHaveBeenCalledTimes(1)
+      expect(spy2).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -109,21 +104,14 @@ describe('Post Resolution Interceptor', function () {
       const first = di.get(AsyncToken)
       const second = di.get(AsyncToken)
 
-      expect(interceptorSpy)
-        .toHaveBeenCalledTimes(1)
-      expect(interceptedInstance)
-        .toBeInstanceOf(AsyncToken)
+      expect(interceptorSpy).toHaveBeenCalledTimes(1)
+      expect(interceptedInstance).toBeInstanceOf(AsyncToken)
       expect(interceptedInstance).not.toBeInstanceOf(Promise)
-      expect((interceptedInstance as AsyncToken).value)
-        .toBe('async-value')
-      expect(first)
-        .toBeInstanceOf(AsyncToken)
-      expect((first as AsyncToken).value)
-        .toBe('async-value')
-      expect(first)
-        .toBe(second)
-      expect(first)
-        .toBe(interceptedInstance)
+      expect((interceptedInstance as AsyncToken).value).toBe('async-value')
+      expect(first).toBeInstanceOf(AsyncToken)
+      expect((first as AsyncToken).value).toBe('async-value')
+      expect(first).toBe(second)
+      expect(first).toBe(interceptedInstance)
     })
   })
 
@@ -151,21 +139,14 @@ describe('Post Resolution Interceptor', function () {
       const first = di.get(AsyncServiceImpl)
       const second = di.get(AsyncServiceImpl)
 
-      expect(interceptorSpy)
-        .toHaveBeenCalledTimes(1)
-      expect(interceptedInstance)
-        .toBeInstanceOf(AsyncService)
+      expect(interceptorSpy).toHaveBeenCalledTimes(1)
+      expect(interceptedInstance).toBeInstanceOf(AsyncService)
       expect(interceptedInstance).not.toBeInstanceOf(Promise)
-      expect((interceptedInstance as AsyncService).label)
-        .toBe('uaf-value')
-      expect(first)
-        .toBeInstanceOf(AsyncService)
-      expect((first as AsyncService).label)
-        .toBe('uaf-value')
-      expect(first)
-        .toBe(second)
-      expect(first)
-        .toBe(interceptedInstance)
+      expect((interceptedInstance as AsyncService).label).toBe('uaf-value')
+      expect(first).toBeInstanceOf(AsyncService)
+      expect((first as AsyncService).label).toBe('uaf-value')
+      expect(first).toBe(second)
+      expect(first).toBe(interceptedInstance)
     })
   })
 })

@@ -1,5 +1,5 @@
-import { Ctor } from '../../types.js'
 import { Injection, InjectionDescriptor } from '../../injection.js'
+import { Ctor } from '../../types.js'
 
 export function normalizeInjection(dep: Injection): InjectionDescriptor {
   return typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep }

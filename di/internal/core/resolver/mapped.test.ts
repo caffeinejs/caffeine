@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../../../key.js'
+
 import { CaffeineIoC } from '../../../container.js'
 import { ErrMissingInjectionKey, ErrNoResolutionForKey } from '../../../errors.js'
-import { BuiltInResolvers } from '../../../injection_resolver.js'
 import { $i } from '../../../injection.js'
+import { BuiltInResolvers } from '../../../injection_resolver.js'
+import { token } from '../../../key.js'
 import { mappedFactory } from './index.js'
 
-function ctx(container: CaffeineIoC, descriptor: ReturnType<typeof $i.mapped | typeof $i.optional>, key: any = 'Consumer') {
+function ctx(
+  container: CaffeineIoC,
+  descriptor: ReturnType<typeof $i.mapped | typeof $i.optional>,
+  key: any = 'Consumer',
+) {
   return { container, descriptor, key, kind: 'constructor' as const, member: '', index: 0 }
 }
 
@@ -16,29 +21,29 @@ describe('mappedFactory', function () {
       const kKey = token<any>(Symbol('map-no-ctx-key'))
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => mappedFactory(ctx(di, $i.mapped(kKey), null)))
-        .toThrow(ErrMissingInjectionKey)
+      expect(() => mappedFactory(ctx(di, $i.mapped(kKey), null))).toThrow(ErrMissingInjectionKey)
     })
 
     it('should throw ErrMissingInjectionKey when descriptor has no key', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => mappedFactory({
-        container: di,
-        descriptor: { resolver: BuiltInResolvers.MAP },
-        key: token<any>('Consumer'),
-        kind: 'constructor',
-        member: '',
-        index: 0,
-      })).toThrow(ErrMissingInjectionKey)
+      expect(() =>
+        mappedFactory({
+          container: di,
+          descriptor: { resolver: BuiltInResolvers.MAP },
+          key: token<any>('Consumer'),
+          kind: 'constructor',
+          member: '',
+          index: 0,
+        }),
+      ).toThrow(ErrMissingInjectionKey)
     })
 
     it('should throw ErrNoResolutionForKey when no bindings exist and injection is required', function () {
       const kAbsent = token<any>(Symbol('map-absent-required'))
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => mappedFactory(ctx(di, $i.mapped(kAbsent))))
-        .toThrow(ErrNoResolutionForKey)
+      expect(() => mappedFactory(ctx(di, $i.mapped(kAbsent)))).toThrow(ErrNoResolutionForKey)
     })
 
     it('should return undefined when no bindings exist and injection is optional', function () {
@@ -57,12 +62,8 @@ describe('mappedFactory', function () {
       class InputWidget extends Widget {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ButtonWidget, t => t.toSelf()
-        .extends(Widget)
-        .names('button'))
-      di.bind(InputWidget, t => t.toSelf()
-        .extends(Widget)
-        .names('input'))
+      di.bind(ButtonWidget, t => t.toSelf().extends(Widget).names('button'))
+      di.bind(InputWidget, t => t.toSelf().extends(Widget).names('input'))
       await di.init()
 
       const resolver = mappedFactory(ctx(di, $i.mapped(Widget)))
@@ -80,10 +81,8 @@ describe('mappedFactory', function () {
       class StoreB extends Store {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(StoreA, t => t.toSelf()
-        .extends(Store))
-      di.bind(StoreB, t => t.toSelf()
-        .extends(Store))
+      di.bind(StoreA, t => t.toSelf().extends(Store))
+      di.bind(StoreB, t => t.toSelf().extends(Store))
       await di.init()
 
       const resolver = mappedFactory(ctx(di, $i.mapped(Store)))
@@ -99,11 +98,8 @@ describe('mappedFactory', function () {
       class PluginB extends Plugin {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(PluginA, t => t.toSelf()
-        .extends(Plugin)
-        .names('alpha'))
-      di.bind(PluginB, t => t.toSelf()
-        .extends(Plugin))
+      di.bind(PluginA, t => t.toSelf().extends(Plugin).names('alpha'))
+      di.bind(PluginB, t => t.toSelf().extends(Plugin))
       await di.init()
 
       const resolver = mappedFactory(ctx(di, $i.mapped(Plugin)))

@@ -1,5 +1,6 @@
 import type { RouteExtension } from '@caffeinejs/http'
 import { configureRoute } from '@caffeinejs/http/decorators/registrar'
+
 import type { OperationDetail } from './detail.js'
 import { kOperation } from './keys.js'
 

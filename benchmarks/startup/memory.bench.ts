@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
 import { printMachineInfo } from '../machine-info.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -78,13 +79,13 @@ function row(label: string, m: Record<keyof MemUsage, number>, overhead: number)
   const ratio = overhead / smallerOverhead
   const vs = ratio === 1 ? ' (baseline)' : `  ${ratio.toFixed(1)}x more`
   return (
-    label.padEnd(10)
-    + kb(m.heapUsed).padStart(COL)
-    + kb(m.heapTotal).padStart(COL)
-    + kb(m.rss).padStart(COL)
-    + kb(m.external).padStart(COL)
-    + kb(overhead).padStart(COL)
-    + vs
+    label.padEnd(10) +
+    kb(m.heapUsed).padStart(COL) +
+    kb(m.heapTotal).padStart(COL) +
+    kb(m.rss).padStart(COL) +
+    kb(m.external).padStart(COL) +
+    kb(overhead).padStart(COL) +
+    vs
   )
 }
 
@@ -92,12 +93,12 @@ printMachineInfo()
 console.log(`\n--- Memory Usage (median of ${N} subprocess runs, same 6-module app) ---\n`)
 console.log(`Node.js baseline heapUsed: ${kb(baseline.heapUsed)}\n`)
 console.log(
-  ''.padEnd(10)
-  + 'heapUsed'.padStart(COL)
-  + 'heapTotal'.padStart(COL)
-  + 'rss'.padStart(COL)
-  + 'external'.padStart(COL)
-  + 'overhead'.padStart(COL),
+  ''.padEnd(10) +
+    'heapUsed'.padStart(COL) +
+    'heapTotal'.padStart(COL) +
+    'rss'.padStart(COL) +
+    'external'.padStart(COL) +
+    'overhead'.padStart(COL),
 )
 const rows = [
   { name: 'caffeine', m: caffeine, overhead: caffeineOverhead },

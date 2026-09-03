@@ -1,6 +1,7 @@
 import { Injectable } from '@caffeinejs/di'
-import { CustomerService } from '../customer/customer.service.js'
+
 import { CartService } from '../cart/cart.service.js'
+import { CustomerService } from '../customer/customer.service.js'
 import { NotifierService } from '../shared/notifier.service.js'
 import { OrderRepository } from './order.repository.js'
 
@@ -13,8 +14,12 @@ export class OrderService {
     private readonly notifier: NotifierService,
   ) {}
 
-  findAll(): unknown[] { return this.repo.findAll() }
-  findById(id: string): unknown { return this.repo.findById(id) }
+  findAll(): unknown[] {
+    return this.repo.findAll()
+  }
+  findById(id: string): unknown {
+    return this.repo.findById(id)
+  }
   create(data: unknown): unknown {
     void this.customerService.findById((data as Record<string, string>).customerId)
     void this.cartService.findById((data as Record<string, string>).cartId)

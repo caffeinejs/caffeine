@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+
 import { Bar } from './Bar.js'
 
 export class Foo {

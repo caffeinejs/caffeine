@@ -13,8 +13,8 @@ export class ErrKafka extends Error {
 export class ErrKafkaMissingTopic extends ErrKafka {
   constructor(handler: string) {
     super(
-      `Cannot register Kafka listener "${handler}": no topic declared`
-      + '\n  - Pass a topic to @KafkaListener, for example @KafkaListener({ topic: "orders" })',
+      `Cannot register Kafka listener "${handler}": no topic declared` +
+        '\n  - Pass a topic to @KafkaListener, for example @KafkaListener({ topic: "orders" })',
       'ERR_KAFKA_MISSING_TOPIC',
     )
     this.name = 'ErrKafkaMissingTopic'
@@ -25,8 +25,8 @@ export class ErrKafkaMissingTopic extends ErrKafka {
 export class ErrKafkaMissingGroupID extends ErrKafka {
   constructor(handler: string) {
     super(
-      `Cannot register Kafka listener "${handler}": no group id resolved`
-      + '\n  - Set a per-listener groupId on @KafkaListener, or a default groupId on the kafka feature config',
+      `Cannot register Kafka listener "${handler}": no group id resolved` +
+        '\n  - Set a per-listener groupId on @KafkaListener, or a default groupId on the kafka feature config',
       'ERR_KAFKA_MISSING_GROUP_ID',
     )
     this.name = 'ErrKafkaMissingGroupID'
@@ -38,10 +38,10 @@ export class ErrKafkaUnknownInstance extends ErrKafka {
   constructor(handler: string, instance: string, configured: string[]) {
     const known = configured.length > 0 ? configured.map(name => `"${name}"`).join(', ') : '(none)'
     super(
-      `Cannot start Kafka handler "${handler}": no integration named "${instance}" is configured`
-      + `\n  - Declare the instance with .extend(kafka("${instance}"), k => k.brokers(...))`
-      + '\n  - Or reassign the handler to a configured instance with @KafkaHandler({ instance: "..." })'
-      + `\n  - Configured instances: ${known}`,
+      `Cannot start Kafka handler "${handler}": no integration named "${instance}" is configured` +
+        `\n  - Declare the instance with .extend(kafka("${instance}"), k => k.brokers(...))` +
+        '\n  - Or reassign the handler to a configured instance with @KafkaHandler({ instance: "..." })' +
+        `\n  - Configured instances: ${known}`,
       'ERR_KAFKA_UNKNOWN_INSTANCE',
     )
     this.name = 'ErrKafkaUnknownInstance'
@@ -63,8 +63,8 @@ export class ErrKafkaNackExhausted extends ErrKafka {
 export class ErrKafkaMissingBrokers extends ErrKafka {
   constructor() {
     super(
-      'Cannot start Kafka integration: no brokers configured'
-      + '\n  - Provide at least one broker, for example kafka({ brokers: "localhost:9092" })',
+      'Cannot start Kafka integration: no brokers configured' +
+        '\n  - Provide at least one broker, for example kafka({ brokers: "localhost:9092" })',
       'ERR_KAFKA_MISSING_BROKERS',
     )
     this.name = 'ErrKafkaMissingBrokers'

@@ -1,6 +1,6 @@
 import { MediaTypes } from '../media_types.js'
-import { configureClass, configureMethod } from './registrar/registrar.js'
 import { classOrMember } from './_decorator_util.js'
+import { configureClass, configureMethod } from './registrar/registrar.js'
 
 /**
  * Marks a method's (or every method's, at class level) request body as
@@ -9,14 +9,16 @@ import { classOrMember } from './_decorator_util.js'
 export function FormURLEncoded() {
   return classOrMember(
     'FormURLEncoded',
-    (_target, context) => configureClass(context, spec => {
-      spec.requestType('form')
-      spec.header('content-type', MediaTypes.FORM_URL_ENCODED)
-    }),
-    context => configureMethod(context, spec => {
-      spec.formURLEncoded()
-      spec.requestType('form')
-      spec.header('content-type', MediaTypes.FORM_URL_ENCODED)
-    }),
+    (_target, context) =>
+      configureClass(context, spec => {
+        spec.requestType('form')
+        spec.header('content-type', MediaTypes.FORM_URL_ENCODED)
+      }),
+    context =>
+      configureMethod(context, spec => {
+        spec.formURLEncoded()
+        spec.requestType('form')
+        spec.header('content-type', MediaTypes.FORM_URL_ENCODED)
+      }),
   )
 }

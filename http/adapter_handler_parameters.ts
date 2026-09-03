@@ -1,22 +1,18 @@
 /// <reference types="@fastify/cookie" />
 
-import { FastifyRequest, FastifyReply } from 'fastify'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import { FastifyRequest, FastifyReply } from 'fastify'
 
-type Picker<
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->
-  = (req: REQ, res: RES) => unknown
+type Picker<REQ extends FastifyRequest = FastifyRequest, RES extends FastifyReply = FastifyReply> = (
+  req: REQ,
+  res: RES,
+) => unknown
 
 // Compiles the parameter pickers into a function that returns the handler's argument list. Unlike
 // compileHandler, it does not bake in the target function — the caller resolves the instance and
 // invokes the method itself, so the same instance can be reused (e.g. for per-controller error
 // handling of transient-scoped controllers).
-export function compileArgs<
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->(
+export function compileArgs<REQ extends FastifyRequest = FastifyRequest, RES extends FastifyReply = FastifyReply>(
   params: ParameterPickOptions<REQ>[],
 ): (req: REQ, res: RES) => unknown[] | Promise<unknown[]> {
   if (params.length === 0) {
@@ -26,15 +22,10 @@ export function compileArgs<
   const a = params.map(p => buildPicker<REQ, RES>(p))
   const hasAsync = params.some(p => p.async === true)
 
-  return hasAsync
-    ? (req, res) => Promise.all(a.map(p => p(req, res)))
-    : (req, res) => a.map(p => p(req, res))
+  return hasAsync ? (req, res) => Promise.all(a.map(p => p(req, res))) : (req, res) => a.map(p => p(req, res))
 }
 
-export function compileHandler<
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->(
+export function compileHandler<REQ extends FastifyRequest = FastifyRequest, RES extends FastifyReply = FastifyReply>(
   params: ParameterPickOptions<REQ>[],
   fn: (...args: unknown[]) => unknown,
 ): (req: REQ, res: RES) => unknown {
@@ -54,20 +45,15 @@ export function compileHandler<
   if (!hasAsync) {
     switch (a.length) {
       case 1:
-        return (req, res) =>
-          fn(a[0](req, res))
+        return (req, res) => fn(a[0](req, res))
       case 2:
-        return (req, res) =>
-          fn(a[0](req, res), a[1](req, res))
+        return (req, res) => fn(a[0](req, res), a[1](req, res))
       case 3:
-        return (req, res) =>
-          fn(a[0](req, res), a[1](req, res), a[2](req, res))
+        return (req, res) => fn(a[0](req, res), a[1](req, res), a[2](req, res))
       case 4:
-        return (req, res) =>
-          fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res))
+        return (req, res) => fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res))
       case 5:
-        return (req, res) =>
-          fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res))
+        return (req, res) => fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res))
       case 6:
         return (req, res) =>
           fn(a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res), a[5](req, res))
@@ -86,26 +72,31 @@ export function compileHandler<
 
   switch (a.length) {
     case 1:
-      return (req, res) =>
-        Promise.all([a[0](req, res)]).then(r => fn(r[0]))
+      return (req, res) => Promise.all([a[0](req, res)]).then(r => fn(r[0]))
     case 2:
-      return (req, res) =>
-        Promise.all([a[0](req, res), a[1](req, res)]).then(r => fn(r[0], r[1]))
+      return (req, res) => Promise.all([a[0](req, res), a[1](req, res)]).then(r => fn(r[0], r[1]))
     case 3:
-      return (req, res) =>
-        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res)]).then(r => fn(r[0], r[1], r[2]))
+      return (req, res) => Promise.all([a[0](req, res), a[1](req, res), a[2](req, res)]).then(r => fn(r[0], r[1], r[2]))
     case 4:
       return (req, res) =>
-        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res)])
-          .then(r => fn(r[0], r[1], r[2], r[3]))
+        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res)]).then(r =>
+          fn(r[0], r[1], r[2], r[3]),
+        )
     case 5:
       return (req, res) =>
-        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res)])
-          .then(r => fn(r[0], r[1], r[2], r[3], r[4]))
+        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res)]).then(r =>
+          fn(r[0], r[1], r[2], r[3], r[4]),
+        )
     case 6:
       return (req, res) =>
-        Promise.all([a[0](req, res), a[1](req, res), a[2](req, res), a[3](req, res), a[4](req, res), a[5](req, res)])
-          .then(r => fn(r[0], r[1], r[2], r[3], r[4], r[5]))
+        Promise.all([
+          a[0](req, res),
+          a[1](req, res),
+          a[2](req, res),
+          a[3](req, res),
+          a[4](req, res),
+          a[5](req, res),
+        ]).then(r => fn(r[0], r[1], r[2], r[3], r[4], r[5]))
     default: {
       const len = a.length
       return (req, res) => {
@@ -119,10 +110,9 @@ export function compileHandler<
   }
 }
 
-function buildPicker<
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
->(p: ParameterPickOptions<REQ>): Picker<REQ, RES> {
+function buildPicker<REQ extends FastifyRequest = FastifyRequest, RES extends FastifyReply = FastifyReply>(
+  p: ParameterPickOptions<REQ>,
+): Picker<REQ, RES> {
   if (p.picker) {
     return req => (p.picker as (req: REQ) => unknown)(req)
   }

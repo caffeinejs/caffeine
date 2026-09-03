@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
+import { Lifetime } from '../decorators/lifetime.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { Lifetime } from '../decorators/lifetime.js'
-import { $i } from '../injection.js'
-import { CaffeineIoC } from '../container.js'
 import { ErrInvalidBinding, ErrInvalidDecorator } from '../errors.js'
+import { $i } from '../injection.js'
+import { token } from '../key.js'
 import { Scopes } from '../scope.js'
 
 describe('Abstract Classes', function () {
@@ -33,14 +35,10 @@ describe('Abstract Classes', function () {
       const impl1 = di.get(Base) as Impl
       const impl2 = di.get(Base) as Impl
 
-      expect(impl1)
-        .toBeInstanceOf(Impl)
-      expect(impl1)
-        .toBeInstanceOf(Base)
-      expect(impl1.test())
-        .toEqual('ok')
-      expect(impl1.id)
-        .toEqual(impl2.id)
+      expect(impl1).toBeInstanceOf(Impl)
+      expect(impl1).toBeInstanceOf(Base)
+      expect(impl1.test()).toEqual('ok')
+      expect(impl1.id).toEqual(impl2.id)
     })
 
     it('should inject abstract key as a constructor dependency', async function () {
@@ -53,12 +51,9 @@ describe('Abstract Classes', function () {
       await di.init()
       const service = di.get(Service)
 
-      expect(service.dep)
-        .toBeInstanceOf(Impl)
-      expect(service.dep)
-        .toBeInstanceOf(Base)
-      expect(service.dep.test())
-        .toEqual('ok')
+      expect(service.dep).toBeInstanceOf(Impl)
+      expect(service.dep).toBeInstanceOf(Base)
+      expect(service.dep.test()).toEqual('ok')
     })
   })
 
@@ -124,10 +119,8 @@ describe('Abstract Classes', function () {
 
       const service = di.get<DbService>(DbService)
 
-      expect(service.repo)
-        .toBeInstanceOf(MongoRepo)
-      expect(service.repo.list())
-        .toEqual('mongodb')
+      expect(service.repo).toBeInstanceOf(MongoRepo)
+      expect(service.repo.list()).toEqual('mongodb')
     })
 
     it('should inject the primary implementation when requesting a single dependency by the abstract class key', async function () {
@@ -141,10 +134,8 @@ describe('Abstract Classes', function () {
 
       const service = di.get<DbService>(DbService)
 
-      expect(service.repo)
-        .toBeInstanceOf(MongoRepo)
-      expect(service.repo.list())
-        .toEqual('mongodb')
+      expect(service.repo).toBeInstanceOf(MongoRepo)
+      expect(service.repo.list()).toEqual('mongodb')
     })
 
     it('should inject all implementations by the abstract class key', async function () {
@@ -158,19 +149,13 @@ describe('Abstract Classes', function () {
 
       const service = di.get<DbService>(DbService)
 
-      expect(service.repos)
-        .toHaveLength(2)
-      expect(service.repos.map(r => r.list())
-        .sort())
-        .toEqual(['mongodb', 'mysql'])
+      expect(service.repos).toHaveLength(2)
+      expect(service.repos.map(r => r.list()).sort()).toEqual(['mongodb', 'mysql'])
 
       const repos = di.getMany(Repo)
 
-      expect(repos)
-        .toHaveLength(2)
-      expect(repos.map(r => r.list())
-        .sort())
-        .toEqual(['mongodb', 'mysql'])
+      expect(repos).toHaveLength(2)
+      expect(repos.map(r => r.list()).sort()).toEqual(['mongodb', 'mysql'])
     })
 
     it('should inject all named implementations ', async function () {
@@ -184,11 +169,8 @@ describe('Abstract Classes', function () {
 
       const service = di.get(AllRepoService)
 
-      expect(service.repos)
-        .toHaveLength(2)
-      expect(service.repos.map(r => r.list())
-        .sort())
-        .toEqual(['mongodb', 'mysql'])
+      expect(service.repos).toHaveLength(2)
+      expect(service.repos.map(r => r.list()).sort()).toEqual(['mongodb', 'mysql'])
     })
 
     describe('when mixing injections', function () {
@@ -208,20 +190,12 @@ describe('Abstract Classes', function () {
 
         const service = di.get(DbService)
 
-        expect(service.repo)
-          .toBeInstanceOf(MongoRepo)
-        expect(service.byName)
-          .toBeInstanceOf(MySqlRepo)
-        expect(service.byAbstract)
-          .toHaveLength(2)
-        expect(service.byAbstract.map(r => r.list())
-          .sort())
-          .toEqual(['mongodb', 'mysql'])
-        expect(service.byAll)
-          .toHaveLength(2)
-        expect(service.byAll.map(r => r.list())
-          .sort())
-          .toEqual(['mongodb', 'mysql'])
+        expect(service.repo).toBeInstanceOf(MongoRepo)
+        expect(service.byName).toBeInstanceOf(MySqlRepo)
+        expect(service.byAbstract).toHaveLength(2)
+        expect(service.byAbstract.map(r => r.list()).sort()).toEqual(['mongodb', 'mysql'])
+        expect(service.byAll).toHaveLength(2)
+        expect(service.byAll.map(r => r.list()).sort()).toEqual(['mongodb', 'mysql'])
       })
     })
   })
@@ -245,10 +219,8 @@ describe('Abstract Classes', function () {
       await di.init()
       const repo = di.get(Repo)
 
-      expect(repo)
-        .toBeInstanceOf(InMemoryRepo)
-      expect(repo.list())
-        .toEqual('ok')
+      expect(repo).toBeInstanceOf(InMemoryRepo)
+      expect(repo.list()).toEqual('ok')
     })
 
     it('should throw when the class has no explicit base', function () {
@@ -257,8 +229,7 @@ describe('Abstract Classes', function () {
         @Extends()
         class Impl {}
         void Impl
-      })
-        .toThrow(ErrInvalidDecorator)
+      }).toThrow(ErrInvalidDecorator)
     })
   })
 
@@ -303,10 +274,8 @@ describe('Abstract Classes', function () {
       await di.init()
       const repo = di.get(Repo)
 
-      expect(repo)
-        .toBeInstanceOf(InMemoryRepo)
-      expect(repo.list())
-        .toEqual('in-memory')
+      expect(repo).toBeInstanceOf(InMemoryRepo)
+      expect(repo.list()).toEqual('in-memory')
     })
 
     it('should resolve the primary implementation when requesting a single dependency by the abstract key', async function () {
@@ -314,10 +283,8 @@ describe('Abstract Classes', function () {
       await di.init()
       const repo = di.get(Repo)
 
-      expect(repo)
-        .toBeInstanceOf(InMemoryRepo)
-      expect(repo.list())
-        .toEqual('in-memory')
+      expect(repo).toBeInstanceOf(InMemoryRepo)
+      expect(repo.list()).toEqual('in-memory')
     })
 
     it('should inject all implementations by the abstract key', async function () {
@@ -325,11 +292,8 @@ describe('Abstract Classes', function () {
       await di.init()
       const repos = di.getMany(Repo)
 
-      expect(repos)
-        .toHaveLength(2)
-      expect(repos.map(r => r.list())
-        .sort())
-        .toEqual(['in-memory', 'mysql'])
+      expect(repos).toHaveLength(2)
+      expect(repos.map(r => r.list()).sort()).toEqual(['in-memory', 'mysql'])
     })
 
     it('should resolve the dependencies following the injection specification', async function () {
@@ -337,17 +301,11 @@ describe('Abstract Classes', function () {
       await di.init()
       const service = di.get(Service)
 
-      expect(service.inMemory)
-        .toBeInstanceOf(InMemoryRepo)
-      expect(service.mysql)
-        .toBeInstanceOf(MySqlRepo)
-      expect(service.all)
-        .toHaveLength(2)
-      expect(service.all.map(r => r.list())
-        .sort())
-        .toEqual(['in-memory', 'mysql'])
-      expect(service.single)
-        .toBeInstanceOf(InMemoryRepo)
+      expect(service.inMemory).toBeInstanceOf(InMemoryRepo)
+      expect(service.mysql).toBeInstanceOf(MySqlRepo)
+      expect(service.all).toHaveLength(2)
+      expect(service.all.map(r => r.list()).sort()).toEqual(['in-memory', 'mysql'])
+      expect(service.single).toBeInstanceOf(InMemoryRepo)
     })
   })
 
@@ -365,31 +323,24 @@ describe('Abstract Classes', function () {
 
       it('should resolve the concrete class via the abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemStore, t => t
-          .toSelf()
-          .extends(Store))
+        di.bind(MemStore, t => t.toSelf().extends(Store))
         await di.init()
 
         const result = di.get(Store)
 
-        expect(result)
-          .toBeInstanceOf(MemStore)
-        expect(result.fetch())
-          .toEqual('mem')
+        expect(result).toBeInstanceOf(MemStore)
+        expect(result.fetch()).toEqual('mem')
       })
 
       it('should return the same singleton instance via both the concrete and abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemStore, t => t
-          .toSelf()
-          .extends(Store))
+        di.bind(MemStore, t => t.toSelf().extends(Store))
         await di.init()
 
         const viaAbstract = di.get(Store)
         const viaConcrete = di.get(MemStore)
 
-        expect(viaAbstract)
-          .toBe(viaConcrete)
+        expect(viaAbstract).toBe(viaConcrete)
       })
     })
 
@@ -402,10 +353,7 @@ describe('Abstract Classes', function () {
 
       it('should produce a new instance on each resolution via the abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(IdImpl, t => t
-          .toSelf()
-          .lifetime(Scopes.TRANSIENT)
-          .extends(IdBase))
+        di.bind(IdImpl, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(IdBase))
         await di.init()
 
         const a = di.get(IdBase)
@@ -434,38 +382,25 @@ describe('Abstract Classes', function () {
 
       it('should resolve the primary implementation when requesting by abstract key', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemCache, t => t
-          .toSelf()
-          .extends(Cache))
-        di.bind(RedisCache, t => t
-          .toSelf()
-          .extends(Cache)
-          .primary())
+        di.bind(MemCache, t => t.toSelf().extends(Cache))
+        di.bind(RedisCache, t => t.toSelf().extends(Cache).primary())
         await di.init()
 
         const cache = di.get(Cache)
 
-        expect(cache)
-          .toBeInstanceOf(RedisCache)
+        expect(cache).toBeInstanceOf(RedisCache)
       })
 
       it('should resolve all implementations via getMany', async function () {
         const di = new CaffeineIoC()
-        di.bind(MemCache, t => t
-          .toSelf()
-          .extends(Cache))
-        di.bind(RedisCache, t => t
-          .toSelf()
-          .extends(Cache))
+        di.bind(MemCache, t => t.toSelf().extends(Cache))
+        di.bind(RedisCache, t => t.toSelf().extends(Cache))
         await di.init()
 
         const all = di.getMany(Cache)
 
-        expect(all)
-          .toHaveLength(2)
-        expect(all.map(c => c.get())
-          .sort())
-          .toEqual(['mem', 'redis'])
+        expect(all).toHaveLength(2)
+        expect(all.map(c => c.get()).sort()).toEqual(['mem', 'redis'])
       })
     })
 
@@ -477,10 +412,7 @@ describe('Abstract Classes', function () {
       it('should throw when the concrete class does not extend the given base', function () {
         const di = new CaffeineIoC()
 
-        expect(() => di.bind(Unrelated, t => t
-          .toSelf()
-          .extends(Base)))
-          .toThrow(ErrInvalidBinding)
+        expect(() => di.bind(Unrelated, t => t.toSelf().extends(Base))).toThrow(ErrInvalidBinding)
       })
 
       it('should throw when base is not a class reference', function () {
@@ -488,13 +420,7 @@ describe('Abstract Classes', function () {
 
         const di = new CaffeineIoC()
 
-        expect(() =>
-          di
-            .bind(Impl, t => t
-              .toSelf()
-              .extends('not-a-class' as any)),
-        )
-          .toThrow(ErrInvalidBinding)
+        expect(() => di.bind(Impl, t => t.toSelf().extends('not-a-class' as any))).toThrow(ErrInvalidBinding)
       })
     })
   })
@@ -506,7 +432,9 @@ describe('Abstract Classes', function () {
 
     @Injectable()
     class AutoExtendChild extends AutoExtendBase {
-      greet(): string { return 'child' }
+      greet(): string {
+        return 'child'
+      }
     }
 
     it('registers the class under its abstract base key automatically', async function () {
@@ -518,12 +446,16 @@ describe('Abstract Classes', function () {
     })
 
     class ConcreteBase {
-      greet(): string { return 'base' }
+      greet(): string {
+        return 'base'
+      }
     }
 
     @Injectable()
     class ConcreteChild extends ConcreteBase {
-      greet(): string { return 'child' }
+      greet(): string {
+        return 'child'
+      }
     }
 
     it('registers the class under a non-injectable concrete base key', async function () {
@@ -540,13 +472,17 @@ describe('Abstract Classes', function () {
 
     @Injectable()
     class MultiA extends MultiBase {
-      id(): string { return 'A' }
+      id(): string {
+        return 'A'
+      }
     }
 
     @Primary()
     @Injectable()
     class MultiB extends MultiBase {
-      id(): string { return 'B' }
+      id(): string {
+        return 'B'
+      }
     }
 
     it('resolves the @Primary child when multiple children share the same abstract base', async function () {
@@ -569,7 +505,9 @@ describe('has() and a polymorphic binding', function () {
   }
 
   class HasChild extends HasBase {
-    id(): string { return 'child' }
+    id(): string {
+      return 'child'
+    }
   }
 
   abstract class HasUnextended {

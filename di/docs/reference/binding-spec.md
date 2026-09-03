@@ -32,7 +32,7 @@
 ## Factory methods
 
 `BindingSpec<TValue, TKey>` is the object handed to the callback of `di.bind(key, …)`,
-`di.rebind(key, …)` and `di.bindValuesProvider(…)`. These methods select *how* the key is
+`di.rebind(key, …)` and `di.bindValuesProvider(…)`. These methods select _how_ the key is
 resolved.
 
 Every method returns the same instance, so one chain describes the whole binding. The
@@ -40,8 +40,7 @@ container registers it once, when the callback returns — which is why `di.bind
 returns the container and can be chained:
 
 ```ts
-di.bind(Repository, t => t.toSelf())
-  .bind(kPort, t => t.toValue(8080))
+di.bind(Repository, t => t.toSelf()).bind(kPort, t => t.toValue(8080))
 ```
 
 `injections` is checked against the target: one entry per constructor (or function)
@@ -127,10 +126,12 @@ Binds the key to an async factory function that returns a `Promise`. The
 container awaits the promise during `init()`.
 
 ```ts
-di.bind(DatabasePool, t => t.toAsyncFactory(async ctx => {
-  const cfg = ctx.container.get(AppConfig)
-  return connectToDatabase(cfg.databaseUrl)
-}))
+di.bind(DatabasePool, t =>
+  t.toAsyncFactory(async ctx => {
+    const cfg = ctx.container.get(AppConfig)
+    return connectToDatabase(cfg.databaseUrl)
+  }),
+)
 ```
 
 ### toFunction
@@ -139,15 +140,12 @@ di.bind(DatabasePool, t => t.toAsyncFactory(async ctx => {
 toFunction(fn, injections?)
 ```
 
-Binds the key to the *result* of calling `fn` with resolved dependencies.
+Binds the key to the _result_ of calling `fn` with resolved dependencies.
 Unlike `toFactory`, the function does not receive a `ResolutionContext` — it
 receives the resolved dependency values directly.
 
 ```ts
-di.bind(Greeter, t => t.toFunction(
-  (name: string) => `Hello, ${name}!`,
-  ['app.name'],
-))
+di.bind(Greeter, t => t.toFunction((name: string) => `Hello, ${name}!`, ['app.name']))
 ```
 
 ### aliasOf
@@ -194,9 +192,7 @@ Registers additional string or symbol keys for the binding. The binding is
 accessible under the primary key and all named keys.
 
 ```ts
-di.bind(Logger, t => t
-  .toClass(ConsoleLogger)
-  .names('default-logger', Symbol.for('logger')))
+di.bind(Logger, t => t.toClass(ConsoleLogger).names('default-logger', Symbol.for('logger')))
 ```
 
 ### lazy
@@ -317,9 +313,7 @@ postConstruct(fn)
 Runs `fn` immediately after the instance is created. Must be synchronous; the container does not await a returned promise.
 
 ```ts
-di.bind(DatabasePool, t => t
-  .toSelf()
-  .postConstruct(pool => pool.connect()))
+di.bind(DatabasePool, t => t.toSelf().postConstruct(pool => pool.connect()))
 ```
 
 ### preDestroy
@@ -331,9 +325,7 @@ preDestroy(fn)
 Runs `fn` before the instance is destroyed during `dispose()`.
 
 ```ts
-di.bind(DatabasePool, t => t
-  .toSelf()
-  .preDestroy(pool => pool.end()))
+di.bind(DatabasePool, t => t.toSelf().preDestroy(pool => pool.end()))
 ```
 
 ### intercept
@@ -347,9 +339,7 @@ Wraps every resolved instance with `interceptor`. The interceptor receives the
 instance.
 
 ```ts
-di.bind(PaymentService, t => t
-  .toSelf()
-  .intercept((ctx, instance) => withMetrics(instance)))
+di.bind(PaymentService, t => t.toSelf().intercept((ctx, instance) => withMetrics(instance)))
 ```
 
 ### conditional
@@ -362,9 +352,7 @@ Activates the binding only when all predicates in `fn` return `true`.
 Predicates receive a `ConditionContext` with `container.has()`.
 
 ```ts
-di.bind(RedisCacheService, t => t
-  .toSelf()
-  .conditional(ctx => ctx.container.has(RedisClient)))
+di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
 ```
 
 ### profiles

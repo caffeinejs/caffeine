@@ -1,5 +1,6 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { generateCodeChallenge, generateCodeVerifier, selectPKCEMethod } from './pkce.js'
 
 /** RFC 7636 §4.1: the verifier is 43-128 characters from the unreserved set. */
@@ -36,7 +37,10 @@ describe('generateCodeChallenge (property)', () => {
 })
 
 describe('selectPKCEMethod (property)', () => {
-  const noise = fc.array(fc.string().filter(s => s !== 'S256' && s !== 'plain'), { maxLength: 4 })
+  const noise = fc.array(
+    fc.string().filter(s => s !== 'S256' && s !== 'plain'),
+    { maxLength: 4 },
+  )
 
   it.prop([noise, noise, fc.boolean()])(
     'prefers S256 wherever it appears in the advertised list',
@@ -48,21 +52,16 @@ describe('selectPKCEMethod (property)', () => {
   )
 
   it.prop([noise, noise])('rejects a plain-only provider by default', (before, after) => {
-    expect(() => selectPKCEMethod([...before, 'plain', ...after]))
-      .toThrow('enable allowPlainPKCE')
+    expect(() => selectPKCEMethod([...before, 'plain', ...after])).toThrow('enable allowPlainPKCE')
   })
 
   it.prop([noise, noise])('accepts a plain-only provider when opted in', (before, after) => {
     expect(selectPKCEMethod([...before, 'plain', ...after], true)).toBe('plain')
   })
 
-  it.prop([noise, fc.boolean()])(
-    'throws when a published list advertises neither method',
-    (supported, allowPlain) => {
-      expect(() => selectPKCEMethod(supported, allowPlain))
-        .toThrow('advertises no supported PKCE method')
-    },
-  )
+  it.prop([noise, fc.boolean()])('throws when a published list advertises neither method', (supported, allowPlain) => {
+    expect(() => selectPKCEMethod(supported, allowPlain)).toThrow('advertises no supported PKCE method')
+  })
 
   it.prop([fc.boolean()])('falls back to S256 when discovery says nothing', allowPlain => {
     expect(selectPKCEMethod(undefined, allowPlain)).toBe('S256')

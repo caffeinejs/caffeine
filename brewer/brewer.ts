@@ -82,12 +82,7 @@ export function brewer<T>(target: string | Fetchable, options: BrewOptions = {})
 
 // A node of the proxy: the segments walked so far, and the method once a verb has been read. Built over a function
 // target so one object can be both called — to supply a parameter, or to send the request — and indexed.
-function node(
-  baseURL: string,
-  options: BrewOptions,
-  segments: readonly string[],
-  method: string | undefined,
-): unknown {
+function node(baseURL: string, options: BrewOptions, segments: readonly string[], method: string | undefined): unknown {
   return new Proxy(target, {
     get(_target, prop) {
       if (typeof prop !== 'string') {
@@ -162,20 +157,20 @@ async function send(
   })
 }
 
-function resolveHeaders(
-  headers: BrewOptions['headers'],
-): HeaderValues | Promise<HeaderValues> | undefined {
+function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise<HeaderValues> | undefined {
   return typeof headers === 'function' ? headers() : headers
 }
 
 function isRawBody(body: unknown): body is RawBody {
-  return typeof body === 'string'
-    || body instanceof FormData
-    || body instanceof URLSearchParams
-    || body instanceof Blob
-    || body instanceof ArrayBuffer
-    || body instanceof ReadableStream
-    || ArrayBuffer.isView(body)
+  return (
+    typeof body === 'string' ||
+    body instanceof FormData ||
+    body instanceof URLSearchParams ||
+    body instanceof Blob ||
+    body instanceof ArrayBuffer ||
+    body instanceof ReadableStream ||
+    ArrayBuffer.isView(body)
+  )
 }
 
 /**

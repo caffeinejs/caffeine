@@ -1,18 +1,17 @@
 import '../../index.nodejs.js'
 import { describe, it, expect } from 'vitest'
+
 import { CaffeineIoC } from '../../container.js'
 import { Scopes } from '../../scope.js'
-import { forceGC } from './_gc.js'
 import { trackForCollection } from './_assert_collected.js'
+import { forceGC } from './_gc.js'
 
 describe('Request scope memory', function () {
   it('releases request-scoped instance after run() resolves', async function () {
     class ReqSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ReqSvc, t => t
-      .toSelf()
-      .lifetime(Scopes.REQUEST))
+    di.bind(ReqSvc, t => t.toSelf().lifetime(Scopes.REQUEST))
 
     await di.init()
 
@@ -25,8 +24,7 @@ describe('Request scope memory', function () {
 
     await forceGC()
 
-    expect(isCollected())
-      .toBe(true)
+    expect(isCollected()).toBe(true)
     await di.dispose()
   })
 
@@ -34,9 +32,7 @@ describe('Request scope memory', function () {
     class ReqSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ReqSvc, t => t
-      .toSelf()
-      .lifetime(Scopes.REQUEST))
+    di.bind(ReqSvc, t => t.toSelf().lifetime(Scopes.REQUEST))
 
     await di.init()
 
@@ -50,8 +46,7 @@ describe('Request scope memory', function () {
 
     await forceGC()
 
-    expect(refs.every(r => r()))
-      .toBe(true)
+    expect(refs.every(r => r())).toBe(true)
     await di.dispose()
   })
 
@@ -59,9 +54,7 @@ describe('Request scope memory', function () {
     class ReqSvc {}
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(ReqSvc, t => t
-      .toSelf()
-      .lifetime(Scopes.REQUEST))
+    di.bind(ReqSvc, t => t.toSelf().lifetime(Scopes.REQUEST))
 
     await di.init()
 
@@ -73,8 +66,7 @@ describe('Request scope memory', function () {
 
     await forceGC()
 
-    expect(capturedRef())
-      .toBe(true)
+    expect(capturedRef()).toBe(true)
     await di.dispose()
   })
 })

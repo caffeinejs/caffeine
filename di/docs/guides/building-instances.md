@@ -27,7 +27,9 @@ array maps each constructor argument position to a key or injection descriptor.
 import { CaffeineIoC } from '@caffeinejs/di'
 
 @Injectable()
-class DatabaseService { /* ... */ }
+class DatabaseService {
+  /* ... */
+}
 
 class ReportGenerator {
   constructor(
@@ -35,7 +37,9 @@ class ReportGenerator {
     private readonly format: string,
   ) {}
 
-  generate() { /* ... */ }
+  generate() {
+    /* ... */
+  }
 }
 
 const di = new CaffeineIoC()
@@ -101,8 +105,8 @@ injection in a registered binding.
 import { optional, allOf, useValue } from '@caffeinejs/di'
 
 di.build(NotificationDispatcher, [
-  allOf(Notifier),          // array of all Notifier bindings
-  optional(RateLimiter),    // undefined if not registered
+  allOf(Notifier), // array of all Notifier bindings
+  optional(RateLimiter), // undefined if not registered
   useValue({ retries: 3 }), // literal value
 ])
 ```
@@ -116,7 +120,9 @@ di.build(NotificationDispatcher, [
 ```ts
 function createHandler(db: DatabaseService, config: AppConfig) {
   return {
-    handle(req: Request) { /* ... */ },
+    handle(req: Request) {
+      /* ... */
+    },
   }
 }
 
@@ -127,8 +133,8 @@ const handler = di.build(createHandler, [DatabaseService, AppConfig])
 
 ## When to use `build()` vs `builder()`
 
-| Need | Use |
-| --- | --- |
-| Single instance, created once | `build()` |
-| Multiple instances of the same class | `builder()` — compile once, call many times |
-| Class managed by the container lifecycle | `bind().toSelf()` — register it instead |
+| Need                                     | Use                                         |
+| ---------------------------------------- | ------------------------------------------- |
+| Single instance, created once            | `build()`                                   |
+| Multiple instances of the same class     | `builder()` — compile once, call many times |
+| Class managed by the container lifecycle | `bind().toSelf()` — register it instead     |

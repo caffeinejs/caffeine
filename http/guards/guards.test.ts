@@ -1,6 +1,15 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import {
+  ErrInvalidDecorator,
+  Injectable,
+  Lifetime,
+  Scopes,
+  defineMetadata,
+  getMetadataOverride,
+  token,
+} from '@caffeinejs/di'
 import fastify, { type FastifyContextConfig, type RouteOptions } from 'fastify'
-import { ErrInvalidDecorator, Injectable, Lifetime, Scopes, defineMetadata, getMetadataOverride, token } from '@caffeinejs/di'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+
 import {
   Catch,
   Claim,
@@ -81,40 +90,60 @@ describe('guard', () => {
   class AllowController {
     @UseGuards(AllowGuard)
     @Get('/')
-    ok() { return { ok: true } }
+    ok() {
+      return { ok: true }
+    }
 
     @UseGuards(ResultAllowGuard)
     @Get('/result')
-    resultOk() { return { ok: true } }
+    resultOk() {
+      return { ok: true }
+    }
 
     @UseGuards(AsyncAllowGuard)
     @Get('/async')
-    asyncOk() { return { ok: true } }
+    asyncOk() {
+      return { ok: true }
+    }
   }
 
   @Controller('/guard-deny')
   class DenyController {
     @UseGuards(DenyGuard)
     @Get('/')
-    never() { return { ok: true } }
+    never() {
+      return { ok: true }
+    }
 
     @UseGuards(ResultDenyGuard)
     @Get('/result')
-    resultNever() { return { ok: true } }
+    resultNever() {
+      return { ok: true }
+    }
 
     @UseGuards(AsyncDenyGuard)
     @Get('/async')
-    asyncNever() { return { ok: true } }
+    asyncNever() {
+      return { ok: true }
+    }
 
     @UseGuards(AsyncResultDenyGuard)
     @Get('/async-result')
-    asyncResultNever() { return { ok: true } }
+    asyncResultNever() {
+      return { ok: true }
+    }
   }
 
   void [
-    AllowGuard, DenyGuard, ResultAllowGuard, ResultDenyGuard,
-    AsyncAllowGuard, AsyncDenyGuard, AsyncResultDenyGuard,
-    AllowController, DenyController,
+    AllowGuard,
+    DenyGuard,
+    ResultAllowGuard,
+    ResultDenyGuard,
+    AsyncAllowGuard,
+    AsyncDenyGuard,
+    AsyncResultDenyGuard,
+    AllowController,
+    DenyController,
   ]
 
   it('allows a boolean true', async () => {
@@ -246,19 +275,29 @@ describe('use_guards', () => {
   class UseGuardsController {
     @UseGuards(MethodGuard)
     @Get('/both')
-    both() { return { ok: true } }
+    both() {
+      return { ok: true }
+    }
   }
 
   @Controller('/use-guards-multi')
   class UseGuardsMultiController {
     @UseGuards(FirstGuard, OrderedDenyGuard, UnreachedGuard)
     @Get('/multi')
-    multi() { return { ok: true } }
+    multi() {
+      return { ok: true }
+    }
   }
 
   void [
-    GlobalGuard, ControllerGuard, MethodGuard, FirstGuard, OrderedDenyGuard, UnreachedGuard,
-    UseGuardsController, UseGuardsMultiController,
+    GlobalGuard,
+    ControllerGuard,
+    MethodGuard,
+    FirstGuard,
+    OrderedDenyGuard,
+    UnreachedGuard,
+    UseGuardsController,
+    UseGuardsMultiController,
   ]
 
   it('runs global, then controller, then method', async () => {
@@ -302,20 +341,26 @@ describe('builder', () => {
 
   @Injectable()
   class NotAGuard {
-    ping() { return true }
+    ping() {
+      return true
+    }
   }
 
   @Controller('/builder-ok')
   class BuilderOkController {
     @Get('/')
-    ok() { return { ok: true } }
+    ok() {
+      return { ok: true }
+    }
   }
 
   @Controller('/builder-use')
   class BuilderUseController {
     @UseGuards(ListedGuard)
     @Get('/')
-    ok() { return { ok: true } }
+    ok() {
+      return { ok: true }
+    }
   }
 
   void [ListedGuard, NotAGuard, BuilderOkController, BuilderUseController]
@@ -394,15 +439,21 @@ describe('denial', () => {
   class DenialController {
     @UseGuards(FalseGuard)
     @Get('/false')
-    byFalse() { return { ok: true } }
+    byFalse() {
+      return { ok: true }
+    }
 
     @UseGuards(ReasonGuard)
     @Get('/reason')
-    byReason() { return { ok: true } }
+    byReason() {
+      return { ok: true }
+    }
 
     @UseGuards(UnauthorizedGuard)
     @Get('/401')
-    byThrow() { return { ok: true } }
+    byThrow() {
+      return { ok: true }
+    }
   }
 
   void [FalseGuard, ReasonGuard, UnauthorizedGuard, UnauthorizedCatch, DenialController]
@@ -457,8 +508,10 @@ describe('on_request', () => {
     canActivate(input: GuardInput<unknown>): boolean {
       // `body` is off the guard's view of the request by type; reached through a cast, it answers undefined,
       // which is the point: the guard runs before the body has been parsed.
-      return (input.context.req as { body?: () => unknown }).body!() === undefined
-        && input.context.req.header('x-token') === 'ok'
+      return (
+        (input.context.req as { body?: () => unknown }).body!() === undefined &&
+        input.context.req.header('x-token') === 'ok'
+      )
     }
   }
 
@@ -466,11 +519,15 @@ describe('on_request', () => {
   class OnRequestController {
     @UseGuards(HeaderGuard)
     @Post('/echo')
-    echo() { return { ok: true } }
+    echo() {
+      return { ok: true }
+    }
 
     @UseGuards(HeaderGuard)
     @Get('/ping')
-    ping() { return { ok: true } }
+    ping() {
+      return { ok: true }
+    }
   }
 
   void [HeaderGuard, OnRequestController]
@@ -512,7 +569,9 @@ describe('target', () => {
   class TargetController {
     @UseGuards(RecordingGuard)
     @Get('/one')
-    one() { return { ok: true } }
+    one() {
+      return { ok: true }
+    }
   }
 
   void [RecordingGuard, TargetController]
@@ -563,9 +622,7 @@ describe('authorization', () => {
         throw new ErrHTTPUnauthorized()
       }
 
-      input.context.user = new Principal(true,
-        new Identity('test', true, [
-          new Claim('roles', roles, 'test')]))
+      input.context.user = new Principal(true, new Identity('test', true, [new Claim('roles', roles, 'test')]))
 
       return true
     }
@@ -592,11 +649,15 @@ describe('authorization', () => {
   @Controller('/cats')
   class CatsController {
     @Get('/')
-    list() { return { cats: [] } }
+    list() {
+      return { cats: [] }
+    }
 
     @Roles(Role.Admin)
     @Post('/')
-    create() { return { created: true } }
+    create() {
+      return { created: true }
+    }
   }
 
   void [AuthGuard, RolesGuard, CatsController]
@@ -689,14 +750,18 @@ describe('scope', () => {
   class RequestScopeController {
     @UseGuards(RequestGuard)
     @Get('/')
-    ok() { return { ok: true } }
+    ok() {
+      return { ok: true }
+    }
   }
 
   @Controller('/scope-single')
   class SingletonScopeController {
     @UseGuards(SingletonGuard)
     @Get('/')
-    ok() { return { ok: true } }
+    ok() {
+      return { ok: true }
+    }
   }
 
   void [RequestGuard, SingletonGuard, RequestScopeController, SingletonScopeController]
@@ -740,11 +805,15 @@ describe('zero_cost', () => {
   @Controller('/guard-hooks')
   class GuardHookController {
     @Get('/plain')
-    plain() { return { ok: true } }
+    plain() {
+      return { ok: true }
+    }
 
     @UseGuards(HookGuard)
     @Get('/guarded')
-    guarded() { return { ok: true } }
+    guarded() {
+      return { ok: true }
+    }
   }
 
   void [HookGuard, GuardHookController]
@@ -792,7 +861,9 @@ describe('use_guards_unbound', () => {
     @Controller('/unbound-guard')
     class UnboundGuardController {
       @Get('/')
-      ok() { return { ok: true } }
+      ok() {
+        return { ok: true }
+      }
     }
     void [UnboundGuardController]
 

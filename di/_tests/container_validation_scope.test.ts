@@ -1,10 +1,11 @@
 import { describe, it, expect, afterAll } from 'vitest'
-import { token } from '../key.js'
+
 import { CaffeineIoC } from '../container.js'
 import { ErrScopeMismatch } from '../errors.js'
 import { $i } from '../injection.js'
-import { Scopes, bindScope, unbindScope } from '../scope.js'
+import { token } from '../key.js'
 import { ResolutionContext } from '../resolution_context.js'
+import { Scopes, bindScope, unbindScope } from '../scope.js'
 
 describe('checks:scopes', function () {
   describe('constructor injection', function () {
@@ -13,10 +14,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-ss'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep'))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep]))
+      di.bind(kDep, t => t.toValue('dep'))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -26,12 +25,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-tt'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.TRANSIENT))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -41,12 +36,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-st'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.SINGLETON))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })
@@ -56,12 +47,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-ts'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.SINGLETON))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.SINGLETON))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.TRANSIENT))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })
@@ -71,12 +58,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-srf'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.REFRESH))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.REFRESH))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.SINGLETON))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })
@@ -86,12 +69,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-spt'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [$i.provide(kDep)])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [$i.provide(kDep)]).lifetime(Scopes.SINGLETON))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -101,12 +80,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-tps'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.SINGLETON))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [$i.provide(kDep)])
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.SINGLETON))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [$i.provide(kDep)]).lifetime(Scopes.TRANSIENT))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -116,12 +91,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-owner-allof'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown[]) => ({}), [$i.allOf(kDep)])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown[]) => ({}), [$i.allOf(kDep)]).lifetime(Scopes.SINGLETON))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })
@@ -134,13 +105,8 @@ describe('checks:scopes', function () {
 
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(SmPropDep, t => t
-        .toClass(SmPropDep)
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(SmPropOwner, t => t
-        .toClass(SmPropOwner)
-        .lifetime(Scopes.SINGLETON)
-        .injectProperty('dep', SmPropDep))
+      di.bind(SmPropDep, t => t.toClass(SmPropDep).lifetime(Scopes.TRANSIENT))
+      di.bind(SmPropOwner, t => t.toClass(SmPropOwner).lifetime(Scopes.SINGLETON).injectProperty('dep', SmPropDep))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })
@@ -151,13 +117,10 @@ describe('checks:scopes', function () {
 
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(SmPropDepOk, t => t
-        .toClass(SmPropDepOk)
-        .lifetime(Scopes.SINGLETON))
-      di.bind(SmPropOwnerOk, t => t
-        .toClass(SmPropOwnerOk)
-        .lifetime(Scopes.SINGLETON)
-        .injectProperty('dep', SmPropDepOk))
+      di.bind(SmPropDepOk, t => t.toClass(SmPropDepOk).lifetime(Scopes.SINGLETON))
+      di.bind(SmPropOwnerOk, t =>
+        t.toClass(SmPropOwnerOk).lifetime(Scopes.SINGLETON).injectProperty('dep', SmPropDepOk),
+      )
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -172,13 +135,8 @@ describe('checks:scopes', function () {
 
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(SmMethodDep, t => t
-        .toClass(SmMethodDep)
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(SmMethodOwner, t => t
-        .toClass(SmMethodOwner)
-        .lifetime(Scopes.SINGLETON)
-        .injectMethod('init', SmMethodDep))
+      di.bind(SmMethodDep, t => t.toClass(SmMethodDep).lifetime(Scopes.TRANSIENT))
+      di.bind(SmMethodOwner, t => t.toClass(SmMethodOwner).lifetime(Scopes.SINGLETON).injectMethod('init', SmMethodDep))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
     })
@@ -191,12 +149,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-mv-owner'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDepA, t => t
-        .toValue('a')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t
-        .toFunction((_a: unknown, _b: unknown) => ({}), [kDepA, kDepB])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(kDepA, t => t.toValue('a').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_a: unknown, _b: unknown) => ({}), [kDepA, kDepB]).lifetime(Scopes.SINGLETON))
 
       let caught: ErrScopeMismatch | undefined
       try {
@@ -205,25 +159,19 @@ describe('checks:scopes', function () {
         caught = e as ErrScopeMismatch
       }
 
-      expect(caught)
-        .toBeInstanceOf(ErrScopeMismatch)
-      expect(caught!.violations)
-        .toHaveLength(1)
+      expect(caught).toBeInstanceOf(ErrScopeMismatch)
+      expect(caught!.violations).toHaveLength(1)
     })
   })
 
-  describe('checks: { scopes: \'off\' }', function () {
+  describe("checks: { scopes: 'off' }", function () {
     it('skips scope validation when scopes check is off', async function () {
       const kDep = token<any>(Symbol('sm-off-dep'))
       const kOwner = token<any>(Symbol('sm-off-owner'))
       const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.SINGLETON))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -242,8 +190,12 @@ describe('checks:scopes', function () {
         reset: () => {},
         configure: () => {},
         undo: () => {},
-        get lazy() { return true },
-        get durable() { return true },
+        get lazy() {
+          return true
+        },
+        get durable() {
+          return true
+        },
       }))
       bindScope(kScopeB, () => ({
         provide: (_, f) => f({} as unknown as ResolutionContext),
@@ -251,18 +203,18 @@ describe('checks:scopes', function () {
         reset: () => {},
         configure: () => {},
         undo: () => {},
-        get lazy() { return true },
-        get durable() { return true },
+        get lazy() {
+          return true
+        },
+        get durable() {
+          return true
+        },
       }))
 
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(kScopeA))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(kScopeB))
+      di.bind(kDep, t => t.toValue('dep').lifetime(kScopeA))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(kScopeB))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
 
@@ -277,12 +229,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('sm-msg-owner'))
       const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
 
-      di.bind(kDep, t => t
-        .toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t
-        .toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.SINGLETON))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.SINGLETON))
 
       let caught: ErrScopeMismatch | undefined
       try {
@@ -291,12 +239,9 @@ describe('checks:scopes', function () {
         caught = e as ErrScopeMismatch
       }
 
-      expect(caught)
-        .toBeInstanceOf(ErrScopeMismatch)
-      expect(caught!.message.toLowerCase())
-        .toContain('transient')
-      expect(caught!.message.toLowerCase())
-        .toContain('$i.provide(')
+      expect(caught).toBeInstanceOf(ErrScopeMismatch)
+      expect(caught!.message.toLowerCase()).toContain('transient')
+      expect(caught!.message.toLowerCase()).toContain('$i.provide(')
     })
   })
 
@@ -313,8 +258,12 @@ describe('checks:scopes', function () {
         cachedInstance: () => undefined,
         reset: () => {},
         configure: () => {},
-        get lazy() { return true },
-        get durable() { return false },
+        get lazy() {
+          return true
+        },
+        get durable() {
+          return false
+        },
       }))
     })
 
@@ -334,8 +283,7 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('cso-owner-srf'))
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
-      di.bind(kDep, t => t.toValue('dep')
-        .lifetime(Scopes.REFRESH))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.REFRESH))
       di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]))
 
       await expect(di.init()).resolves.not.toThrow()
@@ -346,8 +294,7 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('cso-owner-st'))
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
-      di.bind(kDep, t => t.toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
       di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
@@ -358,8 +305,7 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('cso-owner-snd'))
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
-      di.bind(kDep, t => t.toValue('dep')
-        .lifetime(kNonDurableScope))
+      di.bind(kDep, t => t.toValue('dep').lifetime(kNonDurableScope))
       di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]))
 
       await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
@@ -371,8 +317,7 @@ describe('checks:scopes', function () {
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep, t => t.toValue('dep'))
-      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.TRANSIENT))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -383,8 +328,7 @@ describe('checks:scopes', function () {
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep, t => t.toValue('dep'))
-      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(kNonDurableScope))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(kNonDurableScope))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -394,10 +338,8 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('cso-owner-tt'))
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
-      di.bind(kDep, t => t.toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
-      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep])
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.TRANSIENT))
 
       await expect(di.init()).resolves.not.toThrow()
     })
@@ -407,8 +349,7 @@ describe('checks:scopes', function () {
       const kOwner = token<any>(Symbol('cso-owner-prov'))
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
-      di.bind(kDep, t => t.toValue('dep')
-        .lifetime(Scopes.TRANSIENT))
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.TRANSIENT))
       di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [$i.provide(kDep)]))
 
       await expect(di.init()).resolves.not.toThrow()

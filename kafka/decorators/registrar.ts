@@ -1,4 +1,5 @@
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+
 import type { KafkaDeserializers, KafkaMessage } from '../config.js'
 import type { DeadLetterOptions, RetryPolicy } from '../error_handling.js'
 import type { RetryStrategy } from '../retry/strategy.js'
@@ -115,10 +116,7 @@ const ListenerRegistry = new WeakMap<object, Map<string | symbol, ListenerBuilde
 const HandlerRegistry = new WeakMap<Function, ListenerSpec[]>()
 
 /** Records/merges a listener's config for a decorated method. Called by `@KafkaListener`/`@KafkaParams`/… */
-export function configureListener(
-  ctx: ClassMethodDecoratorContext,
-  mut: (builder: ListenerBuilder) => void,
-): void {
+export function configureListener(ctx: ClassMethodDecoratorContext, mut: (builder: ListenerBuilder) => void): void {
   let listeners = ListenerRegistry.get(ctx.metadata)
   if (!listeners) {
     listeners = new Map<string | symbol, ListenerBuilder>()
@@ -140,7 +138,10 @@ export function configureListener(
  */
 export function registerHandler(metadata: object, target: Function): void {
   const builders = ListenerRegistry.get(metadata)
-  HandlerRegistry.set(target, Array.from(builders?.values() ?? [], builder => builder.toListener()))
+  HandlerRegistry.set(
+    target,
+    Array.from(builders?.values() ?? [], builder => builder.toListener()),
+  )
 }
 
 /** Returns the frozen listener specs declared on a handler class, or an empty array when there are none. */

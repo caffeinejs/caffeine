@@ -46,7 +46,7 @@ Use `mod(name, fn)` to attach a debug name. The name appears in hook events.
 ```ts
 import { mod } from '@caffeinejs/di'
 
-const databaseModule = mod('database', (di) => {
+const databaseModule = mod('database', di => {
   di.bind(Database, t => t.toClass(PostgresDatabase))
 })
 ```
@@ -58,7 +58,7 @@ const databaseModule = mod('database', (di) => {
 Modules can be async. The container awaits each async `fn` during `init()`.
 
 ```ts
-const configModule = mod('config', async (di) => {
+const configModule = mod('config', async di => {
   const config = await loadConfigFromRemote()
   di.bind(AppConfig, t => t.toValue(config))
 })
@@ -78,21 +78,19 @@ evaluated once during `init()`, so the container is partially available:
 import { type ContainerBindingOps } from '@caffeinejs/di'
 
 function storageModule(di: ContainerBindingOps) {
-  di.bind(BlobStorage, t => t
-    .toClass(S3BlobStorage)
-    .conditional(ctx => ctx.container.has(AppConfig)))
+  di.bind(BlobStorage, t => t.toClass(S3BlobStorage).conditional(ctx => ctx.container.has(AppConfig)))
 }
 ```
 
 Conditionals can be async:
 
 ```ts
-di.bind(FeatureFlags, t => t
-  .toClass(RemoteFeatureFlags)
-  .conditional(async ctx => {
+di.bind(FeatureFlags, t =>
+  t.toClass(RemoteFeatureFlags).conditional(async ctx => {
     const cfg = ctx.container.has(AppConfig)
     return cfg && process.env.NODE_ENV === 'production'
-  }))
+  }),
+)
 ```
 
 Plain `if`/`else` also works when the condition is known at module-registration

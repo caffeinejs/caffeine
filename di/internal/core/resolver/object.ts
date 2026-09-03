@@ -1,6 +1,11 @@
-import { defaultResolverFor, resolverFor, type InjectionResolver, type InjectionResolverFactory } from '../../../injection_resolver.js'
-import type { ObjectInjection, ObjectInjections } from '../../../injection.js'
 import type { ContainerOps } from '../../../container_interface.js'
+import type { ObjectInjection, ObjectInjections } from '../../../injection.js'
+import {
+  defaultResolverFor,
+  resolverFor,
+  type InjectionResolver,
+  type InjectionResolverFactory,
+} from '../../../injection_resolver.js'
 import type { InjectionToken } from '../../../key.js'
 
 export const objectFactory: InjectionResolverFactory = ctx =>

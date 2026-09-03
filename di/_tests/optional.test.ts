@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Profile } from '../decorators/profile.js'
-import { CaffeineIoC } from '../container.js'
 import { ErrNoResolutionForKey, ErrNoUniqueInjectionForKey } from '../errors.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 
 describe('Optional Injections', function () {
   describe('with no default values', function () {
@@ -38,11 +39,9 @@ describe('Optional Injections', function () {
       const svc = di.get(OptSvc)
       const ctrl = di.get(Ctrl)
 
-      expect(svc.repo)
-        .toBeUndefined()
+      expect(svc.repo).toBeUndefined()
       expect(svc.repo).not.toBe(null)
-      expect(ctrl.service)
-        .toBeUndefined()
+      expect(ctrl.service).toBeUndefined()
       expect(ctrl.service).not.toBe(null)
     })
 
@@ -81,14 +80,10 @@ describe('Optional Injections', function () {
       const optStr = di.get(OptStr)
       const test = di.get(Test)
 
-      expect(optStr.value)
-        .toEqual('optional')
-      expect(test.reg)
-        .toBeInstanceOf(Reg)
-      expect(test.dep)
-        .toBeInstanceOf(Dep)
-      expect(test.dep.value)
-        .toEqual('default value')
+      expect(optStr.value).toEqual('optional')
+      expect(test.reg).toBeInstanceOf(Reg)
+      expect(test.dep).toBeInstanceOf(Dep)
+      expect(test.dep.value).toEqual('default value')
     })
   })
 })
@@ -113,11 +108,8 @@ describe('container.getOptional()', function () {
     const kSvc = token<any>(Symbol('opt-primary'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('primary-val'), t => t.toValue('primary')
-      .names(kSvc)
-      .primary())
-    di.bind(token<any>('secondary-val'), t => t.toValue('secondary')
-      .names(kSvc))
+    di.bind(token<any>('primary-val'), t => t.toValue('primary').names(kSvc).primary())
+    di.bind(token<any>('secondary-val'), t => t.toValue('secondary').names(kSvc))
     await di.init()
 
     expect(di.getOptional(kSvc)).toBe('primary')
@@ -127,10 +119,8 @@ describe('container.getOptional()', function () {
     const kSvc = token<any>(Symbol('opt-ambig'))
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('val-a'), t => t.toValue('alpha')
-      .names(kSvc))
-    di.bind(token<any>('val-b'), t => t.toValue('bravo')
-      .names(kSvc))
+    di.bind(token<any>('val-a'), t => t.toValue('alpha').names(kSvc))
+    di.bind(token<any>('val-b'), t => t.toValue('bravo').names(kSvc))
     await di.init()
 
     expect(() => di.getOptional(kSvc)).toThrow(ErrNoUniqueInjectionForKey)

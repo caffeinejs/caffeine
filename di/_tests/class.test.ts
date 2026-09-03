@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, beforeAll, expect, vi } from 'vitest'
-import { token } from '../key.js'
+
+import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { CaffeineIoC } from '../container.js'
 import { ErrInvalidDecorator, ErrNoUniqueInjectionForKey, ErrNoResolutionForKey } from '../errors.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 
 describe('Class', function () {
   describe('when using dependencies with default configurations', function () {
@@ -59,29 +61,20 @@ describe('Class', function () {
     it('should register class and resolve it when requested', function () {
       const root = di.get(Root)
 
-      expect(root)
-        .toBeDefined()
-      expect(new CaffeineIoC()
-        .has(Root))
-        .toBeTruthy()
-      expect(root.seeYaService.bye())
-        .toEqual('bye-bye')
-      expect(root.okService.ok())
-        .toEqual('ok-bye-bye')
-      expect(spy)
-        .toHaveBeenCalledTimes(3) // there are 3 dependencies: SeeYaService, OkService, Root
+      expect(root).toBeDefined()
+      expect(new CaffeineIoC().has(Root)).toBeTruthy()
+      expect(root.seeYaService.bye()).toEqual('bye-bye')
+      expect(root.okService.ok()).toEqual('ok-bye-bye')
+      expect(spy).toHaveBeenCalledTimes(3) // there are 3 dependencies: SeeYaService, OkService, Root
     })
 
     it('should return singleton instance as default', function () {
       const root1 = di.get(Root)
       const root2 = di.get(Root)
 
-      expect(root1)
-        .toEqual(root2)
-      expect(root1.id)
-        .toEqual(root2.id)
-      expect(spy)
-        .toHaveBeenCalledTimes(3) // there are 3 dependencies: SeeYaService, OkService, Root
+      expect(root1).toEqual(root2)
+      expect(root1.id).toEqual(root2.id)
+      expect(spy).toHaveBeenCalledTimes(3) // there are 3 dependencies: SeeYaService, OkService, Root
     })
   })
 
@@ -98,8 +91,7 @@ describe('Class', function () {
 
     it('should throw error', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Service, t => t
-        .toSelf([Repo]))
+      di.bind(Service, t => t.toSelf([Repo]))
 
       await expect(di.init()).rejects.toThrow(ErrNoResolutionForKey)
     })
@@ -138,12 +130,9 @@ describe('Class', function () {
       await di.init()
       const lang = di.get(Lang)
 
-      expect(lang.all)
-        .toHaveLength(2)
-      expect(lang.all[0].hello())
-        .toEqual('hi')
-      expect(lang.all[1].hello())
-        .toEqual('oi')
+      expect(lang.all).toHaveLength(2)
+      expect(lang.all[0].hello()).toEqual('hi')
+      expect(lang.all[1].hello()).toEqual('oi')
     })
   })
 
@@ -173,8 +162,7 @@ describe('Class', function () {
         await di.init()
         const dep = di.get<Svc2>(kName)
 
-        expect(dep.name())
-          .toEqual('svc2')
+        expect(dep.name()).toEqual('svc2')
       })
     })
 
@@ -193,16 +181,14 @@ describe('Class', function () {
         const di = new CaffeineIoC()
         await di.init()
 
-        expect(() => di.get(name))
-          .toThrow(ErrNoUniqueInjectionForKey)
+        expect(() => di.get(name)).toThrow(ErrNoUniqueInjectionForKey)
       })
 
       it('should return an array of instances when requesting many instances - regardless of the primary definition', async function () {
         const di = new CaffeineIoC()
         await di.init()
 
-        expect(di.getMany(name))
-          .toHaveLength(2)
+        expect(di.getMany(name)).toHaveLength(2)
       })
     })
 
@@ -211,8 +197,7 @@ describe('Class', function () {
         const di = new CaffeineIoC()
         await di.init()
 
-        expect(() => di.getMany(token<any>('nonexistent')))
-          .toThrow(ErrNoResolutionForKey)
+        expect(() => di.getMany(token<any>('nonexistent'))).toThrow(ErrNoResolutionForKey)
       })
     })
   })
@@ -261,18 +246,12 @@ describe('Class', function () {
         const repo = di.get(Repo)
         const dep = di.get(Dep)
 
-        expect(controller.dep)
-          .toEqual(dep)
-        expect(controller.repo)
-          .toEqual(repo)
-        expect(controller.service)
-          .toEqual(service)
-        expect(service.dep)
-          .toEqual(dep)
-        expect(service.repo)
-          .toEqual(repo)
-        expect(repo.dep)
-          .toEqual(dep)
+        expect(controller.dep).toEqual(dep)
+        expect(controller.repo).toEqual(repo)
+        expect(controller.service).toEqual(service)
+        expect(service.dep).toEqual(dep)
+        expect(service.repo).toEqual(repo)
+        expect(repo.dep).toEqual(dep)
       })
     })
   })
@@ -297,12 +276,9 @@ describe('Class', function () {
       await di.init()
       const root = di.get(Root)
 
-      expect(root)
-        .toBeInstanceOf(Root)
-      expect(root.dep)
-        .toBeInstanceOf(Dep)
-      expect(root.dep.id)
-        .toEqual('hello world')
+      expect(root).toBeInstanceOf(Root)
+      expect(root.dep).toBeInstanceOf(Dep)
+      expect(root.dep.id).toEqual('hello world')
     })
   })
 
@@ -337,18 +313,15 @@ describe('Class', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.get(SingleValueDep).label)
-        .toEqual('injected-constant')
+      expect(di.get(SingleValueDep).label).toEqual('injected-constant')
     })
 
     it('should inject multiple constants via @Injectable', async function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.get(MultiValueDep).host)
-        .toEqual('host')
-      expect(di.get(MultiValueDep).port)
-        .toEqual(8080)
+      expect(di.get(MultiValueDep).host).toEqual('host')
+      expect(di.get(MultiValueDep).port).toEqual(8080)
     })
 
     it('should mix container-resolved and constant injections', async function () {
@@ -356,10 +329,8 @@ describe('Class', function () {
       await di.init()
 
       const mixed = di.get(MixedDep)
-      expect(mixed.dep)
-        .toBeInstanceOf(BareDep)
-      expect(mixed.label)
-        .toEqual('mixed')
+      expect(mixed.dep).toBeInstanceOf(BareDep)
+      expect(mixed.label).toEqual('mixed')
     })
   })
 
@@ -371,8 +342,7 @@ describe('Class', function () {
         @Injectable(Base as any)
         class Impl extends Base {}
         void Impl
-      })
-        .toThrow(ErrInvalidDecorator)
+      }).toThrow(ErrInvalidDecorator)
     })
   })
 
@@ -388,10 +358,8 @@ describe('Class', function () {
       const di = new CaffeineIoC()
       await di.init()
 
-      expect(di.get(kKey))
-        .toBeInstanceOf(Service)
-      expect(di.get(Service))
-        .toBeInstanceOf(Service)
+      expect(di.get(kKey)).toBeInstanceOf(Service)
+      expect(di.get(Service)).toBeInstanceOf(Service)
     })
   })
 })

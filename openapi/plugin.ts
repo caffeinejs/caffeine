@@ -1,4 +1,5 @@
 import { defineFeature, type Feature, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
+
 import { OpenAPIBuilder } from './builder.js'
 
 interface OpenAPIBuilderF extends TypeLambda {

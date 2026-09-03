@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, expect } from 'vitest'
-import { token } from '../key.js'
-import { Injectable } from '../decorators/injectable.js'
+
 import { CaffeineIoC } from '../container.js'
+import { Injectable } from '../decorators/injectable.js'
+import { token } from '../key.js'
 
 describe('interfaces', function () {
   describe('given an interface with multiple implementations and one of them using a named key', function () {
@@ -38,14 +40,11 @@ describe('interfaces', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Service, t => t
-        .toSelf())
+      di.bind(Service, t => t.toSelf())
       await di.init()
       const svc = di.get(Service)
-      expect(svc)
-        .toBeInstanceOf(Service)
-      expect(svc!.repo)
-        .toBeUndefined()
+      expect(svc).toBeInstanceOf(Service)
+      expect(svc!.repo).toBeUndefined()
     })
 
     it('should resolve the dependency when it is correctly identified', async function () {
@@ -65,14 +64,10 @@ describe('interfaces', function () {
         const svc1 = di.get(Service)
         const svc2 = di.get(Service)
 
-        expect(svc1.act())
-          .toStrictEqual('mysql')
-        expect(svc2.act())
-          .toStrictEqual('mysql')
-        expect(svc1)
-          .toEqual(svc2)
-        expect((svc1.repo as MySQLRepository).id)
-          .toEqual((svc2.repo as MySQLRepository).id)
+        expect(svc1.act()).toStrictEqual('mysql')
+        expect(svc2.act()).toStrictEqual('mysql')
+        expect(svc1).toEqual(svc2)
+        expect((svc1.repo as MySQLRepository).id).toEqual((svc2.repo as MySQLRepository).id)
       }
     })
   })

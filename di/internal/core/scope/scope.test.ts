@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto'
+
 import { describe, it, afterAll, expect, vi } from 'vitest'
-import { token } from '../../../key.js'
+
 import { Binding } from '../../../binding.js'
+import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
-import { CaffeineIoC } from '../../../container.js'
 import { ErrScopeAlreadyRegistered, ErrScopeNotRegistered } from '../../../errors.js'
 import { Factory } from '../../../factory.js'
-import { bindScope, hasScope, Scopes, Scope, unbindScope } from '../../../scope.js'
+import { token } from '../../../key.js'
 import { ResolutionContext } from '../../../resolution_context.js'
+import { bindScope, hasScope, Scopes, Scope, unbindScope } from '../../../scope.js'
 
 describe('Scoping', function () {
   const kCustomScopeID = token<any>(Symbol('custom'))
@@ -68,10 +70,8 @@ describe('Scoping', function () {
     try {
       new CaffeineIoC()
     } catch (e) {
-      expect(e)
-        .toBeInstanceOf(ErrScopeNotRegistered)
-      expect(hasScope('none'))
-        .toBeFalsy()
+      expect(e).toBeInstanceOf(ErrScopeNotRegistered)
+      expect(hasScope('none')).toBeFalsy()
       return
     } finally {
       if (!hasScope('none')) {
@@ -114,13 +114,10 @@ describe('Scoping', function () {
     const scoped1 = di.get(Dep)
     const scoped2 = di.get(Dep)
 
-    expect(scoped1)
-      .toBeInstanceOf(Dep)
-    expect(scoped2)
-      .toBeInstanceOf(Dep)
+    expect(scoped1).toBeInstanceOf(Dep)
+    expect(scoped2).toBeInstanceOf(Dep)
     expect(scoped1).not.toEqual(scoped2)
-    expect(spy)
-      .toHaveBeenCalledTimes(2)
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 
   it('should fail when registering a scope with an existing identifier', function () {
@@ -128,7 +125,7 @@ describe('Scoping', function () {
       bindScope(
         Scopes.SINGLETON,
         () =>
-          new class implements Scope {
+          new (class implements Scope {
             provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {
               return factory(ctx)
             }
@@ -156,9 +153,8 @@ describe('Scoping', function () {
             get durable(): boolean {
               return false
             }
-          }(),
+          })(),
       ),
-    )
-      .toThrow(ErrScopeAlreadyRegistered)
+    ).toThrow(ErrScopeAlreadyRegistered)
   })
 })

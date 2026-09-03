@@ -27,7 +27,7 @@ export function renderFolderModule(source: FolderModuleSource): string {
   const lines = [
     HEADER,
     '',
-    'import { mod, type Module } from \'@caffeinejs/di\'',
+    "import { mod, type Module } from '@caffeinejs/di'",
     ...relativeImportLines(source.sideEffectImports, needs),
     '',
     renderModConst(source.exportName, source.moduleName, needs),
@@ -41,12 +41,15 @@ export function renderRootModule(source: RootModuleSource): string {
   const lines = [
     HEADER,
     '',
-    'import { mod, type Module } from \'@caffeinejs/di\'',
+    "import { mod, type Module } from '@caffeinejs/di'",
     ...modules.map(renderNamedImport),
     '',
     'export const rootModule: Module = mod({',
-    '  name: \'root\',',
-    `  provides: () => ${renderThunkArray(modules.map(m => m.alias), '  ')},`,
+    "  name: 'root',",
+    `  provides: () => ${renderThunkArray(
+      modules.map(m => m.alias),
+      '  ',
+    )},`,
     '})',
     '',
   ]
@@ -102,7 +105,10 @@ function renderModConst(exportName: string, moduleName: string, needs: NamedImpo
   return [
     `export const ${exportName}: Module = mod({`,
     `  name: '${escapeQuotes(moduleName)}',`,
-    `  needs: () => ${renderThunkArray(needs.map(n => n.alias), '  ')},`,
+    `  needs: () => ${renderThunkArray(
+      needs.map(n => n.alias),
+      '  ',
+    )},`,
     `})`,
   ].join('\n')
 }
@@ -124,7 +130,7 @@ function sortNamedImports(items: NamedImport[]): NamedImport[] {
 }
 
 function relativeImportLines(sideEffectImports: string[], named: NamedImport[]): string[] {
-  const rows: Array<{ path: string, line: string }> = [
+  const rows: Array<{ path: string; line: string }> = [
     ...sideEffectImports.map(p => ({ path: p, line: `import '${p}'` })),
     ...named.map(item => ({ path: item.importPath, line: renderNamedImport(item) })),
   ]
@@ -139,10 +145,9 @@ function relativeImportLines(sideEffectImports: string[], named: NamedImport[]):
 }
 
 function escapeQuotes(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll('\'', '\\\'')
+  return value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")
 }
 
 function hash(content: string): string {
-  return new Bun.CryptoHasher('sha1').update(content)
-    .digest('hex')
+  return new Bun.CryptoHasher('sha1').update(content).digest('hex')
 }

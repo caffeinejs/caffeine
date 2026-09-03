@@ -1,6 +1,3 @@
-import { describe, it, expect, beforeAll } from 'vitest'
-import fastify from 'fastify'
-import FastifyCookie from '@fastify/cookie'
 import {
   Authorize,
   type Context,
@@ -11,6 +8,10 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
+import FastifyCookie from '@fastify/cookie'
+import fastify from 'fastify'
+import { describe, it, expect, beforeAll } from 'vitest'
+
 import { oauthServerUp, pickCookie, springLogin } from './internal/spring/index.js'
 
 const OAUTH = 'http://localhost:9000'
@@ -54,16 +55,20 @@ function buildApp() {
   const f = fastify()
   f.register(FastifyCookie)
   const builder = createWebApplication(fastifyAdapterFactory(f))
-  builder.authentication(auth => auth.addOIDC('spring', o => o
-    .clientID('caffeine-oidc')
-    .clientSecret('caffeine-oidc-secret')
-    .sessionSecret(SESSION_SECRET)
-    .callbackURL(`${CALLBACK_ORIGIN}/oidc/callback`)
-    .authorizationEndpoint(`${OAUTH}/oauth2/authorize`)
-    .tokenEndpoint(`${OAUTH}/oauth2/token`)
-    .jwksURI(`${OAUTH}/oauth2/jwks`)
-    .issuer(OAUTH)
-    .scopes('openid', 'profile', 'email')))
+  builder.authentication(auth =>
+    auth.addOIDC('spring', o =>
+      o
+        .clientID('caffeine-oidc')
+        .clientSecret('caffeine-oidc-secret')
+        .sessionSecret(SESSION_SECRET)
+        .callbackURL(`${CALLBACK_ORIGIN}/oidc/callback`)
+        .authorizationEndpoint(`${OAUTH}/oauth2/authorize`)
+        .tokenEndpoint(`${OAUTH}/oauth2/token`)
+        .jwksURI(`${OAUTH}/oauth2/jwks`)
+        .issuer(OAUTH)
+        .scopes('openid', 'profile', 'email'),
+    ),
+  )
   return builder.build().useAuthenticationAndAuthorization()
 }
 

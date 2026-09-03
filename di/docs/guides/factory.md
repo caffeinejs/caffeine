@@ -22,8 +22,12 @@ at resolution time rather than at bind time.
 ```ts
 import { CaffeineIoC } from '@caffeinejs/di'
 
-class DatabaseService { /* ... */ }
-class CacheService { /* ... */ }
+class DatabaseService {
+  /* ... */
+}
+class CacheService {
+  /* ... */
+}
 
 const REPOSITORY = Symbol('app:repository')
 
@@ -32,11 +36,13 @@ const di = new CaffeineIoC()
 di.bind(DatabaseService, t => t.toSelf())
 di.bind(CacheService, t => t.toSelf())
 
-di.bind(REPOSITORY, t => t.toFactory(({ container }) => {
-  const db = container.get(DatabaseService)
-  const cache = container.get(CacheService)
-  return { db, cache }
-}))
+di.bind(REPOSITORY, t =>
+  t.toFactory(({ container }) => {
+    const db = container.get(DatabaseService)
+    const cache = container.get(CacheService)
+    return { db, cache }
+  }),
+)
 
 await di.init()
 
@@ -53,20 +59,26 @@ The factory is called once per scope cycle, the same as `toClass()` or `toFuncti
 Use it to make a dependency optional inside the factory body.
 
 ```ts
-class MetricsService { record(event: string): void { /* ... */ } }
+class MetricsService {
+  record(event: string): void {
+    /* ... */
+  }
+}
 
 const HANDLER = Symbol('app:handler')
 
-di.bind(HANDLER, t => t.toFactory(({ container }) => {
-  const metrics = container.getOptional(MetricsService)
+di.bind(HANDLER, t =>
+  t.toFactory(({ container }) => {
+    const metrics = container.getOptional(MetricsService)
 
-  return {
-    handle(event: string) {
-      metrics?.record(event)
-      // ...
-    },
-  }
-}))
+    return {
+      handle(event: string) {
+        metrics?.record(event)
+        // ...
+      },
+    }
+  }),
+)
 ```
 
 ---
@@ -76,19 +88,23 @@ di.bind(HANDLER, t => t.toFactory(({ container }) => {
 `ctx.container.getMany()` returns all bindings registered under a key.
 
 ```ts
-abstract class Plugin { abstract run(): void }
+abstract class Plugin {
+  abstract run(): void
+}
 
 const RUNNER = Symbol('app:runner')
 
-di.bind(RUNNER, t => t.toFactory(({ container }) => {
-  const plugins = container.getMany(Plugin)
+di.bind(RUNNER, t =>
+  t.toFactory(({ container }) => {
+    const plugins = container.getMany(Plugin)
 
-  return {
-    runAll() {
-      for (const plugin of plugins) plugin.run()
-    },
-  }
-}))
+    return {
+      runAll() {
+        for (const plugin of plugins) plugin.run()
+      },
+    }
+  }),
+)
 ```
 
 ---
@@ -143,7 +159,10 @@ function inMemoryRepo<T>(): Repo<T> {
   let seq = 1
   return {
     findById: id => store.get(id),
-    save: entity => { store.set(seq++, entity); return entity },
+    save: entity => {
+      store.set(seq++, entity)
+      return entity
+    },
   }
 }
 
@@ -179,12 +198,12 @@ class OrderService {}
 
 ## When to use `toFactory()` vs `toFunction()`
 
-| Need | Use |
-| --- | --- |
-| Fixed set of deps, known at bind time | `toFunction(fn, [deps])` |
-| Dynamic or conditional deps | `toFactory(ctx => ...)` |
-| Deps determined by runtime state | `toFactory(ctx => ...)` |
-| Collecting all bindings for a key | `toFactory(ctx => ...)` with `ctx.container.getMany()` |
+| Need                                  | Use                                                    |
+| ------------------------------------- | ------------------------------------------------------ |
+| Fixed set of deps, known at bind time | `toFunction(fn, [deps])`                               |
+| Dynamic or conditional deps           | `toFactory(ctx => ...)`                                |
+| Deps determined by runtime state      | `toFactory(ctx => ...)`                                |
+| Collecting all bindings for a key     | `toFactory(ctx => ...)` with `ctx.container.getMany()` |
 
 ---
 

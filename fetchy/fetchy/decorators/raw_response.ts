@@ -1,6 +1,6 @@
 import { ErrFetchyInvalidDecoratorTarget } from '../errors.js'
-import { NoopResponseHandler } from '../response_handler.js'
 import { RawResponseConverter } from '../response_converter.js'
+import { NoopResponseHandler } from '../response_handler.js'
 import { configureMethod } from './registrar/registrar.js'
 
 /**

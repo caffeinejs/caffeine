@@ -1,4 +1,5 @@
 import type { FastifyContextConfig } from 'fastify'
+
 import type { Context } from '../../context.js'
 import { ErrAuthenticationNotConfigured } from '../../middleware/errors.js'
 import { Middleware, type MiddlewareSetupContext, type Next } from '../../middleware/middleware.js'

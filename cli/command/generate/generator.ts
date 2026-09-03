@@ -42,6 +42,5 @@ export async function generate(opts: GenerateOptions): Promise<boolean> {
 }
 
 function hash(content: string): string {
-  return new Bun.CryptoHasher('sha1').update(content)
-    .digest('hex')
+  return new Bun.CryptoHasher('sha1').update(content).digest('hex')
 }

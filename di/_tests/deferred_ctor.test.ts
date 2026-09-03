@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+
 import { DeferredCtor } from '../deferred_ctor.js'
 
 describe('DeferredCtor', function () {

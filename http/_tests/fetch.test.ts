@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import fastify from 'fastify'
+import { describe, it, expect } from 'vitest'
+
 import { Controller, Get, Header, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Fetch API Response Support', () => {
@@ -8,10 +9,13 @@ describe('Fetch API Response Support', () => {
     class FetchController {
       @Get('/json')
       get() {
-        return Response.json({ hello: 'world' }, {
-          status: 201,
-          headers: { 'content-type': 'application/json', 'x-custom': 'yes' },
-        })
+        return Response.json(
+          { hello: 'world' },
+          {
+            status: 201,
+            headers: { 'content-type': 'application/json', 'x-custom': 'yes' },
+          },
+        )
       }
     }
 

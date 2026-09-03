@@ -32,7 +32,7 @@ export function formatToken(series: string, token: string): string {
 }
 
 /** Split a `series:token` string on the first colon. Returns null for malformed input. */
-export function parseToken(value: string): { series: string, token: string } | null {
+export function parseToken(value: string): { series: string; token: string } | null {
   const sep = value.indexOf(':')
   if (sep <= 0 || sep === value.length - 1) {
     return null

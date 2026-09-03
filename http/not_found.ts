@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
+
 import type { Context } from './context.js'
 import { ErrCaffeineWebApplication } from './error/common.js'
 import { ErrHTTPNotFound } from './error/http.js'
@@ -110,10 +111,7 @@ export function isServerOwned(owned: readonly string[], path: string): boolean {
  * Throwing rather than replying is what puts an unmatched URL through the application's error handling, so a
  * global `@Catch(ErrHTTPNotFound)` sees it and the body matches a 404 a handler threw.
  */
-export function installNotFoundHandler(
-  ctx: ServerExtensionContext,
-  fallbacks: readonly NotFoundFallback[],
-): void {
+export function installNotFoundHandler(ctx: ServerExtensionContext, fallbacks: readonly NotFoundFallback[]): void {
   const owned = deriveServerOwnedPaths(ctx.routeGroups, Object.values(ctx.services.health.options.paths))
 
   const handler = async (req: FastifyRequest, reply: FastifyReply): Promise<never | FastifyReply> => {
@@ -152,8 +150,8 @@ export function installNotFoundHandler(
     }
 
     ctx.server.log.warn(
-      'A not-found handler was already set on the Fastify instance, so Caffeine did not install its own: '
-      + 'unmatched routes bypass the error pipeline and will not be seen by @Catch',
+      'A not-found handler was already set on the Fastify instance, so Caffeine did not install its own: ' +
+        'unmatched routes bypass the error pipeline and will not be seen by @Catch',
     )
   }
 }
@@ -169,12 +167,12 @@ export function installNotFoundHandler(
 export class ErrNotFoundHandlerAlreadySet extends ErrCaffeineWebApplication {
   constructor(fallbackNames: readonly string[]) {
     super(
-      `Cannot install the not-found handler: one is already set on the Fastify instance, and it would `
-      + `prevent the registered fallbacks from running: "${fallbackNames.join('", "')}"`
-      + solutions(
-        'Remove the setNotFoundHandler call and express the same logic as a NotFoundFallback',
-        'Remove the fallback registration if the hand-written handler is the one that should win',
-      ),
+      `Cannot install the not-found handler: one is already set on the Fastify instance, and it would ` +
+        `prevent the registered fallbacks from running: "${fallbackNames.join('", "')}"` +
+        solutions(
+          'Remove the setNotFoundHandler call and express the same logic as a NotFoundFallback',
+          'Remove the fallback registration if the hand-written handler is the one that should win',
+        ),
       'ERR_NOT_FOUND_HANDLER_ALREADY_SET',
     )
     this.name = 'ErrNotFoundHandlerAlreadySet'

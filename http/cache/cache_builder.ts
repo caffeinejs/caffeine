@@ -1,8 +1,9 @@
 import { $t, ServiceBeforeBootstrapIn, ServiceBootstrapIn, Service, type ServiceAPI } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+
 import { ETagGenerator } from './cache.js'
-import { CacheStore } from './store.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
+import { CacheStore } from './store.js'
 
 /** The default location of the cache settings in the configuration tree. */
 export const CACHE_CONFIG_NAMESPACE: readonly string[] = ['cache']
@@ -93,12 +94,13 @@ export class CacheBuilder<C = unknown> implements Service {
       kit.container.bind(kETagGenerator, t => t.toValue(etagGenerator).internal())
     }
 
-    kit.container
-      .bind(kCacheStatusHeader, t => t
-      // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but a
-      // header name that followed a refresh is the behaviour every other config value has.
+    kit.container.bind(kCacheStatusHeader, t =>
+      t
+        // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but a
+        // header name that followed a refresh is the behaviour every other config value has.
         .toFactory(() => this.#slice!.config.statusHeader)
-        .internal())
+        .internal(),
+    )
 
     return Promise.resolve()
   }

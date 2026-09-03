@@ -1,6 +1,7 @@
 import { token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
+
 import { $t } from '../../schema/t.js'
 import { bootstrapConfig } from '../bootstrap.js'
 import { ConfigDefinition } from '../definition.js'
@@ -86,14 +87,16 @@ describe('diagnostics redaction', () => {
 
   async function bootstrapWithSlice() {
     const definition = new ConfigDefinition(token<any>(Symbol('app')))
-    const slice = defineFeatureConfig<{ issuer: string, secret: string }>(definition, {
+    const slice = defineFeatureConfig<{ issuer: string; secret: string }>(definition, {
       namespace: ['auth', 'jwt'],
       schema: jwtSchema,
     })
 
-    definition.sources.add(new InlineConfigProvider({
-      auth: { jwt: { issuer: 'https://id.example.com', secret: 'super-secret' } },
-    }))
+    definition.sources.add(
+      new InlineConfigProvider({
+        auth: { jwt: { issuer: 'https://id.example.com', secret: 'super-secret' } },
+      }),
+    )
 
     const result = await bootstrapConfig({
       sources: definition.sources,

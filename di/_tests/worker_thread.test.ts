@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads'
+
 import { describe, it, expect } from 'vitest'
 
 function runWorker<T>(url: URL): Promise<T> {
@@ -14,28 +15,23 @@ const workerURL = new URL('./_worker_di.mjs', import.meta.url)
 describe('CaffeineIoC in worker thread', function () {
   it('resolves a singleton to the same instance', async function () {
     const result = await runWorker<{ singletonIsSameInstance: boolean }>(workerURL)
-    expect(result.singletonIsSameInstance)
-      .toBe(true)
+    expect(result.singletonIsSameInstance).toBe(true)
   })
 
   it('singleton state persists across resolutions', async function () {
     const result = await runWorker<{ countAfterTwoIncrements: number }>(workerURL)
-    expect(result.countAfterTwoIncrements)
-      .toBe(2)
+    expect(result.countAfterTwoIncrements).toBe(2)
   })
 
   it('fires @PostConstruct lifecycle hook', async function () {
-    const result = await runWorker<{ postConstructFired: boolean, greeterMessage: string }>(workerURL)
-    expect(result.postConstructFired)
-      .toBe(true)
-    expect(result.greeterMessage)
-      .toBe('hello from worker')
+    const result = await runWorker<{ postConstructFired: boolean; greeterMessage: string }>(workerURL)
+    expect(result.postConstructFired).toBe(true)
+    expect(result.greeterMessage).toBe('hello from worker')
   })
 
   it('resolves constructor injections', async function () {
     const result = await runWorker<{ injectionWorks: boolean }>(workerURL)
-    expect(result.injectionWorks)
-      .toBe(true)
+    expect(result.injectionWorks).toBe(true)
   })
 
   it('two workers have isolated singleton instances', async function () {
@@ -44,9 +40,7 @@ describe('CaffeineIoC in worker thread', function () {
       runWorker<{ countAfterTwoIncrements: number }>(workerURL),
     ])
 
-    expect(r1.countAfterTwoIncrements)
-      .toBe(2)
-    expect(r2.countAfterTwoIncrements)
-      .toBe(2)
+    expect(r1.countAfterTwoIncrements).toBe(2)
+    expect(r2.countAfterTwoIncrements).toBe(2)
   })
 })

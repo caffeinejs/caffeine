@@ -7,13 +7,7 @@ can resolve it by the abstract type. This is the key decorator for this pattern.
 All decorators are imported from `@caffeinejs/di/decorators`.
 
 ```ts
-import { 
-  Injectable, 
-  Extends, 
-  Named, 
-  Primary, 
-  ConditionalOn, 
-} from '@caffeinejs/di/decorators'
+import { Injectable, Extends, Named, Primary, ConditionalOn } from '@caffeinejs/di/decorators'
 ```
 
 ---
@@ -65,19 +59,25 @@ abstract class Processor {
 @Injectable()
 @Extends()
 class UpperCaseProcessor extends Processor {
-  process(input: string) { return input.toUpperCase() }
+  process(input: string) {
+    return input.toUpperCase()
+  }
 }
 
 @Injectable()
 @Extends()
 class TrimProcessor extends Processor {
-  process(input: string) { return input.trim() }
+  process(input: string) {
+    return input.trim()
+  }
 }
 
 @Injectable()
 @Extends()
 class SanitizeProcessor extends Processor {
-  process(input: string) { return input.replace(/<[^>]*>/g, '') }
+  process(input: string) {
+    return input.replace(/<[^>]*>/g, '')
+  }
 }
 
 @Injectable([allOf(Processor)])
@@ -119,16 +119,24 @@ abstract class UserRepository {
 @Extends()
 class InMemoryUserRepository extends UserRepository {
   private store = new Map<string, User>()
-  async findById(id: string) { return this.store.get(id) }
-  async save(user: User) { this.store.set(user.id, user) }
+  async findById(id: string) {
+    return this.store.get(id)
+  }
+  async save(user: User) {
+    this.store.set(user.id, user)
+  }
 }
 
 @Primary()
 @Injectable()
 @Extends()
 class PostgresUserRepository extends UserRepository {
-  async findById(id: string) { /* query postgres */ }
-  async save(user: User) { /* insert into postgres */ }
+  async findById(id: string) {
+    /* query postgres */
+  }
+  async save(user: User) {
+    /* insert into postgres */
+  }
 }
 
 // Resolves to PostgresUserRepository because it is @Primary
@@ -156,14 +164,18 @@ abstract class NotificationSender {
 @Injectable()
 @Extends()
 class EmailSender extends NotificationSender {
-  async send(message: string, to: string) { /* send email */ }
+  async send(message: string, to: string) {
+    /* send email */
+  }
 }
 
 @Named('sms')
 @Injectable()
 @Extends()
 class SmsSender extends NotificationSender {
-  async send(message: string, to: string) { /* send SMS */ }
+  async send(message: string, to: string) {
+    /* send SMS */
+  }
 }
 
 // Inject a specific implementation by name
@@ -210,8 +222,12 @@ abstract class CacheStore {
 @Fallback()
 class InMemoryCache extends CacheStore {
   private store = new Map<string, string>()
-  async get(key: string) { return this.store.get(key) }
-  async set(key: string, value: string) { this.store.set(key, value) }
+  async get(key: string) {
+    return this.store.get(key)
+  }
+  async set(key: string, value: string) {
+    this.store.set(key, value)
+  }
 }
 
 // Only registered when a RedisClient binding is present in the container
@@ -220,8 +236,12 @@ class InMemoryCache extends CacheStore {
 @ConditionalOn(ctx => ctx.container.has(RedisClient))
 class RedisCache extends CacheStore {
   constructor(private readonly client: RedisClient) {}
-  async get(key: string) { return this.client.get(key) }
-  async set(key: string, value: string) { await this.client.set(key, value) }
+  async get(key: string) {
+    return this.client.get(key)
+  }
+  async set(key: string, value: string) {
+    await this.client.set(key, value)
+  }
 }
 ```
 
@@ -248,13 +268,21 @@ abstract class Cache {
 
 class MemCache extends Cache {
   private store = new Map<string, string>()
-  get(key: string) { return this.store.get(key) }
-  set(key: string, value: string) { this.store.set(key, value) }
+  get(key: string) {
+    return this.store.get(key)
+  }
+  set(key: string, value: string) {
+    this.store.set(key, value)
+  }
 }
 
 class RedisCache extends Cache {
-  get(key: string) { /* ... */ return undefined }
-  set(key: string, value: string) { /* ... */ }
+  get(key: string) {
+    /* ... */ return undefined
+  }
+  set(key: string, value: string) {
+    /* ... */
+  }
 }
 
 const di = new CaffeineIoC()
@@ -264,12 +292,12 @@ di.bind(RedisCache, t => t.toSelf().extends().primary())
 
 await di.init()
 
-const cache = di.get(Cache)         // RedisCache — marked primary
-const all   = di.getMany(Cache)     // [MemCache, RedisCache]
+const cache = di.get(Cache) // RedisCache — marked primary
+const all = di.getMany(Cache) // [MemCache, RedisCache]
 ```
 
 :::note
-.extends() parameter can be omitted when the key is a class constructor and the 
+.extends() parameter can be omitted when the key is a class constructor and the
 intended extended to be used as key the first one.
 :::
 

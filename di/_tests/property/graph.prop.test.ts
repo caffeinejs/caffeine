@@ -1,5 +1,6 @@
-import { describe, expect } from 'vitest'
 import { it, fc } from '@fast-check/vitest'
+import { describe, expect } from 'vitest'
+
 import { buildBindingGraph, graphToJSON, graphToDot, graphToMermaid } from '../../graph.js'
 import { binding } from './helpers/binding_factory.js'
 
@@ -30,8 +31,7 @@ describe('buildBindingGraph (property)', function () {
     }
 
     const graph = buildBindingGraph(entries)
-    expect(graph.nodes)
-      .toHaveLength(count)
+    expect(graph.nodes).toHaveLength(count)
   })
 
   it.prop([fc.integer({ min: 1, max: 6 })], { numRuns: 50 })(
@@ -49,10 +49,8 @@ describe('buildBindingGraph (property)', function () {
       const nodeIds = new Set(graph.nodes.map(n => n.id))
 
       for (const edge of graph.edges) {
-        expect(nodeIds.has(edge.fromID))
-          .toBe(true)
-        expect(nodeIds.has(edge.toID))
-          .toBe(true)
+        expect(nodeIds.has(edge.fromID)).toBe(true)
+        expect(nodeIds.has(edge.toID)).toBe(true)
       }
     },
   )
@@ -69,8 +67,7 @@ describe('buildBindingGraph (property)', function () {
       const graph = buildBindingGraph(entries)
       const groupEdges = graph.edges.filter(e => e.kind === 'named-group')
 
-      expect(groupEdges)
-        .toHaveLength(count - 1)
+      expect(groupEdges).toHaveLength(count - 1)
     },
   )
 
@@ -85,10 +82,8 @@ describe('buildBindingGraph (property)', function () {
     const graph = buildBindingGraph(entries)
     const parsed = JSON.parse(graphToJSON(graph))
 
-    expect(parsed.nodes)
-      .toHaveLength(graph.nodes.length)
-    expect(parsed.edges)
-      .toHaveLength(graph.edges.length)
+    expect(parsed.nodes).toHaveLength(graph.nodes.length)
+    expect(parsed.edges).toHaveLength(graph.edges.length)
   })
 
   it.prop([fc.integer({ min: 1, max: 3 })], { numRuns: 20 })('serializers do not throw for valid graphs', count => {

@@ -12,7 +12,9 @@ const COLUMNS: Column<RouteSnapshot>[] = [
     header: 'Method',
     render: r => (
       <div className="flex flex-wrap gap-1">
-        {r.method.map(m => <MethodBadge key={m} method={m} />)}
+        {r.method.map(m => (
+          <MethodBadge key={m} method={m} />
+        ))}
       </div>
     ),
   },
@@ -41,8 +43,8 @@ const COLUMNS: Column<RouteSnapshot>[] = [
     header: 'Status',
     render: r => {
       const status = r.responseStatus ?? 200
-      const color
-        = status < 300
+      const color =
+        status < 300
           ? 'text-emerald-600 dark:text-emerald-400'
           : status < 400
             ? 'text-yellow-600 dark:text-yellow-400'
@@ -58,11 +60,7 @@ export function Routes({ routes }: Props) {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Routes</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          {routes.length}
-          {' '}
-          {routes.length === 1 ? 'route' : 'routes'}
-          {' '}
-          registered
+          {routes.length} {routes.length === 1 ? 'route' : 'routes'} registered
         </p>
       </div>
       <Table

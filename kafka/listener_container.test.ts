@@ -1,12 +1,13 @@
-import { describe, it, expect } from 'vitest'
 import { Lifetime, Scopes } from '@caffeinejs/di'
 import { createApplication } from '@caffeinejs/std'
+import { describe, it, expect } from 'vitest'
+
 import type { ConsumerClient, KafkaClients, KafkaMessage, KafkaOutboundMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
 import { KafkaParams } from './decorators/kafka_params.js'
-import { KafkaTemplate } from './template.js'
 import { kafka } from './plugin.js'
+import { KafkaTemplate } from './template.js'
 
 // --- a minimal in-memory broker: producer sends are delivered to consumer streams by topic -----------------
 
@@ -102,7 +103,7 @@ class FakeBroker {
   }
 }
 
-function deferred<T>(): { promise: Promise<T>, resolve: (v: T) => void } {
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
   let resolve!: (v: T) => void
   const promise = new Promise<T>(res => {
     resolve = res
@@ -143,7 +144,7 @@ class ThrowingConsumer {
   }
 }
 
-const paramsReceived = deferred<{ value: unknown, key: string }>()
+const paramsReceived = deferred<{ value: unknown; key: string }>()
 
 @KafkaHandler()
 class ParamsConsumer {
@@ -159,7 +160,9 @@ const GROUP = 'kafka-test-default'
 describe('KafkaListenerContainer', () => {
   it('dispatches a produced message to the matching @KafkaListener (singleton)', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('localhost:9092').groupId(GROUP))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k.brokers('localhost:9092').groupId(GROUP),
+    )
 
     const built = app.build()
     await built.run()
@@ -175,7 +178,9 @@ describe('KafkaListenerContainer', () => {
 
   it('dispatches within a request scope for a request-scoped handler', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('localhost:9092').groupId(GROUP))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k.brokers('localhost:9092').groupId(GROUP),
+    )
 
     const built = app.build()
     await built.run()
@@ -190,7 +195,12 @@ describe('KafkaListenerContainer', () => {
 
   it('routes a handler failure to the onError hook instead of crashing the stream', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('localhost:9092').groupId(GROUP).onError(error => errorThrown.resolve(error)))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k
+        .brokers('localhost:9092')
+        .groupId(GROUP)
+        .onError(error => errorThrown.resolve(error)),
+    )
 
     const built = app.build()
     await built.run()
@@ -206,7 +216,9 @@ describe('KafkaListenerContainer', () => {
 
   it('extracts handler arguments via @KafkaParams', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k => k.brokers('localhost:9092').groupId(GROUP))
+    const app = createApplication({}).extend(kafka.with({ clients: broker.clients() }), k =>
+      k.brokers('localhost:9092').groupId(GROUP),
+    )
 
     const built = app.build()
     await built.run()

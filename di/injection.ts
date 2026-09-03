@@ -1,7 +1,7 @@
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrMissingInjectionKey } from './errors.js'
-import { solutions } from './internal/util/errutil/index.js'
 import { BuiltInResolvers } from './injection_resolver.js'
+import { solutions } from './internal/util/errutil/index.js'
 import { InjectionToken, isValidKey } from './key.js'
 import type { Provider } from './provider.js'
 
@@ -103,13 +103,14 @@ export type InjectionsFor<A extends readonly unknown[]> = { [K in keyof A]: Inje
  * The value produced when `I` is resolved: the instance of a token, or the
  * encoded result type of an {@link InjectionDescriptor}.
  */
-export type ResolveInjection<I> = I extends InjectionToken<infer T>
-  ? T
-  : I extends { readonly [kInjectionResult]: infer T }
+export type ResolveInjection<I> =
+  I extends InjectionToken<infer T>
     ? T
-    : I extends InjectionDescriptor<infer T>
+    : I extends { readonly [kInjectionResult]: infer T }
       ? T
-      : never
+      : I extends InjectionDescriptor<infer T>
+        ? T
+        : never
 
 /**
  * Authoring shape for `$i.object`: property values are tokens, descriptors,
@@ -142,13 +143,14 @@ function encode<T>(descriptor: InjectionDescriptor<any>): InjectionResult<T> {
   return Object.defineProperty(descriptor, kInjectionDescriptor, { value: true }) as InjectionResult<T>
 }
 
-type InjectedField<V> = V extends InjectionToken<infer T>
-  ? T
-  : V extends { readonly [kInjectionDescriptor]: true, readonly [kInjectionResult]: infer T }
+type InjectedField<V> =
+  V extends InjectionToken<infer T>
     ? T
-    : V extends object
-      ? InjectedOf<V>
-      : never
+    : V extends { readonly [kInjectionDescriptor]: true; readonly [kInjectionResult]: infer T }
+      ? T
+      : V extends object
+        ? InjectedOf<V>
+        : never
 
 /**
  * allOf creates an injection descriptor that injects all bindings associated with given key.
@@ -187,11 +189,11 @@ function allOf<K extends InjectionToken<any> | InjectionDescriptor<any>>(
 
     if (!isValidKey(descriptor.key)) {
       throw new ErrMissingInjectionKey(
-        `Cannot call 'allOf': descriptor does not have a valid key`
-        + solutions(
-          `- Pass a key directly or use an injection function that resolves to a key, e.g. allOf(optional(key))`,
-          `- A circular module import may have caused the key to be undefined at declaration time — use allOf(defer(() => ClassName)) to defer resolution`,
-        ),
+        `Cannot call 'allOf': descriptor does not have a valid key` +
+          solutions(
+            `- Pass a key directly or use an injection function that resolves to a key, e.g. allOf(optional(key))`,
+            `- A circular module import may have caused the key to be undefined at declaration time — use allOf(defer(() => ClassName)) to defer resolution`,
+          ),
       )
     }
 
@@ -240,11 +242,11 @@ function ordered<K extends InjectionToken<any> | InjectionDescriptor<any>>(
 
     if (!isValidKey(descriptor.key)) {
       throw new ErrMissingInjectionKey(
-        `Cannot call 'ordered': descriptor does not have a valid key`
-        + solutions(
-          `- Pass a key directly or use an injection function that resolves to a key, e.g. ordered(optional(key))`,
-          `- A circular module import may have caused the key to be undefined at declaration time — use ordered(defer(() => ClassName)) to defer resolution`,
-        ),
+        `Cannot call 'ordered': descriptor does not have a valid key` +
+          solutions(
+            `- Pass a key directly or use an injection function that resolves to a key, e.g. ordered(optional(key))`,
+            `- A circular module import may have caused the key to be undefined at declaration time — use ordered(defer(() => ClassName)) to defer resolution`,
+          ),
       )
     }
 
@@ -290,11 +292,11 @@ function ordered<K extends InjectionToken<any> | InjectionDescriptor<any>>(
 function mapped<K extends InjectionToken<any>>(key: K): InjectionResult<Map<string, ResolveInjection<K>>> {
   if (key == null) {
     throw new ErrMissingInjectionKey(
-      `Cannot call 'mapped': key is null or undefined`
-      + solutions(
-        `- A circular module import may have caused the key to be undefined at declaration time — use mapped(defer(() => ClassName)) to defer resolution`,
-        `- Verify that the key is correctly imported`,
-      ),
+      `Cannot call 'mapped': key is null or undefined` +
+        solutions(
+          `- A circular module import may have caused the key to be undefined at declaration time — use mapped(defer(() => ClassName)) to defer resolution`,
+          `- Verify that the key is correctly imported`,
+        ),
     )
   }
 
@@ -400,11 +402,11 @@ function provide<K extends InjectionToken<any> | InjectionDescriptor<any>>(
 ): InjectionResult<Provider<ResolveInjection<K>>> {
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(
-      `Cannot call 'provide': key is null or undefined`
-      + solutions(
-        `- A circular module import may have caused the key to be undefined at declaration time — use provide(defer(() => ClassName)) to defer resolution`,
-        `- Verify that the key is correctly imported`,
-      ),
+      `Cannot call 'provide': key is null or undefined` +
+        solutions(
+          `- A circular module import may have caused the key to be undefined at declaration time — use provide(defer(() => ClassName)) to defer resolution`,
+          `- Verify that the key is correctly imported`,
+        ),
     )
   }
 
@@ -470,10 +472,7 @@ function just<T>(value: T): InjectionResult<T> {
  * }
  * ```
  */
-function value<T = unknown, R = any>(
-  access: ((provider: T) => R) | string,
-  defaultValue?: R,
-): InjectionResult<R> {
+function value<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R> {
   return encode({
     resolver: BuiltInResolvers.CONFIG,
     args: { access, defaultValue },
