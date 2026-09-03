@@ -13,7 +13,7 @@ Missing either one does not fail the `build` job — it only surfaces later as a
 
 ## Petstore codegen
 
-Keep package-specific setup out of the root scripts. The petstore example has two generated, untracked artifacts its specs import — the Prisma client and `src/**/*.generated.mod.ts` (`caffeine generate`). Rather than chaining codegen into the root `test`/`test:typecheck` (which would fire for every unrelated package), the petstore regenerates them in its **own vitest `globalSetup`** ([examples/03-petstore/vitest.globalsetup.ts](../../examples/03-petstore/vitest.globalsetup.ts) → `npm run generate`), so codegen runs only when the petstore's own vitest project runs. Its CI build job also generates them (via `npm run build --workspaces`) before the root type-check.
+Keep package-specific setup out of the root scripts. The petstore example has two generated, untracked artifacts its specs import — the Prisma client and `src/**/*.generated.mod.ts` (`caffeine generate`). Rather than chaining codegen into the root `test`/`test:typecheck` (which would fire for every unrelated package), the petstore regenerates them in its **own vitest `globalSetup`** ([examples/03-petstore/vitest.globalsetup.ts](../../examples/03-petstore/vitest.globalsetup.ts) → `npm run generate`) when `src/root.generated.mod.ts` or `node_modules/.prisma/client` is missing. A fresh CI checkout has neither, so generate still runs once per job; local loops after the first generate skip it. Force with `npm run generate -w @caffeinejs/example-petstore`. Its CI build job also generates them (via `npm run build --workspaces`) before the root type-check.
 
 ## CLI binary
 

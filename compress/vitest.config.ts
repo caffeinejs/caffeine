@@ -15,6 +15,7 @@ export default defineConfig({
   oxc: false,
   test: {
     name: 'compress',
+    pool: 'threads',
     include: ['**/*.test.ts'],
     environment: 'node',
     testTimeout: 30000,

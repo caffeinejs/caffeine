@@ -11,6 +11,7 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'json-summary'],
       exclude: ['examples/**'],
     },
+    pool: 'threads',
     projects: [
       './di/vitest.config.ts',
       './di/vitest.leak.config.ts',

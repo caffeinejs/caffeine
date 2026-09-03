@@ -15,10 +15,10 @@ export default defineConfig({
   ],
   test: {
     name: 'scan',
+    pool: 'threads',
     include: ['**/*.test.ts'],
     exclude: ['node_modules/**', 'dist/**'],
     environment: 'node',
     passWithNoTests: true,
-    pool: 'forks',
   },
 })

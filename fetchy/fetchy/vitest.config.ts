@@ -15,6 +15,7 @@ export default defineConfig({
   oxc: false,
   test: {
     name: 'fetchy',
+    pool: 'threads',
     include: ['**/*.test.ts'],
     environment: 'node',
     passWithNoTests: true,

@@ -12,9 +12,11 @@ import { defineConfig } from 'vitest/config'
 const rootEnv = loadEnv({ path: fileURLToPath(new URL('../../.env', import.meta.url)) }).parsed ?? {}
 
 // Vitest project for the 03-petstore example so its specs surface in the test explorer and in
-// `npm test`. No tests exist yet (passWithNoTests). The example uses TC39 decorators (swc transform)
-// and Prisma/PostgreSQL — any spec added here must be docker-gated (skip when the DB is down),
-// mirroring test/e2e, so the default suite stays green offline.
+// `npm test`. `globalSetup` runs `npm run generate` only when `src/root.generated.mod.ts` or the
+// Prisma client is missing. Forks: Prisma is not safe under Vitest `threads`. The example uses
+// TC39 decorators (swc transform) and Prisma/PostgreSQL — specs that need a live DB must be
+// docker-gated (skip when the DB is down), mirroring test/e2e, so the default suite stays green
+// offline.
 export default defineConfig({
   plugins: [
     swc.vite({
@@ -52,5 +54,6 @@ export default defineConfig({
     testTimeout: 30000,
     hookTimeout: 30000,
     passWithNoTests: true,
+    pool: 'forks',
   },
 })

@@ -15,6 +15,7 @@ export default defineConfig({
   oxc: false,
   test: {
     name: 'brewer',
+    pool: 'threads',
     include: ['**/*.test.ts'],
     typecheck: {
       enabled: true,

@@ -18,6 +18,7 @@ export default defineConfig({
   oxc: false,
   test: {
     name: 'html',
+    pool: 'threads',
     include: ['**/*.test.ts', '**/*.test.tsx'],
     environment: 'node',
     testTimeout: 30000,

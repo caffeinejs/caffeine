@@ -23,9 +23,9 @@ export default defineConfig({
   test: {
     setupFiles: ['../di/_polyfill.ts'],
     name: 'test',
+    pool: 'threads',
     include: ['**/*.test.ts'],
     environment: 'node',
     passWithNoTests: true,
-    pool: 'forks',
   },
 })

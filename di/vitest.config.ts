@@ -16,10 +16,10 @@ export default defineConfig({
   test: {
     setupFiles: ['./_polyfill.ts'],
     name: 'core',
+    pool: 'threads',
     include: ['**/*.test.ts'],
     exclude: ['node_modules/**', 'dist/**', '_tests/memory/**', '_tests/deno/**', 'examples/**'],
     environment: 'node',
     passWithNoTests: true,
-    pool: 'forks',
   },
 })
