@@ -127,6 +127,7 @@ jobs:
     needs: build
     permissions:
       contents: read
+      id-token: write
     strategy:
       matrix:
         node-version: ['24', '26']
@@ -152,4 +153,21 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Test
+        if: matrix.node-version != '24' || runner.os != 'Linux'
+        run: npm test
+
+      - name: Test & Coverage
+        if: matrix.node-version == '24' && runner.os == 'Linux'
         run: npm run test:coverage
+
+      - name: Coverage Summary
+        if: matrix.node-version == '24' && runner.os == 'Linux'
+        run: node tools/coverage-summary.mjs
+
+      - name: Upload Coverage
+        if: matrix.node-version == '24' && runner.os == 'Linux'
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: coverage/lcov.info
+          fail_ci_if_error: false

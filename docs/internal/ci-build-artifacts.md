@@ -22,3 +22,9 @@ Keep package-specific setup out of the root scripts. The petstore example has tw
 ## License allowlist and dependency review
 
 `.github/workflows/license-check.yml` runs on pull requests and on pushes to `main` / `[0-9]+.x`. On PRs it also runs GitHub Dependency Review (`fail-on-severity: high`). The license job runs `npm run license:check`, which walks production dependency trees of first-party workspace packages (examples, benchmarks, scaffold templates, and `di/_tests/deno` are excluded) and fails if any third-party SPDX license is outside the allowlist in `tools/check-licenses.mjs`.
+
+## Coverage
+
+The `test` job in `.github/workflows/ci.yml` runs `npm run test:coverage` only on Linux + Node 24. That job posts a per-package line-coverage table to the GitHub Actions summary (`tools/coverage-summary.mjs`) and uploads `coverage/lcov.info` to Codecov via OIDC (`codecov/codecov-action`, `use_oidc: true`). Other matrix cells run `npm test` without instrumentation.
+
+[`codecov.yml`](../../codecov.yml) sets project and patch status to informational. Do not add Codecov as a required GitHub check. There is no coverage threshold.
