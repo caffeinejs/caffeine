@@ -1,1 +1,1 @@
-# Caffeine · [![CI](https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml/badge.svg)](https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml)
+# Caffeine · [![CI](https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml/badge.svg)](https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml) · [![codecov](https://codecov.io/gh/caffeinejs/caffeine/graph/badge.svg?token=CH1MHCDV1J)](https://codecov.io/gh/caffeinejs/caffeine)
