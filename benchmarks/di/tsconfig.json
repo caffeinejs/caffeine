@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": [
+    "container.bench.ts",
+    "compare_third_parties.bench.ts",
+    "perf_compare.bench.ts",
+    "testdata/di.ts",
+    "testdata/inferdi.ts"
+  ],
+  "exclude": ["**/dist/**", "**/node_modules/**", "testdata/third_party_legacy/**"]
+}

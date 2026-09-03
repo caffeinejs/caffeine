@@ -64,7 +64,7 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 
 .PHONY: bench
 bench: ## list available benchmarks
-	@echo "Available benchmarks: helloworld startup request request:bun mixedscopes"
+	@echo "Available benchmarks: helloworld startup request request:bun mixedscopes di di-compare di-perf"
 	@echo "Usage: make bench:<type> (e.g. make bench:helloworld)"
 	@echo "Fetchy HTTP client benchmark: make bench-fetchy"
 

@@ -38,32 +38,18 @@
     "lint:fix": "eslint --fix",
     "lint:markdown": "markdownlint-cli2",
     "docs:llms-full": "node tools/generate-llms-full.mjs",
-    "bench": "node --expose-gc --import=tsx _benchmarks/container.bench.ts",
-    "bench:compare": "node --expose-gc --import=tsx _benchmarks/compare_third_parties.bench.ts",
-    "bench:perf-compare": "node --expose-gc --import=tsx _benchmarks/perf_compare.bench.ts",
-    "bench:readme": "node tools/bench-report.mjs",
     "example:javascript": "npm run start -w @caffeinejs/example-javascript",
     "example:framework": "npm run start -w @caffeinejs/example-framework",
     "example:fastify-functions": "npm run start -w @caffeinejs/example-fastify-functions",
     "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete"
   },
   "devDependencies": {
-    "@loopback/context": "^8.0.13",
-    "@nestjs/common": "^11.1.24",
-    "@nestjs/core": "^11.1.24",
     "@types/node": "^25.9.1",
     "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^4.1.8",
-    "awilix": "^13.0.3",
     "esbuild": "^0.28.0",
     "eslint-plugin-jsdoc": "^63.0.2",
-    "injection-js": "^2.6.1",
-    "inversify": "^8.1.0",
-    "mitata": "^1.0.34",
     "supertest": "^7.2.2",
-    "table": "^6.9.0",
-    "tsx": "^4.22.4",
-    "tsyringe": "^4.10.0",
-    "typedi": "^0.10.0"
+    "tsx": "^4.22.4"
   }
 }

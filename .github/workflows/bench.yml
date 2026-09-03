@@ -10,6 +10,9 @@ on:
         type: choice
         options:
           - aspect
+          - di
+          - di-compare
+          - di-perf
           - helloworld
           - mixedscopes
           - startup

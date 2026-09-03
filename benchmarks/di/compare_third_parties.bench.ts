@@ -3,14 +3,15 @@ import 'reflect-metadata'
 
 import { bench, group, run } from 'mitata'
 import { ReflectiveInjector } from 'injection-js'
-import { Root, di, RootSingleton, Rep1, Svc1, Rep3, Rep2, Svc2, Svc3, Svc4, Svc5, Svc6 } from './_testdata/di'
-import { inv, InvRootSingleton as InvSingletonRoot, InvRoot } from './_testdata/third_party_legacy/dist/inversify'
-import { tsy, TsySingletonRoot, TsyRoot } from './_testdata/third_party_legacy/dist/tsy'
-import { bootstrap, NestRoot, NestTransientRoot } from './_testdata/third_party_legacy/dist/nest'
-import { loopCtx, LoopSingletonRoot, LoopRoot } from './_testdata/third_party_legacy/dist/loopback'
-import { typeContainer, TypeSingletonRoot, TypeRoot } from './_testdata/third_party_legacy/dist/typedi'
-import { awilixContainer } from './_testdata/third_party_legacy/dist/awilix'
-import { injResolvedProviders, injSingletonInjector, InjRoot, InjSingletonRoot } from './_testdata/third_party_legacy/dist/injection_js'
+import { Root, di, RootSingleton, Rep1, Svc1, Rep3, Rep2, Svc2, Svc3, Svc4, Svc5, Svc6 } from './testdata/di.js'
+import { inferdi, inferdiFast } from './testdata/inferdi.js'
+import { inv, InvRootSingleton as InvSingletonRoot, InvRoot } from './testdata/third_party_legacy/dist/inversify.js'
+import { tsy, TsySingletonRoot, TsyRoot } from './testdata/third_party_legacy/dist/tsy.js'
+import { bootstrap, NestRoot, NestTransientRoot } from './testdata/third_party_legacy/dist/nest.js'
+import { loopCtx, LoopSingletonRoot, LoopRoot } from './testdata/third_party_legacy/dist/loopback.js'
+import { typeContainer, TypeSingletonRoot, TypeRoot } from './testdata/third_party_legacy/dist/typedi.js'
+import { awilixContainer } from './testdata/third_party_legacy/dist/awilix.js'
+import { injResolvedProviders, injSingletonInjector, InjRoot, InjSingletonRoot } from './testdata/third_party_legacy/dist/injection_js.js'
 
 const nestApp = await bootstrap()
 const transientProvider = di.wrap(Root)
@@ -22,6 +23,10 @@ group('normal', () => {
   bench('caffeine-ioc:transient:provider', () => transientProvider.get())
   bench('caffeine-ioc:singleton', () => di.get(RootSingleton))
   bench('caffeine-ioc:singleton:provider', () => singletonProvider.get())
+  bench('inferdi:transient', () => inferdi.get('root'))
+  bench('inferdi:singleton', () => inferdi.get('rootSingleton'))
+  bench('inferdi:fast:transient', () => inferdiFast.get('root'))
+  bench('inferdi:fast:singleton', () => inferdiFast.get('rootSingleton'))
   bench('inversify:transient', () => inv.get(InvRoot))
   bench('inversify:singleton', () => inv.get(InvSingletonRoot))
   bench('tsyringe:transient', () => tsy.resolve(TsyRoot))

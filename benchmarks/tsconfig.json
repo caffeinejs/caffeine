@@ -8,5 +8,5 @@
     "types": ["node"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["dist", "node_modules", "startup/nestjs/**", "startup/caffeine/**", "helloworld/caffeine/**", "helloworld/caffeine-router/**", "request/caffeine/**", "request/caffeine-middleware/**", "request/caffeine-request-scope/**", "mixedscopes/caffeine/**", "aspect/**"]
+  "exclude": ["dist", "node_modules", "startup/nestjs/**", "startup/caffeine/**", "helloworld/caffeine/**", "helloworld/caffeine-router/**", "request/caffeine/**", "request/caffeine-middleware/**", "request/caffeine-request-scope/**", "mixedscopes/caffeine/**", "aspect/**", "di/**"]
 }

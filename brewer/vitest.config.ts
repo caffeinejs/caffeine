@@ -18,6 +18,7 @@ export default defineConfig({
     include: ['**/*.test.ts'],
     typecheck: {
       enabled: true,
+      tsconfig: './tsconfig.vitest.json',
       include: ['**/*.test.ts'],
     },
     environment: 'node',

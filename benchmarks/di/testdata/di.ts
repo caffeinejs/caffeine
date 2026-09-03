@@ -1,7 +1,4 @@
-import { CaffeineIoC } from '../../container.js'
-import { Injectable } from '../../decorators/injectable.js'
-import { Lifetime } from '../../decorators/lifetime.js'
-import { Scopes } from '../../scope.js'
+import { CaffeineIoC, Injectable, Lifetime, Scopes } from '@caffeinejs/di'
 
 @Injectable()
 @Lifetime(Scopes.TRANSIENT)

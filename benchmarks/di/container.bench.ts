@@ -1,17 +1,21 @@
+/* eslint-disable @typescript-eslint/no-empty-function -- bench stubs */
+/* eslint-disable @typescript-eslint/no-unused-vars -- decorator-registered fixtures */
+import {
+  $i,
+  CaffeineIoC,
+  ConditionalOn,
+  Configuration,
+  Extends,
+  Inject,
+  Injectable,
+  Lifetime,
+  Named,
+  Primary,
+  Provides,
+  Scopes,
+  token,
+} from '@caffeinejs/di'
 import { bench, group, run } from 'mitata'
-import { token } from '../key.js'
-import { Injectable } from '../decorators/injectable.js'
-import { Configuration } from '../decorators/configuration.js'
-import { Provides } from '../decorators/provides.js'
-import { Named } from '../decorators/named.js'
-import { Primary } from '../decorators/primary.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
-import { $i } from '../injection.js'
-import { CaffeineIoC } from '../container.js'
-import { Lifetime } from '../decorators/lifetime.js'
-import { Scopes } from '../scope.js'
-import { Inject } from '../decorators/inject.js'
-import { Extends } from '../decorators/extends.js'
 
 const kDbURL = token<any>(Symbol('db_url'))
 
@@ -309,8 +313,12 @@ group('bindings', () => {
 const { benchmarks } = await run()
 
 const fmtNs = (ns: number): string => {
-  if (ns < 1_000) { return `${ns.toFixed(2)} ns` }
-  if (ns < 1_000_000) { return `${(ns / 1_000).toFixed(2)} µs` }
+  if (ns < 1_000) {
+    return `${ns.toFixed(2)} ns`
+  }
+  if (ns < 1_000_000) {
+    return `${(ns / 1_000).toFixed(2)} µs`
+  }
   return `${(ns / 1_000_000).toFixed(2)} ms`
 }
 
