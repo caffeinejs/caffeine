@@ -165,9 +165,18 @@ jobs:
         run: node tools/coverage-summary.mjs
 
       - name: Upload Coverage
-        if: matrix.node-version == '24' && runner.os == 'Linux'
+        if: ${{ !cancelled() && matrix.node-version == '24' && runner.os == 'Linux' }}
         uses: codecov/codecov-action@v5
         with:
           use_oidc: true
           files: coverage/lcov.info
+          fail_ci_if_error: false
+
+      - name: Upload test results
+        if: ${{ !cancelled() && matrix.node-version == '24' && runner.os == 'Linux' }}
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          report_type: test_results
+          files: coverage/junit.xml
           fail_ci_if_error: false

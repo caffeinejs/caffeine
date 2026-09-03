@@ -1391,7 +1391,11 @@ export class CaffeineIoC implements Container {
     return false
   }
 
-  private queueProfiledConfig(key: InjectionToken, config: DecoratedBindingConfig, providedByConfig?: InjectionToken): boolean {
+  private queueProfiledConfig(
+    key: InjectionToken,
+    config: DecoratedBindingConfig,
+    providedByConfig?: InjectionToken,
+  ): boolean {
     const profiles = config.getProfiles
     if (!profiles || profiles.size === 0) {
       return false

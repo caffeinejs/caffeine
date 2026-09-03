@@ -1,6 +1,15 @@
 codecov:
   require_ci_to_pass: false
 
+ignore:
+  - 'api/**'
+  - 'benchmarks/**'
+  - 'docs/**'
+  - 'examples/**'
+  - 'plugins/**'
+  - 'test/**'
+  - 'tools/**'
+
 coverage:
   status:
     project:

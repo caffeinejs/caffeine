@@ -76,8 +76,12 @@ function main() {
     if (rel.startsWith(`..${sep}`) || rel === '..') {
       continue
     }
-    const pkg = packageForFile(rel, prefixes)
-    if (!pkg) {
+    const normalized = rel.replaceAll('\\', '/')
+    if (normalized === 'examples' || normalized.startsWith('examples/')) {
+      continue
+    }
+    const pkg = packageForFile(normalized, prefixes)
+    if (!pkg || pkg === 'examples' || pkg.startsWith('examples/')) {
       continue
     }
     const entry = byPkg.get(pkg) ?? { covered: 0, total: 0 }

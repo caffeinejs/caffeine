@@ -25,6 +25,8 @@ Keep package-specific setup out of the root scripts. The petstore example has tw
 
 ## Coverage
 
-The `test` job in `.github/workflows/ci.yml` runs `npm run test:coverage` only on Linux + Node 24. That job posts a per-package line-coverage table to the GitHub Actions summary (`tools/coverage-summary.mjs`) and uploads `coverage/lcov.info` to Codecov via OIDC (`codecov/codecov-action`, `use_oidc: true`). Other matrix cells run `npm test` without instrumentation.
+The `test` job in `.github/workflows/ci.yml` runs `npm run test:coverage` only on Linux + Node 24. That job posts a per-package line-coverage table to the GitHub Actions summary (`tools/coverage-summary.mjs`) and uploads `coverage/lcov.info` to Codecov via OIDC (`codecov/codecov-action`, `use_oidc: true`). The same job uploads `coverage/junit.xml` as Test Analytics (`report_type: test_results`). Coverage and test-result uploads use `if: ${{ !cancelled() }}` so a failing suite still reports. Other matrix cells run `npm test` without instrumentation.
+
+`examples/` is excluded from coverage (`vitest` `coverage.exclude`, `codecov.yml` `ignore`, and the summary script). Example projects may still run as tests.
 
 [`codecov.yml`](../../codecov.yml) sets project and patch status to informational. Do not add Codecov as a required GitHub check. There is no coverage threshold.
