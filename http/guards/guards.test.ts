@@ -595,7 +595,7 @@ describe('authorization', () => {
     Admin = 'admin',
   }
 
-  const kRoles = token<any>(Symbol('roles'))
+  const kRoles = Symbol('roles')
 
   function Roles(...roles: Role[]) {
     return (_target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => {
@@ -836,14 +836,14 @@ describe('zero_cost', () => {
   })
 
   it('leaves onRequest empty on a route with no guards', () => {
-    const route = registered.get(token<any>('GET /guard-hooks/plain'))!
+    const route = registered.get('GET /guard-hooks/plain')!
 
     expect(route).toBeDefined()
     expect(route.onRequest).toBeUndefined()
   })
 
   it('attaches a function, not a one-element array, when a route has guards', () => {
-    const route = registered.get(token<any>('GET /guard-hooks/guarded'))!
+    const route = registered.get('GET /guard-hooks/guarded')!
 
     expect(typeof route.onRequest).toBe('function')
   })

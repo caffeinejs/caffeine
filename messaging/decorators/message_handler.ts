@@ -1,12 +1,12 @@
-import { type Ctor, type Injection, Injectable, Label } from '@caffeinejs/di'
+import { type Ctor, type InjectionsFor, Injectable, Label } from '@caffeinejs/di'
 
 import { Keys } from '../symbols.js'
 import { registerHandler } from './registrar.js'
 
 /** Options for {@link MessageHandler}. */
-export interface MessageHandlerOptions {
+export interface MessageHandlerOptions<A extends unknown[] = []> {
   /** Constructor injections, forwarded to `@Injectable`. */
-  dependencies?: Injection[]
+  dependencies?: [...InjectionsFor<A>]
 }
 
 /**
@@ -23,9 +23,13 @@ export interface MessageHandlerOptions {
  * }
  * ```
  */
-export function MessageHandler(options: MessageHandlerOptions = {}) {
-  return function (target: Function, context: ClassDecoratorContext): void {
-    Injectable(options.dependencies ?? [])(target as Ctor, context)
+export function MessageHandler<A extends unknown[] = []>(options: MessageHandlerOptions<A> = {}) {
+  return function (target: Ctor<unknown, A>, context: ClassDecoratorContext): void {
+    if (options.dependencies === undefined) {
+      Injectable()(target as Ctor<unknown, []>, context)
+    } else {
+      Injectable(options.dependencies)(target, context)
+    }
     Label(Keys.MESSAGE_HANDLER)(target, context)
 
     registerHandler(context.metadata, target)

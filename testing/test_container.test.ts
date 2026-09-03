@@ -16,7 +16,7 @@ import { newTestContainer, TestContainer } from './test_container.js'
 import { InstanceTracker } from './tracker.js'
 
 describe('TestContainer', function () {
-  const kMsg = token<any>(Symbol('kMsg'))
+  const kMsg = token<string>(Symbol('kMsg'))
 
   @Injectable()
   class Repository {}
@@ -138,7 +138,7 @@ describe('TestContainer', function () {
     })
 
     it('modules() still accumulate and run at init', async function () {
-      const kClock = token<any>(Symbol('kClock'))
+      const kClock = token<{ now: () => number }>(Symbol('kClock'))
       const clock = { now: () => 0 }
       const di = new TestContainer()
         .modules(c => {
@@ -210,7 +210,7 @@ describe('TestContainer', function () {
   })
 
   describe('skipAsyncBindings() / skip()', function () {
-    const kConn = token<any>(Symbol('kConn'))
+    const kConn = token<string>(Symbol('kConn'))
 
     @Configuration()
     class InfraConfig {
@@ -417,12 +417,6 @@ describe('TestContainer', function () {
   })
 
   describe('complex async graphs', function () {
-    const kCgConnStr = token<any>(Symbol('kCgConnStr'))
-    const kCgDbPool = token<any>(Symbol('kCgDbPool'))
-    const kCgDbConn = token<any>(Symbol('kCgDbConn'))
-    const kCgRedisURL = token<any>(Symbol('kCgRedisURL'))
-    const kCgCache = token<any>(Symbol('kCgCache'))
-
     class CgDbPool {
       constructor(readonly connStr: string) {}
     }
@@ -432,6 +426,12 @@ describe('TestContainer', function () {
     class CgCacheClient {
       constructor(readonly url: string) {}
     }
+
+    const kCgConnStr = token<string>(Symbol('kCgConnStr'))
+    const kCgDbPool = token<CgDbPool>(Symbol('kCgDbPool'))
+    const kCgDbConn = token<CgDbConn>(Symbol('kCgDbConn'))
+    const kCgRedisURL = token<string>(Symbol('kCgRedisURL'))
+    const kCgCache = token<CgCacheClient>(Symbol('kCgCache'))
 
     @Configuration()
     class CgInfraConfig {
@@ -593,7 +593,7 @@ describe('TestContainer', function () {
     })
 
     it('modules() registers a test-local binding not in the source', async function () {
-      const kTestClock = token<any>(Symbol('kTestClock'))
+      const kTestClock = token<{ now: () => number }>(Symbol('kTestClock'))
       const fakeClock = { now: () => 0 }
 
       const source = new CaffeineIoC()
@@ -622,7 +622,7 @@ describe('TestContainer', function () {
         .build()
       await di.init()
 
-      expect(di.profiles.has(token<any>('staging'))).toBe(true)
+      expect(di.profiles.has('staging')).toBe(true)
     })
 
     it('snapshot from profile-aware source captures @Profile-gated classes', async function () {

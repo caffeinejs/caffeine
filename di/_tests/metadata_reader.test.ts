@@ -7,7 +7,7 @@ import { InjectionToken, token } from '../key.js'
 import { MetadataReader } from '../metadata_reader.js'
 
 const Symbols = {
-  injections: token<any>(Symbol('di_injections')),
+  injections: Symbol('di_injections'),
 }
 
 const builtInMetadataReader: MetadataReader = (key: any): Partial<Binding> => {
@@ -42,13 +42,15 @@ const builtInMetadataReader: MetadataReader = (key: any): Partial<Binding> => {
 
 describe('Custom Binding Metadata', function () {
   describe('when using a static factory method with Symbols.injections', function () {
-    const kNm = token<any>(Symbol('nm'))
+    const kNm = token<Nm>(Symbol('nm'))
 
     class Dep {}
 
     class Opt {}
 
-    class Nm {}
+    class Nm {
+      readonly kind = 'nm'
+    }
 
     class Root {
       constructor(

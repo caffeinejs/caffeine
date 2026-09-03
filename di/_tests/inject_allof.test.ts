@@ -9,7 +9,7 @@ import { token } from '../key.js'
 
 describe('given multiple named injectables sharing the same name', function () {
   describe('and one of them asking to inject all others via that shared name', function () {
-    const kProcessor = token<any>(Symbol('processor'))
+    const kProcessor = token<Processor>(Symbol('processor'))
 
     interface Processor {
       process(): string

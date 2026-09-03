@@ -7,7 +7,7 @@ import { InlineConfigProvider } from './config/index.js'
 import { defineFeature, defineKeyedFeature, ErrFeatureAlreadyInstalled } from './plugin.js'
 import { type Service } from './service.js'
 
-const kSentinel = token<any>(Symbol('extend-sentinel'))
+const kSentinel = token<Record<string, unknown>>(Symbol('extend-sentinel'))
 
 function tracker(name = 'track') {
   return defineFeature<{ capture(value: string): void }>({

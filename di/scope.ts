@@ -5,7 +5,7 @@ import { Factory } from './factory.js'
 import { RefreshScope } from './internal/core/scope/refresh.js'
 import { SingletonScope } from './internal/core/scope/singleton.js'
 import { notNil } from './internal/util/assert/index.js'
-import { Identifier } from './key.js'
+import { NamedToken, token } from './key.js'
 import { ResolutionContext } from './resolution_context.js'
 
 export const kScopeName = Symbol('@caffeinejs/di:scope.name')
@@ -25,10 +25,10 @@ export const kScopeName = Symbol('@caffeinejs/di:scope.name')
  * ```
  */
 export const Scopes = {
-  SINGLETON: Symbol('@caffeinejs/di:scope.singleton'),
-  TRANSIENT: Symbol('@caffeinejs/di:scope.transient'),
-  REQUEST: Symbol('@caffeinejs/di:scope.request'),
-  REFRESH: Symbol('@caffeinejs/di:scope.refresh'),
+  SINGLETON: token<Scope>(Symbol('@caffeinejs/di:scope.singleton')),
+  TRANSIENT: token<Scope>(Symbol('@caffeinejs/di:scope.transient')),
+  REQUEST: token<Scope>(Symbol('@caffeinejs/di:scope.request')),
+  REFRESH: token<Scope>(Symbol('@caffeinejs/di:scope.refresh')),
 } as const
 
 /**
@@ -98,7 +98,7 @@ singletonFactory[kScopeName] = 'Singleton'
 const refreshFactory = (container: Container): Scope => new RefreshScope(container)
 refreshFactory[kScopeName] = 'Refresh'
 
-const Registry = new Map<Identifier, ScopeFactory>()
+const Registry = new Map<NamedToken<Scope>, ScopeFactory>()
   .set(Scopes.SINGLETON, singletonFactory)
   .set(Scopes.REFRESH, refreshFactory)
 
@@ -115,7 +115,7 @@ const Registry = new Map<Identifier, ScopeFactory>()
  *
  * @throws {@link ErrScopeAlreadyRegistered} if the scope identifier is already registered.
  */
-export function bindScope(scopeID: Identifier, factory: ScopeFactory): void {
+export function bindScope(scopeID: NamedToken<Scope>, factory: ScopeFactory): void {
   notNil(scopeID)
   notNil(factory)
 
@@ -131,7 +131,7 @@ export function bindScope(scopeID: Identifier, factory: ScopeFactory): void {
  *
  * @param scopeID - The scope identifier to unbind the factory from.
  */
-export function unbindScope(scopeID: Identifier): void {
+export function unbindScope(scopeID: NamedToken<Scope>): void {
   Registry.delete(notNil(scopeID))
 }
 
@@ -140,15 +140,15 @@ export function unbindScope(scopeID: Identifier): void {
  *
  * @param scopeID - The scope identifier to check.
  */
-export function hasScope(scopeID: Identifier): boolean {
+export function hasScope(scopeID: NamedToken<Scope>): boolean {
   return scopeID === Scopes.TRANSIENT || Registry.has(scopeID)
 }
 
-export function scopeEntries(): IterableIterator<[Identifier, ScopeFactory]> {
+export function scopeEntries(): IterableIterator<[NamedToken<Scope>, ScopeFactory]> {
   return Registry.entries()
 }
 
-export function scopeLabel(scopeID: Identifier): string {
+export function scopeLabel(scopeID: NamedToken<Scope>): string {
   const factory = Registry.get(scopeID)
   if (factory && kScopeName in factory) {
     return factory[kScopeName] as string

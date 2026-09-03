@@ -32,7 +32,7 @@ class WidgetService implements Service {
   bootstrap(kit: ServiceBootstrapIn): Promise<void> {
     this.steps.push('configure')
     this.bound = this.slice!.config.size
-    kit.container.bind(token<any>('widget.size'), t => t.toValue(this.bound))
+    kit.container.bind(token<number | undefined>('widget.size'), t => t.toValue(this.bound))
     return Promise.resolve()
   }
 }
@@ -61,7 +61,7 @@ describe('service lifecycle', () => {
     await app.ready()
 
     expect(service.bound).toBe(42)
-    expect(app.container.get(token<any>('widget.size'))).toBe(42)
+    expect(app.container.get(token<number | undefined>('widget.size'))).toBe(42)
   })
 
   it('refuses a slice read from the declare step, where nothing has resolved yet', async () => {

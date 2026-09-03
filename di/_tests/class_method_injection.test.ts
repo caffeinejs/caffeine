@@ -15,9 +15,9 @@ import { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
 
 describe('Method Injections', function () {
-  const kVal = token<any>(Symbol('testVal'))
-  const kBase = token<any>(Symbol('base'))
-  const kBs = token<any>(Symbol('bs'))
+  const kVal = token<string>(Symbol('testVal'))
+  const kBase = token<Base>(Symbol('base'))
+  const kBs = token<Base>(Symbol('bs'))
 
   @Injectable()
   @Lifetime(Scopes.TRANSIENT)
@@ -202,8 +202,8 @@ describe('Method Injections', function () {
   })
 
   describe('given the injection order, constructor, properties and setter methods', function () {
-    const kValue = token<any>(Symbol('value'))
-    const kMethodValue = token<any>(Symbol('method_value'))
+    const kValue = token<string>(Symbol('value'))
+    const kMethodValue = token<string>(Symbol('method_value'))
 
     @Injectable()
     @Profile('method-injections-dep')
@@ -237,7 +237,7 @@ describe('Method Injections', function () {
 
   describe('BindingSpec.injectMethod() — happy paths', function () {
     it('should inject a single dep into a method', async function () {
-      const kVal = token<any>(Symbol('val'))
+      const kVal = token<string>(Symbol('val'))
 
       class Svc {
         val!: string
@@ -256,8 +256,8 @@ describe('Method Injections', function () {
     })
 
     it('should inject multiple deps into a method in correct order', async function () {
-      const kA = token<any>(Symbol('a'))
-      const kB = token<any>(Symbol('b'))
+      const kA = token<string>(Symbol('a'))
+      const kB = token<number>(Symbol('b'))
 
       class Svc {
         a!: string
@@ -280,8 +280,8 @@ describe('Method Injections', function () {
     })
 
     it('should inject deps into multiple methods via chaining', async function () {
-      const kA = token<any>(Symbol('a'))
-      const kB = token<any>(Symbol('b'))
+      const kA = token<string>(Symbol('a'))
+      const kB = token<number>(Symbol('b'))
 
       class Svc {
         a!: string
@@ -330,7 +330,7 @@ describe('Method Injections', function () {
     })
 
     it('should leave optional dep as undefined when absent from container', async function () {
-      const kOpt = token<any>(Symbol('opt'))
+      const kOpt = token<Record<string, unknown>>(Symbol('opt'))
 
       class Svc {
         opt: string | undefined = 'initial'
@@ -349,16 +349,18 @@ describe('Method Injections', function () {
 
   describe('BindingSpec.injectMethod() — validation', function () {
     it('should throw ErrInvalidBinding for a symbol key', function () {
-      const k = token<any>(Symbol('x'))
+      const k = token<string>(Symbol('x'))
       const di = new CaffeineIoC({ decorators: false })
       expect(() => di.bind(k, t => t.toValue('v').injectMethod('setVal', k))).toThrow(ErrInvalidBinding)
     })
 
     it('should throw ErrInvalidBinding for a string key', function () {
       const di = new CaffeineIoC({ decorators: false })
-      expect(() => di.bind(token<any>('key'), t => t.toValue('v').injectMethod('setVal', token<any>('key')))).toThrow(
-        ErrInvalidBinding,
-      )
+      expect(() =>
+        di.bind(token<string>('key'), t =>
+          t.toValue('v').injectMethod('setVal', token<Record<string, unknown>>('key')),
+        ),
+      ).toThrow(ErrInvalidBinding)
     })
   })
 })

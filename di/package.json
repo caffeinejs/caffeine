@@ -43,7 +43,6 @@
     "lint:markdown": "markdownlint-cli2",
     "docs:llms-full": "node tools/generate-llms-full.mjs",
     "example:javascript": "npm run start -w @caffeinejs/example-javascript",
-    "example:framework": "npm run start -w @caffeinejs/example-framework",
     "example:fastify-functions": "npm run start -w @caffeinejs/example-fastify-functions",
     "example:cats-complete": "npm run start -w @caffeinejs/example-fastify-cats-complete"
   },

@@ -111,7 +111,7 @@ describe('kafka configuration', () => {
     expect(configOf(built.container, 'default').brokers).toEqual(['moved:9092'])
     expect(configOf(built.container, 'default').groupId).toBe('from-moved-path')
     // Nothing was written at the default namespace.
-    const handle = built.container.get(kAppConfig) as Record<string, unknown>
+    const handle = built.container.get<Record<string, unknown>>(kAppConfig)
     expect(handle.kafka).toBeUndefined()
 
     await built.close()

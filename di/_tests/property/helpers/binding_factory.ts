@@ -1,15 +1,16 @@
 import { newBinding } from '../../../binding.js'
 import type { Binding } from '../../../binding.js'
-import { token } from '../../../key.js'
+import { token, type NamedToken } from '../../../key.js'
+import type { Scope } from '../../../scope.js'
 
-const SINGLETON = token<any>(Symbol('singleton'))
+const SINGLETON = token<Scope>(Symbol('singleton'))
 
 export { SINGLETON }
 
 export function binding(
   id: number,
   opts: {
-    scopeID?: symbol
+    scopeID?: NamedToken<Scope>
     names?: (string | symbol)[]
     labels?: symbol[]
     primary?: boolean

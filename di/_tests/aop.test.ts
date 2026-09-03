@@ -370,7 +370,7 @@ describe('AOP', function () {
       }
     }
 
-    const kLogPrefix = token<any>(Symbol('log-prefix'))
+    const kLogPrefix = token<string>(Symbol('log-prefix'))
     const logged: string[] = []
 
     @Aspect([$aop.forClass(Target, 'work')])
@@ -437,7 +437,7 @@ describe('AOP', function () {
   })
 
   describe('constructor deps', function () {
-    const kGreetSvc = token<any>(Symbol('greet-svc'))
+    const kGreetSvc = token<GreetSvc>(Symbol('greet-svc'))
 
     class GreetSvc {
       msg() {
@@ -793,7 +793,7 @@ describe('AOP', function () {
     }
     void MatchClassAspect
 
-    const kSvcLabel = token<any>(Symbol('svc-label'))
+    const kSvcLabel = Symbol('svc-label')
 
     @Label(kSvcLabel)
     @Injectable()
@@ -822,7 +822,7 @@ describe('AOP', function () {
     }
     void LabelAspect
 
-    const kTagSvc = token<any>(Symbol('tag-svc'))
+    const kTagSvc = Symbol('tag-svc')
     const TaggedMethodAnn = createAnnotation<true>()
 
     @Tag(kTagSvc, true)

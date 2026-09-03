@@ -4,13 +4,14 @@ import { Binding } from './binding.js'
 import { BindingSpec } from './binding_spec.js'
 import { HookListener } from './hooks.js'
 import { Injection, ResolveInjection } from './injection.js'
-import { Identifier, InjectionToken, TokenValue } from './key.js'
+import { Identifier, InjectionToken, NamedToken, TokenValue, OpaqueToken } from './key.js'
 import { MetadataReader } from './metadata_reader.js'
 import type { Module, ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
 import { Provider } from './provider.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
+import type { Scope } from './scope.js'
 import type { Snapshot } from './snapshot.js'
 import { Ctor } from './types.js'
 
@@ -40,7 +41,7 @@ export interface Options {
    *
    * @defaultValue `Scopes.SINGLETON`
    */
-  defaultScopeID?: Identifier
+  defaultScopeID?: NamedToken<Scope>
 
   /**
    * The parent container to use for the container.
@@ -128,8 +129,10 @@ export interface Container {
   autoWire(): void
 
   get<T>(key: InjectionToken<T>): T
+  get<T>(key: OpaqueToken): T
 
   getOptional<T>(key: InjectionToken<T>): T | undefined
+  getOptional<T>(key: OpaqueToken): T | undefined
 
   getMany<T>(key: InjectionToken<T>): T[]
 
@@ -155,7 +158,7 @@ export interface Container {
    */
   has<T>(key: InjectionToken<T>): boolean
 
-  hasScopeInGraph(key: InjectionToken, scopeID: Identifier): boolean
+  hasScopeInGraph(key: InjectionToken, scopeID: NamedToken<Scope>): boolean
 
   build<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections?: (Injection | undefined | null)[]): T
 

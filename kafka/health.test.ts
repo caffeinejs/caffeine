@@ -9,7 +9,9 @@ function containerWith(statuses: Record<string, KafkaContainerStatus>): Caffeine
   const ioc = new CaffeineIoC()
 
   for (const [name, status] of Object.entries(statuses)) {
-    ioc.bind(token<any>(Symbol(name)), t => t.toValue({ name, status: () => status }).labels(Keys.KAFKA_CONTAINER))
+    ioc.bind(token<Record<string, unknown>>(Symbol(name)), t =>
+      t.toValue({ name, status: () => status }).labels(Keys.KAFKA_CONTAINER),
+    )
   }
 
   return ioc

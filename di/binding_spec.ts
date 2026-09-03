@@ -8,9 +8,9 @@ import { functionFactory } from './internal/core/factory/function_closure.js'
 import { valueFactory } from './internal/core/factory/value.js'
 import { check, notNil } from './internal/util/assert/index.js'
 import { solutions } from './internal/util/errutil/index.js'
-import { InjectionToken, Identifier, TypedKey, isNamedKey, keyStr } from './key.js'
+import { InjectionToken, Identifier, NamedToken, TypedKey, isNamedKey, keyStr } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
-import { hasScope } from './scope.js'
+import { hasScope, type Scope } from './scope.js'
 import { AbstractCtor, Ctor } from './types.js'
 
 /**
@@ -279,7 +279,7 @@ export class BindingSpec<TValue, K = unknown> {
    * container.bind(key, t => t.toClass(Service).lifetime(Scopes.SINGLETON))
    * ```
    */
-  lifetime(scopeID: Identifier): this {
+  lifetime(scopeID: NamedToken<Scope>): this {
     if (!hasScope(notNil(scopeID))) {
       throw new ErrInvalidBinding(
         `Scope "${String(scopeID)}" is not registered: use bindScope() to register it before use`,
@@ -435,13 +435,15 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Attaches one or more symbol labels to the binding for group-resolution via `getMany`.
+   * Attaches one or more symbol labels to the binding, read back with {@link Container.getBindingsByLabel}.
+   *
+   * A label is a plain symbol, not an injection token: it groups bindings, it does not resolve one.
    *
    * @example
    * ```ts
-   * const Plugin = token<MyPlugin>(Symbol('Plugin'))
-   * container.bind(key, t => t.toClass(MyPlugin).labels(Plugin))
-   * container.getMany(Plugin) // [MyPlugin instance]
+   * const kPlugin = Symbol('Plugin')
+   * container.bind(MyPlugin, t => t.toSelf().labels(kPlugin))
+   * container.getBindingsByLabel(kPlugin) // [{ key, binding }]
    * ```
    */
   labels(label: symbol, ...labels: symbol[]): this {

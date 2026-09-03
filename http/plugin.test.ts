@@ -8,7 +8,7 @@ import { createWebApplication, fastifyAdapterFactory } from './index.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
 // the same `bootstrap()` path as the built-in auth/authz services.
-const kProbe = token<any>(Symbol('probe-sentinel'))
+const kProbe = token<Record<string, unknown>>(Symbol('probe-sentinel'))
 
 function probe() {
   return defineFeature<{ capture(broker: string): void }>({

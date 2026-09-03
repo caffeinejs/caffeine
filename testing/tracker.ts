@@ -1,8 +1,8 @@
-import type { Identifier, InjectionToken, PostProcessor, ResolutionContext } from '@caffeinejs/di'
+import type { InjectionToken, NamedToken, PostProcessor, ResolutionContext, Scope } from '@caffeinejs/di'
 
 export interface InstantiationEvent {
   key: InjectionToken
-  scopeID: Identifier
+  scopeID: NamedToken<Scope>
   instance: unknown
   timestamp: number
 }

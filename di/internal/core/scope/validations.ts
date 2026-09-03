@@ -4,12 +4,12 @@ import { DeferredCtor } from '../../../deferred_ctor.js'
 import { ErrScopeMismatch } from '../../../errors.js'
 import { InjectionDescriptor, ObjectInjections } from '../../../injection.js'
 import { BuiltInResolvers } from '../../../injection_resolver.js'
-import { InjectionToken, keyStr, Identifier, TypedKey } from '../../../key.js'
+import { InjectionToken, keyStr, NamedToken, TypedKey } from '../../../key.js'
 import { Scope, Scopes, scopeLabel } from '../../../scope.js'
 
 interface ScopeValidationContext {
   mode: ScopeCheckMode
-  scopes: Map<Identifier, Scope>
+  scopes: Map<NamedToken<Scope>, Scope>
   getBindings<T>(key: TypedKey<T>): Binding<T>[]
 }
 
@@ -36,7 +36,7 @@ function checkCompatibleScopes(
   runCheck(entries, ctx, (ownerScopeID, depScopeID) => isDurable(ownerScopeID, ctx) && !isDurable(depScopeID, ctx))
 }
 
-function isDurable(scopeID: Identifier, ctx: ScopeValidationContext): boolean {
+function isDurable(scopeID: NamedToken<Scope>, ctx: ScopeValidationContext): boolean {
   if (scopeID === Scopes.TRANSIENT) {
     return false
   }
@@ -47,7 +47,7 @@ function isDurable(scopeID: Identifier, ctx: ScopeValidationContext): boolean {
 function runCheck(
   entries: IterableIterator<[InjectionToken, Binding]>,
   ctx: ScopeValidationContext,
-  isViolation: (ownerScopeID: Identifier, depScopeID: Identifier) => boolean,
+  isViolation: (ownerScopeID: NamedToken<Scope>, depScopeID: NamedToken<Scope>) => boolean,
 ): void {
   const violations: string[] = []
 
@@ -98,12 +98,12 @@ function runCheck(
 
 function checkInjection(
   ownerKey: InjectionToken,
-  ownerScopeID: Identifier,
+  ownerScopeID: NamedToken<Scope>,
   inj: InjectionDescriptor,
   location: string,
   violations: string[],
   ctx: ScopeValidationContext,
-  isViolation: (ownerScopeID: Identifier, depScopeID: Identifier) => boolean,
+  isViolation: (ownerScopeID: NamedToken<Scope>, depScopeID: NamedToken<Scope>) => boolean,
 ): void {
   if (inj.resolver === BuiltInResolvers.PROVIDER) {
     return
@@ -132,12 +132,12 @@ function checkInjection(
 
 function checkObjectInjection(
   ownerKey: InjectionToken,
-  ownerScopeID: Identifier,
+  ownerScopeID: NamedToken<Scope>,
   obj: ObjectInjections,
   location: string,
   violations: string[],
   ctx: ScopeValidationContext,
-  isViolation: (ownerScopeID: Identifier, depScopeID: Identifier) => boolean,
+  isViolation: (ownerScopeID: NamedToken<Scope>, depScopeID: NamedToken<Scope>) => boolean,
 ): void {
   const props: Array<string | symbol> = [...Object.keys(obj.children), ...Object.getOwnPropertySymbols(obj.children)]
 

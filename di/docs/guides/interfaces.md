@@ -11,12 +11,14 @@ Declare a symbol (or string) alongside the interface and use it everywhere you w
 use the interface type as a key.
 
 ```ts
+import { token } from '@caffeinejs/di'
+
 export interface Repository {
   save(entity: unknown): Promise<void>
   findById(id: string): Promise<unknown>
 }
 
-export const kRepository = Symbol('Repository')
+export const kRepository = token<Repository>(Symbol('Repository'))
 ```
 
 Register an implementation under that token:

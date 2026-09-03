@@ -1,5 +1,5 @@
 import { ErrInvalidDecorator } from '../errors.js'
-import { Injection } from '../injection.js'
+import { Injection, InjectionsFor } from '../injection.js'
 import { isNamedKey, NamedToken, InjectionToken } from '../key.js'
 import { AbstractCtor, Ctor } from '../types.js'
 import { Extends } from './extends.js'
@@ -25,13 +25,15 @@ import { defineInjectable } from './registrar/index.js'
  * class UserService {}
  * ```
  */
-export function Injectable(): (target: Ctor, context: ClassDecoratorContext) => void
-export function Injectable(key: NamedToken<any>): (target: Ctor, context: ClassDecoratorContext) => void
-export function Injectable(dependencies: Injection[]): (target: Ctor, context: ClassDecoratorContext) => void
-export function Injectable(
-  key: NamedToken<any>,
-  dependencies: Injection[],
-): (target: Ctor, context: ClassDecoratorContext) => void
+export function Injectable(): (target: Ctor<unknown, []>, context: ClassDecoratorContext) => void
+export function Injectable<T>(key: NamedToken<T>): (target: Ctor<T, []>, context: ClassDecoratorContext) => void
+export function Injectable<A extends unknown[]>(
+  dependencies: [...InjectionsFor<A>],
+): (target: Ctor<unknown, A>, context: ClassDecoratorContext) => void
+export function Injectable<T, A extends unknown[]>(
+  key: NamedToken<T>,
+  dependencies: [...InjectionsFor<A>],
+): (target: Ctor<T, A>, context: ClassDecoratorContext) => void
 export function Injectable<T>(keyOrDependencies?: InjectionToken | Injection[], dependencies?: Injection[]) {
   const key = keyOrDependencies !== undefined && !Array.isArray(keyOrDependencies) ? keyOrDependencies : undefined
   const deps = Array.isArray(keyOrDependencies) ? keyOrDependencies : (dependencies ?? [])

@@ -45,8 +45,6 @@ identical in both flavours; differences are noted inline where they exist.
 - [@Async](#async)
 - [@PreDestroy](#predestroy)
 - [@Inject](#inject)
-- [Utilities](#utilities)
-  - [composeDecorators](#composedecorators)
 
 ---
 
@@ -55,8 +53,10 @@ identical in both flavours; differences are noted inline where they exist.
 ### @Injectable
 
 ```ts
-@Injectable(key?: InjectionToken, deps?: Injection[])
-@Injectable(deps?: Injection[])
+@Injectable()
+@Injectable(key: NamedToken<T>)
+@Injectable(deps: InjectionsFor<A>)
+@Injectable(key: NamedToken<T>, deps: InjectionsFor<A>)
 ```
 
 Marks a class as a container-managed bean and registers it in the global
@@ -66,25 +66,25 @@ dependencies, and manage its lifecycle.
 **Parameters:**
 
 - `key` — the binding key. Defaults to the class constructor reference.
-- `deps` — explicit dependency list. Required when the class has constructor
-  parameters, unless using legacy decorators (see below).
+- `deps` — explicit dependency list, one entry per constructor parameter, in
+  order. Required when the class has constructor parameters. `$i.optional(X)`
+  is only valid for a parameter typed `X | undefined` (or `x?: X`).
 
 ```ts
 @Injectable()
-class UserService {
-  constructor(private readonly db: Database) {}
-}
+class Cache {}
 
-// With explicit named token
 const kUserService = token<UserService>(Symbol.for('user-service'))
 
 @Injectable(kUserService)
-class UserService { ... }
+class UserService {}
 
-// With explicit deps (stage 3 decorators, no reflect-metadata)
 @Injectable([Database, Logger])
 class UserService {
-  constructor(private readonly db: Database, private readonly logger: Logger) {}
+  constructor(
+    private readonly db: Database,
+    private readonly logger: Logger,
+  ) {}
 }
 ```
 
@@ -442,28 +442,4 @@ class Service {
   @Inject(Logger, Database)
   setup(logger: Logger, db: Database) { ... }
 }
-```
-
----
-
-## Utilities
-
-### composeDecorators
-
-```ts
-composeDecorators(...decorators: ClassDecorator[]): ClassDecorator
-```
-
-Combines multiple decorators into a single reusable decorator. Applied in
-right-to-left order.
-
-```ts
-const Controller = composeDecorators(
-  Injectable(),
-  Lifetime(Scopes.SINGLETON),
-  Label(Symbol.for('controller')),
-)
-
-@Controller
-class UserController { ... }
 ```

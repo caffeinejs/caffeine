@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { composeDecorators } from '../decorators/compose_decorators.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Label } from '../decorators/label.js'
@@ -35,11 +34,13 @@ describe('Custom decorator primitives', function () {
   })
 
   describe('configureInjectable — factory with metadata', function () {
-    const kDep = token<any>(Symbol('dep-field'))
+    const kDep = token<FieldDep>(Symbol('dep-field'))
 
     function MyFieldInject(key: symbol) {
       return (_target: Function | object | undefined, context: ClassMemberDecoratorContext) => {
-        defineMemberInjection(context.metadata, context.name, context.kind, { key: token<any>(key) })
+        defineMemberInjection(context.metadata, context.name, context.kind, {
+          key: token<Record<string, unknown>>(key),
+        })
       }
     }
 
@@ -73,7 +74,7 @@ describe('Custom decorator primitives', function () {
   describe('configureMethodOrPropertyInjectable — method partial', function () {
     const LazyBean = (_target: object, context: ClassMethodDecoratorContext) =>
       extendMemberInjectableAttributes(context.metadata, context.name, config => config.lazy(true))
-    const kService = token<any>(Symbol('lazy-bean'))
+    const kService = token<Record<string, unknown>>(Symbol('lazy-bean'))
 
     @Configuration()
     class ConfLazyBean {
@@ -92,13 +93,12 @@ describe('Custom decorator primitives', function () {
     })
   })
 
-  describe('composeDecorators', function () {
-    const Transient = composeDecorators(Injectable(), Lifetime(Scopes.TRANSIENT))
-
-    @Transient
+  describe('stacked class decorators', function () {
+    @Injectable()
+    @Lifetime(Scopes.TRANSIENT)
     class TransientSvc {}
 
-    it('should compose Injectable + Scoped into a single decorator', async function () {
+    it('should apply Injectable and Lifetime on the same class', async function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(TransientSvc, t => t.toSelf())
       await di.init()
@@ -108,13 +108,13 @@ describe('Custom decorator primitives', function () {
       expect(a).not.toBe(b)
     })
 
-    const sym = token<any>(Symbol('composed-label'))
-    const Controller = composeDecorators(Injectable(), Label(sym))
+    const sym = Symbol('composed-label')
 
-    @Controller
+    @Injectable()
+    @Label(sym)
     class ComposedCtrl {}
 
-    it('should compose Injectable + Label and accumulate all contributions', function () {
+    it('should apply Injectable and Label and accumulate all contributions', function () {
       const di = new CaffeineIoC()
       expect(di.has(ComposedCtrl)).toBe(true)
       const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
@@ -124,11 +124,13 @@ describe('Custom decorator primitives', function () {
   })
 
   describe('configureInjectionMetadata', function () {
-    const kCustomDep = token<any>(Symbol('custom-dep'))
+    const kCustomDep = token<TargetService>(Symbol('custom-dep'))
 
     function MyInject(key: symbol) {
       return (_target: Function | object | undefined, context: ClassMemberDecoratorContext) => {
-        defineMemberInjection(context.metadata, context.name, context.kind, { key: token<any>(key) })
+        defineMemberInjection(context.metadata, context.name, context.kind, {
+          key: token<Record<string, unknown>>(key),
+        })
       }
     }
 

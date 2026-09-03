@@ -11,7 +11,7 @@ import { token } from '../key.js'
 
 describe('Label', function () {
   it('should tag a class and return its binding via getBy', function () {
-    const sym = token<any>(Symbol('svc'))
+    const sym = Symbol('svc')
 
     @Label(sym)
     @Injectable()
@@ -25,8 +25,8 @@ describe('Label', function () {
   })
 
   it('should support multiple labels on a single class', function () {
-    const sym1 = token<any>(Symbol('a'))
-    const sym2 = token<any>(Symbol('b'))
+    const sym1 = Symbol('a')
+    const sym2 = Symbol('b')
 
     @Label(sym1, sym2)
     @Injectable()
@@ -39,8 +39,8 @@ describe('Label', function () {
   })
 
   it('should accumulate labels when @Label is stacked', function () {
-    const sym1 = token<any>(Symbol('x'))
-    const sym2 = token<any>(Symbol('y'))
+    const sym1 = Symbol('x')
+    const sym2 = Symbol('y')
 
     @Label(sym2)
     @Label(sym1)
@@ -55,7 +55,7 @@ describe('Label', function () {
   })
 
   it('should return a BindingDescriptor with the correct key and labels', function () {
-    const sym = token<any>(Symbol('resolve'))
+    const sym = Symbol('resolve')
 
     @Label(sym)
     @Injectable()
@@ -70,7 +70,7 @@ describe('Label', function () {
   })
 
   it('should return BindingDescriptor[] from getBindingsBy, not resolved instances', function () {
-    const sym = token<any>(Symbol('bindings-only'))
+    const sym = Symbol('bindings-only')
 
     @Label(sym)
     @Injectable()
@@ -84,7 +84,7 @@ describe('Label', function () {
   })
 
   it('should not return the binding of a class that fails its conditional', function () {
-    const sym = token<any>(Symbol('cond'))
+    const sym = Symbol('cond')
 
     @Label(sym)
     @ConditionalOn(() => false)
@@ -98,7 +98,7 @@ describe('Label', function () {
   })
 
   it('should respect profile when querying labels via child container', async function () {
-    const sym = token<any>(Symbol('ns-label'))
+    const sym = Symbol('ns-label')
 
     @Label(sym)
     @Profile('myns')
@@ -116,8 +116,8 @@ describe('Label', function () {
 
   describe('on @Provides methods inside @Configuration', function () {
     it('should tag a bean method and return its binding via getBindingsByLabel', function () {
-      const sym = token<any>(Symbol('bean-label'))
-      const kSvc = token<any>(Symbol('svc-key'))
+      const sym = Symbol('bean-label')
+      const kSvc = token<string>(Symbol('svc-key'))
 
       @Configuration()
       class Conf {
@@ -136,8 +136,8 @@ describe('Label', function () {
     })
 
     it('should return a BindingDescriptor with the correct key and labels when label is on @Provides method', function () {
-      const sym = token<any>(Symbol('bean-label-resolve'))
-      const kItem = token<any>(Symbol('item-key'))
+      const sym = Symbol('bean-label-resolve')
+      const kItem = token<Record<string, unknown>>(Symbol('item-key'))
 
       @Configuration()
       class ItemConf {

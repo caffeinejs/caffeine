@@ -92,12 +92,22 @@ export type ObjectInjection = InjectionDescriptor | ObjectInjections
 export type Injection<T = unknown> = InjectionToken<T> | InjectionDescriptor<T>
 
 /**
- * One {@link Injection} per element of the parameter tuple `A`, in order.
- *
- * Mapping over a tuple preserves its length, so a dependency list is checked both positionally and by arity:
- * a list shorter or longer than the constructor it is bound to does not typecheck.
+ * Helper return type: an {@link InjectionDescriptor} branded with its resolved value `T`.
  */
-export type InjectionsFor<A extends readonly unknown[]> = { [K in keyof A]: Injection<A[K]> }
+type InjectionResult<T> = InjectionDescriptor<T> & {
+  readonly [kInjectionResult]: T
+  readonly [kInjectionDescriptor]: true
+}
+
+/**
+ * One injection per constructor (or factory) parameter, in order.
+ *
+ * Tokens and `$i` helpers only — a hand-written `{ key }` descriptor is not in this list at the type level.
+ * `$i.optional(X)` matches `X | undefined`, not a required `X`.
+ */
+export type InjectionsFor<A extends readonly unknown[]> = {
+  [K in keyof A]: InjectionToken<A[K]> | InjectionResult<A[K]>
+}
 
 /**
  * The value produced when `I` is resolved: the instance of a token, or the
@@ -128,14 +138,6 @@ export type ObjectInjectionSpec = {
  * helper — a hand-written `{ key: … }` literal is a nested bag, here and at run time alike.
  */
 export type InjectedOf<S> = { [K in keyof S]: InjectedField<S[K]> }
-
-/**
- * Helper return type: an {@link InjectionDescriptor} branded with its resolved value `T`.
- */
-type InjectionResult<T> = InjectionDescriptor<T> & {
-  readonly [kInjectionResult]: T
-  readonly [kInjectionDescriptor]: true
-}
 
 function encode<T>(descriptor: InjectionDescriptor<any>): InjectionResult<T> {
   // Non-enumerable: the mark is not data, so it stays out of deep-equality, `Object.entries` and any dump of a

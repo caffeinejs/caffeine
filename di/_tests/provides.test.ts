@@ -80,7 +80,7 @@ describe('Configuration', function () {
 
   describe('named class factory', function () {
     const spy = vi.fn()
-    const kTest = token<any>(Symbol('test'))
+    const kTest = token<Service>(Symbol('test'))
 
     class Service {
       readonly id: string = randomUUID()
@@ -95,7 +95,7 @@ describe('Configuration', function () {
     @Configuration()
     @Profile('provides-named')
     class Conf {
-      @Provides(Service, [token<any>('msg')])
+      @Provides(Service, [token<string>('msg')])
       @Named(kTest)
       service(msg: string) {
         spy()
@@ -107,7 +107,7 @@ describe('Configuration', function () {
       const di = new CaffeineIoC({ profiles: ['provides-named'] })
       const msg = 'hello world'
 
-      di.bind(token<any>('msg'), t => t.toValue(msg))
+      di.bind(token<string>('msg'), t => t.toValue(msg))
       await di.init()
 
       const service = di.get<Service>(kTest)
@@ -123,13 +123,13 @@ describe('Configuration', function () {
   describe('value factory', function () {
     @Configuration()
     class ValueFactory {
-      @Provides(token<any>('txt'))
+      @Provides(token<string>('txt'))
       txt() {
         return 'hello world'
       }
     }
 
-    @Injectable([token<any>('txt')])
+    @Injectable([token<string>('txt')])
     class UsingTxt {
       constructor(readonly txt: string) {}
     }
@@ -137,7 +137,7 @@ describe('Configuration', function () {
     it('should inject value provided by bean method', async function () {
       const di = new CaffeineIoC()
       await di.init()
-      const txt = di.get(token<any>('txt'))
+      const txt = di.get(token<string>('txt'))
       const usingTxt = di.get(UsingTxt)
       const expected = 'hello world'
 
@@ -147,7 +147,7 @@ describe('Configuration', function () {
   })
 
   describe('configuration class with primary beans', function () {
-    const kInterface = token<any>(Symbol('interface'))
+    const kInterface = token<Interface>(Symbol('interface'))
 
     abstract class Abs {
       abstract test(): string

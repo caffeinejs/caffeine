@@ -8,7 +8,7 @@ import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
 
-const APP_CONFIG = token<any>(Symbol('app.config'))
+const APP_CONFIG = token<Record<string, unknown>>(Symbol('app.config'))
 
 interface Slice {
   paths: { live: string }

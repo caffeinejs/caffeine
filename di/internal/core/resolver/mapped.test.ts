@@ -18,7 +18,7 @@ function ctx(
 describe('mappedFactory', function () {
   describe('validation', function () {
     it('should throw ErrMissingInjectionKey when ctx.key is absent', function () {
-      const kKey = token<any>(Symbol('map-no-ctx-key'))
+      const kKey = token<Record<string, unknown>>(Symbol('map-no-ctx-key'))
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => mappedFactory(ctx(di, $i.mapped(kKey), null))).toThrow(ErrMissingInjectionKey)
@@ -31,7 +31,7 @@ describe('mappedFactory', function () {
         mappedFactory({
           container: di,
           descriptor: { resolver: BuiltInResolvers.MAP },
-          key: token<any>('Consumer'),
+          key: token<Record<string, unknown>>('Consumer'),
           kind: 'constructor',
           member: '',
           index: 0,
@@ -40,14 +40,14 @@ describe('mappedFactory', function () {
     })
 
     it('should throw ErrNoResolutionForKey when no bindings exist and injection is required', function () {
-      const kAbsent = token<any>(Symbol('map-absent-required'))
+      const kAbsent = token<Record<string, unknown>>(Symbol('map-absent-required'))
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => mappedFactory(ctx(di, $i.mapped(kAbsent)))).toThrow(ErrNoResolutionForKey)
     })
 
     it('should return undefined when no bindings exist and injection is optional', function () {
-      const kAbsent = token<any>(Symbol('map-absent-optional'))
+      const kAbsent = token<Record<string, unknown>>(Symbol('map-absent-optional'))
       const di = new CaffeineIoC({ decorators: false })
 
       const resolver = mappedFactory(ctx(di, $i.optional($i.mapped(kAbsent))))
@@ -71,8 +71,8 @@ describe('mappedFactory', function () {
 
       expect(result).toBeInstanceOf(Map)
       expect(result.size).toBe(2)
-      expect(result.get(token<any>('button'))).toBeInstanceOf(ButtonWidget)
-      expect(result.get(token<any>('input'))).toBeInstanceOf(InputWidget)
+      expect(result.get('button')).toBeInstanceOf(ButtonWidget)
+      expect(result.get('input')).toBeInstanceOf(InputWidget)
     })
 
     it('should exclude bindings that have no names', async function () {
@@ -106,7 +106,7 @@ describe('mappedFactory', function () {
       const result = resolver() as Map<string, Plugin>
 
       expect(result.size).toBe(1)
-      expect(result.get(token<any>('alpha'))).toBeInstanceOf(PluginA)
+      expect(result.get('alpha')).toBeInstanceOf(PluginA)
     })
   })
 })

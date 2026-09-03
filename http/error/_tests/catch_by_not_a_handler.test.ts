@@ -6,6 +6,7 @@ import {
   CatchWith,
   Controller,
   ErrConfiguration,
+  ErrorHandler,
   Get,
   createWebApplication,
   fastifyAdapterFactory,
@@ -19,7 +20,7 @@ import {
 class NotAHandler {}
 void [NotAHandler]
 
-@CatchWith(token<any>('notAHandler'))
+@CatchWith(token<ErrorHandler<Error>>('notAHandler'))
 @Controller('/undeclared')
 class UndeclaredController {
   @Get('/')

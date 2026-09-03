@@ -9,7 +9,7 @@ import { token } from '../key.js'
 
 describe('class field injection', function () {
   // Shared deps registered via @Injectable at describe scope — visible to all tests in this file
-  const kNone = token<any>(Symbol('none'))
+  const kNone = token<string>(Symbol('none'))
 
   @Injectable()
   class DepA {
@@ -213,7 +213,7 @@ describe('class field injection', function () {
 
   describe('BindingSpec.injectProperty() — validation', function () {
     it('should throw ErrInvalidBinding when key is a symbol', function () {
-      const kSym = token<any>(Symbol('sym'))
+      const kSym = token<string>(Symbol('sym'))
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
@@ -225,7 +225,7 @@ describe('class field injection', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() => {
-        di.bind(token<any>('stringKey'), t => t.toValue('x').injectProperty('prop', DepA))
+        di.bind(token<string>('stringKey'), t => t.toValue('x').injectProperty('prop', DepA))
       }).toThrow(ErrInvalidBinding)
     })
   })

@@ -7,9 +7,9 @@ import { $i, type InjectedOf } from '../injection.js'
 import { token } from '../key.js'
 
 describe('Destructuring', function () {
-  const kDep = token<any>(Symbol('test'))
-  const kBase = token<any>(Symbol('base-impls'))
-  const kSymbolField = token<any>(Symbol('symbol-field'))
+  const kDep = token<Dep3>(Symbol('test'))
+  const kBase = token<Record<string, unknown>>(Symbol('base-impls'))
+  const kSymbolField = token<Record<string, unknown>>(Symbol('symbol-field'))
 
   abstract class Base {}
 
@@ -27,7 +27,9 @@ describe('Destructuring', function () {
   class Dep2 {}
 
   @Injectable(kDep)
-  class Dep3 {}
+  class Dep3 {
+    readonly kind = 'dep3'
+  }
 
   @Injectable([
     $i.object({

@@ -277,7 +277,7 @@ describe('Hooks', function () {
 
     // 1
     class IncompleteWithProp {
-      @Inject(token<any>(''))
+      @Inject(token<string>(''))
       message!: string
     }
 
@@ -295,14 +295,14 @@ describe('Hooks', function () {
     @Configuration()
     class Conf {
       // 5
-      @Provides(token<any>(Symbol('test1')))
+      @Provides(token<string>(Symbol('test1')))
       @ConditionalOn(() => false)
       test1() {
         return 'test1'
       }
 
       // 6
-      @Provides(token<any>(Symbol('test2')))
+      @Provides(token<string>(Symbol('test2')))
       test2() {
         return 'test2'
       }

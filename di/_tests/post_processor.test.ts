@@ -16,7 +16,7 @@ import { bindScope, Scope, unbindScope } from '../scope.js'
 describe('Post Processors', function () {
   const ppSpy = vi.fn()
   const sSpy = vi.fn()
-  const kScope = token<any>(Symbol('custom_transient'))
+  const kScope = token<Scope>(Symbol('custom_transient'))
 
   class CustomTransient implements Scope {
     provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {

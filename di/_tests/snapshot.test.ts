@@ -11,9 +11,9 @@ function newContainerFromSnapshot(snap: Snapshot, options?: Partial<Options>): C
   return di
 }
 
-const kDb = token<any>(Symbol('db'))
-const kAPI = token<any>(Symbol('api'))
-const kLabel = token<any>(Symbol('label'))
+const kDb = token<string>(Symbol('db'))
+const kAPI = token<string>(Symbol('api'))
+const kLabel = token<Record<string, unknown>>(Symbol('label'))
 
 describe('ContainerSnapshot', function () {
   describe('snapshot()', function () {
@@ -74,7 +74,7 @@ describe('ContainerSnapshot', function () {
     })
 
     it('class binding with symbol key resolves via factory in new container', async function () {
-      const kSvc = token<any>(Symbol('svc'))
+      const kSvc = token<Svc>(Symbol('svc'))
 
       class Svc {
         readonly tag = 'real'
@@ -190,7 +190,7 @@ describe('ContainerSnapshot', function () {
       const testDi = newContainerFromSnapshot(di.snapshot(), { profiles: ['test'] })
       await testDi.init()
 
-      expect(testDi.profiles.has(token<any>('test'))).toBe(true)
+      expect(testDi.profiles.has('test')).toBe(true)
       expect(testDi.get(kDb)).toBe('prod-db')
     })
   })

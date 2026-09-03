@@ -9,7 +9,7 @@ import { token } from '../key.js'
 
 describe('Tag', function () {
   it('should attach and retrieve a tag from a class binding', function () {
-    const kRoute = token<any>(Symbol('route'))
+    const kRoute = Symbol('route')
 
     @Tag(kRoute, '/users')
     @Injectable()
@@ -22,7 +22,7 @@ describe('Tag', function () {
   })
 
   it('should return undefined for a tag key never set on a binding', function () {
-    const kRoute = token<any>(Symbol('route'))
+    const kRoute = token<Record<string, unknown>>(Symbol('route'))
 
     @Injectable()
     class Plain {}
@@ -34,8 +34,8 @@ describe('Tag', function () {
   })
 
   it('should keep two distinct tag keys independent of each other', function () {
-    const kA = token<any>(Symbol('a'))
-    const kB = token<any>(Symbol('b'))
+    const kA = Symbol('a')
+    const kB = Symbol('b')
 
     @Tag(kB, 42)
     @Tag(kA, 'hello')
@@ -50,7 +50,7 @@ describe('Tag', function () {
   })
 
   it('last write wins when Tag is stacked twice with the same key', function () {
-    const kSlot = token<any>(Symbol('slot'))
+    const kSlot = Symbol('slot')
 
     @Tag(kSlot, 'second')
     @Tag(kSlot, 'first')
@@ -65,7 +65,7 @@ describe('Tag', function () {
 
   describe('array accumulation', function () {
     it('should concatenate arrays when Tag is stacked with the same key on a class', function () {
-      const k = token<any>(Symbol('arr'))
+      const k = Symbol('arr')
 
       @Tag(k, [1, 2])
       @Tag(k, [3])
@@ -79,8 +79,8 @@ describe('Tag', function () {
     })
 
     it('should concatenate arrays when Tag is stacked on a @Provides method', function () {
-      const k = token<any>(Symbol('arr'))
-      const kBean = token<any>(Symbol('arrBean'))
+      const k = Symbol('arr')
+      const kBean = token<Record<string, unknown>>(Symbol('arrBean'))
 
       @Configuration()
       class Conf {
@@ -100,7 +100,7 @@ describe('Tag', function () {
     })
 
     it('primitive last-write-wins is unchanged when type does not match existing array', function () {
-      const k = token<any>(Symbol('mismatch'))
+      const k = Symbol('mismatch')
 
       @Tag(k, 'scalar')
       @Tag(k, [1, 2])
@@ -116,7 +116,7 @@ describe('Tag', function () {
 
   describe('set accumulation', function () {
     it('should union Sets when Tag is stacked with the same key', function () {
-      const k = token<any>(Symbol('set'))
+      const k = Symbol('set')
 
       @Tag(k, new Set([1, 2]))
       @Tag(k, new Set([2, 3]))
@@ -132,7 +132,7 @@ describe('Tag', function () {
 
   describe('map accumulation', function () {
     it('should merge Map entries when Tag is stacked with the same key', function () {
-      const k = token<any>(Symbol('map'))
+      const k = Symbol('map')
 
       @Tag(k, new Map([['a', 1]]))
       @Tag(k, new Map([['b', 2]]))
@@ -142,12 +142,12 @@ describe('Tag', function () {
       const di = new CaffeineIoC()
       const result = di.getBindings(MergedMap)[0].tags.get(k) as Map<string, number>
 
-      expect(result.get(token<any>('a'))).toBe(1)
-      expect(result.get(token<any>('b'))).toBe(2)
+      expect(result.get('a')).toBe(1)
+      expect(result.get('b')).toBe(2)
     })
 
     it('outer decorator wins for conflicting Map keys', function () {
-      const k = token<any>(Symbol('mapConflict'))
+      const k = Symbol('mapConflict')
 
       @Tag(k, new Map([['x', 'outer']]))
       @Tag(k, new Map([['x', 'inner']]))
@@ -157,13 +157,13 @@ describe('Tag', function () {
       const di = new CaffeineIoC()
       const result = di.getBindings(MapConflict)[0].tags.get(k) as Map<string, string>
 
-      expect(result.get(token<any>('x'))).toBe('outer')
+      expect(result.get('x')).toBe('outer')
     })
   })
 
   describe('plain object accumulation', function () {
     it('should shallow-merge plain objects when Tag is stacked with the same key', function () {
-      const k = token<any>(Symbol('obj'))
+      const k = Symbol('obj')
 
       @Tag(k, { a: 1 })
       @Tag(k, { b: 2 })
@@ -178,7 +178,7 @@ describe('Tag', function () {
     })
 
     it('outer decorator wins for conflicting object keys', function () {
-      const k = token<any>(Symbol('objConflict'))
+      const k = Symbol('objConflict')
 
       @Tag(k, { x: 'outer' })
       @Tag(k, { x: 'inner' })
@@ -194,8 +194,8 @@ describe('Tag', function () {
 
   describe('on @Provides methods inside @Configuration', function () {
     it('should attach and retrieve a tag from a bean binding', function () {
-      const kPath = token<any>(Symbol('path'))
-      const kEndpoint = token<any>(Symbol('endpoint'))
+      const kPath = Symbol('path')
+      const kEndpoint = token<Record<string, unknown>>(Symbol('endpoint'))
 
       @Configuration()
       class APIConf {
@@ -215,8 +215,8 @@ describe('Tag', function () {
     })
 
     it('last write wins when Tag is stacked on a @Provides method', function () {
-      const kSlot = token<any>(Symbol('slot'))
-      const kBean = token<any>(Symbol('bean'))
+      const kSlot = Symbol('slot')
+      const kBean = token<Record<string, unknown>>(Symbol('bean'))
 
       @Configuration()
       class Conf {

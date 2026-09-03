@@ -3,14 +3,15 @@ import { Conditional } from '../../conditional.js'
 import { ErrInvalidDecorator, ErrRepeatedInjectableConfiguration } from '../../errors.js'
 import { Factory, AsyncFactory } from '../../factory.js'
 import { Injection, InjectionDescriptor } from '../../injection.js'
-import { Identifier, InjectionToken, keyStr } from '../../key.js'
+import { Identifier, InjectionToken, NamedToken, keyStr } from '../../key.js'
 import { PostResolutionInterceptor } from '../../post_resolution_interceptor.js'
+import type { Scope } from '../../scope.js'
 import { Ctor } from '../../types.js'
 import { normalizeInjections, normalizeInjection } from '../util/index.js'
 
 export class DecoratedBindingConfig {
   #profiles?: Set<Identifier>
-  #scopeID?: Identifier
+  #scopeID?: NamedToken<Scope>
   #names?: Identifier[]
   #factory?: Factory<unknown> | AsyncFactory<unknown>
   #conditionals?: Conditional[]
@@ -45,7 +46,7 @@ export class DecoratedBindingConfig {
     return this.#profiles
   }
 
-  get scopeID(): Identifier | undefined {
+  get scopeID(): NamedToken<Scope> | undefined {
     return this.#scopeID
   }
 
@@ -101,7 +102,7 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  scope(scopeID: Identifier): this {
+  scope(scopeID: NamedToken<Scope>): this {
     this.#scopeID = scopeID
     return this
   }

@@ -24,7 +24,9 @@ class Beta extends Plugin {
   }
 }
 
-class Singleton {}
+class Singleton {
+  readonly kind = 'singleton'
+}
 
 class Transient {}
 

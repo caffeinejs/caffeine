@@ -1,6 +1,6 @@
 import { $aop, kAspectLabel, kAspectPointcuts, type Pointcut, type PointcutBuilders } from '../aop.js'
 import { ErrInvalidDecorator } from '../errors.js'
-import type { Injection } from '../injection.js'
+import type { Injection, InjectionsFor } from '../injection.js'
 import { Scopes } from '../scope.js'
 import { Ctor } from '../types.js'
 import { defineInjectable } from './registrar/index.js'
@@ -37,14 +37,14 @@ import { defineInjectable } from './registrar/index.js'
  * }
  * ```
  */
-export function Aspect(
+export function Aspect<A extends unknown[] = []>(
   pointcuts: Pointcut[],
-  deps?: Injection[],
-): (aspectClass: Ctor, context: ClassDecoratorContext) => void
-export function Aspect(
+  deps?: [...InjectionsFor<A>],
+): (aspectClass: Ctor<unknown, A>, context: ClassDecoratorContext) => void
+export function Aspect<A extends unknown[] = []>(
   build: (p: PointcutBuilders) => Pointcut[],
-  deps?: Injection[],
-): (aspectClass: Ctor, context: ClassDecoratorContext) => void
+  deps?: [...InjectionsFor<A>],
+): (aspectClass: Ctor<unknown, A>, context: ClassDecoratorContext) => void
 export function Aspect(arg: Pointcut[] | ((p: PointcutBuilders) => Pointcut[]), deps: Injection[] = []) {
   const pointcuts = typeof arg === 'function' ? arg($aop) : arg
 

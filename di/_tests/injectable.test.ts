@@ -15,10 +15,12 @@ describe('@Injectable overloads', function () {
   })
 
   it('should register with a symbol qualifier key only', async function () {
-    const kSvc = token<any>(Symbol('svc'))
+    const kSvc = token<KeyOnly>(Symbol('svc'))
 
     @Injectable(kSvc)
-    class KeyOnly {}
+    class KeyOnly {
+      readonly kind = 'keyOnly'
+    }
 
     const di = new CaffeineIoC()
     await di.init()
@@ -26,12 +28,16 @@ describe('@Injectable overloads', function () {
   })
 
   it('should register with a string qualifier key only', async function () {
-    @Injectable(token<any>('myService'))
-    class StringKey {}
+    const kStringKey = token<StringKey>('myService')
+
+    @Injectable(kStringKey)
+    class StringKey {
+      readonly kind = 'stringKey'
+    }
 
     const di = new CaffeineIoC()
     await di.init()
-    expect(di.get(token<any>('myService'))).toBeInstanceOf(StringKey)
+    expect(di.get(kStringKey)).toBeInstanceOf(StringKey)
   })
 
   it('should register with dependencies array only', async function () {
@@ -53,7 +59,7 @@ describe('@Injectable overloads', function () {
   })
 
   it('should register with a symbol key and dependencies', async function () {
-    const kNamed = token<any>(Symbol('named-with-deps'))
+    const kNamed = token<KeyAndDeps>(Symbol('named-with-deps'))
 
     @Injectable()
     class Dependency {
@@ -67,7 +73,7 @@ describe('@Injectable overloads', function () {
 
     const di = new CaffeineIoC()
     await di.init()
-    const instance = di.get(kNamed) as KeyAndDeps
+    const instance = di.get(kNamed)
     expect(instance).toBeInstanceOf(KeyAndDeps)
     expect(instance.dep.name).toBe('dep')
   })

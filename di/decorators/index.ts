@@ -1,7 +1,6 @@
 export * from './aspect.js'
 export * from './async.js'
 export * from './bypass_post_processors.js'
-export * from './compose_decorators.js'
 export * from './conditional_on.js'
 export * from './configuration.js'
 export * from './extends.js'

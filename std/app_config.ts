@@ -1,4 +1,4 @@
-import { token } from '@caffeinejs/di'
+import { opaqueToken } from '@caffeinejs/di'
 
 import {
   ArgsConfigProvider,
@@ -15,7 +15,7 @@ import {
  * Features resolve it to read their configuration slice (e.g. `.server(s => s.config(c => c.server))`).
  * The bound type is application-specific; pass it as `get<ConfigHandle<T>>(kAppConfig)`.
  */
-export const kAppConfig = token<any>(Symbol.for('@caffeinejs/std:app.config'))
+export const kAppConfig = opaqueToken(Symbol.for('@caffeinejs/std:app.config'))
 
 /**
  * Fluent definition of the application configuration sources, passed to

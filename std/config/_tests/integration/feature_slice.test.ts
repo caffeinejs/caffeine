@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -11,7 +11,7 @@ import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { MutableConfigProvider } from '../../providers/mutable_provider.js'
 import { ConfigPriority } from '../../sources.js'
 
-const APP_CONFIG = token<any>(Symbol('app.config'))
+const APP_CONFIG = opaqueToken(Symbol('app.config'))
 
 interface ServerSlice {
   port: number

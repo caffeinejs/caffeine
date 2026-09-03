@@ -7,7 +7,7 @@ import { token } from '../key.js'
 
 describe('Functions', function () {
   describe('given a function that returns another function', function () {
-    const kVal = token<any>(Symbol('test'))
+    const kVal = token<Nm>(Symbol('test'))
 
     class Opt {}
 
@@ -23,7 +23,7 @@ describe('Functions', function () {
 
     it('should resolve functions injecting required dependencies', async function () {
       const di = new CaffeineIoC()
-      const kFn = token<any>(Symbol('fn'))
+      const kFn = token<(message: string) => string>(Symbol('fn'))
       const fn = (dep: Dep, nm: Nm, opt?: Opt) => (message: string) =>
         `received: ${message} - ${dep.value} - ${nm.id} - ${opt === undefined}`
 
@@ -46,7 +46,7 @@ describe('Functions', function () {
         }
       }
 
-      const kFn = token<any>(Symbol('fn'))
+      const kFn = token<{ greet: () => string }>(Symbol('fn'))
       const fn = (msg: Msg) => ({
         greet: () => msg.msg() + ' world',
       })
@@ -64,7 +64,7 @@ describe('Functions', function () {
 
   describe('given a function with 0 dependencies', function () {
     it('should resolve without arguments', async function () {
-      const kFn = token<any>(Symbol('fn-no-deps'))
+      const kFn = token<string>(Symbol('fn-no-deps'))
       const fn = () => 'no deps'
 
       const di = new CaffeineIoC()
@@ -79,13 +79,13 @@ describe('Functions', function () {
 
   describe('given a function with 2 dependencies', function () {
     it('should resolve with 2 arguments', async function () {
-      const kFn = token<any>(Symbol('fn-2-deps'))
+      const kFn = token<string>(Symbol('fn-2-deps'))
       const fn = (a: string, b: string) => `${a}-${b}`
 
       const di = new CaffeineIoC()
-      di.bind(token<any>('fn2-dep-a'), t => t.toValue('alpha'))
-      di.bind(token<any>('fn2-dep-b'), t => t.toValue('beta'))
-      di.bind(kFn, t => t.toFunction(fn, [token<any>('fn2-dep-a'), token<any>('fn2-dep-b')]))
+      di.bind(token<string>('fn2-dep-a'), t => t.toValue('alpha'))
+      di.bind(token<string>('fn2-dep-b'), t => t.toValue('beta'))
+      di.bind(kFn, t => t.toFunction(fn, [token<string>('fn2-dep-a'), token<string>('fn2-dep-b')]))
       await di.init()
 
       const result = di.get<string>(kFn)
@@ -96,20 +96,20 @@ describe('Functions', function () {
 
   describe('given a function with 4 dependencies', function () {
     it('should resolve with 4 arguments', async function () {
-      const kFn = token<any>(Symbol('fn-4-deps'))
+      const kFn = token<string>(Symbol('fn-4-deps'))
       const fn = (a: string, b: string, c: string, d: string) => `${a}-${b}-${c}-${d}`
 
       const di = new CaffeineIoC()
-      di.bind(token<any>('fn4-dep-a'), t => t.toValue('a'))
-      di.bind(token<any>('fn4-dep-b'), t => t.toValue('b'))
-      di.bind(token<any>('fn4-dep-c'), t => t.toValue('c'))
-      di.bind(token<any>('fn4-dep-d'), t => t.toValue('d'))
+      di.bind(token<string>('fn4-dep-a'), t => t.toValue('a'))
+      di.bind(token<string>('fn4-dep-b'), t => t.toValue('b'))
+      di.bind(token<string>('fn4-dep-c'), t => t.toValue('c'))
+      di.bind(token<string>('fn4-dep-d'), t => t.toValue('d'))
       di.bind(kFn, t =>
         t.toFunction(fn, [
-          token<any>('fn4-dep-a'),
-          token<any>('fn4-dep-b'),
-          token<any>('fn4-dep-c'),
-          token<any>('fn4-dep-d'),
+          token<string>('fn4-dep-a'),
+          token<string>('fn4-dep-b'),
+          token<string>('fn4-dep-c'),
+          token<string>('fn4-dep-d'),
         ]),
       )
       await di.init()
@@ -122,22 +122,22 @@ describe('Functions', function () {
 
   describe('given a function with 5 or more dependencies', function () {
     it('should resolve via fallback array path', async function () {
-      const kFn = token<any>(Symbol('fn-5-deps'))
+      const kFn = token<string>(Symbol('fn-5-deps'))
       const fn = (a: string, b: string, c: string, d: string, e: string) => `${a}-${b}-${c}-${d}-${e}`
 
       const di = new CaffeineIoC()
-      di.bind(token<any>('fn5-dep-a'), t => t.toValue('a'))
-      di.bind(token<any>('fn5-dep-b'), t => t.toValue('b'))
-      di.bind(token<any>('fn5-dep-c'), t => t.toValue('c'))
-      di.bind(token<any>('fn5-dep-d'), t => t.toValue('d'))
-      di.bind(token<any>('fn5-dep-e'), t => t.toValue('e'))
+      di.bind(token<string>('fn5-dep-a'), t => t.toValue('a'))
+      di.bind(token<string>('fn5-dep-b'), t => t.toValue('b'))
+      di.bind(token<string>('fn5-dep-c'), t => t.toValue('c'))
+      di.bind(token<string>('fn5-dep-d'), t => t.toValue('d'))
+      di.bind(token<string>('fn5-dep-e'), t => t.toValue('e'))
       di.bind(kFn, t =>
         t.toFunction(fn, [
-          token<any>('fn5-dep-a'),
-          token<any>('fn5-dep-b'),
-          token<any>('fn5-dep-c'),
-          token<any>('fn5-dep-d'),
-          token<any>('fn5-dep-e'),
+          token<string>('fn5-dep-a'),
+          token<string>('fn5-dep-b'),
+          token<string>('fn5-dep-c'),
+          token<string>('fn5-dep-d'),
+          token<string>('fn5-dep-e'),
         ]),
       )
       await di.init()

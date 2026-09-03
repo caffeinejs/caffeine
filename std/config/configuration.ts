@@ -1,11 +1,11 @@
-import { token } from '@caffeinejs/di'
+import { opaqueToken } from '@caffeinejs/di'
 
 import type { ConfigHandle } from './accessor.js'
 import type { ConfigDiagnostics } from './diagnostics.js'
 import type { ConfigChangeListener } from './notifier.js'
 
 /** DI key for the application {@link Configuration}. `kAppConfig` stays bound to the config object itself. */
-export const kConfiguration = token<any>(Symbol.for('@caffeinejs/std:configuration'))
+export const kConfiguration = opaqueToken(Symbol.for('@caffeinejs/std:configuration'))
 
 /** What {@link Configuration} needs from the resolved configuration, without depending on the shard directly. */
 export interface ConfigurationSource<T> {

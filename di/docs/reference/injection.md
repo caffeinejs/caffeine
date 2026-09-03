@@ -36,6 +36,13 @@ Every place that accepts a dependency specification accepts either a bare `Injec
 or a full `InjectionDescriptor`. Helpers like `$i.optional()` and `$i.allOf()` return
 `InjectionDescriptor` values that you pass in the same position.
 
+Named keys use `token<T>(string | symbol)`. `T` is the resolved value type;
+omitting it, or passing `any` or `unknown`, is a type error.
+
+Constructor lists on `toClass`, `toSelf`, and `@Injectable` use `InjectionsFor<A>`:
+one token or `$i` helper per parameter, in order. `$i.optional(X)` matches
+`X | undefined`, not a required `X`.
+
 ```ts
 @Injectable([Logger, $i.optional(Database), $i.allOf(Plugin)])
 class App { ... }

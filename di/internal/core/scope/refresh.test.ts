@@ -112,7 +112,7 @@ describe('Refresh Scope', function () {
 
   describe('when refreshing by label', function () {
     it('only resets bindings tagged with the given label', async function () {
-      const kLabel = token<any>(Symbol('refresh-label-a'))
+      const kLabel = Symbol('refresh-label-a')
 
       class LabeledA {
         readonly id = Math.random()
@@ -137,7 +137,7 @@ describe('Refresh Scope', function () {
     })
 
     it('leaves all bindings untouched when label matches nothing', async function () {
-      const kLabel = token<any>(Symbol('refresh-label-unused'))
+      const kLabel = Symbol('refresh-label-unused')
 
       class StableA {
         readonly id = Math.random()

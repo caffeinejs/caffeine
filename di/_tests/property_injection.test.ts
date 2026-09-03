@@ -8,8 +8,8 @@ import { Named } from '../decorators/named.js'
 import { token } from '../key.js'
 
 describe('Property Injection', function () {
-  const kValue = token<any>(Symbol('value'))
-  const kNamedDep = token<any>(Symbol('named-dep'))
+  const kValue = token<string>(Symbol('value'))
+  const kNamedDep = token<Contract>(Symbol('named-dep'))
 
   @Injectable()
   class Dep {

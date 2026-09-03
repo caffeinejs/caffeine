@@ -1,5 +1,6 @@
 import { notNil } from '../internal/util/assert/not_nil.js'
-import { Identifier } from '../key.js'
+import { NamedToken } from '../key.js'
+import type { Scope } from '../scope.js'
 import { extendInjectableAttributes, extendMemberInjectableAttributes } from './registrar/index.js'
 import { defineClassOrMemberDecorator } from './util/index.js'
 
@@ -9,7 +10,7 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  * Sets the scope that controls instance sharing for this component.
  * Note that custom scope implementations must be registered before use.
  *
- * @param scopeID - Identifier of the scope.
+ * @param scopeID - Token identifying the scope, minted with `token<Scope>(...)`.
  *
  * @example
  * ```ts
@@ -18,7 +19,7 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  * class Service {}
  * ```
  */
-export function Lifetime(scopeID: Identifier) {
+export function Lifetime(scopeID: NamedToken<Scope>) {
   notNil(scopeID, `@${Lifetime.name}(): parameter scopeID is required.`)
 
   return defineClassOrMemberDecorator(

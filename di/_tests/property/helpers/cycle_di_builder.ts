@@ -10,7 +10,7 @@ export type CycleEdge = {
   defer?: boolean
 }
 
-function fnWithArity(arity: number): (...args: unknown[]) => object {
+function fnWithArity(arity: number): (...args: unknown[]) => Record<string, unknown> {
   switch (arity) {
     case 0:
       return () => ({})
@@ -34,14 +34,14 @@ function fnWithArity(arity: number): (...args: unknown[]) => object {
 
 function toInjection(edge: CycleEdge): Injection {
   if (edge.optional) {
-    return $i.optional(token<any>(edge.to))
+    return $i.optional(token<Record<string, unknown>>(edge.to))
   }
 
   if (edge.defer) {
-    return $i.defer(() => token<any>(edge.to))
+    return $i.defer(() => token<Record<string, unknown>>(edge.to))
   }
 
-  return token<any>(edge.to)
+  return token<Record<string, unknown>>(edge.to)
 }
 
 export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true): CaffeineIoC {
@@ -57,12 +57,12 @@ export function buildDiFromEdges(edges: CycleEdge[], circularReferences = true):
     const deps = edges.filter(e => e.from === key)
 
     if (deps.length === 0) {
-      di.bind(token<any>(key), t => t.toValue({}))
+      di.bind(token<Record<string, unknown>>(key), t => t.toValue({}))
       continue
     }
 
     const injections = deps.map(toInjection)
-    di.bind(token<any>(key), t => t.toFunction(fnWithArity(deps.length), injections))
+    di.bind(token<Record<string, unknown>>(key), t => t.toFunction(fnWithArity(deps.length), injections))
   }
 
   return di

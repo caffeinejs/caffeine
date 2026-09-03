@@ -115,12 +115,12 @@ describe('Request Scope', function () {
         expect(() => di.get(Ctrl)).toThrow()
 
         await Supertest(server)
-          .get(token<any>('/'))
+          .get('/')
           .expect(200)
           .expect(res => expect(res.text).toEqual(val))
 
         await Supertest(server)
-          .get(token<any>('/'))
+          .get('/')
           .expect(200)
           .expect(res => expect(res.text).toEqual(val))
 

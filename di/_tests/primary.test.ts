@@ -13,7 +13,7 @@ import { token } from '../key.js'
 
 describe('@Primary', function () {
   describe('when two @Injectable classes share a named key and both are marked @Primary', function () {
-    const kSvc = token<any>(Symbol('svc-double-primary'))
+    const kSvc = token<Record<string, unknown>>(Symbol('svc-double-primary'))
 
     @Injectable()
     @Named(kSvc)
@@ -41,7 +41,7 @@ describe('@Primary', function () {
   })
 
   describe('when two @Provides methods share a key and both are marked @Primary', function () {
-    const kMsg = token<any>(Symbol('msg-double-primary'))
+    const kMsg = token<Msg>(Symbol('msg-double-primary'))
 
     class Msg {
       constructor(readonly value: string) {}
@@ -69,7 +69,7 @@ describe('@Primary', function () {
   })
 
   describe('when two @Injectable classes share a named key, both are @Primary, but one is conditionally excluded', function () {
-    const kActive = token<any>(Symbol('svc-conditional-primary'))
+    const kActive = token<Active>(Symbol('svc-conditional-primary'))
 
     @Injectable()
     @Named(kActive)

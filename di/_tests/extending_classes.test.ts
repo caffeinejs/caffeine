@@ -79,9 +79,9 @@ describe('Abstract Classes', function () {
   })
 
   describe('given multiple implementations of an abstract class', function () {
-    const kMongo = token<any>(Symbol.for('mongodb'))
-    const kSql = token<any>(Symbol.for('sql'))
-    const kAll = token<any>(Symbol('all-repos'))
+    const kMongo = token<Repo>(Symbol.for('mongodb'))
+    const kSql = token<Repo>(Symbol.for('sql'))
+    const kAll = token<Repo>(Symbol('all-repos'))
 
     abstract class Repo {
       abstract list(): string

@@ -1,4 +1,4 @@
-import { Keys, mod, token, type Module, type NamedToken, Scopes } from '@caffeinejs/di'
+import { Keys, mod, token, type Module, type NamedToken, Scopes, type InjectionToken } from '@caffeinejs/di'
 
 import type { ConfigHandle } from '../accessor.js'
 import type { BootstrapOptions } from '../bootstrap.js'
@@ -81,7 +81,9 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
       container.bindValuesProvider<ConfigHandle<T>>(t => t.toValue(shard.handle))
     }
 
-    container.bind(kConfiguration, t =>
+    // `kConfiguration` is opaque — the container cannot name the application's config type — so the bind site,
+    // which is the one place `T` is known, re-types the key.
+    container.bind(kConfiguration as unknown as InjectionToken<Configuration<T>>, t =>
       t
         .toValue(
           new Configuration<T>({

@@ -16,7 +16,9 @@ describe('Profile', function () {
 
   @Injectable()
   @Profile('prof1')
-  class Prof1 {}
+  class Prof1 {
+    readonly kind = 'prof1'
+  }
 
   @Injectable()
   @Profile('prof2')
@@ -37,8 +39,8 @@ describe('Profile', function () {
 
   class ProfBean {}
 
-  const kDep = token<any>(Symbol('dep'))
-  const kDiffRef = token<any>(Symbol('diffRef'))
+  const kDep = token<string>(Symbol('dep'))
+  const kDiffRef = token<Prof1>(Symbol('diffRef'))
 
   @Configuration()
   @Profile('prof2')
@@ -203,7 +205,7 @@ describe('CaffeineIoC.addProfiles()', function () {
     expect(di.has(LateProfileBean)).toBe(false)
 
     di.addProfiles('add-prof-late')
-    expect(di.profiles.has(token<any>('add-prof-late'))).toBe(true)
+    expect(di.profiles.has('add-prof-late')).toBe(true)
 
     await di.init()
     expect(di.has(LateProfileBean)).toBe(true)

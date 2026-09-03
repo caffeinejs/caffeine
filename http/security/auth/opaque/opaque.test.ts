@@ -179,7 +179,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
         container: { bind, wrap } as unknown as Container,
         availability: new ApplicationAvailability(),
         contributions: new Contributions(),
-        config: new ConfigDefinition(token<any>(Symbol('app.config'))),
+        config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
       }
     }
 

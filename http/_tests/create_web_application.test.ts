@@ -51,7 +51,7 @@ describe('createWebApplication default Fastify form', () => {
   })
 
   it('accepts features after the options argument', async () => {
-    const kProbe = token<any>(Symbol('probe-sentinel'))
+    const kProbe = token<Record<string, unknown>>(Symbol('probe-sentinel'))
 
     const probe = defineFeature<{ capture(value: string): void }>({
       name: 'probe',

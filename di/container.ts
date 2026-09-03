@@ -34,7 +34,7 @@ import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scop
 import { checkScopes } from './internal/core/scope/validations.js'
 import { notNil } from './internal/util/assert/index.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
-import { keyStr, InjectionToken, Identifier, token, TokenValue } from './key.js'
+import { keyStr, InjectionToken, Identifier, NamedToken, TokenValue, OpaqueToken } from './key.js'
 import { MetadataReader } from './metadata_reader.js'
 import { runModules, type Module, type ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
@@ -86,8 +86,8 @@ export class CaffeineIoC implements Container {
   private readonly metadataReader: MetadataReader
   private readonly lazy?: boolean
   private readonly circularReferences: boolean
-  private readonly scopeID: Identifier
-  private readonly scopes: Map<Identifier, Scope>
+  private readonly scopeID: NamedToken<Scope>
+  private readonly scopes: Map<NamedToken<Scope>, Scope>
   private readonly scopeCheckMode: ScopeCheckMode
 
   readonly postProcessors: Set<PostProcessor> = new Set()
@@ -109,7 +109,7 @@ export class CaffeineIoC implements Container {
   private _evaluatingProfiles = false
   private _pendingConditionalKeys = new Set<InjectionToken>()
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
-  private _aspectScopeCache: Set<Identifier> | null = null
+  private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
   private _hasRequestScoped = false
 
   /**
@@ -127,7 +127,7 @@ export class CaffeineIoC implements Container {
     this.scopeCheckMode = opts.checks?.scopes ?? 'no-mix'
     this.scopeID = opts.defaultScopeID ?? Scopes.SINGLETON
     this.metadataReader = opts.metadataReader || (() => ({}))
-    this.scopes = new Map<Identifier, Scope>()
+    this.scopes = new Map<NamedToken<Scope>, Scope>()
     this.modules = [...(opts.modules ?? [])]
 
     for (const [id, factory] of scopeEntries()) {
@@ -204,14 +204,17 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrNoResolutionForKey} if no binding is registered for the given key
    * @throws {@link ErrNoUniqueInjectionForKey} if multiple bindings are registered for the same key and none is primary
    */
-  get<T>(key: InjectionToken<T>): T {
+  get<T>(key: InjectionToken<T>): T
+  get<T>(key: OpaqueToken): T
+  get<T>(key: InjectionToken<T> | OpaqueToken): T {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
 
-    const bindings = this.getBindings<T>(key)
+    const resolvedKey = key as InjectionToken<T>
+    const bindings = this.getBindings<T>(resolvedKey)
     if (bindings.length === 0) {
-      throw new ErrNoResolutionForKey(`Cannot resolve key '${keyStr(key)}'`)
+      throw new ErrNoResolutionForKey(`Cannot resolve key '${keyStr(resolvedKey)}'`)
     }
 
     const b = bindings[0]
@@ -220,7 +223,7 @@ export class CaffeineIoC implements Container {
         return b.factory(b.ctx!) as T
       }
 
-      throw new ErrNoUniqueInjectionForKey(key)
+      throw new ErrNoUniqueInjectionForKey(resolvedKey)
     }
 
     return b.factory(b.ctx!) as T
@@ -236,12 +239,15 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrInvalidContainerState} if the container is not initialized
    * @throws {@link ErrNoUniqueInjectionForKey} if multiple bindings are registered for the same key and none is primary
    */
-  getOptional<T = unknown>(key: InjectionToken<T>): T | undefined {
+  getOptional<T = unknown>(key: InjectionToken<T>): T | undefined
+  getOptional<T = unknown>(key: OpaqueToken): T | undefined
+  getOptional<T>(key: InjectionToken<T> | OpaqueToken): T | undefined {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
 
-    const bindings = this.getBindings<T>(key)
+    const resolvedKey = key as InjectionToken<T>
+    const bindings = this.getBindings<T>(resolvedKey)
     if (bindings.length === 0) {
       return undefined as T
     }
@@ -252,7 +258,7 @@ export class CaffeineIoC implements Container {
         return b.factory(b.ctx!) as T
       }
 
-      throw new ErrNoUniqueInjectionForKey(key)
+      throw new ErrNoUniqueInjectionForKey(resolvedKey)
     }
 
     return b.factory(b.ctx!) as T
@@ -500,7 +506,7 @@ export class CaffeineIoC implements Container {
    *
    * @returns True if the key or any of its underlying dependencies have the given scope.
    */
-  hasScopeInGraph(key: InjectionToken, scopeID: Identifier): boolean {
+  hasScopeInGraph(key: InjectionToken, scopeID: NamedToken<Scope>): boolean {
     if (!this.has(key)) {
       return false
     }
@@ -546,7 +552,7 @@ export class CaffeineIoC implements Container {
     // consumer's own bindings — from matching anything.
     return compileDescriptorResolver(
       this,
-      token<unknown>(Symbol.for('@caffeinejs/di:standalone')),
+      Keys.kStandaloneResolver,
       descriptor,
       'constructor',
       '',
@@ -2029,7 +2035,7 @@ export class CaffeineIoC implements Container {
     this._pendingConditionalKeys.clear()
   }
 
-  private walkScopeGraph(visited: Set<number>, queue: Binding[], scopeID: Identifier): boolean {
+  private walkScopeGraph(visited: Set<number>, queue: Binding[], scopeID: NamedToken<Scope>): boolean {
     while (queue.length > 0) {
       const binding = queue.shift()!
       if (visited.has(binding.id)) {
@@ -2064,8 +2070,8 @@ export class CaffeineIoC implements Container {
     return false
   }
 
-  private computeAspectScopeCache(): Set<Identifier> {
-    const scopes = new Set<Identifier>()
+  private computeAspectScopeCache(): Set<NamedToken<Scope>> {
+    const scopes = new Set<NamedToken<Scope>>()
     const aspects = this.bindingsByLabel.get(kAspectLabel) ?? []
     if (aspects.length === 0) {
       return scopes

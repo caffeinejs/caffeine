@@ -50,7 +50,7 @@ describe('getting-started: manual bindings', function () {
         return msg
       }
     }
-    const kGsLogger = token<any>(Symbol.for('gs.logger'))
+    const kGsLogger = token<GsLoggerSym>(Symbol.for('gs.logger'))
     const di = new CaffeineIoC({ decorators: false })
     di.bind(kGsLogger, t => t.toClass(GsLoggerSym))
     await di.init()
@@ -240,7 +240,7 @@ describe('abstract-classes: @Named + $i.mapped()', function () {
     }
   }
 
-  @Injectable([token<any>('acEmail')])
+  @Injectable([token<AcNotificationSender>('acEmail')])
   class AcOrderService {
     constructor(readonly sender: AcNotificationSender) {}
   }
@@ -270,8 +270,8 @@ describe('abstract-classes: @Named + $i.mapped()', function () {
 
   it('$i.mapped() injects Map<name, impl> for all named @Extends', function () {
     const router = di.get(AcNotificationRouter)
-    expect(router.senders.get(token<any>('acEmail'))).toBeInstanceOf(AcEmailSender)
-    expect(router.senders.get(token<any>('acSms'))).toBeInstanceOf(AcSmsSender)
+    expect(router.senders.get('acEmail')).toBeInstanceOf(AcEmailSender)
+    expect(router.senders.get('acSms')).toBeInstanceOf(AcSmsSender)
   })
 
   it('$i.mapped() router dispatches to correct sender', function () {
@@ -500,7 +500,7 @@ describe('interfaces: symbol token pattern', function () {
     findByID(id: string): string | undefined
   }
 
-  const kIfRepository = token<any>(Symbol('IfRepository'))
+  const kIfRepository = token<IfRepository>(Symbol('IfRepository'))
 
   @Injectable(kIfRepository)
   class IfInMemoryRepository implements IfRepository {
@@ -538,7 +538,7 @@ describe('interfaces: allOf with symbol token', function () {
     process(input: string): string
   }
 
-  const kIfProcessor = token<any>(Symbol('IfProcessor'))
+  const kIfProcessor = token<IfProcessor>(Symbol('IfProcessor'))
 
   @Named(kIfProcessor)
   @Injectable()
@@ -591,7 +591,7 @@ describe('interfaces: @Primary for interfaces', function () {
     findByID(id: string): string
   }
 
-  const kIfUserRepository = token<any>(Symbol('IfUserRepository'))
+  const kIfUserRepository = token<IfUserRepository>(Symbol('IfUserRepository'))
 
   @Named(kIfUserRepository)
   @Injectable()
@@ -630,7 +630,7 @@ describe('interfaces: @Named dispatch for interfaces', function () {
     send(message: string, to: string): string
   }
 
-  const kIfNotificationSender = token<any>(Symbol('IfNotificationSender'))
+  const kIfNotificationSender = token<IfNotificationSender>(Symbol('IfNotificationSender'))
 
   @Injectable(kIfNotificationSender)
   @Named('ifEmail')
@@ -648,7 +648,7 @@ describe('interfaces: @Named dispatch for interfaces', function () {
     }
   }
 
-  @Injectable([token<any>('ifEmail')])
+  @Injectable([token<IfNotificationSender>('ifEmail')])
   class IfOrderService {
     constructor(readonly sender: IfNotificationSender) {}
   }
@@ -671,8 +671,8 @@ describe('interfaces: @Named dispatch for interfaces', function () {
 
   it('$i.mapped() injects Map<name, impl> for interface token', function () {
     const router = di.get(IfNotificationRouter)
-    expect(router.senders.get(token<any>('ifEmail'))).toBeInstanceOf(IfEmailSender)
-    expect(router.senders.get(token<any>('ifSms'))).toBeInstanceOf(IfSmsSender)
+    expect(router.senders.get('ifEmail')).toBeInstanceOf(IfEmailSender)
+    expect(router.senders.get('ifSms')).toBeInstanceOf(IfSmsSender)
   })
 })
 
@@ -684,7 +684,7 @@ describe('interfaces: manual bind with interface symbol', function () {
     set(key: string, value: string): void
   }
 
-  const kIfCache = token<any>(Symbol('IfCache'))
+  const kIfCache = token<IfCache>(Symbol('IfCache'))
 
   class IfMemCache implements IfCache {
     private store = new Map<string, string>()
@@ -704,7 +704,7 @@ describe('interfaces: manual bind with interface symbol', function () {
     const cache = di.get<IfCache>(kIfCache)
     expect(cache).toBeInstanceOf(IfMemCache)
     cache.set('foo', 'bar')
-    expect(cache.get(token<any>('foo'))).toBe('bar')
+    expect(cache.get('foo')).toBe('bar')
   })
 })
 
@@ -725,7 +725,7 @@ describe('factory-classes: basic @Configuration + @Provides', function () {
       return new FcHTTPClient({ timeout: 5_000 })
     }
 
-    @Provides(token<any>('fc.db.url'))
+    @Provides(token<string>('fc.db.url'))
     dbURL(): string {
       return 'postgres://localhost/app'
     }
@@ -842,7 +842,7 @@ describe('factory-classes: abstract and symbol keys in @Provides', function () {
     abstract log(msg: string): string
   }
 
-  const kFcMetrics = token<any>(Symbol('FcMetrics'))
+  const kFcMetrics = token<FcMetrics>(Symbol('FcMetrics'))
 
   interface FcMetrics {
     record(name: string): void

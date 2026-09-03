@@ -163,7 +163,7 @@ describe('Application lifecycle', () => {
   })
 
   it('installs a feature and rides the configure() path', async () => {
-    const kSentinel = token<any>(Symbol('sentinel'))
+    const kSentinel = token<Record<string, unknown>>(Symbol('sentinel'))
     const state: { value: string | undefined } = { value: undefined }
 
     const probe = defineFeature<{ probe(value: string): void }>({
@@ -222,7 +222,7 @@ describe('application name and profiles', () => {
       .build()
     await app.ready()
 
-    expect(app.container.profiles.has(token<any>('eu'))).toBe(true)
+    expect(app.container.profiles.has('eu')).toBe(true)
   })
 
   it('unions config profiles onto a user-supplied container', async () => {
@@ -232,8 +232,8 @@ describe('application name and profiles', () => {
       .build()
     await app.ready()
 
-    expect(container.profiles.has(token<any>('test'))).toBe(true)
-    expect(container.profiles.has(token<any>('eu'))).toBe(true)
+    expect(container.profiles.has('test')).toBe(true)
+    expect(container.profiles.has('eu')).toBe(true)
   })
 
   it('does not register a @Profile bean without matching config profiles', async () => {

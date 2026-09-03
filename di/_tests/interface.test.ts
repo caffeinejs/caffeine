@@ -8,7 +8,7 @@ import { token } from '../key.js'
 
 describe('interfaces', function () {
   describe('given an interface with multiple implementations and one of them using a named key', function () {
-    const kRepo = token<any>(Symbol('repo'))
+    const kRepo = token<Repository>(Symbol('repo'))
 
     interface Repository {
       save(): string

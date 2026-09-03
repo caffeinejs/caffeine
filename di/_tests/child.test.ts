@@ -10,7 +10,7 @@ describe('Named bindings visible in child containers', function () {
     const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
 
-    child.bind(token<any>('child-key'), t => t.toValue('hello'))
+    child.bind(token<string>('child-key'), t => t.toValue('hello'))
     await child.init()
 
     expect(child.get(token<string>('child-key'))).toEqual('hello')
@@ -19,7 +19,7 @@ describe('Named bindings visible in child containers', function () {
   it('should resolve a named symbol key registered only in the child', async function () {
     const parent = new CaffeineIoC({ decorators: false })
     const child = parent.newChild()
-    const k = token<any>(Symbol('sym-child'))
+    const k = token<number>(Symbol('sym-child'))
 
     child.bind(k, t => t.toValue(42))
     await child.init()
@@ -29,7 +29,7 @@ describe('Named bindings visible in child containers', function () {
 
   it('should fall through to parent for a named key not in the child', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(token<any>('parent-key'), t => t.toValue('from-parent'))
+    parent.bind(token<string>('parent-key'), t => t.toValue('from-parent'))
 
     const child = parent.newChild()
     await child.init()
@@ -39,10 +39,10 @@ describe('Named bindings visible in child containers', function () {
 
   it('should prefer child over parent when both have the same named key', async function () {
     const parent = new CaffeineIoC({ decorators: false })
-    parent.bind(token<any>('shared'), t => t.toValue('parent-value'))
+    parent.bind(token<string>('shared'), t => t.toValue('parent-value'))
 
     const child = parent.newChild()
-    child.bind(token<any>('shared'), t => t.toValue('child-value'))
+    child.bind(token<string>('shared'), t => t.toValue('child-value'))
     await parent.init()
     await child.init()
 

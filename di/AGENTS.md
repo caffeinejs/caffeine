@@ -13,6 +13,29 @@ Two consequences, both deliberate:
 - `bind()` does not inherit `@Fallback` from a decorated class. Binding a key by hand is an explicit
   registration, so an override would otherwise defer to the default it is replacing.
 
+## `token()` is for injection keys only
+
+`token<T>(...)` brands a string or symbol as a key the container resolves. It is not a general-purpose "typed
+key" helper, and it must not be used for a label, a tag key, a metadata key, a resolver name, or a plain `Map`
+lookup. Those are arbitrary keys in a key/value store; they stay plain `string` / `symbol`.
+
+Nothing in the type system stops the misuse — `token<T>()` returns `string & TokenBrand<T>`, which satisfies
+every `string` / `symbol` / `PropertyKey` parameter in the repo. Only the receiving parameter could reject it,
+and the label/tag/metadata APIs deliberately do not, so this is a convention the reviewer enforces.
+
+`T` has to name what the key resolves to. `token()`, `token<any>`, `token<unknown>` and `token<object>` are all
+type errors. A class with no members is structurally `object`, so it is rejected too — give it a member, which
+is worth doing regardless, since every value satisfies a member-less type and assertions against one pass
+vacuously.
+
+A scope identifier is an ordinary token that resolves a `Scope`: `token<Scope>(...)`. There is no separate
+scope-key type, and the invariant brand is what keeps a service key out of `.lifetime()` / `@Lifetime` /
+`bindScope`.
+
+`opaqueToken(...)` is the escape hatch for a key whose value type the declaring package genuinely cannot name —
+an application configuration handle. Each caller supplies the type at `get<T>(key)`. Every use is a place the
+compiler stops checking, so it stays rare.
+
 ## `has()` means resolvable, not directly bound
 
 `has(key)` is true exactly when `get(key)` would resolve — including a key reachable only through

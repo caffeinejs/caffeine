@@ -54,10 +54,10 @@ describe('build()', function () {
 
       di.bind(Repo, t => t.toSelf())
 
-      di.bind(token<any>('env'), t => t.toValue('production'))
+      di.bind(token<string>('env'), t => t.toValue('production'))
       await di.init()
 
-      const uc = di.build(Usecase, [Repo, token<any>('env')])
+      const uc = di.build(Usecase, [Repo, token<Record<string, unknown>>('env')])
 
       expect(uc).toBeInstanceOf(Usecase)
       expect(uc.repo).toBeInstanceOf(Repo)
@@ -87,10 +87,10 @@ describe('build()', function () {
 
       di.bind(Config, t => t.toSelf())
 
-      di.bind(token<any>('port'), t => t.toValue(3000))
+      di.bind(token<number>('port'), t => t.toValue(3000))
       await di.init()
 
-      expect(di.build(fn, [Config, token<any>('port')])).toEqual('localhost:3000')
+      expect(di.build(fn, [Config, token<Record<string, unknown>>('port')])).toEqual('localhost:3000')
     })
   })
 
@@ -286,10 +286,10 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('name'), t => t.toValue('worker'))
+      di.bind(token<string>('name'), t => t.toValue('worker'))
       await di.init()
 
-      const factory = di.builder(Task, [token<any>('name')])
+      const factory = di.builder(Task, [token<Record<string, unknown>>('name')])
 
       const a = factory()
       const b = factory()
@@ -378,10 +378,10 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t.toValue('hello'))
+      di.bind(token<string>('a'), t => t.toValue('hello'))
       await di.init()
 
-      const factory = di.builder(Service, [token<any>('a'), null])
+      const factory = di.builder(Service, [token<Record<string, unknown>>('a'), null])
       const instance = factory()
 
       expect(instance.a).toBe('hello')
@@ -398,10 +398,10 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t.toValue('hello'))
+      di.bind(token<string>('a'), t => t.toValue('hello'))
       await di.init()
 
-      const factory = di.builder(Service, [token<any>('a'), undefined])
+      const factory = di.builder(Service, [token<Record<string, unknown>>('a'), undefined])
       const instance = factory()
 
       expect(instance.a).toBe('hello')
@@ -418,10 +418,10 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t.toValue('hello'))
+      di.bind(token<string>('a'), t => t.toValue('hello'))
       await di.init()
 
-      const factory = di.builder(Service, [token<any>('a')])
+      const factory = di.builder(Service, [token<Record<string, unknown>>('a')])
       const instance = factory()
 
       expect(instance.a).toBe('hello')
@@ -438,10 +438,10 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('second'), t => t.toValue('world'))
+      di.bind(token<string>('second'), t => t.toValue('world'))
       await di.init()
 
-      const factory = di.builder(Service, [null, token<any>('second')])
+      const factory = di.builder(Service, [null, token<Record<string, unknown>>('second')])
       const instance = factory()
 
       expect(instance.first).toBeNull()
@@ -455,10 +455,10 @@ describe('builder()', function () {
 
       const di = new CaffeineIoC({ decorators: false })
 
-      di.bind(token<any>('a'), t => t.toValue('x'))
+      di.bind(token<string>('a'), t => t.toValue('x'))
       await di.init()
 
-      expect(() => di.builder(fn, [token<any>('a')])).not.toThrow()
+      expect(() => di.builder(fn, [token<Record<string, unknown>>('a')])).not.toThrow()
     })
 
     it('should throw ErrNoResolutionForKey when a required dep is not registered', async function () {
@@ -492,7 +492,7 @@ describe('builder()', function () {
 describe('builder() before init()', function () {
   it('should throw ErrInvalidContainerState when called before init()', function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(token<any>('svc'), t => t.toValue('hello'))
+    di.bind(token<string>('svc'), t => t.toValue('hello'))
 
     expect(() => di.builder(class Svc {}, [])).toThrow(ErrInvalidContainerState)
   })

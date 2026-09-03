@@ -28,8 +28,10 @@ class UserService {
 }
 ```
 
-The dep array passed to `@Injectable` must match the constructor parameter
-positions exactly.
+The dep array passed to `@Injectable` is type-checked by position against the
+constructor. Swapped tokens, a list that is too short, or `$i.optional(X)` on a
+required `X` parameter are type errors. `$i.optional(X)` belongs on
+`x?: X` / `x: X | undefined`.
 
 **Legacy decorators:** With `@caffeinejs/di/decorators/legacy`,
 constructor dependencies whose key is the class constructor itself are inferred automatically from TypeScript's type metadata — the `deps` array can be omitted:

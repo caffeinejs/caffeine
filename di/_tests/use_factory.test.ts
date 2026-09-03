@@ -43,7 +43,7 @@ describe(`@${UseFactory.name}()`, function () {
     return new Dep('created')
   })
   class Dep {
-    constructor(readonly status: string) {}
+    constructor(readonly status: string = 'created') {}
   }
 
   it('should use custom factory provided in the decorator', async function () {
@@ -88,6 +88,7 @@ describe(`@${UseFactory.name}()`, function () {
   @Lifetime(Scopes.TRANSIENT)
   class TrUser {}
 
+  // @ts-expect-error factory is bound under the User class key
   @Injectable([User])
   class Svc {
     constructor(readonly repo: Repo<User>) {}

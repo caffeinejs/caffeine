@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -13,7 +13,7 @@ const schema = z.object({
 })
 type AppConfig = z.infer<typeof schema>
 
-const APP_CONFIG = token<any>(Symbol('app.config'))
+const APP_CONFIG = opaqueToken(Symbol('app.config'))
 
 function makeModule(data: Record<string, unknown>) {
   return ConfigModule<AppConfig>({
@@ -46,7 +46,7 @@ describe('ConfigModule', () => {
   })
 
   it('two ConfigModule registrations refresh independently', async () => {
-    const DB_TOKEN = token<any>(Symbol('db.config'))
+    const DB_TOKEN = opaqueToken(Symbol('db.config'))
     const dbSchema = z.object({ db: z.object({ url: z.string() }) })
     type DBConfig = z.infer<typeof dbSchema>
 

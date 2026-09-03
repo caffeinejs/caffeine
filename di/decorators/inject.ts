@@ -1,6 +1,6 @@
 import { DeferredCtor } from '../deferred_ctor.js'
 import { ErrInvalidDecorator } from '../errors.js'
-import { Injection, InjectionDescriptor } from '../injection.js'
+import { Injection, InjectionDescriptor, InjectionsFor, ResolveInjection } from '../injection.js'
 import { notNil } from '../internal/util/assert/index.js'
 import { InjectionToken } from '../key.js'
 import { defineMemberInjection } from './registrar/index.js'
@@ -22,15 +22,22 @@ import { defineMemberInjection } from './registrar/index.js'
  * }
  * ```
  */
-export function Inject(
-  key: InjectionToken,
-): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void
-export function Inject(
-  descriptor: InjectionDescriptor,
-): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void
-export function Inject(
-  dependencies: Injection[],
-): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void
+/** A member whose value the container supplies: field, accessor, getter or setter. */
+type InjectedMemberContext<T> =
+  | ClassFieldDecoratorContext<unknown, T>
+  | ClassAccessorDecoratorContext<unknown, T>
+  | ClassGetterDecoratorContext<unknown, T>
+  | ClassSetterDecoratorContext<unknown, T>
+
+export function Inject<T>(
+  key: InjectionToken<T>,
+): (target: Function | object | undefined, context: InjectedMemberContext<T>) => void
+export function Inject<D extends InjectionDescriptor<any>>(
+  descriptor: D,
+): (target: Function | object | undefined, context: InjectedMemberContext<ResolveInjection<D>>) => void
+export function Inject<A extends unknown[]>(
+  dependencies: [...InjectionsFor<A>],
+): (target: (...args: A) => unknown, context: ClassMethodDecoratorContext) => void
 export function Inject(
   keyOrDependencies: InjectionToken | InjectionDescriptor | Injection[],
 ): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void {

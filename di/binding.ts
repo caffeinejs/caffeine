@@ -3,9 +3,10 @@ import { ContainerOps } from './container_interface.js'
 import { Factory, AsyncFactory, FactoryCreator } from './factory.js'
 import { InjectionDescriptor } from './injection.js'
 import { InjectionResolver } from './injection_resolver.js'
-import { Identifier, InjectionToken } from './key.js'
+import { Identifier, InjectionToken, NamedToken } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { ResolutionContext } from './resolution_context.js'
+import type { Scope } from './scope.js'
 import { Ctor } from './types.js'
 
 let _id = 0
@@ -68,7 +69,7 @@ export interface Binding<T = any> {
   /**
    * The scope the binding is associated with.
    */
-  scopeID: Identifier
+  scopeID: NamedToken<Scope>
 
   /**
    * The names the binding is associated with.

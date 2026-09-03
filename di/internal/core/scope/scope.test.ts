@@ -14,7 +14,8 @@ import { ResolutionContext } from '../../../resolution_context.js'
 import { bindScope, hasScope, Scopes, Scope, unbindScope } from '../../../scope.js'
 
 describe('Scoping', function () {
-  const kCustomScopeID = token<any>(Symbol('custom'))
+  const kCustomScopeID = token<Scope>(Symbol('custom'))
+  const kNoneScopeID = token<Scope>('none')
   const spy = vi.fn()
 
   class CustomScope implements Scope {
@@ -59,23 +60,23 @@ describe('Scoping', function () {
 
   afterAll(() => {
     unbindScope(kCustomScopeID)
-    unbindScope('none')
+    unbindScope(kNoneScopeID)
   })
 
   it('should fail when using an non-registered scope', function () {
     @Injectable()
-    @Lifetime('none')
+    @Lifetime(kNoneScopeID)
     class NonexistentScope {}
 
     try {
       new CaffeineIoC()
     } catch (e) {
       expect(e).toBeInstanceOf(ErrScopeNotRegistered)
-      expect(hasScope('none')).toBeFalsy()
+      expect(hasScope(kNoneScopeID)).toBeFalsy()
       return
     } finally {
-      if (!hasScope('none')) {
-        bindScope('none', () => ({
+      if (!hasScope(kNoneScopeID)) {
+        bindScope(kNoneScopeID, () => ({
           provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {
             return factory(ctx)
           },

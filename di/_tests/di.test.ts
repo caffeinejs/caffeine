@@ -7,7 +7,7 @@ import { $i } from '../injection.js'
 import { token } from '../key.js'
 
 describe('CaffeineIoC', function () {
-  const kTestName = token<any>(Symbol('test-name'))
+  const kTestName = token<Record<string, unknown>>(Symbol('test-name'))
 
   @Injectable()
   class Test {}
@@ -28,8 +28,8 @@ describe('CaffeineIoC', function () {
 
   it('should print the type name when calling toString()', function () {
     const di = new CaffeineIoC()
-    di.bind(token<any>('tk100'), t => t.toValue('test'))
-    di.bind(token<any>('tk200'), t => t.toValue('test'))
+    di.bind(token<string>('tk100'), t => t.toValue('test'))
+    di.bind(token<string>('tk200'), t => t.toValue('test'))
 
     const str = di.toString()
     const protoStr = Object.prototype.toString.call(di)

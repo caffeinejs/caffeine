@@ -1,14 +1,14 @@
-import { type Ctor, type Injection, Injectable, Label, Tag } from '@caffeinejs/di'
+import { type Ctor, type InjectionsFor, Injectable, Label, Tag } from '@caffeinejs/di'
 
 import { DEFAULT_INSTANCE, Keys } from '../symbols.js'
 import { registerHandler } from './registrar.js'
 
 /** Options for {@link KafkaHandler}. */
-export interface KafkaHandlerOptions {
+export interface KafkaHandlerOptions<A extends unknown[] = []> {
   /** The named kafka instance this handler belongs to. Defaults to the unnamed default instance. */
   instance?: string
   /** Constructor injections, forwarded to `@Injectable`. */
-  dependencies?: Injection[]
+  dependencies?: [...InjectionsFor<A>]
 }
 
 /**
@@ -25,11 +25,15 @@ export interface KafkaHandlerOptions {
  * }
  * ```
  */
-export function KafkaHandler(options: KafkaHandlerOptions = {}) {
+export function KafkaHandler<A extends unknown[] = []>(options: KafkaHandlerOptions<A> = {}) {
   const instance = options.instance ?? DEFAULT_INSTANCE
 
-  return function (target: Function, context: ClassDecoratorContext): void {
-    Injectable(options.dependencies ?? [])(target as Ctor, context)
+  return function (target: Ctor<unknown, A>, context: ClassDecoratorContext): void {
+    if (options.dependencies === undefined) {
+      Injectable()(target as Ctor<unknown, []>, context)
+    } else {
+      Injectable(options.dependencies)(target, context)
+    }
     Label(Keys.KAFKA_HANDLER)(target, context)
     Tag(Keys.KAFKA_INSTANCE, instance)(target, context)
 

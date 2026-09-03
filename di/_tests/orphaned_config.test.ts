@@ -26,7 +26,7 @@ describe('Orphaned binding config validation', function () {
   })
 
   it('should throw when @Provides is used at class level', function () {
-    const kSvc = token<any>(Symbol('svc'))
+    const kSvc = token<Record<string, unknown>>(Symbol('svc'))
 
     expect(() => {
       // @ts-expect-error intentional: testing runtime guard for class-level misuse

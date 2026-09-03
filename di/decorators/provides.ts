@@ -1,5 +1,5 @@
 import { ErrInvalidDecorator } from '../errors.js'
-import { Injection } from '../injection.js'
+import { Injection, InjectionsFor } from '../injection.js'
 import { isNil } from '../internal/util/assert/index.js'
 import { InjectionToken, NamedToken, isNamedKey } from '../key.js'
 import { Configuration } from './configuration.js'
@@ -10,7 +10,7 @@ import { normalizeInjections } from './util/index.js'
  * Marks a method inside a `@Configuration` class as a factory that provides a binding.
  *
  * @param key - The binding key to register.
- * @param dependencies - Optional method-level injection overrides.
+ * @param dependencies - One injection per method parameter, in order.
  *
  * @example
  * ```ts
@@ -23,17 +23,27 @@ import { normalizeInjections } from './util/index.js'
  * }
  * ```
  */
-export function Provides(key: InjectionToken): (target: Function, context: ClassMethodDecoratorContext) => void
+export function Provides<R>(
+  key: InjectionToken<R>,
+): (target: () => R | Promise<R>, context: ClassMethodDecoratorContext) => void
+export function Provides<R, A extends unknown[]>(
+  key: InjectionToken<R>,
+  dependencies: [...InjectionsFor<A>],
+): (target: (...args: A) => R | Promise<R>, context: ClassMethodDecoratorContext) => void
+export function Provides<R>(
+  key: InjectionToken<R>,
+  name: NamedToken<R>,
+): (target: () => R | Promise<R>, context: ClassMethodDecoratorContext) => void
+export function Provides<R, A extends unknown[]>(
+  key: InjectionToken<R>,
+  name: NamedToken<R>,
+  dependencies: [...InjectionsFor<A>],
+): (target: (...args: A) => R | Promise<R>, context: ClassMethodDecoratorContext) => void
 export function Provides(
-  key: InjectionToken,
+  key: InjectionToken<any>,
+  nameOrDependencies?: Injection[] | NamedToken<any>,
   dependencies?: Injection[],
-): (target: Function, context: ClassMethodDecoratorContext) => void
-export function Provides(
-  key: InjectionToken,
-  name?: NamedToken<any>,
-  dependencies?: Injection[],
-): (target: Function, context: ClassMethodDecoratorContext) => void
-export function Provides(key: InjectionToken, nameOrDependencies?: Injection[] | NamedToken<any>) {
+) {
   return function (target: Function, context: DecoratorContext) {
     if (context.kind === 'class') {
       throw new ErrInvalidDecorator(
@@ -41,7 +51,7 @@ export function Provides(key: InjectionToken, nameOrDependencies?: Injection[] |
       )
     }
 
-    const deps = Array.isArray(nameOrDependencies) ? (nameOrDependencies as Injection[]) : []
+    const deps = Array.isArray(nameOrDependencies) ? (nameOrDependencies as Injection[]) : (dependencies ?? [])
     const name = isNil(nameOrDependencies)
       ? undefined
       : isNamedKey(nameOrDependencies)

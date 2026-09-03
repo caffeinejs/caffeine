@@ -267,8 +267,14 @@ bindScope(id, factory)
 Registers a scope under `id`. Throws `ErrScopeAlreadyRegistered` if `id` is
 already bound.
 
+A scope identifier is an ordinary injection token that resolves a `Scope` —
+`token<Scope>(...)`. There is no separate scope-key type; the token's invariant
+brand is what stops a service key being passed where a scope belongs.
+
 ```ts
-import { bindScope } from '@caffeinejs/di'
+import { bindScope, token, type Scope } from '@caffeinejs/di'
+
+const MY_SCOPE = token<Scope>(Symbol('my-scope'))
 
 bindScope(MY_SCOPE, container => new MyCustomScope())
 ```

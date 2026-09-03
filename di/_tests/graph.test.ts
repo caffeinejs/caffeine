@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest'
 
 import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJSON, graphToText } from '../graph.js'
 import { token } from '../key.js'
+import type { Scope } from '../scope.js'
 import { binding } from './property/helpers/binding_factory.js'
 
-const TRANSIENT = token<any>(Symbol('transient'))
+const TRANSIENT = token<Scope>(Symbol('transient'))
 
 class ServiceA {}
 class ServiceB {}
@@ -137,7 +138,7 @@ describe('buildBindingGraph', function () {
   })
 
   it('creates label-group edge for bindings sharing a label', function () {
-    const label = token<any>(Symbol('myLabel'))
+    const label = Symbol('myLabel')
     const bA = binding(1, { labels: [label] })
     const bB = binding(2, { labels: [label] })
     const graph = buildBindingGraph([
@@ -159,7 +160,7 @@ describe('buildBindingGraph', function () {
   })
 
   it('maps label symbols to their descriptions', function () {
-    const label = token<any>(Symbol('groupTag'))
+    const label = Symbol('groupTag')
     const b = binding(1, { labels: [label] })
     const graph = buildBindingGraph([[ServiceA, b]])
     expect(graph.nodes[0].labels).toEqual(['groupTag'])
@@ -256,7 +257,7 @@ describe('graphToMarkdown', function () {
   })
 
   it('includes groups section for label groups', function () {
-    const label = token<any>(Symbol('feature'))
+    const label = Symbol('feature')
     const bA = binding(1, { labels: [label] })
     const bB = binding(2, { labels: [label] })
     const output = graphToMarkdown([
@@ -435,7 +436,7 @@ describe('graphToDot', function () {
 
   it('escapes double quotes in labels', function () {
     const b = binding(1)
-    const output = graphToDot([[token<any>('my"key'), b]])
+    const output = graphToDot([[token<Record<string, unknown>>('my"key'), b]])
     expect(output).toContain('\\"')
     expect(output).not.toMatch(/[^\\]"my"key/)
   })
@@ -484,7 +485,7 @@ describe('graphToJSON', function () {
   })
 
   it('produces valid JSON for complex graph', function () {
-    const label = token<any>(Symbol('group'))
+    const label = Symbol('group')
     const bA = binding(1, { names: ['svc'], labels: [label], injections: [{ key: ServiceB }] })
     const bB = binding(2, { names: ['svc'], labels: [label] })
     const output = graphToJSON([

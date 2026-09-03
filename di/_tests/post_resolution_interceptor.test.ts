@@ -131,7 +131,11 @@ describe('Post Resolution Interceptor', function () {
       @Profile('pri-async-uaf')
       @Interceptor(interceptorSpy as PostResolutionInterceptor<AsyncService>)
       @UseAsyncFactory(async () => new AsyncService('uaf-value'))
-      class AsyncServiceImpl extends AsyncService {}
+      class AsyncServiceImpl extends AsyncService {
+        constructor() {
+          super('')
+        }
+      }
 
       const di = new CaffeineIoC({ profiles: ['pri-async-uaf'] })
       await di.init()

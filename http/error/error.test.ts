@@ -379,7 +379,7 @@ class ValidationHandler extends ErrorHandler<Error> {
   }
 }
 
-// Two handlers share a name; @Primary decides which one @CatchWith(token<any>('deltaHandler')) resolves.
+// Two handlers share a name; @Primary decides which one @CatchWith(token<ErrorHandler<Error>>('deltaHandler')) resolves.
 @Named('deltaHandler')
 @Catch(ErrDelta, { global: false })
 class DeltaFallbackHandler extends ErrorHandler<ErrDelta> {
@@ -460,7 +460,7 @@ class CatchByPriorityController {
   }
 }
 
-@CatchWith(token<any>('deltaHandler'))
+@CatchWith(token<ErrorHandler<Error>>('deltaHandler'))
 @Controller('/cb-named')
 class CatchByNamedController {
   @Get('/delta')

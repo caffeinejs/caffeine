@@ -1,4 +1,4 @@
-import { Ctor, ErrInvalidDecorator, Injectable, Injection, Tag } from '@caffeinejs/di'
+import { Ctor, ErrInvalidDecorator, Injectable, Injection, Tag, type InjectionsFor } from '@caffeinejs/di'
 
 import { CatchMetadata, kErrorHandler } from '../error/index.js'
 import { configureControllerErrorHandler } from './registrar/registrar.js'
@@ -54,14 +54,20 @@ export interface CatchOptions {
  */
 type CatchDecorator = (target: unknown, context: ClassDecoratorContext | ClassMethodDecoratorContext) => void
 
+/** Dependencies apply to a handler class only — a `@Catch` method takes error types and nothing else. */
+type CatchClassDecorator<A extends unknown[]> = (target: Ctor<unknown, A>, context: ClassDecoratorContext) => void
+
 export function Catch(errors: Ctor<Error> | Ctor<Error>[]): CatchDecorator
-export function Catch(errors: Ctor<Error> | Ctor<Error>[], dependencies: Injection[]): CatchDecorator
-export function Catch(errors: Ctor<Error> | Ctor<Error>[], options: CatchOptions): CatchDecorator
-export function Catch(
+export function Catch<A extends unknown[]>(
   errors: Ctor<Error> | Ctor<Error>[],
-  dependencies: Injection[],
+  dependencies: [...InjectionsFor<A>],
+): CatchClassDecorator<A>
+export function Catch(errors: Ctor<Error> | Ctor<Error>[], options: CatchOptions): CatchDecorator
+export function Catch<A extends unknown[]>(
+  errors: Ctor<Error> | Ctor<Error>[],
+  dependencies: [...InjectionsFor<A>],
   options: CatchOptions,
-): CatchDecorator
+): CatchClassDecorator<A>
 export function Catch(
   errors: Ctor<Error> | Ctor<Error>[],
   dependenciesOrOptions?: Injection[] | CatchOptions,
@@ -90,6 +96,8 @@ export function Catch(
       return
     }
 
+    // The positional check lives on this function's overloads. Inside the implementation the list has widened
+    // back to `Injection[]`, exactly as it has inside `@Injectable`'s own implementation, so the call is cast.
     const injectable = Injectable as (
       dependencies: Injection[],
     ) => (target: Ctor, context: ClassDecoratorContext) => void

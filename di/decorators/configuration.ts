@@ -1,5 +1,5 @@
 import { ErrInvalidDecorator, ErrScopeMismatchInConfiguration } from '../errors.js'
-import { Injection } from '../injection.js'
+import { Injection, InjectionsFor } from '../injection.js'
 import { isNil } from '../internal/util/assert/index.js'
 import { solutions } from '../internal/util/errutil/index.js'
 import { InjectionToken } from '../key.js'
@@ -26,9 +26,9 @@ import { normalizeInjections } from './util/index.js'
  * ```
  */
 export function Configuration(): <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) => void
-export function Configuration(
-  injections: Injection[],
-): <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) => void
+export function Configuration<A extends unknown[]>(
+  injections: [...InjectionsFor<A>],
+): (target: Ctor<unknown, A>, context: ClassDecoratorContext) => void
 export function Configuration<T>(injections?: Injection[]) {
   return function <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) {
     const deps = injections ?? []

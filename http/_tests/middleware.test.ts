@@ -61,7 +61,7 @@ class MiddlewareController {
 }
 void [MiddlewareController]
 
-const kTagger = token<any>(Symbol('tagger'))
+const kTagger = token<Tagger>(Symbol('tagger'))
 
 class Tag {
   constructor(readonly value: string) {}

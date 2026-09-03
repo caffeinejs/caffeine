@@ -9,7 +9,7 @@ import { $i } from '../injection.js'
 import { token } from '../key.js'
 
 describe('Inject Into Map', function () {
-  const kMap = token<any>(Symbol('map'))
+  const kMap = token<Greeter>(Symbol('map'))
 
   interface Greeter {
     greet(): string
@@ -57,12 +57,12 @@ describe('Inject Into Map', function () {
 
       const consumer = di.build(OptConsumer, [$i.optional($i.mapped(kMap))])
       expect(consumer.greeters).toBeInstanceOf(Map)
-      expect(consumer.greeters!.get(token<any>('hi'))).toBeInstanceOf(Hi)
-      expect(consumer.greeters!.get(token<any>('bye'))).toBeInstanceOf(Bye)
+      expect(consumer.greeters!.get('hi')).toBeInstanceOf(Hi)
+      expect(consumer.greeters!.get('bye')).toBeInstanceOf(Bye)
     })
 
     it('should inject undefined when no bindings are registered for the key', async function () {
-      const kAbsent = token<any>(Symbol('absent-greeters'))
+      const kAbsent = token<Record<string, unknown>>(Symbol('absent-greeters'))
 
       class OptConsumer {
         constructor(readonly data: Map<string, unknown> | undefined) {}
@@ -83,9 +83,9 @@ describe('Inject Into Map', function () {
 
       const welcome = di.get(Welcome)
 
-      expect(welcome.greeters.get(token<any>('hi'))).toBeInstanceOf(Hi)
-      expect(welcome.greeters.get(token<any>('bye'))).toBeInstanceOf(Bye)
-      expect(welcome.greeters.get(token<any>('tschuss'))).toBeUndefined()
+      expect(welcome.greeters.get('hi')).toBeInstanceOf(Hi)
+      expect(welcome.greeters.get('bye')).toBeInstanceOf(Bye)
+      expect(welcome.greeters.get('tschuss')).toBeUndefined()
     })
   })
 })

@@ -98,7 +98,7 @@ describe('Class', function () {
   })
 
   describe('when injecting multiple dependencies with the same key', function () {
-    const kIdentifier = token<any>(Symbol('testID'))
+    const kIdentifier = token<Base>(Symbol('testID'))
 
     abstract class Base {
       abstract hello(): string
@@ -138,7 +138,7 @@ describe('Class', function () {
 
   describe('resolving multiple for same Key', function () {
     describe('when multiple resolutions exists for a named Key', function () {
-      const kName = token<any>(Symbol('svc'))
+      const kName = token<{ name(): string }>(Symbol('svc'))
 
       @Injectable()
       @Named(kName)
@@ -167,7 +167,7 @@ describe('Class', function () {
     })
 
     describe('when multiple injectables are named equally but none is defined as primary', function () {
-      const name = token<any>('svc-no-single')
+      const name = token<Record<string, unknown>>('svc-no-single')
 
       @Injectable()
       @Named(name)
@@ -197,7 +197,7 @@ describe('Class', function () {
         const di = new CaffeineIoC()
         await di.init()
 
-        expect(() => di.getMany(token<any>('nonexistent'))).toThrow(ErrNoResolutionForKey)
+        expect(() => di.getMany(token<Record<string, unknown>>('nonexistent'))).toThrow(ErrNoResolutionForKey)
       })
     })
   })
@@ -347,10 +347,12 @@ describe('Class', function () {
   })
 
   describe('when using a custom key', function () {
-    const kKey = token<any>(Symbol('key'))
+    const kKey = token<Service>(Symbol('key'))
 
     @Injectable(kKey)
     class Service {
+      readonly kind = 'service'
+
       constructor() {}
     }
 

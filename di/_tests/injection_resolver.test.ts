@@ -14,7 +14,7 @@ import { standardFactory } from '../internal/core/resolver/index.js'
 import { token } from '../key.js'
 
 const sentinel = { value: 42 }
-const kTestResolver = token<any>(Symbol('test-resolver'))
+const kTestResolver = Symbol('test-resolver')
 
 class CustomConsumer {
   constructor(readonly dep: typeof sentinel) {}
@@ -39,7 +39,7 @@ describe('hasResolver()', function () {
   })
 
   it('returns false for unknown resolver', function () {
-    expect(hasResolver(token<any>(Symbol('unknown')))).toBe(false)
+    expect(hasResolver(token<Record<string, unknown>>(Symbol('unknown')))).toBe(false)
   })
 })
 
@@ -67,7 +67,7 @@ describe('unbindResolver()', function () {
 
 describe('providerResolverFactory — missing binding (L-2)', function () {
   it('should throw ErrNoResolutionForKey at init() time when the injected key is not registered', async function () {
-    const kMissing = token<any>(Symbol('missing-l2'))
+    const kMissing = token<Record<string, unknown>>(Symbol('missing-l2'))
 
     class Consumer {
       constructor(readonly dep: unknown) {}
@@ -80,14 +80,16 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
   })
 
   it('should return a Provider whose get() is undefined when $i.provide() target is optional and missing', async function () {
-    const kMissing = token<any>(Symbol('missing-optional-l2'))
+    const kMissing = token<Record<string, unknown>>(Symbol('missing-optional-l2'))
 
     class OptConsumer {
       constructor(readonly dep: unknown) {}
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(OptConsumer, t => t.toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER }]))
+    di.bind(OptConsumer, t =>
+      t.toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER } as never]),
+    )
     await di.init()
 
     const inst = di.get(OptConsumer)
@@ -99,12 +101,12 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
 describe('defaultResolverFactory', function () {
   it('should return undefined for optional missing dependencies', function () {
     const di = new CaffeineIoC({ decorators: false })
-    const kMissing = token<any>(Symbol('resolver-missing-optional'))
+    const kMissing = token<Record<string, unknown>>(Symbol('resolver-missing-optional'))
 
     const resolver = standardFactory({
       container: di,
       descriptor: $i.optional(kMissing),
-      key: token<any>('consumer'),
+      key: token<Record<string, unknown>>('consumer'),
       kind: 'constructor',
       member: 'miss',
       index: 0,
@@ -114,17 +116,17 @@ describe('defaultResolverFactory', function () {
   })
 
   it('should resolve all bindings for multiple injection', async function () {
-    const kShared = token<any>(Symbol('resolver-shared-multi'))
+    const kShared = token<Record<string, unknown>>(Symbol('resolver-shared-multi'))
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(token<any>('a'), t => t.toValue('one').names(kShared))
-    di.bind(token<any>('b'), t => t.toValue('two').names(kShared))
+    di.bind(token<string>('a'), t => t.toValue('one').names(kShared))
+    di.bind(token<string>('b'), t => t.toValue('two').names(kShared))
     await di.init()
 
     const resolver = standardFactory({
       container: di,
       descriptor: $i.allOf(kShared),
-      key: token<any>('consumer'),
+      key: token<Record<string, unknown>>('consumer'),
       kind: 'constructor',
       member: 'm',
       index: 0,
@@ -139,7 +141,7 @@ describe('custom resolver end-to-end', function () {
     bindResolver(kTestResolver, () => () => sentinel)
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(CustomConsumer, t => t.toSelf([{ resolver: kTestResolver }]))
+    di.bind(CustomConsumer, t => t.toSelf([{ resolver: kTestResolver } as never]))
     await di.init()
 
     expect(di.get(CustomConsumer)!.dep).toBe(sentinel)
@@ -147,7 +149,9 @@ describe('custom resolver end-to-end', function () {
 
   it('throws ErrUnknownResolver when resolver name is not registered', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(UnknownResolverConsumer, t => t.toSelf([{ resolver: token<any>(Symbol('no-such-resolver')) }]))
+    di.bind(UnknownResolverConsumer, t =>
+      t.toSelf([{ resolver: token<Record<string, unknown>>(Symbol('no-such-resolver')) } as never]),
+    )
 
     await expect(di.init()).rejects.toBeInstanceOf(ErrUnknownResolver)
   })

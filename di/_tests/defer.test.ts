@@ -49,7 +49,7 @@ describe('$i.defer() composition', function () {
 
   describe('$i.allOf($i.defer())', function () {
     it('injects all bindings for the deferred key', async function () {
-      const kPlugin = token<any>(Symbol('plugin'))
+      const kPlugin = token<{ name(): string }>(Symbol('plugin'))
 
       class PluginA {
         name() {
@@ -79,7 +79,7 @@ describe('$i.defer() composition', function () {
     })
 
     it('injects empty array when no bindings are registered for the deferred key', async function () {
-      const kAbsent = token<any>(Symbol('absent'))
+      const kAbsent = token<Record<string, unknown>>(Symbol('absent'))
 
       class Host {
         constructor(readonly items: unknown[]) {}

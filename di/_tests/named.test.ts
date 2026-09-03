@@ -12,8 +12,8 @@ import { ErrInvalidContainerState, ErrNoResolutionForKey, ErrRepeatedInjectableC
 import { token } from '../key.js'
 
 describe('Named Dependencies', function () {
-  const kAck = token<any>(Symbol('ok'))
-  const kBye = token<any>('test-named-dependencies-bye')
+  const kAck = token<AckService>(Symbol('ok'))
+  const kBye = token<ByeService>('test-named-dependencies-bye')
 
   @Injectable()
   @Named(kBye)
@@ -71,7 +71,7 @@ describe('Named Dependencies', function () {
 
   describe('failure scenarios resolving many', function () {
     it('should fail when trying to set multiple raw beans with same name', function () {
-      const kTest = token<any>(Symbol('test'))
+      const kTest = token<string>(Symbol('test'))
 
       expect(() => {
         @Configuration()
@@ -92,7 +92,7 @@ describe('Named Dependencies', function () {
     })
 
     it('should fail when repeating the same bean key', function () {
-      const kOne = token<any>(Symbol('one'))
+      const kOne = token<Record<string, unknown>>(Symbol('one'))
 
       expect(() => {
         @Configuration()
@@ -114,9 +114,9 @@ describe('Named Dependencies', function () {
   })
 
   describe('when configuration provides many components of same type with different names', function () {
-    const kTwo = token<any>(Symbol('two'))
-    const kAm = token<any>(Symbol('am'))
-    const kEu = token<any>(Symbol('eu'))
+    const kTwo = token<Msg>(Symbol('two'))
+    const kAm = token<Msg>(Symbol('am'))
+    const kEu = token<Msg>(Symbol('eu'))
 
     @Configuration()
     class Conf {
@@ -180,7 +180,7 @@ describe('Named Dependencies', function () {
       })
 
       it('should return empty array for unregistered symbol key', async function () {
-        const kMissing = token<any>(Symbol('missing'))
+        const kMissing = token<Record<string, unknown>>(Symbol('missing'))
         const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
@@ -191,7 +191,7 @@ describe('Named Dependencies', function () {
         const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
-        expect(di.getManyOptional(token<any>('no-such-key'))).toEqual([])
+        expect(di.getManyOptional(token<Record<string, unknown>>('no-such-key'))).toEqual([])
       })
     })
 
@@ -209,7 +209,7 @@ describe('Named Dependencies', function () {
       })
 
       it('should return array with one instance for symbol key', async function () {
-        const kSymbol = token<any>(Symbol('getManyOptional-single'))
+        const kSymbol = token<number>(Symbol('getManyOptional-single'))
         const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
           c.bind(kSymbol, t => t.toValue(42))
@@ -224,11 +224,11 @@ describe('Named Dependencies', function () {
       it('should return array with one instance for string key', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.addModules(c => {
-          c.bind(token<any>('str-key'), t => t.toValue('hello'))
+          c.bind(token<string>('str-key'), t => t.toValue('hello'))
         })
         await di.init()
 
-        const result = di.getManyOptional(token<any>('str-key'))
+        const result = di.getManyOptional(token<Record<string, unknown>>('str-key'))
         expect(result).toHaveLength(1)
         expect(result[0]).toBe('hello')
       })
@@ -236,7 +236,7 @@ describe('Named Dependencies', function () {
 
     describe('contrast with getMany', function () {
       it('should return empty array where getMany would throw', async function () {
-        const kUnknown = token<any>(Symbol('unknown'))
+        const kUnknown = token<Record<string, unknown>>(Symbol('unknown'))
         const di = new CaffeineIoC({ decorators: false })
         await di.init()
 
@@ -254,7 +254,7 @@ describe('Named Dependencies', function () {
 
   describe('attempting to use same name multiple times', function () {
     it('should fail to register the component', function () {
-      const kTest = token<any>(Symbol('test'))
+      const kTest = token<Record<string, unknown>>(Symbol('test'))
 
       expect(() => {
         @Injectable()
@@ -268,8 +268,8 @@ describe('Named Dependencies', function () {
 
 describe('has() and a named binding', function () {
   it('reports a name the binding was registered under as present', async function () {
-    const kAlias = token<any>(Symbol('has-named-alias'))
-    const kUnused = token<any>(Symbol('has-named-unused'))
+    const kAlias = token<NamedSvc>(Symbol('has-named-alias'))
+    const kUnused = token<Record<string, unknown>>(Symbol('has-named-unused'))
 
     class NamedSvc {
       tag(): string {
@@ -283,7 +283,7 @@ describe('has() and a named binding', function () {
 
     // The same index `get` resolves from, so the two cannot disagree.
     expect(di.has(kAlias)).toBe(true)
-    expect((di.get(kAlias) as NamedSvc).tag()).toBe('named')
+    expect(di.get(kAlias).tag()).toBe('named')
     expect(di.has(kUnused)).toBe(false)
   })
 })

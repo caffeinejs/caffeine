@@ -57,7 +57,7 @@ describe('instanceNamespace', () => {
 
 describe('defineFeatureConfig', () => {
   it('resolves the framework defaults when nothing else says otherwise', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
       namespace: ['widget'],
       schema: widgetSchema,
@@ -71,7 +71,7 @@ describe('defineFeatureConfig', () => {
   })
 
   it('lets a code-set value override the framework default', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
       namespace: ['widget'],
       schema: widgetSchema,
@@ -87,7 +87,7 @@ describe('defineFeatureConfig', () => {
 
   // The regression the whole mechanism exists for: a builder method is a default, not a setting.
   it('lets the environment override a code-set value', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
       namespace: ['widget'],
       schema: widgetSchema,
@@ -104,7 +104,7 @@ describe('defineFeatureConfig', () => {
 
   // A builder method nobody called must leave the framework default alone rather than writing a null over it.
   it('skips undefined values instead of writing them', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
       namespace: ['widget'],
       schema: widgetSchema,
@@ -120,7 +120,7 @@ describe('defineFeatureConfig', () => {
 
   // Writing `values` as one object would have each key clear the path the previous key wrote.
   it('keeps every code-set key, not only the last', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
       namespace: ['widget'],
       schema: widgetSchema,
@@ -134,7 +134,7 @@ describe('defineFeatureConfig', () => {
   })
 
   it('re-points reads and code-set defaults together when a selector is given', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
       namespace: ['widget'],
       selector: (c: never) => (c as { app: { widget: unknown } }).app.widget,
@@ -152,7 +152,7 @@ describe('defineFeatureConfig', () => {
   })
 
   it('keeps two instances of one feature apart', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const fallback = defineFeatureConfig<WidgetConfig>(definition, {
       namespace: instanceNamespace(['widget']),
       schema: widgetSchema,
@@ -177,7 +177,7 @@ describe('defineFeatureConfig', () => {
 
   // Activation is the builder call, never the tree: no defineFeatureConfig, no slice, nothing read.
   it('reads nothing for a namespace no feature registered', async () => {
-    const definition = new ConfigDefinition(token<any>(Symbol('app')))
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
 
     await resolve(definition, [new InlineConfigProvider({ widget: { size: 99 } })])
 

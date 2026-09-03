@@ -10,11 +10,11 @@ describe('hasScopeWithinGraph', function () {
   it('returns false for unregistered key', async function () {
     const di = new CaffeineIoC({ decorators: false })
     await di.init()
-    expect(di.hasScopeInGraph(token<any>(Symbol('not-registered')), Scopes.SINGLETON)).toBe(false)
+    expect(di.hasScopeInGraph(token<Record<string, unknown>>(Symbol('not-registered')), Scopes.SINGLETON)).toBe(false)
   })
 
   it('returns true when root binding has the scope', async function () {
-    const kA = token<any>(Symbol('ghs-root-scope'))
+    const kA = token<string>(Symbol('ghs-root-scope'))
     const di = new CaffeineIoC({ decorators: false })
     di.bind(kA, t => t.toValue('a').lifetime(Scopes.SINGLETON))
     await di.init()
@@ -22,7 +22,7 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('returns false when root binding does not have the scope', async function () {
-    const kA = token<any>(Symbol('ghs-root-no-scope'))
+    const kA = token<string>(Symbol('ghs-root-no-scope'))
     const di = new CaffeineIoC({ decorators: false })
     di.bind(kA, t => t.toValue('a').lifetime(Scopes.TRANSIENT))
     await di.init()
@@ -30,9 +30,9 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('returns true when a transitive dependency has the scope', async function () {
-    const kA = token<any>(Symbol('ghs-trans-a'))
-    const kB = token<any>(Symbol('ghs-trans-b'))
-    const kC = token<any>(Symbol('ghs-trans-c'))
+    const kA = token<string>(Symbol('ghs-trans-a'))
+    const kB = token<string>(Symbol('ghs-trans-b'))
+    const kC = token<string>(Symbol('ghs-trans-c'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
     di.bind(kC, t => t.toValue('c').lifetime(Scopes.SINGLETON))
     di.bind(kB, t => t.toFunction((_: unknown) => 'b', [kC]).lifetime(Scopes.TRANSIENT))
@@ -42,8 +42,8 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('returns false when no binding in the graph has the scope', async function () {
-    const kA = token<any>(Symbol('ghs-none-a'))
-    const kB = token<any>(Symbol('ghs-none-b'))
+    const kA = token<string>(Symbol('ghs-none-a'))
+    const kB = token<string>(Symbol('ghs-none-b'))
     const di = new CaffeineIoC({ decorators: false })
     di.bind(kB, t => t.toValue('b').lifetime(Scopes.TRANSIENT))
     di.bind(kA, t => t.toFunction((_: unknown) => 'a', [kB]).lifetime(Scopes.TRANSIENT))
@@ -52,8 +52,8 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('handles cycles without infinite loop', async function () {
-    const kA = token<any>(Symbol('ghs-cycle-a'))
-    const kB = token<any>(Symbol('ghs-cycle-b'))
+    const kA = token<string>(Symbol('ghs-cycle-a'))
+    const kB = token<string>(Symbol('ghs-cycle-b'))
     const di = new CaffeineIoC({ checks: { circularReferences: false, scopes: 'off' }, decorators: false })
     di.bind(kA, t => t.toFunction((_: unknown) => 'a', [kB]).lifetime(Scopes.TRANSIENT))
     di.bind(kB, t => t.toFunction((_: unknown) => 'b', [kA]).lifetime(Scopes.TRANSIENT))
@@ -62,8 +62,8 @@ describe('hasScopeWithinGraph', function () {
   })
 
   it('finds scope through a named-key injection', async function () {
-    const kSvc = token<any>('ghs-named-svc')
-    const kOwner = token<any>(Symbol('ghs-named-owner'))
+    const kSvc = token<string>('ghs-named-svc')
+    const kOwner = token<string>(Symbol('ghs-named-owner'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
     di.bind(kSvc, t => t.toValue('svc').lifetime(Scopes.SINGLETON))
     di.bind(kOwner, t => t.toFunction((_: unknown) => 'owner', [kSvc]).lifetime(Scopes.TRANSIENT))
@@ -79,7 +79,7 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
   // aspect injecting a TRANSIENT dep would ordinarily be a captive-dependency violation.
 
   class AspectWithDep implements MethodAspect {
-    constructor(private readonly _dep: unknown) {}
+    constructor(private readonly _dep: string) {}
     before(): void {}
   }
 
@@ -88,8 +88,8 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
   }
 
   it('returns true when aspect dep graph contains the target scope', async function () {
-    const kController = token<any>(Symbol('ghs-aspect-ctrl'))
-    const kDep = token<any>(Symbol('ghs-aspect-dep'))
+    const kController = token<string>(Symbol('ghs-aspect-ctrl'))
+    const kDep = token<string>(Symbol('ghs-aspect-dep'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
     di.bind(kController, t => t.toValue('ctrl').lifetime(Scopes.SINGLETON))
@@ -103,7 +103,7 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
   })
 
   it('returns false when no aspect dep or controller dep has the target scope', async function () {
-    const kController = token<any>(Symbol('ghs-aspect-no-scope-ctrl'))
+    const kController = token<string>(Symbol('ghs-aspect-no-scope-ctrl'))
     const di = new CaffeineIoC({ decorators: false })
 
     di.bind(kController, t => t.toValue('ctrl').lifetime(Scopes.SINGLETON))
@@ -116,8 +116,8 @@ describe('hasScopeWithinGraph — aspect scope detection', function () {
   })
 
   it('returns false pre-compile because aspect scope cache is not yet built', function () {
-    const kController = token<any>(Symbol('ghs-aspect-precompile-ctrl'))
-    const kDep = token<any>(Symbol('ghs-aspect-precompile-dep'))
+    const kController = token<string>(Symbol('ghs-aspect-precompile-ctrl'))
+    const kDep = token<string>(Symbol('ghs-aspect-precompile-dep'))
     const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
 
     di.bind(kController, t => t.toValue('ctrl').lifetime(Scopes.SINGLETON))

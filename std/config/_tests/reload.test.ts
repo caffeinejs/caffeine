@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
 import { $t } from '../../schema/t.js'
@@ -12,7 +12,7 @@ import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
 import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 
-const APP_CONFIG = token<any>(Symbol('app.config'))
+const APP_CONFIG = opaqueToken(Symbol('app.config'))
 const schema = $t.Object({ port: $t.Number({ default: 0 }) })
 
 async function containerFor(definition: ConfigDefinition): Promise<CaffeineIoC> {

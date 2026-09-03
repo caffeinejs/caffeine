@@ -84,9 +84,13 @@ function injectionTupleTypeChecks(di: CaffeineIoC): void {
 
   di.bind(OptionalDep, t => t.toSelf([Repo, $i.optional(Logger)]))
 
-  // `InjectionDescriptor`'s result brand is optional, so `T | undefined` satisfies a `T` parameter: an
-  // `$i.optional` dependency on a required parameter is accepted. Widening the parameter is the caller's call.
-  di.bind(Service, t => t.toSelf([Repo, $i.optional(Logger)]))
+  di.bind(Service, t =>
+    t.toSelf([
+      Repo,
+      // @ts-expect-error optional injection does not satisfy a required parameter
+      $i.optional(Logger),
+    ]),
+  )
 
   di.bind(Service, t =>
     t.toSelf([

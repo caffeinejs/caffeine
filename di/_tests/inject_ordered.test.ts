@@ -9,7 +9,7 @@ import { mod } from '../module.js'
 
 describe('$i.ordered() injection', function () {
   describe('given multiple bindings with @Order — resolves in ascending order', function () {
-    const kHandler = token<any>(Symbol('handler-ordered-asc'))
+    const kHandler = token<Handler>(Symbol('handler-ordered-asc'))
 
     interface Handler {
       name(): string
@@ -54,7 +54,7 @@ describe('$i.ordered() injection', function () {
   })
 
   describe('given bindings with equal order values', function () {
-    const kTied = token<any>(Symbol('handler-ordered-tied'))
+    const kTied = token<Tied>(Symbol('handler-ordered-tied'))
 
     interface Tied {
       label(): string
@@ -92,7 +92,7 @@ describe('$i.ordered() injection', function () {
   })
 
   describe('given a mix of ordered and unordered bindings', function () {
-    const kStep = token<any>(Symbol('handler-ordered-mixed'))
+    const kStep = token<Step>(Symbol('handler-ordered-mixed'))
 
     interface Step {
       label(): string
@@ -139,7 +139,7 @@ describe('$i.ordered() injection', function () {
   })
 
   describe('given no bindings registered for the key', function () {
-    const kEmpty = token<any>(Symbol('handler-ordered-empty'))
+    const kEmpty = token<Record<string, unknown>>(Symbol('handler-ordered-empty'))
 
     @Injectable([$i.ordered(kEmpty)])
     class Consumer {

@@ -22,12 +22,12 @@ describe('Real World', function () {
   const sendSpy = vi.fn()
   const userSpy = vi.fn()
 
-  const kEmail = token<any>(Symbol('mail'))
-  const kSms = token<any>('sms')
-  const kAm = token<any>(Symbol('am'))
-  const kAf = token<any>(Symbol('af'))
-  const kAs = token<any>(Symbol('as'))
-  const kRegions = token<any>(Symbol('regions'))
+  const kEmail = token<NotificationService>(Symbol('mail'))
+  const kSms = token<NotificationService>('sms')
+  const kAm = token<string>(Symbol('am'))
+  const kAf = token<string>(Symbol('af'))
+  const kAs = token<string>(Symbol('as'))
+  const kRegions = token<string>(Symbol('regions'))
 
   const Globals = {
     Env: 'test',
@@ -179,7 +179,7 @@ describe('Real World', function () {
     }
   }
 
-  @Injectable(token<any>('token'), [UserRepository, kSms])
+  @Injectable(token<UserService>('token'), [UserRepository, kSms])
   class UserService {
     constructor(
       private readonly userRepository: UserRepository,
@@ -195,6 +195,7 @@ describe('Real World', function () {
     }
   }
 
+  // @ts-expect-error factory is bound under the Product class key
   @Injectable([Product])
   class ProductService {
     constructor(private readonly repository: GenericRepository<Product>) {}

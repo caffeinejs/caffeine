@@ -57,9 +57,9 @@ describe('@Fallback() on a class', function () {
 // preventing mid-run accumulation that could affect unrelated tests.
 
 describe('@Fallback() on a @Provides method', function () {
-  const kFallbackOnly = token<any>(Symbol('fb-fallback-only'))
-  const kShared = token<any>(Symbol('fb-shared'))
-  const kConcrete = token<any>(Symbol('fb-concrete'))
+  const kFallbackOnly = token<string>(Symbol('fb-fallback-only'))
+  const kShared = token<string>(Symbol('fb-shared'))
+  const kConcrete = token<string>(Symbol('fb-concrete'))
 
   @Configuration()
   class LibConfig {
@@ -115,7 +115,7 @@ describe('@Fallback() on a @Provides method', function () {
 
 describe('.fallback() on BindingSpec', function () {
   it('should register the binding when no other binding exists for the key', async function () {
-    const kFlu = token<any>(Symbol('flu-only'))
+    const kFlu = token<FluLib>(Symbol('flu-only'))
 
     class FluLib {
       tag() {
@@ -133,7 +133,7 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should be skipped when a non-fallback binding was registered for the key first', async function () {
-    const kFlu3 = token<any>(Symbol('flu-loses-to-earlier'))
+    const kFlu3 = token<FluConsumer>(Symbol('flu-loses-to-earlier'))
 
     class FluLib {
       tag() {
@@ -159,7 +159,7 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should keep the first fallback when a second one is registered for the same key', async function () {
-    const kFlu4 = token<any>(Symbol('flu-two-fallbacks'))
+    const kFlu4 = token<FirstLib>(Symbol('flu-two-fallbacks'))
 
     class FirstLib {
       tag() {
@@ -183,7 +183,7 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should register when the competing binding is dropped by a failing conditional', async function () {
-    const kFlu5 = token<any>(Symbol('flu-competitor-dropped'))
+    const kFlu5 = token<FluConsumer>(Symbol('flu-competitor-dropped'))
 
     class FluLib {
       tag() {
@@ -209,9 +209,11 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should not register a fallback whose own conditional fails', async function () {
-    const kFlu6 = token<any>(Symbol('flu-conditional'))
+    const kFlu6 = token<FluLib>(Symbol('flu-conditional'))
 
-    class FluLib {}
+    class FluLib {
+      readonly kind = 'lib'
+    }
 
     const di = new CaffeineIoC({ decorators: false })
 
@@ -227,9 +229,11 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should not register a fallback whose profiles do not match', async function () {
-    const kFlu7 = token<any>(Symbol('flu-profile'))
+    const kFlu7 = token<FluLib>(Symbol('flu-profile'))
 
-    class FluLib {}
+    class FluLib {
+      readonly kind = 'lib'
+    }
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['prod'] })
 
@@ -240,7 +244,7 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should lose to a non-fallback binding registered by a module', async function () {
-    const kFlu8 = token<any>(Symbol('flu-module'))
+    const kFlu8 = token<FluConsumer>(Symbol('flu-module'))
 
     class FluLib {
       tag() {
@@ -270,9 +274,11 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should be invisible until the container is compiled', async function () {
-    const kFlu9 = token<any>(Symbol('flu-visibility'))
+    const kFlu9 = token<FluLib>(Symbol('flu-visibility'))
 
-    class FluLib {}
+    class FluLib {
+      readonly kind = 'lib'
+    }
 
     const di = new CaffeineIoC({ decorators: false })
 
@@ -288,7 +294,7 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should drop a held-back fallback when the key is rebound', async function () {
-    const kFlu10 = token<any>(Symbol('flu-rebind'))
+    const kFlu10 = token<FluLib>(Symbol('flu-rebind'))
 
     class FluLib {
       tag() {
@@ -312,7 +318,7 @@ describe('.fallback() on BindingSpec', function () {
   })
 
   it('should be overridden when a subsequent non-fallback binding is registered for the same key', async function () {
-    const kFlu2 = token<any>(Symbol('flu-overridden'))
+    const kFlu2 = token<FluLib>(Symbol('flu-overridden'))
 
     class FluLib {
       tag() {
@@ -339,8 +345,8 @@ describe('.fallback() on BindingSpec', function () {
 // ----- @Fallback() ordering guarantee ----------------------------------------
 
 describe('@Fallback() ordering guarantee via @Provides', function () {
-  const kFirst = token<any>(Symbol('order-first'))
-  const kSecond = token<any>(Symbol('order-second'))
+  const kFirst = token<string>(Symbol('order-first'))
+  const kSecond = token<string>(Symbol('order-second'))
 
   @Configuration()
   class FirstConfig {

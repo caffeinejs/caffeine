@@ -37,7 +37,7 @@ describe('Async bindings via decorators', function () {
   })
 
   it('should support a mix of sync and async dependencies', async function () {
-    const kConnectionString = token<any>(Symbol('connection-string'))
+    const kConnectionString = token<string>(Symbol('connection-string'))
 
     class ConfigValue {
       constructor(readonly url: string) {}
@@ -91,7 +91,7 @@ describe('Async bindings via decorators', function () {
   })
 
   it('should support async dependencies regardless of @Provides declaration order', async function () {
-    const kConnStr = token<any>(Symbol('conn-str'))
+    const kConnStr = token<string>(Symbol('conn-str'))
 
     class Cfg {
       constructor(readonly url: string) {}
@@ -429,7 +429,11 @@ describe('@UseAsyncFactory()', function () {
 
     @Injectable()
     @UseAsyncFactory(_ctx => Promise.resolve(new Config('redis://localhost')))
-    class Config2 extends Config {}
+    class Config2 extends Config {
+      constructor() {
+        super('')
+      }
+    }
 
     const di = new CaffeineIoC()
     await di.init()
@@ -614,7 +618,7 @@ describe('resetBinding() — async path', function () {
 
 describe('resetInstance() — mixed async + sync bindings under the same key', function () {
   it('should reset both async and non-async bindings sharing a named key', async function () {
-    const kShared = token<any>(Symbol('async-sync-shared'))
+    const kShared = token<Record<string, unknown>>(Symbol('async-sync-shared'))
     let asyncCallCount = 0
     let syncCallCount = 0
 

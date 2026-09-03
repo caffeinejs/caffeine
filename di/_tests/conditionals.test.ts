@@ -176,7 +176,7 @@ describe('Conditionals', function () {
 
   describe('conditional @Configuration cascade', function () {
     it('should skip all provides of a configuration class that fails its conditional', async function () {
-      const kCascadedProvide = token<any>(Symbol('cascadedProvide'))
+      const kCascadedProvide = token<string>(Symbol('cascadedProvide'))
 
       @Configuration()
       @ConditionalOn(() => false)
@@ -196,7 +196,7 @@ describe('Conditionals', function () {
     })
 
     it('should register all provides of a configuration class that passes its conditional', async function () {
-      const kPassingProvide = token<any>(Symbol('passingProvide'))
+      const kPassingProvide = token<string>(Symbol('passingProvide'))
 
       @Configuration()
       @ConditionalOn(() => true)
@@ -222,10 +222,10 @@ describe('Conditionals', function () {
       const spy1 = vi.fn()
       const spy2 = vi.fn()
 
-      const kTxt = token<any>(Symbol('txt'))
-      const kVal = token<any>(Symbol('val'))
-      const kJSON = token<any>(Symbol('json'))
-      const kXML = token<any>(Symbol('xml'))
+      const kTxt = token<string>(Symbol('txt'))
+      const kVal = token<string>(Symbol('val'))
+      const kJSON = token<string>(Symbol('json'))
+      const kXML = token<string>(Symbol('xml'))
 
       @Configuration()
       @ConditionalOn(() => {

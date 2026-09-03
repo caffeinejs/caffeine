@@ -7,7 +7,7 @@ import { AbstractCtor, Ctor } from './types.js'
 export type Identifier = string | symbol
 
 declare const kTokenType: unique symbol
-declare const kTokenNeedsType: unique symbol
+declare const kOpaque: unique symbol
 
 /**
  * Phantom brand that attaches a value type to a named token without a runtime object.
@@ -16,19 +16,26 @@ export interface TokenBrand<in out T> {
   readonly [kTokenType]: T
 }
 
-type TokenNeedsTypeArg = { readonly [kTokenNeedsType]: true }
-
 /**
  * A string or symbol branded with the type it resolves to.
  */
 export type NamedToken<T> = (string & TokenBrand<T>) | (symbol & TokenBrand<T>)
 
+type TokenKey<T, K> = [T] extends [never] ? never : unknown extends T ? never : object extends T ? never : K
+
 /**
  * Brands a string or symbol as a named injection token.
  * The return value is the same primitive; `T` exists only at the type level.
+ *
+ * `T` is the resolved value type. Omitting it, or passing `any`, `unknown` or `object`, is a type error: a
+ * token has to name what it resolves to.
+ *
+ * A class with no members is structurally `{}`, so it is rejected for the same reason — there is no type-level
+ * way to tell one from `object`. Give the class a member, which is worth doing anyway: a member-less type is
+ * satisfied by every value, so any assertion made against it passes vacuously.
  */
-export function token<T = never>(key: string): [T] extends [never] ? TokenNeedsTypeArg : string & TokenBrand<T>
-export function token<T = never>(key: symbol): [T] extends [never] ? TokenNeedsTypeArg : symbol & TokenBrand<T>
+export function token<T = never>(key: TokenKey<T, string>): string & TokenBrand<T>
+export function token<T = never>(key: TokenKey<T, symbol>): symbol & TokenBrand<T>
 export function token<T>(key: string | symbol): NamedToken<T> {
   return key as NamedToken<T>
 }
@@ -47,6 +54,33 @@ export type InjectionToken<T = unknown> = TypedKey<T> | NamedToken<T>
  * The value the key `K` resolves to.
  */
 export type TokenValue<K> = K extends InjectionToken<infer T> ? T : never
+
+/**
+ * The value type of an {@link OpaqueToken}. Never constructed; it exists so an opaque token is a distinct type
+ * rather than a hole every token falls through.
+ */
+export interface Opaque {
+  readonly [kOpaque]: never
+}
+
+/**
+ * A token whose resolved type the declaring package cannot name, so each caller supplies it:
+ * `container.get<ConfigHandle<AppConfig>>(kAppConfig)`.
+ *
+ * Reach for this only when the value's shape is genuinely decided by the application — an application
+ * configuration handle, a values provider. An ordinary token names its type and is checked against it; this one
+ * trades that check away, so every use is a place the compiler stops helping.
+ */
+export type OpaqueToken = NamedToken<Opaque>
+
+/**
+ * Brands a string or symbol as an {@link OpaqueToken}.
+ */
+export function opaqueToken(key: string): string & TokenBrand<Opaque>
+export function opaqueToken(key: symbol): symbol & TokenBrand<Opaque>
+export function opaqueToken(key: string | symbol): OpaqueToken {
+  return key as OpaqueToken
+}
 
 export function isNamedKey(dep: unknown): dep is NamedToken<unknown> {
   return (typeof dep === 'string' && dep.length > 0) || typeof dep === 'symbol'
