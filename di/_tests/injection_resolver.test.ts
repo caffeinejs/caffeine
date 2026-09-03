@@ -1,16 +1,26 @@
 import { describe, it, afterEach, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ErrNoResolutionForKey, ErrResolverAlreadyRegistered, ErrUnknownResolver } from '../errors.js'
+import {
+  ErrConflictingInjectionStages,
+  ErrInjectionStageAlreadyRegistered,
+  ErrNoResolutionForKey,
+  ErrResolverAlreadyRegistered,
+  ErrUnknownResolver,
+} from '../errors.js'
 import { $i } from '../injection.js'
 import {
-  BuiltInResolvers,
+  BuiltInStages,
   bindResolver,
   hasResolver,
+  hasStage,
+  InjectionMiddleware,
   InjectionResolverFactory,
+  registerStage,
   unbindResolver,
+  unregisterStage,
 } from '../injection_resolver.js'
-import { standardFactory } from '../internal/core/resolver/index.js'
+import { compileChain } from '../internal/core/resolver/index.js'
 import { token } from '../key.js'
 
 const sentinel = { value: 42 }
@@ -24,21 +34,33 @@ class UnknownResolverConsumer {
   constructor(readonly dep: unknown) {}
 }
 
+const kTestStage = Symbol('test-stage')
+
 afterEach(() => {
   if (hasResolver(kTestResolver)) {
     unbindResolver(kTestResolver)
   }
+  if (hasStage(kTestStage)) {
+    unregisterStage(kTestStage)
+  }
+})
+
+describe('hasStage()', function () {
+  it('returns true for built-in stages', function () {
+    expect(hasStage(BuiltInStages.MANY)).toBe(true)
+    expect(hasStage(BuiltInStages.MAP)).toBe(true)
+    expect(hasStage(BuiltInStages.SORT)).toBe(true)
+    expect(hasStage(BuiltInStages.PROVIDER)).toBe(true)
+    expect(hasStage(BuiltInStages.OBJECT)).toBe(true)
+  })
+
+  it('returns false for an unknown stage', function () {
+    expect(hasStage(Symbol('unknown'))).toBe(false)
+  })
 })
 
 describe('hasResolver()', function () {
-  it('returns true for built-in resolvers', function () {
-    expect(hasResolver(BuiltInResolvers.DEFAULT)).toBe(true)
-    expect(hasResolver(BuiltInResolvers.MAP)).toBe(true)
-    expect(hasResolver(BuiltInResolvers.DEFER)).toBe(true)
-    expect(hasResolver(BuiltInResolvers.OBJECT)).toBe(true)
-  })
-
-  it('returns false for unknown resolver', function () {
+  it('returns false for a name nothing registered', function () {
     expect(hasResolver(token<Record<string, unknown>>(Symbol('unknown')))).toBe(false)
   })
 })
@@ -65,6 +87,99 @@ describe('unbindResolver()', function () {
   })
 })
 
+describe('registerStage()', function () {
+  const passthrough: InjectionMiddleware = (ctx, next) => next(ctx)
+
+  it('registers a stage under a name', function () {
+    registerStage(kTestStage, passthrough)
+    expect(hasStage(kTestStage)).toBe(true)
+  })
+
+  it('throws ErrInjectionStageAlreadyRegistered on duplicate name', function () {
+    registerStage(kTestStage, passthrough)
+    expect(() => registerStage(kTestStage, passthrough)).toThrow(ErrInjectionStageAlreadyRegistered)
+  })
+
+  it('keeps stage names separate from resolver names', function () {
+    registerStage(kTestStage, passthrough)
+    bindResolver(kTestResolver, () => () => undefined)
+
+    expect(hasResolver(kTestStage)).toBe(false)
+    expect(hasStage(kTestResolver)).toBe(false)
+  })
+})
+
+describe('a custom resolver composed with stages', function () {
+  const kPlug = token<{ id: string }>(Symbol('custom-terminal-plug'))
+
+  it('acts as the terminal, with a wrapping stage composed over it', async function () {
+    bindResolver(kTestResolver, () => () => sentinel)
+
+    class Holder {
+      constructor(readonly dep: { get(): typeof sentinel }) {}
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Holder, t =>
+      t.toSelf([{ key: kPlug, resolver: kTestResolver, stages: [{ name: BuiltInStages.PROVIDER }] } as never]),
+    )
+    await di.init()
+
+    expect(di.get(Holder).dep.get()).toBe(sentinel)
+  })
+
+  it('conflicts with a terminal stage naming both', async function () {
+    bindResolver(kTestResolver, () => () => sentinel)
+
+    class Holder {
+      constructor(readonly dep: unknown) {}
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Holder, t =>
+      t.toSelf([{ key: kPlug, resolver: kTestResolver, stages: [{ name: BuiltInStages.MANY }] } as never]),
+    )
+
+    await expect(di.init()).rejects.toBeInstanceOf(ErrConflictingInjectionStages)
+  })
+
+  it('runs a custom transforming stage before the terminal', async function () {
+    class Alpha {
+      readonly id = 'alpha'
+    }
+
+    class Beta {
+      readonly id = 'beta'
+    }
+
+    // The narrowing stage from the injection-resolvers reference: it changes the bindings and hands the rest of
+    // the chain straight back.
+    registerStage(kTestStage, (ctx, next) => next({ ...ctx, bindings: ctx.bindings.slice(0, 1) }))
+
+    class Holder {
+      constructor(readonly plugins: { id: string }[]) {}
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Alpha, t => t.toSelf().names(kPlug))
+    di.bind(Beta, t => t.toSelf().names(kPlug))
+    di.bind(Holder, t =>
+      t.toSelf([{ key: kPlug, stages: [{ name: kTestStage }, { name: BuiltInStages.MANY }] } as never]),
+    )
+    await di.init()
+
+    expect(di.get(Holder).plugins).toHaveLength(1)
+  })
+})
+
+describe('unregisterStage()', function () {
+  it('removes a registered stage', function () {
+    registerStage(kTestStage, (ctx, next) => next(ctx))
+    unregisterStage(kTestStage)
+    expect(hasStage(kTestStage)).toBe(false)
+  })
+})
+
 describe('providerResolverFactory — missing binding (L-2)', function () {
   it('should throw ErrNoResolutionForKey at init() time when the injected key is not registered', async function () {
     const kMissing = token<Record<string, unknown>>(Symbol('missing-l2'))
@@ -87,9 +202,7 @@ describe('providerResolverFactory — missing binding (L-2)', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(OptConsumer, t =>
-      t.toSelf([{ key: kMissing, optional: true, resolver: BuiltInResolvers.PROVIDER } as never]),
-    )
+    di.bind(OptConsumer, t => t.toSelf([$i.optional($i.provide(kMissing))]))
     await di.init()
 
     const inst = di.get(OptConsumer)
@@ -103,7 +216,7 @@ describe('defaultResolverFactory', function () {
     const di = new CaffeineIoC({ decorators: false })
     const kMissing = token<Record<string, unknown>>(Symbol('resolver-missing-optional'))
 
-    const resolver = standardFactory({
+    const resolver = compileChain({
       container: di,
       descriptor: $i.optional(kMissing),
       key: token<Record<string, unknown>>('consumer'),
@@ -123,7 +236,7 @@ describe('defaultResolverFactory', function () {
     di.bind(token<string>('b'), t => t.toValue('two').names(kShared))
     await di.init()
 
-    const resolver = standardFactory({
+    const resolver = compileChain({
       container: di,
       descriptor: $i.allOf(kShared),
       key: token<Record<string, unknown>>('consumer'),

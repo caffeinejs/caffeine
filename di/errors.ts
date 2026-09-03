@@ -214,6 +214,52 @@ export class ErrResolverAlreadyRegistered extends CaffeineIoCError {
 }
 
 /**
+ * ErrUnknownInjectionStage is thrown when a descriptor names an injection stage that is not registered.
+ */
+export class ErrUnknownInjectionStage extends CaffeineIoCError {
+  constructor(name: symbol) {
+    super(
+      `Cannot resolve injection: stage "${name.description ?? String(name)}" is not registered: use registerStage() to register it`,
+      'ERR_UNKNOWN_INJECTION_STAGE',
+    )
+    this.name = 'ErrUnknownInjectionStage'
+  }
+}
+
+/**
+ * ErrInjectionStageAlreadyRegistered is thrown when an injection stage name is registered twice.
+ */
+export class ErrInjectionStageAlreadyRegistered extends CaffeineIoCError {
+  constructor(name: symbol) {
+    super(
+      `Injection stage "${name.description ?? String(name)}" is already registered`,
+      'ERR_INJECTION_STAGE_ALREADY_REGISTERED',
+    )
+    this.name = 'ErrInjectionStageAlreadyRegistered'
+  }
+}
+
+/**
+ * ErrConflictingInjectionStages is thrown when an injection names two stages that both produce the value.
+ *
+ * Only one stage in a chain may be terminal, because a terminal decides what the injection resolves to. Two of
+ * them means the injection asks for two different results, e.g. `allOf(mapped(key))` asks for an array and a map.
+ */
+export class ErrConflictingInjectionStages extends CaffeineIoCError {
+  constructor(first: symbol, second: symbol) {
+    super(
+      `Cannot compose injection stages "${first.description ?? String(first)}" and "${second.description ?? String(second)}": both decide what the injection resolves to` +
+        solutions(
+          `- Keep only one of them`,
+          `- Stages that transform or wrap, such as ordered and provide, compose with any of them`,
+        ),
+      'ERR_CONFLICTING_INJECTION_STAGES',
+    )
+    this.name = 'ErrConflictingInjectionStages'
+  }
+}
+
+/**
  * ErrMissingInjectionKey is an error that is thrown when a component dependency is missing a key.
  */
 export class ErrMissingInjectionKey extends CaffeineIoCError {

@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { ErrMissingInjectionKey, ErrNoResolutionForKey, ErrNoUniqueInjectionForKey, ErrOutOfScope } from '../errors.js'
 import { $i } from '../injection.js'
-import { BuiltInResolvers } from '../injection_resolver.js'
 import { token } from '../key.js'
 import type { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
@@ -392,7 +391,7 @@ describe('$i.provide() — missing and ambiguous targets', function () {
   })
 
   it('throws ErrMissingInjectionKey for a descriptor carrying no key', function () {
-    expect(() => $i.provide({ resolver: BuiltInResolvers.DEFAULT })).toThrow(ErrMissingInjectionKey)
+    expect(() => $i.provide({ stages: [] } as never)).toThrow(ErrMissingInjectionKey)
   })
 })
 

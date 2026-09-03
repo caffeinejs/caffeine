@@ -65,27 +65,77 @@ expect(di.get(Svc)).toBeInstanceOf(Svc)
 
 The only tests that are safe to skip `init()` are those that inspect container metadata without resolving instances (e.g. `di.has()`, `di.size`, `di.getBinding()`).
 
-## Three modules own resolution, and the split is load-bearing
+## Resolution is a middleware chain
 
-`injection_resolver_registry.ts` is a leaf: the `InjectionResolver` / `InjectionResolverFactory` /
-`InjectionResolverFactoryContext` types, `BuiltInResolvers`, the registry `Map`, `bindResolver`, `unbindResolver`,
-`hasResolver`, `resolverFor`, and `defaultResolverFor` (the shared rule for a descriptor naming no resolver:
-`DEFER` for a `DeferredCtor` key, `DEFAULT` otherwise). It imports no factory, so it can be imported from anywhere
-— including `internal/core/resolver/*`, which is where its types are consumed. **This is the module to import
-from.** There is no re-export barrel in front of it, and adding one would violate `CONVENTIONS.md`.
+An injection descriptor names **stages**, not a resolver. `compileChain` folds them into the single
+`InjectionResolver` the resolution path calls, once, while the container compiles.
 
-`BuiltInResolvers` lives in the registry, not beside the factories, because `defaultResolverFor` reads two of its
-symbols. Moving them out would make the registry import `built_in_resolvers.ts`, which imports the factories, one
-of which (`object.ts`) imports the registry.
+```ts
+type InjectionMiddleware<T> = (
+  ctx: InjectionContext<T>,
+  next: (ctx: InjectionContext<T>) => InjectionResolver<T>,
+  args?: unknown,
+) => InjectionResolver<T>
+```
 
-`built_in_resolvers.ts` exports one table pairing each built-in name with its factory. It performs no registration
-and has no side effect. **Nothing under `internal/core/resolver/` may import it** — that import is the cycle the
-split exists to avoid.
+`ctx.bindings` is what travels down the chain, which is what lets a stage sort or filter bindings before anything
+is materialized — impossible once instances exist, since order and names live on the `Binding`. A stage acts in
+one of three ways:
 
-`container.ts` is what wires them, looping the table through `bindResolver` at module scope. That is a real value
-dependency, so the built-ins cannot be silently dropped by tidying an unused import, and module scope gives
-run-once semantics that make `bindResolver`'s duplicate-name throw a non-issue. A resolution before that loop runs
-fails loudly with `ErrUnknownResolver`, which every test in the suite would catch.
+- **transform** — change `ctx.bindings`, then `return next(...)`
+- **wrap** — take what `next` returns and wrap it (`provide`)
+- **materialize** — ignore `next` and produce the resolver (`allOf`, `mapped`, `just`, `value`, `object`, and the
+  default single-binding terminal)
+
+The third kind is **terminal**, declared at registration. A chain accepts exactly one; a second throws
+`ErrConflictingInjectionStages` naming both, which is what `allOf(mapped(key))` now does instead of silently
+letting one win.
+
+Stages keep declaration order, except that the terminal always runs last. That single rule is what makes
+`ordered(provide(key))` and `provide(ordered(key))` the same chain: one transforms bindings on the way down, the
+other wraps the resolver on the way back up, so they never contend for the same slot.
+
+Two things are deliberately _not_ stages. `optional` is a flag, because only the terminal knows what an empty
+selection means — `undefined` for `mapped`, `[]` for `allOf`. And `defer` is only a `DeferredCtor` key: seeding
+unwraps it, so collecting stages see the bindings, and the default terminal returns the proxy when the key is
+deferred and not optional. That proxy is what breaks a real constructor cycle.
+
+### Performance rules for a stage
+
+The resolution path is hot enough that `classFactory` hand-unrolls arity 0-4. Every stage must therefore:
+
+- return `next(...)` **unchanged** when it only transforms bindings — wrapping it adds a call frame to every
+  resolution
+- hoist whatever it allocates out of the thunk it returns. `provide` builds its `Provider` once at compile time;
+  building one per read would allocate on every resolution _and_ break the identity `provider_injection.test.ts`
+  asserts
+- keep loops indexed over bindings captured at compile time, with no `map`, spread or closure inside the thunk
+
+Measure a suspected regression in a dedicated file against a hand-written control of the previous shape. The
+24-case `benchmarks/di/container.bench.ts` is a smoke test only: at 3-60 ns its cases reorder between processes,
+so a difference there is not evidence on its own.
+
+### The module split is load-bearing
+
+`injection_resolver.ts` is a leaf: the `InjectionResolver` / `InjectionResolverFactory` /
+`InjectionResolverFactoryContext` / `InjectionContext` / `InjectionMiddleware` types, `BuiltInStages`, both
+registries, and their accessors — `registerStage`, `unregisterStage`, `hasStage`, `stageFor`, `isTerminalStage`,
+plus `bindResolver`, `unbindResolver`, `hasResolver`, `resolverFor`. It imports no middleware, so it can be
+imported from anywhere, including `internal/core/resolver/*` where its types are consumed. **This is the module to
+import from.** There is no re-export barrel in front of it, and adding one would violate `CONVENTIONS.md`.
+
+`injection_builtin_stages.ts` exports one table pairing each built-in name with its middleware and whether it is
+terminal. It performs no registration and has no side effect. **Nothing under `internal/core/resolver/` may import
+it** — that import is the cycle the split exists to avoid.
+
+`container.ts` wires them, looping the table through `registerStage` at module scope. That is a real value
+dependency, so the built-ins cannot be dropped by tidying an unused import, and module scope gives run-once
+semantics that make `registerStage`'s duplicate-name throw a non-issue. A resolution before that loop runs fails
+loudly with `ErrUnknownInjectionStage`, which every test in the suite would catch.
+
+`bindResolver` is the escape hatch and keeps its old signature: an `InjectionResolverFactory` is already
+`(ctx) => InjectionResolver`, which is a terminal written the long way. A descriptor names it through `resolver`
+rather than `stages`, and wrapping stages such as `provide` still compose over it.
 
 ## Process-wide registration and `"sideEffects"`
 
@@ -95,15 +145,17 @@ of an exported binding. Do not add a stray `import './foo.js'` to `index.ts`: th
 so bundlers treat it as side-effect-free and will drop unused re-exports (and a bare polyfill import there).
 `CaffeineIoC` always loads `container.js`, which is why `_polyfill.js` is imported from there.
 
-`InjectionResolverFactoryContext` carries no compilation hook — it is the same shape a custom resolver registered
-with `bindResolver` has always seen. Do not widen it for one factory's internal need; route that factory to the
-registry instead, the way `object.ts` does.
+`InjectionContext` adds only `bindings` to the shape a custom resolver registered with `bindResolver` has always
+seen. Do not widen it for one stage's internal need: a stage that has to compile something reaches for
+`compileChain`, the way the object terminal does for each of its fields.
 
 ## A descriptor is what `encode()` marked
 
 `encode()` stamps `kInjectionDescriptor`, and every `$i` helper returns through it. That one mark is what both sides read: `InjectedField` tests it at the type level, `isDescriptor` tests it at run time. There is no heuristic left to drift — which matters, because the type and the runtime each guessing separately is precisely how `$i.just` came to typecheck and then throw.
 
 So inside an object spec a descriptor **must** come from a helper. A raw key still works in every form (`isValidKey` is tested first: a class, a `token(...)`, a bare string or symbol, a `DeferredCtor`), and every other object is a nested bag — including a hand-written `{ key: X }` literal, which is a bag and not an injection.
+
+The helpers that accept a descriptor — `allOf`, `ordered`, `optional`, `provide` — and `ObjectInjectionSpec` all constrain it to the branded result, so a hand-written literal is now a type error rather than a run-time `ErrMissingInjectionKey`. The run-time checks stay for callers without types.
 
 The mark is non-enumerable, so it stays out of deep-equality and any dump of a descriptor. A spread therefore drops it: a helper that builds on another must end by calling `encode` rather than by spreading, and `compose` does exactly that.
 

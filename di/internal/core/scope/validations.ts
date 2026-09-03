@@ -2,8 +2,8 @@ import { Binding } from '../../../binding.js'
 import { ScopeCheckMode } from '../../../container_interface.js'
 import { DeferredCtor } from '../../../deferred_ctor.js'
 import { ErrScopeMismatch } from '../../../errors.js'
-import { InjectionDescriptor, ObjectInjections } from '../../../injection.js'
-import { BuiltInResolvers } from '../../../injection_resolver.js'
+import { InjectionDescriptor, namesStage, ObjectInjections, stageArgs } from '../../../injection.js'
+import { BuiltInStages } from '../../../injection_resolver.js'
 import { InjectionToken, keyStr, NamedToken, TypedKey } from '../../../key.js'
 import { Scope, Scopes, scopeLabel } from '../../../scope.js'
 
@@ -105,12 +105,21 @@ function checkInjection(
   ctx: ScopeValidationContext,
   isViolation: (ownerScopeID: NamedToken<Scope>, depScopeID: NamedToken<Scope>) => boolean,
 ): void {
-  if (inj.resolver === BuiltInResolvers.PROVIDER) {
+  // A provider re-resolves on every read, so its target's scope is never captured by the consumer's.
+  if (namesStage(inj, BuiltInStages.PROVIDER)) {
     return
   }
 
-  if (inj.resolver === BuiltInResolvers.OBJECT) {
-    checkObjectInjection(ownerKey, ownerScopeID, inj.args as ObjectInjections, location, violations, ctx, isViolation)
+  if (namesStage(inj, BuiltInStages.OBJECT)) {
+    checkObjectInjection(
+      ownerKey,
+      ownerScopeID,
+      stageArgs(inj, BuiltInStages.OBJECT) as ObjectInjections,
+      location,
+      violations,
+      ctx,
+      isViolation,
+    )
     return
   }
 

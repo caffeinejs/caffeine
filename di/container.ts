@@ -28,8 +28,8 @@ import {
 } from './errors.js'
 import { HookListener } from './hooks.js'
 import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
-import { builtInResolvers } from './injection_builtin_resolvers.js'
-import { bindResolver, InjectionResolver } from './injection_resolver.js'
+import { builtInStages } from './injection_builtin_stages.js'
+import { InjectionResolver, registerStage } from './injection_resolver.js'
 import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scope/index.js'
 import { checkScopes } from './internal/core/scope/validations.js'
 import { notNil } from './internal/util/assert/index.js'
@@ -47,9 +47,9 @@ import { Keys } from './symbols.js'
 import { Ctor } from './types.js'
 
 // Wiring the built-ins is a real dependency rather than a module side effect, so nothing here reads as removable.
-// Module scope runs once, which is what makes bindResolver's duplicate-name throw a non-issue.
-for (const [name, factory] of builtInResolvers) {
-  bindResolver(name, factory)
+// Module scope runs once, which is what makes registerStage's duplicate-name throw a non-issue.
+for (const [name, middleware, options] of builtInStages) {
+  registerStage(name, middleware, options)
 }
 
 const DEFAULT_OPTIONS: Partial<Options> = {
@@ -1181,7 +1181,9 @@ export class CaffeineIoC implements Container {
             `injections=[${binding.injections
               ?.map(
                 spec =>
-                  '[' + keyStr(spec.key) + `: optional=${spec.optional || false}, multiple=${spec.multiple || false}]`,
+                  '[' +
+                  keyStr(spec.key) +
+                  `: optional=${spec.optional || false}, stages=[${spec.stages?.map(s => keyStr(s.name)).join(', ') ?? ''}]]`,
               )
               .join(', ')}], ` +
             `lazy=${binding.lazy}, ` +

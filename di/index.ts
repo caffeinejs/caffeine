@@ -23,12 +23,17 @@ export type * from './hooks.js'
 export * from './injection.js'
 export {
   bindResolver,
-  BuiltInResolvers,
+  BuiltInStages,
   hasResolver,
+  hasStage,
+  type InjectionContext,
+  type InjectionMiddleware,
   type InjectionResolver,
   type InjectionResolverFactory,
   type InjectionResolverFactoryContext,
+  registerStage,
   unbindResolver,
+  unregisterStage,
 } from './injection_resolver.js'
 export {
   type Identifier,

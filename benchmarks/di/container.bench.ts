@@ -10,12 +10,14 @@ import {
   Injectable,
   Lifetime,
   Named,
+  Order,
   Primary,
+  type Provider,
   Provides,
   Scopes,
   token,
 } from '@caffeinejs/di'
-import { bench, group, run } from 'mitata'
+import { bench, do_not_optimize, group, run } from 'mitata'
 
 const kDbURL = token<Record<string, unknown>>(Symbol('db_url'))
 
@@ -278,10 +280,85 @@ class RootWith2Props {
   ) {}
 }
 
+// Injection helpers that the groups above never touch. The consumers are transient on purpose: a singleton
+// consumer is resolved from cache, so its injection resolvers run once and the bench measures the cache lookup
+// instead of the resolver.
+
+interface Plugin {
+  id(): string
+}
+
+const kPlug = token<Plugin>(Symbol('plugin'))
+
+@Injectable(kPlug)
+@Named('alpha')
+@Order(2)
+class PlugAlpha implements Plugin {
+  id(): string {
+    return 'alpha'
+  }
+}
+
+@Injectable(kPlug)
+@Named('beta')
+@Order(1)
+class PlugBeta implements Plugin {
+  id(): string {
+    return 'beta'
+  }
+}
+
+@Injectable(kPlug)
+@Named('gamma')
+@Order(3)
+class PlugGamma implements Plugin {
+  id(): string {
+    return 'gamma'
+  }
+}
+
+@Injectable([$i.ordered(kPlug)])
+@Lifetime(Scopes.TRANSIENT)
+class OrderedRoot {
+  constructor(readonly plugins: Plugin[]) {}
+}
+
+@Injectable([$i.mapped(kPlug)])
+@Lifetime(Scopes.TRANSIENT)
+class MappedRoot {
+  constructor(readonly plugins: Map<string, Plugin>) {}
+}
+
+@Injectable([$i.provide(DbT)])
+@Lifetime(Scopes.TRANSIENT)
+class ProvideRoot {
+  constructor(readonly db: Provider<DbT>) {}
+}
+
+@Injectable([$i.allOf($i.provide(kPlug))])
+@Lifetime(Scopes.TRANSIENT)
+class AllOfProvideRoot {
+  constructor(readonly plugins: Provider<Plugin[]>) {}
+}
+
+@Injectable([$i.defer(() => Db)])
+@Lifetime(Scopes.TRANSIENT)
+class DeferRoot {
+  constructor(readonly db: Db) {}
+}
+
+// Held as a singleton so the bench below times Provider.get() alone, not the injection that produced it.
+@Injectable([$i.provide(DbT)])
+class ProvideHolder {
+  constructor(readonly db: Provider<DbT>) {}
+}
+
 class Undecorated {}
 
 const di = new CaffeineIoC()
 await di.init()
+
+const provideHolder = di.get(ProvideHolder)
 
 const kBindSym = token<Record<string, unknown>>(Symbol('bind_sym'))
 const diForBindings = new CaffeineIoC()
@@ -301,6 +378,13 @@ group('resolutions', () => {
   bench('primary', () => di.get(kNotification))
   bench('class destructuring', () => di.get(DestructuringRoot))
   bench('bean - string value', () => di.get(kDbURL))
+  bench('ordered', () => di.get(OrderedRoot))
+  bench('mapped', () => di.get(MappedRoot))
+  bench('provide', () => di.get(ProvideRoot))
+  // do_not_optimize: the resolved instance is otherwise unused and V8 eliminates the whole call.
+  bench('provide get()', () => do_not_optimize(provideHolder.db.get()))
+  bench('allOf provide', () => di.get(AllOfProvideRoot))
+  bench('defer', () => di.get(DeferRoot))
 })
 
 group('bindings', () => {

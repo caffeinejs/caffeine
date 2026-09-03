@@ -3,9 +3,9 @@ import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../../../container.js'
 import { ErrMissingInjectionKey, ErrNoResolutionForKey } from '../../../errors.js'
 import { $i } from '../../../injection.js'
-import { BuiltInResolvers } from '../../../injection_resolver.js'
+import { BuiltInStages } from '../../../injection_resolver.js'
 import { token } from '../../../key.js'
-import { mappedFactory } from './index.js'
+import { compileChain } from './index.js'
 
 function ctx(
   container: CaffeineIoC,
@@ -15,22 +15,26 @@ function ctx(
   return { container, descriptor, key, kind: 'constructor' as const, member: '', index: 0 }
 }
 
-describe('mappedFactory', function () {
+describe('the map terminal', function () {
   describe('validation', function () {
-    it('should throw ErrMissingInjectionKey when ctx.key is absent', function () {
+    // The consumer's own key used to be required here. Mapping never reads it — only the injected key matters —
+    // so an injection that stands on its own now resolves instead of failing.
+    it('resolves without a consumer key', async function () {
       const kKey = token<Record<string, unknown>>(Symbol('map-no-ctx-key'))
       const di = new CaffeineIoC({ decorators: false })
+      di.bind(token<string>('only'), t => t.toValue('one').names(kKey))
+      await di.init()
 
-      expect(() => mappedFactory(ctx(di, $i.mapped(kKey), null))).toThrow(ErrMissingInjectionKey)
+      expect(compileChain(ctx(di, $i.mapped(kKey), null))()).toBeInstanceOf(Map)
     })
 
     it('should throw ErrMissingInjectionKey when descriptor has no key', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() =>
-        mappedFactory({
+        compileChain({
           container: di,
-          descriptor: { resolver: BuiltInResolvers.MAP },
+          descriptor: { stages: [{ name: BuiltInStages.MAP }] },
           key: token<Record<string, unknown>>('Consumer'),
           kind: 'constructor',
           member: '',
@@ -43,14 +47,14 @@ describe('mappedFactory', function () {
       const kAbsent = token<Record<string, unknown>>(Symbol('map-absent-required'))
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => mappedFactory(ctx(di, $i.mapped(kAbsent)))).toThrow(ErrNoResolutionForKey)
+      expect(() => compileChain(ctx(di, $i.mapped(kAbsent)))).toThrow(ErrNoResolutionForKey)
     })
 
     it('should return undefined when no bindings exist and injection is optional', function () {
       const kAbsent = token<Record<string, unknown>>(Symbol('map-absent-optional'))
       const di = new CaffeineIoC({ decorators: false })
 
-      const resolver = mappedFactory(ctx(di, $i.optional($i.mapped(kAbsent))))
+      const resolver = compileChain(ctx(di, $i.optional($i.mapped(kAbsent))))
       expect(resolver()).toBeUndefined()
     })
   })
@@ -66,7 +70,7 @@ describe('mappedFactory', function () {
       di.bind(InputWidget, t => t.toSelf().extends(Widget).names('input'))
       await di.init()
 
-      const resolver = mappedFactory(ctx(di, $i.mapped(Widget)))
+      const resolver = compileChain(ctx(di, $i.mapped(Widget)))
       const result = resolver() as Map<string, Widget>
 
       expect(result).toBeInstanceOf(Map)
@@ -85,7 +89,7 @@ describe('mappedFactory', function () {
       di.bind(StoreB, t => t.toSelf().extends(Store))
       await di.init()
 
-      const resolver = mappedFactory(ctx(di, $i.mapped(Store)))
+      const resolver = compileChain(ctx(di, $i.mapped(Store)))
       const result = resolver() as Map<unknown, unknown>
 
       expect(result).toBeInstanceOf(Map)
@@ -102,7 +106,7 @@ describe('mappedFactory', function () {
       di.bind(PluginB, t => t.toSelf().extends(Plugin))
       await di.init()
 
-      const resolver = mappedFactory(ctx(di, $i.mapped(Plugin)))
+      const resolver = compileChain(ctx(di, $i.mapped(Plugin)))
       const result = resolver() as Map<string, Plugin>
 
       expect(result.size).toBe(1)

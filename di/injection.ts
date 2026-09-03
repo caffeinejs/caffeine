@@ -1,6 +1,6 @@
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrMissingInjectionKey } from './errors.js'
-import { BuiltInResolvers } from './injection_resolver.js'
+import { BuiltInStages } from './injection_resolver.js'
 import { solutions } from './internal/util/errutil/index.js'
 import { InjectionToken, isValidKey } from './key.js'
 import type { Provider } from './provider.js'
@@ -32,36 +32,38 @@ export type InjectionDescriptor<T = unknown> = {
   key?: InjectionToken<any>
 
   /**
-   * Whether to inject multiple bindings associated with the same key.
-   * Normally this is used for named bindings or abstract classes.
-   *
-   * @remarks
-   *
-   * Marking a injection as multiple does not necessarily mean that multiple bindings will be injected.
-   * A resolver must read this flag and implement the logic to inject multiple bindings.
-   *
-   * @defaultValue false
-   */
-  multiple?: boolean
-
-  /**
    * Whether the dependency is optional.
    */
   optional?: boolean
 
   /**
-   * The resolver of the dependency.
-   * This allows using custom {@link InjectionResolver} implementations.
-   * For custom resolvers, make sure to register it using {@link bindResolver}.
+   * The name of a custom resolver registered with `bindResolver`, used as this injection's terminal.
+   *
+   * The built-in behaviours are {@link InjectionStage}s instead. Naming both is a conflict, because each decides
+   * what the injection resolves to.
    */
   resolver?: symbol
 
   /**
-   * The arguments to pass to the resolver.
+   * The stages that resolve this injection, in the order they were declared.
+   *
+   * Stages keep that order when the chain is folded, except that the one deciding what the injection resolves to
+   * always runs last — which is why `provide(ordered(key))` and `ordered(provide(key))` mean the same thing.
    */
-  args?: unknown
+  stages?: readonly InjectionStage[]
 
   readonly [kInjectionResult]?: T
+}
+
+/**
+ * One step in an injection's resolution chain: the name of a registered stage, plus whatever that stage needs.
+ *
+ * Stages are data rather than functions because a descriptor is stored in decorator metadata and read back when
+ * the container compiles. `registerStage` maps the name to the middleware that runs.
+ */
+export type InjectionStage = {
+  name: symbol
+  args?: unknown
 }
 
 /**
@@ -144,7 +146,7 @@ type OptionalInjection<T> = T extends Provider<infer U> ? Provider<U | undefined
  * or nested specs. Matches runtime object-spec parsing.
  */
 export type ObjectInjectionSpec = {
-  [prop: string | symbol]: InjectionToken<any> | InjectionDescriptor<any> | ObjectInjectionSpec
+  [prop: string | symbol]: InjectionToken<any> | InjectionResult<any> | ObjectInjectionSpec
 }
 
 /**
@@ -155,6 +157,36 @@ export type ObjectInjectionSpec = {
  * helper — a hand-written `{ key: … }` literal is a nested bag, here and at run time alike.
  */
 export type InjectedOf<S> = { [K in keyof S]: InjectedField<S[K]> }
+
+/**
+ * Whether the descriptor names the given stage.
+ *
+ * The readers that used to compare `descriptor.resolver` against a built-in name ask this instead.
+ */
+export function namesStage(descriptor: InjectionDescriptor<any>, name: symbol): boolean {
+  return descriptor.stages?.some(stage => stage.name === name) ?? false
+}
+
+/**
+ * The arguments carried by the given stage, or `undefined` when the descriptor does not name it.
+ */
+export function stageArgs(descriptor: InjectionDescriptor<any>, name: symbol): unknown {
+  return descriptor.stages?.find(stage => stage.name === name)?.args
+}
+
+/**
+ * Whether the descriptor resolves to a collection rather than to one instance.
+ *
+ * Both the cycle check and the ambiguity check need this: a key with several bindings is only ambiguous for an
+ * injection that wanted exactly one of them.
+ */
+export function collectsMany(descriptor: InjectionDescriptor<any>): boolean {
+  return namesStage(descriptor, BuiltInStages.MANY) || namesStage(descriptor, BuiltInStages.MAP)
+}
+
+function withStages<T>(descriptor: InjectionDescriptor<any>, ...added: InjectionStage[]): InjectionResult<T> {
+  return encode({ ...descriptor, stages: [...(descriptor.stages ?? []), ...added] })
+}
 
 function encode<T>(descriptor: InjectionDescriptor<any>): InjectionResult<T> {
   // Non-enumerable: the mark is not data, so it stays out of deep-equality, `Object.entries` and any dump of a
@@ -200,7 +232,7 @@ type InjectedField<V> =
  * }
  * ```
  */
-function allOf<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+function allOf<K extends InjectionToken<any> | InjectionResult<any>>(
   keyOrDescriptor: K,
 ): InjectionResult<CollectedInjection<ResolveInjection<K>>> {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
@@ -216,14 +248,17 @@ function allOf<K extends InjectionToken<any> | InjectionDescriptor<any>>(
       )
     }
 
-    return encode({ ...descriptor, multiple: true })
+    // Already collecting: asking for it twice is the same request, not a second one to conflict with.
+    return namesStage(descriptor, BuiltInStages.MANY)
+      ? encode({ ...descriptor })
+      : withStages(descriptor, { name: BuiltInStages.MANY })
   }
 
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(`Cannot call 'allOf': key is null or undefined`)
   }
 
-  return encode({ key: keyOrDescriptor as InjectionToken, multiple: true, resolver: BuiltInResolvers.DEFAULT })
+  return encode({ key: keyOrDescriptor as InjectionToken, stages: [{ name: BuiltInStages.MANY }] })
 }
 
 /**
@@ -253,9 +288,9 @@ function allOf<K extends InjectionToken<any> | InjectionDescriptor<any>>(
  * }
  * ```
  */
-function ordered<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+function ordered<K extends InjectionToken<any> | InjectionResult<any>>(
   keyOrDescriptor: K,
-): InjectionResult<ResolveInjection<K>[]> {
+): InjectionResult<CollectedInjection<ResolveInjection<K>>> {
   if (typeof keyOrDescriptor === 'object' && keyOrDescriptor !== null) {
     const descriptor = keyOrDescriptor as InjectionDescriptor
 
@@ -269,14 +304,19 @@ function ordered<K extends InjectionToken<any> | InjectionDescriptor<any>>(
       )
     }
 
-    return encode({ ...descriptor, resolver: BuiltInResolvers.ORDERED })
+    return namesStage(descriptor, BuiltInStages.MANY)
+      ? withStages(descriptor, { name: BuiltInStages.SORT })
+      : withStages(descriptor, { name: BuiltInStages.SORT }, { name: BuiltInStages.MANY })
   }
 
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(`Cannot call 'ordered': key is null or undefined`)
   }
 
-  return encode({ key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.ORDERED })
+  return encode({
+    key: keyOrDescriptor as InjectionToken,
+    stages: [{ name: BuiltInStages.SORT }, { name: BuiltInStages.MANY }],
+  })
 }
 
 /**
@@ -319,7 +359,7 @@ function mapped<K extends InjectionToken<any>>(key: K): InjectionResult<Map<stri
     )
   }
 
-  return encode({ key, resolver: BuiltInResolvers.MAP })
+  return encode({ key, stages: [{ name: BuiltInStages.MAP }] })
 }
 
 /**
@@ -337,7 +377,7 @@ function mapped<K extends InjectionToken<any>>(key: K): InjectionResult<Map<stri
  * ```
  */
 function defer<K extends InjectionToken<any>>(keyFn: () => K): InjectionResult<ResolveInjection<K>> {
-  return encode({ key: new DeferredCtor(keyFn), resolver: BuiltInResolvers.DEFER })
+  return encode({ key: new DeferredCtor(keyFn), stages: [] })
 }
 
 /**
@@ -353,16 +393,16 @@ function defer<K extends InjectionToken<any>>(keyFn: () => K): InjectionResult<R
  * }
  * ```
  */
-function optional<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+function optional<K extends InjectionToken<any> | InjectionResult<any>>(
   keyOrDescriptor: K,
 ): InjectionResult<OptionalInjection<ResolveInjection<K>>> {
   if (isValidKey(keyOrDescriptor)) {
-    return encode({ key: keyOrDescriptor as InjectionToken, optional: true })
+    return encode({ key: keyOrDescriptor as InjectionToken, optional: true, stages: [] })
   }
 
   const descriptor = keyOrDescriptor as InjectionDescriptor
 
-  if (!descriptor.resolver && !isValidKey(descriptor.key)) {
+  if (descriptor.stages === undefined && !isValidKey(descriptor.key)) {
     throw new ErrMissingInjectionKey(
       `Cannot mark injection as optional: descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
     )
@@ -397,7 +437,7 @@ function optional<K extends InjectionToken<any> | InjectionDescriptor<any>>(
  * ```
  */
 function object<const S extends ObjectInjectionSpec>(spec: S): InjectionResult<InjectedOf<S>> {
-  return encode({ resolver: BuiltInResolvers.OBJECT, args: parseObjectSpec(spec) })
+  return encode({ stages: [{ name: BuiltInStages.OBJECT, args: parseObjectSpec(spec) }] })
 }
 
 /**
@@ -416,7 +456,7 @@ function object<const S extends ObjectInjectionSpec>(spec: S): InjectionResult<I
  * }
  * ```
  */
-function provide<K extends InjectionToken<any> | InjectionDescriptor<any>>(
+function provide<K extends InjectionToken<any> | InjectionResult<any>>(
   keyOrDescriptor: K,
 ): InjectionResult<Provider<ResolveInjection<K>>> {
   if (keyOrDescriptor == null) {
@@ -430,7 +470,7 @@ function provide<K extends InjectionToken<any> | InjectionDescriptor<any>>(
   }
 
   if (isValidKey(keyOrDescriptor)) {
-    return encode({ key: keyOrDescriptor as InjectionToken, resolver: BuiltInResolvers.PROVIDER })
+    return encode({ key: keyOrDescriptor as InjectionToken, stages: [{ name: BuiltInStages.PROVIDER }] })
   }
 
   const descriptor = keyOrDescriptor as InjectionDescriptor
@@ -441,7 +481,7 @@ function provide<K extends InjectionToken<any> | InjectionDescriptor<any>>(
     )
   }
 
-  return encode({ ...descriptor, resolver: BuiltInResolvers.PROVIDER })
+  return withStages(descriptor, { name: BuiltInStages.PROVIDER })
 }
 
 /**
@@ -459,7 +499,7 @@ function provide<K extends InjectionToken<any> | InjectionDescriptor<any>>(
  * ```
  */
 function just<T>(value: T): InjectionResult<T> {
-  return encode({ resolver: BuiltInResolvers.VALUE, args: value })
+  return encode({ stages: [{ name: BuiltInStages.VALUE, args: value }] })
 }
 
 /**
@@ -493,8 +533,7 @@ function just<T>(value: T): InjectionResult<T> {
  */
 function value<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R> {
   return encode({
-    resolver: BuiltInResolvers.CONFIG,
-    args: { access, defaultValue },
+    stages: [{ name: BuiltInStages.CONFIG, args: { access, defaultValue } }],
   })
 }
 
@@ -508,7 +547,15 @@ function compose(
   key: InjectionToken<any>,
   ...fns: Array<(key: InjectionToken<any>) => InjectionDescriptor<any>>
 ): InjectionResult<any> {
-  return encode(fns.reduce((acc, fn) => ({ ...acc, ...fn(key) }), {} as InjectionDescriptor))
+  return encode(
+    fns.reduce((acc, fn) => {
+      const next = fn(key)
+
+      // Stages accumulate rather than replace: a spread would keep only the last function's chain, which is the
+      // opposite of composing.
+      return { ...acc, ...next, stages: [...(acc.stages ?? []), ...(next.stages ?? [])] }
+    }, {} as InjectionDescriptor),
+  )
 }
 
 // The mark `encode` stamps, which is also the one `InjectedField` tests — so a value in a spec cannot be a
@@ -532,9 +579,7 @@ function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
       children[prop] = {
         key: desc.key,
         optional: desc.optional,
-        multiple: desc.multiple,
-        resolver: desc.resolver,
-        args: desc.args,
+        stages: desc.stages,
       } satisfies ObjectInjection
     } else {
       children[prop] = parseObjectSpec(value as ObjectInjectionSpec)

@@ -3,7 +3,7 @@ import { Container } from './container_interface.js'
 import { ErrConfigurationBindingNotFound, ErrInvalidBinding } from './errors.js'
 import { Factory, AsyncFactory } from './factory.js'
 import { InjectionDescriptor } from './injection.js'
-import { defaultResolverFor, InjectionResolver, resolverFor } from './injection_resolver.js'
+import { InjectionResolver } from './injection_resolver.js'
 import {
   chainedFactory,
   scopedFactory,
@@ -17,6 +17,7 @@ import {
   beforeInitInterceptor,
   afterInitInterceptor,
 } from './internal/core/interceptor/index.js'
+import { compileChain } from './internal/core/resolver/index.js'
 import { keyStr, InjectionToken, Identifier } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { Scope, Scopes } from './scope.js'
@@ -30,7 +31,7 @@ export function compileDescriptorResolver(
   member: Identifier,
   index: number,
 ): InjectionResolver {
-  return resolverFor(defaultResolverFor(injection))({ container, key, descriptor: injection, kind, member, index })
+  return compileChain({ container, key, descriptor: injection, kind, member, index })
 }
 
 export function compileInjectionResolvers(container: Container, key: InjectionToken, binding: Binding): void {

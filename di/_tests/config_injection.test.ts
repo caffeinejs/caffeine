@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { ErrNoValuesProvider } from '../errors.js'
 import { $i } from '../injection.js'
-import { configFactory } from '../internal/core/resolver/index.js'
+import { compileChain } from '../internal/core/resolver/index.js'
 import { Scopes } from '../scope.js'
 import { Keys } from '../symbols.js'
 
@@ -21,7 +21,7 @@ describe('$i.config', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() =>
-        configFactory(
+        compileChain(
           ctx(
             di,
             $i.value(cfg => cfg),
@@ -33,13 +33,13 @@ describe('$i.config', function () {
     it('does not throw when optional and no provider is registered', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => configFactory(ctx(di, $i.optional($i.value(cfg => cfg))))).not.toThrow()
+      expect(() => compileChain(ctx(di, $i.optional($i.value(cfg => cfg))))).not.toThrow()
     })
 
     it('returns a resolver that yields undefined when optional and no provider is registered', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      const resolver = configFactory(ctx(di, $i.optional($i.value(cfg => cfg))))
+      const resolver = compileChain(ctx(di, $i.optional($i.value(cfg => cfg))))
       expect(resolver()).toBeUndefined()
     })
   })

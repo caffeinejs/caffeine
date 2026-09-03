@@ -2,8 +2,8 @@ import { kAspectLabel, kAspectPointcuts, Pointcut } from './aop.js'
 import { Binding } from './binding.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrCircularDependency, ErrInvalidAspect, ErrUnresolvableDependencies } from './errors.js'
-import { InjectionDescriptor, ObjectInjections } from './injection.js'
-import { BuiltInResolvers } from './injection_resolver.js'
+import { collectsMany, InjectionDescriptor, namesStage, ObjectInjections, stageArgs } from './injection.js'
+import { BuiltInStages } from './injection_resolver.js'
 import { keyStr, InjectionToken, Identifier, TypedKey } from './key.js'
 import { Scopes } from './scope.js'
 
@@ -24,11 +24,11 @@ export function checkCircularReferences(
   for (const [key, binding] of registry.entries()) {
     const deps: InjectionToken[] = []
     for (const desc of binding.injections) {
-      if (desc.optional || desc.multiple) {
+      if (desc.optional || collectsMany(desc)) {
         continue
       }
 
-      if (desc.resolver === BuiltInResolvers.DEFER || desc.key instanceof DeferredCtor) {
+      if (desc.key instanceof DeferredCtor) {
         continue
       }
 
@@ -128,8 +128,8 @@ function checkInjection(
   issues: string[],
   getBindings: <T>(key: TypedKey<T>) => Binding<T>[],
 ): void {
-  if (inj.resolver === BuiltInResolvers.OBJECT) {
-    checkObjectInjections(inj.args as ObjectInjections, location, issues, getBindings)
+  if (namesStage(inj, BuiltInStages.OBJECT)) {
+    checkObjectInjections(stageArgs(inj, BuiltInStages.OBJECT) as ObjectInjections, location, issues, getBindings)
     return
   }
 
@@ -147,7 +147,7 @@ function checkInjection(
     return
   }
 
-  if (!inj.multiple && bindings.length > 1 && !bindings[0].primary) {
+  if (!collectsMany(inj) && bindings.length > 1 && !bindings[0].primary) {
     issues.push(
       `Ambiguous resolution for "${keyStr(actualKey)}" required by ${location}: ${bindings.length} candidates found`,
     )
