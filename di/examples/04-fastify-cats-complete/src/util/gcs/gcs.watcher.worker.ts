@@ -19,7 +19,7 @@ if (!isMainThread && parentPort) {
 
   const storage = new Storage({
     apiEndpoint: endpoint,
-    projectID,
+    projectId: projectID,
   })
 
   let lastGeneration: string | undefined

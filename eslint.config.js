@@ -43,7 +43,6 @@ export default defineConfig(
           alwaysTryTypes: true,
           noWarnOnMultipleProjects: true,
           project: [
-            './tsconfig.json',
             './di/tsconfig.json',
             './std/tsconfig.json',
             './http/tsconfig.json',
@@ -134,40 +133,6 @@ export default defineConfig(
           ],
         },
       ],
-    },
-  },
-  {
-    files: ['**/*.ts', '**/*.tsx'],
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
-    rules: {
-      '@typescript-eslint/consistent-type-exports': ['error', { fixMixedExportsWithInlineTypeSpecifier: true }],
-    },
-  },
-  {
-    files: [
-      '**/_tests/**/*.ts',
-      '**/_tests/**/*.tsx',
-      '**/_testdata/**/*.ts',
-      '**/_benchmarks/**/*.ts',
-      '**/*.test.ts',
-      '**/*.test.tsx',
-      '**/*.spec.ts',
-      '**/*.spec.tsx',
-      '**/*.bench.ts',
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: false,
-        projectService: false,
-      },
-    },
-    rules: {
-      '@typescript-eslint/consistent-type-exports': 'off',
     },
   },
   {

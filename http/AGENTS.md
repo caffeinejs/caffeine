@@ -45,6 +45,29 @@ A programmatic handler is `(ctx, deps)`. Both arguments are pickers (`$p.context
 
 One global `@Catch` per error class. Duplicate global for the same class fails at boot. Per-controller: `@Catch(..., { global: false })` + `@CatchWith`, or a `@Catch` method on the controller.
 
+## Per-request values
+
+Where a value goes depends on who reads it and how long it lives:
+
+| The value is… | Goes to | Read with |
+|---|---|---|
+| an injectable service with a lifecycle | a request-scoped binding (`Scopes.REQUEST`) | `container.get` / injection |
+| a plain value one middleware computes and a handler reads | `ctx.state` | `ctx.state.get(key)` |
+| the authenticated principal | `ctx.user` | `ctx.user` |
+| what the route declared | the route config | `ctx.routeConfig` |
+
+`ctx.state` is a `Map` on the context, allocated on first touch. It does not participate in DI: no binding, no
+destroy callback, no scope. What it may hold is named by the `V` type parameter a router declares with
+`.vars<V>()` — written as a call and not `new Router<V>(path)`, because naming one type argument stops the
+compiler inferring the rest and would drop the group's path.
+
+`ctx.state` is application space. A first-party package does not write to it: a framework value gets a dedicated
+member, as authentication does with `ctx.user`, or goes on the route config. One flat key namespace shared by an
+application and every package it installs collides.
+
+`app.use()` infers the variables a middleware declares but does not check them against the routers it ends up in
+front of — the routers are declared elsewhere. A middleware naming variables no router declares is not an error.
+
 ## Request scope
 
 When the container has request-scoped bindings, the adapter starts a scope in Fastify `onRequest` with `requestScopeManager.run(() => done())`. `RequestScope.run` destroys the scope when that callback’s promise settles. Work that continues after the handler returns (streams, piped bodies) can outlive that. Do not invent a second “stream scope”; if lifetime is wrong, fix how the adapter awaits the request, not a new scope kind.

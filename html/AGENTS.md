@@ -66,6 +66,6 @@ having the decorator call it.
 ## Tests are `.tsx`
 
 `_tests/*.test.tsx` so the real JSX authoring path is covered. That is why this package's `tsconfig.json`
-sets `jsx`/`jsxImportSource` and includes `**/*.tsx`, why `vitest.config.ts` sets `jsc.parser.tsx` and the
-`react` transform, and why the root `tsconfig.test.colocated.json` sets `jsx: "react-jsx"`. Only tests are
+sets `jsx`/`jsxImportSource` and includes `**/*.tsx`, and why `vitest.config.ts` sets `jsc.parser.tsx` and
+the `react` transform. Only tests are
 `.tsx`; `dist/` contains no JSX.

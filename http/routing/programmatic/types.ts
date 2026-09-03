@@ -45,7 +45,8 @@ export type ParamsOf<S extends RouteValidationSchema, P extends string>
  * Structurally the `FastifyContext` the adapter constructs — the same object a decorated handler gets from
  * `$p.context()` — with the request slots narrowed to what this route declared.
  */
-export interface RouteContext<S extends RouteValidationSchema, P extends string> extends Context<
+export interface RouteContext<S extends RouteValidationSchema, P extends string, V> extends Context<
+  V,
   RawRequestDefaultExpression<RawServerDefault>,
   CookieSerializeOptions,
   false,
@@ -66,8 +67,8 @@ export interface RouteContext<S extends RouteValidationSchema, P extends string>
  * nothing at all when the handler answered through the context. It is a type parameter so that a route can carry
  * what its handler answers with — see {@link DeclaredRoute}.
  */
-export type RouteHandler<S extends RouteValidationSchema, P extends string, D, O = unknown>
-  = (ctx: RouteContext<S, P>, deps: D) => O
+export type RouteHandler<S extends RouteValidationSchema, P extends string, V, D, O = unknown>
+  = (ctx: RouteContext<S, P, V>, deps: D) => O
 
 /**
  * The dependencies visible to a route: what its groups injected, with anything the route injected under the same
@@ -156,3 +157,11 @@ export type PrefixRoutePaths<R, Prefix extends string>
  * value per statement; `blend` unions them. The variable the routes were opened from carries none of them.
  */
 export type RoutesOf<T> = T extends { readonly __routes?: infer R } ? NonNullable<R> : never
+
+/**
+ * What `ctx.state` carries under a `Router`, as the router declared it.
+ *
+ * Read back the same way {@link RoutesOf} reads routes, so that combining routers with `blend` keeps the
+ * variables typed rather than resetting them to what an undeclared router has.
+ */
+export type VarsOf<T> = T extends { readonly __vars?: infer V } ? NonNullable<V> : never

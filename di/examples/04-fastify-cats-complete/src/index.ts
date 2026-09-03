@@ -1,6 +1,5 @@
 import { Pool } from 'pg'
 import { Redis } from 'ioredis'
-import { FastifyPluginAsync } from 'fastify'
 import { buildServer } from './app.js'
 import { AppConfig } from './app.config.js'
 import { catsRoutes } from './cats/cats.routes.js'
@@ -31,7 +30,7 @@ await redis.ping()
 
 const config = container.get(AppConfig)
 
-const healthChecks = container.get<FastifyPluginAsync>(kHealthRoutes)
+const healthChecks = container.get(kHealthRoutes)
 
 const server = await buildServer(container, {}, catsRoutes, healthChecks)
 

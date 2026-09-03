@@ -69,9 +69,19 @@ Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a 
 
 When in doubt on **code** scope, run the full suite. A README next to a TypeScript change does not make the task docs-only.
 
-Root `npm run test:typecheck` is two `tsc` projects: [`tsconfig.test.colocated.json`](tsconfig.test.colocated.json) (tests under `di` / `http` / `multipart` / `static` / `view`, `paths` to **source**) and [`tsconfig.test.json`](tsconfig.test.json) (everything else, via `exports` → `dist/*.d.ts`). Rebuild touched packages before typecheck when public types change. Repeat local runs reuse `.cache/tsconfig.test*.tsbuildinfo` (gitignored).
+Every package has two `tsc` projects. `X/tsconfig.build.json` emits `dist/` from the package sources and
+references the sibling build projects it depends on. `X/tsconfig.json` type-checks the package *including*
+its tests, emits nothing, and references only `./tsconfig.build.json`. Root `tsconfig.json` holds the shared
+`compilerOptions` and nothing else.
 
-Root `npm run build` is `tsc --build` (project references). Do not edit `dist/` by hand.
+Two solution files drive them: `npm run build` is `tsc --build tsconfig.build.json`, and
+`npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental; do not edit `dist/`
+by hand.
+
+Tests resolve `@caffeinejs/*` through package `exports` to `dist/*.d.ts` — the same resolution Vitest uses at
+run time. There is no `source` export condition and no `paths` map, so a type-check needs the dependency
+`dist/` to exist; `tsc --build` produces it. A check project is never referenced by another project, so it
+cannot create a reference cycle.
 
 The root `.npmrc` sets `ignore-scripts=true`. Never rely on npm `pre*` / `post*` / `postinstall` hooks; they will not fire. Explicit `npm run <name>` still runs.
 
@@ -225,7 +235,7 @@ Exceptions:
 
 ## Decorators
 
-TC39 ECMAScript decorators only. Root `tsconfig.json` sets `"lib": ["Decorators", "esnext.decorators"]`. Never add `experimentalDecorators` or `emitDecoratorMetadata` to main-package tsconfigs. `tsconfig.legacy.json` and NestJS benchmark configs use the legacy flags for comparison only — do not copy them.
+TC39 ECMAScript decorators only. Root `tsconfig.json` sets `"lib": ["Decorators", "esnext.decorators"]`. Never add `experimentalDecorators` or `emitDecoratorMetadata` to main-package tsconfigs. The NestJS benchmark configs use the legacy flags for comparison only — do not copy them.
 
 ## Git discipline
 

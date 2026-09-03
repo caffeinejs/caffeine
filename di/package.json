@@ -25,8 +25,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc --build --force tsconfig.build.json",
-    "test:typecheck": "tsc -p tsconfig.test.json",
+    "build": "tsc --build tsconfig.build.json",
     "test": "vitest run",
     "test:property": "vitest run _tests/property",
     "test:watch": "vitest",

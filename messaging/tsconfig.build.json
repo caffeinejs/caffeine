@@ -1,5 +1,8 @@
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
   "references": [
     { "path": "../di/tsconfig.build.json" },
     { "path": "../std/tsconfig.build.json" }

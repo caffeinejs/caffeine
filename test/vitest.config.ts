@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 import swc from 'unplugin-swc'
 
 export default defineConfig({
+  // @ts-expect-error — oxc is an experimental Vitest option not yet in Vite's types
   oxc: false,
   plugins: [
     swc.vite({

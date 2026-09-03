@@ -3,8 +3,10 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["bun"]
+    "types": ["bun"],
+    "noEmit": true
   },
   "include": ["**/*.ts"],
-  "exclude": ["dist", "node_modules", "command/scaffold/templates"]
+  "exclude": ["dist", "node_modules", "command/scaffold/templates"],
+  "references": [{ "path": "./tsconfig.build.json" }]
 }

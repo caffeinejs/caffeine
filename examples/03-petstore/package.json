@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@caffeinejs/cli": "*",
-    "@types/node": "^22.9.0",
+    "@types/node": "^25.9.1",
     "oxfmt": "^0.5.0",
     "oxlint": "^1.80.0",
     "prisma": "^6.2.1",

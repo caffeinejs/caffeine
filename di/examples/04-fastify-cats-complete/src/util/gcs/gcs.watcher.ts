@@ -1,6 +1,6 @@
 import { Worker } from 'node:worker_threads'
 import { Keys, type Provider, type Refresher } from '@caffeinejs/di'
-import { Injectable, PostConstruct, PreDestroy } from '@caffeinejs/di'
+import { $i, Injectable, PostConstruct, PreDestroy } from '@caffeinejs/di'
 import { AppConfig } from '../../app.config.js'
 import { DataConfig } from './data.config.js'
 import { WorkerData, WorkerMessage } from './gcs.watcher.worker.js'

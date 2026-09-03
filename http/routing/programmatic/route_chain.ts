@@ -19,15 +19,16 @@ export class RouteChain<
   S extends RouteValidationSchema,
   P extends string,
   D,
+  V,
   GD,
   GP extends string,
   M extends string,
   R,
 > {
-  readonly #owner: Router<GD, GP, R>
+  readonly #owner: Router<V, GD, GP, R>
   readonly #state: RouteState
 
-  constructor(owner: Router<GD, GP, R>, state: RouteState) {
+  constructor(owner: Router<V, GD, GP, R>, state: RouteState) {
     this.#owner = owner
     this.#state = state
   }
@@ -38,9 +39,9 @@ export class RouteChain<
    * Same contract as `@Schema`: each slot is compiled to JSON Schema once, at registration, and the adapter's
    * validator does the request-time work.
    */
-  schema<S2 extends RouteValidationSchema>(schema: S2): RouteChain<S2, P, D, GD, GP, M, R> {
+  schema<S2 extends RouteValidationSchema>(schema: S2): RouteChain<S2, P, D, V, GD, GP, M, R> {
     this.#state.builder.schema(schema)
-    return this as unknown as RouteChain<S2, P, D, GD, GP, M, R>
+    return this as unknown as RouteChain<S2, P, D, V, GD, GP, M, R>
   }
 
   /**
@@ -59,10 +60,10 @@ export class RouteChain<
    */
   inject<const SPEC extends ObjectInjectionSpec>(
     spec: SPEC,
-  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, GD, GP, M, R>
+  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, GD, GP, M, R>
   inject<const SPEC extends ObjectInjectionSpec>(
     build: (i: typeof $i) => SPEC,
-  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, GD, GP, M, R>
+  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, GD, GP, M, R>
   inject(specOrBuild: ObjectInjectionSpec | ((i: typeof $i) => ObjectInjectionSpec)): any {
     const spec = typeof specOrBuild === 'function' ? specOrBuild($i) : specOrBuild
 
@@ -177,9 +178,9 @@ export class RouteChain<
    * combining them with `blend` arrives at the same type.
    */
   handler<O>(
-    fn: RouteHandler<S, JoinPath<GP, P>, D, O>,
-  ): Router<GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>> {
+    fn: RouteHandler<S, JoinPath<GP, P>, V, D, O>,
+  ): Router<V, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>> {
     this.#state.handle = fn as (...args: unknown[]) => unknown
-    return this.#owner as Router<GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
+    return this.#owner as Router<V, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
   }
 }

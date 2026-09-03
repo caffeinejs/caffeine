@@ -1,0 +1,86 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./di"
+    },
+    {
+      "path": "./scan"
+    },
+    {
+      "path": "./std"
+    },
+    {
+      "path": "./http"
+    },
+    {
+      "path": "./cors"
+    },
+    {
+      "path": "./compress"
+    },
+    {
+      "path": "./html"
+    },
+    {
+      "path": "./multipart"
+    },
+    {
+      "path": "./view"
+    },
+    {
+      "path": "./static"
+    },
+    {
+      "path": "./openapi"
+    },
+    {
+      "path": "./messaging"
+    },
+    {
+      "path": "./kafka"
+    },
+    {
+      "path": "./fetchy/fetchy"
+    },
+    {
+      "path": "./fetchy/fetchy-undici"
+    },
+    {
+      "path": "./fetchy/fetchy-logging-interceptor"
+    },
+    {
+      "path": "./testing"
+    },
+    {
+      "path": "./brewer"
+    },
+    {
+      "path": "./devtools"
+    },
+    {
+      "path": "./cli"
+    },
+    {
+      "path": "./plugins/eslint"
+    },
+    {
+      "path": "./plugins/esbuild"
+    },
+    {
+      "path": "./plugins/vite"
+    },
+    {
+      "path": "./di/examples/02-fastify-functions"
+    },
+    {
+      "path": "./di/examples/03-framework"
+    },
+    {
+      "path": "./di/examples/04-fastify-cats-complete"
+    },
+    {
+      "path": "./test"
+    }
+  ]
+}

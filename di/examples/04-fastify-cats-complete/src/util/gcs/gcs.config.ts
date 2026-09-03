@@ -11,7 +11,7 @@ export class GcsConfig {
   storage(): Storage {
     return new Storage({
       apiEndpoint: this.config.gcsEndpoint,
-      projectID: this.config.gcsProjectID,
+      projectId: this.config.gcsProjectID,
     })
   }
 

@@ -8,6 +8,33 @@ import { type Principal } from './security/index.js'
 
 export type UnsignedCookie = string | false | undefined
 
+/**
+ * The values a request carries between the middlewares, guards and handler that serve it.
+ *
+ * `V` names what may be stored, and is declared where the routes are:
+ *
+ * ```ts
+ * type Vars = { tenant: Tenant }
+ *
+ * const pets = new Router<Vars>('/pets')
+ * pets.get('/', ctx => ctx.state.get('tenant'))
+ * ```
+ *
+ * A key reads back `undefined` until something writes it, because whichever middleware writes it may not be
+ * installed on the route being served.
+ */
+export class ContextState<V = Record<never, never>> {
+  #vars?: Map<string, unknown>
+
+  get<K extends keyof V & string>(key: K): V[K] | undefined {
+    return this.#vars?.get(key) as V[K] | undefined
+  }
+
+  set<K extends keyof V & string>(key: K, value: V[K]): void {
+    (this.#vars ??= new Map()).set(key, value)
+  }
+}
+
 export interface Req<
   RAW = unknown,
   TParams = Record<string, string>,
@@ -59,6 +86,7 @@ export interface Fst<REPLY extends FastifyReply = FastifyReply> {
 }
 
 export interface Context<
+  V = Record<never, never>,
   REQ = unknown,
   CO = unknown,
   TAsync extends boolean = false,
@@ -68,6 +96,9 @@ export interface Context<
   TBody = unknown,
 > {
   get req(): Req<REQ, TParams, TQuery, THeaders, TAsync, TBody>
+
+  /** The values this request carries between the middlewares, guards and handler serving it. */
+  get state(): ContextState<V>
 
   get statusCode(): number
 
@@ -134,9 +165,11 @@ export type InferHeaders<S> = InferSlot<S, 'headers', Record<string, string>>
 export type InferBody<S> = InferSlot<S, 'body', unknown>
 
 export class FastifyContext<
+  V = Record<never, never>,
   SCHEMA extends RouteValidationSchema = RouteValidationSchema,
   REPLY extends FastifyReply = FastifyReply,
 > implements Context<
+  V,
   RawRequestDefaultExpression<RawServerDefault>,
   CookieSerializeOptions,
   false,
@@ -147,6 +180,7 @@ export class FastifyContext<
 > {
   #req!: FastifyContextRequest<SCHEMA>
   #fst!: Fst<REPLY>
+  #state!: ContextState<V>
   #fastifyRequest: FastifyRequest
   #reply: REPLY
 
@@ -165,6 +199,10 @@ export class FastifyContext<
   /** The underlying Fastify request and reply. The escape hatch for platform-specific consumers. */
   get fst(): Fst<REPLY> {
     return this.#fst ??= { request: this.#fastifyRequest, reply: this.#reply }
+  }
+
+  get state(): ContextState<V> {
+    return this.#state ??= new ContextState<V>()
   }
 
   get user(): Principal {

@@ -24,7 +24,8 @@ export async function generateETag(payload: string | Buffer, generator?: ETagGen
     return generator(buf)
   }
 
-  const hash = await crypto.subtle.digest('SHA-1', buf)
+  // Copied into its own ArrayBuffer: a pooled Buffer is ArrayBufferLike, which BufferSource no longer accepts
+  const hash = await crypto.subtle.digest('SHA-1', new Uint8Array(buf))
   const hex = Array.from(new Uint8Array(hash))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')

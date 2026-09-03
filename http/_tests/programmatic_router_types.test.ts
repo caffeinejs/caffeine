@@ -473,3 +473,73 @@ describe('fst options', () => {
     fst({ handlerTimeout: 10 })
   })
 })
+
+describe('request variables', () => {
+  type Vars = { tenant: string, count: number }
+
+  it('types what the handler reads back, as possibly unwritten', () => {
+    const router = new Router('/pets').vars<Vars>()
+
+    router.get('/').handler(ctx => {
+      expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
+      expectTypeOf(ctx.state.get('count')).toEqualTypeOf<number | undefined>()
+      return ctx.body()
+    })
+  })
+
+  it('rejects a key the router did not declare, and a value of the wrong type', () => {
+    const router = new Router('/pets').vars<Vars>()
+
+    router.get('/').handler(ctx => {
+      // @ts-expect-error 'nope' is not a declared variable
+      ctx.state.get('nope')
+      // @ts-expect-error tenant is a string
+      ctx.state.set('tenant', 1)
+      return ctx.body()
+    })
+  })
+
+  it('declares nothing for a router that never called vars', () => {
+    const router = new Router('/pets')
+
+    router.get('/').handler(ctx => {
+      // @ts-expect-error the router declared no variables, so there is no key to write
+      ctx.state.set('tenant', 'acme')
+      return ctx.body()
+    })
+  })
+
+  it('keeps the group path typed, which naming a type argument would not', () => {
+    const router = new Router('/pets/:petID').vars<Vars>()
+
+    router.get('/:id').handler(ctx => {
+      expectTypeOf(ctx.req.param()).toEqualTypeOf<{ petID: string, id: string }>()
+      return ctx.body()
+    })
+  })
+
+  it('survives a schema, an injection, a nested group and a blend', () => {
+    const router = new Router('/pets').vars<Vars>()
+
+    router
+      .get('/:id')
+      .schema({ params: $t.Object({ id: $t.Integer() }) })
+      .inject({ greeter: Greeter })
+      .handler(ctx => {
+        expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
+        return ctx.body()
+      })
+
+    router.group('/nested', r => r.get('/x').handler(ctx => {
+      expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
+      return ctx.body()
+    }))
+
+    const one = router.get('/a').handler(ctx => ctx.body())
+
+    blend(one).get('/b').handler(ctx => {
+      expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
+      return ctx.body()
+    })
+  })
+})

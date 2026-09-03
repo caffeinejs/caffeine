@@ -90,7 +90,8 @@ async function buildApp() {
       v.engine({ handlebars })
         .root(viewsRoot)
         .extension("hbs")
-        .layout("layout"),)
+        .layout("layout"),
+    )
     .build();
   await app.ready();
   return app;

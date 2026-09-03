@@ -36,9 +36,12 @@ type AllMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS
  * Declared as a chain — `router.get('/a').handler(f).get('/b').handler(g)` — the router's type accumulates a
  * descriptor per route, which is what a generated client reads. See {@link RoutesOf}.
  */
-export class Router<GD = undefined, GP extends string = '', R = never> {
+export class Router<V = Record<never, never>, GD = undefined, GP extends string = '', R = never> {
   /** Phantom — names the routes this router declares, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: R
+
+  /** Phantom — names what `ctx.state` carries under this router, for `VarsOf`. Never assigned, never read. */
+  declare readonly __vars?: V
 
   readonly #state: RouterState
 
@@ -63,6 +66,22 @@ export class Router<GD = undefined, GP extends string = '', R = never> {
   }
 
   /**
+   * Declares what `ctx.state` carries for every route of the group and of the groups nested under it.
+   *
+   * ```ts
+   * const pets = new Router('/pets/:petID').vars<{ tenant: Tenant }>()
+   *
+   * pets.get('/:id').handler(ctx => ctx.state.get('tenant'))
+   * ```
+   *
+   * Written as a call rather than `new Router<Vars>(path)` because naming one type argument stops the compiler
+   * inferring the rest, which would drop the group's path and with it the handler's parameter types.
+   */
+  vars<V2>(): Router<V2, GD, GP, R> {
+    return this as unknown as Router<V2, GD, GP, R>
+  }
+
+  /**
    * Declares dependencies for every route of the group and of the groups nested under it, keyed by the name the
    * handlers read them under. Values are container keys or any `$i` helper.
    *
@@ -73,10 +92,10 @@ export class Router<GD = undefined, GP extends string = '', R = never> {
    * new Router('/pets').inject($i => ({ svc: PetService, audit: $i.optional(Audit) }))
    * ```
    */
-  inject<const SPEC extends ObjectInjectionSpec>(spec: SPEC): Router<MergeDeps<GD, InjectedOf<SPEC>>, GP, R>
+  inject<const SPEC extends ObjectInjectionSpec>(spec: SPEC): Router<V, MergeDeps<GD, InjectedOf<SPEC>>, GP, R>
   inject<const SPEC extends ObjectInjectionSpec>(
     build: (i: typeof $i) => SPEC,
-  ): Router<MergeDeps<GD, InjectedOf<SPEC>>, GP, R>
+  ): Router<V, MergeDeps<GD, InjectedOf<SPEC>>, GP, R>
   inject(specOrBuild: ObjectInjectionSpec | ((i: typeof $i) => ObjectInjectionSpec)): any {
     const spec = typeof specOrBuild === 'function' ? specOrBuild($i) : specOrBuild
 
@@ -91,14 +110,14 @@ export class Router<GD = undefined, GP extends string = '', R = never> {
    */
   group<CP extends string, CR>(
     path: CP,
-    configure: (router: Router<GD, JoinPath<GP, CP>>) => Router<any, any, CR>,
-  ): Router<GD, GP, R | CR>
+    configure: (router: Router<V, GD, JoinPath<GP, CP>>) => Router<any, any, any, CR>,
+  ): Router<V, GD, GP, R | CR>
   group<CP extends string>(
     path: CP,
-    configure: (router: Router<GD, JoinPath<GP, CP>>) => unknown,
+    configure: (router: Router<V, GD, JoinPath<GP, CP>>) => unknown,
   ): this
-  group<CP extends string>(path: CP, configure: (router: Router<GD, JoinPath<GP, CP>>) => unknown): this {
-    const child = new Router<GD, JoinPath<GP, CP>>(path as unknown as JoinPath<GP, CP>)
+  group<CP extends string>(path: CP, configure: (router: Router<V, GD, JoinPath<GP, CP>>) => unknown): this {
+    const child = new Router<V, GD, JoinPath<GP, CP>>(path as unknown as JoinPath<GP, CP>)
     configure(child)
     this.#state.children.push(stateOf(child)!)
     return this
@@ -113,16 +132,16 @@ export class Router<GD = undefined, GP extends string = '', R = never> {
    * Mounting the same router twice adds it once — which is what makes routes declared as separate statements
    * mountable, since every value `.handler()` returns names the one router it was opened from.
    */
-  mount<MP extends string, const RS extends ReadonlyArray<Router<any, any, any>>>(
+  mount<MP extends string, const RS extends ReadonlyArray<Router<any, any, any, any>>>(
     path: MP,
     ...routers: RS
-  ): Router<GD, GP, R | PrefixRoutePaths<RoutesOf<RS[number]>, JoinPath<GP, MP>>>
-  mount<const RS extends ReadonlyArray<Router<any, any, any>>>(
+  ): Router<V, GD, GP, R | PrefixRoutePaths<RoutesOf<RS[number]>, JoinPath<GP, MP>>>
+  mount<const RS extends ReadonlyArray<Router<any, any, any, any>>>(
     ...routers: RS
-  ): Router<GD, GP, R | PrefixRoutePaths<RoutesOf<RS[number]>, GP>>
-  mount(...args: Array<string | Router<any, any, any>>): this {
+  ): Router<V, GD, GP, R | PrefixRoutePaths<RoutesOf<RS[number]>, GP>>
+  mount(...args: Array<string | Router<any, any, any, any>>): this {
     const path = typeof args[0] === 'string' ? args[0] : ''
-    const routers = (path === '' ? args : args.slice(1)) as Array<Router<any, any, any>>
+    const routers = (path === '' ? args : args.slice(1)) as Array<Router<any, any, any, any>>
 
     for (const router of routers) {
       const state = stateOf(router)!
@@ -149,114 +168,117 @@ export class Router<GD = undefined, GP extends string = '', R = never> {
    * The chain is what a route needing a name, guards, authorization or an extension is written with: the inline
    * form closes the route immediately, so there is nothing left to hang those on.
    */
-  get<P extends string>(path: P): Chain<'GET', P, GD, GP, R>
-  get<P extends string, O>(path: P, handler: Handler<Empty, P, GD, GP, O>): Closed<'GET', P, Empty, O, GD, GP, R>
+  get<P extends string>(path: P): Chain<'GET', P, V, GD, GP, R>
+  get<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'GET', P, Empty, O, V, GD, GP, R>
   get<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<'GET', P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<'GET', P, S, O, V, GD, GP, R>
   get(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(['GET'], path, schemaOrHandler, handler)
   }
 
-  post<P extends string>(path: P): Chain<'POST', P, GD, GP, R>
-  post<P extends string, O>(path: P, handler: Handler<Empty, P, GD, GP, O>): Closed<'POST', P, Empty, O, GD, GP, R>
+  post<P extends string>(path: P): Chain<'POST', P, V, GD, GP, R>
+  post<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'POST', P, Empty, O, V, GD, GP, R>
   post<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<'POST', P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<'POST', P, S, O, V, GD, GP, R>
   post(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(['POST'], path, schemaOrHandler, handler)
   }
 
-  put<P extends string>(path: P): Chain<'PUT', P, GD, GP, R>
-  put<P extends string, O>(path: P, handler: Handler<Empty, P, GD, GP, O>): Closed<'PUT', P, Empty, O, GD, GP, R>
+  put<P extends string>(path: P): Chain<'PUT', P, V, GD, GP, R>
+  put<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'PUT', P, Empty, O, V, GD, GP, R>
   put<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<'PUT', P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<'PUT', P, S, O, V, GD, GP, R>
   put(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(['PUT'], path, schemaOrHandler, handler)
   }
 
-  patch<P extends string>(path: P): Chain<'PATCH', P, GD, GP, R>
-  patch<P extends string, O>(path: P, handler: Handler<Empty, P, GD, GP, O>): Closed<'PATCH', P, Empty, O, GD, GP, R>
+  patch<P extends string>(path: P): Chain<'PATCH', P, V, GD, GP, R>
+  patch<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'PATCH', P, Empty, O, V, GD, GP, R>
   patch<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<'PATCH', P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<'PATCH', P, S, O, V, GD, GP, R>
   patch(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(['PATCH'], path, schemaOrHandler, handler)
   }
 
-  delete<P extends string>(path: P): Chain<'DELETE', P, GD, GP, R>
+  delete<P extends string>(path: P): Chain<'DELETE', P, V, GD, GP, R>
   delete<P extends string, O>(
     path: P,
-    handler: Handler<Empty, P, GD, GP, O>,
-  ): Closed<'DELETE', P, Empty, O, GD, GP, R>
+    handler: Handler<Empty, P, V, GD, GP, O>,
+  ): Closed<'DELETE', P, Empty, O, V, GD, GP, R>
   delete<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<'DELETE', P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<'DELETE', P, S, O, V, GD, GP, R>
   delete(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(['DELETE'], path, schemaOrHandler, handler)
   }
 
-  head<P extends string>(path: P): Chain<'HEAD', P, GD, GP, R>
-  head<P extends string, O>(path: P, handler: Handler<Empty, P, GD, GP, O>): Closed<'HEAD', P, Empty, O, GD, GP, R>
+  head<P extends string>(path: P): Chain<'HEAD', P, V, GD, GP, R>
+  head<P extends string, O>(path: P, handler: Handler<Empty, P, V, GD, GP, O>): Closed<'HEAD', P, Empty, O, V, GD, GP, R>
   head<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<'HEAD', P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<'HEAD', P, S, O, V, GD, GP, R>
   head(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(['HEAD'], path, schemaOrHandler, handler)
   }
 
-  options<P extends string>(path: P): Chain<'OPTIONS', P, GD, GP, R>
+  options<P extends string>(path: P): Chain<'OPTIONS', P, V, GD, GP, R>
   options<P extends string, O>(
     path: P,
-    handler: Handler<Empty, P, GD, GP, O>,
-  ): Closed<'OPTIONS', P, Empty, O, GD, GP, R>
+    handler: Handler<Empty, P, V, GD, GP, O>,
+  ): Closed<'OPTIONS', P, Empty, O, V, GD, GP, R>
   options<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<'OPTIONS', P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<'OPTIONS', P, S, O, V, GD, GP, R>
   options(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(['OPTIONS'], path, schemaOrHandler, handler)
   }
 
   /** Every method the adapter routes, for a path that answers all of them. */
-  all<P extends string>(path: P): Chain<AllMethod, P, GD, GP, R>
-  all<P extends string, O>(path: P, handler: Handler<Empty, P, GD, GP, O>): Closed<AllMethod, P, Empty, O, GD, GP, R>
+  all<P extends string>(path: P): Chain<AllMethod, P, V, GD, GP, R>
+  all<P extends string, O>(
+    path: P,
+    handler: Handler<Empty, P, V, GD, GP, O>,
+  ): Closed<AllMethod, P, Empty, O, V, GD, GP, R>
   all<P extends string, S extends RouteValidationSchema, O>(
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<AllMethod, P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<AllMethod, P, S, O, V, GD, GP, R>
   all(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route([...ALL_METHODS], path, schemaOrHandler, handler)
   }
 
   /** The escape hatch for a method the verb helpers do not name, or for one route answering a chosen few. */
-  route<M extends string, P extends string>(method: M | M[], path: P): Chain<M, P, GD, GP, R>
+  route<M extends string, P extends string>(method: M | M[], path: P): Chain<M, P, V, GD, GP, R>
   route<M extends string, P extends string, O>(
     method: M | M[],
     path: P,
-    handler: Handler<Empty, P, GD, GP, O>,
-  ): Closed<M, P, Empty, O, GD, GP, R>
+    handler: Handler<Empty, P, V, GD, GP, O>,
+  ): Closed<M, P, Empty, O, V, GD, GP, R>
   route<M extends string, P extends string, S extends RouteValidationSchema, O>(
     method: M | M[],
     path: P,
     schema: S,
-    handler: Handler<S, P, GD, GP, O>,
-  ): Closed<M, P, S, O, GD, GP, R>
+    handler: Handler<S, P, V, GD, GP, O>,
+  ): Closed<M, P, S, O, V, GD, GP, R>
   route(method: string | string[], path: string, schemaOrHandler?: unknown, handler?: unknown): any {
     return this.#route(Array.isArray(method) ? method : [method], path, schemaOrHandler, handler)
   }
@@ -382,18 +404,18 @@ export class Router<GD = undefined, GP extends string = '', R = never> {
 /** A route that has declared no schema yet: every slot falls back to what the path and the adapter give. */
 type Empty = Record<never, never>
 
-type AnyRouteChain = RouteChain<any, any, any, any, any, any, any>
+type AnyRouteChain = RouteChain<any, any, any, any, any, any, any, any>
 
-type AnyRouteHandler = RouteHandler<any, any, any>
+type AnyRouteHandler = RouteHandler<any, any, any, any>
 
 /** What a verb answers when it was given no handler: the route, still open for configuration. */
-type Chain<M extends string, P extends string, GD, GP extends string, R>
-  = RouteChain<Empty, P, GD, GD, GP, M, R>
+type Chain<M extends string, P extends string, V, GD, GP extends string, R>
+  = RouteChain<Empty, P, GD, V, GD, GP, M, R>
 
 /** What a verb answers when a handler closed the route there and then: the group, carrying the route. */
-type Closed<M extends string, P extends string, S extends RouteValidationSchema, O, GD, GP extends string, R>
-  = Router<GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
+type Closed<M extends string, P extends string, S extends RouteValidationSchema, O, V, GD, GP extends string, R>
+  = Router<V, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
 
 /** A handler written inline on a verb, typed against the route's schema and its full path. */
-type Handler<S extends RouteValidationSchema, P extends string, GD, GP extends string, O>
-  = RouteHandler<S, JoinPath<GP, P>, GD, O>
+type Handler<S extends RouteValidationSchema, P extends string, V, GD, GP extends string, O>
+  = RouteHandler<S, JoinPath<GP, P>, V, GD, O>

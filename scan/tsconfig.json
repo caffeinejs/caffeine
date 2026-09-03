@@ -3,13 +3,10 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist",
-    "types": ["node"]
+    "types": ["node"],
+    "jsx": "preserve",
+    "noEmit": true
   },
-  "exclude": [
-    "dist",
-    "node_modules",
-    "**/_testdata/",
-    "**/*.test.ts",
-    "**/*.spec.ts"
-  ]
+  "exclude": ["dist", "node_modules"],
+  "references": [{ "path": "./tsconfig.build.json" }]
 }

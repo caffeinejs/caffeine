@@ -22,7 +22,7 @@ type Chain = (ctx: Context, terminal: () => ActionResult) => ActionResult
 
 interface Entry {
   readonly hook: MiddlewareHook
-  readonly ref: MiddlewareRef
+  readonly ref: MiddlewareRef<any>
   /** Resolved during `resolveAll`, except for request-scoped middlewares, which resolve per request. */
   handle?: Handle
   instance?: Middleware
@@ -48,7 +48,7 @@ export class MiddlewarePipeline {
   #requiresRequestScope = false
 
   /** Registers `ref` at `hook`. Throws once the pipeline has been composed. */
-  add(ref: MiddlewareRef, hook: MiddlewareHook): this {
+  add(ref: MiddlewareRef<any>, hook: MiddlewareHook): this {
     if (this.#sealed) {
       throw new ErrPipelineSealed()
     }

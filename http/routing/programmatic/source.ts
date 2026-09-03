@@ -15,9 +15,9 @@ import type { Router } from './router.js'
 export class FluentRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'programmatic'
 
-  readonly #routers: readonly Router<any, any>[]
+  readonly #routers: readonly Router<any, any, any, any>[]
 
-  constructor(routers: readonly Router<any, any>[]) {
+  constructor(routers: readonly Router<any, any, any, any>[]) {
     this.#routers = routers
   }
 

@@ -1,4 +1,7 @@
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
   "exclude": ["dist", "node_modules", "**/_benchmarks/", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
 }

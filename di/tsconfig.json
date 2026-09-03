@@ -4,17 +4,16 @@
     "rootDir": ".",
     "outDir": "dist",
     "lib": ["esnext", "DOM", "Decorators", "esnext.decorators"],
-    "types": ["node"]
+    "types": ["node"],
+    "noEmit": true
   },
   "exclude": [
     "dist",
     "node_modules",
-    "**/_tests/",
-    "**/_testdata/",
+    "_tests/deno",
     "**/_benchmarks/",
     "**/examples/",
-    "**/tools/",
-    "**/*.spec.ts",
-    "**/*.test.ts"
-  ]
+    "**/tools/"
+  ],
+  "references": [{ "path": "./tsconfig.build.json" }]
 }

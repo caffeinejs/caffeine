@@ -20,8 +20,19 @@ import type { Services } from '../service.js'
  */
 export type Next = () => ActionResult
 
-/** The functional form of a middleware. Return without calling `next` to short-circuit the pipeline. */
-export type MiddlewareFn = (ctx: Context, next: Next) => ActionResult
+/**
+ * The functional form of a middleware. Return without calling `next` to short-circuit the pipeline.
+ *
+ * `V` names what the middleware reads and writes through `ctx.state`:
+ *
+ * ```ts
+ * const tenancy: MiddlewareFn<{ tenant: Tenant }> = (ctx, next) => {
+ *   ctx.state.set('tenant', resolve(ctx))
+ *   return next()
+ * }
+ * ```
+ */
+export type MiddlewareFn<V = Record<never, never>> = (ctx: Context<V>, next: Next) => ActionResult
 
 /**
  * The class form of a middleware, which is what a middleware with dependencies should be: bind it in the
@@ -37,7 +48,7 @@ export type MiddlewareFn = (ctx: Context, next: Next) => ActionResult
  * app.use(Envelope)
  * ```
  */
-export abstract class Middleware {
+export abstract class Middleware<V = Record<never, never>> {
   /**
    * Ran once at start-up, before any request. Resolve singletons here, validate the configuration here, and
    * throw here — a middleware that cannot work is a start-up failure, not a per-request one.
@@ -47,7 +58,7 @@ export abstract class Middleware {
    */
   setup?(ctx: MiddlewareSetupContext): void | Promise<void>
 
-  abstract handle(ctx: Context, next: Next): ActionResult
+  abstract handle(ctx: Context<V>, next: Next): ActionResult
 }
 
 /** What a middleware is given at start-up: the whole application, resolved. */
@@ -82,7 +93,8 @@ export const MIDDLEWARE_HOOKS: readonly MiddlewareHook[] = [
 ]
 
 /** Anything `use()` accepts: a function, an instance, a class, or a container key. */
-export type MiddlewareRef = MiddlewareFn | Middleware | Ctor<Middleware> | InjectionToken
+export type MiddlewareRef<V = Record<never, never>>
+  = MiddlewareFn<V> | Middleware<V> | Ctor<Middleware<V>> | InjectionToken
 
 /** Whether `ref` is a middleware class rather than a plain middleware function. */
 export function isMiddlewareClass(ref: unknown): ref is Ctor<Middleware> {

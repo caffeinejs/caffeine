@@ -5,8 +5,10 @@
     "outDir": "dist",
     "types": ["node"],
     "jsx": "react-jsx",
-    "jsxImportSource": "@kitajs/html"
+    "jsxImportSource": "@kitajs/html",
+    "noEmit": true
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules"],
+  "references": [{ "path": "./tsconfig.build.json" }]
 }
