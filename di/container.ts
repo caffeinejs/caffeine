@@ -118,13 +118,17 @@ export class CaffeineIoC implements Container {
    * @param options - The options to configure the container.
    */
   constructor(options: Partial<Options> = {}) {
-    const opts = { ...DEFAULT_OPTIONS, ...options } as Options
+    const opts = {
+      ...DEFAULT_OPTIONS,
+      ...options,
+      checks: { ...DEFAULT_OPTIONS.checks, ...options.checks },
+    } as Options
 
     this.parent = opts.parent
     this._profiles = new Set(opts.profiles ?? [])
     this.lazy = opts.lazy
-    this.circularReferences = opts.checks?.circularReferences ?? false
-    this.scopeCheckMode = opts.checks?.scopes ?? 'no-mix'
+    this.circularReferences = opts.checks?.circularReferences ?? true
+    this.scopeCheckMode = opts.checks?.scopes ?? 'compatible-scopes-only'
     this.scopeID = opts.defaultScopeID ?? Scopes.SINGLETON
     this.metadataReader = opts.metadataReader || (() => ({}))
     this.scopes = new Map<NamedToken<Scope>, Scope>()

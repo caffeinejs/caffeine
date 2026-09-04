@@ -2,11 +2,12 @@ import '../index.nodejs.js'
 import { describe, expect, it } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ErrCircularDependency } from '../errors.js'
+import { ErrCircularDependency, ErrScopeMismatch } from '../errors.js'
 import { $i } from '../injection.js'
+import type { Provider } from '../provider.js'
 import { Scopes } from '../scope.js'
 
-describe.skip('cycle detection beyond required constructor edges', function () {
+describe('cycle detection beyond required constructor edges', function () {
   it('should throw ErrCircularDependency for a mutual property-injection cycle', async function () {
     class PropA {
       b!: PropB
@@ -86,7 +87,7 @@ describe.skip('cycle detection beyond required constructor edges', function () {
   })
 })
 
-describe.skip('partial checks must not drop circularReferences default', function () {
+describe('partial checks must not drop circularReferences default', function () {
   it('should throw ErrCircularDependency when only checks.scopes is set to off', async function () {
     class CycleA {
       constructor(readonly b: CycleB) {}
@@ -104,20 +105,18 @@ describe.skip('partial checks must not drop circularReferences default', functio
   })
 })
 
-describe.skip('singleton must not retain a destroyed refresh collaborator', function () {
-  it('should not leave a singleton holding a preDestroyed refresh instance after refresh()', async function () {
-    const destroyed: Token[] = []
-
-    class Token {
-      die() {
-        destroyed.push(this)
-      }
+describe('singleton must not retain a destroyed refresh collaborator', function () {
+  class Token {
+    die() {
+      //
     }
+  }
 
-    class App {
-      constructor(readonly token: Token) {}
-    }
+  class App {
+    constructor(readonly token: Token) {}
+  }
 
+  it('should reject a singleton that captures a refresh instance directly', async function () {
     const di = new CaffeineIoC({ decorators: false })
     di.bind(Token, t =>
       t
@@ -126,45 +125,41 @@ describe.skip('singleton must not retain a destroyed refresh collaborator', func
         .preDestroy(token => token.die()),
     )
     di.bind(App, t => t.toSelf([Token]))
-    await di.init()
 
-    const app = di.get(App)
-    await di.refresher.refresh()
-
-    expect(destroyed).not.toContain(app.token)
-    expect(app.token).toBe(di.get(Token))
+    await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
   })
-})
 
-describe.skip('builder() request-scoped dependencies', function () {
-  it('should not reuse a request-scoped dep captured in a previous run() block', async function () {
-    class Sess {
-      readonly id = Math.random()
-    }
+  it('should let a singleton reach a refresh instance through a provider and see it after refresh()', async function () {
+    const destroyed: Token[] = []
 
-    class Use {
-      constructor(readonly sess: Sess) {}
+    class Holder {
+      constructor(readonly token: Provider<Token>) {}
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Sess, t => t.toSelf().lifetime(Scopes.REQUEST))
+    di.bind(Token, t =>
+      t
+        .toSelf()
+        .lifetime(Scopes.REFRESH)
+        .preDestroy(token => {
+          destroyed.push(token)
+        }),
+    )
+    di.bind(Holder, t => t.toSelf([$i.provide(Token)]))
     await di.init()
 
-    let builder!: () => Use
-    let firstId!: number
+    const holder = di.get(Holder)
+    const before = holder.token.get()
 
-    await di.requestScopeManager.run(function () {
-      builder = di.builder(Use, [Sess])
-      firstId = builder().sess.id
-    })
+    await di.refresher.refresh()
 
-    await di.requestScopeManager.run(function () {
-      expect(builder().sess.id).not.toBe(firstId)
-    })
+    expect(destroyed).toEqual([before])
+    expect(holder.token.get()).not.toBe(before)
+    expect(holder.token.get()).toBe(di.get(Token))
   })
 })
 
-describe.skip('preDestroy on request-scoped beans', function () {
+describe('preDestroy on request-scoped beans', function () {
   it('should call preDestroy once when dispose() runs inside an active run() block', async function () {
     let calls = 0
 

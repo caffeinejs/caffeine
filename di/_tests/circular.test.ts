@@ -185,7 +185,9 @@ describe('Circular References', function () {
       await expect(di.init()).rejects.toThrow(ErrCircularDependency)
     })
 
-    it('should not throw when the dep that closes the cycle is optional', async function () {
+    // An optional dependency resolves whatever is bound to it, so it closes a cycle like any other edge.
+    // Being lazy only delays the recursion to the first get().
+    it('should throw when the optional dep that closes the cycle is bound', async function () {
       class OptA {
         constructor(readonly b: OptB | undefined) {}
       }
@@ -198,7 +200,24 @@ describe('Circular References', function () {
       di.bind(OptA, t => t.toSelf([$i.optional(OptB)]).lazy())
       di.bind(OptB, t => t.toSelf([OptA]).lazy())
 
+      await expect(di.init()).rejects.toThrow(ErrCircularDependency)
+    })
+
+    it('should not throw when the optional dep that closes the cycle is unbound', async function () {
+      class OptA {
+        constructor(readonly b: OptB | undefined) {}
+      }
+
+      class OptB {
+        constructor(readonly a: OptA) {}
+      }
+
+      const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
+      di.bind(OptA, t => t.toSelf([$i.optional(OptB)]))
+
       await di.init()
+
+      expect(di.get(OptA).b).toBeUndefined()
     })
 
     it('should not throw when the dep that closes the cycle uses $i.defer()', async function () {

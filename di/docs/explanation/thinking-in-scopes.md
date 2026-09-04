@@ -123,9 +123,11 @@ await container.refresher.refresh()
 // next di.get(RemoteConfig) creates a fresh instance
 ```
 
-`refresh()` clears all refresh-scoped instances atomically. Pre-destroy hooks
-are not called on the old instances — if you need cleanup, do it in the
-factory or the `PostConstruct` hook.
+`refresh()` discards every refresh-scoped instance, running each binding's
+pre-destroy hook before it goes. Nothing may hold one of those instances
+directly: a singleton that captured one would be left with a destroyed object,
+which is why the default scope check rejects that wiring. Reach a refresh
+binding through `$i.provide()` instead.
 
 ---
 

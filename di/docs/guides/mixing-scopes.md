@@ -157,17 +157,21 @@ By default, the container uses: `compatible-scopes-only`.
 const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' } })
 ```
 
-Use `'compatible-scopes-only'` for a relaxed variant that allows durable scopes
-(singleton, refresh) to depend on other durable scopes, while still blocking
-durable → non-durable (transient, request) direct injections.
+Use `'compatible-scopes-only'` for a relaxed variant that allows a durable scope
+to depend on another durable scope, while blocking durable → non-durable
+(transient, request) direct injections. A refresh-scoped dependency is blocked
+too, even though refresh is durable: `refresher.refresh()` replaces the instance
+and runs its pre-destroy hook, so a consumer that captured it directly would keep
+a destroyed object. Only another refresh binding may hold one; everything else
+uses `provide()`.
 
 With `'no-mix'`, the container throws `ErrScopeMismatch` during `init()` for any
 direct injection across different scopes. `provide()` injections are exempt because
 they defer resolution correctly.
 
 :::warning
-Keep scope checking enabled. Disabling it (`checks: { scopes: false }` or omitting the
-option entirely) lets scope leaks through silently. `'compatible-scopes-only'` is the
+Keep scope checking enabled. Disabling it (`checks: { scopes: 'off' }`) lets scope
+leaks through silently; omitting the option keeps the default on. `'compatible-scopes-only'` is the
 recommended baseline for most applications — it catches the dangerous cases (durable
 holding a non-durable reference) without rejecting benign same-lifetime dependencies.
 Only tighten to `'no-mix'` if you want strict enforcement across every scope boundary.

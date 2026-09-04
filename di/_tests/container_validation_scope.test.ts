@@ -284,13 +284,37 @@ describe('checks:scopes', function () {
       await expect(di.init()).resolves.not.toThrow()
     })
 
-    it('allows durable → durable (singleton → refresh)', async function () {
+    // Refresh is durable, but a refresh replaces the instance and runs its preDestroy, so a singleton that
+    // captured it directly keeps a destroyed object.
+    it('throws when a singleton captures a refresh instance directly', async function () {
       const kDep = token<string>(Symbol('cso-dep-srf'))
       const kOwner = token<Record<string, unknown>>(Symbol('cso-owner-srf'))
       const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
 
       di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.REFRESH))
       di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]))
+
+      await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
+    })
+
+    it('allows refresh → refresh', async function () {
+      const kDep = token<string>(Symbol('cso-dep-rr'))
+      const kOwner = token<Record<string, unknown>>(Symbol('cso-owner-rr'))
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.REFRESH))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [kDep]).lifetime(Scopes.REFRESH))
+
+      await expect(di.init()).resolves.not.toThrow()
+    })
+
+    it('allows singleton → $i.provide(refresh)', async function () {
+      const kDep = token<string>(Symbol('cso-dep-spr'))
+      const kOwner = token<Record<string, unknown>>(Symbol('cso-owner-spr'))
+      const di = new CaffeineIoC({ checks: { scopes: 'compatible-scopes-only' }, decorators: false })
+
+      di.bind(kDep, t => t.toValue('dep').lifetime(Scopes.REFRESH))
+      di.bind(kOwner, t => t.toFunction((_: unknown) => ({}), [$i.provide(kDep)]))
 
       await expect(di.init()).resolves.not.toThrow()
     })

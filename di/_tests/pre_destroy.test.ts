@@ -322,7 +322,9 @@ describe('PreDestroy', function () {
         }
       }
 
-      const di = new CaffeineIoC({ decorators: false })
+      // Scope checks off: holding a refresh instance directly is what the default mode rejects, and this
+      // test is about the shared sequence counter, not about the check.
+      const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
       di.bind(TokenXS, t =>
         t
           .toSelf()

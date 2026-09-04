@@ -10,6 +10,10 @@ import { Scopes } from './scope.js'
 /**
  * Check if the container's dependency graph contains any wrongly
  * configured circular references.
+ *
+ * Constructor, property and method injections all count as edges: a scope caches an instance only after its
+ * factory and the property/method injectors have run, so none of the three breaks a cycle. Only `$i.defer`
+ * and `$i.provide` do, and an optional key nothing is bound to.
  */
 export function checkCircularReferences(
   registry: Map<InjectionToken, Binding>,
@@ -20,35 +24,72 @@ export function checkCircularReferences(
     bindingIDToKey.set(binding.id, key)
   }
 
+  const concreteKeys = (depKey: InjectionToken): InjectionToken[] => {
+    if (registry.has(depKey)) {
+      return [depKey]
+    }
+
+    const abstracts = bindings.get(depKey)
+    if (abstracts === undefined) {
+      return []
+    }
+
+    const keys: InjectionToken[] = []
+    for (const b of abstracts) {
+      const concreteKey = bindingIDToKey.get(b.id)
+      if (concreteKey != null) {
+        keys.push(concreteKey)
+      }
+    }
+
+    return keys
+  }
+
+  const addEdges = (ownerKey: InjectionToken, desc: InjectionDescriptor, deps: InjectionToken[]): void => {
+    // A provider re-resolves on every read, so it never re-enters its target while the consumer is being
+    // constructed. Same carve-out the scope check makes.
+    if (namesStage(desc, BuiltInStages.PROVIDER)) {
+      return
+    }
+
+    if (desc.key instanceof DeferredCtor) {
+      return
+    }
+
+    const depKey = desc.key as InjectionToken
+    if (depKey == null) {
+      return
+    }
+
+    // An optional dependency is only an edge when something is bound to it: an unbound key resolves to
+    // undefined and closes nothing. That falls out of concreteKeys returning an empty list.
+    const excludesSelf = collectsMany(desc) && ownerKey !== depKey
+
+    for (const concrete of concreteKeys(depKey)) {
+      // A collecting injection never receives the consumer's own bindings, so that edge is not real.
+      if (excludesSelf && concrete === ownerKey) {
+        continue
+      }
+
+      deps.push(concrete)
+    }
+  }
+
   const adj = new Map<InjectionToken, InjectionToken[]>()
   for (const [key, binding] of registry.entries()) {
     const deps: InjectionToken[] = []
+
     for (const desc of binding.injections) {
-      if (desc.optional || collectsMany(desc)) {
-        continue
-      }
+      addEdges(key, desc, deps)
+    }
 
-      if (desc.key instanceof DeferredCtor) {
-        continue
-      }
+    for (const desc of binding.injectableProperties.values()) {
+      addEdges(key, desc, deps)
+    }
 
-      const depKey = desc.key as InjectionToken
-      if (depKey == null) {
-        continue
-      }
-
-      if (registry.has(depKey)) {
-        deps.push(depKey)
-      } else {
-        const abstracts = bindings.get(depKey)
-        if (abstracts) {
-          for (const b of abstracts) {
-            const concreteKey = bindingIDToKey.get(b.id)
-            if (concreteKey != null) {
-              deps.push(concreteKey)
-            }
-          }
-        }
+    for (const descs of binding.injectableMethods.values()) {
+      for (const desc of descs) {
+        addEdges(key, desc, deps)
       }
     }
 

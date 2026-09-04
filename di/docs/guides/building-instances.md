@@ -70,6 +70,22 @@ const r2 = makeReport()
 Use `builder()` when you need to create many instances of the same class —
 transient request handlers, per-item processors, or pooled workers.
 
+### Dependencies are resolved once
+
+`builder()` resolves the dependency **instances** when you call it, not on each
+call of the factory it returns. Every instance it builds therefore shares the
+same dependencies, including transient ones.
+
+That matters most for a request-scoped dependency: a builder created inside a
+`RequestScopeManager.run()` block captures that request's instance, and calling
+the factory in a later request hands out the earlier — already destroyed — one.
+Wrap anything shorter-lived than the builder in `provide()` so it re-resolves per
+use:
+
+```ts
+const makeHandler = di.builder(Handler, [$i.provide(RequestContext)])
+```
+
 ---
 
 ## Skipping constructor arguments

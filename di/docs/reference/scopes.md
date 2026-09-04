@@ -146,8 +146,10 @@ await container.refresher.refresh()
 
 By default, CaffeineIoC enforces compatible-scope rules: a singleton may not depend
 on a transient directly, because the transient would be created once and
-effectively become a singleton. The container throws during `init()` if this
-rule is violated.
+effectively become a singleton. A refresh-scoped dependency is rejected for the
+mirror reason — `refresher.refresh()` replaces the instance and runs its
+pre-destroy hook, leaving the singleton with a destroyed object. The container
+throws during `init()` if either rule is violated.
 
 Behaviour is controlled by the `checks.scopes` option:
 

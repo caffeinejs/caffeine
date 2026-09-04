@@ -133,15 +133,17 @@ type ScopeCheckMode = 'compatible-scopes-only' | 'no-mix' | 'off'
 
 Controls scope compatibility validation.
 
-| Mode                       | Behaviour                                                                                                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `'compatible-scopes-only'` | Durable scopes (singleton, container) cannot depend directly on shorter-lived scopes (transient, request). Reverse is allowed. |
-| `'no-mix'`                 | Every dependency in a chain must share the exact same scope as its consumer.                                                   |
-| `'off'`                    | Scope validation disabled.                                                                                                     |
+| Mode                       | Behaviour                                                                                                                        |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `'compatible-scopes-only'` | A durable scope cannot depend directly on a shorter-lived one (transient, request) nor on a refresh binding. Reverse is allowed. |
+| `'no-mix'`                 | Every dependency in a chain must share the exact same scope as its consumer.                                                     |
+| `'off'`                    | Scope validation disabled.                                                                                                       |
 
 `'compatible-scopes-only'` catches the most common mistake — a singleton
 holding a transient reference — without blocking valid mixed-scope designs that
-use `provide()`.
+use `provide()`. Refresh counts as shorter-lived even though it is durable:
+`refresher.refresh()` replaces the instance and runs its pre-destroy hook, so
+only another refresh binding may hold one directly.
 
 ```ts
 const di = new CaffeineIoC({ checks: { scopes: 'no-mix' } })
@@ -156,8 +158,13 @@ circularReferences?: boolean
 **Default:** `true`
 
 When `true`, the container performs a graph traversal during `init()` and throws
-`ErrCircularDependency` if a cycle is detected. Disable only when you are
-intentionally breaking cycles with `@Lazy()`.
+`ErrCircularDependency` if a cycle is detected. Constructor, property and method
+injections all count as edges — a scope caches an instance only after the
+property and method injectors have run, so none of the three breaks a cycle.
+Only `$i.defer()`, `$i.provide()` and an optional key nothing is bound to do.
+
+The whole `checks` object is merged field by field, so passing one of the two
+fields keeps the default of the other.
 
 ```ts
 const di = new CaffeineIoC({ checks: { circularReferences: false } })

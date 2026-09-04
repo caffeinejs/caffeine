@@ -86,7 +86,9 @@ describe('$i.provide() — the resolved value follows the target lifetime', func
       constructor(readonly dep: Dep) {}
     }
 
-    const di = new CaffeineIoC({ decorators: false })
+    // Scope checks off so the Captor can exist at all: the default mode rejects a singleton that captures a
+    // refresh instance directly, which is the very thing this test contrasts $i.provide() against.
+    const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
     di.bind(Dep, t => t.toSelf().lifetime(Scopes.REFRESH))
     di.bind(Holder, t => t.toSelf([$i.provide(Dep)]))
     di.bind(Captor, t => t.toSelf([Dep]))

@@ -136,8 +136,9 @@ scoped instances at any point after `init()`:
 await di.refresher.refresh()
 ```
 
-The next `get()` for a refresh-scoped binding creates a fresh instance.
-Pre-destroy hooks are **not** called on the old instances during refresh.
+The next `get()` for a refresh-scoped binding creates a fresh instance. The old
+instance's pre-destroy hook runs first, so no longer-lived component may hold
+one directly — inject `$i.provide()` and read it per use.
 
 ---
 

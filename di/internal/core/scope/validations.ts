@@ -33,7 +33,13 @@ function checkCompatibleScopes(
   ctx: ScopeValidationContext,
   entries: IterableIterator<[InjectionToken, Binding]>,
 ): void {
-  runCheck(entries, ctx, (ownerScopeID, depScopeID) => isDurable(ownerScopeID, ctx) && !isDurable(depScopeID, ctx))
+  runCheck(
+    entries,
+    ctx,
+    (ownerScopeID, depScopeID) =>
+      isDurable(ownerScopeID, ctx) &&
+      (!isDurable(depScopeID, ctx) || (depScopeID === Scopes.REFRESH && ownerScopeID !== Scopes.REFRESH)),
+  )
 }
 
 function isDurable(scopeID: NamedToken<Scope>, ctx: ScopeValidationContext): boolean {
