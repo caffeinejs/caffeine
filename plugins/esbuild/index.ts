@@ -15,7 +15,7 @@ export function caffeineEsbuild(opts: CaffeineEsbuildOptions = {}): Plugin {
     name: 'caffeine',
     setup(build) {
       build.onStart(() => {
-        const args = ['generate', '--cwd', cwd]
+        const args = ['generate', 'modules', '--cwd', cwd]
         if (opts.configPath) {
           args.push('--config', opts.configPath)
         }

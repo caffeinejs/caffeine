@@ -1,2 +1,2 @@
-src/__caffeine__.gen.ts
+src/**/*.generated.mod.ts
 node_modules/

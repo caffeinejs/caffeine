@@ -1,19 +1,5 @@
 import { resolve } from 'node:path'
 
-export interface GenerateConfig {
-  include: string[]
-  exclude?: string[]
-  output: string
-  importExtension?: '.js' | '.ts' | ''
-}
-
-export interface ModulesConfig {
-  include: string[]
-  exclude?: string[]
-  output?: string
-  importExtension?: '.js' | '.ts' | ''
-}
-
 export interface ModuleGraphConfig {
   include: string[]
   exclude?: string[]
@@ -27,9 +13,7 @@ export interface ModuleGraphConfig {
 }
 
 export interface CaffeineConfig {
-  generate?: GenerateConfig
-  modules?: ModulesConfig
-  moduleGraph?: ModuleGraphConfig
+  modules?: ModuleGraphConfig
 }
 
 export function defineConfig(config: CaffeineConfig): CaffeineConfig {

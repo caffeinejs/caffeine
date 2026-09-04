@@ -69,25 +69,30 @@ describe('generateModuleGraph()', () => {
     expect(await Bun.file(join(dir, 'src/libs/libs.generated.mod.ts')).exists()).toBe(false)
     expect(await Bun.file(join(dir, 'src/orders/orders.mod.ts')).text()).toContain('extraOrdersModule')
 
-    expect(orders).toContain("import './order.service.js'")
-    expect(orders).not.toContain('OrderService')
+    expect(orders).toContain("import { OrderService } from './order.service.js'")
+    expect(orders).not.toContain("import './order.service.js'")
     expect(orders).toContain("import { usersModule } from '../users/users.generated.mod.js'")
     expect(orders).toContain("import { extraOrdersModule } from './orders.mod.js'")
     expect(orders.indexOf("'../users/users.generated.mod.js'")).toBeLessThan(orders.indexOf("'./order.service.js'"))
     expect(orders.indexOf("'./order.service.js'")).toBeLessThan(orders.indexOf("'./orders.mod.js'"))
     expect(orders).toContain(['  needs: () => [', '    usersModule,', '    extraOrdersModule,', '  ],'].join('\n'))
+    expect(orders).toContain(['  provides: () => [', '    OrderService,', '  ],'].join('\n'))
     expect(orders).toContain("name: 'orders'")
 
-    expect(users).toContain("export const usersModule: Module = mod({ name: 'users' })")
-    expect(users).toContain("import './user.service.js'")
+    expect(users).toContain("import { User } from './user.service.js'")
+    expect(users).toContain(['  provides: () => [', '    User,', '  ],'].join('\n'))
+    expect(users).not.toContain('needs:')
 
-    expect(db).toContain("mod({ name: 'db' })")
-    expect(cache).toContain("mod({ name: 'cache' })")
+    expect(db).toContain("name: 'db'")
+    expect(db).toContain("import { Db } from './client.js'")
+    expect(cache).toContain("name: 'cache'")
+    expect(cache).toContain("import { Cache } from './cache.js'")
 
-    expect(app).toContain("import './app.js'")
-    expect(app).toContain("import './libs/util.js'")
+    expect(app).toContain("import { App } from './app.js'")
+    expect(app).toContain("import { Util } from './libs/util.js'")
     expect(app).not.toContain('app.di')
-    expect(app).toContain("mod({ name: 'app' })")
+    expect(app).toContain(['  provides: () => [', '    App,', '    Util,', '  ],'].join('\n'))
+    expect(app).toContain("name: 'app'")
 
     expect(root).toContain("name: 'root'")
     expect(root).toContain(
@@ -127,6 +132,33 @@ describe('generateModuleGraph()', () => {
 
     expect(await Bun.file(join(dir, 'src/orders/orders.mod.ts')).text()).toBe(handwritten)
     expect(await Bun.file(join(dir, 'src/orders/orders.generated.mod.ts')).exists()).toBe(true)
+  })
+
+  it('warns and skips a decorated class that has no named export', async () => {
+    const dir = tempDir()
+    dirs.push(dir)
+    await writeTree(dir, {
+      'src/orders/order.service.ts': '@Injectable()\nexport class OrderService {}\n',
+      'src/orders/hidden.ts': '@Injectable()\nclass Hidden {}\nvoid [Hidden]\n',
+    })
+
+    const warnings: string[] = []
+    const warn = console.warn
+    console.warn = (...args: unknown[]) => void warnings.push(args.join(' '))
+    try {
+      await generateModuleGraph({ cwd: dir, config: { include: ['src/**/*.ts'], root: 'src' } })
+    } finally {
+      console.warn = warn
+    }
+
+    expect(warnings).toEqual([
+      '[caffeine] skipped decorated class "Hidden" in "src/orders/hidden.ts": it is not exported',
+    ])
+
+    const orders = await Bun.file(join(dir, 'src/orders/orders.generated.mod.ts')).text()
+    expect(orders).toContain(['  provides: () => [', '    OrderService,', '  ],'].join('\n'))
+    expect(orders).not.toContain('Hidden')
+    expect(orders).not.toContain('./hidden.js')
   })
 
   it('drops files deeper than maxDepth', async () => {

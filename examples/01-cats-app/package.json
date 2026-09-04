@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "caffeine generate && tsc",
+    "build": "caffeine generate modules && tsc",
     "start": "tsx index.ts"
   },
   "dependencies": {

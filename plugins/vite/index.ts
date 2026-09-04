@@ -12,7 +12,7 @@ export function caffeineVite(opts: CaffeineViteOptions = {}): Plugin {
   const cwd = opts.cwd ? resolve(opts.cwd) : process.cwd()
 
   const runGenerate = (): void => {
-    const args = ['generate', '--cwd', cwd]
+    const args = ['generate', 'modules', '--cwd', cwd]
     if (opts.configPath) {
       args.push('--config', opts.configPath)
     }

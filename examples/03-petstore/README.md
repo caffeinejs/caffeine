@@ -137,7 +137,7 @@ npm run build:cli   # bun-compile @caffeinejs/cli + link node_modules/.bin/caffe
 Then:
 
 ```sh
-npm run build -w @caffeinejs/example-petstore   # prisma generate + caffeine generate
+npm run build -w @caffeinejs/example-petstore   # prisma generate + caffeine generate modules
 npm run db:migrate:dev -w @caffeinejs/example-petstore   # author/apply migrations
 npm run db:seed -w @caffeinejs/example-petstore
 npm start -w @caffeinejs/example-petstore

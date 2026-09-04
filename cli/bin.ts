@@ -12,6 +12,7 @@ interface CommandOpts {
   config?: string
   flavor?: string
   arch?: string
+  kind?: string
   name?: string
   agentsMd?: boolean
 }
@@ -21,6 +22,10 @@ type CommandRunner = (opts: CommandOpts) => Promise<void>
 const commands: Record<string, CommandRunner> = {
   generate,
   scaffold,
+}
+
+const aliases: Record<string, string> = {
+  g: 'generate',
 }
 
 const { values, positionals } = parseArgs({
@@ -37,11 +42,11 @@ const { values, positionals } = parseArgs({
 })
 
 const commandName = positionals[0] ?? ''
-const command = commands[commandName]
+const command = commands[aliases[commandName] ?? commandName]
 
 if (!command) {
   console.error('Usage: caffeine <command> [options]')
-  console.error(`Commands: ${Object.keys(commands).join(', ')}`)
+  console.error('Commands: generate (g), scaffold')
   process.exit(1)
 }
 
@@ -51,12 +56,22 @@ const opts: CommandOpts = {
   config: values.config,
   flavor: values.flavor,
   arch: values.arch,
+  kind: positionals[1],
   name: positionals[1],
   agentsMd: values['no-agents-md'] !== true,
 }
 
+async function runCommand(): Promise<void> {
+  try {
+    await command(opts)
+  } catch (err) {
+    console.error(`[caffeine] ${err instanceof Error ? err.message : String(err)}`)
+    process.exit(1)
+  }
+}
+
 if (values.watch) {
-  await command(opts)
+  await runCommand()
 
   let debounce: ReturnType<typeof setTimeout> | undefined
   watch(cwd, { recursive: true }, (event, filename) => {
@@ -65,11 +80,11 @@ if (values.watch) {
     }
     clearTimeout(debounce)
     debounce = setTimeout(() => {
-      void command(opts)
+      void runCommand()
     }, 50)
   })
 
   console.log('[caffeine] watching for file changes...')
 } else {
-  await command(opts)
+  await runCommand()
 }

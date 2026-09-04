@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run generate && tsc",
-    "generate": "prisma generate && caffeine generate",
+    "generate": "prisma generate && caffeine generate modules",
     "prisma:generate": "prisma generate",
     "start": "tsx src/main.ts",
     "test": "vitest run",

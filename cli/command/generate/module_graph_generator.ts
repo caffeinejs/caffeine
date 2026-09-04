@@ -9,7 +9,7 @@ import {
   writeIfChanged,
   type NamedImport,
 } from './_module_graph_emit.js'
-import { hasDecorator, parseExportedConsts, parseRelativeImports } from './_module_graph_parse.js'
+import { parseDecoratedClasses, parseExportedConsts, parseRelativeImports } from './_module_graph_parse.js'
 import {
   bucketFiles,
   DEFAULT_DEPTH,
@@ -64,7 +64,7 @@ export async function generateModuleGraph(
   type FileInfo = {
     abs: string
     text: string
-    decorated: boolean
+    decorated: string[]
     handwritten: boolean
     exports: string[]
     imports: string[]
@@ -82,10 +82,14 @@ export async function generateModuleGraph(
       const abs = join(opts.cwd, cwdRel)
       const text = await Bun.file(abs).text()
       const handwritten = isHandwrittenMod(rel)
+      const classes = handwritten ? { exported: [], unexported: [] } : parseDecoratedClasses(text)
+      for (const name of classes.unexported) {
+        console.warn(`[caffeine] skipped decorated class "${name}" in "${cwdRel}": it is not exported`)
+      }
       fileInfo.set(rel, {
         abs,
         text,
-        decorated: !handwritten && hasDecorator(text),
+        decorated: classes.exported,
         handwritten,
         exports: handwritten ? parseExportedConsts(text) : [],
         imports: parseRelativeImports(text),
@@ -99,14 +103,14 @@ export async function generateModuleGraph(
     moduleName: string
     fileDir: string
     outPath: string
-    decorated: string[]
+    decorated: Array<{ rel: string; names: string[] }>
     handwritten: Array<{ rel: string; exports: string[] }>
     needDirs: Set<string>
   }
 
   const used = new Map<string, Bucket>()
   for (const [dir, files] of buckets) {
-    const decorated: string[] = []
+    const decorated: Array<{ rel: string; names: string[] }> = []
     const handwritten: Array<{ rel: string; exports: string[] }> = []
     for (const rel of files) {
       const info = fileInfo.get(rel)
@@ -115,8 +119,8 @@ export async function generateModuleGraph(
       }
       if (info.handwritten) {
         handwritten.push({ rel, exports: info.exports })
-      } else if (info.decorated) {
-        decorated.push(rel)
+      } else if (info.decorated.length > 0) {
+        decorated.push({ rel, names: info.decorated })
       }
     }
     if (decorated.length === 0 && handwritten.length === 0) {
@@ -167,10 +171,6 @@ export async function generateModuleGraph(
   const writes: Array<Promise<boolean>> = []
 
   for (const bucket of used.values()) {
-    const sideEffectImports = bucket.decorated
-      .map(rel => toImportPath(bucket.fileDir, join(opts.cwd, root, rel), importExtension))
-      .sort()
-
     const needs: NamedImport[] = []
     const aliases = new Set<string>([bucket.exportName])
 
@@ -191,14 +191,22 @@ export async function generateModuleGraph(
       })
     }
 
+    const provides: NamedImport[] = []
+    for (const file of [...bucket.decorated].sort((a, b) => a.rel.localeCompare(b.rel))) {
+      const importPath = toImportPath(bucket.fileDir, join(opts.cwd, root, file.rel), importExtension)
+      for (const name of file.names) {
+        provides.push({ exportName: name, alias: uniqueAlias(name, file.rel, aliases), importPath })
+      }
+    }
+
     writes.push(
       writeIfChanged(
         bucket.outPath,
         renderFolderModule({
           exportName: bucket.exportName,
           moduleName: bucket.moduleName,
-          sideEffectImports,
           needs,
+          provides,
         }),
       ),
     )

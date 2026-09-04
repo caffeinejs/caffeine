@@ -1,8 +1,9 @@
 import { defineConfig } from '@caffeinejs/cli'
 
 export default defineConfig({
-  generate: {
-    include: ['src/**.ts'],
-    output: 'src/routes.ts',
+  modules: {
+    include: ['src/**/*.ts'],
+    exclude: ['**/main.ts', '**/*.test.ts'],
+    root: 'src',
   },
 })

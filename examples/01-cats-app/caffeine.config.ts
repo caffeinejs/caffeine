@@ -1,10 +1,11 @@
 import { defineConfig } from '@caffeinejs/cli'
 
 export default defineConfig({
-  generate: {
+  modules: {
     include: ['src/**/*.ts'],
-    exclude: ['**/__caffeine__.gen.ts'],
-    output: 'src/__caffeine__.gen.ts',
+    // The bootstrap files import the generated graph — including them would be circular.
+    exclude: ['**/main.ts', '**/app.ts', '**/app.di.ts'],
+    root: 'src',
     importExtension: '.js',
   },
 })
