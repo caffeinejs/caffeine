@@ -1,4 +1,4 @@
-import { kAspectLabel, kAspectPointcuts, Pointcut } from './aop.js'
+import { kAspectPointcuts, Pointcut } from './aop.js'
 import { Binding } from './binding.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrCircularDependency, ErrInvalidAspect, ErrUnresolvableDependencies } from './errors.js'
@@ -215,11 +215,10 @@ function checkObjectInjections(
   }
 }
 
-export function checkAspects(bindings: Iterable<[InjectionToken, Binding]>): void {
-  for (const [key, binding] of bindings) {
-    if (!binding.labels.includes(kAspectLabel)) {
-      continue
-    }
+// Takes the aspect bindings, not every binding: the container already indexes them by `kAspectLabel`, so
+// re-deriving the same set by scanning the whole registry is a pass that buys nothing.
+export function checkAspects(aspects: Iterable<[InjectionToken, Binding]>): void {
+  for (const [key, binding] of aspects) {
     const pointcuts = binding.tags.get(kAspectPointcuts) as Pointcut[] | undefined
     if (!pointcuts || pointcuts.length === 0) {
       throw new ErrInvalidAspect(`Cannot compile aspect "${keyStr(key)}": at least one pointcut is required`)

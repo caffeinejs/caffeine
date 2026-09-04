@@ -83,6 +83,9 @@ export class CaffeineIoC implements Container {
   private readonly registry = new Map<InjectionToken, Binding>()
   private readonly bindings = new Map<InjectionToken | Identifier, Binding[]>()
   private readonly bindingsByLabel = new Map<symbol, [InjectionToken, Binding][]>()
+
+  private readonly bindingMembers = new Map<InjectionToken | Identifier, Set<number>>()
+  private readonly labelMembers = new Map<symbol, Set<number>>()
   private readonly metadataReader: MetadataReader
   private readonly lazy?: boolean
   private readonly circularReferences: boolean
@@ -111,6 +114,7 @@ export class CaffeineIoC implements Container {
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
   private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
   private _hasRequestScoped = false
+  private _hasAsync = false
 
   /**
    * Creates a new container instance.
@@ -1309,7 +1313,7 @@ export class CaffeineIoC implements Container {
     this.mapLabeled(key, canonical)
     this.mapAbstract(canonical)
 
-    if (!this._compiled && config.conditionals.length > 0) {
+    if (!this._compiled && canonical.conditionals.length > 0) {
       this._pendingConditionalKeys.add(key)
     }
 
@@ -1331,6 +1335,10 @@ export class CaffeineIoC implements Container {
     if (canonical.scopeID === Scopes.REQUEST) {
       this._hasRequestScoped = true
     }
+
+    if (canonical.async) {
+      this._hasAsync = true
+    }
   }
 
   private async refresh(label?: symbol): Promise<void> {
@@ -1344,6 +1352,8 @@ export class CaffeineIoC implements Container {
     }
 
     for (const label of binding.labels) {
+      this.releaseMember(this.labelMembers, label, binding.id)
+
       const list = this.bindingsByLabel.get(label)
       if (list) {
         const idx = list.findIndex(([, b]) => b.id === binding.id)
@@ -1357,6 +1367,8 @@ export class CaffeineIoC implements Container {
     }
 
     for (const name of binding.names) {
+      this.releaseMember(this.bindingMembers, name, binding.id)
+
       const list = this.bindings.get(name)
       if (list) {
         const idx = list.findIndex(b => b.id === binding.id)
@@ -1370,6 +1382,8 @@ export class CaffeineIoC implements Container {
     }
 
     if (binding.extend) {
+      this.releaseMember(this.bindingMembers, binding.extend, binding.id)
+
       const list = this.bindings.get(binding.extend)
       if (list) {
         const idx = list.findIndex(b => b.id === binding.id)
@@ -1383,6 +1397,8 @@ export class CaffeineIoC implements Container {
     }
 
     this.registry.delete(key)
+    // Mirrors `bindings.delete(key)`: the whole list under the key goes, so every id mapped there goes with it.
+    this.bindingMembers.delete(key)
     this.bindings.delete(key)
     this._pendingConditionalKeys.delete(key)
   }
@@ -1629,21 +1645,57 @@ export class CaffeineIoC implements Container {
       return existing as Binding<T>
     } else {
       this.registry.set(key, binding)
+      this.claimMember(this.bindingMembers, key, binding.id)
       this.bindings.set(key, [binding])
 
       return binding
     }
   }
 
+  /**
+   * Records that `id` now sits in the list under `key`, and reports whether it was absent before.
+   *
+   * False means the binding is already mapped there and the caller must not add it again.
+   */
+  private claimMember<K>(index: Map<K, Set<number>>, key: K, id: number): boolean {
+    const ids = index.get(key)
+    if (ids === undefined) {
+      index.set(key, new Set([id]))
+      return true
+    }
+
+    if (ids.has(id)) {
+      return false
+    }
+
+    ids.add(id)
+
+    return true
+  }
+
+  private releaseMember<K>(index: Map<K, Set<number>>, key: K, id: number): void {
+    const ids = index.get(key)
+    if (ids === undefined) {
+      return
+    }
+
+    ids.delete(id)
+
+    if (ids.size === 0) {
+      index.delete(key)
+    }
+  }
+
   private mapLabeled(key: InjectionToken, binding: Binding): void {
     for (const label of binding.labels) {
-      let list = this.bindingsByLabel.get(label)
-      if (!list) {
-        list = []
-        this.bindingsByLabel.set(label, list)
+      if (!this.claimMember(this.labelMembers, label, binding.id)) {
+        continue
       }
 
-      if (!list.some(([, b]) => b.id === binding.id)) {
+      const list = this.bindingsByLabel.get(label)
+      if (list === undefined) {
+        this.bindingsByLabel.set(label, [[key, binding]])
+      } else {
         list.push([key, binding])
       }
     }
@@ -1653,36 +1705,47 @@ export class CaffeineIoC implements Container {
     for (const name of binding.names) {
       const list = this.bindings.get(name)
       if (!list) {
+        this.claimMember(this.bindingMembers, name, binding.id)
         this.bindings.set(name, [binding])
-      } else {
-        const idx = list.findIndex(b => b.id === binding.id)
-        if (idx === -1) {
-          if (binding.primary) {
-            if (list.some(b => b.primary)) {
-              throw new ErrMultiplePrimary(name)
-            }
+        continue
+      }
 
-            list.unshift(binding)
-          } else {
-            list.push(binding)
-          }
-        } else if (binding.primary && idx > 0) {
-          let hasPrimary = false
-
-          for (let i = 0; i < idx; i++) {
-            if (list[i].primary) {
-              hasPrimary = true
-              break
-            }
-          }
-
-          if (hasPrimary) {
+      if (this.claimMember(this.bindingMembers, name, binding.id)) {
+        if (binding.primary) {
+          if (list.some(b => b.primary)) {
             throw new ErrMultiplePrimary(name)
           }
 
-          list.splice(idx, 1)
           list.unshift(binding)
+        } else {
+          list.push(binding)
         }
+
+        continue
+      }
+
+      // Already mapped. Only a primary can still need to move, so the index is worth locating only then.
+      if (!binding.primary) {
+        continue
+      }
+
+      const idx = list.findIndex(b => b.id === binding.id)
+      if (idx > 0) {
+        let hasPrimary = false
+
+        for (let i = 0; i < idx; i++) {
+          if (list[i].primary) {
+            hasPrimary = true
+            break
+          }
+        }
+
+        if (hasPrimary) {
+          throw new ErrMultiplePrimary(name)
+        }
+
+        list.splice(idx, 1)
+        list.unshift(binding)
       }
     }
   }
@@ -1706,12 +1769,12 @@ export class CaffeineIoC implements Container {
 
     const list = this.bindings.get(base)
     if (!list) {
+      this.claimMember(this.bindingMembers, base, binding.id)
       this.bindings.set(base, [binding])
       return
     }
 
-    const existingIdx = list.findIndex(b => b.id === binding.id)
-    if (existingIdx === -1) {
+    if (this.claimMember(this.bindingMembers, base, binding.id)) {
       if (binding.primary) {
         if (list.some(b => b.primary)) {
           throw new ErrMultiplePrimary(base)
@@ -1721,7 +1784,17 @@ export class CaffeineIoC implements Container {
       } else {
         list.push(binding)
       }
-    } else if (binding.primary && existingIdx > 0) {
+
+      return
+    }
+
+    // Already mapped. Only a primary can still need to move, so the index is worth locating only then.
+    if (!binding.primary) {
+      return
+    }
+
+    const existingIdx = list.findIndex(b => b.id === binding.id)
+    if (existingIdx > 0) {
       if (list.some((b, i) => b.primary && i !== existingIdx)) {
         throw new ErrMultiplePrimary(base)
       }
@@ -1758,10 +1831,11 @@ export class CaffeineIoC implements Container {
       this.registry.entries(),
     )
 
-    checkAspects(this.registry.entries())
+    const aspects = this.bindingsByLabel.get(kAspectLabel)
 
-    const hasAspects = this.bindingsByLabel.has(kAspectLabel)
-    if (hasAspects) {
+    checkAspects(aspects ?? [])
+
+    if (aspects !== undefined) {
       const aopInterceptors = buildAOPInterceptors(this)
       for (const [key, binding] of this.registry.entries()) {
         const ctor = binding.type ?? (typeof key === 'function' ? (key as Function) : null)
@@ -1813,6 +1887,10 @@ export class CaffeineIoC implements Container {
    * are excluded because they are not supported on async bindings.
    */
   private sortAsyncBindings(): [InjectionToken, Binding][] {
+    if (!this._hasAsync) {
+      return []
+    }
+
     const asyncEntries = [...this.registry.entries()].filter(([, b]) => b.async)
     if (asyncEntries.length < 2) {
       return asyncEntries
@@ -2043,17 +2121,20 @@ export class CaffeineIoC implements Container {
     }
 
     const toUnref: InjectionToken[] = []
-    for (const [key, binding] of this.registry) {
-      if (binding.conditionals.length > 0 && !justRegistered.has(binding.id)) {
-        const ctx: ConditionContext = {
-          container: this,
-          key,
-          binding: binding as unknown as Binding,
-        }
-        const pass = await evalAll(binding.conditionals, ctx)
-        if (!pass) {
-          toUnref.push(key)
-        }
+    for (const key of this._pendingConditionalKeys) {
+      const binding = this.registry.get(key)
+      if (binding === undefined || justRegistered.has(binding.id)) {
+        continue
+      }
+
+      const ctx: ConditionContext = {
+        container: this,
+        key,
+        binding: binding as unknown as Binding,
+      }
+      const pass = await evalAll(binding.conditionals, ctx)
+      if (!pass) {
+        toUnref.push(key)
       }
     }
 
@@ -2068,9 +2149,11 @@ export class CaffeineIoC implements Container {
     this._pendingConditionalKeys.clear()
   }
 
+  // The queue is consumed with a cursor rather than `shift()`, which is O(n) per dequeue, and dependencies are
+  // walked in place rather than gathered into a fresh array per node.
   private walkScopeGraph(visited: Set<number>, queue: Binding[], scopeID: NamedToken<Scope>): boolean {
-    while (queue.length > 0) {
-      const binding = queue.shift()!
+    for (let i = 0; i < queue.length; i++) {
+      const binding = queue[i]
       if (visited.has(binding.id)) {
         continue
       }
@@ -2081,26 +2164,39 @@ export class CaffeineIoC implements Container {
         return true
       }
 
-      const injKeys: (InjectionToken | undefined)[] = [
-        ...binding.injections.map(i => i.key),
-        ...[...binding.injectableProperties.values()].map(i => i.key),
-        ...[...binding.injectableMethods.values()].flatMap(list => list.map(i => i.key)),
-      ]
+      this.enqueueDependencies(binding, visited, queue)
+    }
 
-      for (const injKey of injKeys) {
-        if (injKey == null) {
-          continue
-        }
+    return false
+  }
 
-        for (const dep of this.getBindings(injKey)) {
-          if (!visited.has(dep.id)) {
-            queue.push(dep)
-          }
+  private enqueueDependencies(binding: Binding, visited: Set<number>, queue: Binding[]): void {
+    const push = (injKey: InjectionToken | undefined): void => {
+      if (injKey == null) {
+        return
+      }
+
+      const deps = this.getBindings(injKey)
+      for (let i = 0; i < deps.length; i++) {
+        if (!visited.has(deps[i].id)) {
+          queue.push(deps[i])
         }
       }
     }
 
-    return false
+    for (let i = 0; i < binding.injections.length; i++) {
+      push(binding.injections[i].key as InjectionToken | undefined)
+    }
+
+    for (const injection of binding.injectableProperties.values()) {
+      push(injection.key as InjectionToken | undefined)
+    }
+
+    for (const injections of binding.injectableMethods.values()) {
+      for (let i = 0; i < injections.length; i++) {
+        push(injections[i].key as InjectionToken | undefined)
+      }
+    }
   }
 
   private computeAspectScopeCache(): Set<NamedToken<Scope>> {
@@ -2111,37 +2207,19 @@ export class CaffeineIoC implements Container {
     }
 
     const queue: Binding[] = aspects.map(([, b]) => b)
-    const collect = (visited: Set<number>, q: Binding[]): void => {
-      while (q.length > 0) {
-        const binding = q.shift()!
-        if (visited.has(binding.id)) {
-          continue
-        }
+    const visited = new Set<number>()
 
-        visited.add(binding.id)
-        scopes.add(binding.scopeID)
-
-        const injKeys: (InjectionToken | undefined)[] = [
-          ...binding.injections.map(i => i.key),
-          ...[...binding.injectableProperties.values()].map(i => i.key),
-          ...[...binding.injectableMethods.values()].flatMap(list => list.map(i => i.key)),
-        ]
-
-        for (const injKey of injKeys) {
-          if (injKey == null) {
-            continue
-          }
-
-          for (const dep of this.getBindings(injKey)) {
-            if (!visited.has(dep.id)) {
-              q.push(dep)
-            }
-          }
-        }
+    for (let i = 0; i < queue.length; i++) {
+      const binding = queue[i]
+      if (visited.has(binding.id)) {
+        continue
       }
-    }
 
-    collect(new Set(), queue)
+      visited.add(binding.id)
+      scopes.add(binding.scopeID)
+
+      this.enqueueDependencies(binding, visited, queue)
+    }
 
     return scopes
   }

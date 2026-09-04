@@ -22,6 +22,7 @@
     "bench:mixedscopes": "node --import=tsx mixedscopes/bench.ts",
     "bench:aspect": "node --import=tsx aspect/bench.ts",
     "bench:di": "node --expose-gc --import=tsx di/container.bench.ts",
+    "bench:di-compile": "node --expose-gc --import=tsx di/compile.bench.ts",
     "bench:di-compare": "node --expose-gc --import=tsx di/compare_third_parties.bench.ts",
     "bench:di-perf": "node --expose-gc --import=tsx di/perf_compare.bench.ts",
     "bench:di:compile-legacy": "tsc -p di/testdata/third_party_legacy/tsconfig.json",

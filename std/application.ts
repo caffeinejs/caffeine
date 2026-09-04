@@ -1,4 +1,4 @@
-import { type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
+import { type Binding, type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
 
 import { ConfigDefinition, defineFeatureConfig } from './config/index.js'
 import { Contributions } from './contributions.js'
@@ -329,11 +329,17 @@ export abstract class BaseApplication {
   private buildDispatch(): Map<ApplicationEvent, Dispatch[]> {
     const dispatch = new Map<ApplicationEvent, Dispatch[]>()
 
+    // One walk of the registry, indexed by key. The compiled registry binding (it carries the factory after
+    // init) has to come from the registry rather than `getBinding(key)`, so that label-indexed beans such as
+    // controllers — which `get(key)` / `wrap(key)` cannot resolve directly — are still found. Looking each one
+    // up with `getBindingsBy` instead made this quadratic in the number of bindings.
+    const registry = new Map<InjectionToken, Binding>(this.#container.entries())
+
     const candidates: HookBinding[] =
       this.#hookBindings === 'scan'
-        ? this.#container
-            .getBindingsBy(d => typeof d.binding.type === 'function' && hooksOf(d.binding.type) !== undefined)
-            .map(d => ({ key: d.key, ctor: d.binding.type as Function }))
+        ? [...registry]
+            .filter(([, b]) => typeof b.type === 'function' && hooksOf(b.type) !== undefined)
+            .map(([key, b]) => ({ key, ctor: b.type as Function }))
         : this.#hookBindings
 
     for (const { key, ctor } of candidates) {
@@ -342,10 +348,7 @@ export abstract class BaseApplication {
         continue
       }
 
-      // Re-fetch the compiled registry binding by key (it carries the factory after init). This iterates
-      // the registry, so it also finds label-indexed beans (e.g. controllers) that `get(key)`/`wrap(key)`
-      // cannot resolve directly.
-      const binding = this.#container.getBindingsBy(d => d.key === key)[0]?.binding
+      const binding = registry.get(key)
       if (binding === undefined) {
         continue
       }

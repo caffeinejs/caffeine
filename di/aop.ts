@@ -88,6 +88,7 @@ interface WeavingEntry {
   aspectKey: TypedKey<MethodAspect<unknown>>
   methods: Set<string | symbol> | PointcutMethodPredicate | null
   order: number | undefined
+  seq: number
 }
 
 /**
@@ -124,6 +125,8 @@ export function buildAOPInterceptors(container: Container): Map<Function, PostRe
 
 export function buildWeavingMap(container: Container): Map<Function, WeavingEntry[]> {
   const map = new Map<Function, WeavingEntry[]>()
+  const selectors: { predicate: PointcutClassPredicate; entry: WeavingEntry }[] = []
+  let seq = 0
 
   for (const aspect of container.getBindingsByLabel(kAspectLabel)) {
     const { key, binding } = aspect
@@ -137,34 +140,36 @@ export function buildWeavingMap(container: Container): Map<Function, WeavingEntr
         aspectKey: key as TypedKey<MethodAspect<unknown>>,
         methods: pointcut.methods,
         order: binding.order,
+        seq: seq++,
       }
 
       if (isClassPredicate(pointcut.target)) {
-        const predicate = pointcut.target
-
-        for (const desc of container.getBindingsBy(bd => {
-          const cls = bd.binding.type
-          if (!cls) {
-            return false
-          }
-
-          return predicate(bd, cls as AnyClass)
-        })) {
-          const ctor = desc.binding.type ?? (typeof desc.key === 'function' ? desc.key : null)
-          if (!ctor) {
-            continue
-          }
-
-          registerEntry(map, ctor, weavingEntry)
-        }
+        selectors.push({ predicate: pointcut.target, entry: weavingEntry })
       } else {
         registerEntry(map, pointcut.target, weavingEntry)
       }
     }
   }
 
+  if (selectors.length > 0) {
+    for (const [key, binding] of container.entries()) {
+      const cls = binding.type
+      if (!cls) {
+        continue
+      }
+
+      const descriptor: BindingDescriptor = { key, binding }
+
+      for (let i = 0; i < selectors.length; i++) {
+        if (selectors[i].predicate(descriptor, cls as AnyClass)) {
+          registerEntry(map, cls, selectors[i].entry)
+        }
+      }
+    }
+  }
+
   for (const list of map.values()) {
-    list.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
+    list.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || a.seq - b.seq)
   }
 
   return map

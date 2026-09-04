@@ -45,7 +45,7 @@ export class ContainerCollector {
   attach(entries: () => Iterable<[InjectionToken, Binding]>): void {
     this.hooks.on('onBindingRegistered', ({ key, binding }) => {
       this.store.addBinding(toSnapshot(key, binding))
-      this.store.setGraph(buildBindingGraph(entries()))
+      this.store.invalidateGraph(() => buildBindingGraph(entries()))
 
       const event: DevtoolsEvent = {
         kind: 'binding:registered',
