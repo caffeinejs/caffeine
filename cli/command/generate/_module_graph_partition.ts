@@ -1,7 +1,7 @@
 export const DEFAULT_GRAPH_ROOT = 'src'
 export const DEFAULT_DEPTH = 1
 export const DEFAULT_MAX_DEPTH = 8
-export const GENERATED_MOD_SUFFIX = '.generated.mod.ts'
+export const GENERATED_MOD_SUFFIX = '.gen.mod.ts'
 
 export interface PartitionOptions {
   depth: number

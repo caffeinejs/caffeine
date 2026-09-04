@@ -17,7 +17,7 @@
     "benchmarks/di/testdata/third_party_legacy/**",
     "di/_tests/deno/**",
     "fetchy/fetchy/_benchmarks/generated/**",
-    "**/*.generated.mod.ts"
+    "**/*.gen.mod.ts"
   ],
   "rules": {
     "curly": ["error", "all"],

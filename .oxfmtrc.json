@@ -13,7 +13,7 @@
   },
   "ignorePatterns": [
     "**/dist/**",
-    "**/*.generated.mod.ts",
+    "**/*.gen.mod.ts",
     "prisma/migrations/**",
     "**/*.hbs",
     "benchmarks/di/testdata/third_party_legacy/**",

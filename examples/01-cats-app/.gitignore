@@ -1,2 +1,2 @@
-src/**/*.generated.mod.ts
+src/**/*.gen.mod.ts
 node_modules/

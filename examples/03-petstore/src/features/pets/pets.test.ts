@@ -8,7 +8,7 @@ import { buildApp } from '../../app.js'
 import { sessionHeader, signInWithGithub, stubGithub } from '../../util/testing/github.js'
 import type { CreatePetDTO, PetCollection, PetDTO, PetFilters, UpdatePetDTO } from './pet.js'
 import { PetsController } from './pets.controller.js'
-import { petsModule } from './pets.generated.mod.js'
+import { petsModule } from './pets.gen.mod.js'
 import { PetsRepository } from './pets.repository.js'
 
 // In-memory stand-in for the Prisma-backed repository, so the feature is tested with no database.

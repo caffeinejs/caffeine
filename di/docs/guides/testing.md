@@ -37,7 +37,7 @@ The empty constructor skips step 1: `TestContainer` creates a container internal
 test can import a single feature module instead of the whole application graph.
 
 ```ts
-import { ordersModule } from './orders.generated.mod.js'
+import { ordersModule } from './orders.gen.mod.js'
 
 const di = new TestContainer().modules(ordersModule).overrideWithMock(OrderRepository, fakeRepo).build()
 ```
@@ -179,7 +179,7 @@ For a feature-focused test, start from an empty `TestContainer` and pass only th
 generated feature module:
 
 ```ts
-import { ordersModule } from './orders.generated.mod.js'
+import { ordersModule } from './orders.gen.mod.js'
 
 const di = new TestContainer().modules(ordersModule).overrideWithMock(OrderRepository, fakeRepo).build()
 ```

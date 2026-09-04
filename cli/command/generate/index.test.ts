@@ -42,6 +42,6 @@ describe('generate run()', () => {
   it('generates the module graph for kind modules', async () => {
     const dir = await project({ modules: { include: ['src/**/*.ts'], root: 'src' } })
     await run({ cwd: dir, kind: 'modules' })
-    expect(await Bun.file(join(dir, 'src/root.generated.mod.ts')).exists()).toBe(true)
+    expect(await Bun.file(join(dir, 'src/root.gen.mod.ts')).exists()).toBe(true)
   })
 })

@@ -7,7 +7,7 @@ export async function createContainer(modules?: Array<Module | ModuleFn>): Promi
     return new CaffeineIoC({ modules })
   }
 
-  const { rootModule } = await import('./root.generated.mod.js')
+  const { rootModule } = await import('./root.gen.mod.js')
 
   return new CaffeineIoC({ modules: [rootModule] })
 }

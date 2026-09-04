@@ -52,7 +52,7 @@ describe('module graph partition', () => {
         'libs/util.ts',
         'libs/db/client.ts',
         'vendor/skip.ts',
-        'orders/orders.generated.mod.ts',
+        'orders/orders.gen.mod.ts',
       ],
       {
         depth: 1,
@@ -69,8 +69,8 @@ describe('module graph partition', () => {
   })
 
   it('distinguishes handwritten and generated mod files', () => {
-    expect(isGeneratedMod('orders/orders.generated.mod.ts')).toBe(true)
+    expect(isGeneratedMod('orders/orders.gen.mod.ts')).toBe(true)
     expect(isHandwrittenMod('orders/orders.mod.ts')).toBe(true)
-    expect(isHandwrittenMod('orders/orders.generated.mod.ts')).toBe(false)
+    expect(isHandwrittenMod('orders/orders.gen.mod.ts')).toBe(false)
   })
 })
