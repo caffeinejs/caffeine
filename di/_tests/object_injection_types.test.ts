@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest'
 
-import { $i, type InjectedOf } from '../injection.js'
+import { $i, type InjectedOf, type InjectionHelpers } from '../injection.js'
 import { token } from '../key.js'
 import type { Provider } from '../provider.js'
 
@@ -51,5 +51,36 @@ describe('InjectedOf', function () {
 
   it('reads a hand-written descriptor literal as a bag, the way the runtime does', function () {
     expectTypeOf<InjectedOf<{ cfg: { key: typeof Service } }>['cfg']['key']>().toEqualTypeOf<Service>()
+  })
+})
+
+// What an API handing `$i` to a callback relies on: `value` takes the config type as a *default*, so binding it
+// types a bare selector without taking away a call that names its own.
+describe('InjectionHelpers', function () {
+  type AppConfig = { database: { host: string } }
+
+  it('accepts $i itself, whatever the configuration type is bound to', function () {
+    expectTypeOf($i).toExtend<InjectionHelpers<AppConfig>>()
+    expectTypeOf($i).toExtend<InjectionHelpers>()
+  })
+
+  it('types a bare selector from the bound configuration', function () {
+    const i: InjectionHelpers<AppConfig> = $i
+
+    expectTypeOf<InjectedOf<{ host: ReturnType<typeof i.value<AppConfig, string>> }>['host']>().toEqualTypeOf<string>()
+
+    i.value(config => {
+      expectTypeOf(config).toEqualTypeOf<AppConfig>()
+      return config.database.host
+    })
+  })
+
+  it('lets a call name a type of its own over the bound one', function () {
+    const i: InjectionHelpers<AppConfig> = $i
+
+    i.value<{ other: number }>(config => {
+      expectTypeOf(config).toEqualTypeOf<{ other: number }>()
+      return config.other
+    })
   })
 })

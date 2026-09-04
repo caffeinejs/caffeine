@@ -45,8 +45,9 @@ export type ParamsOf<S extends RouteValidationSchema, P extends string> = S exte
  * Structurally the `FastifyContext` the adapter constructs — the same object a decorated handler gets from
  * `$p.context()` — with the request slots narrowed to what this route declared.
  */
-export interface RouteContext<S extends RouteValidationSchema, P extends string, V> extends Context<
+export interface RouteContext<S extends RouteValidationSchema, P extends string, V, C> extends Context<
   V,
+  C,
   RawRequestDefaultExpression<RawServerDefault>,
   CookieSerializeOptions,
   false,
@@ -67,8 +68,8 @@ export interface RouteContext<S extends RouteValidationSchema, P extends string,
  * nothing at all when the handler answered through the context. It is a type parameter so that a route can carry
  * what its handler answers with — see {@link DeclaredRoute}.
  */
-export type RouteHandler<S extends RouteValidationSchema, P extends string, V, D, O = unknown> = (
-  ctx: RouteContext<S, P, V>,
+export type RouteHandler<S extends RouteValidationSchema, P extends string, V, C, D, O = unknown> = (
+  ctx: RouteContext<S, P, V, C>,
   deps: D,
 ) => O
 
@@ -172,3 +173,11 @@ export type RoutesOf<T> = T extends { readonly __routes?: infer R } ? NonNullabl
  * variables typed rather than resetting them to what an undeclared router has.
  */
 export type VarsOf<T> = T extends { readonly __vars?: infer V } ? NonNullable<V> : never
+
+/**
+ * What `ctx.config` is typed as under a `Router`, as the router declared it with `.configType()`.
+ *
+ * Read back the same way {@link VarsOf} reads the variables, and for the same reason: `blend` must keep the
+ * configuration typed rather than reset it to what an undeclared router has.
+ */
+export type ConfigOf<T> = T extends { readonly __config?: infer C } ? NonNullable<C> : never

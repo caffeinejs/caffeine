@@ -1,6 +1,7 @@
 import { IncomingMessage } from 'http'
 
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
+import type { ConfigAccessors, Configuration } from '@caffeinejs/std/config'
 import { CookieSerializeOptions } from '@fastify/cookie'
 import {
   FastifyRequest,
@@ -95,6 +96,7 @@ export interface Fst<REPLY extends FastifyReply = FastifyReply> {
 
 export interface Context<
   V = Record<never, never>,
+  C = Record<never, never>,
   REQ = unknown,
   CO = unknown,
   TAsync extends boolean = false,
@@ -107,6 +109,14 @@ export interface Context<
 
   /** The values this request carries between the middlewares, guards and handler serving it. */
   get state(): ContextState<V>
+
+  /**
+   * The application configuration, as a snapshot: one object for the life of this context, taken the first time
+   * it is read. A refresh that lands mid-request is not observed once the snapshot has been taken.
+   *
+   * `C` is declared where the routes are, with `.configType<C>()`.
+   */
+  get config(): ConfigAccessors<C>
 
   get statusCode(): number
 
@@ -158,7 +168,7 @@ export interface Context<
  * const PetRoute = { params: $t.Object({ id: $t.Integer() }) }
  *
  * // ctx.req.param() is { id: number }
- * handler(ctx: FastifyContext<typeof PetRoute>) { ... }
+ * handler(ctx: FastifyContext<Vars, typeof PetRoute>) { ... }
  * ```
  *
  * Inference reads the *authored* schema, so it reflects what the author wrote — not the per-slot strictness
@@ -175,9 +185,11 @@ export type InferBody<S> = InferSlot<S, 'body', unknown>
 export class FastifyContext<
   V = Record<never, never>,
   SCHEMA extends RouteValidationSchema = RouteValidationSchema,
+  C = Record<never, never>,
   REPLY extends FastifyReply = FastifyReply,
 > implements Context<
   V,
+  C,
   RawRequestDefaultExpression<RawServerDefault>,
   CookieSerializeOptions,
   false,
@@ -189,12 +201,15 @@ export class FastifyContext<
   #req!: FastifyContextRequest<SCHEMA>
   #fst!: Fst<REPLY>
   #state!: ContextState<V>
+  #config?: ConfigAccessors<C>
   #fastifyRequest: FastifyRequest
   #reply: REPLY
+  #configuration: Configuration<unknown>
 
-  constructor(request: FastifyRequest, reply: REPLY) {
+  constructor(request: FastifyRequest, reply: REPLY, configuration: Configuration<unknown>) {
     this.#reply = reply
     this.#fastifyRequest = request
+    this.#configuration = configuration
   }
 
   get req(): FastifyContextRequest<SCHEMA> {
@@ -208,6 +223,16 @@ export class FastifyContext<
 
   get state(): ContextState<V> {
     return (this.#state ??= new ContextState<V>())
+  }
+
+  /**
+   * The application configuration, as a snapshot taken the first time this reads.
+   *
+   * The tree is replaced wholesale by a refresh rather than mutated, so the object handed back keeps the values
+   * it had when it was taken — a refresh landing later in the same request is not observed here.
+   */
+  get config(): ConfigAccessors<C> {
+    return (this.#config ??= this.#configuration.snapshot() as ConfigAccessors<C>)
   }
 
   get user(): Principal {

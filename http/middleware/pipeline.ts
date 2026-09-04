@@ -49,7 +49,7 @@ export class MiddlewarePipeline {
   #requiresRequestScope = false
 
   /** Registers `ref` at `hook`. Throws once the pipeline has been composed. */
-  add(ref: MiddlewareRef<any>, hook: MiddlewareHook): this {
+  add(ref: MiddlewareRef<any, any>, hook: MiddlewareHook): this {
     if (this.#sealed) {
       throw new ErrPipelineSealed()
     }

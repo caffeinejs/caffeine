@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { Readable } from 'node:stream'
 
 import { Container, Ctor, Scopes } from '@caffeinejs/di'
+import { Configuration } from '@caffeinejs/std/config'
 import {
   type FastifyInstance,
   type FastifyReply,
@@ -95,10 +96,13 @@ export class FastifyAdapter<
     const middlewares = input.middlewares
     middlewares.resolveAll(container)
 
+    // One resolution for the whole server: each context takes its own snapshot off it, on first read.
+    const configuration = container.get(Configuration)
+
     if (container.hasRequestScoped) {
       const man = container.requestScopeManager
       fastify.addHook('onRequest', (req, reply, done) => {
-        const ctx = new FastifyContext(req, reply)
+        const ctx = new FastifyContext(req, reply, configuration)
         req.httpContext = ctx
         this.#fastifyCtxAls.run(ctx, () => {
           man
@@ -114,7 +118,7 @@ export class FastifyAdapter<
       })
     } else {
       fastify.addHook('onRequest', (req, reply, done) => {
-        req.httpContext = new FastifyContext(req, reply)
+        req.httpContext = new FastifyContext(req, reply, configuration)
         done()
       })
     }

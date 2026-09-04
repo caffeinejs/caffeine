@@ -589,7 +589,33 @@ function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
   return { children }
 }
 
-export const $i = {
+/**
+ * The injection helpers `$i` exposes, parameterised by what `value` selects from.
+ *
+ * `C` names the values a selector reads, so an API that hands `$i` to a callback can bind it — a parameter typed
+ * `InjectionHelpers<AppConfig>` types `i.value(c => c.database.host)` without the call naming the type again. An
+ * explicit type argument still wins, and `$i` itself leaves `C` at `unknown`.
+ */
+export interface InjectionHelpers<C = unknown> {
+  allOf: typeof allOf
+  ordered: typeof ordered
+  mapped: typeof mapped
+  defer: typeof defer
+  optional: typeof optional
+  object: typeof object
+  provide: typeof provide
+  just: typeof just
+  compose: typeof compose
+
+  /**
+   * Injects a typed value from the registered ValuesProvider, by selector or dot-path.
+   *
+   * `T` falls back to `C`, which is what types a selector whose call names no type argument.
+   */
+  value<T = C, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R>
+}
+
+export const $i: InjectionHelpers = {
   allOf,
   value,
   ordered,

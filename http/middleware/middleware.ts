@@ -24,7 +24,7 @@ export type Next = () => ActionResult
 /**
  * The functional form of a middleware. Return without calling `next` to short-circuit the pipeline.
  *
- * `V` names what the middleware reads and writes through `ctx.state`:
+ * `V` names what the middleware reads and writes through `ctx.state`, and `C` what `ctx.config` carries:
  *
  * ```ts
  * const tenancy: MiddlewareFn<{ tenant: Tenant }> = (ctx, next) => {
@@ -33,7 +33,10 @@ export type Next = () => ActionResult
  * }
  * ```
  */
-export type MiddlewareFn<V = Record<never, never>> = (ctx: Context<V>, next: Next) => ActionResult
+export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
+  ctx: Context<V, C>,
+  next: Next,
+) => ActionResult
 
 /**
  * The class form of a middleware, which is what a middleware with dependencies should be: bind it in the
@@ -49,7 +52,7 @@ export type MiddlewareFn<V = Record<never, never>> = (ctx: Context<V>, next: Nex
  * app.use(Envelope)
  * ```
  */
-export abstract class Middleware<V = Record<never, never>> {
+export abstract class Middleware<V = Record<never, never>, C = Record<never, never>> {
   /**
    * Ran once at start-up, before any request. Resolve singletons here, validate the configuration here, and
    * throw here — a middleware that cannot work is a start-up failure, not a per-request one.
@@ -59,7 +62,7 @@ export abstract class Middleware<V = Record<never, never>> {
    */
   setup?(ctx: MiddlewareSetupContext): void | Promise<void>
 
-  abstract handle(ctx: Context<V>, next: Next): ActionResult
+  abstract handle(ctx: Context<V, C>, next: Next): ActionResult
 }
 
 /** What a middleware is given at start-up: the whole application, resolved. */
@@ -94,10 +97,10 @@ export const MIDDLEWARE_HOOKS: readonly MiddlewareHook[] = [
 ]
 
 /** Anything `use()` accepts: a function, an instance, a class, or a container key. */
-export type MiddlewareRef<V = Record<never, never>> =
-  | MiddlewareFn<V>
-  | Middleware<V>
-  | Ctor<Middleware<V>>
+export type MiddlewareRef<V = Record<never, never>, C = Record<never, never>> =
+  | MiddlewareFn<V, C>
+  | Middleware<V, C>
+  | Ctor<Middleware<V, C>>
   | InjectionToken
 
 /** Whether `ref` is a middleware class rather than a plain middleware function. */

@@ -55,11 +55,17 @@ Where a value goes depends on who reads it and how long it lives:
 | a plain value one middleware computes and a handler reads | `ctx.state`                                 | `ctx.state.get(key)`        |
 | the authenticated principal                               | `ctx.user`                                  | `ctx.user`                  |
 | what the route declared                                   | the route config                            | `ctx.routeConfig`           |
+| the application configuration                             | a snapshot on the context                   | `ctx.config`                |
 
 `ctx.state` is a `Map` on the context, allocated on first touch. It does not participate in DI: no binding, no
 destroy callback, no scope. What it may hold is named by the `V` type parameter a router declares with
 `.vars<V>()` — written as a call and not `new Router<V>(path)`, because naming one type argument stops the
 compiler inferring the rest and would drop the group's path.
+
+`ctx.config` is a snapshot, taken the first time a request reads it and fixed from then on: a refresh landing
+mid-request is not observed by a request already under way. Its type is named by `.configType<C>()` on the
+router — named apart from `.config()`, which writes the adapter's per-route configuration. The values come from
+the application's configuration whether or not a router declared the type.
 
 `ctx.state` is application space. A first-party package does not write to it: a framework value gets a dedicated
 member, as authentication does with `ctx.user`, or goes on the route config. One flat key namespace shared by an

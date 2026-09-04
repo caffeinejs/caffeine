@@ -77,7 +77,7 @@ export abstract class AbstractWebApplication<
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
   #routeGroups: RouteGroup<R>[] = []
-  #mounted: Router<any, any, any, any>[] = []
+  #mounted: Router<any, any, any, any, any>[] = []
   #built = false
   #health: HealthServices | undefined
 
@@ -131,7 +131,7 @@ export abstract class AbstractWebApplication<
    * A middleware naming the variables it writes is taken at its word: the routers it ends up in front of are
    * declared elsewhere, so nothing here checks that they declare the same ones.
    */
-  use<V>(middleware: MiddlewareRef<V>, hook: MiddlewareHook = 'handler'): this {
+  use<V, C>(middleware: MiddlewareRef<V, C>, hook: MiddlewareHook = 'handler'): this {
     this.#middlewares.add(middleware, hook)
     return this
   }
@@ -171,10 +171,10 @@ export abstract class AbstractWebApplication<
    * The application comes back carrying the mounted routers' routes in its type, so `RoutesOf<typeof app>` is the
    * whole surface a generated client would call.
    */
-  mount<const RS extends ReadonlyArray<Router<any, any, any, any>>>(
+  mount<const RS extends ReadonlyArray<Router<any, any, any, any, any>>>(
     ...routers: RS
   ): WebApplication<I, R, A, ROUTES | RoutesOfRouter<RS[number]>>
-  mount(...routers: Router<any, any, any, any>[]): this {
+  mount(...routers: Router<any, any, any, any, any>[]): this {
     if (this.#built) {
       throw new ErrConfiguration(
         'Cannot mount a router: routing has already been built' +
@@ -318,4 +318,4 @@ export class WebApplication<
 > extends AbstractWebApplication<I, R, A, ROUTES> {}
 
 /** The routes one router declares, distributed so a union of routers folds into a union of their routes. */
-type RoutesOfRouter<T> = T extends Router<any, any, any, infer R> ? R : never
+type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R> ? R : never
