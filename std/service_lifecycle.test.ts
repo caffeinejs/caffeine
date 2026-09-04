@@ -1,13 +1,14 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { InlineConfigProvider, type ConfigSlice } from './config/index.js'
+import { InlineConfigProvider, type ConfigHandle, type ConfigSlice } from './config/index.js'
 import { ErrContributionPhase, contributionKey } from './contributions.js'
 import { createApplication } from './index.js'
 import { $t } from './schema/t.js'
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceBootstrapIn } from './service.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
+const kConfig = token<ConfigHandle<{ widget: { size: number } }>>(Symbol('app.config'))
 const widgetSchema = $t.Object({ size: $t.Optional($t.Number()) })
 
 interface WidgetConfig {
@@ -40,7 +41,7 @@ class WidgetService implements Service {
 function appWith(service: Service, size: number) {
   return createApplication({ container: new CaffeineIoC({ decorators: false }) })
     .addService(service)
-    .config(schema, c => c.source(new InlineConfigProvider({ widget: { size } })))
+    .config(schema, kConfig, c => c.source(new InlineConfigProvider({ widget: { size } })))
     .build()
 }
 

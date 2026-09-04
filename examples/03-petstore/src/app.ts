@@ -18,7 +18,7 @@ import FastifyCookie from '@fastify/cookie'
 import fastify, { type FastifyServerOptions } from 'fastify'
 import handlebars from 'handlebars'
 
-import { appConfigSchema } from './config.js'
+import { appConfigSchema, kAppConfig } from './config.js'
 import { GITHUB_SESSION_COOKIE, githubConfig } from './features/auth/index.js'
 import { apiErrorSchema } from './util/errors/index.js'
 
@@ -133,7 +133,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
         .default('GitHub'),
     )
     // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
-    .config(appConfigSchema, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
+    .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
     .server(s => s.config(c => c.server))
     // Kubernetes probes (/livez, /readyz, /startupz) plus the graceful shutdown that drives them: SIGTERM makes
     // /readyz answer 503 immediately, the drain delay covers the routing-table lag while requests keep being

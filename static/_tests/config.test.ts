@@ -1,13 +1,20 @@
 import { fileURLToPath } from 'node:url'
 
+import { token } from '@caffeinejs/di'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import { $t, type InferSchema } from '@caffeinejs/std'
+import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { StaticExtension, StaticExt } from '../index.js'
 import type { StaticMount } from '../static.js'
+
+// The application declares no configuration of its own — `static.*` belongs to the feature — but a source
+// cannot be registered without a schema, so the root names that block and leaves its contents to the
+// feature's own slice.
+const rootSchema = $t.Object({ static: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
 const fixtures = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
@@ -26,7 +33,7 @@ describe('static configuration', () => {
 
   it('reads mounts from the configuration tree with no serve() call at all', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             static: { mounts: [{ root: fixtures, prefix: '/from-config/' }] },
@@ -44,7 +51,7 @@ describe('static configuration', () => {
   // The regression the whole mechanism exists for: a builder method is a default, not a setting.
   it('lets the environment override a builder-set mount root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(env({ STATIC__MOUNTS__0__ROOT: fixtures }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c => c.source(env({ STATIC__MOUNTS__0__ROOT: fixtures }), ConfigPriority.ENV))
       .extend(StaticExt, s => s.serve(dist, { prefix: '/assets/' }))
       .build()
 
@@ -71,7 +78,7 @@ describe('static configuration', () => {
 
   it('lets configuration retune a SPA the application switched on', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             static: { spa: { index: 'index.html', navigationOnly: false } },
@@ -91,7 +98,7 @@ describe('static configuration', () => {
   // Activation is the builder call, never the tree.
   it('does not switch a SPA on from configuration alone', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             static: { spa: { root: dist } },
@@ -112,9 +119,10 @@ describe('static configuration', () => {
         assets: $t.Object({ mounts: $t.Optional($t.Array($t.Record($t.String(), $t.Unknown()))) }),
       }),
     })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(schema, c => c.source(new InlineConfigProvider({ app: { assets: {} } })))
+      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ app: { assets: {} } })))
       // No annotation on the selector: the config type is recovered from the builder.
       .extend(StaticExt, s => s.config(c => c.app.assets).serve(fixtures, { prefix: '/moved/' }))
       .build()

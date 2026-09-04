@@ -1,9 +1,10 @@
-import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { $t } from '../../../schema/t.js'
-import { Configuration, kConfiguration } from '../../configuration.js'
+import type { ConfigHandle } from '../../accessor.js'
+import { Configuration } from '../../configuration.js'
 import { ConfigDefinition } from '../../definition.js'
 import { ErrConfigSlices, ErrConfigValidation } from '../../errors.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
@@ -11,7 +12,7 @@ import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { MutableConfigProvider } from '../../providers/mutable_provider.js'
 import { ConfigPriority } from '../../sources.js'
 
-const APP_CONFIG = opaqueToken(Symbol('app.config'))
+const APP_CONFIG = token<ConfigHandle<Record<string, unknown>>>(Symbol('app.config'))
 
 interface ServerSlice {
   port: number
@@ -252,7 +253,7 @@ describe('feature slices', () => {
     )
 
     const container = await containerFor(definition)
-    const configuration = container.get<Configuration<unknown>>(kConfiguration)
+    const configuration = container.get(Configuration)
 
     expect(configuration.diagnostics.sliceErrors).toEqual([])
 
@@ -291,7 +292,7 @@ describe('feature slices', () => {
     mutable.set('server.port', 8080)
     mutable.set('other.port', 2)
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
-    await container.get<Configuration<unknown>>(kConfiguration).settled()
+    await container.get(Configuration).settled()
 
     expect(otherSeenFromServer).toBe(2)
   })
@@ -316,7 +317,7 @@ describe('feature slices', () => {
 
     mutable.set('server.port', 8080)
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
-    await container.get<Configuration<unknown>>(kConfiguration).settled()
+    await container.get(Configuration).settled()
 
     expect(seen).toEqual([['0.0.0.0:8080', '0.0.0.0:3000']])
   })
@@ -349,7 +350,7 @@ describe('feature slices', () => {
     mutable.set('server.port', 8080)
     mutable.set('other.port', 2)
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
-    await container.get<Configuration<unknown>>(kConfiguration).settled()
+    await container.get(Configuration).settled()
 
     // A failed slice keeps its last good values, so nothing about it changed. The feature that did refresh
     // hears about it as usual.
@@ -363,6 +364,6 @@ describe('feature slices', () => {
 
     const container = await containerFor(definition)
 
-    expect(container.get<{ anything: { at: string } }>(APP_CONFIG).anything.at).toBe('all')
+    expect((container.get(APP_CONFIG).anything as { at: string }).at).toBe('all')
   })
 })

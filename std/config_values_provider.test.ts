@@ -1,8 +1,13 @@
-import { $i, CaffeineIoC, Injectable, Scopes } from '@caffeinejs/di'
+import { $i, CaffeineIoC, Injectable, Scopes, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { Configuration, kConfiguration } from './config/configuration.js'
-import { CONFIG_REFRESH_LABEL, ConfigPriority, MutableConfigProvider, InlineConfigProvider } from './config/index.js'
+import {
+  CONFIG_REFRESH_LABEL,
+  ConfigPriority,
+  MutableConfigProvider,
+  InlineConfigProvider,
+  type ConfigHandle,
+} from './config/index.js'
 import { createApplication } from './index.js'
 import { $t } from './schema/t.js'
 
@@ -15,9 +20,11 @@ const schema = $t.Object({
 
 type AppConfig = { database: { host: string; port: number } }
 
+const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+
 function appWith(...sources: Array<{ provider: InlineConfigProvider | MutableConfigProvider; priority?: number }>) {
   const container = new CaffeineIoC({ decorators: false })
-  const builder = createApplication({ container }).config(schema, c => {
+  const builder = createApplication({ container }).config(schema, kConfig, c => {
     for (const { provider, priority } of sources) {
       c.source(provider, priority ?? ConfigPriority.USER)
     }
@@ -87,7 +94,7 @@ describe('configuration as the DI values provider', () => {
     mutable.set(['database'], { host: 'second', port: 5432 })
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
-    expect(container.get<Configuration<AppConfig>>(kConfiguration).config.database.host).toBe('second')
+    expect(container.get(kConfig).database.host).toBe('second')
     expect(container.get(Holder).host).toBe('second')
   })
 

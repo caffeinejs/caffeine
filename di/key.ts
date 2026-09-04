@@ -7,7 +7,6 @@ import { AbstractCtor, Ctor } from './types.js'
 export type Identifier = string | symbol
 
 declare const kTokenType: unique symbol
-declare const kOpaque: unique symbol
 
 /**
  * Phantom brand that attaches a value type to a named token without a runtime object.
@@ -54,33 +53,6 @@ export type InjectionToken<T = unknown> = TypedKey<T> | NamedToken<T>
  * The value the key `K` resolves to.
  */
 export type TokenValue<K> = K extends InjectionToken<infer T> ? T : never
-
-/**
- * The value type of an {@link OpaqueToken}. Never constructed; it exists so an opaque token is a distinct type
- * rather than a hole every token falls through.
- */
-export interface Opaque {
-  readonly [kOpaque]: never
-}
-
-/**
- * A token whose resolved type the declaring package cannot name, so each caller supplies it:
- * `container.get<ConfigHandle<AppConfig>>(kAppConfig)`.
- *
- * Reach for this only when the value's shape is genuinely decided by the application — an application
- * configuration handle, a values provider. An ordinary token names its type and is checked against it; this one
- * trades that check away, so every use is a place the compiler stops helping.
- */
-export type OpaqueToken = NamedToken<Opaque>
-
-/**
- * Brands a string or symbol as an {@link OpaqueToken}.
- */
-export function opaqueToken(key: string): string & TokenBrand<Opaque>
-export function opaqueToken(key: symbol): symbol & TokenBrand<Opaque>
-export function opaqueToken(key: string | symbol): OpaqueToken {
-  return key as OpaqueToken
-}
 
 export function isNamedKey(dep: unknown): dep is NamedToken<unknown> {
   return (typeof dep === 'string' && dep.length > 0) || typeof dep === 'symbol'

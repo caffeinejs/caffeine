@@ -1,3 +1,4 @@
+import { token } from '@caffeinejs/di'
 import {
   ApplicationAvailability,
   type InferSchema,
@@ -10,6 +11,7 @@ import {
   ConfigPriority,
   EnvConfigProvider,
   InlineConfigProvider,
+  type ConfigHandle,
   type ConfigProvider,
 } from '@caffeinejs/std/config'
 import fastify from 'fastify'
@@ -18,6 +20,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { kHealthContribution } from './index.js'
 
+// The application declares no configuration of its own — `health.*` belongs to the feature — but a source
+// cannot be registered without a schema, so the root names that block and leaves its contents to the
+// feature's own slice.
+const rootSchema = $t.Object({ health: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+
 const schema = $t.Object({
   health: $t.Object({
     drainDelay: $t.String(),
@@ -25,6 +33,7 @@ const schema = $t.Object({
     verbose: $t.Boolean(),
   }),
 })
+const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
 type AppConfig = InferSchema<typeof schema>
 
@@ -84,7 +93,7 @@ describe('HealthBuilder', () => {
 
   it('drives the configuration from the application config slice', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c.source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true })))
+      .config(schema, kConfig, c => c.source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true })))
       .health(h => h.config(c => c.health))
       .build()
 
@@ -100,7 +109,7 @@ describe('HealthBuilder', () => {
 
   it('layers a builder-set duration under the config source rather than conflicting with it', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true }), ConfigPriority.ENV),
       )
       .health(h =>
@@ -128,7 +137,9 @@ describe('HealthBuilder', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
-      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '30ms' } }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '30ms' } }), ConfigPriority.ENV),
+      )
       .health(h => h.drainDelay('10s'))
       .build()
 
@@ -142,7 +153,9 @@ describe('HealthBuilder', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
-      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV),
+      )
       .health()
       .build()
 
@@ -155,7 +168,9 @@ describe('HealthBuilder', () => {
     const provider = new EnvConfigProvider()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'SIGTERM,SIGINT' } }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'SIGTERM,SIGINT' } }), ConfigPriority.ENV),
+      )
       .health(h => h.signals(['SIGTERM']))
       .build()
 
@@ -170,7 +185,9 @@ describe('HealthBuilder', () => {
     const provider = new EnvConfigProvider()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'false' } }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'false' } }), ConfigPriority.ENV),
+      )
       .health()
       .build()
 
@@ -184,7 +201,9 @@ describe('HealthBuilder', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No root schema declared — the sources stand on their own, and the health slice validates itself.
-      .config(c => c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV),
+      )
       .build()
 
     await app.ready()
@@ -200,7 +219,7 @@ describe('HealthBuilder', () => {
     }
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(source({ drainDelay: '30ms', shutdownTimeout: '9s', verbose: true }), ConfigPriority.ENV),
       )
       .health(h => h.dispatcher(dispatcher).config(c => c.health))
@@ -219,7 +238,7 @@ describe('HealthBuilder', () => {
     const mutable: ConfigProvider = { id: 'mutable', reloadable: true, load: ctx => source(data).load(ctx) }
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c.source(mutable, ConfigPriority.ENV))
+      .config(schema, kConfig, c => c.source(mutable, ConfigPriority.ENV))
       .health(h => h.cacheTTL('1s'))
       .build()
 

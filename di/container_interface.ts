@@ -4,7 +4,7 @@ import { Binding } from './binding.js'
 import { BindingSpec } from './binding_spec.js'
 import { HookListener } from './hooks.js'
 import { Injection, ResolveInjection } from './injection.js'
-import { Identifier, InjectionToken, NamedToken, TokenValue, OpaqueToken } from './key.js'
+import { Identifier, InjectionToken, NamedToken, TokenValue } from './key.js'
 import { MetadataReader } from './metadata_reader.js'
 import type { Module, ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
@@ -131,10 +131,8 @@ export interface Container extends AsyncDisposable {
   autoWire(): void
 
   get<T>(key: InjectionToken<T>): T
-  get<T>(key: OpaqueToken): T
 
   getOptional<T>(key: InjectionToken<T>): T | undefined
-  getOptional<T>(key: OpaqueToken): T | undefined
 
   getMany<T>(key: InjectionToken<T>): T[]
 

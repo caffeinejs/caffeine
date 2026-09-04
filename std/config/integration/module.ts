@@ -2,7 +2,7 @@ import { Keys, mod, token, type Module, type NamedToken, Scopes, type InjectionT
 
 import type { ConfigHandle } from '../accessor.js'
 import type { BootstrapOptions } from '../bootstrap.js'
-import { Configuration, kConfiguration } from '../configuration.js'
+import { Configuration } from '../configuration.js'
 import type { ConfigDefinition } from '../definition.js'
 import type { ConfigSchema } from '../schema.js'
 import type { ConfigSliceSpec } from '../slice.js'
@@ -13,7 +13,8 @@ import { ConfigShard } from './shard.js'
 export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:refresh-label')
 
 export interface ConfigModuleOptions<T> {
-  token: NamedToken<any>
+  /** Where the configuration handle is bound. Omitted, the handle is reachable through value injection only. */
+  token?: NamedToken<ConfigHandle<T>>
   schema: ConfigSchema<T>
   /** The live source registry. Preferred — late registrations are picked up because it is read at init. */
   sources?: ConfigSources
@@ -39,7 +40,6 @@ export interface ConfigModuleOptions<T> {
  */
 export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefinition): Module {
   const definition = isDefinition(options) ? options : undefined
-  const tokenName = options.token
 
   // A definition resolves itself, so the fields it holds are read when *it* bootstraps rather than captured
   // here. Only the options-object form needs its arguments assembled up front.
@@ -66,7 +66,15 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
 
     const shardKey = token<ConfigShard<T>>(Symbol('@caffeinejs/config:shard'))
 
-    container.bind(tokenName, t => t.toValue(shard.handle))
+    // Read here, not when the module was created: the application builder installs this module in its own
+    // constructor and the key arrives later, with `.config(schema, key)`.
+    const tokenName = definition !== undefined ? definition.token : (options as ConfigModuleOptions<T>).token
+
+    // Only when the application named a key. An application that declared no configuration of its own still has
+    // its slices published and its values injectable; what it does not have is a root binding to reach them by.
+    if (tokenName !== undefined) {
+      container.bind(tokenName, t => t.toValue(shard.handle))
+    }
 
     // The same handle, under the container's well-known values key, so `$i.value(c => c.database.host)` reads
     // the application configuration. The handle is live and the config resolver calls the binding's factory on
@@ -81,9 +89,10 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
       container.bindValuesProvider<ConfigHandle<T>>(t => t.toValue(shard.handle))
     }
 
-    // `kConfiguration` is opaque — the container cannot name the application's config type — so the bind site,
-    // which is the one place `T` is known, re-types the key.
-    container.bind(kConfiguration as unknown as InjectionToken<Configuration<T>>, t =>
+    // Bound under the class, which cannot carry the application's config type: `get(Configuration)` hands back a
+    // `Configuration<unknown>`, so the cast is what lets the one place that knows `T` construct the real wrapper.
+    // The typed way to the same values is the application's own config key.
+    container.bind(Configuration as InjectionToken<Configuration<unknown>>, t =>
       t
         .toValue(
           new Configuration<T>({

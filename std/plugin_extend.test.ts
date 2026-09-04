@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
 
 import { createApplication } from './application_builder.js'
-import { InlineConfigProvider } from './config/index.js'
+import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
 import { defineFeature, defineKeyedFeature, ErrFeatureAlreadyInstalled } from './plugin.js'
 import { type Service } from './service.js'
 
@@ -61,13 +61,14 @@ describe('BaseApplicationBuilder.extend', () => {
 
   it('keeps .extend available across .config(), in either order', () => {
     const schema = z.object({ server: z.object({ port: z.coerce.number() }) })
+    const kConfig = token<ConfigHandle<z.infer<typeof schema>>>(Symbol('app.config'))
 
     const afterConfig = createApplication()
       .extend(tracker())
-      .config(schema, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
+      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
 
     const beforeConfig = createApplication()
-      .config(schema, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
+      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
       .extend(tracker())
 
     expect(typeof afterConfig.extend).toBe('function')

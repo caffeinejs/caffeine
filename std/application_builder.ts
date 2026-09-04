@@ -1,11 +1,12 @@
-import { CaffeineIoC, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
+import { CaffeineIoC, type Container, type Module, type ModuleFn, type NamedToken, type Options } from '@caffeinejs/di'
 
-import { AppConfigBuilder, kAppConfig } from './app_config.js'
+import { AppConfigBuilder } from './app_config.js'
 import { Application, type ApplicationInit, type BaseApplication, type HookBinding } from './application.js'
 import {
   ConfigDefinition,
   ConfigModule,
   kConfigDefinition,
+  type ConfigHandle,
   type ConfigSchema,
   type InferConfig,
 } from './config/index.js'
@@ -41,7 +42,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #hooks = new ApplicationHooks<BaseApplication>()
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #shutdown: ShutdownConfig | undefined
-  readonly #config = new ConfigDefinition(kAppConfig)
+  readonly #config = new ConfigDefinition()
   readonly #featureState = new Map<string, unknown>()
 
   constructor(options: ApplicationBuilderOptions = {}) {
@@ -116,31 +117,19 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   }
 
   /**
-   * Registers the application configuration. The callback returns an {@link AppConfigBuilder} whose type flows
-   * to features (e.g. `.server(s => s.config(c => c.server))`); concrete builders expose this as `config()` and
-   * re-type themselves to carry the resulting config type. Declare it first so features see the typed config.
+   * Registers the application configuration: the schema it is validated against, and the key the resolved
+   * handle is bound under. The callback returns an {@link AppConfigBuilder} whose type flows to features (e.g.
+   * `.server(s => s.config(c => c.server))`); concrete builders expose this as `config()` and re-type themselves
+   * to carry the resulting config type. Declare it first so features see the typed config.
    */
-  protected applyConfigDefinition<T>(schema: ConfigSchema<T>, configure?: (c: AppConfigBuilder<T>) => void): void {
-    this.#config.schema = schema as ConfigSchema<unknown>
-    configure?.(new AppConfigBuilder<T>(this.#config))
-  }
-
-  /**
-   * Dispatches the two shapes of `.config(...)`: with a schema, which also declares the application config
-   * type, and without one, which only registers sources. The second exists because configuration is now
-   * unconditional — an application may well want its sources in place, and its features configured from them,
-   * without describing a root shape of its own.
-   */
-  protected applyConfigArgs<S extends ConfigSchema>(
-    first: S | ((c: AppConfigBuilder<never>) => void),
-    second?: (c: AppConfigBuilder<never>) => void,
+  protected applyConfigDefinition<T>(
+    schema: ConfigSchema<T>,
+    key: NamedToken<ConfigHandle<T>>,
+    configure?: (c: AppConfigBuilder<T>) => void,
   ): void {
-    if (typeof first === 'function') {
-      first(new AppConfigBuilder(this.#config) as AppConfigBuilder<never>)
-      return
-    }
-
-    this.applyConfigDefinition<never>(first as ConfigSchema<never>, second)
+    this.#config.schema = schema as ConfigSchema<unknown>
+    this.#config.token = key
+    configure?.(new AppConfigBuilder<T>(this.#config))
   }
 
   /**
@@ -233,26 +222,32 @@ export class ApplicationBuilder<TConfig = unknown>
   }
 
   /**
-   * Declares the application configuration, bound under `kAppConfig`, and re-types the builder to carry the
-   * config type `T` inferred from `schema`.
+   * Declares the application configuration — the schema it is validated against, and the key its resolved
+   * {@link ConfigHandle} is bound under — and re-types the builder to carry the config type `T` inferred from
+   * `schema`.
+   *
+   * The key is the application's, so the binding is typed: `container.get(key)` needs no type argument. The
+   * schema comes first, which is what lets the compiler ask for the exact token type it implies.
    *
    * Re-typed so a feature's `.config(c => c.app.thing)` selector reads the config type off the builder it
    * was reached through, and a headless application configures kafka and messaging exactly the way an HTTP
-   * one does. Read the root config itself via `container.get<ConfigHandle<T>>(kAppConfig)`.
+   * one does.
+   *
+   * ```ts
+   * const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+   *
+   * createApplication().config(schema, kConfig, c => c.source(new EnvConfigProvider()))
+   * ```
    *
    * Runtime returns the same instance; only the declared type changes.
    */
-  config(configure: (c: AppConfigBuilder<TConfig>) => void): this
   config<S extends ConfigSchema>(
     schema: S,
+    key: NamedToken<ConfigHandle<InferConfig<NoInfer<S>>>>,
     configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): Reconfigured<this, ApplicationBuilder<TConfig>, ApplicationBuilder<InferConfig<S>>>
-  config<S extends ConfigSchema>(
-    first: S | ((c: AppConfigBuilder<TConfig>) => void),
-    second?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): unknown {
-    this.applyConfigArgs(first as S, second as never)
-    return this
+  ): Reconfigured<this, ApplicationBuilder<TConfig>, ApplicationBuilder<InferConfig<S>>> {
+    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, key, configure)
+    return this as never
   }
 }
 

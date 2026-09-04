@@ -1,11 +1,11 @@
 import { token } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std'
+import { $t, type InferSchema } from '@caffeinejs/std'
 import {
   ConfigPriority,
   EnvConfigProvider,
   InlineConfigProvider,
-  kConfiguration,
-  type Configuration,
+  Configuration,
+  type ConfigHandle,
 } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
@@ -21,6 +21,12 @@ import {
 } from '../../../index.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthContribution, kAuthSchemeDescriptors } from '../keys.js'
+
+// The application declares no configuration of its own — `auth.*` belongs to the feature — but a source
+// cannot be registered without a schema, so the root names that block and leaves its contents to the
+// feature's own slice.
+const rootSchema = $t.Object({ auth: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
 const ENV_SECRET = 'env-secret-key-must-be-at-least-32-chars!!'
@@ -62,7 +68,9 @@ describe('authentication configuration', () => {
   // scheme called `Bearer` lives. See `schemeNamespace`.
   it('takes a JWT secret from the environment, over the one set in code', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c => c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV),
+      )
       .authentication(a => a.addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
       .build()
       .useAuthenticationAndAuthorization()
@@ -101,14 +109,16 @@ describe('authentication configuration', () => {
 
   it('redacts a configured secret in the diagnostics while the handler still authenticates with it', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c => c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV),
+      )
       .authentication(a => a.addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
       .build()
       .useAuthenticationAndAuthorization()
 
     await app.ready()
 
-    const diagnostics = app.container.get<Configuration<unknown>>(kConfiguration).diagnostics
+    const diagnostics = app.container.get(Configuration).diagnostics
     expect(diagnostics.valueAt('auth.schemes.jwt.secret')).toBe('[redacted]')
     expect(JSON.stringify(diagnostics.snapshot)).not.toContain(ENV_SECRET)
 
@@ -124,7 +134,7 @@ describe('authentication configuration', () => {
   // Building last is what puts each scheme's own validation on the merged options.
   it('validates the merged options, not the code half', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } },
@@ -139,7 +149,7 @@ describe('authentication configuration', () => {
 
   it('configures a basic realm and a cookie name from the tree', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             auth: {
@@ -178,7 +188,9 @@ describe('authentication configuration', () => {
 
   it('takes the default scheme from the tree', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c => c.source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }), ConfigPriority.ENV),
+      )
       .authentication(a =>
         a
           .addBasic(b => b.validate(() => null))
@@ -199,7 +211,7 @@ describe('authentication configuration', () => {
     let validated = 0
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             auth: { schemes: { Basic: { realm: 'Configured' } } },
@@ -235,9 +247,10 @@ describe('authentication configuration', () => {
         }),
       }),
     })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(
           new InlineConfigProvider({
             app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } },

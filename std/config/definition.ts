@@ -23,7 +23,12 @@ const DEFAULT_CONTEXT = (): ResolutionContext => ({ app: 'application', profiles
  * the application builder and every feature contribute to the same tree, in whatever order they happen to run.
  */
 export class ConfigDefinition {
-  readonly token: NamedToken<any>
+  /**
+   * The key the resolved configuration handle is bound under, supplied by the application to `.config()`. Absent
+   * until then, and absent for good in an application that never declares a configuration of its own — a slice
+   * still resolves, and value injection still reads the tree, without anything bound at the root.
+   */
+  token: NamedToken<any> | undefined
   readonly sources = new ConfigSources()
   readonly slices: ConfigSliceSpec[] = []
 
@@ -47,7 +52,7 @@ export class ConfigDefinition {
   warn: ((message: string) => void) | undefined
   #shard: ConfigShard<unknown> | undefined
 
-  constructor(token: NamedToken<any>) {
+  constructor(token?: NamedToken<any>) {
     this.token = token
     this.sources.add(this.frameworkDefaults, ConfigPriority.FRAMEWORK)
     this.sources.add(this.codeValues, ConfigPriority.CODE)

@@ -1,8 +1,9 @@
-import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
+import { CaffeineIoC, Keys, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import type { ConfigHandle } from '../../accessor.js'
+import { Configuration } from '../../configuration.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import type { ConfigProvider } from '../../types.js'
@@ -13,7 +14,7 @@ const schema = z.object({
 })
 type AppConfig = z.infer<typeof schema>
 
-const APP_CONFIG = opaqueToken(Symbol('app.config'))
+const APP_CONFIG = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
 
 function makeModule(data: Record<string, unknown>) {
   return ConfigModule<AppConfig>({
@@ -29,10 +30,27 @@ describe('ConfigModule', () => {
     container.addModules(makeModule({ http: { host: 'localhost', port: 3000 }, db: { url: 'postgres://localhost' } }))
     await container.init()
 
-    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
+    const config = container.get(APP_CONFIG)
     expect(config.http.host).toBe('localhost')
     expect(config.http.port).toBe(3000)
     expect(config.db.url).toBe('postgres://localhost')
+  })
+
+  it('binds no root key when none was given, and still binds the rest', async () => {
+    const container = new CaffeineIoC()
+    container.addModules(
+      ConfigModule<AppConfig>({
+        schema,
+        providers: [new InlineConfigProvider({ http: { host: 'h', port: 80 }, db: { url: 'u' } } as never)],
+      }),
+    )
+    await container.init()
+
+    // Nothing to resolve the handle by — an application that declared no configuration of its own — but the
+    // configuration itself resolved, and value injection still reads it.
+    expect(container.has(APP_CONFIG)).toBe(false)
+    expect(container.get(Configuration).diagnostics.originOf('http.host')).toBeDefined()
+    expect(container.has(Keys.kValuesProvider)).toBe(true)
   })
 
   it('ConfigHandle is typed and function-free', async () => {
@@ -40,15 +58,15 @@ describe('ConfigModule', () => {
     container.addModules(makeModule({ http: { host: 'h', port: 80 }, db: { url: 'u' } }))
     await container.init()
 
-    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
+    const config = container.get(APP_CONFIG)
     const ownMethods = Object.keys(config).filter(k => typeof (config as never)[k] === 'function')
     expect(ownMethods).toHaveLength(0)
   })
 
   it('two ConfigModule registrations refresh independently', async () => {
-    const DB_TOKEN = opaqueToken(Symbol('db.config'))
     const dbSchema = z.object({ db: z.object({ url: z.string() }) })
     type DBConfig = z.infer<typeof dbSchema>
+    const DB_TOKEN = token<ConfigHandle<DBConfig>>(Symbol('db.config'))
 
     let appData = { http: { host: 'app', port: 80 }, db: { url: 'u' } }
     let dbData = { db: { url: 'postgres://a' } }
@@ -71,8 +89,8 @@ describe('ConfigModule', () => {
     )
     await container.init()
 
-    const appConfig = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
-    const dbConfig = container.get<ConfigHandle<DBConfig>>(DB_TOKEN)
+    const appConfig = container.get(APP_CONFIG)
+    const dbConfig = container.get(DB_TOKEN)
 
     expect(appConfig.http.host).toBe('app')
     expect(dbConfig.db.url).toBe('postgres://a')
@@ -102,7 +120,7 @@ describe('ConfigModule', () => {
     container.addModules(ConfigModule<AppConfig>({ token: APP_CONFIG, schema, providers: [mutableProvider] }))
     await container.init()
 
-    const config = container.get<ConfigHandle<AppConfig>>(APP_CONFIG)
+    const config = container.get(APP_CONFIG)
     expect(config.http.host).toBe('before')
 
     data = { http: { host: 'after', port: 443 }, db: { url: 'u' } }

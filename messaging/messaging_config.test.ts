@@ -1,12 +1,18 @@
-import type { Container } from '@caffeinejs/di'
-import { $t, createApplication } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import { token, type Container } from '@caffeinejs/di'
+import { $t, type InferSchema, createApplication } from '@caffeinejs/std'
+import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
 import { inMemoryBinder } from './binder.testkit.js'
 import { messaging } from './plugin.js'
 import type { MessagingRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
+
+// The application declares no configuration of its own — `messaging.*` belongs to the feature — but a source
+// cannot be registered without a schema, so the root names that block and leaves its contents to the
+// feature's own slice.
+const rootSchema = $t.Object({ messaging: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
 
@@ -19,7 +25,9 @@ describe('messaging configuration', () => {
   // environment exactly the way a broker list does.
   it('lets the environment override a builder-set destination', async () => {
     const app = createApplication({})
-      .config(c => c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV),
+      )
       .extend(messaging, m =>
         m
           .use('primary', inMemoryBinder())
@@ -40,7 +48,7 @@ describe('messaging configuration', () => {
 
   it('reads a consumer group from the configuration tree', async () => {
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             messaging: { default: { in: { orders: { group: 'from-config' } } } },
@@ -61,7 +69,7 @@ describe('messaging configuration', () => {
 
   it('keeps named instances apart, the unnamed one at messaging.default', async () => {
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             messaging: { audit: { out: { log: { destination: 'audit.v2' } } } },
@@ -85,9 +93,10 @@ describe('messaging configuration', () => {
   // The code-only members ride through untouched.
   it('keeps a code-only schema on a configured binding', async () => {
     const schema = $t.Object({ id: $t.Number() })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             messaging: { default: { in: { orders: { destination: 'orders.v2' } } } },
@@ -116,9 +125,10 @@ describe('messaging configuration', () => {
         }),
       }),
     })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const app = createApplication({})
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(
           new InlineConfigProvider({
             app: { events: { in: { orders: { destination: 'moved.orders' } } } },
@@ -144,7 +154,7 @@ describe('messaging configuration', () => {
   // Activation is the builder call, never the tree.
   it('creates no binding the application never declared', async () => {
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             messaging: { default: { in: { ghost: { destination: 'ghost', via: 'primary' } } } },

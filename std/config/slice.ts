@@ -11,8 +11,8 @@ import type { ConfigSchema } from './schema.js'
  * hand its configuration to a collaborator, or keep it on a field, without having handed over a stale object.
  *
  * A read is a getter call over a plain object: no proxy, no path walk, nothing allocated. Deliberately not the
- * {@link ConfigHandle} proxy `kAppConfig` is bound to — that one exists to give an application ergonomic
- * access to a tree it declared, and pays for it with a trap on every access.
+ * {@link ConfigHandle} proxy the application's config key is bound to — that one exists to give an application
+ * ergonomic access to a tree it declared, and pays for it with a trap on every access.
  *
  * {@link snapshot} is the escape hatch for a caller that explicitly wants a detached, point-in-time copy.
  * Nothing in the framework uses it; it is the primitive a request-scoped snapshot would be built from.

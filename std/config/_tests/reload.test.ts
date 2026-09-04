@@ -1,8 +1,9 @@
-import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
 import { $t } from '../../schema/t.js'
-import { Configuration, kConfiguration } from '../configuration.js'
+import type { ConfigHandle } from '../accessor.js'
+import { Configuration } from '../configuration.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { ArgsConfigProvider } from '../providers/args_provider.js'
@@ -12,7 +13,7 @@ import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
 import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 
-const APP_CONFIG = opaqueToken(Symbol('app.config'))
+const APP_CONFIG = token<ConfigHandle<{ port: number }>>(Symbol('app.config'))
 const schema = $t.Object({ port: $t.Number({ default: 0 }) })
 
 async function containerFor(definition: ConfigDefinition): Promise<CaffeineIoC> {
@@ -60,7 +61,7 @@ describe('refresh gating', () => {
     definition.schema = schema
 
     const container = await containerFor(definition)
-    const configuration = container.get<Configuration<{ port: number }>>(kConfiguration)
+    const configuration = container.get(Configuration) as Configuration<{ port: number }>
 
     const loadsAfterBootstrap = env.loads + args.loads + inline.loads
     const before = configuration.snapshot()
@@ -87,7 +88,7 @@ describe('refresh gating', () => {
     await refresh(container)
 
     expect(counted.loads).toBe(loads)
-    expect(container.get<Configuration<unknown>>(kConfiguration).revision).toBe(0)
+    expect(container.get(Configuration).revision).toBe(0)
   })
 
   it('reloads once a mutable source has actually been written to', async () => {
@@ -98,7 +99,7 @@ describe('refresh gating', () => {
     definition.schema = schema
 
     const container = await containerFor(definition)
-    const configuration = container.get<Configuration<{ port: number }>>(kConfiguration)
+    const configuration = container.get(Configuration) as Configuration<{ port: number }>
 
     mutable.set('port', 8080)
     await refresh(container)
@@ -127,7 +128,7 @@ describe('refresh gating', () => {
 
     // Knowing whether a config server changed means asking it, which is the same call as reloading.
     expect(remote.loads).toBe(loads + 1)
-    expect(container.get<Configuration<{ port: number }>>(kConfiguration).snapshot().port).toBe(8080)
+    expect((container.get(Configuration) as Configuration<{ port: number }>).snapshot().port).toBe(8080)
   })
 
   it('treats a source registered after bootstrap as a change in its own right', async () => {
@@ -136,7 +137,7 @@ describe('refresh gating', () => {
     definition.schema = schema
 
     const container = await containerFor(definition)
-    const configuration = container.get<Configuration<{ port: number }>>(kConfiguration)
+    const configuration = container.get(Configuration) as Configuration<{ port: number }>
 
     // Neither the old source nor the new one can reload, but the registry itself changed.
     definition.sources.add(new InlineConfigProvider({ port: 2 }), ConfigPriority.ENV)
@@ -155,7 +156,7 @@ describe('refresh gating', () => {
     definition.schema = schema
 
     const container = await containerFor(definition)
-    const configuration = container.get<Configuration<unknown>>(kConfiguration)
+    const configuration = container.get(Configuration)
 
     await refresh(container)
     await refresh(container)
@@ -169,7 +170,7 @@ describe('refresh gating', () => {
     definition.schema = schema
 
     const container = await containerFor(definition)
-    const configuration = container.get<Configuration<{ port: number }>>(kConfiguration)
+    const configuration = container.get(Configuration) as Configuration<{ port: number }>
 
     definition.codeValues.set('port', 8080)
     await refresh(container)

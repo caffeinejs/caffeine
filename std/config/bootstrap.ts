@@ -93,8 +93,8 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
  *
  * Slices read from the **materialized** tree rather than the root-validated one on purpose: both zod's
  * `.object()` and TypeBox's `Value.Clean` drop keys the schema does not declare, so a feature namespace the
- * application never described would be stripped before the feature ever saw it. The root schema governs
- * `kAppConfig`; a slice governs itself.
+ * application never described would be stripped before the feature ever saw it. The root schema governs the
+ * application's own config key; a slice governs itself.
  *
  * A namespace that resolves to nothing validates as an empty object, which lets the feature's own schema
  * defaults — and the framework-band values written beneath it — decide the outcome instead of failing.

@@ -1,12 +1,18 @@
-import type { Container } from '@caffeinejs/di'
-import { $t, createApplication, kAppConfig } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import { token, type Container } from '@caffeinejs/di'
+import { $t, type InferSchema, createApplication } from '@caffeinejs/std'
+import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
 import type { ConsumerClient, KafkaClients, ProducerClient, ResolvedKafkaConfig } from './config.js'
 import { kafka } from './plugin.js'
 import type { KafkaRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
+
+// The application declares no configuration of its own — `kafka.*` belongs to the feature — but a source
+// cannot be registered without a schema, so the root names that block and leaves its contents to the
+// feature's own slice.
+const rootSchema = $t.Object({ kafka: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 function noopClients(): KafkaClients {
   const producer: ProducerClient = { send: () => Promise.resolve(), close: () => Promise.resolve() }
@@ -28,7 +34,7 @@ describe('kafka configuration', () => {
   it('reads brokers from the configuration tree with no builder call at all', async () => {
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             kafka: { default: { brokers: ['from-config:9092'], groupId: 'from-config' } },
@@ -50,7 +56,9 @@ describe('kafka configuration', () => {
   it('lets the environment override a builder-set broker list', async () => {
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c => c.source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }), ConfigPriority.ENV),
+      )
       .extend(kfk, k => k.brokers('localhost:9092').groupId('svc'))
 
     const built = app.build()
@@ -68,7 +76,9 @@ describe('kafka configuration', () => {
     // `GROUP_ID`, not `GROUPID`: the env provider folds underscores *within* a segment into camelCase, so an
     // all-uppercase run has no word boundary to find and `GROUPID` would resolve to `groupid`.
     const app = createApplication({})
-      .config(c => c.source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV),
+      )
       .extend(kfk, k => k.brokers('b1:9092').groupId('svc'))
       .extend(kfk('orders'), k => k.brokers('b2:9092').groupId('orders'))
 
@@ -92,10 +102,11 @@ describe('kafka configuration', () => {
         }),
       }),
     })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(
           new InlineConfigProvider({
             app: { events: { groupId: 'from-moved-path' } },
@@ -110,9 +121,8 @@ describe('kafka configuration', () => {
 
     expect(configOf(built.container, 'default').brokers).toEqual(['moved:9092'])
     expect(configOf(built.container, 'default').groupId).toBe('from-moved-path')
-    // Nothing was written at the default namespace.
-    const handle = built.container.get<Record<string, unknown>>(kAppConfig)
-    expect(handle.kafka).toBeUndefined()
+    // Nothing was written at the default namespace — `kafka` is not a key of the tree the application declared.
+    expect(Object.keys(built.container.get(kConfig))).not.toContain('kafka')
 
     await built.close()
   })
@@ -123,7 +133,9 @@ describe('kafka configuration', () => {
 
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c => c.source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }), ConfigPriority.ENV),
+      )
       .extend(kfk, k => k.serializers(serializers).onError(onError))
 
     const built = app.build()
@@ -143,7 +155,7 @@ describe('kafka configuration', () => {
 
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             kafka: { default: { brokers: ['b:9092'], deadLetter: true } },
@@ -163,7 +175,7 @@ describe('kafka configuration', () => {
   it('honours a configured deadLetter: false when code set no object', async () => {
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             kafka: { default: { brokers: ['b:9092'], deadLetter: false } },
@@ -184,7 +196,7 @@ describe('kafka configuration', () => {
   it('configures nothing for an instance the application never declared', async () => {
     const kfk = kafka.with({ clients: noopClients() })
     const app = createApplication({})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             kafka: { ghost: { brokers: ['nobody:9092'] } },

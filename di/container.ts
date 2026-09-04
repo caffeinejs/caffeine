@@ -34,7 +34,7 @@ import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scop
 import { checkScopes } from './internal/core/scope/validations.js'
 import { notNil } from './internal/util/assert/index.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
-import { keyStr, InjectionToken, Identifier, NamedToken, TokenValue, OpaqueToken } from './key.js'
+import { keyStr, InjectionToken, Identifier, NamedToken, TokenValue } from './key.js'
 import { MetadataReader } from './metadata_reader.js'
 import { runModules, type Module, type ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
@@ -208,14 +208,12 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrNoResolutionForKey} if no binding is registered for the given key
    * @throws {@link ErrNoUniqueInjectionForKey} if multiple bindings are registered for the same key and none is primary
    */
-  get<T>(key: InjectionToken<T>): T
-  get<T>(key: OpaqueToken): T
-  get<T>(key: InjectionToken<T> | OpaqueToken): T {
+  get<T>(key: InjectionToken<T>): T {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
 
-    const resolvedKey = key as InjectionToken<T>
+    const resolvedKey = key
     const bindings = this.getBindings<T>(resolvedKey)
     if (bindings.length === 0) {
       throw new ErrNoResolutionForKey(`Cannot resolve key '${keyStr(resolvedKey)}'`)
@@ -243,14 +241,12 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrInvalidContainerState} if the container is not initialized
    * @throws {@link ErrNoUniqueInjectionForKey} if multiple bindings are registered for the same key and none is primary
    */
-  getOptional<T = unknown>(key: InjectionToken<T>): T | undefined
-  getOptional<T = unknown>(key: OpaqueToken): T | undefined
-  getOptional<T>(key: InjectionToken<T> | OpaqueToken): T | undefined {
+  getOptional<T = unknown>(key: InjectionToken<T>): T | undefined {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
     }
 
-    const resolvedKey = key as InjectionToken<T>
+    const resolvedKey = key
     const bindings = this.getBindings<T>(resolvedKey)
     if (bindings.length === 0) {
       return undefined as T

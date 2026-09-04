@@ -1,6 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { $t, defineFeature, type Service } from '@caffeinejs/std'
-import { EnvConfigProvider } from '@caffeinejs/std/config'
+import { $t, type InferSchema, defineFeature, type Service } from '@caffeinejs/std'
+import { EnvConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import Fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -56,14 +56,15 @@ describe('builder.extend()', () => {
   })
 
   it('keeps .extend available across .config(), in either order', () => {
-    const schema = $t.Object({ nothing: $t.Optional($t.String()) })
+    const schema = $t.Object({ nothing: $t.String({ default: '' }) })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const extendFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
       .extend(probe())
-      .config(schema, c => c.source(new EnvConfigProvider()))
+      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
 
     const configFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
-      .config(schema, c => c.source(new EnvConfigProvider()))
+      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
       .extend(probe())
 
     expect(typeof extendFirst.extend).toBe('function')
@@ -72,9 +73,11 @@ describe('builder.extend()', () => {
 
   it('survives .config(), which re-parameterises the builder', async () => {
     const container = new CaffeineIoC()
+    const schema = $t.Object({ nothing: $t.String({ default: '' }) })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
-      .config($t.Object({ nothing: $t.Optional($t.String()) }), c => c.source(new EnvConfigProvider()))
+      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
       .extend(probe(), t => t.capture('after-config:9092'))
 
     const built = app.build()
@@ -85,10 +88,11 @@ describe('builder.extend()', () => {
 
   it('keeps the config type flowing to features configured afterwards', () => {
     const schema = $t.Object({ app: $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) }) })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       .extend(probe())
-      .config(schema, c => c.source(new EnvConfigProvider()))
+      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
       .server(s => s.config(c => c.app.server))
 
     expect(typeof app.build).toBe('function')

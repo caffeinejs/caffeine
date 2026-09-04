@@ -1,6 +1,5 @@
 import { type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
 
-import { kAppConfig } from './app_config.js'
 import { ConfigDefinition, defineFeatureConfig } from './config/index.js'
 import { Contributions } from './contributions.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
@@ -81,7 +80,7 @@ export abstract class BaseApplication {
     this.#shutdownInit = init.shutdown
     // An application constructed without a builder still gets one, so services can register unconditionally.
     // Nothing bootstraps it in that case, which is what a missing config module means.
-    this.#config = init.config ?? new ConfigDefinition(kAppConfig)
+    this.#config = init.config ?? new ConfigDefinition()
   }
 
   get container(): Container {

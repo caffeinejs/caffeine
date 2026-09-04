@@ -1,4 +1,4 @@
-import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import type { ConfigHandle } from '../../accessor.js'
@@ -156,7 +156,7 @@ describe('Refresh e2e with live proxy', () => {
         new InlineConfigProvider(inlineOverride as never).load({ app: 'caffeine', profiles: ['default'] }),
     }
 
-    const APP_TOKEN = opaqueToken(Symbol('caffeine.config'))
+    const APP_TOKEN = token<ConfigHandle<CaffeineConfig>>(Symbol('caffeine.config'))
     const container = new CaffeineIoC()
     container.addModules(
       ConfigModule<CaffeineConfig>({
@@ -168,7 +168,7 @@ describe('Refresh e2e with live proxy', () => {
     )
     await container.init()
 
-    const config = container.get<ConfigHandle<CaffeineConfig>>(APP_TOKEN)
+    const config = container.get(APP_TOKEN)
     expect(config.caffeine.version).toBe('1.0.0')
 
     inlineOverride = { caffeine: { version: '99.0.0' } }

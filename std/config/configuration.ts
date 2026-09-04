@@ -1,11 +1,6 @@
-import { opaqueToken } from '@caffeinejs/di'
-
 import type { ConfigHandle } from './accessor.js'
 import type { ConfigDiagnostics } from './diagnostics.js'
 import type { ConfigChangeListener } from './notifier.js'
-
-/** DI key for the application {@link Configuration}. `kAppConfig` stays bound to the config object itself. */
-export const kConfiguration = opaqueToken(Symbol.for('@caffeinejs/std:configuration'))
 
 /** What {@link Configuration} needs from the resolved configuration, without depending on the shard directly. */
 export interface ConfigurationSource<T> {
@@ -18,11 +13,12 @@ export interface ConfigurationSource<T> {
 }
 
 /**
- * The application's configuration.
+ * The application's configuration, resolved with `container.get(Configuration)`.
  *
- * {@link config} is the ordinary way in and is the same object bound under `kAppConfig` — live, following
- * every refresh. This class exists for the two things that object cannot carry: a detached snapshot, and the
- * resolve metadata.
+ * {@link config} is the ordinary way in and is the same handle bound under the application's own config key —
+ * live, following every refresh. This class exists for the two things that handle cannot carry: a detached
+ * snapshot, and the resolve metadata. The class key cannot name the application's config type, so `config` and
+ * {@link snapshot} come back untyped here; read them through the config key when the type matters.
  *
  * A snapshot is deliberately **not** a member of the config object itself. The config object's keys are the
  * application's own, so a field named `snapshot` would collide with the accessor — the same hazard the

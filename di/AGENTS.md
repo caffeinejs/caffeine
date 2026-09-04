@@ -32,9 +32,10 @@ A scope identifier is an ordinary token that resolves a `Scope`: `token<Scope>(.
 scope-key type, and the invariant brand is what keeps a service key out of `.lifetime()` / `@Lifetime` /
 `bindScope`.
 
-`opaqueToken(...)` is the escape hatch for a key whose value type the declaring package genuinely cannot name —
-an application configuration handle. Each caller supplies the type at `get<T>(key)`. Every use is a place the
-compiler stops checking, so it stays rare.
+There is no escape hatch. A key whose value type the declaring package cannot name is not declared by that
+package — it is declared by whoever knows the type, and passed in. The application configuration key works
+exactly this way: the application writes `token<ConfigHandle<AppConfig>>(...)` next to its schema and hands it to
+`.config(schema, key)`.
 
 ## `has()` means resolvable, not directly bound
 

@@ -1,3 +1,4 @@
+import { token } from '@caffeinejs/di'
 import {
   AllowAnonymous,
   Controller,
@@ -6,14 +7,20 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider } from '@caffeinejs/std/config'
+import { $t, type InferSchema } from '@caffeinejs/std'
+import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPIExtension } from '../extension.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
+
+// The application declares no configuration of its own — `openapi.*` belongs to the feature — but a source
+// cannot be registered without a schema, so the root names that block and leaves its contents to the
+// feature's own slice.
+const rootSchema = $t.Object({ openapi: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 @Controller('/things')
 class ThingsController {
@@ -43,7 +50,9 @@ describe('openapi configuration', () => {
   // The plan's headline case: redirect the documented server URL per environment, no rebuild.
   it('lets the environment override a builder-set server URL', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(env({ OPENAPI__SERVERS__0__URL: 'https://api.prod.example.com' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(env({ OPENAPI__SERVERS__0__URL: 'https://api.prod.example.com' }), ConfigPriority.ENV),
+      )
       .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).server('http://localhost:3000').public())
       .build()
 
@@ -56,7 +65,7 @@ describe('openapi configuration', () => {
 
   it('reads the info block from the configuration tree', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             openapi: { info: { title: 'From Config', version: '9.9.9' } },
@@ -76,7 +85,7 @@ describe('openapi configuration', () => {
   // A partial nested override must not wipe the sibling defaults.
   it('merges a partial errors block over the defaults', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             openapi: { errors: { validation: 422 } },
@@ -98,7 +107,7 @@ describe('openapi configuration', () => {
   // The endpoints are registered while the feature configures, which now happens after configuration resolves.
   it('serves the documentation page at a configured route', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(env({ OPENAPI__ROUTES__DOCS: '/reference' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__DOCS: '/reference' }), ConfigPriority.ENV))
       .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
       .build()
 
@@ -112,7 +121,7 @@ describe('openapi configuration', () => {
 
   it('switches an endpoint off when configuration says false', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c => c.source(env({ OPENAPI__ROUTES__YAML: 'false' }), ConfigPriority.ENV))
+      .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__YAML: 'false' }), ConfigPriority.ENV))
       .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
       .build()
 
@@ -132,9 +141,10 @@ describe('openapi configuration', () => {
         }),
       }),
     })
+    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(
           new InlineConfigProvider({
             app: { docs: { info: { title: 'Moved', version: '2.0.0' } } },
@@ -159,7 +169,7 @@ describe('openapi configuration', () => {
   // `transformDocument` edits the document in place, and the values now come from a deep-frozen tree.
   it('still lets transformDocument mutate a config-sourced info block', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .config(c =>
+      .config(rootSchema, kRootConfig, c =>
         c.source(
           new InlineConfigProvider({
             openapi: { info: { title: 'From Config', version: '1.0.0' } },

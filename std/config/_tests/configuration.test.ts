@@ -1,14 +1,15 @@
-import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
-import { Configuration, kConfiguration } from '../configuration.js'
+import type { ConfigHandle } from '../accessor.js'
+import { Configuration } from '../configuration.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
 
-const APP_CONFIG = opaqueToken(Symbol('app.config'))
+const APP_CONFIG = token<ConfigHandle<App>>(Symbol('app.config'))
 
 interface App {
   server: { port: number }
@@ -33,7 +34,7 @@ async function setup(): Promise<{
   container.addModules(ConfigModule(definition))
   await container.init()
 
-  return { container, configuration: container.get<Configuration<App>>(kConfiguration), mutable }
+  return { container, configuration: container.get(Configuration) as Configuration<App>, mutable }
 }
 
 describe('Configuration', () => {
@@ -105,7 +106,7 @@ describe('Configuration', () => {
 
     // Why a snapshot is not a member of the config object: its keys belong to the application, and one of
     // them may well be called `snapshot`.
-    const configuration = container.get<Configuration<{ snapshot: string }>>(kConfiguration)
+    const configuration = container.get(Configuration) as Configuration<{ snapshot: string }>
     expect(configuration.config.snapshot).toBe('a config value of mine')
     expect(configuration.snapshot().snapshot).toBe('a config value of mine')
   })

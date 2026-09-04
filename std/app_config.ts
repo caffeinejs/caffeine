@@ -1,5 +1,3 @@
-import { opaqueToken } from '@caffeinejs/di'
-
 import {
   ArgsConfigProvider,
   ConfigPriority,
@@ -11,20 +9,14 @@ import {
 } from './config/index.js'
 
 /**
- * The well-known token the base `.config()` builder binds the application {@link ConfigHandle} under.
- * Features resolve it to read their configuration slice (e.g. `.server(s => s.config(c => c.server))`).
- * The bound type is application-specific; pass it as `get<ConfigHandle<T>>(kAppConfig)`.
- */
-export const kAppConfig = opaqueToken(Symbol.for('@caffeinejs/std:app.config'))
-
-/**
  * Fluent definition of the application configuration sources, passed to
- * `.config(schema, c => c.source(...).context(...))`.
+ * `.config(schema, key, c => c.source(...).context(...))`.
  *
- * The schema is supplied to `.config()` directly (not through this builder), so the application config type is
- * inferred from that argument regardless of the callback's shape — it may be a block body, a named function,
- * or omitted entirely. This builder writes straight into the live {@link ConfigDefinition}, so a source added
- * here sits in the same registry a feature builder contributes to later.
+ * The schema and the key the resolved configuration is bound under are supplied to `.config()` directly (not
+ * through this builder), so the application config type is inferred from the schema regardless of the callback's
+ * shape — it may be a block body, a named function, or omitted entirely. This builder writes straight into the
+ * live {@link ConfigDefinition}, so a source added here sits in the same registry a feature builder contributes
+ * to later.
  *
  * Sources land in the `USER` band by default, above the framework and code-set defaults and below nothing else;
  * registration order breaks ties within a band. Pass an explicit {@link ConfigPriority} to place a source
@@ -32,7 +24,7 @@ export const kAppConfig = opaqueToken(Symbol.for('@caffeinejs/std:app.config'))
  */
 export class AppConfigBuilder<T = unknown> {
   /**
-   * Phantom — names the application config type so `.config(schema, c => ...)` can flow it to the features
+   * Phantom — names the application config type so `.config(schema, key, c => ...)` can flow it to the features
    * configured afterwards. Never assigned, never read.
    */
   declare readonly config?: T

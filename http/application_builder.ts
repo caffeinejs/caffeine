@@ -1,3 +1,4 @@
+import type { NamedToken } from '@caffeinejs/di'
 import {
   AppConfigBuilder,
   BaseApplicationBuilder,
@@ -6,7 +7,7 @@ import {
   type Reconfigured,
   type ServiceAPI,
 } from '@caffeinejs/std'
-import type { ConfigSchema, InferConfig } from '@caffeinejs/std/config'
+import type { ConfigHandle, ConfigSchema, InferConfig } from '@caffeinejs/std/config'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { FastifyAdapter } from './adapter.js'
@@ -98,22 +99,25 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   /**
-   * Declares the application configuration and re-types the builder to carry the config type `T` (inferred from
+   * Declares the application configuration — the schema it is validated against, and the key its resolved
+   * `ConfigHandle` is bound under — and re-types the builder to carry the config type `T` (inferred from
    * `schema`), so features configured afterwards (e.g. `server(s => s.config(c => c.server))`) see a
    * strongly-typed `ConfigHandle<T>`. The optional `configure` callback — any shape — adds sources and context.
    * Declare it first. Runtime returns the same instance; only the declared type changes.
+   *
+   * ```ts
+   * const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+   *
+   * createWebApplication().config(schema, kConfig, c => c.source(new EnvConfigProvider()))
+   * ```
    */
-  config(configure: (c: AppConfigBuilder<TConfig>) => void): this
   config<S extends ConfigSchema>(
     schema: S,
+    key: NamedToken<ConfigHandle<InferConfig<NoInfer<S>>>>,
     configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): Reconfigured<this, WebApplicationBuilder<I, REQ, A>, WebApplicationBuilder<I, REQ, A, InferConfig<S>>>
-  config<S extends ConfigSchema>(
-    first: S | ((c: AppConfigBuilder<TConfig>) => void),
-    second?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): unknown {
-    this.applyConfigArgs(first as S, second as never)
-    return this
+  ): Reconfigured<this, WebApplicationBuilder<I, REQ, A>, WebApplicationBuilder<I, REQ, A, InferConfig<S>>> {
+    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, key, configure)
+    return this as never
   }
 
   /**

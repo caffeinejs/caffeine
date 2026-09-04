@@ -1,14 +1,15 @@
-import { CaffeineIoC, token, opaqueToken } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
 import { $t } from '../../schema/t.js'
-import { Configuration, kConfiguration } from '../configuration.js'
+import type { ConfigHandle } from '../accessor.js'
+import { Configuration } from '../configuration.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
 
-const APP_CONFIG = opaqueToken(Symbol('app.config'))
+const APP_CONFIG = token<ConfigHandle<App>>(Symbol('app.config'))
 
 interface App {
   server: { port: number; host: string }
@@ -59,7 +60,7 @@ async function setup(warn?: (message: string) => void): Promise<Harness> {
   return {
     container,
     definition,
-    configuration: container.get<Configuration<App>>(kConfiguration),
+    configuration: container.get(Configuration) as Configuration<App>,
     slice,
     mutable,
     refresh: () => container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol),
@@ -129,7 +130,7 @@ describe('ConfigSlice.onChange', () => {
 
     mutable.set('other.value', 'b')
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
-    await container.get<Configuration<unknown>>(kConfiguration).settled()
+    await container.get(Configuration).settled()
 
     expect(otherSeen).toHaveBeenCalledTimes(1)
     expect(serverSeen).not.toHaveBeenCalled()
@@ -372,7 +373,7 @@ describe('Configuration.onChange', () => {
     container.addModules(ConfigModule(definition))
     await container.init()
 
-    const configuration = container.get<Configuration<App>>(kConfiguration)
+    const configuration = container.get(Configuration) as Configuration<App>
     const seen = vi.fn()
     configuration.onChange(seen)
 

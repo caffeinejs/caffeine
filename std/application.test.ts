@@ -1,8 +1,10 @@
 import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
-import { InlineConfigProvider } from './config/index.js'
+import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
 import {
+  $t,
+  type InferSchema,
   defineFeature,
   OnApplicationReady,
   OnApplicationRun,
@@ -10,6 +12,12 @@ import {
   OnPreApplicationShutdown,
   createApplication,
 } from './index.js'
+
+// The framework's own block, declared as the application root so a source can be registered against it.
+const caffeineSchema = $t.Object({
+  caffeine: $t.Object({ name: $t.Optional($t.String()), profiles: $t.Optional($t.List($t.String())) }, { default: {} }),
+})
+const kConfig = token<ConfigHandle<InferSchema<typeof caffeineSchema>>>(Symbol('app.config'))
 
 // Builds a headless app over an isolated container (no global autowire) with only the explicit binds —
 // exercises the singleton-scan discovery path deterministically.
@@ -209,7 +217,7 @@ describe('application name and profiles', () => {
 
   it('reads caffeine.name from a config source', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(c => c.source(new InlineConfigProvider({ caffeine: { name: 'petstore' } })))
+      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { name: 'petstore' } })))
       .build()
     await app.ready()
 
@@ -218,7 +226,7 @@ describe('application name and profiles', () => {
 
   it('applies caffeine.profiles to the container', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
       .build()
     await app.ready()
 
@@ -228,7 +236,7 @@ describe('application name and profiles', () => {
   it('unions config profiles onto a user-supplied container', async () => {
     const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
     const app = createApplication({ container })
-      .config(c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
       .build()
     await app.ready()
 
@@ -249,7 +257,7 @@ describe('application name and profiles', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf())
     const app = createApplication({ container })
-      .config(c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
       .build()
     await app.ready()
 

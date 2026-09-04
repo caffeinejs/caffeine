@@ -1,6 +1,7 @@
 import type { AddressInfo } from 'node:net'
 
-import { type InferSchema, kAppConfig, $t } from '@caffeinejs/std'
+import { token } from '@caffeinejs/di'
+import { type InferSchema, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   ConfigPriority,
@@ -22,6 +23,8 @@ const schema = $t.Object({
 
 type AppConfig = InferSchema<typeof schema>
 
+const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+
 /** An env source over a fixed map, so the tests never touch the real environment. */
 function env(values: Record<string, string>): ConfigProvider {
   return new EnvConfigProvider({ env: values })
@@ -39,7 +42,7 @@ describe('server builder + config', () => {
 
   it('drives the listen address from the application config slice', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(new InlineConfigProvider({ server: { host: '127.0.0.1', port: 0 }, db: { url: 'x' } })),
       )
       .server(s => s.config(c => c.server))
@@ -54,7 +57,7 @@ describe('server builder + config', () => {
 
   it('layers a code-set port under the environment rather than conflicting with it', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV),
       )
       .server(s => s.port(3000).host('0.0.0.0'))
@@ -68,7 +71,7 @@ describe('server builder + config', () => {
 
   it('falls back to the code-set port when the environment says nothing', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c.source(env({ DB__URL: 'x' }), ConfigPriority.ENV))
+      .config(schema, kConfig, c => c.source(env({ DB__URL: 'x' }), ConfigPriority.ENV))
       .server(s => s.port(3000).host('127.0.0.1'))
       .build()
 
@@ -87,7 +90,7 @@ describe('server builder + config', () => {
 
   it('configures the server from the environment with no .server() call at all', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }), ConfigPriority.ENV),
       )
       .build()
@@ -99,7 +102,7 @@ describe('server builder + config', () => {
 
   it('lets command-line arguments beat both the environment and the code', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c =>
+      .config(schema, kConfig, c =>
         c
           .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
           // Given exactly as `process.argv` arrives, interpreter and script path included.
@@ -117,9 +120,10 @@ describe('server builder + config', () => {
     const nested = $t.Object({
       app: $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) }),
     })
+    const kNested = token<ConfigHandle<InferSchema<typeof nested>>>(Symbol('app.config'))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(nested, c => c.source(env({ APP__SERVER__HOST: '127.0.0.1' }), ConfigPriority.ENV))
+      .config(nested, kNested, c => c.source(env({ APP__SERVER__HOST: '127.0.0.1' }), ConfigPriority.ENV))
       .server(s => s.config(c => c.app.server).port(4567))
       .build()
 
@@ -133,9 +137,10 @@ describe('server builder + config', () => {
     const nested = $t.Object({
       app: $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) }),
     })
+    const kNested = token<ConfigHandle<InferSchema<typeof nested>>>(Symbol('app.config'))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(nested, c => c.source(env({ APP__SERVER__PORT: '8082' }), ConfigPriority.ENV))
+      .config(nested, kNested, c => c.source(env({ APP__SERVER__PORT: '8082' }), ConfigPriority.ENV))
       .server(s => s.config(c => c.app.server).port(4567))
       .build()
 
@@ -164,7 +169,7 @@ describe('server builder + config', () => {
     }
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c.source(mutable))
+      .config(schema, kConfig, c => c.source(mutable))
       .server(s => s.config(c => c.server))
       .build()
 
@@ -177,7 +182,7 @@ describe('server builder + config', () => {
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // The options are configuration like any other, so they report what configuration now says.
-    expect(app.container.get<ConfigHandle<AppConfig>>(kAppConfig).server.port).toBe(1234)
+    expect(app.container.get(kConfig).server.port).toBe(1234)
     expect(app.contributions.get(kServerContribution)).toEqual({ host: '0.0.0.0', port: 1234 })
 
     // The socket does not move: the address was fixed when the adapter took these values and listened. That is
@@ -187,7 +192,9 @@ describe('server builder + config', () => {
 
   it('rejects a selector whose slice is not ServerOptions (compile-time)', () => {
     void createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, c => c.source(new InlineConfigProvider({ server: { host: 'h', port: 1 }, db: { url: 'u' } })))
+      .config(schema, kConfig, c =>
+        c.source(new InlineConfigProvider({ server: { host: 'h', port: 1 }, db: { url: 'u' } })),
+      )
       // @ts-expect-error the `db` slice ({ url }) is not assignable to ServerOptions
       .server(s => s.config(c => c.db))
   })
