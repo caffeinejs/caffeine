@@ -1,4 +1,4 @@
-import { loadConfig } from '../../config.js'
+import { loadConfig } from '../../config_loader.js'
 import { generateModuleGraph } from './module_graph_generator.js'
 
 const KINDS = ['modules'] as const

@@ -6,7 +6,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "bun": ">=1.0.0"
+    "bun": ">=1.2.0"
   },
   "bin": {
     "caffeine": "./dist/caffeine"
@@ -20,14 +20,19 @@
   },
   "files": [
     "dist",
+    "caffeinerc.schema.json",
     "package.json"
   ],
   "scripts": {
-    "build": "tsc --build tsconfig.build.json",
+    "build": "tsc --build tsconfig.build.json && npm run generate:schema",
+    "generate:schema": "bun tools/generate_schema.ts",
     "compile": "bun build --compile bin.ts --outfile dist/caffeine",
     "clean:dist": "rm -rf dist",
-    "test": "bun test command",
+    "test": "bun test",
     "test:typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14"

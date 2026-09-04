@@ -18,7 +18,7 @@ RUN npm run build
 # bin is a `bun build --compile` native binary that the root `tsc --build` never produces. So codegen runs in a Bun
 # stage and only its one output file crosses back; Bun stays out of the runtime image.
 #
-# The whole /app is carried over rather than re-copied from context because caffeine.config.ts imports
+# The whole /app is carried over rather than re-copied from context because .caffeinerc.ts imports
 # '@caffeinejs/cli', which resolves through the workspace symlinks that `npm ci` created above.
 FROM oven/bun:1 AS codegen
 WORKDIR /app

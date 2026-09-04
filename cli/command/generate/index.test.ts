@@ -20,23 +20,23 @@ describe('generate run()', () => {
     dirs.push(dir)
     await mkdir(join(dir, 'src/orders'), { recursive: true })
     await Bun.write(join(dir, 'src/orders/order.ts'), '@Injectable()\nexport class Order {}\n')
-    await Bun.write(join(dir, 'caffeine.config.ts'), `export default ${JSON.stringify(config)}\n`)
+    await Bun.write(join(dir, '.caffeinerc.ts'), `export default ${JSON.stringify(config)}\n`)
     return dir
   }
 
   it('rejects a missing kind', async () => {
     const dir = await project({ modules: { include: ['src/**/*.ts'], root: 'src' } })
-    expect(run({ cwd: dir })).rejects.toThrow('Cannot generate: missing kind')
+    await expect(run({ cwd: dir })).rejects.toThrow('Cannot generate: missing kind')
   })
 
   it('rejects an unknown kind', async () => {
     const dir = await project({ modules: { include: ['src/**/*.ts'], root: 'src' } })
-    expect(run({ cwd: dir, kind: 'routes' })).rejects.toThrow('Cannot generate: unknown kind "routes"')
+    await expect(run({ cwd: dir, kind: 'routes' })).rejects.toThrow('Cannot generate: unknown kind "routes"')
   })
 
   it('rejects a config without a modules section', async () => {
     const dir = await project({})
-    expect(run({ cwd: dir, kind: 'modules' })).rejects.toThrow('config does not define "modules"')
+    await expect(run({ cwd: dir, kind: 'modules' })).rejects.toThrow('config does not define "modules"')
   })
 
   it('generates the module graph for kind modules', async () => {
