@@ -79,7 +79,13 @@ export function toImportPath(fromDir: string, absTarget: string, importExtension
 }
 
 export function resolveSpecifier(fromFile: string, spec: string): string {
-  const abs = resolve(dirname(fromFile), spec)
+  return normalizeResolvedPath(resolve(dirname(fromFile), spec))
+}
+
+// A resolved specifier — relative or, since path aliases are also resolved to an absolute file,
+// alias-substituted — points at a source file, but imports drop the extension (or write `.js` for
+// a `.ts` source). Map it back onto the real `.ts` file on disk.
+export function normalizeResolvedPath(abs: string): string {
   if (abs.endsWith('.js')) {
     return abs.slice(0, -3) + '.ts'
   }

@@ -1,3 +1,5 @@
+import { skipBlockComment, skipLineComment, skipSpace, skipString } from './_scan.js'
+
 const FROM_SRC = String.raw`(?:^|[\n;])\s*(import|export)(\s+type\b)?\s*([\s\S]{0,400}?)from\s+['"]([^'"]+)['"]`
 const SIDE_SRC = String.raw`(?:^|[\n;])\s*import\s+['"]([^'"]+)['"]`
 const EXPORT_CONST_SRC = String.raw`export\s+const\s+(\w+)`
@@ -127,7 +129,17 @@ export function parseDecoratedClasses(text: string): DecoratedClasses {
   return { exported, unexported }
 }
 
-export function parseRelativeImports(text: string): string[] {
+/**
+ * Import specifiers `text` treats as local sources.
+ *
+ * `isLocal` decides whether a specifier is worth resolving to a file — by default a relative
+ * specifier (`./`, `../`). Pass a predicate that also matches tsconfig `paths` aliases to have
+ * those tracked too; a bare package specifier (`@caffeinejs/di`) is still excluded either way.
+ */
+export function parseRelativeImports(
+  text: string,
+  isLocal: (spec: string) => boolean = spec => spec.startsWith('.'),
+): string[] {
   const specs: string[] = []
   const seen = new Set<string>()
 
@@ -137,12 +149,12 @@ export function parseRelativeImports(text: string): string[] {
     if (match[2]) {
       continue
     }
-    addSpec(specs, seen, match[4])
+    addSpec(specs, seen, match[4], isLocal)
   }
 
   const sideRe = new RegExp(SIDE_SRC, 'g')
   while ((match = sideRe.exec(text)) !== null) {
-    addSpec(specs, seen, match[1])
+    addSpec(specs, seen, match[1], isLocal)
   }
 
   return specs
@@ -204,67 +216,6 @@ function skipDecorator(text: string, start: number): number {
   return index
 }
 
-function skipString(text: string, start: number): number {
-  const quote = text[start]
-  let index = start + 1
-  while (index < text.length) {
-    const char = text[index]
-    if (char === '\\') {
-      index += 2
-      continue
-    }
-    if (quote === '`' && char === '$' && text[index + 1] === '{') {
-      index = skipTemplateExpression(text, index + 1)
-      continue
-    }
-    if (char === quote) {
-      return index + 1
-    }
-    index++
-  }
-  return index
-}
-
-function skipTemplateExpression(text: string, start: number): number {
-  let depth = 0
-  let index = start
-  while (index < text.length) {
-    const char = text[index]
-    if (char === "'" || char === '"' || char === '`') {
-      index = skipString(text, index)
-      continue
-    }
-    if (char === '{') {
-      depth++
-    } else if (char === '}') {
-      depth--
-      if (depth === 0) {
-        return index + 1
-      }
-    }
-    index++
-  }
-  return index
-}
-
-function skipLineComment(text: string, start: number): number {
-  const end = text.indexOf('\n', start)
-  return end === -1 ? text.length : end + 1
-}
-
-function skipBlockComment(text: string, start: number): number {
-  const end = text.indexOf('*/', start + 2)
-  return end === -1 ? text.length : end + 2
-}
-
-function skipSpace(text: string, start: number): number {
-  let index = start
-  while (index < text.length && /\s/u.test(text[index])) {
-    index++
-  }
-  return index
-}
-
 function isIdentStart(char: string): boolean {
   return /[A-Za-z_$]/u.test(char)
 }
@@ -273,8 +224,8 @@ function isIdentPart(char: string): boolean {
   return /[A-Za-z0-9_$]/u.test(char)
 }
 
-function addSpec(specs: string[], seen: Set<string>, spec: string): void {
-  if (!spec.startsWith('.') || seen.has(spec)) {
+function addSpec(specs: string[], seen: Set<string>, spec: string, isLocal: (spec: string) => boolean): void {
+  if (!isLocal(spec) || seen.has(spec)) {
     return
   }
   seen.add(spec)

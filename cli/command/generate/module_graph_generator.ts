@@ -1,4 +1,4 @@
-import { join, relative } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 
 import type { ModuleGraphConfig } from '../../config.js'
 import {
@@ -21,6 +21,7 @@ import {
   moduleDir,
   toRootRel,
 } from './_module_graph_partition.js'
+import { buildAliasResolver } from './_tsconfig_resolve.js'
 
 export interface GenerateModuleGraphOptions {
   cwd: string
@@ -38,6 +39,10 @@ export async function generateModuleGraph(
   const skip = opts.config.skip ?? []
   const exclude = [...(opts.config.exclude ?? []), `**/*${GENERATED_MOD_SUFFIX}`]
   const moduleName = opts.config.moduleName ?? (name => name)
+
+  const tsconfigPath = resolve(opts.cwd, opts.config.tsconfig ?? 'tsconfig.json')
+  const aliasResolver = await buildAliasResolver(tsconfigPath)
+  const isLocal = (spec: string): boolean => spec.startsWith('.') || aliasResolver?.resolve(spec) !== undefined
 
   const cwdRels = await globFiles(opts.cwd, opts.config.include, exclude)
   const rootRels: string[] = []
@@ -92,7 +97,7 @@ export async function generateModuleGraph(
         decorated: classes.exported,
         handwritten,
         exports: handwritten ? parseExportedConsts(text) : [],
-        imports: parseRelativeImports(text),
+        imports: parseRelativeImports(text, isLocal),
       })
     }),
   )
@@ -153,7 +158,7 @@ export async function generateModuleGraph(
         continue
       }
       for (const spec of info.imports) {
-        const resolved = resolveSpecifier(info.abs, spec)
+        const resolved = aliasResolver?.resolve(spec) ?? resolveSpecifier(info.abs, spec)
         const cwdRel = posixRel(opts.cwd, resolved)
         const rootRel = toRootRel(cwdRel, root)
         if (rootRel === undefined) {

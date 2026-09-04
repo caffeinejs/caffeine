@@ -212,4 +212,38 @@ describe('generateModuleGraph()', () => {
     const again = await generateModuleGraph({ cwd: dir, config })
     expect(again.changed).toBe(false)
   })
+
+  it('tracks a cross-bucket dependency imported through a tsconfig path alias', async () => {
+    const dir = tempDir()
+    dirs.push(dir)
+    await writeTree(dir, {
+      'tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@app/*': ['src/app/*'] } } }),
+      'src/app/user.service.ts': '@Injectable()\nexport class User {}\n',
+      'src/orders/order.service.ts':
+        "import { User } from '@app/user.service.js'\n@Injectable()\nexport class OrderService { constructor(private user: User) {} }\n",
+    })
+
+    await generateModuleGraph({ cwd: dir, config: { include: ['src/**/*.ts'], root: 'src' } })
+
+    const orders = await Bun.file(join(dir, 'src/orders/orders.generated.mod.ts')).text()
+    expect(orders).toContain(['  needs: () => [', '    appModule,', '  ],'].join('\n'))
+    // The generated import is still a relative path — the alias never leaks into the output.
+    expect(orders).toContain("import { OrderService } from './order.service.js'")
+    expect(orders).not.toContain('@app/')
+  })
+
+  it('behaves as before when no tsconfig is present', async () => {
+    const dir = tempDir()
+    dirs.push(dir)
+    await writeTree(dir, {
+      'src/app/user.service.ts': '@Injectable()\nexport class User {}\n',
+      'src/orders/order.service.ts':
+        "import { User } from '@app/user.service.js'\n@Injectable()\nexport class OrderService {}\n",
+    })
+
+    await generateModuleGraph({ cwd: dir, config: { include: ['src/**/*.ts'], root: 'src' } })
+
+    const orders = await Bun.file(join(dir, 'src/orders/orders.generated.mod.ts')).text()
+    expect(orders).not.toContain('needs:')
+  })
 })
