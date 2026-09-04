@@ -405,6 +405,67 @@ describe('dispose() (L-1, L-5)', function () {
     expect(err).toBeInstanceOf(AggregateError)
     expect((err as AggregateError).errors).toHaveLength(2)
   })
+
+  it('should run PreDestroy hooks and drop ready when disposed through an `await using` block', async function () {
+    const destroy = vi.fn()
+
+    @Injectable()
+    class Resource {
+      @PreDestroy()
+      close() {
+        destroy()
+      }
+    }
+
+    let outer: CaffeineIoC
+
+    {
+      await using di = new CaffeineIoC({ decorators: false })
+      di.bind(Resource, t => t.toSelf())
+      await di.init()
+      di.get(Resource)
+      outer = di
+    }
+
+    expect(destroy).toHaveBeenCalledTimes(1)
+    expect(outer!.ready).toBe(false)
+  })
+
+  it('should reject from [Symbol.asyncDispose]() with the same AggregateError dispose() produces', async function () {
+    @Injectable()
+    class SvcA {
+      @PreDestroy()
+      destroy() {
+        throw new Error('svc-a error')
+      }
+    }
+
+    @Injectable()
+    class SvcB {
+      @PreDestroy()
+      destroy() {
+        throw new Error('svc-b error')
+      }
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(SvcA, t => t.toSelf())
+    di.bind(SvcB, t => t.toSelf())
+    await di.init()
+
+    di.get(SvcA)
+    di.get(SvcB)
+
+    const err = await di[Symbol.asyncDispose]().catch(e => e)
+
+    expect(err).toBeInstanceOf(AggregateError)
+    expect((err as AggregateError).errors).toHaveLength(2)
+  })
+
+  it('should polyfill the disposal symbols the `using` helper probes', function () {
+    expect(typeof Symbol.asyncDispose).toBe('symbol')
+    expect(typeof Symbol.dispose).toBe('symbol')
+  })
 })
 
 describe('async singleton resolution timing (L-3)', function () {

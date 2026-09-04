@@ -1194,6 +1194,14 @@ export class CaffeineIoC implements Container {
     )
   }
 
+  /**
+   * Disposes the container. Alias of {@link dispose} that lets a container back an
+   * `await using` declaration.
+   */
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.dispose()
+  }
+
   [Symbol.iterator](): IterableIterator<[InjectionToken, Binding]> {
     return this.registry.entries()
   }

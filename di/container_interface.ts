@@ -113,7 +113,7 @@ export interface BindingDescriptor {
  * Container describes the IoC container API.
  * @see {@link CaffeineIoC} for the implementation of the container and more information.
  */
-export interface Container {
+export interface Container extends AsyncDisposable {
   readonly profiles: ReadonlySet<Identifier>
   readonly parent?: Container
   readonly size: number
@@ -125,6 +125,8 @@ export interface Container {
   readonly hasRequestScoped: boolean
 
   readonly [Symbol.toStringTag]: string
+
+  [Symbol.asyncDispose](): Promise<void>
 
   autoWire(): void
 
@@ -152,10 +154,6 @@ export interface Container {
 
   getBindingsByLabel(label: symbol): BindingDescriptor[]
 
-  /**
-   * Whether the key can be resolved — including through a name it aliases or a subclass bound with
-   * `.extends(key)`. True exactly when {@link get} would resolve.
-   */
   has<T>(key: InjectionToken<T>): boolean
 
   hasScopeInGraph(key: InjectionToken, scopeID: NamedToken<Scope>): boolean

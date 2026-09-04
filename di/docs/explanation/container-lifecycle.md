@@ -83,6 +83,9 @@ during `init()`, not during resolution.
 await di.dispose()
 ```
 
+`await using di = new CaffeineIoC(...)` is equivalent — the container implements
+`Symbol.asyncDispose` as an alias of `dispose()`.
+
 Disposal tears down the container:
 
 1. **PreDestroy hooks** — `@PreDestroy` (and `.preDestroy()`) callbacks are

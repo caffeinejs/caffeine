@@ -319,6 +319,10 @@ dispose(): Promise<void>
 Destroys the container. Runs `@PreDestroy` hooks on all singleton instances in
 reverse initialization order.
 
+The container also implements `Symbol.asyncDispose`, so `await using di = new CaffeineIoC(...)`
+disposes it when the block exits. It is a direct alias of `dispose()` — same hooks, same
+order, same `AggregateError` on failure. There is no synchronous `Symbol.dispose`.
+
 ### resetInstances
 
 ```ts
