@@ -1,6 +1,11 @@
 export class RequestScopeContext {
   private readonly _cachedInstances = new Map<number, unknown>()
   private _destroyCallbacks = new Array<() => Promise<void> | void>()
+  private _destroyed = false
+
+  get destroyed(): boolean {
+    return this._destroyed
+  }
 
   get<T>(id: number): T | undefined {
     return this._cachedInstances.get(id) as T | undefined
@@ -15,6 +20,12 @@ export class RequestScopeContext {
   }
 
   async destroy(): Promise<void> {
+    if (this._destroyed) {
+      return
+    }
+
+    this._destroyed = true
+
     if (this._destroyCallbacks.length === 0) {
       this._cachedInstances.clear()
       return

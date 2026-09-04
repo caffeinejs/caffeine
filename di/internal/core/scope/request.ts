@@ -27,7 +27,7 @@ export class RequestScope implements Scope {
   }
 
   run<T>(fn: () => T | Promise<T>): Promise<T> {
-    this.checkAndthrowIfNoStorageIsSet()
+    this.#checkAndthrowIfNoStorageIsSet()
 
     if (this._storage!.getStore() !== undefined) {
       throw new ErrIllegalScopeState('A request scope block is already in progress: only one is allowed at a time')
@@ -46,11 +46,17 @@ export class RequestScope implements Scope {
   }
 
   provide<T>(ctx: ResolutionContext, factory: Factory<T>): T {
-    this.checkAndthrowIfNoStorageIsSet()
+    this.#checkAndthrowIfNoStorageIsSet()
 
     const context = (this._storage! as RequestScopeStorage<RequestScopeContext>).getStore()
     if (!context) {
       throw new ErrOutOfScope(`Cannot access key "${keyStr(ctx.key)}" outside of a request scope block`)
+    }
+
+    if (context.destroyed) {
+      throw new ErrOutOfScope(
+        `Cannot access key "${keyStr(ctx.key)}": the request scope block it belongs to has already ended`,
+      )
     }
 
     const value = context.get(ctx.binding.id)
@@ -69,7 +75,7 @@ export class RequestScope implements Scope {
   }
 
   cachedInstance<T>(binding: Binding<T>): T | undefined {
-    this.checkAndthrowIfNoStorageIsSet()
+    this.#checkAndthrowIfNoStorageIsSet()
 
     return this._storage!.getStore()?.get(binding.id) as T | undefined
   }
@@ -82,7 +88,7 @@ export class RequestScope implements Scope {
     // noop
   }
 
-  checkAndthrowIfNoStorageIsSet(): void {
+  #checkAndthrowIfNoStorageIsSet(): void {
     if (this._storage === undefined) {
       throw new ErrNoRequestStorageSet()
     }

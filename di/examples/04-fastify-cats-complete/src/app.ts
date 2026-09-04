@@ -11,8 +11,16 @@ export async function buildServer(
   const server = fastify({ logger: true, ...opts })
 
   server
-    .addHook('onRequest', (_req, _reply, done) => {
-      void container.requestScopeManager.run(done)
+    // The scope ends when the callback settles, and `done()` returns as soon as Fastify reaches its first
+    // await. Waiting for the raw response to close keeps it alive for a handler that streams.
+    .addHook('onRequest', (_req, reply, done) => {
+      void container.requestScopeManager.run(
+        () =>
+          new Promise<void>(resolve => {
+            reply.raw.once('close', () => resolve())
+            done()
+          }),
+      )
     })
     .addHook('onClose', async () => await container.dispose())
 

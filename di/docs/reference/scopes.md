@@ -100,12 +100,22 @@ To start a new request context, run code through
 
 ```ts
 app.use((req, res, next) => {
-  container.requestScopeManager.run(() => next())
+  void container.requestScopeManager.run(
+    () =>
+      new Promise<void>(resolve => {
+        res.once('close', () => resolve())
+        next()
+      }),
+  )
 })
 ```
 
 Any code running within that callback — regardless of how deeply nested — will
 resolve the same `RequestContext` instance.
+
+The scope ends when the callback settles, which is why the callback waits for the
+response to close rather than returning as soon as `next()` hands control on. See
+[request scope manager](./request-scope-manager.md) for the full contract.
 
 ---
 

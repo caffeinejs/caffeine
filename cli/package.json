@@ -23,7 +23,8 @@
     "package.json"
   ],
   "scripts": {
-    "build": "bun build --compile bin.ts --outfile dist/caffeine && tsc --build tsconfig.build.json",
+    "build": "tsc --build tsconfig.build.json",
+    "compile": "bun build --compile bin.ts --outfile dist/caffeine",
     "clean:dist": "rm -rf dist",
     "test": "bun test command",
     "test:typecheck": "tsc --noEmit"

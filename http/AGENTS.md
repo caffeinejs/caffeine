@@ -70,7 +70,11 @@ front of — the routers are declared elsewhere. A middleware naming variables n
 
 ## Request scope
 
-When the container has request-scoped bindings, the adapter starts a scope in Fastify `onRequest` with `requestScopeManager.run(() => done())`. `RequestScope.run` destroys the scope when that callback’s promise settles. Work that continues after the handler returns (streams, piped bodies) can outlive that. Do not invent a second “stream scope”; if lifetime is wrong, fix how the adapter awaits the request, not a new scope kind.
+When the container has request-scoped bindings, the adapter starts a scope in Fastify `onRequest`. `RequestScope.run` destroys the scope when its callback’s promise settles, and `done()` returns as soon as Fastify reaches its first await — so the callback stays pending until `reply.raw` emits `close`. That is the one signal that fires for a response that finished, one that errored, and a connection the client dropped, which is what keeps a handler that streams and a body still being piped inside their own scope.
+
+Resolving a request-scoped binding after the scope ended throws `ErrOutOfScope`; it does not quietly mint a new instance. `close` follows `finish` by a tick, so a synchronous `onResponse` hook is still inside the scope and one that awaits first is not.
+
+Do not invent a second “stream scope”; if lifetime is wrong, fix how the adapter awaits the request, not a new scope kind.
 
 ## `ActionResult`
 

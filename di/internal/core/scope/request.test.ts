@@ -9,6 +9,7 @@ import { Lazy } from '../../../decorators/lazy.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
 import { PostConstruct } from '../../../decorators/post_construct.js'
 import { PreDestroy } from '../../../decorators/pre_destroy.js'
+import { ErrOutOfScope } from '../../../errors.js'
 import { CaffeineIoC, Scopes } from '../../../index.nodejs.js'
 import { token } from '../../../key.js'
 
@@ -89,6 +90,36 @@ describe('Request Scope', function () {
       await di.requestScopeManager.run(async () => {
         expect(() => di.requestScopeManager.run(() => {})).toThrow()
       })
+    })
+
+    it('should return the same instance across an await inside the run block', async function () {
+      let first!: Ctrl
+      let second!: Ctrl
+
+      await di.requestScopeManager.run(async function () {
+        first = di.get(Ctrl)
+        await new Promise(resolve => setTimeout(resolve, 5))
+        second = di.get(Ctrl)
+
+        expect(second).toBe(first)
+        expect(destroySpy).not.toHaveBeenCalled()
+      })
+
+      expect(ctorSpy).toHaveBeenCalledTimes(1)
+      expect(destroySpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('should throw when a request-scoped key is resolved after the scope block ended', async function () {
+      let afterEnd!: Promise<unknown>
+
+      await di.requestScopeManager.run(function () {
+        // A task that outlives the block, the way a body still being piped does. It was created inside the
+        // scope, so it still reaches the same context — one that has been destroyed.
+        afterEnd = new Promise(resolve => setTimeout(resolve, 5)).then(() => di.get(Ctrl))
+      })
+
+      await expect(afterEnd).rejects.toThrow(ErrOutOfScope)
+      expect(ctorSpy).not.toHaveBeenCalled()
     })
 
     it('should destroy request-scoped instances when async run() rejects', async function () {

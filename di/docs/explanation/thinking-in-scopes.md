@@ -91,13 +91,23 @@ even though they resolve the same key.
 
 ```ts
 app.use((req, res, next) => {
-  container.requestScopeManager.run(() => next())
+  void container.requestScopeManager.run(
+    () =>
+      new Promise<void>(resolve => {
+        res.once('close', () => resolve())
+        next()
+      }),
+  )
 })
 ```
 
 Everything running inside the `run()` callback — across awaits, across service
 calls — resolves the same request-scoped instances. Outside that callback,
 request-scoped resolution throws.
+
+The callback is what decides how long the scope lives, so it has to stay pending
+until the request really is over. `next()` returns as soon as the framework hits an
+await, and a response that is still streaming resolves long after that.
 
 ---
 

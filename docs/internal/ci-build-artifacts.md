@@ -17,7 +17,9 @@ Keep package-specific setup out of the root scripts. The petstore example has tw
 
 ## CLI binary
 
-`@caffeinejs/cli` ships a bun-compiled binary at `cli/dist/caffeine`. Root `npm run build` (`tsc`) does not produce it — run `npm run build:cli` (or `make build:cli`) after clone/clean so `node_modules/.bin/caffeine` exists before any example `caffeine generate`. `build:examples` and CI already call `build:cli` first.
+`@caffeinejs/cli` ships a bun-compiled binary at `cli/dist/caffeine`. Package `build` is `tsc` only — same as every other workspace. Root `npm run build` (`tsc`) does not produce the binary either. Run `npm run build:cli` (or `make build:cli`) after clone/clean so `node_modules/.bin/caffeine` exists before any example `caffeine generate`. That script runs `compile` (`bun build --compile`) then relinks the bin.
+
+`build:examples` compiles the binary only when `cli/dist/caffeine` is missing. `make check` rebuilds it when it is missing or older than CLI sources. CI calls `build:cli` once explicitly; `npm run build --workspaces` does not bun-compile.
 
 ## License allowlist and dependency review
 

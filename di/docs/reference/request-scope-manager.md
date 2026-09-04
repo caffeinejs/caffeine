@@ -33,9 +33,21 @@ the same instance for the duration of the call. Always returns a `Promise`
 that resolves after all request-scoped instances are destroyed (including any
 `@PreDestroy` hooks). Await it when cleanup ordering matters.
 
+The scope ends when `fn` settles, so `fn` has to stay pending for as long as the
+work that depends on the scope. A callback that only hands control to the next
+middleware settles immediately, and everything the request does afterwards —
+streaming a response, piping a body — runs against a scope that is already gone.
+Keep it pending until the work is really over:
+
 ```ts
-app.use(async (req, res, next) => {
-  await container.requestScopeManager.run(() => next())
+app.use((req, res, next) => {
+  void container.requestScopeManager.run(
+    () =>
+      new Promise<void>(resolve => {
+        res.once('close', () => resolve())
+        next()
+      }),
+  )
 })
 ```
 
@@ -43,7 +55,8 @@ Nested `run()` calls are not supported. Calling `run()` while a scope block is
 already active throws `ErrIllegalScopeState`.
 
 Accessing a `REQUEST`-scoped binding outside of a `run()` block throws
-`ErrOutOfScope`.
+`ErrOutOfScope`, and so does accessing one after the block that owns it has
+ended — a destroyed scope never resolves again.
 
 ### setStorage
 

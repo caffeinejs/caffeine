@@ -101,7 +101,15 @@ export class FastifyAdapter<
         const ctx = new FastifyContext(req, reply)
         req.httpContext = ctx
         this.#fastifyCtxAls.run(ctx, () => {
-          void man.run(() => done())
+          man
+            .run(
+              () =>
+                new Promise<void>(resolve => {
+                  reply.raw.once('close', () => resolve())
+                  done()
+                }),
+            )
+            .catch((err: unknown) => req.log.error({ err }, 'Cannot tear down the request scope'))
         })
       })
     } else {

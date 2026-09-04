@@ -68,6 +68,13 @@ The `onRequest` hook calls `requestScopeManager.run()`. Everything inside that
 callback runs within a single request's async context — CaffeineIoC uses it to isolate
 request-scoped instances between concurrent requests.
 
+The scope ends when the callback settles, and `done()` returns as soon as Fastify
+reaches its first `await` — long before the response is sent. So the callback returns
+a promise that stays pending until the raw response closes, which is the one signal
+that fires for a response that finished, one that errored, and a connection the client
+dropped. Resolve it any earlier and a handler that streams, or a body still being
+piped, outlives the scope it depends on.
+
 ```ts
 // src/app.ts
 import fastify from 'fastify'
@@ -77,8 +84,14 @@ export async function buildServer(container: Container) {
   const server = fastify({ logger: true })
 
   server
-    .addHook('onRequest', (_req, _reply, done) => {
-      container.requestScopeManager.run(() => done())
+    .addHook('onRequest', (_req, reply, done) => {
+      void container.requestScopeManager.run(
+        () =>
+          new Promise<void>(resolve => {
+            reply.raw.once('close', () => resolve())
+            done()
+          }),
+      )
     })
     .addHook('onClose', async () => {
       await container.dispose()
@@ -156,7 +169,7 @@ HTTP request arrives
   │     container.get(CatsService)          → singleton (reused)
   │     CatsService.ctx.get()               → RequestContext for this request
   │
-  └─ response sent
+  └─ raw response closes
         Request scope is discarded — RequestContext is garbage collected
 ```
 

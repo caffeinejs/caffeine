@@ -1,6 +1,8 @@
 .ONESHELL:
 .DEFAULT_GOAL := help
 
+CLI_SRCS := $(shell find cli -name '*.ts' ! -path '*/dist/*' ! -name '*.test.ts' ! -path '*/templates/*')
+
 -include Makefile.overrides # allow user specific optional overrides
 -include .env # allow user specific optional environment variables
 
@@ -12,6 +14,9 @@ build: ## build all packages
 
 .PHONY: build\:cli
 build\:cli: ## build the caffeine CLI binary and link node_modules/.bin/caffeine
+	@npm run build:cli
+
+cli/dist/caffeine: $(CLI_SRCS) cli/package.json
 	@npm run build:cli
 
 build\:%: ## build a single package and its local deps (e.g. build:http)
@@ -33,6 +38,7 @@ check: ## run all checks
 	@npm run lint:fix
 	@npm run lint:markdown
 	@npm run build
+	@$(MAKE) cli/dist/caffeine
 	@npm run build:examples
 	@npm run test:typecheck
 	@npm run test:memory
