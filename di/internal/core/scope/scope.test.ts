@@ -30,6 +30,14 @@ describe('Scoping', function () {
       return undefined
     }
 
+    instances() {
+      return []
+    }
+
+    clear(): void {
+      //
+    }
+
     reset(_binding: Binding): void {
       //
     }
@@ -83,6 +91,12 @@ describe('Scoping', function () {
           cachedInstance<T>(_binding: Binding): T | undefined {
             return undefined
           },
+          instances() {
+            return []
+          },
+          clear(): void {
+            //
+          },
           reset(_binding: Binding): void {
             //
           },
@@ -133,6 +147,14 @@ describe('Scoping', function () {
 
             cachedInstance<T>(_binding: Binding): T | undefined {
               return undefined
+            }
+
+            instances() {
+              return []
+            }
+
+            clear(): void {
+              //
             }
 
             reset(_binding: Binding): void {

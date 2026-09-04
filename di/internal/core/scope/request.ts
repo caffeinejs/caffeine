@@ -4,7 +4,7 @@ import { Factory } from '../../../factory.js'
 import { keyStr } from '../../../key.js'
 import { RequestScopeStorage } from '../../../request_scope_manager.js'
 import { ResolutionContext } from '../../../resolution_context.js'
-import { Scope } from '../../../scope.js'
+import { Scope, ScopedInstance } from '../../../scope.js'
 import { RequestScopeContext } from './request_context.js'
 
 export class RequestScope implements Scope {
@@ -68,7 +68,7 @@ export class RequestScope implements Scope {
     context.set(ctx.binding.id, resolved)
 
     if (ctx.binding.preDestroy !== undefined) {
-      context.registerDestroyCallback(() => ctx.binding.preDestroy!(resolved))
+      context.registerDestroy(resolved, ctx.binding.preDestroy)
     }
 
     return resolved
@@ -81,6 +81,16 @@ export class RequestScope implements Scope {
   }
 
   reset(_binding: Binding): void {
+    // noop
+  }
+
+  // Request instances belong to the context the scope block installed, which destroys them when the block
+  // ends. Nothing here outlives a request, so the container has nothing to dispose or clear.
+  instances(): Iterable<ScopedInstance> {
+    return []
+  }
+
+  clear(): void {
     // noop
   }
 

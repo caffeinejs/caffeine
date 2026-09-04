@@ -281,6 +281,12 @@ describe('Container Operations', function () {
             await Promise.resolve()
             asyncResetCompleted = true
           },
+          instances() {
+            return []
+          },
+          clear(): void {
+            //
+          },
           configure(_binding: Binding): void {
             //
           },

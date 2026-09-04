@@ -160,3 +160,23 @@ The helpers that accept a descriptor — `allOf`, `ordered`, `optional`, `provid
 The mark is non-enumerable, so it stays out of deep-equality and any dump of a descriptor. A spread therefore drops it: a helper that builds on another must end by calling `encode` rather than by spreading, and `compose` does exactly that.
 
 Fields are lazy getters that resolve through the binding on every read. That is what makes one cached bag correct for singleton, transient and request scope alike — never make a field resolve eagerly.
+
+## Disposal is reverse creation order, one hook at a time
+
+`dispose()` does not walk `registry`. It collects `Scope.instances()` from every scope, sorts the entries by
+the sequence they were created in, and runs `preDestroy` from the newest backwards, awaiting each hook before
+the next starts. A dependency is cached only after its dependent's factory returns, so reverse creation order
+is a topological teardown order — including for instances a factory pulled through `ctx.container.get()`,
+which no declared-injection graph would see. `RequestScopeContext.destroy()` follows the same rule for a
+request.
+
+An instance reached through more than one binding runs one hook, the first the order reaches, so an aliased or
+doubly-bound resource is closed once. Only reference types are deduplicated: two bindings holding `8080` are
+two settings, not one socket.
+
+The sequence counter is shared by every durable scope (`internal/core/scope/_sequence.ts`), because singleton
+and refresh keep separate caches and a per-scope counter would lose their relative order.
+
+`SingletonScope` records creation in `_created`, deliberately kept apart from `_cachedInstances`: the cache-hit
+path in `provide()` must stay a single map lookup with no property load on the value. Only creation writes to
+`_created`, and only disposal reads it.

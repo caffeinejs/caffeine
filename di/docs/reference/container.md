@@ -316,8 +316,10 @@ await di.init()
 dispose(): Promise<void>
 ```
 
-Destroys the container. Runs `@PreDestroy` hooks on all singleton instances in
-reverse initialization order.
+Destroys the container. Runs `@PreDestroy` hooks on every cached instance in
+reverse creation order, one at a time, and once per instance — two bindings
+holding the same object destroy it once. Hooks that throw do not stop the rest;
+they are reported together as an `AggregateError`.
 
 The container also implements `Symbol.asyncDispose`, so `await using di = new CaffeineIoC(...)`
 disposes it when the block exits. It is a direct alias of `dispose()` — same hooks, same

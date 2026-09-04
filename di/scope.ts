@@ -38,6 +38,18 @@ export const Scopes = {
 export type ScopeFactory = (container: Container) => Scope
 
 /**
+ * A cached instance, paired with the order it was created in.
+ *
+ * The sequence is drawn from a counter shared by every scope, so entries collected from different scopes sort
+ * against each other. Disposal walks them in descending order.
+ */
+export interface ScopedInstance {
+  binding: Binding
+  instance: unknown
+  sequence: number
+}
+
+/**
  * Scope is a contract for a scope implementation.
  * A scope is responsible for providing instances of a {@link Binding} to the {@link Container}.
  * A single scope instance is responsible for managing all the bindings bound to it.
@@ -82,6 +94,23 @@ export interface Scope {
    * @param binding - The binding to reset the cached instance for.
    */
   reset(binding: Binding): void | Promise<void>
+
+  /**
+   * Returns every instance the scope holds, each with the sequence it was created in.
+   *
+   * A scope that caches nothing returns nothing. The {@link Container} collects these across all scopes to
+   * destroy components in reverse creation order, so a scope that caches must report the sequence it was
+   * given when the instance was stored, never the order it happens to iterate in.
+   */
+  instances(): Iterable<ScopedInstance>
+
+  /**
+   * Drops every cached instance without running any destruction hook.
+   *
+   * The {@link Container} calls this at the end of disposal, once the hooks it collected from
+   * {@link instances} have run.
+   */
+  clear(): void
 
   /**
    * Configures the scope for the given {@link Binding}.

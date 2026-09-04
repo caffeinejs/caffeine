@@ -188,6 +188,8 @@ describe('checks:scopes', function () {
         provide: (_, f) => f(_),
         cachedInstance: () => undefined,
         reset: () => {},
+        instances: () => [],
+        clear: () => {},
         configure: () => {},
         undo: () => {},
         get lazy() {
@@ -201,6 +203,8 @@ describe('checks:scopes', function () {
         provide: (_, f) => f({} as unknown as ResolutionContext),
         cachedInstance: () => undefined,
         reset: () => {},
+        instances: () => [],
+        clear: () => {},
         configure: () => {},
         undo: () => {},
         get lazy() {
@@ -257,6 +261,8 @@ describe('checks:scopes', function () {
         provide: (ctx, f) => f(ctx),
         cachedInstance: () => undefined,
         reset: () => {},
+        instances: () => [],
+        clear: () => {},
         configure: () => {},
         get lazy() {
           return true

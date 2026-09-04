@@ -41,7 +41,7 @@ import { PostProcessor } from './post_processor.js'
 import { Provider } from './provider.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
-import { Scopes, scopeEntries, Scope } from './scope.js'
+import { Scopes, scopeEntries, Scope, ScopedInstance } from './scope.js'
 import { Snapshot } from './snapshot.js'
 import { Keys } from './symbols.js'
 import { Ctor } from './types.js'
@@ -1114,37 +1114,60 @@ export class CaffeineIoC implements Container {
 
   /**
    * Disposes the container, destroying all instances and executing destruction hooks.
+   *
+   * Instances are destroyed in reverse creation order, one at a time: a scope caches an instance only after
+   * its factory returns, so a dependency is always created — and therefore destroyed — after whatever depends
+   * on it. An instance reached through more than one binding runs one hook, the first the order reaches.
+   *
+   * @throws {@link AggregateError} carrying every hook that threw. Disposal still completes.
    */
   async dispose(): Promise<void> {
-    const entries = Array.from(this.registry.entries())
-    const disposers: Promise<void>[] = []
-
-    for (const [, binding] of entries) {
-      if (binding.preDestroy) {
-        disposers.push(this.preDestroyBinding(binding).finally(() => this.scopes.get(binding.scopeID)?.reset(binding)))
-      } else {
-        disposers.push(Promise.resolve(this.scopes.get(binding.scopeID)?.reset(binding)))
+    const created: ScopedInstance[] = []
+    for (const scope of this.scopes.values()) {
+      for (const entry of scope.instances()) {
+        created.push(entry)
       }
     }
 
-    return Promise.allSettled(disposers)
-      .then(async results => {
-        const rejections = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-        if (rejections.length === 0) {
-          return
+    created.sort((a, b) => b.sequence - a.sequence)
+
+    const seen = new Set<object>()
+    const errors: unknown[] = []
+
+    try {
+      for (const { binding, instance } of created) {
+        if (binding.preDestroy === undefined) {
+          continue
         }
 
-        return Promise.reject(
-          new AggregateError(
-            rejections.map(r => r.reason),
-            `${rejections.length} component(s) failed during disposal`,
-          ),
-        )
-      })
-      .finally(() => {
-        this._ready = false
-        this.hooks.emit('onDisposed')
-      })
+        // Only reference types are deduplicated: two bindings holding the number 8080 are two settings, not
+        // one resource, and each keeps its hook.
+        if (instance !== null && (typeof instance === 'object' || typeof instance === 'function')) {
+          if (seen.has(instance as object)) {
+            continue
+          }
+
+          seen.add(instance as object)
+        }
+
+        try {
+          await binding.preDestroy(instance)
+        } catch (error) {
+          errors.push(error)
+        }
+      }
+
+      for (const scope of this.scopes.values()) {
+        scope.clear()
+      }
+    } finally {
+      this._ready = false
+      this.hooks.emit('onDisposed')
+    }
+
+    if (errors.length > 0) {
+      throw new AggregateError(errors, `${errors.length} component(s) failed during disposal`)
+    }
   }
 
   /**

@@ -163,4 +163,29 @@ describe('Request Scope', function () {
       })
     })
   })
+
+  // Request instances live and die with their scope block, so container disposal has nothing of theirs to
+  // destroy — and must not fail reaching for an instance that only exists inside a request.
+  describe('container disposal', function () {
+    it('should not run a request-scoped hook and should not throw', async function () {
+      const destroyed = vi.fn()
+
+      class SessionCD {
+        readonly id: string = randomUUID()
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(SessionCD, t => t.toSelf().lifetime(Scopes.REQUEST).preDestroy(destroyed))
+      await di.init()
+
+      await di.requestScopeManager.run(async () => {
+        di.get(SessionCD)
+      })
+
+      expect(destroyed).toHaveBeenCalledTimes(1)
+
+      await expect(di.dispose()).resolves.toBeUndefined()
+      expect(destroyed).toHaveBeenCalledTimes(1)
+    })
+  })
 })

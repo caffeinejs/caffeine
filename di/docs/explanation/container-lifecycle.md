@@ -89,13 +89,20 @@ await di.dispose()
 Disposal tears down the container:
 
 1. **PreDestroy hooks** — `@PreDestroy` (and `.preDestroy()`) callbacks are
-   called on all singleton instances in **reverse initialization order** —
-   the last thing created is the first to be destroyed.
-2. **Async cleanup** — hooks returning `Promise` are awaited.
-3. **State cleared** — instances are released.
+   called on every cached instance in **reverse creation order** — the last
+   thing created is the first to be destroyed, so a dependency is still usable
+   while the hook of whatever depends on it runs.
+2. **One hook at a time** — hooks returning `Promise` are awaited before the
+   next one starts. A hook that throws does not stop the rest; the failures
+   surface together as an `AggregateError` once disposal has finished.
+3. **One hook per instance** — when two bindings hand back the same object it
+   is destroyed once, by the first hook the order reaches. Bindings holding
+   equal primitives are unrelated and each keeps its hook.
+4. **State cleared** — instances are released.
 
 Transient instances are not tracked by the container, so `dispose()` does not
-call their `@PreDestroy` hooks.
+call their `@PreDestroy` hooks. Request-scoped instances are destroyed by their
+own scope block, on the same reverse-creation-order rule, not by `dispose()`.
 
 ---
 

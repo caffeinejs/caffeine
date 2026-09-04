@@ -28,6 +28,14 @@ describe('Post Processors', function () {
       return undefined
     }
 
+    instances() {
+      return []
+    }
+
+    clear(): void {
+      //
+    }
+
     reset(_binding: Binding): void {
       //
     }
