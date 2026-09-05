@@ -46,8 +46,9 @@
     "test:typecheck:benchmarks": "npm run test:typecheck -w @caffeinejs/benchmarks",
     "test:memory": "npm run test:memory --workspaces --if-present",
     "lint": "oxlint && oxfmt --check",
-    "lint:fix": "oxlint --fix && oxfmt",
-    "fmt": "oxfmt",
+    "lint:fix": "oxlint --fix && oxfmt --write",
+    "fmt": "oxfmt --write",
+    "fmt:check": "oxfmt --check",
     "lint:markdown": "markdownlint-cli2",
     "license:check": "node tools/check-licenses.mjs"
   },

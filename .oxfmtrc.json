@@ -14,6 +14,7 @@
   "ignorePatterns": [
     "**/dist/**",
     "**/*.gen.mod.ts",
+    "cli/caffeinerc.schema.json",
     "prisma/migrations/**",
     "**/*.hbs",
     "benchmarks/di/testdata/third_party_legacy/**",
