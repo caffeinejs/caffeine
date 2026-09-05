@@ -123,11 +123,11 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
    * to carry the resulting config type. Declare it first so features see the typed config.
    */
   protected applyConfigDefinition<T>(
-    schema: ConfigSchema<T>,
+    schema: ConfigSchema<unknown>,
     key: NamedToken<ConfigHandle<T>>,
     configure?: (c: AppConfigBuilder<T>) => void,
   ): void {
-    this.#config.schema = schema as ConfigSchema<unknown>
+    this.#config.schema = schema
     this.#config.token = key
     configure?.(new AppConfigBuilder<T>(this.#config))
   }
@@ -233,6 +233,10 @@ export class ApplicationBuilder<TConfig = unknown>
    * was reached through, and a headless application configures kafka and messaging exactly the way an HTTP
    * one does.
    *
+   * The key may name a **wider** type than the schema describes. A feature's namespace is in the resolved tree
+   * whether or not the application declared it, so naming `server` in the key's type without redeclaring its
+   * shape is accurate rather than a lie.
+   *
    * ```ts
    * const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
    *
@@ -241,12 +245,12 @@ export class ApplicationBuilder<TConfig = unknown>
    *
    * Runtime returns the same instance; only the declared type changes.
    */
-  config<S extends ConfigSchema>(
+  config<S extends ConfigSchema, T extends InferConfig<NoInfer<S>> = InferConfig<NoInfer<S>>>(
     schema: S,
-    key: NamedToken<ConfigHandle<InferConfig<NoInfer<S>>>>,
-    configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): Reconfigured<this, ApplicationBuilder<TConfig>, ApplicationBuilder<InferConfig<S>>> {
-    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, key, configure)
+    key: NamedToken<ConfigHandle<T>>,
+    configure?: (c: AppConfigBuilder<T>) => void,
+  ): Reconfigured<this, ApplicationBuilder<TConfig>, ApplicationBuilder<T>> {
+    this.applyConfigDefinition<T>(schema as ConfigSchema<unknown>, key, configure)
     return this as never
   }
 }

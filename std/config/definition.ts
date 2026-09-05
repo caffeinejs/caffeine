@@ -4,11 +4,11 @@ import { ErrConfig } from './errors.js'
 import type { FeatureConfigKey } from './feature_key.js'
 import { ConfigShard } from './integration/shard.js'
 import { MutableConfigProvider } from './providers/mutable_provider.js'
-import { type ConfigSchema, passthroughConfigSchema } from './schema.js'
+import { declaredDefaults, type ConfigSchema, passthroughConfigSchema } from './schema.js'
 import { secretPaths } from './secrets.js'
 import { ConfigSlice, type ConfigSliceSpec } from './slice.js'
 import { ConfigPriority, ConfigSources } from './sources.js'
-import type { ResolutionContext } from './types.js'
+import type { ConfigValue, ResolutionContext } from './types.js'
 
 /** DI key for the {@link ConfigDefinition} the application builder owns. Features resolve it to register a slice. */
 export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs/std:config.definition'))
@@ -41,10 +41,18 @@ export class ConfigDefinition {
 
   /** Framework defaults — the bottom of the chain. Everything overrides these. */
   readonly frameworkDefaults = new MutableConfigProvider('framework-defaults')
+  /**
+   * Defaults read off the application's own schema, so that declaring `server.port` with a `default` actually
+   * reaches the server rather than only filling the root tree.
+   *
+   * A schema default cannot do this on its own: a feature writes its framework defaults as real values, and a
+   * schema default only fills a value that is *absent*. Lifting them into a band is what puts the two in the
+   * same merge.
+   */
+  readonly schemaDefaults = new MutableConfigProvider('schema-defaults')
   /** Values set through feature builder methods. Defaults too: file, env and args all win over them. */
   readonly codeValues = new MutableConfigProvider('code')
 
-  schema: ConfigSchema<unknown> = passthroughConfigSchema
   context: ResolutionContext = DEFAULT_CONTEXT()
   failFast: boolean | undefined
   /**
@@ -57,12 +65,29 @@ export class ConfigDefinition {
    * channel; `std/config` never reaches for one itself, so it stays free of any host dependency.
    */
   warn: ((message: string) => void) | undefined
+  #schema: ConfigSchema<unknown> = passthroughConfigSchema
   #shard: ConfigShard<unknown> | undefined
 
   constructor(token?: NamedToken<any>) {
     this.token = token
     this.sources.add(this.frameworkDefaults, ConfigPriority.FRAMEWORK)
+    this.sources.add(this.schemaDefaults, ConfigPriority.SCHEMA)
     this.sources.add(this.codeValues, ConfigPriority.CODE)
+  }
+
+  /** The schema the root tree is validated against. Defaults to {@link passthroughConfigSchema}. */
+  get schema(): ConfigSchema<unknown> {
+    return this.#schema
+  }
+
+  /**
+   * Declaring the schema also publishes the defaults it carries into the `SCHEMA` band, which is what lets an
+   * application default a feature it did not write. Done on assignment rather than in a separate call so the
+   * two cannot drift apart.
+   */
+  set schema(schema: ConfigSchema<unknown>) {
+    this.#schema = schema
+    this.schemaDefaults.replace(declaredDefaults(schema) as Record<string, ConfigValue>)
   }
 
   /** Whether the configuration has been resolved. After this, changes need a refresh to take effect. */

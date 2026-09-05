@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC, token, type NamedToken } from '@caffeinejs/di'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
 
@@ -52,6 +52,16 @@ describe('base .config() builder', () => {
     const kUnwrapped = token<AppConfig>(Symbol('unwrapped'))
     // @ts-expect-error - the key names the handle, not the shape the handle projects
     createApplication().config(schema, kUnwrapped)
+  })
+
+  // A feature's namespace is in the resolved tree whether or not the application described it, so a key naming
+  // more than the schema does is accurate. This is how an application types `ctx.config.server` without
+  // redeclaring the server's shape and taking over its defaults.
+  it('accepts a key naming a wider type than the schema describes', () => {
+    const kWider = token<ConfigHandle<AppConfig & { caffeine: { name: string } }>>(Symbol('wider'))
+    const builder = createApplication().config(schema, kWider)
+
+    expectTypeOf(builder.configDefinition.token).toEqualTypeOf<NamedToken<any> | undefined>()
   })
 
   it('requires a key', () => {

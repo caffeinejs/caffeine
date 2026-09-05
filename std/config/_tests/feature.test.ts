@@ -1,5 +1,6 @@
 import { token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 
 import { $t } from '../../schema/t.js'
 import type { ConfigHandle } from '../accessor.js'
@@ -9,6 +10,7 @@ import { DEFAULT_INSTANCE, defineFeatureConfig, instanceNamespace } from '../fea
 import { featureConfigKey } from '../feature_key.js'
 import { EnvConfigProvider } from '../providers/env_provider.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
+import type { ConfigSchema } from '../schema.js'
 import { ConfigPriority } from '../sources.js'
 import type { ConfigProvider, ResolutionContext } from '../types.js'
 
@@ -302,5 +304,100 @@ describe('feature config keys', () => {
     // oxlint-disable-next-line typescript/no-misused-spread -- the handle is callable; spreading must still work
     expect({ ...config }).toEqual({ widget: { size: 3, label: 'widget' } })
     expect(JSON.parse(JSON.stringify(config))).toEqual({ widget: { size: 3, label: 'widget' } })
+  })
+})
+
+/**
+ * An application must be able to default a feature it did not write.
+ *
+ * A schema `default` cannot do that on its own: a feature writes its framework defaults as real tree values,
+ * and a schema default only fills a value that is *absent*. Lifting the schema's declared defaults into their
+ * own band is what puts the two in the same merge — the bug `examples/03-petstore` shipped with, where a
+ * declared `server.port` of 9999 never applied and the process listened on an OS-assigned port.
+ */
+describe('application schema defaults', () => {
+  const appSchema = $t.Object({
+    widget: $t.Object(
+      { size: $t.Number({ default: 9999 }), label: $t.String({ default: 'from-schema' }) },
+      { default: {} },
+    ),
+  })
+
+  function definitionWith(schema: ConfigSchema<unknown>): ConfigDefinition {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    definition.schema = schema
+    return definition
+  }
+
+  it('beats the framework default the feature registered', async () => {
+    const definition = definitionWith(appSchema)
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    await resolve(definition)
+
+    expect(slice.config.size).toBe(9999)
+    expect(slice.config.label).toBe('from-schema')
+  })
+
+  // Declaring a shape is a weaker statement than calling a method, so the builder still wins.
+  it('loses to a value the feature builder set', async () => {
+    const definition = definitionWith(appSchema)
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+      values: { size: 7 },
+    })
+
+    await resolve(definition)
+
+    expect(slice.config.size).toBe(7)
+    // Untouched by the builder, so the schema default still stands.
+    expect(slice.config.label).toBe('from-schema')
+  })
+
+  it('loses to the environment, so a deployment still overrides it', async () => {
+    const definition = definitionWith(appSchema)
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    await resolve(definition, [new EnvConfigProvider({ prefix: 'APP_', env: { APP_WIDGET__SIZE: '11' } })])
+
+    expect(slice.config.size).toBe(11)
+  })
+
+  // `Value.Default` is TypeBox's. A foreign Standard Schema exposes nothing to walk, the same limitation
+  // `secretPaths` has, so its defaults reach the root tree and go no further.
+  it('contributes nothing from a foreign Standard Schema', async () => {
+    const definition = definitionWith(z.object({ widget: z.object({ size: z.number().default(9999) }) }))
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    await resolve(definition)
+
+    expect(slice.config.size).toBe(1)
+  })
+
+  it('leaves a feature alone when the schema declares no default for it', async () => {
+    const definition = definitionWith($t.Object({ widget: $t.Object({ size: $t.Optional($t.Number()) }) }))
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    await resolve(definition)
+
+    expect(slice.config.size).toBe(1)
   })
 })

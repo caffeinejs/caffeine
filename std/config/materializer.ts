@@ -13,7 +13,7 @@ export function materialize(snapshot: ConfigSnapshot): Record<string, unknown> {
   return promoteNumericObjects(result) as Record<string, unknown>
 }
 
-function setByPath(obj: Record<string, unknown>, parts: string[], value: unknown): void {
+export function setByPath(obj: Record<string, unknown>, parts: string[], value: unknown): void {
   let node = obj
 
   for (let i = 0; i < parts.length - 1; i++) {

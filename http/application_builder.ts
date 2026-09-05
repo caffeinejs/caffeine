@@ -105,18 +105,22 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * strongly-typed `ConfigHandle<T>`. The optional `configure` callback — any shape — adds sources and context.
    * Declare it first. Runtime returns the same instance; only the declared type changes.
    *
+   * The key may name a **wider** type than the schema describes. A feature's namespace is in the resolved tree
+   * whether or not the application declared it, so naming `server` in the key's type without redeclaring its
+   * shape is accurate rather than a lie.
+   *
    * ```ts
    * const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
    *
    * createWebApplication().config(schema, kConfig, c => c.source(new EnvConfigProvider()))
    * ```
    */
-  config<S extends ConfigSchema>(
+  config<S extends ConfigSchema, T extends InferConfig<NoInfer<S>> = InferConfig<NoInfer<S>>>(
     schema: S,
-    key: NamedToken<ConfigHandle<InferConfig<NoInfer<S>>>>,
-    configure?: (c: AppConfigBuilder<InferConfig<S>>) => void,
-  ): Reconfigured<this, WebApplicationBuilder<I, REQ, A>, WebApplicationBuilder<I, REQ, A, InferConfig<S>>> {
-    this.applyConfigDefinition<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>, key, configure)
+    key: NamedToken<ConfigHandle<T>>,
+    configure?: (c: AppConfigBuilder<T>) => void,
+  ): Reconfigured<this, WebApplicationBuilder<I, REQ, A>, WebApplicationBuilder<I, REQ, A, T>> {
+    this.applyConfigDefinition<T>(schema as ConfigSchema<unknown>, key, configure)
     return this as never
   }
 

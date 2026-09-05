@@ -14,6 +14,13 @@ import type { ConfigProvider } from './types.js'
 export const ConfigPriority = {
   /** Framework defaults — `DEFAULT_SERVER_OPTIONS` and friends. Always loses. */
   FRAMEWORK: 0,
+  /**
+   * Defaults declared by the application's own schema, e.g. `$t.Number({ default: 9999 })`.
+   *
+   * Above the framework's so an application can default a feature it did not write, and below `CODE` so an
+   * explicit builder call still wins: declaring a shape is a weaker statement than calling a method.
+   */
+  SCHEMA: 25,
   /** Values set through a feature builder method, e.g. `s.port(3000)`. A default, not an override. */
   CODE: 50,
   /** The default band for `.source(...)`. Registration order breaks ties within it. */

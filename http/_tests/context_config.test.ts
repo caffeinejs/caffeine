@@ -11,7 +11,13 @@ import {
 import fastify from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import { type MiddlewareFn, Router, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import {
+  type MiddlewareFn,
+  Router,
+  createWebApplication,
+  fastifyAdapterFactory,
+  kServerContribution,
+} from '../index.js'
 
 const schema = $t.Object({
   catalog: $t.Object({ pageSize: $t.Number() }),
@@ -96,8 +102,10 @@ describe('ctx.config', () => {
     await app.ready()
 
     // No `.config()` call, so there is no application config key to resolve — and the context still reads,
-    // because it is served by the configuration the framework's own features resolved for themselves.
-    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['caffeine', 'server'] })
+    // because it is served by the configuration the framework's own features resolved for themselves. `health`
+    // is here because every slice's resolved values are placed into the root tree, not only the ones that
+    // wrote framework defaults into it.
+    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['caffeine', 'server', 'health'] })
 
     await app.close()
   })
@@ -250,6 +258,82 @@ describe('ctx.config(featureKey)', () => {
     await app.ready()
 
     expect(await (await app.fetch('/widget')).json()).toEqual({ found: false })
+
+    await app.close()
+  })
+})
+
+/**
+ * The case the whole mechanism exists for.
+ *
+ * An application that declares its own configuration used to *lose* the framework's from the same tree:
+ * validation drops every key the schema does not name, so `ctx.config.server` and `$i.value(c => c.server...)`
+ * both went missing in exactly the applications that bothered to describe their settings.
+ */
+describe('ctx.config with an application schema', () => {
+  const ownSchema = $t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) })
+
+  type FullConfig = InferSchema<typeof ownSchema> & { server: { host: string; port: number } }
+
+  // The key names the whole tree; the schema declares only what the application owns. The framework's half is
+  // in the resolved tree either way, so naming it here is accurate rather than a lie.
+  const kFull = token<ConfigHandle<FullConfig>>(Symbol('app.full'))
+
+  it('still reads a framework namespace the schema never declared', async () => {
+    const routes = new Router('/catalog')
+      .configType<FullConfig>()
+      .get('/', ctx => ({ pageSize: ctx.config.catalog.pageSize, host: ctx.config.server.host }))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+      .config(ownSchema, kFull, c => c.source(new InlineConfigProvider({ catalog: { pageSize: 25 } })))
+      .build()
+      .mount(routes)
+
+    await app.ready()
+
+    expect(await (await app.fetch('/catalog')).json()).toEqual({ pageSize: 25, host: '0.0.0.0' })
+
+    await app.close()
+  })
+
+  // The values provider is bound to the same handle, so the loss was never confined to `ctx.config`.
+  it('resolves an $i.value selector into a framework namespace', async () => {
+    const routes = new Router('/catalog')
+      .configType<FullConfig>()
+      .inject($i => ({ host: $i.value(c => c.server.host) }))
+      .get('/', (_ctx, deps) => ({ host: deps.host }))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+      .config(ownSchema, kFull, c => c.source(new InlineConfigProvider({ catalog: { pageSize: 25 } })))
+      .build()
+      .mount(routes)
+
+    await app.ready()
+
+    expect(await (await app.fetch('/catalog')).json()).toEqual({ host: '0.0.0.0' })
+
+    await app.close()
+  })
+
+  it('lets the application default a builtin feature from its own schema', async () => {
+    const withServer = $t.Object({
+      server: $t.Object(
+        { port: $t.Number({ default: 4321 }), host: $t.String({ default: '0.0.0.0' }) },
+        { default: {} },
+      ),
+    })
+    const kServer = token<ConfigHandle<InferSchema<typeof withServer>>>(Symbol('app.server'))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+      .config(withServer, kServer)
+      .build()
+
+    await app.ready()
+
+    // Read through the server's own contribution, not the root handle: the root would show 4321 either way,
+    // because the application schema declares it. What has to be true is that the value reached the *feature*,
+    // whose framework default is 0 — an OS-assigned port.
+    expect(app.contributions.get(kServerContribution).port).toBe(4321)
 
     await app.close()
   })

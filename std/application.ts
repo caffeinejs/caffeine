@@ -35,16 +35,21 @@ interface Dispatch {
   method: string | symbol
 }
 
-const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
+/** Where the framework's own block lives in the configuration tree. */
+export const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
 
-interface CaffeineConfig {
+/**
+ * The framework's own configuration. Registered by every application, so it is always in the resolved tree —
+ * which is what makes it safe for an application to name in the type of its config key.
+ */
+export interface CaffeineConfig {
   name: string
   profiles: string[]
 }
 
-const DEFAULT_CAFFEINE_CONFIG: CaffeineConfig = { name: '', profiles: [] }
+export const DEFAULT_CAFFEINE_CONFIG: CaffeineConfig = { name: '', profiles: [] }
 
-const caffeineConfigSchema = $t.Object({
+export const caffeineConfigSchema = $t.Object({
   name: $t.String({ default: DEFAULT_CAFFEINE_CONFIG.name }),
   profiles: $t.List($t.String(), { default: DEFAULT_CAFFEINE_CONFIG.profiles }),
 })

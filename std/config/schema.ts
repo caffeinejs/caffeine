@@ -1,7 +1,8 @@
 import type { TSchema } from '@sinclair/typebox'
+import { Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
-import type { AnySchema, InferSchema } from '../schema/schema.js'
+import { isTypeBoxSchema, type AnySchema, type InferSchema } from '../schema/schema.js'
 import { validateSchema } from '../schema/validate.js'
 import { ErrConfigValidation } from './errors.js'
 
@@ -32,6 +33,29 @@ export const passthroughConfigSchema: StandardSchemaV1<unknown, unknown> = {
     vendor: 'caffeine',
     validate: value => ({ value }),
   },
+}
+
+/**
+ * The defaults a schema declares, as a tree, for registration as a configuration source.
+ *
+ * A schema `default` only fills a value that is **absent**, and a feature writes its own defaults into the tree
+ * as real values — so `$t.Number({ default: 9999 })` on `server.port` would otherwise never be reached. Lifting
+ * the declared defaults into their own band puts them in the same merge as everything else, where they beat the
+ * framework's and lose to a builder call.
+ *
+ * Only the `$t` dialect is introspected. A foreign Standard Schema is validated by its own library and exposes
+ * nothing to walk, so its defaults reach the root tree the way they always did and no further — the same
+ * limitation {@link secretPaths} has.
+ */
+export function declaredDefaults(schema: ConfigSchema<unknown>): Record<string, unknown> {
+  if (!isTypeBoxSchema(schema)) {
+    return {}
+  }
+
+  // `Value.Default` writes into what it is given, so it gets a fresh object rather than anything shared.
+  const defaults = Value.Default(schema, {})
+
+  return defaults !== null && typeof defaults === 'object' ? (defaults as Record<string, unknown>) : {}
 }
 
 /**
