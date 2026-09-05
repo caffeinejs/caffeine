@@ -42,13 +42,19 @@ service, `@kitajs/ts-html-plugin` does not run; unescaped `{userInput}` is not r
 Use the plugin's `xss-scan` CLI for that check, or keep the TypeScript 6 language service in the editor
 until a TypeScript 7.1 API exists that the plugin can use.
 
-## `autoDoctype` reaches a response through Fastify; Content-Type does not
+## `autoDoctype` reaches a response through the config slice; Content-Type does not
 
-`Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLExtension` decorates
-the Fastify instance under the `kHTMLDefaults` symbol and `respond` reads `autoDoctype` back through
-`(ctx as FastifyContext).fst` — the escape hatch `http/context.ts` documents. When the application never
-installed `HTMLExt` there is no decoration and `HTML_DEFAULTS` applies, which is what keeps `HTML(...)`
-working with no setup. Do not route this through a config slice or a container key.
+`Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLBuilder` registers a
+slice at `html.*` under the `kHTMLConfig` feature key, and `respond` reads it with
+`ctx.config(kHTMLConfig)`. The key is what makes that possible — the path is relocatable and `HTML(...)` is
+called from application code that does not know the application's config type, so neither the namespace nor
+`C` is available to it.
+
+When the application never installed `HTMLExt` no slice is registered, the key reads `undefined`, and
+`HTML_DEFAULTS` applies — which is what keeps `HTML(...)` working with no setup.
+
+There is no `HTMLExtension` and no Fastify decoration. Do not reintroduce either; the package registers no
+Fastify plugin and does not appear in `printPlugins()`.
 
 Content-Type has no app-level default and no per-call override — `HTMLOptions` carries no `contentType`
 field. `respond` sets the hardcoded `text/html; charset=utf-8` only when the reply carries no Content-Type

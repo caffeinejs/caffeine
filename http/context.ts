@@ -1,7 +1,7 @@
 import { IncomingMessage } from 'http'
 
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
-import type { ConfigAccessors, Configuration } from '@caffeinejs/std/config'
+import type { ConfigHandle, Configuration } from '@caffeinejs/std/config'
 import { CookieSerializeOptions } from '@fastify/cookie'
 import {
   FastifyRequest,
@@ -114,9 +114,11 @@ export interface Context<
    * The application configuration, as a snapshot: one object for the life of this context, taken the first time
    * it is read. A refresh that lands mid-request is not observed once the snapshot has been taken.
    *
-   * `C` is declared where the routes are, with `.configType<C>()`.
+   * `C` is declared where the routes are, with `.configType<C>()`. Calling it reads a feature's own
+   * configuration instead — `ctx.config(kHTMLConfig)` — which is how a package with no knowledge of `C` reaches
+   * the settings it registered.
    */
-  get config(): ConfigAccessors<C>
+  get config(): ConfigHandle<C>
 
   get statusCode(): number
 
@@ -201,7 +203,7 @@ export class FastifyContext<
   #req!: FastifyContextRequest<SCHEMA>
   #fst!: Fst<REPLY>
   #state!: ContextState<V>
-  #config?: ConfigAccessors<C>
+  #config?: ConfigHandle<C>
   #fastifyRequest: FastifyRequest
   #reply: REPLY
   #configuration: Configuration<unknown>
@@ -231,8 +233,8 @@ export class FastifyContext<
    * The tree is replaced wholesale by a refresh rather than mutated, so the object handed back keeps the values
    * it had when it was taken — a refresh landing later in the same request is not observed here.
    */
-  get config(): ConfigAccessors<C> {
-    return (this.#config ??= this.#configuration.snapshot() as ConfigAccessors<C>)
+  get config(): ConfigHandle<C> {
+    return (this.#config ??= this.#configuration.snapshotHandle as ConfigHandle<C>)
   }
 
   get user(): Principal {

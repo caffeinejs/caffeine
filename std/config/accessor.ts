@@ -1,4 +1,5 @@
 import { ErrConfig } from './errors.js'
+import type { FeatureConfigKey } from './feature_key.js'
 
 /**
  * The read-only projection of a config type.
@@ -20,7 +21,20 @@ type ConfigValueOf<V> = V extends readonly (infer U)[]
       ? ConfigAccessors<V>
       : V
 
-export type ConfigHandle<T> = ConfigAccessors<T>
+/** Answers a feature key with that feature's configuration, or `undefined` when nothing registered it. */
+export type FeatureConfigLookup = (key: symbol) => unknown
+
+/**
+ * The root of a config tree: the application's own shape, plus the call that reads a feature's configuration
+ * by {@link FeatureConfigKey}.
+ *
+ * A call rather than a member, because every member name is one an application could have declared in its own
+ * configuration — the collision {@link Configuration.snapshot} is deliberately kept off the tree to avoid. Only
+ * the root is callable; a nested node is a plain {@link ConfigAccessors} projection.
+ */
+export type ConfigHandle<T> = ConfigAccessors<T> & {
+  <F>(key: FeatureConfigKey<F>): F | undefined
+}
 
 /**
  * A live view of a validated config tree.
@@ -33,12 +47,19 @@ export type ConfigHandle<T> = ConfigAccessors<T>
  * `revision` is what makes the memo sound: it changes only when a refresh actually re-resolved, so a refresh
  * that found nothing to reload does not even invalidate the cache. Omitted, the memo is disabled and every
  * read goes back to `source` — which is what a caller swapping the backing object by hand needs.
+ *
+ * `features` answers a {@link FeatureConfigKey} passed to the handle itself. Only the root node takes one, so
+ * only the root is callable.
  */
-export function createLiveAccessors<T>(source: () => T, revision?: () => number): ConfigHandle<T> {
-  return buildNode(source, revision) as ConfigHandle<T>
+export function createLiveAccessors<T>(
+  source: () => T,
+  revision?: () => number,
+  features?: FeatureConfigLookup,
+): ConfigHandle<T> {
+  return buildNode(source, revision, features) as ConfigHandle<T>
 }
 
-function buildNode<T>(source: () => T, revision: (() => number) | undefined): unknown {
+function buildNode<T>(source: () => T, revision: (() => number) | undefined, features?: FeatureConfigLookup): unknown {
   const children = new Map<string, unknown>()
   let stamp: number | undefined
   let target: unknown
@@ -82,9 +103,28 @@ function buildNode<T>(source: () => T, revision: (() => number) | undefined): un
     return node !== null && typeof node === 'object' ? Object.keys(node) : []
   }
 
-  return new Proxy({} as object, {
+  // An arrow function where the node has to answer a feature key, so the handle can be called. It must be an
+  // arrow: a function *declaration* carries a non-configurable own `prototype`, which `ownKeys` would then be
+  // obliged to report, and the tree's own keys are the only ones that may appear there. `length` and `name`
+  // are configurable, so leaving them out is allowed.
+  const carrier: object = features === undefined ? {} : () => undefined
+
+  return new Proxy(carrier, {
+    apply(_t, _this, args: unknown[]) {
+      return features?.(args[0] as symbol)
+    },
     get(_t, prop) {
-      return typeof prop === 'string' ? read(prop) : undefined
+      if (typeof prop !== 'string') {
+        return undefined
+      }
+
+      // A callable target is a function to `JSON.stringify`, which skips it — so the root would serialize to
+      // nothing without this. Only when the configuration does not declare `toJSON` itself.
+      if (features !== undefined && prop === 'toJSON' && !keys().includes(prop)) {
+        return () => resolve()
+      }
+
+      return read(prop)
     },
     set(_t, prop) {
       throw new ErrConfig(

@@ -1,8 +1,10 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { type InferSchema, $t } from '@caffeinejs/std'
+import { type InferSchema, type Service, type ServiceBeforeBootstrapIn, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   InlineConfigProvider,
+  defineFeatureConfig,
+  featureConfigKey,
   type ConfigHandle,
   type ConfigProvider,
 } from '@caffeinejs/std/config'
@@ -167,5 +169,88 @@ describe('ctx.config typing', () => {
         expectTypeOf(deps.other).toEqualTypeOf<string>()
         return null
       })
+  })
+})
+
+/**
+ * What a package with no knowledge of the application reads its own settings with.
+ *
+ * `.configType<C>()` names the *application's* shape, which a package cannot know, and the namespace is
+ * relocatable, so neither is an address a package can use. The key is, and the context is where it is answered.
+ */
+describe('ctx.config(featureKey)', () => {
+  interface WidgetConfig {
+    size: number
+  }
+
+  const widgetSchema = $t.Object({ size: $t.Number({ default: 1 }) })
+  const kWidget = featureConfigKey<WidgetConfig>('widget')
+
+  /** A feature registering its slice under a key, the way a first-party package's builder does. */
+  class WidgetService implements Service {
+    constructor(private readonly at?: (c: never) => unknown) {}
+
+    get name(): string {
+      return 'widget'
+    }
+
+    beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
+      defineFeatureConfig<WidgetConfig>(kit.config, {
+        namespace: ['widget'],
+        selector: this.at,
+        key: kWidget,
+        schema: widgetSchema,
+        values: { size: 7 },
+      })
+    }
+
+    bootstrap(): Promise<void> {
+      return Promise.resolve()
+    }
+  }
+
+  it('hands a package its own configuration, whatever the application declared', async () => {
+    // Note the router declares no config type at all: reading by key does not depend on one.
+    const routes = new Router('/widget').get('/', ctx => ({ size: ctx.config(kWidget)?.size }))
+
+    const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+    builder.addService(new WidgetService())
+    const app = builder.build().mount(routes)
+
+    await app.ready()
+
+    expect(await (await app.fetch('/widget')).json()).toEqual({ size: 7 })
+
+    await app.close()
+  })
+
+  it('finds the slice after the feature relocated it', async () => {
+    const routes = new Router('/widget').get('/', ctx => ({ size: ctx.config(kWidget)?.size }))
+
+    const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+    builder.addService(new WidgetService(c => (c as { app: { widget: unknown } }).app.widget))
+    const app = builder.build().mount(routes)
+
+    await app.ready()
+
+    expect(await (await app.fetch('/widget')).json()).toEqual({ size: 7 })
+
+    await app.close()
+  })
+
+  // A feature the application never installed is absent, not an error — which is what lets a package ship a
+  // fallback rather than requiring the feature to be installed before its helpers can be called.
+  it('reads undefined when nothing registered the key', async () => {
+    const routes = new Router('/widget').get('/', ctx => ({ found: ctx.config(kWidget) !== undefined }))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+      .build()
+      .mount(routes)
+
+    await app.ready()
+
+    expect(await (await app.fetch('/widget')).json()).toEqual({ found: false })
+
+    await app.close()
   })
 })

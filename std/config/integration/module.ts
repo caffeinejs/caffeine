@@ -5,7 +5,7 @@ import type { BootstrapOptions } from '../bootstrap.js'
 import { Configuration } from '../configuration.js'
 import type { ConfigDefinition } from '../definition.js'
 import type { ConfigSchema } from '../schema.js'
-import type { ConfigSliceSpec } from '../slice.js'
+import type { ConfigSlice, ConfigSliceSpec } from '../slice.js'
 import type { ConfigSources } from '../sources.js'
 import type { ConfigProvider, ResolutionContext } from '../types.js'
 import { ConfigShard } from './shard.js'
@@ -21,6 +21,8 @@ export interface ConfigModuleOptions<T> {
   /** Convenience for a fixed set of sources. */
   providers?: ConfigProvider[]
   slices?: readonly ConfigSliceSpec[]
+  /** The slices published under a feature key, which the resolved handle answers a key with. */
+  features?: ReadonlyMap<symbol, ConfigSlice<unknown>>
   context?: ResolutionContext
   failFast?: boolean
   /** Paths the diagnostics must redact, on top of whatever the root schema marks with `$t.Secret`. */
@@ -51,6 +53,7 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
           providers: (options as ConfigModuleOptions<T>).providers,
           schema: (options as ConfigModuleOptions<T>).schema,
           slices: (options as ConfigModuleOptions<T>).slices,
+          features: (options as ConfigModuleOptions<T>).features,
           context: (options as ConfigModuleOptions<T>).context,
           failFast: (options as ConfigModuleOptions<T>).failFast,
           secrets: (options as ConfigModuleOptions<T>).secrets,
@@ -98,6 +101,9 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
           new Configuration<T>({
             get handle() {
               return shard.handle
+            },
+            get snapshotHandle() {
+              return shard.snapshotHandle
             },
             get validated() {
               return shard.validated

@@ -9,8 +9,8 @@ import { materialize, readByParts } from './materializer.js'
 import type { ConfigSchema, InferConfig } from './schema.js'
 import { validateConfig } from './schema.js'
 import { secretPaths } from './secrets.js'
-import type { ConfigSliceSpec } from './slice.js'
-import { freezeDeep } from './slice.js'
+import type { ConfigSlice, ConfigSliceSpec } from './slice.js'
+import { featureLookup, freezeDeep } from './slice.js'
 import { ConfigSources } from './sources.js'
 import type { ConfigProvider, ConfigSnapshot, ResolutionContext } from './types.js'
 
@@ -29,6 +29,8 @@ export interface BootstrapOptions<T> {
    * module passes the set the feature slices contributed as they registered.
    */
   secrets?: ReadonlySet<string>
+  /** The slices published under a feature key, which the resulting handle answers a key with. */
+  features?: ReadonlyMap<symbol, ConfigSlice<unknown>>
   /**
    * Reports a refresh that failed for one feature while the rest succeeded. Such a failure is deliberately not
    * thrown — the application keeps running on the last good values — so without this it would be silent unless
@@ -77,7 +79,11 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
   // Frozen once, here: it is what the live handle reads through to, so freezing makes the read-only typing
   // true at runtime and lets the handle hand back arrays directly instead of copying them on every read.
   const validated = freezeDeep(validateConfig(options.schema, materialized))
-  const config = createLiveAccessors(() => validated)
+  const config = createLiveAccessors(
+    () => validated,
+    undefined,
+    featureLookup(options.features, slice => slice.config),
+  )
 
   const failures = publishSlices(options.slices, materialized)
   // The root schema is walked here rather than by the caller: an application that declared its own secrets in

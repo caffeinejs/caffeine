@@ -2,9 +2,11 @@ import { token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
+import type { ConfigHandle } from '../accessor.js'
 import { bootstrapConfig } from '../bootstrap.js'
 import { ConfigDefinition } from '../definition.js'
 import { DEFAULT_INSTANCE, defineFeatureConfig, instanceNamespace } from '../feature.js'
+import { featureConfigKey } from '../feature_key.js'
 import { EnvConfigProvider } from '../providers/env_provider.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { ConfigPriority } from '../sources.js'
@@ -37,6 +39,24 @@ async function resolve(definition: ConfigDefinition, extra: readonly ConfigProvi
     slices: definition.slices,
     context: ctx,
   })
+}
+
+/** {@link resolve}, handing back the config handle — what a reader holding no builder actually has. */
+async function resolveHandle(
+  definition: ConfigDefinition,
+  extra: readonly ConfigProvider[] = [],
+): Promise<ConfigHandle<unknown>> {
+  definition.sources.addAll(extra, ConfigPriority.ENV)
+
+  const result = await bootstrapConfig({
+    sources: definition.sources,
+    schema: definition.schema,
+    slices: definition.slices,
+    features: definition.features,
+    context: { app: 'test', profiles: ['default'] },
+  })
+
+  return result.config
 }
 
 describe('instanceNamespace', () => {
@@ -182,5 +202,105 @@ describe('defineFeatureConfig', () => {
     await resolve(definition, [new InlineConfigProvider({ widget: { size: 99 } })])
 
     expect(definition.slices).toHaveLength(0)
+  })
+})
+
+/**
+ * A key exists so that code holding no builder can read a feature's configuration — a `Responder`, a
+ * middleware, anything handed only a request context. The tests below are about that reader's guarantees, not
+ * about the tree, so each one asks the *handle* rather than the slice.
+ */
+describe('feature config keys', () => {
+  const kWidget = featureConfigKey<WidgetConfig>('widget')
+
+  it('answers the key with the feature configuration', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      key: kWidget,
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+      values: { size: 7 },
+    })
+
+    const config = await resolveHandle(definition)
+
+    expect(config(kWidget)).toEqual({ size: 7, label: 'widget' })
+  })
+
+  // The whole reason a key beats a namespace: a reader cannot hard-code a path the feature is free to move.
+  it('finds a slice the application relocated', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      selector: (c: never) => (c as { app: { widget: unknown } }).app.widget,
+      key: kWidget,
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    const config = await resolveHandle(definition, [new InlineConfigProvider({ app: { widget: { size: 42 } } })])
+
+    expect(config(kWidget)).toEqual({ size: 42, label: 'widget' })
+    // Nothing lives at the default path any more, so a reader that had gone looking there would find nothing.
+    expect((config as { widget?: unknown }).widget).toBeUndefined()
+  })
+
+  // A feature the application never installed is absent, not broken — which is what lets a package ship a
+  // fallback (`HTML(...)` renders with its own defaults) instead of requiring the feature to be installed.
+  it('answers undefined for a key nothing registered', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+
+    const config = await resolveHandle(definition)
+
+    expect(config(kWidget)).toBeUndefined()
+  })
+
+  it('leaves a slice registered without a key unreachable by any key', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    const config = await resolveHandle(definition)
+
+    expect(definition.slices).toHaveLength(1)
+    expect(config(kWidget)).toBeUndefined()
+  })
+
+  // Two slices under one key would make the answer depend on install order. Refusing is also what tells a
+  // multi-instance feature that one key cannot address all of its instances.
+  it('refuses a second slice under the same key', () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const register = (namespace: readonly string[]): void => {
+      defineFeatureConfig<WidgetConfig>(definition, { namespace, key: kWidget, schema: widgetSchema })
+    }
+
+    register(instanceNamespace(['widget']))
+
+    expect(() => {
+      register(instanceNamespace(['widget'], 'orders'))
+    }).toThrow(expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_FEATURE_CONFLICT' }))
+  })
+
+  // The handle stays an ordinary config tree: being callable must not make it look like a function to anything
+  // that walks or serializes it.
+  it('reads as a plain tree despite being callable', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    defineFeatureConfig<WidgetConfig>(definition, {
+      namespace: ['widget'],
+      key: kWidget,
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    const config = await resolveHandle(definition, [new InlineConfigProvider({ widget: { size: 3 } })])
+
+    expect(Object.keys(config)).toEqual(['widget'])
+    // oxlint-disable-next-line typescript/no-misused-spread -- the handle is callable; spreading must still work
+    expect({ ...config }).toEqual({ widget: { size: 3, label: 'widget' } })
+    expect(JSON.parse(JSON.stringify(config))).toEqual({ widget: { size: 3, label: 'widget' } })
   })
 })

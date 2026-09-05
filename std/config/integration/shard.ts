@@ -9,6 +9,7 @@ import { createConfigDiagnostics } from '../diagnostics.js'
 import { ErrConfigSlices, type ConfigSliceFailure } from '../errors.js'
 import type { ConfigChangeListener } from '../notifier.js'
 import { ConfigNotifier } from '../notifier.js'
+import { featureLookup } from '../slice.js'
 import type { ConfigProvider, ConfigSnapshot } from '../types.js'
 
 export class ConfigShard<T> implements SelfRefreshable {
@@ -19,6 +20,8 @@ export class ConfigShard<T> implements SelfRefreshable {
   #revision = 0
   #stamps: ReadonlyMap<string, unknown>
   #sources: number
+  #snapshotHandle: ConfigHandle<T> | undefined
+  #snapshotStamp: number | undefined
   readonly #options: BootstrapOptions<T>
   readonly #notifier: ConfigNotifier<T>
   readonly handle: ConfigHandle<T>
@@ -50,6 +53,7 @@ export class ConfigShard<T> implements SelfRefreshable {
     this.handle = createLiveAccessors(
       () => this.#validated,
       () => this.#revision,
+      featureLookup(options.features, slice => slice.config),
     )
     this.#notifier = new ConfigNotifier<T>(
       () => 'the application configuration',
@@ -72,6 +76,29 @@ export class ConfigShard<T> implements SelfRefreshable {
   /** The validated tree as of now — deep-frozen, and replaced wholesale rather than mutated by a refresh. */
   get validated(): T {
     return this.#validated
+  }
+
+  /**
+   * A handle over the tree as it stands, fixed: unlike {@link handle}, a later refresh is not observed through
+   * it. What a request-scoped read is served from, so a refresh landing mid-request cannot change the answers a
+   * request already started with.
+   *
+   * Built once per revision and shared by every reader, rather than per read — the tree it closes over is
+   * replaced wholesale, so one handle per revision is exactly as fixed as one per reader.
+   */
+  get snapshotHandle(): ConfigHandle<T> {
+    if (this.#snapshotStamp !== this.#revision || this.#snapshotHandle === undefined) {
+      const validated = this.#validated
+
+      this.#snapshotHandle = createLiveAccessors(
+        () => validated,
+        undefined,
+        featureLookup(this.#options.features, slice => slice.snapshot()),
+      )
+      this.#snapshotStamp = this.#revision
+    }
+
+    return this.#snapshotHandle
   }
 
   /** Advances only when a refresh actually re-resolved. A skipped refresh leaves it alone. */

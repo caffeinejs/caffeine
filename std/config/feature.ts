@@ -1,4 +1,5 @@
 import type { ConfigDefinition } from './definition.js'
+import type { FeatureConfigKey } from './feature_key.js'
 import type { ConfigSchema } from './schema.js'
 import { selectorPath } from './selector_path.js'
 import type { ConfigSlice } from './slice.js'
@@ -36,6 +37,11 @@ export interface FeatureConfigSpec<T> {
   namespace: readonly string[]
   /** The selector recorded by the builder's `.config(...)`, when it was called. Wins over `namespace`. */
   selector?: (c: never) => unknown
+  /**
+   * Publishes this slice under a key, so code holding no builder can read it — `config(kHTMLConfig)` on the
+   * configuration handle. Omit it for a feature whose settings nothing outside its own builder reads.
+   */
+  key?: FeatureConfigKey<T>
   schema: ConfigSchema<T>
   /** `FRAMEWORK` band — the bottom of the chain. Everything overrides these. */
   defaults?: Record<string, unknown>
@@ -73,5 +79,11 @@ export function defineFeatureConfig<T>(definition: ConfigDefinition, spec: Featu
     }
   }
 
-  return definition.slice(parts, spec.schema)
+  const slice = definition.slice(parts, spec.schema)
+
+  if (spec.key !== undefined) {
+    definition.publishFeature(spec.key, slice)
+  }
+
+  return slice
 }

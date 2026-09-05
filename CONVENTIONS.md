@@ -150,13 +150,14 @@ A package’s `index.ts` barrel aggregating that package’s **own** modules is 
 
 Where a value goes depends on who reads it, not on what is convenient:
 
-| The value is…                                                 | Goes to                               | Read with                                   |
-| ------------------------------------------------------------- | ------------------------------------- | ------------------------------------------- |
-| a setting a user tunes from the environment or a file         | a config slice, in `beforeBootstrap`  | `defineFeatureConfig(...)` → `slice.config` |
-| something user code injects                                   | a container binding, in `bootstrap`   | `container.get` / constructor injection     |
-| one of many providers a single consumer collects              | a container binding with `.extends()` | `container.getManyOptional(Base)`           |
-| an extension's own data                                       | that extension's **constructor**      | the field                                   |
-| a framework value the application needs once everything is up | a contribution, in `bootstrap`        | `app.contributions.get(key)`                |
+| The value is…                                                 | Goes to                                | Read with                                   |
+| ------------------------------------------------------------- | -------------------------------------- | ------------------------------------------- |
+| a setting a user tunes from the environment or a file         | a config slice, in `beforeBootstrap`   | `defineFeatureConfig(...)` → `slice.config` |
+| a setting code outside the feature's builder must read        | that slice, given a `featureConfigKey` | `config(key)` on the config handle          |
+| something user code injects                                   | a container binding, in `bootstrap`    | `container.get` / constructor injection     |
+| one of many providers a single consumer collects              | a container binding with `.extends()`  | `container.getManyOptional(Base)`           |
+| an extension's own data                                       | that extension's **constructor**       | the field                                   |
+| a framework value the application needs once everything is up | a contribution, in `bootstrap`         | `app.contributions.get(key)`                |
 
 Do not route an extension's own configuration through a container key it reads back at server setup: the
 builder is holding the value when it constructs the extension. `bind(X).toValue(new X(data)).extends()`.

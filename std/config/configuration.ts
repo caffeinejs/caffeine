@@ -5,6 +5,7 @@ import type { ConfigChangeListener } from './notifier.js'
 /** What {@link Configuration} needs from the resolved configuration, without depending on the shard directly. */
 export interface ConfigurationSource<T> {
   readonly handle: ConfigHandle<T>
+  readonly snapshotHandle: ConfigHandle<T>
   readonly validated: T
   readonly revision: number
   readonly diagnostics: ConfigDiagnostics
@@ -37,11 +38,21 @@ export class Configuration<T> {
   }
 
   /**
+   * The same config object as {@link config}, fixed: a later refresh is not observed through it.
+   *
+   * What a request-scoped read is served from — the HTTP context latches one on first read, so a refresh
+   * landing mid-request cannot change the answers a request already started with. It is one handle per
+   * revision, shared, so taking one costs nothing.
+   */
+  get snapshotHandle(): ConfigHandle<T> {
+    return this.#source.snapshotHandle
+  }
+
+  /**
    * The validated tree as it stands right now: plain, deep-frozen, and detached — a later refresh replaces the
    * tree rather than mutating it, so what this returns keeps the values it had when it was taken.
    *
-   * Nothing in the framework uses it. It is here for a caller that explicitly wants a fixed view — the
-   * primitive a request-scoped snapshot is built from.
+   * The plain tree, as opposed to {@link snapshotHandle}: no feature-key lookup, and nothing to call.
    */
   snapshot(): T {
     return this.#source.validated

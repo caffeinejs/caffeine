@@ -1,3 +1,4 @@
+import { token } from '@caffeinejs/di'
 import {
   $p,
   Args,
@@ -11,11 +12,16 @@ import {
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
-import type { ServiceAPI } from '@caffeinejs/std'
+import { $t, type InferSchema, type ServiceAPI } from '@caffeinejs/std'
+import { Configuration, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { HTML, HTMLBuilder, HTMLExt } from '../index.js'
+import { HTML, HTMLBuilder, HTMLExt, kHTMLConfig } from '../index.js'
+
+const schema = $t.Object({ html: $t.Object({ autoDoctype: $t.Boolean() }) })
+
+const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
 function Document({ title }: { title: string }) {
   return (
@@ -128,8 +134,8 @@ describe('HTML', () => {
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
   })
 
-  // Rendering must not require any application wiring: HTML() falls back to HTML_DEFAULTS when no
-  // HTMLExtension decorated the server. An application that only ever renders needs no plugin at all.
+  // Rendering must not require any application wiring: with no slice registered the feature key reads
+  // undefined and HTML_DEFAULTS applies. An application that only ever renders installs nothing.
   it('renders in an application that never installed HTMLExt', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).build()
     await app.ready()
@@ -179,9 +185,9 @@ describe('HTML', () => {
     })
   })
 
-  // The builder's autoDoctype setting only matters if it survives the trip through HTMLExtension's
-  // Fastify decoration and back out through ctx.fst in respond() — the only route a Responder has to
-  // app state. Content-Type has no app-level default any more, so it stays the hardcoded one here.
+  // The builder's autoDoctype setting only matters if it survives the trip through the config slice and
+  // back out through ctx.config(kHTMLConfig) in respond() — the only route a Responder has to app state.
+  // Content-Type has no app-level default any more, so it stays the hardcoded one here.
   it('applies the application defaults', async () => {
     const app = htmlApp(h => h.autoDoctype(false))
     await app.ready()
@@ -190,6 +196,32 @@ describe('HTML', () => {
 
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
     expect(await res.text()).toBe('<html><body><h1>hello</h1></body></html>')
+  })
+
+  // What routing the setting through the tree buys, and the reason the Fastify decoration was not enough:
+  // `.autoDoctype(true)` is a *default* in the CODE band, so a deployment can turn it off without a rebuild.
+  it('lets a configuration source override what the builder set', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(HTMLExt, h => h.autoDoctype(true))
+      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
+      .build()
+
+    await app.ready()
+
+    expect(await (await app.fetch('/html/document')).text()).toBe('<html><body><h1>hello</h1></body></html>')
+  })
+
+  // The key is the contract, not the namespace: a feature that relocated its settings must still be found by
+  // whatever reads it, because `HTML(...)` is called from code that cannot know where the slice ended up.
+  it('reads the slice through the key, not the namespace', async () => {
+    const app = htmlApp(h => h.autoDoctype(false))
+    await app.ready()
+
+    const config = app.container.get(Configuration)
+
+    expect(config.snapshotHandle(kHTMLConfig)).toEqual({ autoDoctype: false })
+
+    await app.close()
   })
 
   // One route answering differently must not require reconfiguring the application.

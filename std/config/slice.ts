@@ -1,3 +1,4 @@
+import type { FeatureConfigLookup } from './accessor.js'
 import { ErrConfig } from './errors.js'
 import type { ConfigChangeListener } from './notifier.js'
 import { ConfigNotifier } from './notifier.js'
@@ -194,6 +195,30 @@ export class ConfigSlice<T> {
     }
 
     return facade as T
+  }
+}
+
+/**
+ * Turns the feature registry into what a config handle answers a {@link FeatureConfigKey} with.
+ *
+ * `read` is what makes the same registry serve both handles: the live one hands back {@link ConfigSlice.config},
+ * the per-request snapshot {@link ConfigSlice.snapshot}, so a feature's configuration follows the same rule as
+ * the tree it was read through.
+ *
+ * A key nothing registered reads `undefined` — a feature the application never installed is absent, not an
+ * error. A slice that failed to resolve still throws, because that is a broken feature rather than a missing one.
+ */
+export function featureLookup(
+  features: ReadonlyMap<symbol, ConfigSlice<unknown>> | undefined,
+  read: (slice: ConfigSlice<unknown>) => unknown,
+): FeatureConfigLookup | undefined {
+  if (features === undefined) {
+    return undefined
+  }
+
+  return key => {
+    const slice = features.get(key)
+    return slice === undefined ? undefined : read(slice)
   }
 }
 

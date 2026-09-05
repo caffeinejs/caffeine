@@ -56,6 +56,7 @@ Where a value goes depends on who reads it and how long it lives:
 | the authenticated principal                               | `ctx.user`                                  | `ctx.user`                  |
 | what the route declared                                   | the route config                            | `ctx.routeConfig`           |
 | the application configuration                             | a snapshot on the context                   | `ctx.config`                |
+| another feature's own configuration                       | that feature's keyed config slice           | `ctx.config(key)`           |
 
 `ctx.state` is a `Map` on the context, allocated on first touch. It does not participate in DI: no binding, no
 destroy callback, no scope. What it may hold is named by the `V` type parameter a router declares with
@@ -66,6 +67,11 @@ compiler inferring the rest and would drop the group's path.
 mid-request is not observed by a request already under way. Its type is named by `.configType<C>()` on the
 router — named apart from `.config()`, which writes the adapter's per-route configuration. The values come from
 the application's configuration whether or not a router declared the type.
+
+Calling it — `ctx.config(kHTMLConfig)` — reads a feature's own slice instead, by `featureConfigKey`. That is
+the path for a package, which knows neither `C` nor where the slice ended up, since `.config(selector)` makes
+the namespace relocatable. A key nothing registered reads `undefined`, so a package can fall back to its own
+defaults rather than require the feature to be installed.
 
 `ctx.state` is application space. A first-party package does not write to it: a framework value gets a dedicated
 member, as authentication does with `ctx.user`, or goes on the route config. One flat key namespace shared by an

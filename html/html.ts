@@ -1,6 +1,6 @@
-import { Responder, type ActionResult, type Context, type FastifyContext } from '@caffeinejs/http'
+import { Responder, type ActionResult, type Context } from '@caffeinejs/http'
 
-import { HTML_DEFAULTS, kHTMLDefaults, type HTMLDefaults } from './extension.js'
+import { HTML_DEFAULTS, kHTMLConfig, type HTMLDefaults } from './config.js'
 
 /**
  * What `@kitajs/html` evaluates a JSX expression to: the markup itself, or a promise of it when any
@@ -38,9 +38,7 @@ function applyDoctype(markup: string, autoDoctype: boolean): string {
 }
 
 function defaultsOf(ctx: Context): HTMLDefaults {
-  const server = (ctx as FastifyContext).fst.request.server as unknown as Partial<Record<symbol, HTMLDefaults>>
-
-  return server[kHTMLDefaults] ?? HTML_DEFAULTS
+  return ctx.config(kHTMLConfig) ?? HTML_DEFAULTS
 }
 
 /**

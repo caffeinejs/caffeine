@@ -46,10 +46,11 @@ describe('base .config() builder', () => {
     // @ts-expect-error - key and schema must agree
     createApplication().config(schema, kWrongShape)
 
-    // Naming the config type instead of the handle is *not* rejected: the token brand relates the two
-    // structurally, and the handle only adds `readonly`. Both keys resolve the same object, so this is a
-    // laxness rather than a hole — but it means the guarantee here is "the shape matches", nothing more.
+    // Naming the config type instead of the handle is rejected too. The handle is not merely the shape with
+    // `readonly` added — it can be *called* with a feature key — so the bare shape no longer describes what
+    // gets bound, and the token brand stops relating the two.
     const kUnwrapped = token<AppConfig>(Symbol('unwrapped'))
+    // @ts-expect-error - the key names the handle, not the shape the handle projects
     createApplication().config(schema, kUnwrapped)
   })
 
