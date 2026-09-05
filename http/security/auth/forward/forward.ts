@@ -22,8 +22,8 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
     return this.#selectScheme(ctx).then(handler => handler.authenticate(ctx))
   }
 
-  challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
-    return this.#selectScheme(ctx).then(handler => handler.challenge(ctx, properties))
+  challenge(ctx: Context, properties?: AuthenticationProperties, previous?: AuthenticateResult): Promise<void> {
+    return this.#selectScheme(ctx).then(handler => handler.challenge(ctx, properties, previous))
   }
 
   forbid(ctx: Context, properties?: AuthenticationProperties): Promise<void> {

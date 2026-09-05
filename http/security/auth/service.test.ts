@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../context.js'
 import { Claim, Identity, Principal } from '../index.js'
@@ -8,7 +8,13 @@ import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
 import { AuthenticateResult, AuthenticationTicket } from './ticket.js'
 
-const ctx = {} as unknown as Context
+// A fresh one per test: the per-request authentication record lives on the context now, so a context
+// shared between tests would carry one test's memoised result into the next.
+let ctx: Context
+
+beforeEach(() => {
+  ctx = {} as unknown as Context
+})
 
 function makeProvider(
   handlers: Record<string, AuthenticationHandler>,
@@ -119,6 +125,96 @@ describe('AuthenticationCoordinator', () => {
     })
   })
 
+  describe('the per-request record', () => {
+    it('runs a scheme once per request however many times it is asked', async () => {
+      // A request authenticates repeatedly by design — the default scheme at the server hook, the named ones
+      // at the route, and again from a handler holding this service. Running the scheme each time re-runs
+      // whatever it does while reading the credential, and the cookie scheme spends a single-use token there.
+      const handler = makeHandler(AuthenticateResult.success(new AuthenticationTicket(makePrincipal(), 'Bearer')))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
+
+      const first = coordinator.authenticate(ctx, 'Bearer')
+      const second = coordinator.authenticate(ctx, 'Bearer')
+
+      expect(second).toBe(first)
+      await expect(second).resolves.toBe(await first)
+      expect(handler.authenticate).toHaveBeenCalledTimes(1)
+    })
+
+    it('coalesces callers that ask while the scheme is still verifying', async () => {
+      let release!: (result: AuthenticateResult) => void
+      const handler = makeHandler(AuthenticateResult.none())
+      handler.authenticate = vi.fn(() => new Promise<AuthenticateResult>(resolve => (release = resolve)))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
+
+      const both = Promise.all([coordinator.authenticate(ctx, 'Bearer'), coordinator.authenticate(ctx, 'Bearer')])
+      release(AuthenticateResult.none())
+
+      const [a, b] = await both
+      expect(a).toBe(b)
+      expect(handler.authenticate).toHaveBeenCalledTimes(1)
+    })
+
+    it('replays a rejection rather than re-running the scheme', async () => {
+      // A scheme that blew up must blow up identically for everyone in the request: a second attempt could
+      // disagree with the first because a key rotated or a session expired between them.
+      const boom = new Error('jwks unreachable')
+      const handler = makeHandler(AuthenticateResult.none())
+      handler.authenticate = vi.fn().mockRejectedValue(boom)
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
+
+      await expect(coordinator.authenticate(ctx, 'Bearer')).rejects.toBe(boom)
+      await expect(coordinator.authenticate(ctx, 'Bearer')).rejects.toBe(boom)
+      expect(handler.authenticate).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps schemes apart within one request', async () => {
+      const bearer = makeHandler(AuthenticateResult.success(new AuthenticationTicket(makePrincipal('a'), 'Bearer')))
+      const cookie = makeHandler(AuthenticateResult.success(new AuthenticationTicket(makePrincipal('b'), 'Cookie')))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: bearer, Cookie: cookie }))
+
+      const [first, second] = await Promise.all([
+        coordinator.authenticate(ctx, 'Bearer'),
+        coordinator.authenticate(ctx, 'Cookie'),
+      ])
+
+      expect(first.ticket!.principal.findFirst('sub')!.value).toBe('a')
+      expect(second.ticket!.principal.findFirst('sub')!.value).toBe('b')
+      expect(bearer.authenticate).toHaveBeenCalledTimes(1)
+      expect(cookie.authenticate).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not carry the result of one request into the next', async () => {
+      const handler = makeHandler(AuthenticateResult.success(new AuthenticationTicket(makePrincipal(), 'Bearer')))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
+      const other = {} as unknown as Context
+
+      await coordinator.authenticate(ctx, 'Bearer')
+      await coordinator.authenticate(other, 'Bearer')
+
+      expect(handler.authenticate).toHaveBeenCalledTimes(2)
+    })
+
+    it('reads back the settled result without starting an authentication', async () => {
+      // What a later phase of the request consults to decide how to answer a failure. It must never be the
+      // thing that triggers the verification.
+      const mapped = makePrincipal('mapped')
+      const handler = makeHandler(AuthenticateResult.success(new AuthenticationTicket(makePrincipal(), 'Bearer')))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }), { get: () => () => mapped })
+
+      expect(coordinator.resultFor(ctx, 'Bearer')).toBeUndefined()
+
+      const pending = coordinator.authenticate(ctx, 'Bearer')
+      expect(coordinator.resultFor(ctx, 'Bearer')).toBeUndefined()
+
+      await pending
+
+      expect(coordinator.resultFor(ctx, 'Bearer')!.ticket!.principal).toBe(mapped)
+      expect(coordinator.resultFor(ctx, 'Basic')).toBeUndefined()
+      expect(handler.authenticate).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('challenge()', () => {
     it('delegates to handler with ctx and properties', async () => {
       const handler = makeHandler(AuthenticateResult.none())
@@ -127,7 +223,31 @@ describe('AuthenticationCoordinator', () => {
 
       await coordinator.challenge(ctx, 'Bearer', props)
 
-      expect(handler.challenge).toHaveBeenCalledWith(ctx, props)
+      expect(handler.challenge).toHaveBeenCalledWith(ctx, props, undefined)
+    })
+
+    it('hands the scheme what it already decided for this request', async () => {
+      // How a scheme gets to say *why* it is challenging without keeping request state of its own, and
+      // without re-authenticating to find out: the coordinator kept the result and gives it back.
+      const failed = AuthenticateResult.fail(new Error('expired'))
+      const handler = makeHandler(failed)
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }, 'Bearer'))
+
+      await coordinator.authenticate(ctx, 'Bearer')
+      await coordinator.challenge(ctx, 'Bearer')
+
+      expect(handler.challenge).toHaveBeenCalledWith(ctx, undefined, failed)
+      expect(handler.authenticate).toHaveBeenCalledTimes(1)
+    })
+
+    it('challenges with nothing when the scheme has not run for this request', async () => {
+      const handler = makeHandler(AuthenticateResult.fail(new Error('expired')))
+      const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }, 'Bearer'))
+
+      await coordinator.challenge(ctx, 'Bearer')
+
+      expect(handler.challenge).toHaveBeenCalledWith(ctx, undefined, undefined)
+      expect(handler.authenticate).not.toHaveBeenCalled()
     })
 
     it('uses default scheme when schemeName is not provided', async () => {

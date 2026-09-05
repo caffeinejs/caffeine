@@ -13,6 +13,7 @@ import {
 
 import { statusErrorBody } from './error/http.js'
 import type { RouteValidationSchema } from './route.js'
+import type { AuthenticationState } from './security/auth/authentication_state.js'
 import { type Principal } from './security/index.js'
 
 export type UnsignedCookie = string | false | undefined
@@ -130,6 +131,15 @@ export interface Context<
    */
   user: Principal
 
+  /**
+   * What each authentication scheme decided for this request, created on first use.
+   *
+   * The authentication package is the writer. `user` is the outcome and is replaced as a route refines it;
+   * this is the record of how each scheme reached it, and is what stops a scheme running twice in one
+   * request.
+   */
+  auth?: AuthenticationState
+
   /** Whether the response has already been written. A middleware checks it before answering itself. */
   get sent(): boolean
 
@@ -200,6 +210,9 @@ export class FastifyContext<
   InferHeaders<SCHEMA>,
   InferBody<SCHEMA>
 > {
+  /** @see {@link Context.auth} */
+  auth?: AuthenticationState
+
   #req!: FastifyContextRequest<SCHEMA>
   #fst!: Fst<REPLY>
   #state!: ContextState<V>

@@ -5,22 +5,13 @@ import { Claim, Identity, Principal } from '../../index.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import { REGISTERED_CLAIMS } from '../registered_claims.js'
-import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
+import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
 import type { JWTAuthenticationOptions } from './jwt_options.js'
 import { JWTService } from './jwt_service.js'
 
 export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthenticationOptions> {
   readonly #name: string
   readonly #jwt: JWTService
-
-  /**
-   * Why this request's token was rejected, so `challenge()` can name it.
-   *
-   * The handler is a singleton and the challenge runs later in the same request than the authenticate
-   * that failed, so the reason has to be parked somewhere keyed by the request. The `Context` is the
-   * request identity and a `WeakMap` lets the entry die with it.
-   */
-  readonly #failures: WeakMap<Context, Error> = new WeakMap()
 
   constructor(name: string, options: JWTAuthenticationOptions, jwt?: JWTService) {
     super(options)
@@ -53,7 +44,6 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
 
       return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
     } catch (e) {
-      this.#failures.set(ctx, e as Error)
       await this.options.onFail?.(ctx, e as Error)
       return AuthenticateResult.fail(e as Error)
     }
@@ -67,19 +57,23 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
    * give up. When this request already tried and failed to validate a token, that reason is named:
    * `error="invalid_token"` plus, if `includeErrorDetails` is on, the underlying description.
    *
-   * Nothing is invented: the parameters appear only when this scheme actually failed in this request. A
-   * caller who presented no credential at all gets the bare challenge, since there is no token to fault.
+   * Nothing is invented: the parameters appear only when this scheme actually failed in this request, which
+   * is what `previous` carries. A caller who presented no credential at all gets the bare challenge, since
+   * there is no token to fault — and so does a caller who challenges without having authenticated.
    */
-  override async challenge(ctx: Context): Promise<void> {
+  override async challenge(
+    ctx: Context,
+    _properties?: AuthenticationProperties,
+    previous?: AuthenticateResult,
+  ): Promise<void> {
     if (this.options.onChallenge) {
       return this.options.onChallenge(ctx)
     }
 
-    ctx.status(401).header('WWW-Authenticate', this.#challengeHeader(ctx))
+    ctx.status(401).header('WWW-Authenticate', this.#challengeHeader(previous?.error))
   }
 
-  #challengeHeader(ctx: Context): string {
-    const error = this.#failures.get(ctx)
+  #challengeHeader(error: Error | undefined): string {
     if (error === undefined) {
       return 'Bearer'
     }

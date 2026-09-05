@@ -3,7 +3,15 @@ import type { AuthenticateResult, AuthenticationProperties, AuthenticationTicket
 
 export interface AuthenticationHandler {
   authenticate(ctx: Context): Promise<AuthenticateResult>
-  challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void>
+
+  /**
+   * Answers a caller the route did not admit, advertising what this scheme accepts.
+   *
+   * @param previous - What this scheme decided earlier in the same request, when it ran. A handler that can
+   * say *why* it is challenging reads it from here; it never re-authenticates to find out. `undefined` means
+   * the scheme has not run for this request, so there is nothing to fault.
+   */
+  challenge(ctx: Context, properties?: AuthenticationProperties, previous?: AuthenticateResult): Promise<void>
   forbid(ctx: Context, properties?: AuthenticationProperties): Promise<void>
   persist(ctx: Context, ticket: AuthenticationTicket): Promise<void>
   revoke(ctx: Context, properties?: AuthenticationProperties): Promise<void>
@@ -22,7 +30,7 @@ export abstract class BaseAuthenticationHandler<TOptions> implements Authenticat
 
   abstract authenticate(ctx: Context): Promise<AuthenticateResult>
 
-  async challenge(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
+  async challenge(ctx: Context, _properties?: AuthenticationProperties, _previous?: AuthenticateResult): Promise<void> {
     ctx.status(401)
   }
 

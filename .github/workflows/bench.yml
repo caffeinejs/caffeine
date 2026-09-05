@@ -16,6 +16,7 @@ on:
           - fastify
           - helloworld
           - mixedscopes
+          - authn
           - startup
           - request
           - request:bun

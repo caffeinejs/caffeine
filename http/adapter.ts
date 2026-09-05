@@ -299,7 +299,23 @@ export class FastifyAdapter<
                 }
 
                 if (result instanceof Promise) {
-                  return result.then(r => (r instanceof Responder ? r.respond(req.httpContext) : r))
+                  return result.then(r => {
+                    if (r instanceof Responder) {
+                      return r.respond(req.httpContext)
+                    }
+
+                    if (r === undefined) {
+                      res.send()
+                      return
+                    }
+
+                    return r
+                  })
+                }
+
+                if (result === undefined) {
+                  res.send()
+                  return
                 }
 
                 return result

@@ -42,4 +42,23 @@ describe('Status', () => {
 
     expect(res.status).toBe(200)
   })
+
+  it('completes an empty body when @Status is set and the handler returns void', async () => {
+    @Controller('/status-empty')
+    class StatusEmptyController {
+      @Status(200)
+      @Get('/ok')
+      get() {}
+    }
+
+    void [StatusEmptyController]
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    await app.ready()
+
+    const res = await app.fetch('/status-empty/ok')
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
+  })
 })

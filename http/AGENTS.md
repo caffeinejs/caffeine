@@ -54,6 +54,7 @@ Where a value goes depends on who reads it and how long it lives:
 | an injectable service with a lifecycle                    | a request-scoped binding (`Scopes.REQUEST`) | `container.get` / injection |
 | a plain value one middleware computes and a handler reads | `ctx.state`                                 | `ctx.state.get(key)`        |
 | the authenticated principal                               | `ctx.user`                                  | `ctx.user`                  |
+| what each authentication scheme decided                   | `ctx.auth`                                  | `ctx.auth?.find(scheme)`    |
 | what the route declared                                   | the route config                            | `ctx.routeConfig`           |
 | the application configuration                             | a snapshot on the context                   | `ctx.config`                |
 | another feature's own configuration                       | that feature's keyed config slice           | `ctx.config(key)`           |
@@ -76,6 +77,18 @@ defaults rather than require the feature to be installed.
 `ctx.state` is application space. A first-party package does not write to it: a framework value gets a dedicated
 member, as authentication does with `ctx.user`, or goes on the route config. One flat key namespace shared by an
 application and every package it installs collides.
+
+`ctx.auth` is that dedicated member for the authentication package: one record per scheme, created on first use
+and holding the authenticate call and its settled result. It exists because the service and the handlers are
+singletons while the data is per request, and because a request authenticates several times by design — the
+server hook with the default scheme, a route with the ones it names, a handler asking again. `ctx.user` is the
+outcome and is replaced as a route refines it; `ctx.auth` is stable for the request. Do not park per-request
+authentication state on the singleton, keyed by the context.
+
+`AuthenticationService` is the only writer. A handler reads the request and returns an `AuthenticateResult`;
+anything a later phase needs — the reason a token was rejected, so `challenge()` can name it — travels in that
+result and is handed back as the third argument to `challenge`. A handler that writes to `ctx.auth`, or keeps its
+own per-request state, is doing the coordinator's job.
 
 `app.use()` infers the variables a middleware declares but does not check them against the routers it ends up in
 front of — the routers are declared elsewhere. A middleware naming variables no router declares is not an error.

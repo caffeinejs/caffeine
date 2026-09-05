@@ -2,6 +2,7 @@ import type { Provider } from '@caffeinejs/di'
 
 import type { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
+import { AuthenticationState, type SchemeAuthentication } from './authentication_state.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
 import type { AuthenticationHandler } from './handler.js'
 import type { AuthenticationSchemeProvider } from './scheme_provider.js'
@@ -11,8 +12,13 @@ export class AuthenticationService {
   readonly #schemeProvider: AuthenticationSchemeProvider
   readonly #mapper: Provider<PrincipalMapper> | undefined
 
+  constructor(schemeProvider: AuthenticationSchemeProvider, mapper?: Provider<PrincipalMapper>) {
+    this.#schemeProvider = schemeProvider
+    this.#mapper = mapper
+  }
+
   /**
-   * Memoises `authenticate()` per request, per scheme.
+   * Authenticates the request with `scheme`, once.
    *
    * A request authenticates more than once by design: the router-level hook runs the default scheme, a
    * route naming its own schemes re-authenticates with those, and a controller holding this service can
@@ -22,47 +28,17 @@ export class AuthenticationService {
    * `authenticate()`, so the second call of a request would present the token the first call had just
    * invalidated and the guard would read its own rotation as theft.
    *
-   * Handlers are singletons, so the memo is keyed by `Context` — one instance per request, assigned once
-   * by the adapter. A `WeakMap` means the entry dies with the request rather than being something to
-   * clean up.
-   *
-   * The *promise* is cached, not the result, so concurrent callers within one request coalesce onto a
-   * single in-flight verification instead of racing. A rejection is cached with the same reasoning: a
-   * failing scheme must fail identically for every caller in the request.
+   * This service is a singleton, so what a scheme did is recorded on the request — `ctx.auth` — and lives
+   * exactly as long as it. The *promise* is kept, not the result, so concurrent callers within one request
+   * coalesce onto a single in-flight verification instead of racing. A rejection is kept with the same
+   * reasoning: a failing scheme must fail identically for every caller in the request.
    */
-  readonly #inflight: WeakMap<Context, Map<string, Promise<AuthenticateResult>>> = new WeakMap()
-
-  /**
-   * The same results once they have settled, readable without awaiting.
-   *
-   * `challenge()` is synchronous with respect to authentication — it must not start one — but it wants the
-   * failure the authenticate pass already produced so it can name it in `WWW-Authenticate`. Recording the
-   * settled value alongside the promise is what makes that readable after the fact.
-   */
-  readonly #settled: WeakMap<Context, Map<string, AuthenticateResult>> = new WeakMap()
-
-  constructor(schemeProvider: AuthenticationSchemeProvider, mapper?: Provider<PrincipalMapper>) {
-    this.#schemeProvider = schemeProvider
-    this.#mapper = mapper
-  }
-
   authenticate(ctx: Context, scheme: string): Promise<AuthenticateResult> {
-    let perRequest = this.#inflight.get(ctx)
-    if (perRequest === undefined) {
-      perRequest = new Map()
-      this.#inflight.set(ctx, perRequest)
-    }
-
-    let pending = perRequest.get(scheme)
-    if (pending === undefined) {
-      pending = this.#authenticate(ctx, scheme)
-      perRequest.set(scheme, pending)
-    }
-
-    return pending
+    const entry = (ctx.auth ??= new AuthenticationState()).for(scheme)
+    return (entry.pending ??= this.#authenticate(ctx, scheme, entry))
   }
 
-  async #authenticate(ctx: Context, scheme: string): Promise<AuthenticateResult> {
+  async #authenticate(ctx: Context, scheme: string, entry: SchemeAuthentication): Promise<AuthenticateResult> {
     // An unregistered name used to come back as `none()` — indistinguishable from "the caller presented no
     // credential". A typo in a route's `schemes` therefore produced a blanket 401 with nothing to point at,
     // and on a route whose policy does not demand an identity it admitted the caller anonymously instead.
@@ -80,19 +56,21 @@ export class AuthenticationService {
           )
         : result
 
-    let settled = this.#settled.get(ctx)
-    if (settled === undefined) {
-      settled = new Map()
-      this.#settled.set(ctx, settled)
-    }
-    settled.set(scheme, mapped)
+    entry.result = mapped
 
     return mapped
   }
 
+  /**
+   * Challenges with `schemeName`, handing the scheme back whatever it already decided for this request.
+   *
+   * A scheme that rejected a credential can then say why — the reason travels in the `AuthenticateResult` it
+   * returned, not in state the scheme keeps for itself. Nothing is authenticated here: a scheme that has not
+   * run is challenged with nothing to fault.
+   */
   challenge(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultChallengeScheme
-    return this.#handlerFor(name).get().challenge(ctx, properties)
+    return this.#handlerFor(name).get().challenge(ctx, properties, this.resultFor(ctx, name))
   }
 
   forbid(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
@@ -120,7 +98,7 @@ export class AuthenticationService {
    * to respond to a failure can consult what already happened rather than re-running it.
    */
   resultFor(ctx: Context, scheme: string): AuthenticateResult | undefined {
-    return this.#settled.get(ctx)?.get(scheme)
+    return ctx.auth?.find(scheme)?.result
   }
 
   /** Resolves a scheme name to its handler, or throws naming what *is* registered. */

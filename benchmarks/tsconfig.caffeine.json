@@ -18,6 +18,8 @@
     "request/caffeine-middleware/**/*.ts",
     "request/caffeine-request-scope/**/*.ts",
     "mixedscopes/caffeine/**/*.ts",
+    "authn/caffeine/**/*.ts",
+    "authn/shared.ts",
     "startup/caffeine/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]

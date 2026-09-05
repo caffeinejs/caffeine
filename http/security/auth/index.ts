@@ -1,4 +1,5 @@
 export { Authentication } from './authentication_middleware.js'
+export { AuthenticationState, SchemeAuthentication } from './authentication_state.js'
 export { BasicAuthenticationHandler, type BasicAuthenticationOptions } from './basic/index.js'
 export { AuthenticationBuilder } from './builder.js'
 export { AUTH_CONFIG_NAMESPACE, type AuthConfigSlice } from './config.js'

@@ -2,6 +2,8 @@ import { SignJWT } from 'jose'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
+import { AuthenticationSchemeProvider } from '../scheme_provider.js'
+import { AuthenticationService } from '../service.js'
 import { JWTAuthenticationHandler } from './jwt.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt_options.js'
 
@@ -273,8 +275,8 @@ describe('JWTAuthenticationHandler', () => {
       const handler = makeHandler()
       const { ctx, header } = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
 
-      await handler.authenticate(ctx)
-      await handler.challenge(ctx)
+      const result = await handler.authenticate(ctx)
+      await handler.challenge(ctx, undefined, result)
 
       const [, value] = header.mock.calls.at(-1) as [string, string]
       expect(value).toMatch(/^Bearer error="invalid_token"/)
@@ -287,8 +289,8 @@ describe('JWTAuthenticationHandler', () => {
       const handler = makeHandler()
       const { ctx, header } = makeCtx()
 
-      await handler.authenticate(ctx)
-      await handler.challenge(ctx)
+      const result = await handler.authenticate(ctx)
+      await handler.challenge(ctx, undefined, result)
 
       expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
     })
@@ -297,23 +299,40 @@ describe('JWTAuthenticationHandler', () => {
       const handler = new JWTAuthenticationHandler('Bearer', { secret: SECRET, includeErrorDetails: false })
       const { ctx, header } = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
 
-      await handler.authenticate(ctx)
-      await handler.challenge(ctx)
+      const result = await handler.authenticate(ctx)
+      await handler.challenge(ctx, undefined, result)
 
       expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"')
     })
 
-    it("keeps one request's failure out of another request's challenge", async () => {
-      // The handler is a singleton, so the failure has to be keyed by request rather than held in a field.
+    it('names the reason when the coordinator drives authenticate and challenge', async () => {
+      // The wiring that carries the reason in production: the handler reports it in the result it returns,
+      // the coordinator records it against the request, and hands it back when the same scheme challenges.
       const handler = makeHandler()
-      const failing = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
-      await handler.authenticate(failing.ctx)
+      const provider = new AuthenticationSchemeProvider(new Map([['Bearer', { get: () => handler }]]), {
+        defaultAuthenticateScheme: 'Bearer',
+      })
+      const coordinator = new AuthenticationService(provider)
+      const { ctx, header } = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
 
-      const clean = makeCtx()
-      await handler.authenticate(clean.ctx)
-      await handler.challenge(clean.ctx)
+      await coordinator.authenticate(ctx, 'Bearer')
+      await coordinator.challenge(ctx, 'Bearer')
 
-      expect(clean.header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+      const [, value] = header.mock.calls.at(-1) as [string, string]
+      expect(value).toMatch(/^Bearer error="invalid_token"/)
+    })
+
+    it('stays a bare challenge when the scheme has not run for this request', async () => {
+      const handler = makeHandler()
+      const provider = new AuthenticationSchemeProvider(new Map([['Bearer', { get: () => handler }]]), {
+        defaultAuthenticateScheme: 'Bearer',
+      })
+      const coordinator = new AuthenticationService(provider)
+      const { ctx, header } = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
+
+      await coordinator.challenge(ctx, 'Bearer')
+
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
     })
   })
 

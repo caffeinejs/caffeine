@@ -19,6 +19,7 @@
     "request/caffeine-middleware/**",
     "request/caffeine-request-scope/**",
     "mixedscopes/caffeine/**",
+    "authn/caffeine/**",
     "aspect/**",
     "di/**"
   ]
