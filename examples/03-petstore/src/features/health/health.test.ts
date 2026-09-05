@@ -78,15 +78,19 @@ describe('health probes', () => {
     })()
 
     const started = await start(indicator)
-    const before = checks
+    try {
+      const before = checks
 
-    const closing = started.close()
+      const closing = started.close()
 
-    expect((await probe(started, '/readyz')).status).toBe(503)
-    // A draining pod answers from its own state; hammering the database on the way out helps nobody.
-    expect(checks).toBe(before)
+      expect((await probe(started, '/readyz')).status).toBe(503)
+      // A draining pod answers from its own state; hammering the database on the way out helps nobody.
+      expect(checks).toBe(before)
 
-    await closing
+      await closing
+    } finally {
+      await started.close()
+    }
   })
 
   it('leaves the probes reachable without authentication', async () => {

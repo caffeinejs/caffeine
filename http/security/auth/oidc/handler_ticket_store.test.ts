@@ -396,6 +396,8 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
 })
 
 describe('ticket key generation', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('mints an unguessable key per sign-in rather than deriving one', async () => {
     // The key is the bearer credential for the session; the handler owns its generation so a
     // store implementation cannot substitute something predictable.

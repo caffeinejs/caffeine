@@ -55,5 +55,9 @@ export default defineConfig({
     hookTimeout: 30000,
     passWithNoTests: true,
     pool: 'forks',
+    maxWorkers: 2,
+    sequence: {
+      groupOrder: 1,
+    },
   },
 })

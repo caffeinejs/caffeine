@@ -12,6 +12,7 @@ export default defineConfig({
       exclude: ['examples/**'],
     },
     pool: 'threads',
+    maxWorkers: 4,
     experimental: {
       fsModuleCache: true,
     },
