@@ -144,6 +144,11 @@ export interface Binding<T = any> {
   postConstruct?: (value: T) => void
 
   /**
+   * The bootstrap hook for the component. Run automatically by init(), after every other binding is resolved.
+   */
+  bootstrap?: (value: T) => void | Promise<void>
+
+  /**
    * Whether to bypass post-processors for this binding.
    */
   byPassPostProcessors?: boolean
@@ -214,6 +219,7 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     lazy: initial.lazy,
     preDestroy: initial.preDestroy,
     postConstruct: initial.postConstruct,
+    bootstrap: initial.bootstrap,
     configuration: initial.configuration,
     keysProvided: initial.keysProvided || [],
     extend: initial.extend,

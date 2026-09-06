@@ -192,9 +192,11 @@ export abstract class BaseApplication {
     const kit = this.serviceKit()
 
     await Promise.all(services.map(service => service.bootstrap(kit)))
+
     // Every service has had its turn, so what they contributed is now complete — and closing the step is what
     // lets the rest of the boot read it without the answer depending on which service happened to finish first.
     this.#contributions.seal()
+
     await this.#container.init()
     await this.setup()
 
@@ -258,6 +260,7 @@ export abstract class BaseApplication {
     } catch (error) {
       errors.push(error)
     }
+
     await this.emitBestEffort('application:shutdown', errors)
     try {
       await this.#container.dispose()

@@ -1,4 +1,4 @@
-import { CaffeineRuntime } from './runtime.js'
+import { CaffeineRuntime } from './platform.js'
 
 export function solutions(...solutions: string[]) {
   return '\nPossible Solutions:\n  - ' + solutions.join('\n  - ')

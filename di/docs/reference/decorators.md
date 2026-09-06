@@ -39,7 +39,7 @@ identical in both flavours; differences are noted inline where they exist.
 - [@UseFactory](#usefactory)
 - [@UseAsyncFactory](#useasyncfactory)
 - [@PostConstruct](#postconstruct)
-- [@OnPreDestroy](#onpredestroy)
+- [@OnDestroy](#ondestroy)
 - [@Configuration](#configuration)
 - [@Provides](#provides)
 - [@Async](#async)
@@ -324,10 +324,10 @@ class DatabasePool {
 }
 ```
 
-### @OnPreDestroy
+### @OnDestroy
 
 ```ts
-@OnPreDestroy(fn: (value: T) => void | Promise<void>)
+@OnDestroy(fn: (value: T) => void | Promise<void>)
 ```
 
 Registers a callback to run before the instance is destroyed. Class-level

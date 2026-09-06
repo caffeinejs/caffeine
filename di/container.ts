@@ -83,6 +83,7 @@ export class CaffeineIoC implements Container {
   private readonly registry = new Map<InjectionToken, Binding>()
   private readonly bindings = new Map<InjectionToken | Identifier, Binding[]>()
   private readonly bindingsByLabel = new Map<symbol, [InjectionToken, Binding][]>()
+  private readonly _bootstrapBindings = new Map<InjectionToken, Binding>()
 
   private readonly bindingMembers = new Map<InjectionToken | Identifier, Set<number>>()
   private readonly labelMembers = new Map<symbol, Set<number>>()
@@ -1055,8 +1056,10 @@ export class CaffeineIoC implements Container {
 
   /**
    * Initializes the container.
-   * It compiles the bindings and prepares them for resolution,
-   * so it must be called before the container can be used for resolution.
+   * It compiles the bindings and prepares them for resolution, so it must be called before the container
+   * can be used for resolution. Once every binding is resolved, runs every registered bootstrap hook (see
+   * `@OnBootstrap` / `.bootstrap()`) in dependency order, forcing resolution of any lazy singleton binding
+   * that registered one.
    */
   async init(): Promise<void> {
     if (this._ready) {
@@ -1110,6 +1113,12 @@ export class CaffeineIoC implements Container {
       }
 
       await Promise.all(eagerResolutions)
+
+      for (const [, binding] of this.sortBootstrapBindings()) {
+        const instance = binding.factory(binding.ctx!)
+        await binding.bootstrap!(instance)
+      }
+
       this._ready = true
     } finally {
       this._initializing = false
@@ -1339,6 +1348,16 @@ export class CaffeineIoC implements Container {
     if (canonical.async) {
       this._hasAsync = true
     }
+
+    if (canonical.bootstrap !== undefined) {
+      if (canonical.scopeID !== Scopes.SINGLETON) {
+        throw new ErrInvalidBinding(
+          `Cannot configure binding "${keyStr(key)}": bootstrap hooks are only allowed on singleton-scoped bindings`,
+        )
+      }
+
+      this._bootstrapBindings.set(key, canonical)
+    }
   }
 
   private async refresh(label?: symbol): Promise<void> {
@@ -1401,6 +1420,7 @@ export class CaffeineIoC implements Container {
     this.bindingMembers.delete(key)
     this.bindings.delete(key)
     this._pendingConditionalKeys.delete(key)
+    this._bootstrapBindings.delete(key)
   }
 
   private async preDestroyBinding(binding: Binding): Promise<void> {
@@ -1892,22 +1912,43 @@ export class CaffeineIoC implements Container {
     }
 
     const asyncEntries = [...this.registry.entries()].filter(([, b]) => b.async)
-    if (asyncEntries.length < 2) {
-      return asyncEntries
+    return this.topoSortEntries(asyncEntries, kAspectLabel)
+  }
+
+  private sortBootstrapBindings(): [InjectionToken, Binding][] {
+    if (this._bootstrapBindings.size === 0) {
+      return []
     }
 
-    const asyncKeySet = new Set<InjectionToken>(asyncEntries.map(([k]) => k))
+    return this.topoSortEntries([...this._bootstrapBindings.entries()])
+  }
+
+  /**
+   * Topologically sorts `entries` by constructor-injection dependencies (Kahn's algorithm), considering an
+   * edge only between two entries both present in `entries` — a dependency on a binding outside the set has
+   * nothing to order against. `priorityLabel`, when given, moves zero-indegree bindings carrying that label
+   * to the front of the ready queue at every step.
+   *
+   * Falls back to `entries` unsorted if a cycle prevents a full ordering, so a cyclic subset degrades
+   * gracefully instead of throwing.
+   */
+  private topoSortEntries(entries: [InjectionToken, Binding][], priorityLabel?: symbol): [InjectionToken, Binding][] {
+    if (entries.length < 2) {
+      return entries
+    }
+
+    const keySet = new Set<InjectionToken>(entries.map(([k]) => k))
     const adjList = new Map<InjectionToken, InjectionToken[]>()
     const inDegree = new Map<InjectionToken, number>()
 
-    for (const [key] of asyncEntries) {
+    for (const [key] of entries) {
       adjList.set(key, [])
       inDegree.set(key, 0)
     }
 
-    for (const [key, binding] of asyncEntries) {
+    for (const [key, binding] of entries) {
       const depKeys = new Set<InjectionToken>(
-        [...binding.injections.map(d => d.key as InjectionToken)].filter(k => asyncKeySet.has(k)),
+        [...binding.injections.map(d => d.key as InjectionToken)].filter(k => keySet.has(k)),
       )
 
       for (const dep of depKeys) {
@@ -1916,18 +1957,18 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    const aspectQueue: InjectionToken[] = []
+    const priorityQueue: InjectionToken[] = []
     const otherQueue: InjectionToken[] = []
     for (const [key, deg] of inDegree) {
       if (deg === 0) {
-        if (this.registry.get(key)?.labels.includes(kAspectLabel)) {
-          aspectQueue.push(key)
+        if (priorityLabel !== undefined && this.registry.get(key)?.labels.includes(priorityLabel)) {
+          priorityQueue.push(key)
         } else {
           otherQueue.push(key)
         }
       }
     }
-    const queue: InjectionToken[] = [...aspectQueue, ...otherQueue]
+    const queue: InjectionToken[] = [...priorityQueue, ...otherQueue]
 
     const result: [InjectionToken, Binding][] = []
     while (queue.length > 0) {
@@ -1937,7 +1978,7 @@ export class CaffeineIoC implements Container {
         const newDeg = inDegree.get(dependent)! - 1
         inDegree.set(dependent, newDeg)
         if (newDeg === 0) {
-          if (this.registry.get(dependent)?.labels.includes(kAspectLabel)) {
+          if (priorityLabel !== undefined && this.registry.get(dependent)?.labels.includes(priorityLabel)) {
             queue.unshift(dependent)
           } else {
             queue.push(dependent)
@@ -1946,7 +1987,7 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    return result.length === asyncEntries.length ? result : asyncEntries
+    return result.length === entries.length ? result : entries
   }
 
   private findPendingConfigForKey(key: InjectionToken): InjectionToken | undefined {

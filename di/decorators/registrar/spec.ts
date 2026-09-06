@@ -29,6 +29,7 @@ export class DecoratedBindingConfig {
   #extend?: InjectionToken
   #postConstruct?: Identifier | ((value: any) => void)
   #preDestroy?: Identifier | ((value: any) => void | Promise<void>)
+  #bootstrap?: Identifier | ((value: any) => void | Promise<void>)
   #injectableProperties?: Map<Identifier, InjectionDescriptor<unknown>>
   #injectableMethods?: Map<Identifier, InjectionDescriptor<unknown>[]>
   #configuredBy?: string
@@ -227,6 +228,11 @@ export class DecoratedBindingConfig {
     return this
   }
 
+  bootstrap(bootstrap: Identifier | ((value: any) => void | Promise<void>)): this {
+    this.#bootstrap = bootstrap
+    return this
+  }
+
   injectableProperty(name: Identifier, descriptor: Injection<unknown>): this {
     this.#injectableProperties ??= new Map()
     this.#injectableProperties.set(name, normalizeInjection(descriptor))
@@ -324,6 +330,12 @@ export class DecoratedBindingConfig {
           : typeof this.#preDestroy === 'function'
             ? this.#preDestroy
             : (value: any) => (value as any)[this.#preDestroy as string | symbol]?.(),
+      bootstrap:
+        this.#bootstrap === undefined
+          ? undefined
+          : typeof this.#bootstrap === 'function'
+            ? this.#bootstrap
+            : (value: any) => (value as any)[this.#bootstrap as string | symbol]?.(),
       labels: this.#labels,
       tags: this.#tags,
       configuration: this.#configuration,
@@ -343,6 +355,7 @@ export class MemberMetadata {
   #injectableMethods?: Map<Identifier, InjectionDescriptor<unknown>[]>
   #postConstruct?: string | symbol
   #preDestroy?: string | symbol
+  #bootstrap?: string | symbol
 
   get members(): Map<Identifier, DecoratedBindingConfig> | undefined {
     return this.#members
@@ -398,6 +411,17 @@ export class MemberMetadata {
     return this
   }
 
+  bootstrap(name: string | symbol): this {
+    if (this.#bootstrap) {
+      throw new ErrInvalidDecorator(
+        `@OnBootstrap is already defined on method "${String(this.#bootstrap)}": only 1 @OnBootstrap is allowed per class`,
+      )
+    }
+
+    this.#bootstrap = name
+    return this
+  }
+
   applyTo(config: DecoratedBindingConfig): void {
     if (this.#injectableProperties) {
       config.injectableProperties(this.#injectableProperties)
@@ -413,6 +437,10 @@ export class MemberMetadata {
 
     if (this.#preDestroy) {
       config.preDestroy(this.#preDestroy)
+    }
+
+    if (this.#bootstrap) {
+      config.bootstrap(this.#bootstrap)
     }
   }
 }

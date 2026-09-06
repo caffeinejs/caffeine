@@ -512,6 +512,22 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
+   * Registers a callback invoked automatically by init(), after every binding has been resolved.
+   *
+   * @example
+   * ```ts
+   * container.bind(key, t => t.toClass(CacheWarmer).bootstrap(svc => svc.warm()))
+   * ```
+   */
+  bootstrap(fn: (value: TValue) => void | Promise<void>): this {
+    notNil(fn, `Parameter fn must not be null or undefined`)
+
+    this.binding.bootstrap = fn
+
+    return this
+  }
+
+  /**
    * Adds a post-resolution interceptor that can wrap or transform the resolved instance.
    *
    * @example

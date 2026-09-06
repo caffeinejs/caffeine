@@ -6,7 +6,7 @@ import { CaffeineIoC } from '../container.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
-import { OnPreDestroy } from '../decorators/on_pre_destroy.js'
+import { OnDestroy } from '../decorators/on_destroy.js'
 import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Provides } from '../decorators/provides.js'
 import { ErrInvalidDecorator } from '../errors.js'
@@ -43,7 +43,7 @@ describe('PreDestroy', function () {
     expect(mspy).toHaveBeenCalledTimes(1)
   })
 
-  describe('OnPreDestroy', function () {
+  describe('OnDestroy', function () {
     it('should call the fn with the produced instance on dispose', async function () {
       const spy = vi.fn()
 
@@ -53,7 +53,7 @@ describe('PreDestroy', function () {
 
       @Configuration()
       class AppConfigOPD {
-        @OnPreDestroy((c: ConnOPD) => spy(c))
+        @OnDestroy((c: ConnOPD) => spy(c))
         @Provides(ConnOPD)
         conn(): ConnOPD {
           return new ConnOPD()
@@ -81,7 +81,7 @@ describe('PreDestroy', function () {
 
       @Configuration()
       class CacheConfigOPD {
-        @OnPreDestroy(async (_c: CacheOPD) => {
+        @OnDestroy(async (_c: CacheOPD) => {
           await Promise.resolve()
           order.push('destroyed')
         })
@@ -110,7 +110,7 @@ describe('PreDestroy', function () {
       @Configuration()
       class SvcConfigOPD {
         @Lazy()
-        @OnPreDestroy((_s: SvcOPD) => spy(_s))
+        @OnDestroy((_s: SvcOPD) => spy(_s))
         @Provides(SvcOPD)
         svc(): SvcOPD {
           return new SvcOPD()
@@ -130,7 +130,7 @@ describe('PreDestroy', function () {
 
     it('should throw ErrInvalidDecorator when used on a non-method', function () {
       expect(() => {
-        const fn = OnPreDestroy(() => {})
+        const fn = OnDestroy(() => {})
         fn(class Foo {}, { kind: 'class', name: 'Foo' } as unknown as DecoratorContext)
       }).toThrow(ErrInvalidDecorator)
     })

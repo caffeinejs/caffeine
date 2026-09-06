@@ -13,7 +13,7 @@ import { extendMemberInjectableAttributes } from './registrar/index.js'
  * ```ts
  * @Configuration()
  * class AppConfig {
- *   @OnPreDestroy((conn: DbConnection) => conn.close())
+ *   @OnDestroy((conn: DbConnection) => conn.close())
  *   @Provides(DbConnection)
  *   connection(): DbConnection {
  *     return new DbConnection()
@@ -21,10 +21,10 @@ import { extendMemberInjectableAttributes } from './registrar/index.js'
  * }
  * ```
  */
-export function OnPreDestroy<T>(fn: (instance: T) => void | unknown | Promise<void | unknown>) {
+export function OnDestroy<T>(fn: (instance: T) => void | unknown | Promise<void | unknown>) {
   return function (_target: Function, context: DecoratorContext) {
     if (context.kind !== 'method') {
-      throw new ErrInvalidDecorator(`@OnPreDestroy can only be used on a method inside a @${Configuration.name} class`)
+      throw new ErrInvalidDecorator(`@OnDestroy can only be used on a method inside a @${Configuration.name} class`)
     }
 
     extendMemberInjectableAttributes(context.metadata, context.name, config =>
