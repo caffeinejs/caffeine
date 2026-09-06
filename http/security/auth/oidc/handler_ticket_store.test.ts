@@ -1,5 +1,5 @@
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
-import type { JWTVerifyGetKey, KeyLike } from 'jose'
+import type { JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { Context } from '../../../context.js'
@@ -108,7 +108,7 @@ const DISCOVERY_DOCUMENT = {
 }
 
 describe('OIDCAuthenticationHandler with a ticket store', () => {
-  let privateKey: KeyLike
+  let privateKey: CryptoKey
   let jwksResolver: (uri: string) => JWTVerifyGetKey
   let store: FakeTicketStore
 
@@ -544,7 +544,7 @@ describe('RemoteAuthenticationTicket shape', () => {
 
 describe('RP-initiated logout', () => {
   const END_SESSION = `${ISSUER}/logout`
-  let privateKey: KeyLike
+  let privateKey: CryptoKey
   let jwksResolver: (uri: string) => JWTVerifyGetKey
   let store: FakeTicketStore
 

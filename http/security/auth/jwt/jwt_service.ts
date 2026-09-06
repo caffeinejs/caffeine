@@ -1,5 +1,5 @@
 import { SignJWT, decodeJwt, jwtVerify } from 'jose'
-import type { JWTPayload, JWTVerifyGetKey, JWTVerifyOptions, KeyLike } from 'jose'
+import type { JWTPayload, JWTVerifyGetKey, JWTVerifyOptions, CryptoKey } from 'jose'
 
 import type { JWTKeyResolver, JWTServiceOptions } from './jwt_service_options.js'
 
@@ -19,8 +19,8 @@ export interface JWTSignOptions {
  * Standalone JWT utility over jose: sign, verify and decode.
  */
 export class JWTService {
-  readonly #signKey?: Uint8Array | KeyLike
-  readonly #verifyKey?: Uint8Array | KeyLike
+  readonly #signKey?: Uint8Array | CryptoKey
+  readonly #verifyKey?: Uint8Array | CryptoKey
   readonly #resolver?: JWTKeyResolver
   readonly #algorithm: string
   readonly #options: JWTServiceOptions
@@ -147,7 +147,7 @@ export class JWTServiceBuilder {
     return this
   }
 
-  keys(privateKey: KeyLike | Uint8Array, publicKey: KeyLike | Uint8Array): this {
+  keys(privateKey: CryptoKey | Uint8Array, publicKey: CryptoKey | Uint8Array): this {
     this.#options.privateKey = privateKey
     this.#options.publicKey = publicKey
     return this

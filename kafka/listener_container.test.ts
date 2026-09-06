@@ -20,6 +20,8 @@ function toMessage(out: KafkaOutboundMessage): KafkaMessage {
     offset: 0n,
     timestamp: 0n,
     headers: new Map(),
+    headerEntries: [],
+    leaderEpoch: 0,
     metadata: {},
     commit: () => {},
     toJSON: () => ({}) as never,

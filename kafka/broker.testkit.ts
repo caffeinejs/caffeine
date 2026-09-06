@@ -58,6 +58,8 @@ class FakeStream implements ConsumerStream {
       offset: 0n,
       timestamp: 0n,
       headers,
+      headerEntries: Array.from(headers.entries()),
+      leaderEpoch: 0,
       metadata: {},
       commit: () => {
         this.#committed.push(message)

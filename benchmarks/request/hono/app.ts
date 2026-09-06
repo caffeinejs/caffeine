@@ -1,4 +1,4 @@
-import Ajv from 'ajv'
+import { Ajv } from 'ajv'
 import fastJsonStringify from 'fast-json-stringify'
 import { Hono } from 'hono'
 import { validator } from 'hono/validator'

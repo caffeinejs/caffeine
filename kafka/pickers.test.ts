@@ -16,6 +16,8 @@ function message(): KafkaMessage {
     offset: 42n,
     timestamp: 99n,
     headers: new Map([['trace', 'abc']]),
+    headerEntries: [['trace', 'abc']],
+    leaderEpoch: 0,
     metadata: {},
     commit: () => {},
     toJSON: () => ({}) as never,
