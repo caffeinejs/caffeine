@@ -21,10 +21,6 @@ Keep package-specific setup out of the root scripts. The petstore example has tw
 
 `build:examples` compiles the binary only when `cli/dist/caffeine` is missing. `make check` rebuilds it when it is missing or older than CLI sources. CI calls `build:cli` once explicitly; `npm run build --workspaces` does not bun-compile.
 
-## CodeQL
-
-`.github/workflows/codeql.yml` runs GitHub CodeQL on push and pull request to `main` (skipping docs-only changes) and on a weekly schedule. Language is `javascript-typescript` with `build-mode: none`. It is a separate workflow from CI; it does not consume or produce `dist/` artifacts. Do not also enable GitHub's UI default CodeQL setup — that would duplicate this scan.
-
 ## License allowlist and dependency review
 
 `.github/workflows/license-check.yml` runs on pull requests and on pushes to `main` / `[0-9]+.x`. On PRs it also runs GitHub Dependency Review (`fail-on-severity: high`). The license job runs `npm run license:check`, which walks production dependency trees of first-party workspace packages (examples, benchmarks, scaffold templates, and `di/_tests/deno` are excluded) and fails if any third-party SPDX license is outside the allowlist in `tools/check-licenses.mjs`.

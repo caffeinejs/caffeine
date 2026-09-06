@@ -17,3 +17,49 @@ updates:
       prefix: 'chore'
     open-pull-requests-limit: 2
     target-branch: main
+
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    commit-message:
+      prefix: 'chore'
+    open-pull-requests-limit: 5
+    target-branch: main
+    versioning-strategy: increase
+    exclude-paths:
+      - 'di/_tests/deno/**'
+    cooldown:
+      default-days: 7
+    allow:
+      - dependency-type: all
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      test:
+        patterns:
+          - 'vitest*'
+          - '@vitest/*'
+          - 'oxlint*'
+          - 'oxfmt*'
+          - 'fast-check'
+          - '@fast-check/*'
+          - 'markdownlint-cli2'
+          - '@swc/*'
+          - 'unplugin-swc'
+          - 'esbuild'
+          - 'supertest'
+          - 'globby'
+          - 'eslint'
+      typescript:
+        patterns:
+          - 'typescript'
+          - 'tsx'
+          - '@types/*'
+          - 'typescript-eslint'
+      dependencies:
+        dependency-type: 'production'
+        exclude-patterns:
+          - '@caffeinejs/*'
