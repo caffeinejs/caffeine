@@ -3,6 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "rootDir": ".",
+    "lib": ["esnext", "Decorators", "esnext.decorators", "dom"],
     "types": ["node"],
     "composite": false
   },
