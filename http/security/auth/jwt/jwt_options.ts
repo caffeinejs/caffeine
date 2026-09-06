@@ -1,6 +1,4 @@
-import { KeyLike } from 'crypto'
-
-import { JWTPayload, JWTVerifyOptions, type KeyLike as JoseKeyLike } from 'jose'
+import { JWTPayload, JWTVerifyOptions, type KeyLike } from 'jose'
 
 import { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
@@ -66,7 +64,7 @@ export class JWTAuthenticationOptionsBuilder {
     return this
   }
 
-  keyPair(privateKey: JoseKeyLike | Uint8Array, publicKey: JoseKeyLike | Uint8Array): this {
+  keyPair(privateKey: KeyLike | Uint8Array, publicKey: KeyLike | Uint8Array): this {
     // Keys live on the service options (used for both sign and verify). `#options.secret` is only the
     // fallback path when no service options exist, which `build()` always populates.
     this.#service.privateKey = privateKey
