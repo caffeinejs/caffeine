@@ -37,68 +37,67 @@ export const NAVIGATION = { 'sec-fetch-mode': 'navigate' }
  * The default claim mapper would seal all of them and overflow the browser's ~4096-byte per-cookie limit, so
  * the size assertion in the flow test is what guards the claimMapper whitelist.
  */
+function href(input: RequestInfo | URL): string {
+  if (typeof input === 'string') {
+    return input
+  }
+  if (input instanceof URL) {
+    return input.href
+  }
+  return input.url
+}
+
 export function stubGithub(): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (url: string) => {
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = href(input)
       if (url === GITHUB_TOKEN_URL) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            access_token: 'gho_test',
-            token_type: 'bearer',
-          }),
-        }
+        return Response.json({
+          access_token: 'gho_test',
+          token_type: 'bearer',
+        })
       }
       if (url === GITHUB_USER_URL) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            login: 'octocat',
-            id: 4242,
-            node_id: 'MDQ6VXNlcjQyNDI=',
-            avatar_url: 'https://avatars.githubusercontent.com/u/4242?v=4',
-            gravatar_id: '',
-            url: 'https://api.github.com/users/octocat',
-            html_url: 'https://github.com/octocat',
-            followers_url: 'https://api.github.com/users/octocat/followers',
-            following_url: 'https://api.github.com/users/octocat/following{/other_user}',
-            gists_url: 'https://api.github.com/users/octocat/gists{/gist_id}',
-            starred_url: 'https://api.github.com/users/octocat/starred{/owner}{/repo}',
-            subscriptions_url: 'https://api.github.com/users/octocat/subscriptions',
-            organizations_url: 'https://api.github.com/users/octocat/orgs',
-            repos_url: 'https://api.github.com/users/octocat/repos',
-            events_url: 'https://api.github.com/users/octocat/events{/privacy}',
-            received_events_url: 'https://api.github.com/users/octocat/received_events',
-            type: 'User',
-            site_admin: false,
-            name: 'The Octocat',
-            company: '@github',
-            blog: 'https://github.blog',
-            location: 'San Francisco',
-            email: null,
-            hireable: null,
-            bio: 'A mysterious cat that lives in the GitHub logo and enjoys long walks on the keyboard.',
-            twitter_username: 'octocat',
-            public_repos: 8,
-            public_gists: 8,
-            followers: 9001,
-            following: 9,
-            created_at: '2011-01-25T18:44:36Z',
-            updated_at: '2024-01-25T18:44:36Z',
-          }),
-        }
+        return Response.json({
+          login: 'octocat',
+          id: 4242,
+          node_id: 'MDQ6VXNlcjQyNDI=',
+          avatar_url: 'https://avatars.githubusercontent.com/u/4242?v=4',
+          gravatar_id: '',
+          url: 'https://api.github.com/users/octocat',
+          html_url: 'https://github.com/octocat',
+          followers_url: 'https://api.github.com/users/octocat/followers',
+          following_url: 'https://api.github.com/users/octocat/following{/other_user}',
+          gists_url: 'https://api.github.com/users/octocat/gists{/gist_id}',
+          starred_url: 'https://api.github.com/users/octocat/starred{/owner}{/repo}',
+          subscriptions_url: 'https://api.github.com/users/octocat/subscriptions',
+          organizations_url: 'https://api.github.com/users/octocat/orgs',
+          repos_url: 'https://api.github.com/users/octocat/repos',
+          events_url: 'https://api.github.com/users/octocat/events{/privacy}',
+          received_events_url: 'https://api.github.com/users/octocat/received_events',
+          type: 'User',
+          site_admin: false,
+          name: 'The Octocat',
+          company: '@github',
+          blog: 'https://github.blog',
+          location: 'San Francisco',
+          email: null,
+          hireable: null,
+          bio: 'A mysterious cat that lives in the GitHub logo and enjoys long walks on the keyboard.',
+          twitter_username: 'octocat',
+          public_repos: 8,
+          public_gists: 8,
+          followers: 9001,
+          following: 9,
+          created_at: '2011-01-25T18:44:36Z',
+          updated_at: '2024-01-25T18:44:36Z',
+        })
       }
       if (url === GITHUB_EMAILS_URL) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => [{ email: 'octocat@github.com', primary: true, verified: true }],
-        }
+        return Response.json([{ email: 'octocat@github.com', primary: true, verified: true }])
       }
-      return { ok: false, status: 404, json: async () => ({}) }
+      return Response.json({}, { status: 404 })
     }),
   )
 }
