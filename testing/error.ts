@@ -16,6 +16,28 @@ export class ErrMissingRouteParam extends Error {
   }
 }
 
+export class ErrTestClientTarget extends Error {
+  readonly code = 'CAFFEINE_ERR_TEST_CLIENT_TARGET'
+  readonly name = 'ErrTestClientTarget'
+
+  constructor(detail: string) {
+    super(`Cannot build test client: ${detail}`)
+  }
+}
+
+export class ErrTestClientAlreadyReady extends Error {
+  readonly code = 'CAFFEINE_ERR_TEST_CLIENT_ALREADY_READY'
+  readonly name = 'ErrTestClientAlreadyReady'
+
+  constructor(option: string) {
+    super(
+      `Cannot apply "${option}": the application is already ready` +
+        '\n\nPossible Solutions:\n - Hand "testClient" the routers instead of an application, so it owns the setup' +
+        '\n - Pass the application before calling "ready()" on it',
+    )
+  }
+}
+
 export class ErrFetchFailed extends Error {
   readonly code = 'CAFFEINE_ERR_FETCH_FAILED'
   readonly status: number

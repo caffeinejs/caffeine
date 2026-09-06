@@ -70,9 +70,13 @@ export abstract class AbstractWebApplication<
   R,
   A extends Adapter<I, R> = Adapter<I, R>,
   ROUTES = never,
+  DEPS = never,
 > extends BaseApplication {
   /** Phantom — names the routes mounted on this application, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: ROUTES
+
+  /** Phantom — names what the mounted routers injected, for `DepsOf`. Never assigned, never read. */
+  declare readonly __deps?: DEPS
 
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
@@ -173,7 +177,7 @@ export abstract class AbstractWebApplication<
    */
   mount<const RS extends ReadonlyArray<Router<any, any, any, any, any>>>(
     ...routers: RS
-  ): WebApplication<I, R, A, ROUTES | RoutesOfRouter<RS[number]>>
+  ): WebApplication<I, R, A, ROUTES | RoutesOfRouter<RS[number]>, DEPS | DepsOfRouter<RS[number]>>
   mount(...routers: Router<any, any, any, any, any>[]): this {
     if (this.#built) {
       throw new ErrConfiguration(
@@ -315,7 +319,16 @@ export class WebApplication<
   R = FastifyRequest,
   A extends Adapter<I, R> = Adapter<I, R>,
   ROUTES = never,
-> extends AbstractWebApplication<I, R, A, ROUTES> {}
+  DEPS = never,
+> extends AbstractWebApplication<I, R, A, ROUTES, DEPS> {}
 
 /** The routes one router declares, distributed so a union of routers folds into a union of their routes. */
 type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R> ? R : never
+
+/**
+ * What one router injected, distributed the same way — `DepsOf` intersects the union back into one bag.
+ *
+ * A router that injected nothing carries `undefined` rather than `never`, and unioning that in would make every
+ * application that mounted one report `undefined` as its dependencies. It contributes nothing instead.
+ */
+type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any> ? (D extends undefined ? never : D) : never

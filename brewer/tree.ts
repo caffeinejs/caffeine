@@ -1,9 +1,14 @@
 import type { RouteContract, Routes } from './contract.js'
 import type { CallInit, VerbCall } from './init.js'
-import type { BrewResponse } from './response.js'
+import type { BrewResponseOf } from './response.js'
 import type { Verb } from './verbs.js'
 
-/** A path split into its segments: `/pets/:id` becomes `['pets', ':id']`, `/` becomes `[]`. */
+/**
+ * A path split into its segments: `/pets/:id` becomes `['pets', ':id']`, `/` becomes `[]`.
+ *
+ * Splits on every `/`, so a parameter whose matching constraint contains one — `:id(\d+/\d+)` — is split inside
+ * the constraint and the segment is misread. `$request` addresses such a route by its literal path.
+ */
 export type Split<P extends string> = P extends `/${infer Rest}`
   ? Split<Rest>
   : P extends `${infer Head}/${infer Tail}`
@@ -104,7 +109,7 @@ export interface RawCall<R extends RouteContract> {
     method: M,
     path: P,
     ...args: RawArgs<Extract<R, { method: M; path: P }>>
-  ): Promise<BrewResponse<Extract<R, { method: M; path: P }>['output']>>
+  ): Promise<BrewResponseOf<Extract<R, { method: M; path: P }>>>
 }
 
 type RawArgs<R extends RouteContract> =

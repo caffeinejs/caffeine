@@ -27,6 +27,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@caffeinejs/brewer": "*",
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*",
     "@caffeinejs/http": "*"

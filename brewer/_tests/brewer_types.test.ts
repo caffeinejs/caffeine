@@ -7,6 +7,7 @@ import type { RouteContract } from '../contract.js'
 import type { BrewResponse } from '../response.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
+const problemSchema = $t.Object({ detail: $t.String() })
 
 const pets = new Router('/pets')
   .get('/')
@@ -23,11 +24,18 @@ const pets = new Router('/pets')
   .get('/search')
   .schema({ querystring: $t.Object({ q: $t.String() }), headers: $t.Object({ 'x-tenant': $t.String() }) })
   .handler(() => [] as string[])
+  .get('/:id/owner')
+  .schema({
+    params: $t.Object({ id: $t.Integer() }),
+    response: { 200: petSchema, 404: problemSchema, '4xx': problemSchema },
+  })
+  .handler(ctx => ctx.body())
 
 const app = createWebApplication().build().mount(pets)
 
 type App = typeof app
 type Pet = { id: number; name: string }
+type Problem = { detail: string }
 
 const client = brewer<App>('http://localhost')
 
@@ -42,7 +50,9 @@ function typeOnly(_assertions: () => unknown): void {}
 describe('the route contract', () => {
   it('is the shape the server describes a route with', () => {
     // The guard that makes the structural copy safe: if either side changes, this stops compiling.
-    expectTypeOf<RouteDef<'GET', '/pets', unknown, unknown, unknown, unknown, unknown>>().toExtend<RouteContract>()
+    expectTypeOf<
+      RouteDef<'GET', '/pets', unknown, unknown, unknown, unknown, unknown, unknown>
+    >().toExtend<RouteContract>()
   })
 })
 
@@ -51,7 +61,6 @@ describe('the tree', () => {
     typeOnly(async () => {
       const res = await client.pets({ id: 1 }).get()
 
-      expectTypeOf(res).toEqualTypeOf<BrewResponse<Pet>>()
       expectTypeOf(await res.json()).toEqualTypeOf<Pet>()
     })
   })
@@ -60,7 +69,42 @@ describe('the tree', () => {
     typeOnly(async () => {
       const res = await client.pets.get()
 
+      expectTypeOf(res).toEqualTypeOf<BrewResponse<Pet[]>>()
       expectTypeOf(await res.json()).toEqualTypeOf<Pet[]>()
+    })
+  })
+
+  it('keeps the status wide, so an undeclared code can still be compared against', () => {
+    typeOnly(async () => {
+      const res = await client.pets({ id: 1 }).owner.get()
+
+      // A route may always answer something it never declared — a framework 500, say. Narrowing the status to the
+      // declared codes would make this a non-overlapping comparison and stop it compiling.
+      expectTypeOf(res.status).toEqualTypeOf<number>()
+    })
+  })
+
+  it('types the body from the status the caller checked', () => {
+    typeOnly(async () => {
+      const res = await client.pets({ id: 1 }).owner.get()
+
+      if (res.status === 200) {
+        expectTypeOf(await res.json()).toEqualTypeOf<Pet>()
+      } else if (res.status === 404) {
+        expectTypeOf(await res.json()).toEqualTypeOf<Problem>()
+      }
+    })
+  })
+
+  it('says nothing about a status the route did not declare', () => {
+    typeOnly(async () => {
+      const res = await client.pets({ id: 1 }).owner.get()
+
+      // The wildcard `4xx` the route declares is deliberately not read: it would have to be typed against `number`,
+      // which overlaps every literal code, and that would widen the narrowed members back into a union.
+      if (res.status === 500) {
+        expectTypeOf(await res.json()).toEqualTypeOf<never>()
+      }
     })
   })
 

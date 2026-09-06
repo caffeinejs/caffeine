@@ -3,7 +3,7 @@ import { $t } from '@caffeinejs/std'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import { Router, blend, createWebApplication, fst } from '../index.js'
-import type { PathParams, RoutesOf } from '../routing/programmatic/types.js'
+import type { DepsOf, PathParams, ResponsesOf, RoutesOf } from '../routing/programmatic/types.js'
 
 class Greeter {}
 class Audit {}
@@ -551,5 +551,80 @@ describe('request variables', () => {
         expectTypeOf(ctx.state.get('tenant')).toEqualTypeOf<string | undefined>()
         return ctx.body()
       })
+  })
+})
+
+describe('declared responses', () => {
+  const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
+  const problemSchema = $t.Object({ detail: $t.String() })
+
+  type Pet = { id: number; name: string }
+  type Problem = { detail: string }
+
+  it('reads a body per status code', () => {
+    expectTypeOf<ResponsesOf<{ response: { 200: typeof petSchema; 404: typeof problemSchema } }>>().toEqualTypeOf<{
+      200: Pet
+      404: Problem
+    }>()
+  })
+
+  it('leaves out a wildcard key, which cannot discriminate a literal status', () => {
+    expectTypeOf<ResponsesOf<{ response: { 200: typeof petSchema; '4xx': typeof problemSchema } }>>().toEqualTypeOf<{
+      200: Pet
+    }>()
+  })
+
+  it('is unknown where the route declares no response schema', () => {
+    expectTypeOf<ResponsesOf<{ body: typeof petSchema }>>().toEqualTypeOf<unknown>()
+  })
+
+  it('does not change what the route reports as its output', () => {
+    const router = new Router('/pets')
+      .get('/:id')
+      .schema({ response: { 200: petSchema, 404: problemSchema } })
+      .handler(ctx => ctx.body())
+
+    // The 200 schema still wins, as it did before responses were carried alongside it.
+    expectTypeOf<RoutesOf<typeof router>['output']>().toEqualTypeOf<Pet>()
+    expectTypeOf<RoutesOf<typeof router>['responses']>().toEqualTypeOf<{ 200: Pet; 404: Problem }>()
+  })
+})
+
+describe('declared dependencies', () => {
+  class Clock {}
+
+  it('reads what a router injected', () => {
+    const router = new Router('/greet').inject({ greeter: Greeter })
+
+    expectTypeOf<DepsOf<typeof router>>().toEqualTypeOf<{ greeter: Greeter }>()
+  })
+
+  it('is empty for a router that injected nothing', () => {
+    expectTypeOf<keyof DepsOf<Router>>().toEqualTypeOf<never>()
+  })
+
+  it('intersects across a union of routers, so every name is reachable', () => {
+    const greet = new Router('/greet').inject({ greeter: Greeter })
+    const ticks = new Router('/ticks').inject({ clock: Clock })
+
+    expectTypeOf<DepsOf<typeof greet | typeof ticks>>().toEqualTypeOf<{ greeter: Greeter; clock: Clock }>()
+  })
+
+  it('survives blending', () => {
+    const greet = new Router('/greet').inject({ greeter: Greeter })
+    const ticks = new Router('/ticks').inject({ clock: Clock })
+
+    expectTypeOf<DepsOf<ReturnType<typeof blend<[typeof greet, typeof ticks]>>>>().toEqualTypeOf<{
+      greeter: Greeter
+      clock: Clock
+    }>()
+  })
+
+  it('is accumulated by what an application mounted', () => {
+    const greet = new Router('/greet').inject({ greeter: Greeter })
+    const ticks = new Router('/ticks').inject({ clock: Clock })
+    const app = createWebApplication().build().mount(greet, ticks)
+
+    expectTypeOf<DepsOf<typeof app>>().toEqualTypeOf<{ greeter: Greeter; clock: Clock }>()
   })
 })

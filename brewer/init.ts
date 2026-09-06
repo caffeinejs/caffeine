@@ -1,5 +1,5 @@
 import type { RouteContract } from './contract.js'
-import type { BrewResponse } from './response.js'
+import type { BrewResponseOf } from './response.js'
 
 /** Whether `T` is the open record `InferQuery`/`InferHeaders` fall back to when a route declares no schema. */
 type IsOpenRecord<T> = string extends keyof T ? true : false
@@ -43,4 +43,4 @@ type AllOptional<T> = Partial<T> extends T ? true : false
 /** The call one verb makes: the init argument disappears when the route needs nothing from it. */
 export type VerbCall<R extends RouteContract> = (
   ...args: AllOptional<CallInit<R>> extends true ? [init?: CallInit<R>] : [init: CallInit<R>]
-) => Promise<BrewResponse<R['output']>>
+) => Promise<BrewResponseOf<R>>

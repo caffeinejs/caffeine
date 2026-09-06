@@ -101,6 +101,7 @@ export interface RouteDef<
   Headers = unknown,
   Body = unknown,
   Output = unknown,
+  Responses = unknown,
 > {
   method: M
   path: P
@@ -109,6 +110,7 @@ export interface RouteDef<
   headers: Headers
   body: Body
   output: Output
+  responses: Responses
 }
 
 /**
@@ -122,7 +124,8 @@ export type DeclaredRoute<M extends string, P extends string, S extends RouteVal
   InferQuery<S>,
   InferHeaders<S>,
   InferBody<S>,
-  OutputOf<S, O>
+  OutputOf<S, O>,
+  ResponsesOf<S>
 >
 
 /**
@@ -147,10 +150,30 @@ type SuccessBody<R> = R extends { 200: infer S extends AnySchema }
 type HandlerOutput<O> =
   Awaited<O> extends { readonly req: unknown; status: (code: number) => unknown } ? unknown : Awaited<O>
 
+/**
+ * What a route answers with, per status code, so a caller that checks the status knows the body that goes with it.
+ *
+ * Only codes written as numbers are read. A wildcard key — `'4xx'`, `'5xx'`, `'default'` — is left out on purpose:
+ * it would have to be typed against `number`, which overlaps every literal code, and a union member whose status is
+ * `number` stops `res.status === 200` narrowing to the 200 body. {@link OutputOf} still reads what it always read.
+ */
+export type ResponsesOf<S extends RouteValidationSchema> = S extends { response: infer R }
+  ? { [K in Extract<keyof R, number> as K]: R[K] extends AnySchema ? InferSchema<R[K]> : never }
+  : unknown
+
 /** Re-bases a set of route descriptors under a prefix, for a router mounted inside another. */
 export type PrefixRoutePaths<R, Prefix extends string> =
-  R extends RouteDef<infer M, infer P, infer Params, infer Query, infer Headers, infer Body, infer Output>
-    ? RouteDef<M, JoinPath<Prefix, P>, Params, Query, Headers, Body, Output>
+  R extends RouteDef<
+    infer M,
+    infer P,
+    infer Params,
+    infer Query,
+    infer Headers,
+    infer Body,
+    infer Output,
+    infer Responses
+  >
+    ? RouteDef<M, JoinPath<Prefix, P>, Params, Query, Headers, Body, Output, Responses>
     : never
 
 /**
@@ -181,3 +204,25 @@ export type VarsOf<T> = T extends { readonly __vars?: infer V } ? NonNullable<V>
  * configuration typed rather than reset it to what an undeclared router has.
  */
 export type ConfigOf<T> = T extends { readonly __config?: infer C } ? NonNullable<C> : never
+
+/**
+ * The dependencies a `Router` or an application declared with `.inject()`, keyed by the name handlers read them
+ * under.
+ *
+ * Read back the same way {@link VarsOf} reads the variables, but intersected rather than unioned: a union of
+ * routers declares the names of *all* of them, and a caller naming one has to reach every name. A target that
+ * injected nothing reads as the empty object.
+ *
+ * Only group-level `.inject()` is carried. A route-level one types that route's handler and goes no further, so it
+ * is not part of the router's type.
+ */
+export type DepsOf<T> = Flatten<UnionToIntersection<T extends { readonly __deps?: infer D } ? NonNullable<D> : never>>
+
+// Folds the intersection into one object type. Not `Simplify`, whose trailing `& {}` is there to force the display
+// eagerly and would survive into the result. `readonly` is dropped with it: it comes from the `const` spec
+// `inject()` captured, and what this names is a bag of values to supply, not a read-only view of one.
+type Flatten<T> = { -readonly [K in keyof T]: T[K] }
+
+// Distributes the union into contravariant position so inference collapses it to an intersection — the standard
+// trick, and the only way to turn "any of these routers" into "every name they declare".
+type UnionToIntersection<U> = (U extends unknown ? (arg: U) => void : never) extends (arg: infer I) => void ? I : never

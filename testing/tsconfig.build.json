@@ -5,6 +5,9 @@
   },
   "references": [
     {
+      "path": "../brewer/tsconfig.build.json"
+    },
+    {
       "path": "../di/tsconfig.build.json"
     },
     {

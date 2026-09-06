@@ -59,6 +59,9 @@ export class Router<
   /** Phantom — names what `ctx.config` is typed as under this router. Never assigned, never read. */
   declare readonly __config?: C
 
+  /** Phantom — names what this router's `inject()` declared, for `DepsOf`. Never assigned, never read. */
+  declare readonly __deps?: GD
+
   readonly #state: RouterState
 
   constructor(path: GP = '' as GP) {

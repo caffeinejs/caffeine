@@ -1,5 +1,5 @@
 import { Router } from './router.js'
-import type { ConfigOf, RoutesOf, VarsOf } from './types.js'
+import type { ConfigOf, DepsOf, RoutesOf, VarsOf } from './types.js'
 
 /**
  * Combines routers into one, carrying every route they declare in its type.
@@ -21,13 +21,13 @@ import type { ConfigOf, RoutesOf, VarsOf } from './types.js'
  */
 export function blend<const RS extends ReadonlyArray<Router<any, any, any, any, any>>>(
   ...routers: RS
-): Router<VarsOf<RS[number]>, ConfigOf<RS[number]>, undefined, '', RoutesOf<RS[number]>> {
+): Router<VarsOf<RS[number]>, ConfigOf<RS[number]>, DepsOf<RS[number]>, '', RoutesOf<RS[number]>> {
   // The mount re-bases under the empty path, which is the identity — a step the compiler will not take on its own
   // while the routes are still a type parameter.
-  return new Router<VarsOf<RS[number]>, ConfigOf<RS[number]>>().mount(...routers) as Router<
+  return new Router<VarsOf<RS[number]>, ConfigOf<RS[number]>, DepsOf<RS[number]>>().mount(...routers) as Router<
     VarsOf<RS[number]>,
     ConfigOf<RS[number]>,
-    undefined,
+    DepsOf<RS[number]>,
     '',
     RoutesOf<RS[number]>
   >

@@ -13,6 +13,7 @@ export interface RouteContract {
   headers: unknown
   body: unknown
   output: unknown
+  responses: unknown
 }
 
 /**
