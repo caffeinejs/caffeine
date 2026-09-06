@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@caffeinejs/di": "file:../..",
+    "@caffeinejs/di": "*",
     "fastify": "^5.12.1"
   },
   "devDependencies": {

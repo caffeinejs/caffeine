@@ -51,15 +51,18 @@ updates:
           - 'unplugin-swc'
           - 'esbuild'
           - 'supertest'
+          - '@types/supertest'
           - 'globby'
           - 'eslint'
       typescript:
         patterns:
           - 'typescript'
           - 'tsx'
-          - '@types/*'
           - 'typescript-eslint'
+          - '@types/node'
+          - '@types/bun'
       dependencies:
-        dependency-type: 'production'
+        patterns:
+          - '*'
         exclude-patterns:
           - '@caffeinejs/*'
