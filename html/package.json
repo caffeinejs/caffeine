@@ -38,6 +38,6 @@
   },
   "devDependencies": {
     "@kitajs/html": "^4.2.13",
-    "fastify": "^5.8.5"
+    "fastify": "^5.12.1"
   }
 }

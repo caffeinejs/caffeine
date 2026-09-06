@@ -15,33 +15,33 @@ import {
   Post,
   Query,
   Res,
+  SerializeOptions,
+  StandardSchemaSerializerInterceptor,
+  StandardSchemaValidationPipe,
   UnauthorizedException,
   UseGuards,
   UseInterceptors,
-  ValidationPipe,
 } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
-import { Transform, Type } from 'class-transformer'
-import { IsBoolean, IsInt, IsNotEmpty, IsString } from 'class-validator'
 import { FastifyReply } from 'fastify'
 import { Observable } from 'rxjs'
+import { z } from 'zod'
 
 const PORT = parseInt(process.env.PORT ?? '3022', 10)
 
-class Schema {
-  @IsString()
-  @IsNotEmpty()
-  text!: string
+const schema = z.object({
+  text: z.string(),
+  num: z.coerce.number().int(),
+  bool: z.preprocess(v => v === 'true' || v === true, z.boolean()),
+})
+type Schema = z.infer<typeof schema>
 
-  @IsInt()
-  @Type(() => Number)
-  num!: number
-
-  @IsBoolean()
-  @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
-  bool!: boolean
-}
+const responseSchema = z.object({
+  params: schema,
+  query: schema,
+  body: schema,
+})
 
 @Injectable()
 class RequestIdInterceptor implements NestInterceptor {
@@ -73,11 +73,13 @@ class TestController {
 
   @Post('/api/test/:text/:num/:bool')
   @UseGuards(ApiKeyGuard)
+  @UseInterceptors(StandardSchemaSerializerInterceptor)
+  @SerializeOptions({ schema: responseSchema })
   @HttpCode(200)
   test(
-    @Param() params: Schema,
-    @Query() query: Schema,
-    @Body() body: Schema,
+    @Param({ schema }) params: Schema,
+    @Query({ schema }) query: Schema,
+    @Body({ schema }) body: Schema,
     @Headers() headers: Record<string, string>,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
@@ -100,6 +102,6 @@ class TestController {
 class AppModule {}
 
 const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
-app.useGlobalPipes(new ValidationPipe({ transform: true }))
+app.useGlobalPipes(new StandardSchemaValidationPipe())
 
 await app.listen(PORT, '0.0.0.0')
