@@ -45,7 +45,7 @@
     "test:coverage": "vitest run --coverage",
     "test:property": "vitest run prop.test",
     "test:watch": "vitest",
-    "test:typecheck": "tsc --build tsconfig.check.json && npm run test:typecheck:benchmarks",
+    "test:typecheck": "tsc --build tsconfig.check.json && npm run test:typecheck:benchmarks && npm run test:typecheck -w @caffeinejs/cli",
     "test:typecheck:benchmarks": "npm run test:typecheck -w @caffeinejs/benchmarks",
     "test:memory": "npm run test:memory --workspaces --if-present",
     "lint": "oxlint && oxfmt --check",

@@ -26,7 +26,7 @@ describe('Redirect', () => {
       @Post('/test')
       @Header('x-test', 'tested')
       post() {
-        return Response.redirect(new URL('/another-place', 'http://localhost'), 307)
+        return Response.redirect(new URL('/another-place', 'http://localhost').href, 307)
       }
     }
 

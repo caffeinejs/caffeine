@@ -4,6 +4,7 @@
     "rootDir": ".",
     "outDir": "dist",
     "lib": ["esnext", "dom"],
+    "types": [],
     "noEmit": true
   },
   "include": ["**/*.ts"],
