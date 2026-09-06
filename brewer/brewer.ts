@@ -12,7 +12,7 @@ export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'head
   headers?: HeaderValues | (() => HeaderValues | Promise<HeaderValues>)
 
   /** The `fetch` to call. Defaults to the global one; supply another for a test or a non-global implementation. */
-  fetch?: typeof globalThis.fetch
+  fetch?: Fetchable['fetch']
 }
 
 /**
