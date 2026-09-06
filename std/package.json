@@ -36,10 +36,10 @@
   },
   "dependencies": {
     "@caffeinejs/di": "*",
-    "@sinclair/typebox": "^0.34.49",
+    "@sinclair/typebox": "^0.34.52",
     "@standard-schema/spec": "^1.1.0"
   },
   "devDependencies": {
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   }
 }

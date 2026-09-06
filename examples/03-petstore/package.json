@@ -20,15 +20,15 @@
     "@caffeinejs/static": "*",
     "@caffeinejs/std": "*",
     "@caffeinejs/view": "*",
-    "@fastify/cookie": "^11.0.0",
-    "@fastify/multipart": "^10.0.0",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/multipart": "^10.1.1",
     "@fastify/static": "^10.1.3",
     "@fastify/view": "^12.0.0",
     "@prisma/client": "^6.19.3",
     "dotenv": "^17.0.0",
     "fastify": "^5.12.1",
     "handlebars": "^4.7.9",
-    "jose": "^5.0.0"
+    "jose": "^6.2.10"
   },
   "devDependencies": {
     "@caffeinejs/cli": "*",

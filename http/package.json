@@ -37,8 +37,8 @@
   "dependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*",
-    "jose": "^5.0.0",
-    "lru-cache": "^11.0.0"
+    "jose": "^6.2.10",
+    "lru-cache": "^11.5.2"
   },
   "peerDependencies": {
     "@fastify/cookie": "^11.0.0",
@@ -57,9 +57,9 @@
     }
   },
   "devDependencies": {
-    "@fastify/cookie": "^11.0.2",
+    "@fastify/cookie": "^11.1.2",
     "fastify": "^5.12.1",
     "fastify-plugin": "^6.0.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   }
 }

@@ -32,7 +32,7 @@
     "test:typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.49"
+    "@sinclair/typebox": "^0.34.52"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0"
