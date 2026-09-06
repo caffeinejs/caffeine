@@ -9,10 +9,12 @@ on:
     tags:
       - '*'
     paths-ignore:
+      - '.vscode/**'
       - 'docs/**'
       - '**.md'
   pull_request:
     paths-ignore:
+      - '.vscode/**'
       - 'docs/**'
       - '**.md'
 
