@@ -31,6 +31,9 @@ updates:
       - 'di/_tests/deno/**'
     cooldown:
       default-days: 7
+    ignore:
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
     allow:
       - dependency-type: all
         update-types:
