@@ -74,6 +74,7 @@ jobs:
             static/dist \
             openapi/dist \
             testing/dist \
+            brewer/dist \
             cli/dist \
             messaging/dist \
             kafka/dist \
@@ -110,6 +111,7 @@ jobs:
             static/dist/
             openapi/dist/
             testing/dist/
+            brewer/dist/
             cli/dist/
             messaging/dist/
             kafka/dist/
