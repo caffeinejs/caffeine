@@ -20,6 +20,8 @@ function fakeMessage(): KafkaMessage {
     offset: 7n,
     timestamp: 0n,
     headers: new Map(),
+    headerEntries: [],
+    leaderEpoch: 0,
     metadata: {},
     commit: () => {},
     toJSON: () => ({}) as never,

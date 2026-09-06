@@ -26,6 +26,6 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/messaging": "*",
     "@caffeinejs/std": "*",
-    "@platformatic/kafka": "^2.9.0"
+    "@platformatic/kafka": "^2.11.0"
   }
 }

@@ -14,6 +14,8 @@ function fakeMessage(commit: () => void = () => {}): KafkaMessage {
     offset: 42n,
     timestamp: 99n,
     headers: new Map([['h', 'v']]),
+    headerEntries: [['h', 'v']],
+    leaderEpoch: 0,
     metadata: {},
     commit,
     toJSON: () => ({}) as never,

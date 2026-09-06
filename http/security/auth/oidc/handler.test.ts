@@ -1,5 +1,5 @@
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
-import type { JWTVerifyGetKey, KeyLike } from 'jose'
+import type { JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { Context } from '../../../context.js'
@@ -558,7 +558,7 @@ describe('OIDCAuthenticationHandler', () => {
   })
 
   describe('processCallback()', () => {
-    let privateKey: KeyLike
+    let privateKey: CryptoKey
     let jwksResolver: (uri: string) => JWTVerifyGetKey
 
     beforeEach(async () => {

@@ -1,7 +1,7 @@
 import FastifyCookie from '@fastify/cookie'
 import fastify from 'fastify'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
-import type { JWK, JWTVerifyGetKey, KeyLike } from 'jose'
+import type { JWK, JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import {
@@ -96,7 +96,7 @@ describe('OIDC integration', () => {
   })
 
   describe('callback flow', () => {
-    let privateKey: KeyLike
+    let privateKey: CryptoKey
     let jwkPublic: JWK
     let jwksResolver: (uri: string) => JWTVerifyGetKey
 
