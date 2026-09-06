@@ -39,7 +39,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
     logger: true,
     routerOptions: { ignoreTrailingSlash: true },
     ...serverOpts,
-  }).addHttpMethod('QUERY', { hasBody: true })
+  }).addHttpMethod('QUERY', { hasBody: true, overrideExisting: true })
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie)
 
@@ -138,7 +138,14 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
     // Kubernetes probes (/livez, /readyz, /startupz) plus the graceful shutdown that drives them: SIGTERM makes
     // /readyz answer 503 immediately, the drain delay covers the routing-table lag while requests keep being
     // served normally, and only then does the server close. No preStop sleep in the manifest.
-    .health()
+    //
+    // Tests never need the 25s production shutdown budget; a hung Fastify close would sit on it until
+    // hookTimeout. shutdownTimeout(0) waits forever — a small positive budget still force-tears down.
+    .health(h => {
+      if (process.env.VITEST !== undefined) {
+        h.drainDelay(0).shutdownTimeout(200)
+      }
+    })
 
   const app = builder
     .build()

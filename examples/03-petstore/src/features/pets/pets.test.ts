@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { WebApplication } from '@caffeinejs/http'
 import { ErrFetchFailed, newReq, newURL, TestContainer, controllerTypedClient } from '@caffeinejs/testing'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { buildApp } from '../../app.js'
 import { sessionHeader, signInWithGithub, stubGithub } from '../../util/testing/github.js'
@@ -127,6 +127,7 @@ describe('pets feature (via @caffeinejs/testing)', () => {
 
   afterAll(async () => {
     await app.close()
+    vi.unstubAllGlobals()
   })
 
   beforeEach(() => {

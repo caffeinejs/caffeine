@@ -32,8 +32,8 @@
   },
   "devDependencies": {
     "@caffeinejs/cli": "*",
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.4.0",
     "prisma": "^6.2.1",
-    "tsx": "^4.22.4"
+    "tsx": "^4.23.13"
   }
 }
