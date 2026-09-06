@@ -27,10 +27,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v5
-        with:
-          fail-on-severity: high
+      # Enable this when the repository goes public
+      # .
+      # - name: Dependency Review
+      #   uses: actions/dependency-review-action@v5
+      #   with:
+      #     fail-on-severity: high
 
   license-check:
     name: License Allowlist
