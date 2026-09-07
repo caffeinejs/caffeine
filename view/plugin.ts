@@ -11,7 +11,7 @@ interface ViewBuilderF extends TypeLambda {
   readonly Out: ViewBuilder<this['In']>
 }
 
-export interface ViewFeature extends KeyedFeature<ViewBuilder> {
+export interface ViewFeature extends KeyedFeature<ViewBuilder, ViewBuilderF> {
   readonly _F: ViewBuilderF
 }
 

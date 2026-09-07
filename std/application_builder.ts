@@ -233,9 +233,10 @@ export class ApplicationBuilder<TConfig = unknown>
    * was reached through, and a headless application configures kafka and messaging exactly the way an HTTP
    * one does.
    *
-   * The key may name a **wider** type than the schema describes. A feature's namespace is in the resolved tree
-   * whether or not the application declared it, so naming `server` in the key's type without redeclaring its
-   * shape is accurate rather than a lie.
+   * The key may name a **wider** type than the schema describes, which is what lets one key type serve an
+   * application whose schema is assembled in pieces. It buys nothing where a field is concerned: the resolved
+   * object holds exactly what the schema declared, so a key naming a field the schema does not describe reads
+   * `undefined`.
    *
    * ```ts
    * const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))

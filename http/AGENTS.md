@@ -70,9 +70,9 @@ router — named apart from `.config()`, which writes the adapter's per-route co
 the application's configuration whether or not a router declared the type.
 
 Calling it — `ctx.config(kHTMLConfig)` — reads a feature's own slice instead, by `featureConfigKey`. That is
-the path for a package, which knows neither `C` nor where the slice ended up, since `.config(selector)` makes
-the namespace relocatable. A key nothing registered reads `undefined`, so a package can fall back to its own
-defaults rather than require the feature to be installed.
+the path for a package, which knows neither `C` nor where the slice ended up, since `.config(selector)` is the
+application's choice and may not have been made at all. A key nothing registered reads `undefined`, so a
+package can fall back to its own defaults rather than require the feature to be installed.
 
 `ctx.state` is application space. A first-party package does not write to it: a framework value gets a dedicated
 member, as authentication does with `ctx.user`, or goes on the route config. One flat key namespace shared by an

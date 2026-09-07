@@ -16,17 +16,18 @@ export const HTML_DEFAULTS: HTMLDefaults = {
   autoDoctype: true,
 }
 
-/** The default location of the HTML settings in the configuration tree. */
-export const HTML_CONFIG_NAMESPACE: readonly string[] = ['html']
-
 /**
  * Where a rendering `HTMLResult` finds the application's settings: `ctx.config(kHTMLConfig)`.
  *
- * A key rather than the namespace, because `HTML(...)` is called from application code that knows neither the
- * application's config type nor where in the tree the feature ended up.
+ * A key rather than a path, because `HTML(...)` is called from application code that knows neither the
+ * application's config type nor where in the tree the feature was placed — if it was placed anywhere at all.
  */
 export const kHTMLConfig = featureConfigKey<HTMLDefaults>('html')
 
+/**
+ * The shape the HTML feature expects wherever the application decides to keep its settings. Import it into an
+ * application schema and point the builder at it with `h.config(c => c.app.html)`.
+ */
 export const htmlConfigSchema = $t.Object({
   autoDoctype: $t.Boolean({ default: HTML_DEFAULTS.autoDoctype }),
 })

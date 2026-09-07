@@ -1,5 +1,6 @@
 import {
   $t,
+  SHUTDOWN_SIGNALS,
   type Duration,
   type SignalDispatcher,
   type ShutdownSignal,
@@ -105,9 +106,6 @@ function gracePeriodOf(env: EnvLike): number {
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1_000 : DEFAULT_GRACE_PERIOD_MS
 }
 
-/** The default location of the health settings in the configuration tree. */
-export const HEALTH_CONFIG_NAMESPACE: readonly string[] = ['health']
-
 /** The health slice of the configuration tree. Every duration accepts `'5s'`-style strings or milliseconds. */
 export interface HealthConfig {
   enabled?: boolean
@@ -153,7 +151,7 @@ export const healthConfigSchema = $t.Object({
   // `$t.List` rather than `$t.Array`: the signal names are the one health setting that is naturally a list, and
   // an operator setting `HEALTH__SIGNALS=SIGTERM,SIGINT` should get two signals rather than one signal with a
   // comma in its name, which is what a plain array does with a scalar.
-  signals: $t.Optional($t.Union([$t.Literal(false), $t.List($t.String())])),
+  signals: $t.Optional($t.Union([$t.Literal(false), $t.List($t.UnionEnum(SHUTDOWN_SIGNALS))])),
 })
 
 /**

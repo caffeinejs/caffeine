@@ -9,11 +9,12 @@ import type { OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import type { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
 import type { RefreshTokenOptionsBuilder } from './refresh/refresh_options.js'
 
-/** The default location of the authentication settings in the configuration tree. */
-export const AUTH_CONFIG_NAMESPACE: readonly string[] = ['auth']
-
 /**
- * Where one scheme's settings live: `auth.schemes.<name>.*`, under the scheme's own registered name.
+ * Where one scheme's settings live, relative to wherever the application placed the authentication block:
+ * `<base>.schemes.<name>.*`, under the scheme's own registered name.
+ *
+ * `undefined` in, `undefined` out — an application that never placed authentication in its configuration has
+ * nowhere for a scheme to sit either, and the scheme resolves detached from its builder alone.
  *
  * **A scheme addressed by environment variable needs a lowercase name.** `EnvConfigProvider` lowercases each
  * path segment before folding underscores into camelCase, so `AUTH__SCHEMES__BEARER__SECRET` resolves to
@@ -22,8 +23,16 @@ export const AUTH_CONFIG_NAMESPACE: readonly string[] = ['auth']
  * `addJWTBearer('jwt', ...)` — wherever an environment variable has to reach it. A file or an inline source
  * addresses a capitalized name as written.
  */
-export function schemeNamespace(base: readonly string[], name: string): readonly string[] {
-  return [...base, 'schemes', name]
+export function schemeNamespace(base: readonly string[] | undefined, name: string): readonly string[] | undefined {
+  return authSubNamespace(base, 'schemes', name)
+}
+
+/** The location of one block nested inside the authentication settings, or `undefined` when there is none. */
+export function authSubNamespace(
+  base: readonly string[] | undefined,
+  ...segments: string[]
+): readonly string[] | undefined {
+  return base === undefined ? undefined : [...base, ...segments]
 }
 
 /** The kinds of scheme that carry configurable options. `addStrategy` and `forward` take none. */

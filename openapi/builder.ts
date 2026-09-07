@@ -8,12 +8,7 @@ import {
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
-import {
-  OPENAPI_CONFIG_KEYS,
-  OPENAPI_CONFIG_NAMESPACE,
-  openapiConfigSchema,
-  type OpenAPIConfigSlice,
-} from './config.js'
+import { OPENAPI_CONFIG_KEYS, openapiConfigSchema, type OpenAPIConfigSlice } from './config.js'
 import { OpenAPIDocumentStore } from './document_store.js'
 import { registerEndpoints } from './endpoints.js'
 import { OpenAPIExtension } from './extension.js'
@@ -291,7 +286,6 @@ export class OpenAPIBuilder<C = unknown> implements Service {
     const code = this.#options
 
     const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
-      namespace: OPENAPI_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: openapiConfigSchema,
       values: Object.fromEntries(

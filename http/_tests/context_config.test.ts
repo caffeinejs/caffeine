@@ -101,11 +101,10 @@ describe('ctx.config', () => {
 
     await app.ready()
 
-    // No `.config()` call, so there is no application config key to resolve — and the context still reads,
-    // because it is served by the configuration the framework's own features resolved for themselves. `health`
-    // is here because every slice's resolved values are placed into the root tree, not only the ones that
-    // wrote framework defaults into it.
-    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['caffeine', 'server', 'health'] })
+    // No `.config()` call, so there is no application config key to resolve — and the context still reads.
+    // Only `caffeine` is there: it is the framework's own block, while the server and health features were
+    // pointed nowhere and therefore contribute no field to the tree.
+    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['caffeine'] })
 
     await app.close()
   })
@@ -204,8 +203,7 @@ describe('ctx.config(featureKey)', () => {
 
     beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
       defineFeatureConfig<WidgetConfig>(kit.config, {
-        namespace: ['widget'],
-        selector: this.at,
+        selector: this.at ?? ((c: never) => (c as { widget: unknown }).widget),
         key: kWidget,
         schema: widgetSchema,
         values: { size: 7 },
@@ -264,28 +262,31 @@ describe('ctx.config(featureKey)', () => {
 })
 
 /**
- * The case the whole mechanism exists for.
+ * The application owns the schema, so a feature's settings are in `ctx.config` when the application declared
+ * them there and pointed the feature at them — never because the feature was installed.
  *
- * An application that declares its own configuration used to *lose* the framework's from the same tree:
- * validation drops every key the schema does not name, so `ctx.config.server` and `$i.value(c => c.server...)`
- * both went missing in exactly the applications that bothered to describe their settings.
+ * The two halves have to agree: what the application reads through the tree and what actually reached the
+ * feature. Declaring `server.port` and reading 4321 back from the handle proves nothing on its own; the server
+ * has to be listening on it.
  */
 describe('ctx.config with an application schema', () => {
-  const ownSchema = $t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) })
+  const ownSchema = $t.Object({
+    catalog: $t.Object({ pageSize: $t.Number() }),
+    server: $t.Object({ port: $t.Number({ default: 0 }), host: $t.String({ default: '0.0.0.0' }) }, { default: {} }),
+  })
 
-  type FullConfig = InferSchema<typeof ownSchema> & { server: { host: string; port: number } }
+  type FullConfig = InferSchema<typeof ownSchema>
 
-  // The key names the whole tree; the schema declares only what the application owns. The framework's half is
-  // in the resolved tree either way, so naming it here is accurate rather than a lie.
   const kFull = token<ConfigHandle<FullConfig>>(Symbol('app.full'))
 
-  it('still reads a framework namespace the schema never declared', async () => {
+  it('reads a feature block the application declared and pointed the feature at', async () => {
     const routes = new Router('/catalog')
       .configType<FullConfig>()
       .get('/', ctx => ({ pageSize: ctx.config.catalog.pageSize, host: ctx.config.server.host }))
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
       .config(ownSchema, kFull, c => c.source(new InlineConfigProvider({ catalog: { pageSize: 25 } })))
+      .server(s => s.config(c => c.server))
       .build()
       .mount(routes)
 
@@ -296,8 +297,8 @@ describe('ctx.config with an application schema', () => {
     await app.close()
   })
 
-  // The values provider is bound to the same handle, so the loss was never confined to `ctx.config`.
-  it('resolves an $i.value selector into a framework namespace', async () => {
+  // The values provider is bound to the same handle, so it sees the same tree `ctx.config` does.
+  it('resolves an $i.value selector into a declared feature block', async () => {
     const routes = new Router('/catalog')
       .configType<FullConfig>()
       .inject($i => ({ host: $i.value(c => c.server.host) }))
@@ -305,12 +306,34 @@ describe('ctx.config with an application schema', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
       .config(ownSchema, kFull, c => c.source(new InlineConfigProvider({ catalog: { pageSize: 25 } })))
+      .server(s => s.config(c => c.server))
       .build()
       .mount(routes)
 
     await app.ready()
 
     expect(await (await app.fetch('/catalog')).json()).toEqual({ host: '0.0.0.0' })
+
+    await app.close()
+  })
+
+  // A feature the application never placed is absent from the tree entirely, whatever a source says about a
+  // name that looks like it.
+  it('leaves out a feature block the application declared nothing for', async () => {
+    const routes = new Router('/plain').configType<FullConfig>().get('/', ctx => ({ keys: Object.keys(ctx.config) }))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+      .config($t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) }), kFull, c =>
+        c.source(new InlineConfigProvider({ catalog: { pageSize: 25 }, server: { host: '127.0.0.1' } })),
+      )
+      .build()
+      .mount(routes)
+
+    await app.ready()
+
+    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['catalog'] })
+    // And the server did not take it either — it was pointed nowhere, so its own default stands.
+    expect(app.contributions.get(kServerContribution).host).toBe('0.0.0.0')
 
     await app.close()
   })
@@ -326,6 +349,7 @@ describe('ctx.config with an application schema', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
       .config(withServer, kServer)
+      .server(s => s.config(c => c.server))
       .build()
 
     await app.ready()

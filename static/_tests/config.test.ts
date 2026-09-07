@@ -10,10 +10,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { StaticExtension, StaticExt } from '../index.js'
 import type { StaticMount } from '../static.js'
 
-// The application declares no configuration of its own — `static.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ static: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema: it declares where the static block lives and `s.config(c => c.static)`
+// points the feature at it. Declared field by field rather than by importing `staticConfigSchema`: every
+// field of `StaticConfigSlice` is optional, so a block naming only what these tests configure satisfies the
+// feature, and that schema is small enough for TypeScript to infer a config type from.
+const rootSchema = $t.Object({
+  static: $t.Object(
+    {
+      mounts: $t.Optional($t.Array($t.Object({ root: $t.String(), prefix: $t.Optional($t.String()) }))),
+      spa: $t.Optional($t.Object({ root: $t.String(), index: $t.Optional($t.String()) })),
+    },
+    { default: {} },
+  ),
+})
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
@@ -40,7 +49,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt, () => undefined)
+      .extend(StaticExt, s => s.config(c => c.static))
       .build()
 
     await app.ready()
@@ -52,7 +61,7 @@ describe('static configuration', () => {
   it('lets the environment override a builder-set mount root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ STATIC__MOUNTS__0__ROOT: fixtures }), ConfigPriority.ENV))
-      .extend(StaticExt, s => s.serve(dist, { prefix: '/assets/' }))
+      .extend(StaticExt, s => s.config(c => c.static).serve(dist, { prefix: '/assets/' }))
       .build()
 
     await app.ready()
@@ -85,7 +94,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt, s => s.spa(dist))
+      .extend(StaticExt, s => s.config(c => c.static).spa(dist))
       .build()
 
     await app.ready()
@@ -105,7 +114,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt, s => s.serve(fixtures))
+      .extend(StaticExt, s => s.config(c => c.static).serve(fixtures))
       .build()
 
     await app.ready()

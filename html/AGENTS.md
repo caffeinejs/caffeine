@@ -44,11 +44,11 @@ until a TypeScript 7.1 API exists that the plugin can use.
 
 ## `autoDoctype` reaches a response through the config slice; Content-Type does not
 
-`Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLBuilder` registers a
-slice at `html.*` under the `kHTMLConfig` feature key, and `respond` reads it with
-`ctx.config(kHTMLConfig)`. The key is what makes that possible — the path is relocatable and `HTML(...)` is
-called from application code that does not know the application's config type, so neither the namespace nor
-`C` is available to it.
+`Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLBuilder` registers its
+slice under the `kHTMLConfig` feature key, and `respond` reads it with `ctx.config(kHTMLConfig)`. The key is
+what makes that possible — where the settings live is the application's choice (`h.config(c => c.app.html)`,
+or nowhere at all), and `HTML(...)` is called from application code that knows neither that location nor the
+application's config type, so neither a path nor `C` is available to it.
 
 When the application never installed `HTMLExt` no slice is registered, the key reads `undefined`, and
 `HTML_DEFAULTS` applies — which is what keeps `HTML(...)` working with no setup.

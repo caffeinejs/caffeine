@@ -8,7 +8,6 @@ import type { ConfigSlice } from '@caffeinejs/std/config'
 
 import { kHealthContribution } from './keys.js'
 import {
-  HEALTH_CONFIG_NAMESPACE,
   finalizeHealthOptions,
   healthConfigSchema,
   mergeHealthConfig,
@@ -23,10 +22,11 @@ import {
  * probes or not, and an application that never calls `.health()` still benefits from a shutdown that refuses
  * traffic before it stops listening.
  *
- * {@link HealthOptions} still resolves from the configuration tree when `.health()` was never called, so the drain
- * policy can be set entirely from the environment — `HEALTH__DRAINDELAY=10s` works with no code change at all.
- * The only difference from the configured path is what `enabled` falls back to: here the Kubernetes
- * auto-detection decides, because nothing opted in.
+ * {@link HealthOptions} still resolves when `.health()` was never called — from the health schema's own defaults,
+ * since an application that configured nothing placed nothing in its configuration either. Reaching the drain
+ * policy from a file or the environment means calling `.health(h => h.config(c => c.app.health))`. The other
+ * difference from the configured path is what `enabled` falls back to: here the Kubernetes auto-detection
+ * decides, because nothing opted in.
  *
  * Always registered after the `HealthBuilder`, so a configured setup wins.
  */
@@ -53,7 +53,8 @@ export class HealthServiceConfigurer implements Service {
       return
     }
 
-    const slice: ConfigSlice<HealthConfig> = kit.config.slice(HEALTH_CONFIG_NAMESPACE, healthConfigSchema)
+    // Detached: no builder ran, so nothing named a location for these settings.
+    const slice: ConfigSlice<HealthConfig> = kit.config.slice(undefined, healthConfigSchema)
     this.#options = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
   }
 

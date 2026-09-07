@@ -19,13 +19,22 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '../../../index.js'
+import { authConfigSchema } from '../config.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthContribution, kAuthSchemeDescriptors } from '../keys.js'
 
-// The application declares no configuration of its own — `auth.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ auth: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema: it declares where the authentication block lives — importing the feature's
+// own schema for the scheme-independent half — and `a.config(c => c.auth)` points the feature at it. `schemes`
+// stays an open record here: each scheme's shape is governed by its own slice, nested under this block.
+const rootSchema = $t.Object({
+  auth: $t.Object(
+    {
+      ...authConfigSchema.properties,
+      schemes: $t.Optional($t.Record($t.String(), $t.Record($t.String(), $t.Unknown()))),
+    },
+    { default: {} },
+  ),
+})
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
@@ -71,7 +80,9 @@ describe('authentication configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV),
       )
-      .authentication(a => a.addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
+      .authentication(a =>
+        a.config(c => c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      )
       .build()
       .useAuthenticationAndAuthorization()
 
@@ -112,7 +123,9 @@ describe('authentication configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV),
       )
-      .authentication(a => a.addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
+      .authentication(a =>
+        a.config(c => c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      )
       .build()
       .useAuthenticationAndAuthorization()
 
@@ -141,7 +154,9 @@ describe('authentication configuration', () => {
           }),
         ),
       )
-      .authentication(a => a.addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')))
+      .authentication(a =>
+        a.config(c => c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
+      )
       .build()
 
     await expect(app.ready()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
@@ -163,6 +178,7 @@ describe('authentication configuration', () => {
       )
       .authentication(a =>
         a
+          .config(c => c.auth)
           .addBasic(b => b.realm('From Code').validate(() => null))
           .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
           .default('Basic'),
@@ -193,6 +209,7 @@ describe('authentication configuration', () => {
       )
       .authentication(a =>
         a
+          .config(c => c.auth)
           .addBasic(b => b.validate(() => null))
           .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )
@@ -219,12 +236,14 @@ describe('authentication configuration', () => {
         ),
       )
       .authentication(a =>
-        a.addBasic(b =>
-          b.realm('Coded').validate(() => {
-            validated++
-            return null
-          }),
-        ),
+        a
+          .config(c => c.auth)
+          .addBasic(b =>
+            b.realm('Coded').validate(() => {
+              validated++
+              return null
+            }),
+          ),
       )
       .build()
       .useAuthenticationAndAuthorization()

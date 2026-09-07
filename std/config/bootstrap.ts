@@ -5,12 +5,12 @@ import type { ConfigDiagnostics } from './diagnostics.js'
 import { createConfigDiagnostics } from './diagnostics.js'
 import { ConfigEngine } from './engine.js'
 import type { ConfigSliceFailure } from './errors.js'
-import { materialize, readByParts, setByPath } from './materializer.js'
+import { materialize, readByParts } from './materializer.js'
 import type { ConfigSchema, InferConfig } from './schema.js'
 import { validateConfig } from './schema.js'
 import { secretPaths } from './secrets.js'
 import type { ConfigSlice, ConfigSliceSpec } from './slice.js'
-import { featureLookup, freezeDeep } from './slice.js'
+import { featureLookup, freezeDeep, sliceLabel } from './slice.js'
 import { ConfigSources } from './sources.js'
 import type { ConfigProvider, ConfigSnapshot, ResolutionContext } from './types.js'
 
@@ -77,13 +77,15 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
   const snapshot = await engine.resolve(ctx)
   const materialized = materialize(snapshot)
 
-  // Before the root tree is built, because what the slices publish is what gets overlaid onto it.
   const failures = publishSlices(options.slices, materialized)
 
-  // Frozen once, after the overlay: it is what the live handle reads through to, so freezing makes the
-  // read-only typing true at runtime and lets the handle hand back arrays directly instead of copying them on
-  // every read.
-  const validated = freezeDeep(overlaySlices(validateConfig(options.schema, materialized), options.slices))
+  // What the live handle reads through to, so freezing makes the read-only typing true at runtime and lets the
+  // handle hand back arrays directly instead of copying them on every read.
+  //
+  // Exactly what the application declared, and nothing else: a feature contributes no field here. Its settings
+  // are in the root tree when the application put them there — declared in the schema and named by the
+  // feature's `.config(...)` selector — and nowhere at all otherwise.
+  const validated = freezeDeep(validateConfig(options.schema, materialized))
   const config = createLiveAccessors(
     () => validated,
     undefined,
@@ -98,104 +100,6 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
 }
 
 /**
- * Places every published slice's values into the root tree at the namespace it owns.
- *
- * Without this, declaring an application schema *removes* the framework's configuration from the root: slices
- * read the materialized tree, the root handle reads the validated one, and validation drops every key the
- * schema does not declare. So an application that described its own settings would find `ctx.config.server`
- * gone, along with `$i.value(c => c.server.port)`.
- *
- * Values rather than a composed schema, because a schema may be `$t` or any Standard Schema and the two cannot
- * be merged. Each subtree is therefore validated exactly once, by the feature that owns it.
- *
- * What the application declared wins any overlap, and the two cannot disagree anyway: a schema's declared
- * defaults are published into the `SCHEMA` band, so the slice resolved from the same merged tree.
- */
-function overlaySlices<T>(validated: T, slices: readonly ConfigSliceSpec[] | undefined): T {
-  if (slices === undefined || slices.length === 0 || !isRecord(validated)) {
-    return validated
-  }
-
-  // Cloned before anything is written. Under `passthroughConfigSchema` the validated tree *is* the materialized
-  // one — the standard-schema branch hands its input straight back — and that object is what every slice read
-  // from.
-  const tree = cloneTree(validated) as Record<string, unknown>
-
-  // Shallowest first, so a slice nested inside another's namespace (`auth.schemes.jwt` under `auth`) is written
-  // after its parent instead of being erased by it.
-  const ordered = [...slices].sort((a, b) => a.parts.length - b.parts.length)
-
-  for (const spec of ordered) {
-    // A slice spanning the whole tree would replace the application's own, and one that failed to resolve has
-    // nothing to place — start-up fails for it separately.
-    if (spec.parts.length === 0 || !spec.slice.published) {
-      continue
-    }
-
-    const parts = [...spec.parts]
-    setByPath(tree, parts, mergeUnder(readByParts(tree, parts), spec.slice.snapshot()))
-  }
-
-  return tree as T
-}
-
-/**
- * Fills `incoming`'s keys in behind `existing`'s, so what the application declared is never overwritten.
- *
- * Everything is copied on the way in. A slice publishes a deep-frozen value, and a feature that nests slices
- * inside its own namespace — authentication registers `auth` alongside `auth.schemes.*` — needs to write into
- * the object its parent just placed.
- */
-function mergeUnder(existing: unknown, incoming: unknown): unknown {
-  if (!isRecord(existing) || !isRecord(incoming)) {
-    return cloneTree(existing === undefined ? incoming : existing)
-  }
-
-  const merged: Record<string, unknown> = {}
-
-  for (const [key, value] of Object.entries(incoming)) {
-    merged[key] = cloneTree(value)
-  }
-
-  for (const [key, value] of Object.entries(existing)) {
-    merged[key] = mergeUnder(value, incoming[key])
-  }
-
-  return merged
-}
-
-/**
- * Copies the containers, not their contents.
- *
- * Only plain objects and arrays are rebuilt; anything else is carried across by reference, so a value a schema
- * transformed into a class instance keeps its identity and its prototype.
- */
-function cloneTree(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(cloneTree)
-  }
-
-  if (!isRecord(value)) {
-    return value
-  }
-
-  const out: Record<string, unknown> = {}
-  for (const [key, child] of Object.entries(value)) {
-    out[key] = cloneTree(child)
-  }
-  return out
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-
-  const proto = Object.getPrototypeOf(value) as unknown
-  return proto === Object.prototype || proto === null
-}
-
-/**
  * Validates each feature slice and hands it to its holder.
  *
  * Slices read from the **materialized** tree rather than the root-validated one on purpose: both zod's
@@ -203,8 +107,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * application never described would be stripped before the feature ever saw it. The root schema governs the
  * application's own config key; a slice governs itself.
  *
- * A namespace that resolves to nothing validates as an empty object, which lets the feature's own schema
+ * A location that resolves to nothing validates as an empty object, which lets the feature's own schema
  * defaults — and the framework-band values written beneath it — decide the outcome instead of failing.
+ *
+ * A **detached** slice validates its own values instead: the application never named a location for it, so
+ * there is nothing in the tree that could be meant for it, and reading one would be guessing.
  *
  * **Failures are isolated.** Each slice validates and derives inside its own guard, so a feature with an
  * unusable value does not stop every other feature from resolving. The failures are returned rather than
@@ -220,13 +127,13 @@ export function publishSlices(
 
   for (const spec of slices ?? []) {
     try {
-      const raw = readByParts(materialized, spec.parts) ?? {}
+      const raw = spec.parts === undefined ? (spec.local ?? {}) : (readByParts(materialized, spec.parts) ?? {})
       // Publishing also runs this slice's derivations, so a derivation that rejects the combination as a whole
       // is caught by the same guard as a field that failed to validate.
       spec.slice.publish(freezeDeep(validateConfig(spec.schema, raw)))
     } catch (error) {
       spec.slice.fail(error)
-      failures.push({ path: spec.parts.join('.') || '<root>', error })
+      failures.push({ path: sliceLabel(spec.parts), error })
     }
   }
 

@@ -130,9 +130,18 @@ export class ConfigDefinition {
   /**
    * Registers a feature slice and returns the holder its validated value is published into, on bootstrap and
    * on every refresh. `parts` is pre-split so no read path ever parses a dotted key.
+   *
+   * `parts` `undefined` registers a **detached** slice: it is validated from `local` rather than from the tree,
+   * for a feature the application never pointed at a location.
    */
-  slice<T>(parts: readonly string[], schema: ConfigSchema<T>): ConfigSlice<T> {
-    for (const path of secretPaths(schema, parts)) {
+  slice<T>(
+    parts: readonly string[] | undefined,
+    schema: ConfigSchema<T>,
+    local?: Record<string, unknown>,
+  ): ConfigSlice<T> {
+    // Only a slice in the tree has paths to redact; a detached one is never in the resolved snapshot the
+    // diagnostics walk.
+    for (const path of parts === undefined ? [] : secretPaths(schema, parts)) {
       this.secrets.add(path)
     }
 
@@ -140,7 +149,7 @@ export class ConfigDefinition {
     // application builder points `warn` at the host separately. Passing it by value here would capture whatever
     // it happened to be — usually nothing.
     const slice = new ConfigSlice<T>(parts, () => this.warn)
-    this.slices.push({ parts, schema, slice } as ConfigSliceSpec)
+    this.slices.push({ parts, schema, slice, local } as ConfigSliceSpec)
     return slice
   }
 

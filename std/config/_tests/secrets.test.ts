@@ -88,7 +88,7 @@ describe('diagnostics redaction', () => {
   async function bootstrapWithSlice() {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<{ issuer: string; secret: string }>(definition, {
-      namespace: ['auth', 'jwt'],
+      selector: (c: never) => (c as { auth: { jwt: unknown } }).auth.jwt,
       schema: jwtSchema,
     })
 

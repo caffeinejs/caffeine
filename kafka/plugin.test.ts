@@ -78,7 +78,8 @@ describe('kafka feature', () => {
 
     expect(error).toMatchObject({ code: 'ERR_CONFIG_SLICES' })
     expect((error as ErrConfigSlices).failures).toHaveLength(1)
-    expect((error as ErrConfigSlices).failures[0].path).toBe('kafka.default')
+    // The application pointed this instance nowhere, so the failure names it as detached rather than by path.
+    expect((error as ErrConfigSlices).failures[0].path).toBe('<detached>')
     expect((error as ErrConfigSlices).failures[0].error).toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 

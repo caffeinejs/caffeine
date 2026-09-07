@@ -6,7 +6,7 @@ import { $t } from '../../schema/t.js'
 import type { ConfigHandle } from '../accessor.js'
 import { bootstrapConfig } from '../bootstrap.js'
 import { ConfigDefinition } from '../definition.js'
-import { DEFAULT_INSTANCE, defineFeatureConfig, instanceNamespace } from '../feature.js'
+import { defineFeatureConfig } from '../feature.js'
 import { featureConfigKey } from '../feature_key.js'
 import { EnvConfigProvider } from '../providers/env_provider.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
@@ -61,27 +61,19 @@ async function resolveHandle(
   return result.config
 }
 
-describe('instanceNamespace', () => {
-  it('addresses the unnamed instance as "default"', () => {
-    expect(instanceNamespace(['kafka'])).toEqual(['kafka', DEFAULT_INSTANCE])
-  })
-
-  it('addresses a named instance by its name', () => {
-    expect(instanceNamespace(['kafka'], 'orders')).toEqual(['kafka', 'orders'])
-  })
-
-  it('does not mutate the base it was given', () => {
-    const base = ['kafka']
-    instanceNamespace(base, 'orders')
-    expect(base).toEqual(['kafka'])
-  })
-})
+/**
+ * Records a location the way a feature builder's `.config(...)` does — `at('app', 'widget')` is
+ * `c => c.app.widget`. A feature has no location of its own any more, so every placed slice needs one.
+ */
+function at(...parts: readonly string[]): (c: never) => unknown {
+  return c => parts.reduce<Record<string, never>>((node, part) => node[part], c as Record<string, never>)
+}
 
 describe('defineFeatureConfig', () => {
   it('resolves the framework defaults when nothing else says otherwise', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
     })
@@ -95,7 +87,7 @@ describe('defineFeatureConfig', () => {
   it('lets a code-set value override the framework default', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
       values: { size: 7 },
@@ -111,7 +103,7 @@ describe('defineFeatureConfig', () => {
   it('lets the environment override a code-set value', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
       values: { size: 7, label: 'from-code' },
@@ -128,7 +120,7 @@ describe('defineFeatureConfig', () => {
   it('skips undefined values instead of writing them', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
       values: { size: undefined, label: undefined },
@@ -144,7 +136,7 @@ describe('defineFeatureConfig', () => {
   it('keeps every code-set key, not only the last', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       values: { size: 7, label: 'both' },
     })
@@ -155,11 +147,10 @@ describe('defineFeatureConfig', () => {
     expect(slice.config.label).toBe('both')
   })
 
-  it('re-points reads and code-set defaults together when a selector is given', async () => {
+  it('places reads and code-set defaults together where the selector points', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
-      selector: (c: never) => (c as { app: { widget: unknown } }).app.widget,
+      selector: at('app', 'widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
       values: { size: 7 },
@@ -176,13 +167,13 @@ describe('defineFeatureConfig', () => {
   it('keeps two instances of one feature apart', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     const fallback = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: instanceNamespace(['widget']),
+      selector: at('widget', 'default'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
       values: { label: 'unnamed' },
     })
     const orders = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: instanceNamespace(['widget'], 'orders'),
+      selector: at('widget', 'orders'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
       values: { label: 'named' },
@@ -198,12 +189,96 @@ describe('defineFeatureConfig', () => {
   })
 
   // Activation is the builder call, never the tree: no defineFeatureConfig, no slice, nothing read.
-  it('reads nothing for a namespace no feature registered', async () => {
+  it('reads nothing for a location no feature registered', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
 
     await resolve(definition, [new InlineConfigProvider({ widget: { size: 99 } })])
 
     expect(definition.slices).toHaveLength(0)
+  })
+})
+
+/**
+ * A feature the application never placed anywhere.
+ *
+ * It still works — that is the point: installing a feature must not force an application to describe it in its
+ * own schema. What it gives up is everything outside the process: no file, environment variable or argument
+ * reaches a slice that is not in the tree, because nothing in the tree was ever declared to be about it.
+ */
+describe('a slice with no location', () => {
+  it('resolves from the feature defaults and the builder values', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+      values: { size: 7 },
+    })
+
+    await resolve(definition)
+
+    expect(slice.parts).toBeUndefined()
+    expect(slice.config.size).toBe(7)
+    expect(slice.config.label).toBe('widget')
+  })
+
+  // Guessing that `widget.*` is meant for this feature is exactly what the rework removed.
+  it('ignores a tree value at the name the feature goes by', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+    })
+
+    await resolve(definition, [
+      new InlineConfigProvider({ widget: { size: 99 } }),
+      new EnvConfigProvider({ prefix: 'APP_', env: { APP_WIDGET__LABEL: 'from-env' } }),
+    ])
+
+    expect(slice.config.size).toBe(1)
+    expect(slice.config.label).toBe('widget')
+  })
+
+  it('writes nothing into the tree the application declared', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    defineFeatureConfig<WidgetConfig>(definition, { schema: widgetSchema, defaults: { ...DEFAULTS } })
+
+    const config = await resolveHandle(definition)
+
+    expect(Object.keys(config)).toEqual([])
+  })
+
+  it('is still reachable by its feature key', async () => {
+    const kWidget = featureConfigKey<WidgetConfig>('detached-widget')
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    defineFeatureConfig<WidgetConfig>(definition, {
+      key: kWidget,
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+      values: { label: 'from-code' },
+    })
+
+    const config = await resolveHandle(definition)
+
+    expect(config(kWidget)).toEqual({ size: 1, label: 'from-code' })
+  })
+
+  it('keeps two instances of one feature apart', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const fallback = defineFeatureConfig<WidgetConfig>(definition, {
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+      values: { label: 'unnamed' },
+    })
+    const orders = defineFeatureConfig<WidgetConfig>(definition, {
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+      values: { label: 'named', size: 42 },
+    })
+
+    await resolve(definition)
+
+    expect(fallback.config).toEqual({ size: 1, label: 'unnamed' })
+    expect(orders.config).toEqual({ size: 42, label: 'named' })
   })
 })
 
@@ -218,7 +293,7 @@ describe('feature config keys', () => {
   it('answers the key with the feature configuration', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       key: kWidget,
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
@@ -230,12 +305,11 @@ describe('feature config keys', () => {
     expect(config(kWidget)).toEqual({ size: 7, label: 'widget' })
   })
 
-  // The whole reason a key beats a namespace: a reader cannot hard-code a path the feature is free to move.
+  // The whole reason a key beats a path: a reader cannot hard-code a location the application chooses.
   it('finds a slice the application relocated', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
-      selector: (c: never) => (c as { app: { widget: unknown } }).app.widget,
+      selector: at('app', 'widget'),
       key: kWidget,
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
@@ -244,7 +318,7 @@ describe('feature config keys', () => {
     const config = await resolveHandle(definition, [new InlineConfigProvider({ app: { widget: { size: 42 } } })])
 
     expect(config(kWidget)).toEqual({ size: 42, label: 'widget' })
-    // Nothing lives at the default path any more, so a reader that had gone looking there would find nothing.
+    // The feature contributed no field of its own, so a reader that had gone looking under `widget` finds nothing.
     expect((config as { widget?: unknown }).widget).toBeUndefined()
   })
 
@@ -261,7 +335,7 @@ describe('feature config keys', () => {
   it('leaves a slice registered without a key unreachable by any key', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
     })
@@ -276,14 +350,14 @@ describe('feature config keys', () => {
   // multi-instance feature that one key cannot address all of its instances.
   it('refuses a second slice under the same key', () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
-    const register = (namespace: readonly string[]): void => {
-      defineFeatureConfig<WidgetConfig>(definition, { namespace, key: kWidget, schema: widgetSchema })
+    const register = (selector: (c: never) => unknown): void => {
+      defineFeatureConfig<WidgetConfig>(definition, { selector, key: kWidget, schema: widgetSchema })
     }
 
-    register(instanceNamespace(['widget']))
+    register(at('widget', 'default'))
 
     expect(() => {
-      register(instanceNamespace(['widget'], 'orders'))
+      register(at('widget', 'orders'))
     }).toThrow(expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_FEATURE_CONFLICT' }))
   })
 
@@ -292,7 +366,7 @@ describe('feature config keys', () => {
   it('reads as a plain tree despite being callable', async () => {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
     defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       key: kWidget,
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
@@ -332,7 +406,7 @@ describe('application schema defaults', () => {
   it('beats the framework default the feature registered', async () => {
     const definition = definitionWith(appSchema)
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
     })
@@ -347,7 +421,7 @@ describe('application schema defaults', () => {
   it('loses to a value the feature builder set', async () => {
     const definition = definitionWith(appSchema)
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
       values: { size: 7 },
@@ -363,7 +437,7 @@ describe('application schema defaults', () => {
   it('loses to the environment, so a deployment still overrides it', async () => {
     const definition = definitionWith(appSchema)
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
     })
@@ -378,7 +452,7 @@ describe('application schema defaults', () => {
   it('contributes nothing from a foreign Standard Schema', async () => {
     const definition = definitionWith(z.object({ widget: z.object({ size: z.number().default(9999) }) }))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
     })
@@ -391,7 +465,7 @@ describe('application schema defaults', () => {
   it('leaves a feature alone when the schema declares no default for it', async () => {
     const definition = definitionWith($t.Object({ widget: $t.Object({ size: $t.Optional($t.Number()) }) }))
     const slice = defineFeatureConfig<WidgetConfig>(definition, {
-      namespace: ['widget'],
+      selector: at('widget'),
       schema: widgetSchema,
       defaults: { ...DEFAULTS },
     })

@@ -13,7 +13,6 @@ import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import {
-  AUTH_CONFIG_NAMESPACE,
   CREDENTIALS_CONFIG_SEGMENT,
   REFRESH_CONFIG_SEGMENT,
   SCHEME_CONFIG,
@@ -22,6 +21,7 @@ import {
   credentialsConfigSchema,
   refresh,
   refreshConfigSchema,
+  authSubNamespace,
   schemeNamespace,
   type AuthConfigSlice,
   type SchemeConfigSpec,
@@ -283,7 +283,6 @@ export class AuthenticationBuilder<C = unknown> implements Service {
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     this.#authSlice = defineFeatureConfig<AuthConfigSlice>(kit.config, {
-      namespace: AUTH_CONFIG_NAMESPACE,
       selector: this.#selector,
       schema: authConfigSchema,
       values: {
@@ -293,8 +292,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
       },
     })
 
-    // Read back rather than recomputed, so a `.config(...)` selector moves the schemes with the block they
-    // belong to instead of leaving them behind at `auth.schemes.*`.
+    // Read back rather than recomputed, so the schemes follow the block they belong to wherever `.config(...)`
+    // put it — and stay detached along with it when the application placed it nowhere.
     const base = this.#authSlice.parts
 
     for (const registration of this.#registrations) {
@@ -305,12 +304,15 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     }
 
     if (this.#credentials !== undefined) {
-      this.#credentialsSlice = kit.config.slice([...base, CREDENTIALS_CONFIG_SEGMENT], credentialsConfigSchema)
+      this.#credentialsSlice = kit.config.slice(
+        authSubNamespace(base, CREDENTIALS_CONFIG_SEGMENT),
+        credentialsConfigSchema,
+      )
     }
 
     if (this.#refreshConfigure !== undefined) {
       this.#refreshSlice = kit.config.slice(
-        [...base, REFRESH_CONFIG_SEGMENT],
+        authSubNamespace(base, REFRESH_CONFIG_SEGMENT),
         refreshConfigSchema as ConfigSchema<Record<string, unknown>>,
       )
     }

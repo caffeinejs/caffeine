@@ -36,9 +36,13 @@ export interface Feature<B = unknown> {
  *
  * Declared as an interface (call signature plus methods) so TypeScript does not collapse it to a
  * function type and drop phantoms such as `__builder`.
+ *
+ * `L` is the feature's {@link TypeLambda}, carried onto the named instance as well. Without it
+ * `.extend(kafka('orders'), k => k.config(c => c.brokers.orders))` would type the selector against `unknown`,
+ * so only the unnamed instance could name a location.
  */
-export interface KeyedFeature<B = unknown> extends Feature<B> {
-  (instance: string): Feature<B>
+export interface KeyedFeature<B = unknown, L = unknown> extends Feature<B> {
+  (instance: string): Feature<B> & { readonly _F: L }
 }
 
 /**

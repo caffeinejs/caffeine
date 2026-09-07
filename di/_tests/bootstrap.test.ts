@@ -69,8 +69,16 @@ describe('OnBootstrap', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Repo, t => t.toSelf().bootstrap(() => order.push('repo')))
-    di.bind(Service, t => t.toSelf([Repo]).bootstrap(() => order.push('service')))
+    di.bind(Repo, t =>
+      t.toSelf().bootstrap(() => {
+        order.push('repo')
+      }),
+    )
+    di.bind(Service, t =>
+      t.toSelf([Repo]).bootstrap(() => {
+        order.push('service')
+      }),
+    )
     await di.init()
 
     expect(order).toEqual(['repo', 'service'])
@@ -86,7 +94,11 @@ describe('OnBootstrap', function () {
 
     const di = new CaffeineIoC({ decorators: false })
     di.bind(PlainDep, t => t.toSelf())
-    di.bind(Service, t => t.toSelf([PlainDep]).bootstrap(() => order.push('service')))
+    di.bind(Service, t =>
+      t.toSelf([PlainDep]).bootstrap(() => {
+        order.push('service')
+      }),
+    )
     await di.init()
 
     expect(order).toEqual(['service'])

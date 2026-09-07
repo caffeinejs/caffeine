@@ -1,14 +1,13 @@
 import { ErrConfiguration } from '@caffeinejs/http'
 import {
   defineFeatureConfig,
-  instanceNamespace,
   type ConfigAccessors,
   type ConfigDefinition,
   type ConfigHandle,
   type ConfigSlice,
 } from '@caffeinejs/std/config'
 
-import { VIEW_CONFIG_KEYS, VIEW_CONFIG_NAMESPACE, viewConfigSchema, type ViewConfig } from './config.js'
+import { VIEW_CONFIG_KEYS, viewConfigSchema, type ViewConfig } from './config.js'
 import type { ViewOptions } from './view.js'
 
 /**
@@ -152,7 +151,6 @@ export class ViewBuilder<C = unknown> {
     const code = this.#options
 
     const slice = defineFeatureConfig<ViewConfig>(definition, {
-      namespace: instanceNamespace(VIEW_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: viewConfigSchema,
       values: Object.fromEntries(

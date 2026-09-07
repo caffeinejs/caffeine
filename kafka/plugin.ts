@@ -25,7 +25,7 @@ interface KafkaBuilderF extends TypeLambda {
   readonly Out: ServiceAPI<KafkaBuilder<this['In']>>
 }
 
-export interface KafkaFeature extends KeyedFeature<ServiceAPI<KafkaBuilder>> {
+export interface KafkaFeature extends KeyedFeature<ServiceAPI<KafkaBuilder>, KafkaBuilderF> {
   with(options: KafkaPluginOptions): KafkaFeature
   readonly _F: KafkaBuilderF
 }

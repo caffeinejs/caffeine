@@ -11,9 +11,6 @@ import type {
   TagObject,
 } from './spec/spec.js'
 
-/** The default location of the OpenAPI settings in the configuration tree. */
-export const OPENAPI_CONFIG_NAMESPACE: readonly string[] = ['openapi']
-
 /**
  * The part of {@link OpenAPIOptions} that can live in a configuration tree.
  *

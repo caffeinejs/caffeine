@@ -5,9 +5,6 @@ import { ETagGenerator } from './cache.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { CacheStore } from './store.js'
 
-/** The default location of the cache settings in the configuration tree. */
-export const CACHE_CONFIG_NAMESPACE: readonly string[] = ['cache']
-
 /** The cache feature's slice of the configuration tree. */
 export interface CacheConfig {
   /** The cache-status response header name, carrying HIT/MISS/BYPASS. */
@@ -16,7 +13,11 @@ export interface CacheConfig {
 
 export const DEFAULT_CACHE_CONFIG: CacheConfig = { statusHeader: 'X-Cache' }
 
-const cacheConfigSchema = $t.Object({
+/**
+ * The shape the cache expects wherever the application decides to keep its settings. Import it into an
+ * application schema and point the builder at it with `c.config(c => c.app.cache)`.
+ */
+export const cacheConfigSchema = $t.Object({
   statusHeader: $t.String({ default: DEFAULT_CACHE_CONFIG.statusHeader }),
 })
 
@@ -75,7 +76,6 @@ export class CacheBuilder<C = unknown> implements Service {
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     this.#slice = defineFeatureConfig<CacheConfig>(kit.config, {
-      namespace: CACHE_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: cacheConfigSchema,
       defaults: { ...DEFAULT_CACHE_CONFIG },

@@ -19,11 +19,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
 import { kHealthContribution } from './index.js'
+import { healthConfigSchema } from './options.js'
 
-// The application declares no configuration of its own — `health.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ health: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema: it declares where the health block lives — by importing the feature's own
+// schema — and `.health(h => h.config(c => c.health))` points the feature at it.
+const rootSchema = $t.Object({ health: healthConfigSchema })
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const schema = $t.Object({
@@ -136,11 +136,10 @@ describe('HealthBuilder', () => {
     const provider = new EnvConfigProvider()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      // No root schema declared — the sources stand on their own, and the health slice validates itself.
       .config(rootSchema, kRootConfig, c =>
         c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '30ms' } }), ConfigPriority.ENV),
       )
-      .health(h => h.drainDelay('10s'))
+      .health(h => h.config(c => c.health).drainDelay('10s'))
       .build()
 
     await app.ready()
@@ -152,11 +151,10 @@ describe('HealthBuilder', () => {
     const provider = new EnvConfigProvider()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      // No root schema declared — the sources stand on their own, and the health slice validates itself.
       .config(rootSchema, kRootConfig, c =>
         c.source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV),
       )
-      .health()
+      .health(h => h.config(c => c.health))
       .build()
 
     await app.ready()
@@ -171,7 +169,7 @@ describe('HealthBuilder', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'SIGTERM,SIGINT' } }), ConfigPriority.ENV),
       )
-      .health(h => h.signals(['SIGTERM']))
+      .health(h => h.config(c => c.health).signals(['SIGTERM']))
       .build()
 
     await app.ready()
@@ -188,7 +186,7 @@ describe('HealthBuilder', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(new EnvConfigProvider({ env: { HEALTH__SIGNALS: 'false' } }), ConfigPriority.ENV),
       )
-      .health()
+      .health(h => h.config(c => c.health))
       .build()
 
     await app.ready()
@@ -196,11 +194,11 @@ describe('HealthBuilder', () => {
     expect(app.contributions.get(kHealthContribution).signals).toBe(false)
   })
 
-  it('reads the drain policy from the environment when .health() was never called', async () => {
-    const provider = new EnvConfigProvider()
-
+  // Health resolves without `.health()`, but off its own defaults: nothing pointed it at the block the
+  // application declared, so nothing in the tree is meant for it — `.health(h => h.config(...))` is what
+  // connects the two.
+  it('ignores the environment when .health() was never called', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      // No root schema declared — the sources stand on their own, and the health slice validates itself.
       .config(rootSchema, kRootConfig, c =>
         c.source(new EnvConfigProvider({ env: { HEALTH__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV),
       )
@@ -208,7 +206,7 @@ describe('HealthBuilder', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kHealthContribution).drainDelayMs).toBe(40)
+    expect(app.contributions.get(kHealthContribution).drainDelayMs).toBe(0)
   })
 
   it('keeps the code-only members alongside the config-driven ones', async () => {
@@ -239,7 +237,7 @@ describe('HealthBuilder', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .config(schema, kConfig, c => c.source(mutable, ConfigPriority.ENV))
-      .health(h => h.cacheTTL('1s'))
+      .health(h => h.config(c => c.health).cacheTTL('1s'))
       .build()
 
     await app.ready()

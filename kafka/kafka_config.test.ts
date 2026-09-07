@@ -3,15 +3,24 @@ import { $t, type InferSchema, createApplication } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
-import type { ConsumerClient, KafkaClients, ProducerClient, ResolvedKafkaConfig } from './config.js'
+import {
+  kafkaConfigSchema,
+  type ConsumerClient,
+  type KafkaClients,
+  type ProducerClient,
+  type ResolvedKafkaConfig,
+} from './config.js'
 import { kafka } from './plugin.js'
 import type { KafkaRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
 
-// The application declares no configuration of its own — `kafka.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ kafka: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema: it declares one block per kafka instance — by importing the feature's own
+// schema rather than restating it — and each `.extend` points its instance at the matching block.
+// The feature's own schema, given a default so a block a test never configures still materializes.
+const instanceSchema = $t.Object(kafkaConfigSchema.properties, { default: {} })
+const rootSchema = $t.Object({
+  kafka: $t.Object({ default: instanceSchema, orders: instanceSchema }, { default: {} }),
+})
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 function noopClients(): KafkaClients {
@@ -41,7 +50,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk)
+      .extend(kfk, k => k.config(c => c.kafka.default))
 
     const built = app.build()
     await built.ready()
@@ -59,7 +68,12 @@ describe('kafka configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }), ConfigPriority.ENV),
       )
-      .extend(kfk, k => k.brokers('localhost:9092').groupId('svc'))
+      .extend(kfk, k =>
+        k
+          .config(c => c.kafka.default)
+          .brokers('localhost:9092')
+          .groupId('svc'),
+      )
 
     const built = app.build()
     await built.ready()
@@ -79,8 +93,18 @@ describe('kafka configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV),
       )
-      .extend(kfk, k => k.brokers('b1:9092').groupId('svc'))
-      .extend(kfk('orders'), k => k.brokers('b2:9092').groupId('orders'))
+      .extend(kfk, k =>
+        k
+          .config(c => c.kafka.default)
+          .brokers('b1:9092')
+          .groupId('svc'),
+      )
+      .extend(kfk('orders'), k =>
+        k
+          .config(c => c.kafka.orders)
+          .brokers('b2:9092')
+          .groupId('orders'),
+      )
 
     const built = app.build()
     await built.ready()
@@ -136,7 +160,12 @@ describe('kafka configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }), ConfigPriority.ENV),
       )
-      .extend(kfk, k => k.serializers(serializers).onError(onError))
+      .extend(kfk, k =>
+        k
+          .config(c => c.kafka.default)
+          .serializers(serializers)
+          .onError(onError),
+      )
 
     const built = app.build()
     await built.ready()
@@ -162,7 +191,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk, k => k.deadLetter({ topic }))
+      .extend(kfk, k => k.config(c => c.kafka.default).deadLetter({ topic }))
 
     const built = app.build()
     await built.ready()
@@ -182,7 +211,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk, k => k.brokers('b:9092'))
+      .extend(kfk, k => k.config(c => c.kafka.default).brokers('b:9092'))
 
     const built = app.build()
     await built.ready()
@@ -203,7 +232,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk, k => k.brokers('real:9092'))
+      .extend(kfk, k => k.config(c => c.kafka.default).brokers('real:9092'))
 
     const built = app.build()
     await built.ready()

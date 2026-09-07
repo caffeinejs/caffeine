@@ -202,8 +202,8 @@ describe('HTML', () => {
   // `.autoDoctype(true)` is a *default* in the CODE band, so a deployment can turn it off without a rebuild.
   it('lets a configuration source override what the builder set', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(HTMLExt, h => h.autoDoctype(true))
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
+      .extend(HTMLExt, h => h.config(c => c.html).autoDoctype(true))
       .build()
 
     await app.ready()
@@ -211,9 +211,9 @@ describe('HTML', () => {
     expect(await (await app.fetch('/html/document')).text()).toBe('<html><body><h1>hello</h1></body></html>')
   })
 
-  // The key is the contract, not the namespace: a feature that relocated its settings must still be found by
-  // whatever reads it, because `HTML(...)` is called from code that cannot know where the slice ended up.
-  it('reads the slice through the key, not the namespace', async () => {
+  // The key is the contract, not a path: `HTML(...)` is called from code that cannot know where the
+  // application put the settings — or whether it placed them anywhere at all, as here.
+  it('reads the slice through the key rather than a path', async () => {
     const app = htmlApp(h => h.autoDoctype(false))
     await app.ready()
 

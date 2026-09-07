@@ -135,7 +135,7 @@ describe('base .config() builder', () => {
 
     // A feature registers its slice the way every feature builder does, without the application declaring a root.
     const slice = defineFeatureConfig<{ size: number }>(builder.configDefinition, {
-      namespace: ['widget'],
+      selector: (c: never) => (c as { widget: unknown }).widget,
       schema: z.object({ size: z.coerce.number() }),
       defaults: { size: 1 },
     })

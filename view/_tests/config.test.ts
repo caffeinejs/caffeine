@@ -8,13 +8,17 @@ import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { viewConfigSchema } from '../config.js'
 import { ViewExtension } from '../extension.js'
 import { ViewExt } from '../plugin.js'
 
-// The application declares no configuration of its own — `view.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ view: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema: it declares one block per view engine — by importing the feature's own
+// schema, given a default so a block a test never configures still materializes — and each `.extend` points
+// its engine at the matching block.
+const engineSchema = $t.Object(viewConfigSchema.properties, { default: {} })
+const rootSchema = $t.Object({
+  view: $t.Object({ default: engineSchema, mail: engineSchema }, { default: {} }),
+})
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
@@ -36,7 +40,13 @@ describe('view configuration', () => {
   it('lets the environment override a builder-set root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ VIEW__DEFAULT__ROOT: ejsRoot }), ConfigPriority.ENV))
-      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .extend(ViewExt, v =>
+        v
+          .config(c => c.view.default)
+          .engine({ handlebars })
+          .root(templatesRoot)
+          .extension('hbs'),
+      )
       .build()
 
     await app.ready()
@@ -57,7 +67,12 @@ describe('view configuration', () => {
           }),
         ),
       )
-      .extend(ViewExt, v => v.engine({ handlebars }).extension('hbs'))
+      .extend(ViewExt, v =>
+        v
+          .config(c => c.view.default)
+          .engine({ handlebars })
+          .extension('hbs'),
+      )
       .build()
 
     await app.ready()
@@ -67,7 +82,7 @@ describe('view configuration', () => {
     expect(options.production).toBe(true)
   })
 
-  it('keeps named engines apart, the unnamed one at view.default', async () => {
+  it('keeps named engines apart, each at the block it was pointed at', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c =>
         c.source(
@@ -76,8 +91,20 @@ describe('view configuration', () => {
           }),
         ),
       )
-      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .extend(ViewExt('mail'), v => v.engine({ handlebars }).root(templatesRoot).extension('ejs'))
+      .extend(ViewExt, v =>
+        v
+          .config(c => c.view.default)
+          .engine({ handlebars })
+          .root(templatesRoot)
+          .extension('hbs'),
+      )
+      .extend(ViewExt('mail'), v =>
+        v
+          .config(c => c.view.mail)
+          .engine({ handlebars })
+          .root(templatesRoot)
+          .extension('ejs'),
+      )
       .build()
 
     await app.ready()

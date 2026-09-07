@@ -7,11 +7,10 @@ import {
   type ServiceAPI,
   type ServiceBootstrapIn,
 } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { kHealthContribution } from './keys.js'
 import {
-  HEALTH_CONFIG_NAMESPACE,
   finalizeHealthOptions,
   healthConfigSchema,
   mergeHealthConfig,
@@ -47,7 +46,7 @@ import {
 export class HealthBuilder<C = unknown> implements Service {
   readonly #config: HealthConfig = {}
   #dispatcher: SignalDispatcher | undefined
-  #selector: ((c: ConfigHandle<C>) => HealthConfig) | undefined
+  #selector: ((c: ConfigHandle<C>) => ConfigAccessors<HealthConfig>) | undefined
   #options: ConfigSlice<HealthOptions> | undefined
 
   get name(): string {
@@ -144,14 +143,13 @@ export class HealthBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    * Both the reads and the defaults written by the builder methods follow it.
    */
-  config(selector: (c: ConfigHandle<C>) => HealthConfig): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<HealthConfig>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
-      namespace: HEALTH_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: healthConfigSchema,
       values: { ...this.#config },

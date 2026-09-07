@@ -6,24 +6,12 @@ import {
   AnySchema,
   ServiceBootstrapIn,
 } from '@caffeinejs/std'
-import {
-  defineFeatureConfig,
-  instanceNamespace,
-  type ConfigAccessors,
-  type ConfigHandle,
-  type ConfigSlice,
-} from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
 import { MessageBus } from './bus.js'
-import {
-  BINDING_CONFIG_KEYS,
-  MESSAGING_CONFIG_NAMESPACE,
-  messagingConfigSchema,
-  type BindingConfig,
-  type MessagingConfigSlice,
-} from './config.js'
+import { BINDING_CONFIG_KEYS, messagingConfigSchema, type BindingConfig, type MessagingConfigSlice } from './config.js'
 import { MessagingContainer } from './engine.js'
 import type { ErrorClassifier, RetryPolicy } from './error_handling.js'
 import { ErrMissingDestination } from './errors.js'
@@ -129,7 +117,6 @@ export class MessagingBuilder<C = unknown> implements Service {
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
-      namespace: instanceNamespace(MESSAGING_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: messagingConfigSchema,
       values: {

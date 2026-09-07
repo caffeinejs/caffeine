@@ -26,10 +26,12 @@ export interface ServerAddress {
   readonly origin: string
 }
 
-/** The default location of the server settings in the configuration tree. */
-export const SERVER_CONFIG_NAMESPACE: readonly string[] = ['server']
-
-const serverConfigSchema = $t.Object({
+/**
+ * The shape the server expects wherever the application decides to keep its settings — import it into an
+ * application schema (`$t.Object({ app: $t.Object({ server: serverConfigSchema }) })`) rather than restating
+ * the fields, then point the server at it with {@link ServerBuilder.config}.
+ */
+export const serverConfigSchema = $t.Object({
   port: $t.Number({ default: DEFAULT_SERVER_OPTIONS.port }),
   host: $t.String({ default: DEFAULT_SERVER_OPTIONS.host }),
 })
@@ -37,14 +39,16 @@ const serverConfigSchema = $t.Object({
 /**
  * Configures the server address the adapter listens on when {@link WebApplication.run} is called.
  *
- * There is one read path. `s.port(3000)` does not hold the value on the builder — it writes it into the
- * configuration tree in the `CODE` band, and the server then reads the merged result like any other setting.
- * So a port set in code is a **default**: a `SERVER__PORT` environment variable or a `--server.port` argument
- * overrides it, which is what lets one image ship with sensible values and still be redirected on deploy.
- * Anything that must beat the environment is registered as a source of its own at a higher priority.
+ * {@link config} is what puts these settings in the configuration tree: `s.config(c => c.app.server)` places
+ * them at `app.server.*`, checked against the application's own schema — {@link serverConfigSchema} is exported
+ * to be spliced into it. Without it the server runs on its defaults and whatever {@link port}/{@link host} set,
+ * and no file, environment variable or argument reaches it.
  *
- * By default the settings live at `server.*`. {@link config} re-points them — `s.config(c => c.app.server)`
- * moves both the reads and the code-set defaults to `app.server.*`, checked against the application schema.
+ * Once placed, there is one read path. `s.port(3000)` does not hold the value on the builder — it writes it
+ * into the tree in the `CODE` band, and the server reads the merged result like any other setting. So a port
+ * set in code is a **default**: `APP__SERVER__PORT` or `--app.server.port` overrides it, which is what lets one
+ * image ship with sensible values and still be redirected on deploy. Anything that must beat the environment is
+ * registered as a source of its own at a higher priority.
  *
  * A {@link Service}: its `bootstrap` contributes the live {@link ServerOptions} under
  * {@link kServerContribution}. The listen address still stops moving once the socket is bound — the
@@ -74,10 +78,11 @@ export class ServerBuilder<C = unknown> implements Service {
   }
 
   /**
-   * Places the server settings elsewhere in the configuration tree, e.g. `s.config(c => c.app.server)`.
+   * Places the server settings in the configuration tree, e.g. `s.config(c => c.app.server)`.
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
-   * Both the reads and the defaults written by {@link port}/{@link host} follow it.
+   * Both the reads and the defaults written by {@link port}/{@link host} go there. The application's schema
+   * must describe that location — {@link serverConfigSchema} is exported for exactly that.
    */
   config(selector: (c: ConfigHandle<C>) => ServerOptions): ServiceAPI<this> {
     this.#selector = selector
@@ -86,7 +91,6 @@ export class ServerBuilder<C = unknown> implements Service {
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     this.#slice = defineFeatureConfig(kit.config, {
-      namespace: SERVER_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: serverConfigSchema,
       defaults: { ...DEFAULT_SERVER_OPTIONS },

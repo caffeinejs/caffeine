@@ -3,9 +3,6 @@ import { $t } from '@caffeinejs/std'
 import type { SPAOptions } from './spa.js'
 import type { StaticMount } from './static.js'
 
-/** The default location of the static-file settings in the configuration tree. */
-export const STATIC_CONFIG_NAMESPACE: readonly string[] = ['static']
-
 /**
  * The static feature's slice of the configuration tree.
  *

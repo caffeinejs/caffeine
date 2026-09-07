@@ -2,7 +2,7 @@ import { NotFoundFallback } from '@caffeinejs/http'
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, ServiceBootstrapIn } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
-import { STATIC_CONFIG_NAMESPACE, staticConfigSchema, type StaticConfigSlice } from './config.js'
+import { staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
 import { StaticExtension } from './extension.js'
 import { resolveSPASettings, type SPAOptions, type SPASettings } from './spa.js'
@@ -86,7 +86,6 @@ export class StaticBuilder<C = unknown> implements Service {
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
-      namespace: STATIC_CONFIG_NAMESPACE,
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: staticConfigSchema,
       values: {

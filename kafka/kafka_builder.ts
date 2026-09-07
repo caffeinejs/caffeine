@@ -6,17 +6,10 @@ import {
   type ServiceAPI,
   type ServiceBootstrapIn,
 } from '@caffeinejs/std'
-import {
-  defineFeatureConfig,
-  instanceNamespace,
-  type ConfigAccessors,
-  type ConfigHandle,
-  type ConfigSlice,
-} from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import {
-  KAFKA_CONFIG_NAMESPACE,
   kafkaConfigSchema,
   type DeserializationErrorHandler,
   type KafkaAckMode,
@@ -215,7 +208,6 @@ export class KafkaBuilder<C = unknown> implements Service {
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const slice = defineFeatureConfig<KafkaConfigSlice>(kit.config, {
-      namespace: instanceNamespace(KAFKA_CONFIG_NAMESPACE, this.#name),
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: kafkaConfigSchema,
       values: {

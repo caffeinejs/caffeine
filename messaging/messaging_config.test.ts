@@ -4,14 +4,18 @@ import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHan
 import { describe, expect, it } from 'vitest'
 
 import { inMemoryBinder } from './binder.testkit.js'
+import { messagingConfigSchema } from './config.js'
 import { messaging } from './plugin.js'
 import type { MessagingRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
 
-// The application declares no configuration of its own — `messaging.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ messaging: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema: it declares one block per messaging instance — by importing the feature's
+// own schema, given a default so a block a test never configures still materializes — and each `.extend`
+// points its instance at the matching block.
+const instanceSchema = $t.Object(messagingConfigSchema.properties, { default: {} })
+const rootSchema = $t.Object({
+  messaging: $t.Object({ default: instanceSchema, audit: instanceSchema }, { default: {} }),
+})
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
@@ -30,6 +34,7 @@ describe('messaging configuration', () => {
       )
       .extend(messaging, m =>
         m
+          .config(c => c.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary' })
           .out('notify', { destination: 'notify', via: 'primary' }),
@@ -56,7 +61,10 @@ describe('messaging configuration', () => {
         ),
       )
       .extend(messaging, m =>
-        m.use('primary', inMemoryBinder()).in('orders', { destination: 'orders', via: 'primary' }),
+        m
+          .config(c => c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary' }),
       )
 
     const built = app.build()
@@ -76,9 +84,17 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging, m => m.use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }))
+      .extend(messaging, m =>
+        m
+          .config(c => c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .out('log', { destination: 'log', via: 'primary' }),
+      )
       .extend(messaging('audit'), m =>
-        m.use('primary', inMemoryBinder()).out('log', { destination: 'log', via: 'primary' }),
+        m
+          .config(c => c.messaging.audit)
+          .use('primary', inMemoryBinder())
+          .out('log', { destination: 'log', via: 'primary' }),
       )
 
     const built = app.build()
@@ -104,7 +120,10 @@ describe('messaging configuration', () => {
         ),
       )
       .extend(messaging, m =>
-        m.use('primary', inMemoryBinder()).in('orders', { destination: 'orders', via: 'primary', schema }),
+        m
+          .config(c => c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary', schema }),
       )
 
     const built = app.build()
@@ -162,7 +181,10 @@ describe('messaging configuration', () => {
         ),
       )
       .extend(messaging, m =>
-        m.use('primary', inMemoryBinder()).in('orders', { destination: 'orders', via: 'primary' }),
+        m
+          .config(c => c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary' }),
       )
 
     const built = app.build()

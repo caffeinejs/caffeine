@@ -17,7 +17,7 @@ interface MessagingBuilderF extends TypeLambda {
   readonly Out: ServiceAPI<MessagingBuilder<this['In']>>
 }
 
-export interface MessagingFeature extends KeyedFeature<ServiceAPI<MessagingBuilder>> {
+export interface MessagingFeature extends KeyedFeature<ServiceAPI<MessagingBuilder>, MessagingBuilderF> {
   readonly _F: MessagingBuilderF
 }
 

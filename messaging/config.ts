@@ -2,9 +2,6 @@ import { $t } from '@caffeinejs/std'
 
 import type { RetryPolicy } from './error_handling.js'
 
-/** The default location of the messaging settings in the configuration tree. Instances sit beneath it by name. */
-export const MESSAGING_CONFIG_NAMESPACE: readonly string[] = ['messaging']
-
 /**
  * The part of a binding that can live in a configuration tree.
  *

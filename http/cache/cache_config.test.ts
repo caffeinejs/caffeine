@@ -5,12 +5,12 @@ import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { cacheConfigSchema } from './cache_builder.js'
 import { kCacheStatusHeader } from './keys.js'
 
-// The application declares no configuration of its own — `cache.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ cache: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema: it declares where the cache block lives — by importing the feature's own
+// schema — and `.cache(c => c.config(...))` points the feature at it.
+const rootSchema = $t.Object({ cache: cacheConfigSchema })
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
@@ -39,7 +39,7 @@ describe('cache configuration', () => {
   it('lets the environment override a builder-set status header', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ CACHE__STATUS_HEADER: 'X-Edge-Cache' }), ConfigPriority.ENV))
-      .cache(c => c.statusHeader('X-From-Code'))
+      .cache(c => c.config(c => c.cache).statusHeader('X-From-Code'))
       .build()
 
     await app.ready()

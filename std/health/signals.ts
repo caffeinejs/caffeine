@@ -2,7 +2,9 @@
  * The signals a graceful shutdown can be triggered by. A local union rather than `NodeJS.Signals`, so nothing in
  * the shutdown path depends on Node's type definitions being installed.
  */
-export type ShutdownSignal = 'SIGTERM' | 'SIGINT' | 'SIGHUP' | 'SIGQUIT'
+export const SHUTDOWN_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP', 'SIGQUIT'] as const
+
+export type ShutdownSignal = (typeof SHUTDOWN_SIGNALS)[number]
 
 /**
  * Everything the graceful shutdown needs from the host runtime, behind one interface.

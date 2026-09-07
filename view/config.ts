@@ -1,8 +1,5 @@
 import { $t } from '@caffeinejs/std'
 
-/** The default location of the view settings in the configuration tree. Engines sit beneath it by name. */
-export const VIEW_CONFIG_NAMESPACE: readonly string[] = ['view']
-
 /**
  * The part of `@fastify/view`'s options one engine can take from a configuration tree.
  *

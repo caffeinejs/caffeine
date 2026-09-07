@@ -1,6 +1,6 @@
 import { type Binding, type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
 
-import { ConfigDefinition, defineFeatureConfig } from './config/index.js'
+import { ConfigDefinition } from './config/index.js'
 import { Contributions } from './contributions.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { ApplicationAvailability } from './health/availability.js'
@@ -39,8 +39,8 @@ interface Dispatch {
 export const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
 
 /**
- * The framework's own configuration. Registered by every application, so it is always in the resolved tree —
- * which is what makes it safe for an application to name in the type of its config key.
+ * The framework's own configuration: read from `caffeine.*` by every application, whether or not the
+ * application's schema declares it. Declaring it is what puts it in the application's own config object too.
  */
 export interface CaffeineConfig {
   name: string
@@ -165,11 +165,12 @@ export abstract class BaseApplication {
       return
     }
 
-    const caffeine = defineFeatureConfig<CaffeineConfig>(this.#config, {
-      namespace: CAFFEINE_CONFIG_NAMESPACE,
-      schema: caffeineConfigSchema,
-      defaults: { ...DEFAULT_CAFFEINE_CONFIG },
-    })
+    // Registered directly rather than through `defineFeatureConfig`, which places a *feature* — and a feature
+    // only lives where the application pointed it. This block is the framework's own: the application name and
+    // profiles are read before any service has configured, so its location cannot be something a builder
+    // supplies.
+    this.#config.frameworkDefaults.set(CAFFEINE_CONFIG_NAMESPACE, { ...DEFAULT_CAFFEINE_CONFIG })
+    const caffeine = this.#config.slice<CaffeineConfig>(CAFFEINE_CONFIG_NAMESPACE, caffeineConfigSchema)
 
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()

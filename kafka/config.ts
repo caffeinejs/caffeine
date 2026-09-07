@@ -88,9 +88,6 @@ export interface KafkaConfig {
   onError?: (error: unknown, message: KafkaMessage) => void
 }
 
-/** The default location of the kafka settings in the configuration tree. Instances sit beneath it by name. */
-export const KAFKA_CONFIG_NAMESPACE: readonly string[] = ['kafka']
-
 /**
  * The part of {@link KafkaConfig} that can live in a configuration tree.
  *

@@ -60,7 +60,12 @@ describe('server builder + config', () => {
       .config(schema, kConfig, c =>
         c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV),
       )
-      .server(s => s.port(3000).host('0.0.0.0'))
+      .server(s =>
+        s
+          .config(c => c.server)
+          .port(3000)
+          .host('0.0.0.0'),
+      )
       .build()
 
     await app.ready()
@@ -72,7 +77,12 @@ describe('server builder + config', () => {
   it('falls back to the code-set port when the environment says nothing', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .config(schema, kConfig, c => c.source(env({ DB__URL: 'x' }), ConfigPriority.ENV))
-      .server(s => s.port(3000).host('127.0.0.1'))
+      .server(s =>
+        s
+          .config(c => c.server)
+          .port(3000)
+          .host('127.0.0.1'),
+      )
       .build()
 
     await app.ready()
@@ -88,7 +98,9 @@ describe('server builder + config', () => {
     expect(app.contributions.get(kServerContribution)).toEqual(DEFAULT_SERVER_OPTIONS)
   })
 
-  it('configures the server from the environment with no .server() call at all', async () => {
+  // Declaring `server` in the schema is not on its own an instruction to configure the server from it: a
+  // feature reads what the application pointed it at, and nothing pointed here.
+  it('leaves the server on its defaults when nothing pointed it at the block', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .config(schema, kConfig, c =>
         c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }), ConfigPriority.ENV),
@@ -97,7 +109,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 8081 })
+    expect(app.contributions.get(kServerContribution)).toEqual(DEFAULT_SERVER_OPTIONS)
   })
 
   it('lets command-line arguments beat both the environment and the code', async () => {
@@ -108,7 +120,7 @@ describe('server builder + config', () => {
           // Given exactly as `process.argv` arrives, interpreter and script path included.
           .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] }),
       )
-      .server(s => s.port(3000))
+      .server(s => s.config(c => c.server).port(3000))
       .build()
 
     await app.ready()
@@ -129,11 +141,11 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    // `port` came from the builder at the re-pointed namespace, `host` from the environment at the same one.
+    // `port` came from the builder at the block the application named, `host` from the environment at the same one.
     expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 4567 })
   })
 
-  it('lets the environment override a re-pointed namespace', async () => {
+  it('lets the environment override the block the application named', async () => {
     const nested = $t.Object({
       app: $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) }),
     })
@@ -149,7 +161,7 @@ describe('server builder + config', () => {
     expect(app.contributions.get(kServerContribution).port).toBe(8082)
   })
 
-  it('resolves against the defaults when a selector is used without an application config', async () => {
+  it('resolves against the defaults when a selector is used without an application schema', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No `.config(...)` declared — the tree still exists, so the selector simply names a place in it.
       .server(s => s.config(c => (c as ConfigHandle<AppConfig>).server).port(4444))

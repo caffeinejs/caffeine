@@ -16,10 +16,33 @@ import { OpenAPIExtension } from '../extension.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
 
-// The application declares no configuration of its own — `openapi.*` belongs to the feature — but a source
-// cannot be registered without a schema, so the root names that block and leaves its contents to the
-// feature's own slice.
-const rootSchema = $t.Object({ openapi: $t.Record($t.String(), $t.Unknown(), { default: {} }) })
+// The application owns the schema, so it declares where the OpenAPI block lives and points the feature there
+// with `o.config(c => c.openapi)`. Declared field by field rather than by importing `openapiConfigSchema`:
+// every field of `OpenAPIConfigSlice` is optional, so a block naming only what these tests configure
+// satisfies the feature, and that schema is small enough for TypeScript to infer a config type from.
+const rootSchema = $t.Object({
+  openapi: $t.Object(
+    {
+      info: $t.Optional($t.Object({ title: $t.String(), version: $t.String() })),
+      servers: $t.Optional($t.List($t.Object({ url: $t.String() }))),
+      errors: $t.Optional(
+        $t.Object({
+          validation: $t.Optional($t.Number()),
+          unauthorized: $t.Optional($t.Number()),
+          forbidden: $t.Optional($t.Number()),
+        }),
+      ),
+      routes: $t.Optional(
+        $t.Object({
+          json: $t.Optional($t.String()),
+          yaml: $t.Optional($t.Union([$t.String(), $t.Literal(false)])),
+          docs: $t.Optional($t.Union([$t.String(), $t.Literal(false)])),
+        }),
+      ),
+    },
+    { default: {} },
+  ),
+})
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 @Controller('/things')
@@ -53,7 +76,13 @@ describe('openapi configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ OPENAPI__SERVERS__0__URL: 'https://api.prod.example.com' }), ConfigPriority.ENV),
       )
-      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).server('http://localhost:3000').public())
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.openapi)
+          .info({ title: 'Things', version: '1.0.0' })
+          .server('http://localhost:3000')
+          .public(),
+      )
       .build()
 
     await app.ready()
@@ -72,7 +101,12 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt, o => o.info({ title: 'From Code', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.openapi)
+          .info({ title: 'From Code', version: '1.0.0' })
+          .public(),
+      )
       .build()
 
     await app.ready()
@@ -92,7 +126,12 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.openapi)
+          .info({ title: 'Things', version: '1.0.0' })
+          .public(),
+      )
       .build()
 
     await app.ready()
@@ -108,7 +147,12 @@ describe('openapi configuration', () => {
   it('serves the documentation page at a configured route', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__DOCS: '/reference' }), ConfigPriority.ENV))
-      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.openapi)
+          .info({ title: 'Things', version: '1.0.0' })
+          .public(),
+      )
       .build()
 
     await app.ready()
@@ -122,7 +166,12 @@ describe('openapi configuration', () => {
   it('switches an endpoint off when configuration says false', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__YAML: 'false' }), ConfigPriority.ENV))
-      .extend(OpenAPIExt, o => o.info({ title: 'Things', version: '1.0.0' }).public())
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.openapi)
+          .info({ title: 'Things', version: '1.0.0' })
+          .public(),
+      )
       .build()
 
     await app.ready()
@@ -177,9 +226,12 @@ describe('openapi configuration', () => {
         ),
       )
       .extend(OpenAPIExt, o =>
-        o.public().transformDocument(document => {
-          document.info.title = 'Renamed'
-        }),
+        o
+          .config(c => c.openapi)
+          .public()
+          .transformDocument(document => {
+            document.info.title = 'Renamed'
+          }),
       )
       .build()
 

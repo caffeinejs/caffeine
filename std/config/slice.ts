@@ -19,7 +19,12 @@ import type { ConfigSchema } from './schema.js'
  * Nothing in the framework uses it; it is the primitive a request-scoped snapshot would be built from.
  */
 export class ConfigSlice<T> {
-  readonly parts: readonly string[]
+  /**
+   * Where in the configuration tree this slice reads from, or `undefined` when it is **detached** — the
+   * application never pointed the feature at a location, so its values come from the feature's own defaults
+   * and its builder alone.
+   */
+  readonly parts: readonly string[] | undefined
   readonly #derivations: Array<(value: T) => void> = []
   readonly #derived: Array<{ notify: () => void; settled: () => Promise<void> }> = []
   readonly #notifier: ConfigNotifier<T>
@@ -33,10 +38,13 @@ export class ConfigSlice<T> {
    * @param report - Where a change listener's failure is reported. Read lazily rather than taken by value: the
    *   application builder points the warning channel at the host after the slices have been registered.
    */
-  constructor(parts: readonly string[], report: () => ((message: string) => void) | undefined = () => undefined) {
+  constructor(
+    parts: readonly string[] | undefined,
+    report: () => ((message: string) => void) | undefined = () => undefined,
+  ) {
     this.parts = parts
     this.#report = report
-    this.#notifier = new ConfigNotifier<T>(() => this.parts.join('.') || '<root>', report)
+    this.#notifier = new ConfigNotifier<T>(() => sliceLabel(this.parts), report)
   }
 
   /**
@@ -166,7 +174,7 @@ export class ConfigSlice<T> {
         throw this.#error
       }
       throw new ErrConfig(
-        `Cannot read config "${this.parts.join('.') || '<root>'}": configuration has not been resolved yet`,
+        `Cannot read config "${sliceLabel(this.parts)}": configuration has not been resolved yet`,
         'ERR_CONFIG_NOT_RESOLVED',
         undefined,
         'Read the configuration from inside a service, not while the application is still being built',
@@ -222,11 +230,27 @@ export function featureLookup(
   }
 }
 
-/** A feature slice registration: where in the tree it lives, and the schema that governs it. */
+/** How a slice names itself in an error, a warning or the diagnostics. */
+export function sliceLabel(parts: readonly string[] | undefined): string {
+  if (parts === undefined) {
+    return '<detached>'
+  }
+
+  return parts.join('.') || '<root>'
+}
+
+/**
+ * A feature slice registration: where in the tree it lives, and the schema that governs it.
+ *
+ * A detached slice — `parts` `undefined` — is validated from {@link local} instead of from the tree, so a
+ * feature the application never pointed anywhere still resolves against its own defaults.
+ */
 export interface ConfigSliceSpec<T = unknown> {
-  parts: readonly string[]
+  parts: readonly string[] | undefined
   schema: ConfigSchema<T>
   slice: ConfigSlice<T>
+  /** The input a detached slice validates. Ignored for a slice that has a location. */
+  local?: Record<string, unknown>
 }
 
 /** Freezes a validated tree, so nothing downstream can mutate shared configuration. */
