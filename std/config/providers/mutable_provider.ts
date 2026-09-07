@@ -1,6 +1,6 @@
+import { flattenObject } from '../flatten.js'
 import { joinPath, toPathParts } from '../path.js'
 import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../types.js'
-import { flattenObject } from './_flatten.js'
 
 /**
  * A source whose contents can change at any time.

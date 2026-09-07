@@ -1,5 +1,5 @@
 import { type Service, type ServiceAPI, ServiceBeforeBootstrapIn } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigHandle } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigHandle, type ConfigLocation } from '@caffeinejs/std/config'
 
 import { htmlConfigSchema, kHTMLConfig, type HTMLDefaults } from './config.js'
 
@@ -19,7 +19,7 @@ import { htmlConfigSchema, kHTMLConfig, type HTMLDefaults } from './config.js'
  */
 export class HTMLBuilder<C = unknown> implements Service {
   #autoDoctype: boolean | undefined
-  #selector?: (c: ConfigHandle<C>) => HTMLDefaults
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<HTMLDefaults>
 
   get name(): string {
     return 'html'
@@ -41,7 +41,7 @@ export class HTMLBuilder<C = unknown> implements Service {
    * Both the reads and the default written by {@link autoDoctype} go there, and the application's schema must
    * describe it — {@link htmlConfigSchema} is exported for that.
    */
-  config(selector: (c: ConfigHandle<C>) => HTMLDefaults): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<HTMLDefaults>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }

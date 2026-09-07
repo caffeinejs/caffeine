@@ -1,4 +1,4 @@
-export type { ConfigAccessors, ConfigHandle, FeatureConfigLookup } from './accessor.js'
+export type { ConfigAccessors, ConfigHandle, ConfigLocation, FeatureConfigLookup } from './accessor.js'
 export type { BootstrapOptions, ConfigBootstrapResult } from './bootstrap.js'
 export { bootstrapConfig, notifySlices, publishSlices, sourcesOf } from './bootstrap.js'
 export type { ConfigurationSource } from './configuration.js'

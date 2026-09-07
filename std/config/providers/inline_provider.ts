@@ -1,5 +1,5 @@
+import { flattenObject } from '../flatten.js'
 import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../types.js'
-import { flattenObject } from './_flatten.js'
 
 export class InlineConfigProvider implements ConfigProvider {
   readonly id: string

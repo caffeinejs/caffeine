@@ -475,3 +475,91 @@ describe('application schema defaults', () => {
     expect(slice.config.size).toBe(1)
   })
 })
+
+interface GadgetConfig {
+  paths: { live: string; ready: string }
+  hosts: string[]
+}
+
+const gadgetSchema = $t.Object({
+  paths: $t.Object({ live: $t.String(), ready: $t.String() }),
+  hosts: $t.Array($t.String()),
+})
+
+const GADGET_DEFAULTS: GadgetConfig = { paths: { live: '/livez', ready: '/readyz' }, hosts: ['a', 'b', 'c'] }
+
+/**
+ * Where a feature was pointed decides where its *overrides* come from. It never decides what the feature's own
+ * defaults and builder values add up to — both paths merge the same two bands the same way.
+ */
+describe('a feature resolving its own two bands', () => {
+  it('merges a nested builder value into the defaults rather than replacing them', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const slice = defineFeatureConfig<GadgetConfig>(definition, {
+      schema: gadgetSchema,
+      defaults: { ...GADGET_DEFAULTS },
+      values: { paths: { live: '/l' } },
+    })
+
+    await resolve(definition)
+
+    // A builder that set one field of a block must not delete the sibling defaults it never mentioned.
+    expect(slice.config.paths).toEqual({ live: '/l', ready: '/readyz' })
+  })
+
+  it('replaces an array default wholesale rather than patching it', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const slice = defineFeatureConfig<GadgetConfig>(definition, {
+      schema: gadgetSchema,
+      defaults: { ...GADGET_DEFAULTS },
+      values: { hosts: ['x', 'y'] },
+    })
+
+    await resolve(definition)
+
+    // The array rule is the engine's, and it must not depend on whether the feature was placed.
+    expect(slice.config.hosts).toEqual(['x', 'y'])
+  })
+
+  // The test that fails the moment anyone gives the detached path a merge of its own again.
+  it('resolves to the same object placed and detached, given the same inputs', async () => {
+    const spec = {
+      schema: gadgetSchema as ConfigSchema<GadgetConfig>,
+      defaults: { ...GADGET_DEFAULTS },
+      values: { paths: { live: '/l' }, hosts: ['x', 'y'] },
+    }
+
+    const placedDefinition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const placed = defineFeatureConfig<GadgetConfig>(placedDefinition, { ...spec, selector: at('app', 'gadget') })
+    await resolve(placedDefinition)
+
+    const detachedDefinition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const detached = defineFeatureConfig<GadgetConfig>(detachedDefinition, spec)
+    await resolve(detachedDefinition)
+
+    expect(detached.snapshot()).toEqual(placed.snapshot())
+  })
+
+  /**
+   * Two features may legitimately share one location — the application chose it, and nothing stops it naming
+   * the same block twice. Their defaults have to merge for the same reason their builder values do.
+   */
+  it('keeps the defaults of two features pointed at one location', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const first = defineFeatureConfig<WidgetConfig>(definition, {
+      selector: at('app', 'shared'),
+      schema: widgetSchema,
+      defaults: { size: 5 },
+    })
+    const second = defineFeatureConfig<WidgetConfig>(definition, {
+      selector: at('app', 'shared'),
+      schema: widgetSchema,
+      defaults: { label: 'second' },
+    })
+
+    await resolve(definition)
+
+    expect(first.config).toEqual({ size: 5, label: 'second' })
+    expect(second.config).toEqual({ size: 5, label: 'second' })
+  })
+})

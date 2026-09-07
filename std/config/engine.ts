@@ -47,7 +47,7 @@ export class ConfigEngine {
 
     const sources = loaded.flat()
 
-    return { sources, values: merge(sources) }
+    return { sources, values: mergeSources(sources) }
   }
 }
 
@@ -66,7 +66,7 @@ export class ConfigEngine {
  * beat a lower band's `tags.0/1/2`: without the claim both survive the merge and the materializer lets the
  * indexed children overwrite the scalar, so the value an operator set disappears without a word.
  */
-function merge(sources: readonly PropertySource[]): ConfigSnapshot['values'] {
+export function mergeSources(sources: readonly PropertySource[]): ConfigSnapshot['values'] {
   const values: ConfigSnapshot['values'] = new Map()
   const claimed = new Set<string>()
 

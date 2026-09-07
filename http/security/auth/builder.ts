@@ -2,7 +2,7 @@ import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, type ServiceBootstrapIn } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
-  type ConfigAccessors,
+  type ConfigLocation,
   type ConfigHandle,
   type ConfigSchema,
   type ConfigSlice,
@@ -121,7 +121,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, while declaring, to record the path.
    * Both `auth.*` and every `auth.schemes.<name>.*` beneath it move together.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<AuthConfigSlice>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<AuthConfigSlice>): ServiceAPI<this> {
     this.#selector = selector as (c: never) => unknown
     return this
   }

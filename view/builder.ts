@@ -1,7 +1,7 @@
 import { ErrConfiguration } from '@caffeinejs/http'
 import {
   defineFeatureConfig,
-  type ConfigAccessors,
+  type ConfigLocation,
   type ConfigDefinition,
   type ConfigHandle,
   type ConfigSlice,
@@ -31,7 +31,7 @@ import type { ViewOptions } from './view.js'
 export class ViewBuilder<C = unknown> {
   readonly #name: string | undefined
   #options: Partial<ViewOptions> = {}
-  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<ViewConfig>
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<ViewConfig>
   #resolved: ConfigSlice<ViewOptions> | undefined
 
   /**
@@ -131,7 +131,7 @@ export class ViewBuilder<C = unknown> {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<ViewConfig>): this {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<ViewConfig>): this {
     this.#selector = selector
     return this
   }

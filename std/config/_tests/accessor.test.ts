@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createLiveAccessors, type ConfigHandle } from '../accessor.js'
+import { createLiveAccessors, type ConfigHandle, type ConfigLocation } from '../accessor.js'
 import { featureConfigKey } from '../feature_key.js'
 
 interface AppConfig {
@@ -213,5 +213,71 @@ describe('createLiveAccessors with a feature lookup', () => {
   // Only the root takes a lookup, so a nested node is the same plain projection it always was.
   it('leaves nested nodes uncallable', () => {
     expect(typeof callable().http).toBe('object')
+  })
+})
+
+/**
+ * A feature's `.config(...)` selector returns a {@link ConfigLocation}, not the feature's type, so an
+ * application may declare only the part of the shape it wants to control and leave the rest to the feature's
+ * defaults, its builder, or the environment.
+ *
+ * These are type assertions. They compile or they do not; the runtime expectations only keep vitest happy.
+ */
+describe('ConfigLocation', () => {
+  interface ServerOptions {
+    port: number
+    host: string
+  }
+
+  interface Shape {
+    tags: string[]
+    frozen: readonly string[]
+    optional?: string[]
+    nested: { ports: number[] }
+    hook: (n: number) => void
+  }
+
+  it('accepts a location declaring only part of the feature shape', () => {
+    // The application declared `port` and nothing else. `host` comes from the builder or the environment.
+    const declared = createLiveAccessors<{ port: number }>(() => ({ port: 3000 }))
+    const location: ConfigLocation<ServerOptions> = declared
+
+    expect(location.port).toBe(3000)
+  })
+
+  it('accepts a location declaring the whole shape', () => {
+    const declared = createLiveAccessors<ServerOptions>(() => ({ port: 3000, host: 'localhost' }))
+    const location: ConfigLocation<ServerOptions> = declared
+
+    expect(location.host).toBe('localhost')
+  })
+
+  // A handle projects every array read-only. Widening the branch back to `T[K]` would reject every
+  // array-carrying location — `kafka.brokers`, `static.mounts`, `openapi.servers`.
+  it('accepts the read-only arrays a handle actually hands back', () => {
+    const declared = createLiveAccessors<Shape>(() => ({
+      tags: ['a'],
+      frozen: ['b'],
+      optional: ['c'],
+      nested: { ports: [1] },
+      hook: () => undefined,
+    }))
+    const location: ConfigLocation<Shape> = declared
+
+    expect(location.tags?.[0]).toBe('a')
+    expect(location.nested?.ports?.[0]).toBe(1)
+  })
+
+  /**
+   * The only safety left once every property is optional. Without this the check is undocumented, and a change
+   * to {@link ConfigAccessors} or to TypeScript could remove it without a single test going red.
+   */
+  it('rejects a subtree that shares no property with the feature shape', () => {
+    const unrelated = createLiveAccessors<{ brokers: readonly string[] }>(() => ({ brokers: ['localhost'] }))
+
+    // @ts-expect-error no property in common, so this is not a location for these options
+    const location: ConfigLocation<ServerOptions> = unrelated
+
+    expect(location).toBeDefined()
   })
 })

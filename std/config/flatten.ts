@@ -1,5 +1,11 @@
-import type { ConfigEntry, ConfigValue } from '../types.js'
+import type { ConfigEntry, ConfigValue } from './types.js'
 
+/**
+ * Flattens a nested value into the dotted leaf keys a property source carries.
+ *
+ * Every provider produces entries this way, so an environment variable and an object literal are merged by the
+ * same per-leaf rules and one source can override a single field without erasing its siblings.
+ */
 export function flattenObject(obj: unknown, origin: string, prefix: string, out: Map<string, ConfigEntry>): void {
   if (Array.isArray(obj)) {
     if (obj.length === 0) {

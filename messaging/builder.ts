@@ -6,7 +6,7 @@ import {
   AnySchema,
   ServiceBootstrapIn,
 } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
@@ -52,7 +52,7 @@ export interface OutBindingOptions {
  */
 export class MessagingBuilder<C = unknown> implements Service {
   readonly #name: string
-  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<MessagingConfigSlice>
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>
   readonly #binders = new Map<string, Binder | BinderFactory>()
   readonly #inbound = new Map<string, InBindingOptions>()
   readonly #outbound = new Map<string, OutBindingOptions>()
@@ -110,7 +110,7 @@ export class MessagingBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<MessagingConfigSlice>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }

@@ -21,6 +21,33 @@ type ConfigValueOf<V> = V extends readonly (infer U)[]
       ? ConfigAccessors<V>
       : V
 
+/**
+ * A location in a config tree a feature's settings may be pointed at.
+ *
+ * {@link ConfigAccessors} with every property optional, all the way down. That is what lets an application
+ * declare only part of a feature's shape — `$t.Object({ port: $t.Number() })` where the feature wants
+ * `{ port, host }` — and still name it with `.config(...)`. The fields it left out arrive from the feature's
+ * defaults, its builder, or the environment, and the feature reads one merged object either way.
+ *
+ * Arrays stay read-only and the conditional stays in a helper for the same two reasons {@link ConfigAccessors}
+ * gives: a declared `string[]` reads back off a handle as `readonly string[]`, and a union has to distribute.
+ *
+ * All-optional means the weak-type rule is what keeps an unrelated subtree out — a location sharing no
+ * property name with `T` is rejected. One that shares a compatible name is not, and that surfaces when the
+ * slice validates rather than at the selector.
+ */
+export type ConfigLocation<T> = {
+  readonly [K in keyof T]?: ConfigLocationValue<T[K]>
+}
+
+type ConfigLocationValue<V> = V extends readonly (infer U)[]
+  ? ReadonlyArray<ConfigLocationValue<U>>
+  : V extends (...args: never[]) => unknown
+    ? V
+    : V extends object
+      ? ConfigLocation<V>
+      : V
+
 /** Answers a feature key with that feature's configuration, or `undefined` when nothing registered it. */
 export type FeatureConfigLookup = (key: symbol) => unknown
 

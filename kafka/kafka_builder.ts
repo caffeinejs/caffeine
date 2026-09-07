@@ -6,7 +6,7 @@ import {
   type ServiceAPI,
   type ServiceBootstrapIn,
 } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import {
@@ -52,7 +52,7 @@ import { KafkaTemplate } from './template.js'
 export class KafkaBuilder<C = unknown> implements Service {
   readonly #name: string
   readonly #clients: KafkaClients
-  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<KafkaConfigSlice>
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<KafkaConfigSlice>
   #brokers?: string | string[]
   #clientId?: string
   #groupId?: string
@@ -201,7 +201,7 @@ export class KafkaBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    * Both the reads and the defaults written by the builder methods follow it.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<KafkaConfigSlice>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<KafkaConfigSlice>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }

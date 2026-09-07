@@ -240,3 +240,103 @@ describe('openapi configuration', () => {
     expect((await documentOf(app)).info.title).toBe('Renamed')
   })
 })
+
+/**
+ * An application defaults a feature it did not write by declaring the default in its own schema. That band sits
+ * above the framework's defaults and below anything the application actually chose, so it fills in only what
+ * nobody named — which is what makes it useful, and what makes its position load-bearing.
+ */
+describe('openapi defaults and the schema band', () => {
+  let app: WebApplication | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  const defaultedSchema = $t.Object({
+    openapi: $t.Object(
+      {
+        // The block carries `default: {}` so `Value.Default` materializes it — a field default nested under an
+        // optional block that has none of its own never reaches the schema band at all.
+        info: $t.Optional(
+          $t.Object(
+            {
+              title: $t.String({ default: 'From Schema' }),
+              version: $t.String({ default: '2.0.0' }),
+            },
+            { default: {} },
+          ),
+        ),
+        servers: $t.Optional(
+          $t.List($t.Object({ url: $t.String() }), { default: [{ url: 'https://schema.example.com' }] }),
+        ),
+      },
+      { default: {} },
+    ),
+  })
+  const kDefaultedConfig = token<ConfigHandle<InferSchema<typeof defaultedSchema>>>(Symbol('app.config'))
+
+  // `'API'` and `'0.0.0'` are the feature's own defaults. They have to lose to the application's schema, or an
+  // application can never name a default for a feature it did not write.
+  it('lets the application schema default a block the feature also defaults', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(defaultedSchema, kDefaultedConfig)
+      .extend(OpenAPIExt, o => o.config(c => c.openapi).public())
+      .build()
+
+    await app.ready()
+
+    const doc = await documentOf(app)
+    expect(doc.info.title).toBe('From Schema')
+    expect(doc.info.version).toBe('2.0.0')
+  })
+
+  // The feature's own `servers` default is an empty array, and an empty array claims its own path in the merge.
+  // Published in the code band it would not merely lose to a schema default — it would erase it.
+  it('keeps a schema-declared server list the feature would otherwise claim away', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(defaultedSchema, kDefaultedConfig)
+      .extend(OpenAPIExt, o => o.config(c => c.openapi).public())
+      .build()
+
+    await app.ready()
+
+    const doc = await documentOf(app)
+    expect(doc.servers).toEqual([{ url: 'https://schema.example.com' }])
+  })
+
+  it('still lets a builder call beat the schema default', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(defaultedSchema, kDefaultedConfig)
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.openapi)
+          .info({ title: 'From Code', version: '1.0.0' })
+          .public(),
+      )
+      .build()
+
+    await app.ready()
+
+    expect((await documentOf(app)).info.title).toBe('From Code')
+  })
+
+  it('still lets the environment beat both', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(defaultedSchema, kDefaultedConfig, c =>
+        c.source(env({ OPENAPI__INFO__TITLE: 'From Env' }), ConfigPriority.ENV),
+      )
+      .extend(OpenAPIExt, o =>
+        o
+          .config(c => c.openapi)
+          .info({ title: 'From Code', version: '1.0.0' })
+          .public(),
+      )
+      .build()
+
+    await app.ready()
+
+    expect((await documentOf(app)).info.title).toBe('From Env')
+  })
+})

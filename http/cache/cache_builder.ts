@@ -1,5 +1,5 @@
 import { $t, ServiceBeforeBootstrapIn, ServiceBootstrapIn, Service, type ServiceAPI } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { ETagGenerator } from './cache.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
@@ -41,7 +41,7 @@ export class CacheBuilder<C = unknown> implements Service {
   #store: CacheStore | undefined
   #etagGenerator: ETagGenerator | undefined
   #statusHeader: string | undefined
-  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<CacheConfig>
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<CacheConfig>
   #slice: ConfigSlice<CacheConfig> | undefined
 
   get name(): string {
@@ -69,7 +69,7 @@ export class CacheBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<CacheConfig>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<CacheConfig>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }

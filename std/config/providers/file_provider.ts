@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises'
 
 import { ErrConfig } from '../errors.js'
+import { flattenObject } from '../flatten.js'
 import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
-import { flattenObject } from './_flatten.js'
 
 /** Turns a config file's text into the object its keys are flattened from. */
 export type ConfigFileParser = (text: string) => Record<string, unknown>

@@ -1,7 +1,7 @@
 import { $t, type Service, type ServiceAPI, ServiceBeforeBootstrapIn, ServiceBootstrapIn } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigHandle, type ConfigLocation, type ConfigSlice } from '@caffeinejs/std/config'
 
-import { kServerContribution } from './keys.js'
+import { kServerContribution, kServerOptions } from './keys.js'
 
 export interface ServerOptions {
   port: number
@@ -60,7 +60,7 @@ export const serverConfigSchema = $t.Object({
 export class ServerBuilder<C = unknown> implements Service {
   #port: number | undefined
   #host: string | undefined
-  #selector?: (c: ConfigHandle<C>) => ServerOptions
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<ServerOptions>
   #slice: ConfigSlice<ServerOptions> | undefined
 
   get name(): string {
@@ -82,9 +82,11 @@ export class ServerBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    * Both the reads and the defaults written by {@link port}/{@link host} go there. The application's schema
-   * must describe that location — {@link serverConfigSchema} is exported for exactly that.
+   * must describe that location — {@link serverConfigSchema} is exported for exactly that — though it need
+   * only describe the part it wants to control: a location declaring `port` alone is a location, and `host`
+   * then comes from {@link host}, the defaults, or the environment.
    */
-  config(selector: (c: ConfigHandle<C>) => ServerOptions): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<ServerOptions>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
@@ -108,6 +110,10 @@ export class ServerBuilder<C = unknown> implements Service {
     // immediately before the adapter binds the socket, and that copy is what the server runs on. Freezing
     // the whole object here instead would only mean nobody could ever see what configuration now says.
     kit.contributions.contribute(kServerContribution, slice.config)
+
+    // The same object as a binding, for a class the container constructs rather than the builder. `toValue` is
+    // right because the slice's identity is stable — the fields still follow a refresh.
+    kit.container.bind(kServerOptions, t => t.toValue(slice.config))
 
     return Promise.resolve()
   }

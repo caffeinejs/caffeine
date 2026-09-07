@@ -6,7 +6,13 @@ import {
   AnySchema,
   ServiceBootstrapIn,
 } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import {
+  configEquals,
+  defineFeatureConfig,
+  type ConfigHandle,
+  type ConfigLocation,
+  type ConfigSlice,
+} from '@caffeinejs/std/config'
 
 import { OPENAPI_CONFIG_KEYS, openapiConfigSchema, type OpenAPIConfigSlice } from './config.js'
 import { OpenAPIDocumentStore } from './document_store.js'
@@ -43,7 +49,7 @@ import type {
 export class OpenAPIBuilder<C = unknown> implements Service {
   readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
   readonly #store = new OpenAPIDocumentStore()
-  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<OpenAPIConfigSlice>
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<OpenAPIConfigSlice>
   #resolved?: ConfigSlice<OpenAPIOptions>
 
   get name(): string {
@@ -55,7 +61,7 @@ export class OpenAPIBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<OpenAPIConfigSlice>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<OpenAPIConfigSlice>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }
@@ -284,16 +290,17 @@ export class OpenAPIBuilder<C = unknown> implements Service {
 
   beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
     const code = this.#options
+    const defaults = defaultOpenAPIOptions()
 
     const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
       selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: openapiConfigSchema,
-      values: Object.fromEntries(
-        OPENAPI_CONFIG_KEYS.filter(key => code[key as keyof OpenAPIOptions] !== undefined).map(key => [
-          key,
-          code[key as keyof OpenAPIOptions],
-        ]),
-      ),
+      defaults: treeCarryable(defaults, () => true),
+      // Only what a builder method actually changed. `#options` starts from the defaults so the setters can
+      // write into `routes` and `infer` without guarding every one, and a key still holding its default is a
+      // default — it belongs in the band below, or an application could not name `info.title` in its own
+      // schema and have it apply.
+      values: treeCarryable(code, (key, value) => !configEquals(value, defaults[key])),
     })
 
     this.#resolved = slice.derive(published => {
@@ -367,4 +374,26 @@ function mergeRoutes(
     yaml: optional(configured.yaml, code.yaml),
     docs: optional(configured.docs, code.docs),
   }
+}
+
+/**
+ * The subset of the options a configuration tree can carry, filtered by `keep`.
+ *
+ * A key holding `undefined` is never written: it would land as a null and beat the band it was meant to leave
+ * alone.
+ */
+function treeCarryable(
+  options: OpenAPIOptions,
+  keep: (key: keyof OpenAPIOptions, value: unknown) => boolean,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+
+  for (const key of OPENAPI_CONFIG_KEYS) {
+    const value = options[key as keyof OpenAPIOptions]
+    if (value !== undefined && keep(key as keyof OpenAPIOptions, value)) {
+      out[key] = value
+    }
+  }
+
+  return out
 }

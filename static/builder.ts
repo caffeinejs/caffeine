@@ -1,6 +1,6 @@
 import { NotFoundFallback } from '@caffeinejs/http'
 import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, ServiceBootstrapIn } from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigAccessors, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
@@ -27,7 +27,7 @@ export class StaticBuilder<C = unknown> implements Service {
   #mounts: StaticMount[] = []
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
-  #selector?: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<StaticConfigSlice>
   #resolved?: ConfigSlice<ResolvedStatic>
 
   get name(): string {
@@ -79,7 +79,7 @@ export class StaticBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigAccessors<StaticConfigSlice>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<StaticConfigSlice>): ServiceAPI<this> {
     this.#selector = selector
     return this
   }

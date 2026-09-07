@@ -53,6 +53,13 @@ export class ConfigSlice<T> {
    * After a refresh that failed for this slice, the fields keep serving the last values that did validate —
    * a feature never observes a half-updated object. A slice that has *never* validated rethrows the failure
    * that stopped it rather than pretending to be empty.
+   *
+   * Because the identity is stable, this is what a feature hands to whatever it constructs, and the one case
+   * where `toValue` does not freeze a configuration: `bind(key, t => t.toValue(slice.config))` gives a
+   * container-constructed class an object whose fields keep moving.
+   *
+   * A slice resolving to a **primitive** has no facade to read through, so binding it by value would freeze it
+   * at the first resolve. Read one through a factory instead.
    */
   get config(): T {
     const current = this.#require()

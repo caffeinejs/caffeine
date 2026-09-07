@@ -1,9 +1,12 @@
 import type { ConfigDefinition } from './definition.js'
+import { mergeSources } from './engine.js'
 import type { FeatureConfigKey } from './feature_key.js'
+import { flattenObject } from './flatten.js'
+import { materialize } from './materializer.js'
 import type { ConfigSchema } from './schema.js'
 import { selectorPath } from './selector_path.js'
 import type { ConfigSlice } from './slice.js'
-import type { ConfigValue } from './types.js'
+import type { ConfigEntry, ConfigValue, PropertySource } from './types.js'
 
 /**
  * What a feature needs to resolve its settings.
@@ -55,9 +58,16 @@ export interface FeatureConfigSpec<T> {
  * over its defaults. Without one it resolves detached, off `defaults` and `values` — the feature works, it
  * simply has no external overrides and adds no field to the application's configuration object.
  *
- * The two bands are written at different granularity, and that is load-bearing. `defaults` goes in as one
- * object so it lands as a unit; `values` goes in key by key, because {@link MutableConfigProvider.set} clears
- * everything under the path it writes and a single whole-object write would have each key erase the last.
+ * Both bands are written key by key, because {@link MutableConfigProvider.set} clears everything under the path
+ * it writes: a whole-object write would have each key erase the last, and would give the last feature
+ * registered at a location the whole default block.
+ *
+ * The two paths resolve the same way. A detached feature merges its own two bands through the merge the tree
+ * itself goes through, so where a feature was pointed decides where its *overrides* come from and never what
+ * its own inputs add up to.
+ *
+ * The returned slice's {@link ConfigSlice.config} is what the feature hands to whatever it constructs or binds,
+ * in `bootstrap`.
  */
 export function defineFeatureConfig<T>(definition: ConfigDefinition, spec: FeatureConfigSpec<T>): ConfigSlice<T> {
   const values = definedValues(spec.values)
@@ -65,7 +75,7 @@ export function defineFeatureConfig<T>(definition: ConfigDefinition, spec: Featu
 
   const slice =
     parts === undefined
-      ? definition.slice(undefined, spec.schema, { ...spec.defaults, ...values })
+      ? definition.slice(undefined, spec.schema, detachedValues(spec.defaults, values))
       : mappedSlice(definition, parts, spec, values)
 
   if (spec.key !== undefined) {
@@ -81,8 +91,8 @@ function mappedSlice<T>(
   spec: FeatureConfigSpec<T>,
   values: Record<string, unknown>,
 ): ConfigSlice<T> {
-  if (spec.defaults !== undefined) {
-    definition.frameworkDefaults.set(parts, spec.defaults as ConfigValue)
+  for (const [key, value] of Object.entries(spec.defaults ?? {})) {
+    definition.frameworkDefaults.set([...parts, key], value as ConfigValue)
   }
 
   for (const [key, value] of Object.entries(values)) {
@@ -90,6 +100,32 @@ function mappedSlice<T>(
   }
 
   return definition.slice(parts, spec.schema)
+}
+
+/**
+ * The object a detached feature validates.
+ *
+ * The same flatten and merge the configuration tree goes through, over the feature's own two bands and nothing
+ * else — so a detached feature still reads no file, environment variable or argument, and still adds no field
+ * to the application's configuration. What it gains is that its defaults and its builder values merge leaf by
+ * leaf: a builder setting one field of a nested block no longer loses that block's other defaults for want of
+ * a location.
+ */
+function detachedValues(
+  defaults: Record<string, unknown> | undefined,
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  // Highest band first — the merge is first-wins, the order the engine is handed the real bands in.
+  const sources = [band('feature:code', values), band('feature:defaults', defaults ?? {})]
+
+  return materialize({ sources, values: mergeSources(sources) })
+}
+
+function band(name: string, values: Record<string, unknown>): PropertySource {
+  const entries = new Map<string, ConfigEntry>()
+  flattenObject(values, name, '', entries)
+
+  return { name, entries }
 }
 
 /**
