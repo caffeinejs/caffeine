@@ -20,7 +20,8 @@
     "request/shared.ts",
     "mixedscopes/nestjs/nestjs.ts",
     "authn/nestjs/nestjs.ts",
-    "authn/shared.ts"
+    "authn/shared.ts",
+    "testing/nestjs/**/*.ts"
   ],
   "exclude": ["dist", "node_modules"]
 }

@@ -20,7 +20,8 @@
     "mixedscopes/caffeine/**/*.ts",
     "authn/caffeine/**/*.ts",
     "authn/shared.ts",
-    "startup/caffeine/**/*.ts"
+    "startup/caffeine/**/*.ts",
+    "testing/caffeine/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

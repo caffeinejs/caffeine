@@ -20,6 +20,7 @@
     "request/caffeine-request-scope/**",
     "mixedscopes/caffeine/**",
     "authn/caffeine/**",
+    "testing/caffeine/**",
     "aspect/**",
     "di/**"
   ]
