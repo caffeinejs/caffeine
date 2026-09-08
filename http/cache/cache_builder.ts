@@ -1,13 +1,4 @@
-import {
-  $t,
-  kBeforeBootstrap,
-  kBootstrap,
-  kFeatureName,
-  type BeforeBootstrapKit,
-  type BootstrapKit,
-  type FeatureLifecycle,
-} from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { $t, FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 
 import { ETagGenerator } from './cache.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
@@ -45,14 +36,14 @@ export const cacheConfigSchema = $t.Object({
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
-export class CacheBuilder<C = unknown> implements FeatureLifecycle {
+export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
   readonly [kFeatureName] = 'cache'
+
+  protected readonly schema = cacheConfigSchema
+  protected readonly defaults = { ...DEFAULT_CACHE_CONFIG }
 
   #store: CacheStore | undefined
   #etagGenerator: ETagGenerator | undefined
-  #statusHeader: string | undefined
-  #selector?: (c: ConfigHandle<C>) => ConfigLocation<CacheConfig>
-  #resolved: ConfigSlice<CacheConfig> | undefined
 
   store(store: CacheStore): this {
     this.#store = store
@@ -66,30 +57,10 @@ export class CacheBuilder<C = unknown> implements FeatureLifecycle {
 
   /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/BYPASS. */
   statusHeader(name: string): this {
-    this.#statusHeader = name
-    return this
+    return this.set('statusHeader', name)
   }
 
-  /**
-   * Places the cache settings elsewhere in the configuration tree, e.g. `c.config(x => x.app.cache)`.
-   *
-   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
-   */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<CacheConfig>): this {
-    this.#selector = selector
-    return this
-  }
-
-  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-    this.#resolved = defineFeatureConfig<CacheConfig>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: cacheConfigSchema,
-      defaults: { ...DEFAULT_CACHE_CONFIG },
-      values: { statusHeader: this.#statusHeader },
-    })
-  }
-
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): Promise<void> {
     const store = this.#store
     if (store !== undefined) {
       kit.container.bind(CacheStore, t => t.toValue(store).internal())
@@ -104,7 +75,7 @@ export class CacheBuilder<C = unknown> implements FeatureLifecycle {
       t
         // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but
         // a header name that followed a refresh is the behaviour every other config value has.
-        .toFactory(() => this.#resolved!.config.statusHeader)
+        .toFactory(() => this.slice.config.statusHeader)
         .internal(),
     )
 

@@ -10,6 +10,7 @@ import {
 } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
+  Configuration,
   InlineConfigProvider,
   defineFeatureConfig,
   featureConfigKey,
@@ -19,13 +20,7 @@ import {
 import fastify from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import {
-  type MiddlewareFn,
-  Router,
-  createWebApplication,
-  fastifyAdapterFactory,
-  kServerContribution,
-} from '../index.js'
+import { type MiddlewareFn, Router, createWebApplication, fastifyAdapterFactory, kServerConfig } from '../index.js'
 
 const schema = $t.Object({
   catalog: $t.Object({ pageSize: $t.Number() }),
@@ -341,7 +336,7 @@ describe('ctx.config with an application schema', () => {
 
     expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['catalog'] })
     // And the server did not take it either — it was pointed nowhere, so its own default stands.
-    expect(app.contributions.get(kServerContribution).host).toBe('0.0.0.0')
+    expect(app.container.get(Configuration).config(kServerConfig)!.host).toBe('0.0.0.0')
 
     await app.close()
   })
@@ -362,10 +357,10 @@ describe('ctx.config with an application schema', () => {
 
     await app.ready()
 
-    // Read through the server's own contribution, not the root handle: the root would show 4321 either way,
+    // Read through the server's own key, not the root handle: the root would show 4321 either way,
     // because the application schema declares it. What has to be true is that the value reached the *feature*,
     // whose framework default is 0 — an OS-assigned port.
-    expect(app.contributions.get(kServerContribution).port).toBe(4321)
+    expect(app.container.get(Configuration).config(kServerConfig)!.port).toBe(4321)
 
     await app.close()
   })

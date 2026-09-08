@@ -2,6 +2,31 @@
 
 Adapter is Fastify. Controllers are `@Controller` + `@Get` / `@Post` / … + `@Args` / `$p`. Throw `ErrHTTPNotFound` (and other `ErrHTTP*`) from handlers. Do not invent Nest `HttpException`.
 
+## The built-ins are extensions
+
+There is no `Services` record and no `Contributions`. Everything this package wires at start-up — the error
+handler, the form body parser, the health probes, the OIDC callback routes, the not-found handler — is an
+ordinary `ServerExtension` its own feature registers, and `adapter.setup()` has one registration loop with no
+special cases in front of or behind it.
+
+What separates them from a package's extension is `kExtensionStage` alone: `core` for the four that must
+precede anything contributed, `fallback` for the not-found handler, which needs whatever an extension
+decorated the server with and every `ServerOwnedPaths` provider already registered. Do not reintroduce a
+direct `install*()` call in the adapter; write the extension and give it a stage.
+
+A feature that answers on URLs outside the compiled routing binds a `ServerOwnedPaths` provider with
+`.extends(ServerOwnedPaths)`, and a fallback reads them with `container.getManyOptional(ServerOwnedPaths)`.
+That is how a SPA shell knows not to swallow `/livez` without `static` importing anything from `health`.
+
+Health is one feature, registered unconditionally like the server. `app.health(...)` only calls
+`markExplicit()`, which is what flips the `enabled` default away from the Kubernetes auto-detection — there is
+no second fallback configurer, and nothing matches on `[kFeatureName] === 'health'`.
+
+The effective authentication schemes are stamped onto each compiled route (`route.authorization.schemes`)
+while routing is built, where the application's default scheme is known. A reader that documents or describes
+a route takes them from there; extensions run before any Fastify route exists, so `routeOptions.config` is not
+available to them.
+
 ## Two route sources
 
 Routes come from `RouteSource`s, and there are two: `routing/decorated/` reads the `@Controller` registry, `routing/programmatic/` reads the `Router` chains an application mounted. Both produce `RouteGroupSpec` and go through the same `compileRouteGroup`, so a route is configured, guarded and authorized identically whichever way it was written. Common pieces live at the root of `routing/`; a `_`-prefixed file there is private to that directory, so anything both sources need (`inherit.ts`) is not underscore-prefixed.

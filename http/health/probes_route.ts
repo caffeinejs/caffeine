@@ -5,7 +5,8 @@ import { joinPaths } from '../internal/paths/paths.js'
 import type { ServerExtensionContext } from '../server_extension.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { kHealthRoute } from './keys.js'
-import type { ProbeQuery, ProbeResponse } from './probes.js'
+import type { HealthOptions } from './options.js'
+import type { ProbeEndpoint, ProbeQuery, ProbeResponse } from './probes.js'
 
 interface ProbeRequestQuery {
   verbose?: string | string[]
@@ -20,16 +21,9 @@ interface ProbeRequestQuery {
  * no authentication middleware can reach a probe, no "allow anonymous" annotation is needed, and no
  * misconfigured guard can make the kubelet see a 401.
  */
-export function installHealthProbes(ctx: ServerExtensionContext): void {
-  const health = ctx.services.health
-  if (!health.options.enabled) {
-    return
-  }
-
-  const paths = health.options.paths
+export function installHealthProbes(ctx: ServerExtensionContext, options: HealthOptions, probes: ProbeEndpoint): void {
+  const paths = options.paths
   assertNoCollision(ctx, [paths.live, paths.ready, paths.startup])
-
-  const probes = health.probes
 
   mount(ctx, paths.live, query => probes.live(query))
   mount(ctx, paths.ready, query => probes.ready(query))

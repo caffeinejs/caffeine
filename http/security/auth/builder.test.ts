@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
-import { ApplicationAvailability, Contributions, kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+import { ApplicationAvailability, kBootstrap, type BootstrapKit } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -14,9 +14,8 @@ function makeKit(): BootstrapKit {
   return {
     container: { bind, wrap } as unknown as Container,
     availability: new ApplicationAvailability(),
-    contributions: new Contributions(),
     config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
-    extensions: { add: () => undefined },
+    extensions: { add: () => undefined, register: () => undefined },
   }
 }
 

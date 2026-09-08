@@ -1,13 +1,6 @@
 import { NotFoundFallback } from '@caffeinejs/http'
-import {
-  kBeforeBootstrap,
-  kBootstrap,
-  kFeatureName,
-  type BeforeBootstrapKit,
-  type BootstrapKit,
-  type FeatureLifecycle,
-} from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { splitOptionBag, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
@@ -30,13 +23,14 @@ import type { StaticMount } from './static.js'
  *
  * `C` is the application config type, recovered from the builder `.extend(StaticExt, …)` was reached through.
  */
-export class StaticBuilder<C = unknown> implements FeatureLifecycle {
+export class StaticBuilder<C = unknown> extends FeatureBuilder<StaticConfigSlice, C> {
   readonly [kFeatureName] = 'static'
+
+  protected readonly schema = staticConfigSchema
 
   #mounts: StaticMount[] = []
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
-  #selector?: (c: ConfigHandle<C>) => ConfigLocation<StaticConfigSlice>
   #resolved?: ConfigSlice<ResolvedStatic>
 
   /**
@@ -45,6 +39,10 @@ export class StaticBuilder<C = unknown> implements FeatureLifecycle {
    */
   serve(root: string, options?: Omit<StaticMount, 'root'>): this {
     this.#mounts.push({ root, ...options } as StaticMount)
+    // Written straight into the bag: what the builder holds is a `@fastify/static` option bag, and only the
+    // half of it that is not a function is what the slice declares.
+    this.values.mounts = this.#mounts.map(dataOf)
+
     return this
   }
 
@@ -75,31 +73,13 @@ export class StaticBuilder<C = unknown> implements FeatureLifecycle {
     }
 
     this.#spa = { ...options, root }
+    this.values.spa = dataOf(this.#spa)
 
     return this
   }
 
-  /**
-   * Places the static settings elsewhere in the configuration tree, e.g. `s.config(c => c.app.assets)`.
-   *
-   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
-   */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<StaticConfigSlice>): this {
-    this.#selector = selector
-    return this
-  }
-
-  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-    const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: staticConfigSchema,
-      values: {
-        mounts: this.#mounts.length > 0 ? this.#mounts.map(dataOf) : undefined,
-        spa: this.#spa === undefined ? undefined : dataOf(this.#spa),
-      },
-    })
-
-    // A callback cannot go through the tree at all — `Value.Convert` cannot clone a function — so each
+  protected override beforeBootstrap(): void {
+    // A callback cannot go through the tree at all — the validator cannot clone a function — so each
     // mount's callbacks are held here and re-attached by position once the slice publishes. A config
     // source that replaces `static.mounts` replaces the callbacks with it, which is the array rule being
     // consistent rather than an oversight.
@@ -110,10 +90,10 @@ export class StaticBuilder<C = unknown> implements FeatureLifecycle {
     // switches it on, so that a config file cannot start serving a shell the application never asked for.
     const spaEnabled = this.#spa !== undefined
 
-    this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
+    this.#resolved = this.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): Promise<void> {
     const resolved = this.#resolved!
     const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
 
@@ -184,11 +164,11 @@ function resolveStatic(
 }
 
 /** The half of an option bag a configuration tree can carry: everything that is not a function. */
-function dataOf<T extends object>(options: T): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(options).filter(([, value]) => typeof value !== 'function'))
+function dataOf(options: object): Record<string, unknown> {
+  return splitOptionBag(options).data
 }
 
 /** The other half — the callbacks, which are re-attached after the slice publishes. */
-function callbacksOf<T extends object>(options: T): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(options).filter(([, value]) => typeof value === 'function'))
+function callbacksOf(options: object): Record<string, unknown> {
+  return splitOptionBag(options).callbacks
 }

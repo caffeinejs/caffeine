@@ -1,7 +1,13 @@
 import { existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
-import { deriveServerOwnedPaths, ServerExtension, type ServerExtensionContext } from '@caffeinejs/http'
+import {
+  deriveServerOwnedPaths,
+  ServerExtension,
+  ServerOwnedPaths,
+  serverOwnedPaths,
+  type ServerExtensionContext,
+} from '@caffeinejs/http'
 import fastifyStatic from '@fastify/static'
 
 import { ErrSPAIndexMissing } from './errors.js'
@@ -109,7 +115,7 @@ export class StaticExtension extends ServerExtension {
    */
   #report(ctx: ServerExtensionContext, spa: SPASettings, otherMountPrefixes: readonly string[]): void {
     const derived = spa.derive
-      ? deriveServerOwnedPaths(ctx.routeGroups, Object.values(ctx.services.health.options.paths))
+      ? deriveServerOwnedPaths(ctx.routeGroups, serverOwnedPaths(ctx.container.getManyOptional(ServerOwnedPaths)))
       : []
     const neverShell = [...new Set([...derived, ...spa.exclude, ...otherMountPrefixes.filter(p => p !== '')])]
       .filter(prefix => !spa.include.some(included => underPrefix(prefix, included)))

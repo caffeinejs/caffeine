@@ -1,7 +1,6 @@
 import type { Container, ContainerBindingOps } from '@caffeinejs/di'
 
 import type { ConfigDefinition } from './config/index.js'
-import type { Contributions } from './contributions.js'
 import type { ExtensionRegistrar } from './extensions.js'
 import type { ApplicationAvailability } from './health/availability.js'
 
@@ -45,12 +44,6 @@ export interface BootstrapKit {
    * lifecycle writes to the application's, and a second instance would report a state nothing ever updates.
    */
   availability: ApplicationAvailability
-
-  /**
-   * Where a feature leaves what the application needs from it once everything is up. Write-only here: it is
-   * sealed the moment every feature has bootstrapped, and reads before that throw.
-   */
-  contributions: Contributions
 
   /**
    * Where a feature registers an extension it has bound. What it adds runs in the order the application's

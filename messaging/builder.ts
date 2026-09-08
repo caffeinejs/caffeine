@@ -1,14 +1,6 @@
 import type { Ctor } from '@caffeinejs/di'
-import {
-  kBeforeBootstrap,
-  kBootstrap,
-  kFeatureName,
-  type AnySchema,
-  type BeforeBootstrapKit,
-  type BootstrapKit,
-  type FeatureLifecycle,
-} from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { FeatureBuilder, kFeatureName, type AnySchema, type BootstrapKit } from '@caffeinejs/std'
+import { type ConfigSlice } from '@caffeinejs/std/config'
 
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
@@ -52,11 +44,12 @@ export interface OutBindingOptions {
  * `ready()` its `configure()` builds the runtime and binds the engine + `MessageBus` into the container.
  * A second integration is `.extend(messaging('audit'), m => ...)`.
  */
-export class MessagingBuilder<C = unknown> implements FeatureLifecycle {
+export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfigSlice, C> {
   readonly [kFeatureName] = 'messaging'
 
+  protected readonly schema = messagingConfigSchema
+
   readonly #name: string
-  #selector?: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>
   readonly #binders = new Map<string, Binder | BinderFactory>()
   readonly #inbound = new Map<string, InBindingOptions>()
   readonly #outbound = new Map<string, OutBindingOptions>()
@@ -66,6 +59,7 @@ export class MessagingBuilder<C = unknown> implements FeatureLifecycle {
   #resolved?: ConfigSlice<{ inbound: Map<string, ConsumerBinding>; outbound: Map<string, ProducerBinding> }>
 
   constructor(name: string = DEFAULT_BINDER) {
+    super()
     this.#name = name
   }
 
@@ -105,29 +99,17 @@ export class MessagingBuilder<C = unknown> implements FeatureLifecycle {
     return this
   }
 
-  /**
-   * Places this instance's settings elsewhere in the configuration tree, e.g. `m.config(c => c.app.events)`.
-   *
-   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
-   */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>): this {
-    this.#selector = selector
-    return this
+  protected override configValues(): Record<string, unknown> {
+    return {
+      in: configurableHalf(this.#inbound),
+      out: configurableHalf(this.#outbound),
+    }
   }
 
-  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-    const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: messagingConfigSchema,
-      values: {
-        in: configurableHalf(this.#inbound),
-        out: configurableHalf(this.#outbound),
-      },
-    })
-
+  protected override beforeBootstrap(): void {
     const code = { in: this.#inbound, out: this.#outbound }
 
-    this.#resolved = slice.derive(published => ({
+    this.#resolved = this.derive(published => ({
       // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
       // created has nothing to attach to and is read by nothing — declaring one is a code act.
       inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
@@ -135,7 +117,7 @@ export class MessagingBuilder<C = unknown> implements FeatureLifecycle {
     }))
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): Promise<void> {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)

@@ -6,7 +6,8 @@ import { Middleware, type MiddlewareSetupContext, type Next } from '../../middle
 import type { ActionResultTypes } from '../../response.js'
 import { mergePrincipals, newAnonymousUser, type Principal } from '../index.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
-import type { AuthenticationService } from './service.js'
+import { AuthenticationSchemeProvider } from './scheme_provider.js'
+import { AuthenticationService } from './service.js'
 
 /**
  * Authenticates the request and, when the route is protected, authorizes it — in that order, in one
@@ -23,26 +24,26 @@ export class Authentication extends Middleware {
   #defaultScheme!: string
 
   setup(ctx: MiddlewareSetupContext): void {
-    const auth = ctx.services.auth
-    if (!auth.enabled || !auth.coordinator || !auth.options) {
+    // Configuring authentication binds the coordinator, and nothing else does — so its presence *is* the
+    // feature being on, with no separate flag to be written and then read out of sync with it.
+    const coordinator = ctx.container.getOptional(AuthenticationService)
+    const registered = ctx.container.getOptional(AuthenticationSchemeProvider)
+    if (coordinator === undefined || registered === undefined) {
       throw new ErrAuthenticationNotConfigured()
     }
 
-    this.#coordinator = auth.coordinator
-    this.#defaultScheme = auth.options.defaultAuthenticateScheme
+    this.#coordinator = coordinator
+    this.#defaultScheme = registered.defaultAuthenticateScheme
 
     // A name that resolves to nothing authenticates nobody, and the failure is invisible: the route would
     // reject every caller with no indication of why. Rejecting here means a typo is a start-up error next
     // to the decorator that caused it, not a support ticket. Validated even though `authenticate()` also
     // throws on the same condition — start-up is where a fixed, known-ahead-of-time reference belongs.
-    const registered = auth.schemes
-    if (registered !== undefined) {
-      for (const router of ctx.routeGroups) {
-        for (const route of router.routes) {
-          for (const scheme of route.authorization.options?.schemes ?? []) {
-            if (!registered.schemeNames.includes(scheme)) {
-              throw new ErrAuthSchemeNotFound(scheme, registered.schemeNames)
-            }
+    for (const router of ctx.routeGroups) {
+      for (const route of router.routes) {
+        for (const scheme of route.authorization.options?.schemes ?? []) {
+          if (!registered.schemeNames.includes(scheme)) {
+            throw new ErrAuthSchemeNotFound(scheme, registered.schemeNames)
           }
         }
       }

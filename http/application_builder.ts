@@ -32,9 +32,9 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 
   #authBuilder: AuthenticationBuilder | undefined
   #cacheBuilder: CacheBuilder<unknown> | undefined
-  #healthBuilder: HealthBuilder<unknown> | undefined
   readonly #authzBuilder: AuthorizationBuilder
   readonly #serverBuilder: ServerBuilder<unknown>
+  readonly #healthBuilder: HealthBuilder<unknown>
   readonly #guardsBuilder: GuardsBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
@@ -51,6 +51,11 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     // has to work on an application that never calls `.server()`.
     this.#serverBuilder = new ServerBuilder<unknown>()
     this.addFeature(this.#serverBuilder)
+
+    // Likewise: the drain policy applies to every application, probes or not, and `HEALTH__ENABLED=true` has
+    // to switch the probes on without a code change. `.health()` only flips the default for `enabled`.
+    this.#healthBuilder = new HealthBuilder<unknown>()
+    this.addFeature(this.#healthBuilder)
   }
 
   authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
@@ -132,11 +137,8 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * behaviour anyone opts into deliberately.
    */
   health(configure?: (health: HealthBuilder<TConfig>) => void): this {
-    if (this.#healthBuilder == null) {
-      this.#healthBuilder = new HealthBuilder<unknown>()
-      this.addFeature(this.#healthBuilder)
-    }
-
+    // The feature is already registered; reaching this is what turns the probes on regardless of environment.
+    this.#healthBuilder.markExplicit()
     configure?.(this.#healthBuilder as HealthBuilder<TConfig>)
 
     return this

@@ -4,7 +4,6 @@ import type { FastifyInstance } from 'fastify'
 import type { Context } from '../context.js'
 import type { ActionResult } from '../response.js'
 import type { RouteGroup } from '../route.js'
-import type { Services } from '../service.js'
 
 /**
  * Runs the rest of the pipeline and returns whatever it produced.
@@ -69,7 +68,6 @@ export abstract class Middleware<V = Record<never, never>, C = Record<never, nev
 export interface MiddlewareSetupContext {
   server: FastifyInstance
   container: Container
-  services: Services
   routeGroups: RouteGroup<any>[]
 }
 

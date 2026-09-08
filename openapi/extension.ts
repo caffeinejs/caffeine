@@ -4,6 +4,7 @@ import { extname, resolve } from 'node:path'
 import {
   type AuthSchemeDescriptor,
   AuthenticationSchemeProvider,
+  AuthenticationService,
   ServerExtension,
   type RouteGroup,
   type ServerExtensionContext,
@@ -62,7 +63,6 @@ export class OpenAPIExtension extends ServerExtension {
             routeGroups: ctx.routeGroups as Array<RouteGroup<unknown>>,
             options,
             schemes: descriptors,
-            defaultScheme: ctx.services.auth.options?.defaultAuthenticateScheme,
             onWarning: message => warnings.push(message),
           })
         : readDocument(options.source)
@@ -151,7 +151,9 @@ export class OpenAPIExtension extends ServerExtension {
       return
     }
 
-    if (!ctx.services.auth.enabled) {
+    // Configuring authentication binds the coordinator, and nothing else does, so its presence is the feature
+    // being on.
+    if (!ctx.container.has(AuthenticationService)) {
       return
     }
 

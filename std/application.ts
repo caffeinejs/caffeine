@@ -1,12 +1,11 @@
 import { type Binding, type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
 
 import { ConfigDefinition } from './config/index.js'
-import { Contributions } from './contributions.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { Extensions } from './extensions.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
-import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
+import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
 import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './lifecycle.js'
 import { $t } from './schema/t.js'
@@ -67,7 +66,6 @@ export abstract class BaseApplication {
   readonly #hooks: ApplicationHooks<BaseApplication>
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #availability = new ApplicationAvailability()
-  readonly #contributions = new Contributions()
   readonly #extensions: Extensions
   readonly #shutdownInit: ShutdownOptions | undefined
   readonly #config: ConfigDefinition
@@ -75,6 +73,7 @@ export abstract class BaseApplication {
   #name = ''
   #profiles: string[] = []
   #dispatch?: Map<ApplicationEvent, Dispatch[]>
+  #shutdownPolicy?: ShutdownOptions
   #ready = false
   #shutdown?: GracefulShutdown
   #closing?: Promise<void>
@@ -110,15 +109,6 @@ export abstract class BaseApplication {
    */
   get availability(): ApplicationAvailability {
     return this.#availability
-  }
-
-  /**
-   * What the services left for the application: values a feature assembled while bootstrapping. Sealed once
-   * every service has bootstrapped, so reading before {@link ready} has got that far throws rather than
-   * reporting a feature as absent because its service had not run yet.
-   */
-  get contributions(): Contributions {
-    return this.#contributions
   }
 
   /**
@@ -163,9 +153,9 @@ export abstract class BaseApplication {
    * 1. the always-on `caffeine` slice is registered, then every service **declares**;
    * 2. configuration **resolves**, and every slice publishes;
    * 3. `caffeine.name` and `caffeine.profiles` are applied;
-   * 4. every service **configures** — binding into the container and contributing what the application needs
-   *    from it, now able to read its own settings;
-   * 5. the contributions are sealed, the container initializes, and the platform is set up.
+   * 4. every service **configures** — binding into the container and registering its extensions, now able to
+   *    read its own settings;
+   * 5. the container initializes and the platform is set up.
    *
    * Declare and resolve are separate so a feature can read its resolved configuration while it is still able
    * to bind. Resolving inside `container.init()` — after every service had configured — is what used to make
@@ -206,11 +196,12 @@ export abstract class BaseApplication {
     // before registering cannot move it past a feature installed after it.
     await Promise.all(services.map((service, index) => service[kBootstrap](this.serviceKit(index))))
 
-    // Every service has had its turn, so what they contributed is now complete — and closing the step is what
-    // lets the rest of the boot read it without the answer depending on which service happened to finish first.
-    this.#contributions.seal()
-
     await this.#container.init()
+
+    // The drain policy comes from whatever feature owns it, so it is read here rather than named by the
+    // application: a shutdown starting before the platform finished setting up still uses the real budget.
+    this.#shutdownPolicy = this.#container.getOptional(kShutdownPolicy)
+
     await this.setup()
 
     this.#dispatch = this.buildDispatch()
@@ -293,12 +284,15 @@ export abstract class BaseApplication {
   }
 
   /**
-   * The drain policy. Defaults to what the builder was given, or to {@link defaultShutdownOptions}. Subclasses
-   * override it to source the policy from their own feature configuration — the HTTP application derives it from
-   * the resolved health options.
+   * The drain policy: what a feature published under {@link kShutdownPolicy}, else what the builder was given,
+   * else {@link defaultShutdownOptions}.
+   *
+   * A feature wins over the builder because publishing one is the specific act — `.health(h =>
+   * h.drainDelay('10s'))` is how an HTTP application states its drain, and it would be pointless if the
+   * builder's own default beat it.
    */
   protected shutdownOptions(): ShutdownOptions {
-    return this.#shutdownInit ?? defaultShutdownOptions()
+    return this.#shutdownPolicy ?? this.#shutdownInit ?? defaultShutdownOptions()
   }
 
   /** Ran once availability has started refusing, before the drain delay. Subclasses invalidate caches here. */
@@ -328,7 +322,6 @@ export abstract class BaseApplication {
       container: this.#container,
       availability: this.#availability,
       config: this.#config,
-      contributions: this.#contributions,
       extensions: this.#extensions.at(order),
     }
   }

@@ -7,6 +7,7 @@ import { solutions } from './error/util.js'
 import { joinPaths } from './internal/paths/paths.js'
 import type { RouteGroup } from './route.js'
 import type { ServerExtensionContext } from './server_extension.js'
+import { ServerOwnedPaths, serverOwnedPaths } from './server_owned_paths.js'
 
 /**
  * What a fallback is told about the request that matched no route.
@@ -63,7 +64,7 @@ export abstract class NotFoundFallback {
  */
 export function deriveServerOwnedPaths(
   routeGroups: readonly RouteGroup<any>[],
-  healthPaths: readonly string[] = [],
+  extraPaths: readonly string[] = [],
 ): string[] {
   const owned = new Set<string>()
 
@@ -85,11 +86,11 @@ export function deriveServerOwnedPaths(
     }
   }
 
-  for (const path of healthPaths) {
-    const probe = staticPrefix(path)
+  for (const path of extraPaths) {
+    const extra = staticPrefix(path)
 
-    if (probe !== '' && probe !== '/') {
-      owned.add(probe)
+    if (extra !== '' && extra !== '/') {
+      owned.add(extra)
     }
   }
 
@@ -112,7 +113,10 @@ export function isServerOwned(owned: readonly string[], path: string): boolean {
  * global `@Catch(ErrHTTPNotFound)` sees it and the body matches a 404 a handler threw.
  */
 export function installNotFoundHandler(ctx: ServerExtensionContext, fallbacks: readonly NotFoundFallback[]): void {
-  const owned = deriveServerOwnedPaths(ctx.routeGroups, Object.values(ctx.services.health.options.paths))
+  const owned = deriveServerOwnedPaths(
+    ctx.routeGroups,
+    serverOwnedPaths(ctx.container.getManyOptional(ServerOwnedPaths)),
+  )
 
   const handler = async (req: FastifyRequest, reply: FastifyReply): Promise<never | FastifyReply> => {
     const path = req.url.split('?')[0] ?? ''
