@@ -1,5 +1,13 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { type InferSchema, type BeforeBootstrapKit, type FeatureLifecycle, $t } from '@caffeinejs/std'
+import {
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
+  type InferSchema,
+  type BeforeBootstrapKit,
+  type FeatureLifecycle,
+  $t,
+} from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   InlineConfigProvider,
@@ -197,11 +205,11 @@ describe('ctx.config(featureKey)', () => {
   class WidgetService implements FeatureLifecycle {
     constructor(private readonly at?: (c: never) => unknown) {}
 
-    get name(): string {
+    get [kFeatureName](): string {
       return 'widget'
     }
 
-    beforeBootstrap(kit: BeforeBootstrapKit): void {
+    [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
       defineFeatureConfig<WidgetConfig>(kit.config, {
         selector: this.at ?? ((c: never) => (c as { widget: unknown }).widget),
         key: kWidget,
@@ -210,7 +218,7 @@ describe('ctx.config(featureKey)', () => {
       })
     }
 
-    bootstrap(): Promise<void> {
+    [kBootstrap](): Promise<void> {
       return Promise.resolve()
     }
   }

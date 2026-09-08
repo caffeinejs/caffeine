@@ -2,6 +2,7 @@ import type { Container, ContainerBindingOps } from '@caffeinejs/di'
 
 import type { ConfigDefinition } from './config/index.js'
 import type { Contributions } from './contributions.js'
+import type { ExtensionRegistrar } from './extensions.js'
 import type { ApplicationAvailability } from './health/availability.js'
 
 /**
@@ -50,39 +51,40 @@ export interface BootstrapKit {
    * sealed the moment every feature has bootstrapped, and reads before that throw.
    */
   contributions: Contributions
+
+  /**
+   * Where a feature registers an extension it has bound. What it adds runs in the order the application's
+   * features were installed, not in the order their bootstrap hooks happened to reach this call.
+   */
+  extensions: ExtensionRegistrar
 }
 
 /**
+ * The keys a feature's lifecycle hangs off. Symbols so the lifecycle stays off the builder's autocomplete:
+ * `.extend(StaticExt, s => …)` sees the fluent surface and nothing else.
+ */
+export const kFeatureName = Symbol('caffeine.feature.name')
+export const kBeforeBootstrap = Symbol('caffeine.feature.beforeBootstrap')
+export const kBootstrap = Symbol('caffeine.feature.bootstrap')
+
+/**
  * The unit the application orchestrator drives: it is bootstrapped once, in two phases, and never seen by
- * user code. A feature's fluent builder is a separate object — {@link FeatureProvider} yields this from it.
+ * user code. A feature's fluent builder implements this directly — the authoring methods and the lifecycle
+ * live on one object, kept apart by the symbol keys.
  */
 export interface FeatureLifecycle {
   /**
    * Stable identifier for this feature, used in logs and diagnostics.
    */
-  readonly name: string
+  readonly [kFeatureName]: string
 
   /**
    * Runs before configuration resolves. Register slices and defaults here; resolved values are not available yet.
    */
-  beforeBootstrap?(kit: BeforeBootstrapKit): void | Promise<void>
+  [kBeforeBootstrap]?(kit: BeforeBootstrapKit): void | Promise<void>
 
   /**
    * Runs after configuration resolves and before the container initializes. Bind runtime artifacts here.
    */
-  bootstrap(kit: BootstrapKit): Promise<void>
-}
-
-/**
- * The key under which a fluent builder exposes its {@link FeatureLifecycle}. A symbol so the handoff stays
- * off the builder's autocomplete: `.extend(StaticExt, s => …)` sees the fluent surface and nothing else.
- */
-export const kFeatureSetup = Symbol('caffeine.feature.setup')
-
-/**
- * A fluent configuration builder that yields the lifecycle unit the application drives. The builder holds the
- * authored state; the returned {@link FeatureLifecycle} reads it.
- */
-export interface FeatureProvider {
-  [kFeatureSetup](): FeatureLifecycle
+  [kBootstrap](kit: BootstrapKit): Promise<void>
 }

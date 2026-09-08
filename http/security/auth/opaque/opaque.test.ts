@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
-import { ApplicationAvailability, Contributions, kFeatureSetup, type BootstrapKit } from '@caffeinejs/std'
+import { ApplicationAvailability, Contributions, kBootstrap, type BootstrapKit } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -180,6 +180,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
         availability: new ApplicationAvailability(),
         contributions: new Contributions(),
         config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
+        extensions: { add: () => undefined },
       }
     }
 
@@ -190,7 +191,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
 
       const builder = new AuthenticationBuilder()
       builder.addStrategy('OpaqueToken', handler)
-      await builder[kFeatureSetup]().bootstrap(makeKit(wrap))
+      await builder[kBootstrap](makeKit(wrap))
 
       expect(wrap).toHaveBeenCalledWith(OpaqueTokenStore)
 
@@ -206,7 +207,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
 
       const builder = new AuthenticationBuilder()
       builder.addStrategy('OpaqueToken', handler)
-      await builder[kFeatureSetup]().bootstrap(makeKit(wrap))
+      await builder[kBootstrap](makeKit(wrap))
 
       expect(wrap).not.toHaveBeenCalled()
 

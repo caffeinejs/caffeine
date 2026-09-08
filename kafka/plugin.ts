@@ -1,10 +1,4 @@
-import {
-  defineKeyedFeature,
-  kFeatureSetup,
-  type KeyedFeature,
-  type PluginContext,
-  type TypeLambda,
-} from '@caffeinejs/std'
+import { defineKeyedFeature, type KeyedFeature, type PluginContext, type TypeLambda } from '@caffeinejs/std'
 
 import { defaultKafkaClients } from './clients.js'
 import type { KafkaClients } from './config.js'
@@ -72,7 +66,7 @@ function createKafka(options: KafkaPluginOptions = {}): KafkaFeature {
     install(ctx, instance, configure) {
       const builder = new KafkaBuilder(clients, instance)
       configure?.(builder)
-      ctx.addFeature(builder[kFeatureSetup]())
+      ctx.addFeature(builder)
       registerLifecycle(ctx)
     },
   })

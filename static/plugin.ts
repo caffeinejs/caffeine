@@ -1,4 +1,4 @@
-import { defineFeature, kFeatureSetup, type Feature, type TypeLambda } from '@caffeinejs/std'
+import { defineFeature, type Feature, type TypeLambda } from '@caffeinejs/std'
 
 import { StaticBuilder } from './builder.js'
 
@@ -20,6 +20,6 @@ export const StaticExt: StaticFeature = defineFeature({
   install(ctx, configure) {
     const builder = new StaticBuilder()
     configure?.(builder)
-    ctx.addFeature(builder[kFeatureSetup]())
+    ctx.addFeature(builder)
   },
 }) as StaticFeature

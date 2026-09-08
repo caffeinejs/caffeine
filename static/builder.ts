@@ -1,10 +1,11 @@
 import { NotFoundFallback } from '@caffeinejs/http'
 import {
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-  type FeatureProvider,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -19,7 +20,7 @@ import type { StaticMount } from './static.js'
  * Configures static file serving over `@fastify/static`. Bound via
  * `.extend(StaticExt, s => s.serve(dir, { prefix: '/static' }))`.
  *
- * The fluent builder is pure authoring; its {@link kFeatureSetup} lifecycle hands the assembled mounts to the
+ * The fluent methods are pure authoring; the lifecycle behind the symbol keys hands the assembled mounts to the
  * {@link StaticExtension} it binds. Each `.serve(...)` call adds one mount; multiple mounts serve multiple
  * directories (the {@link StaticExtension} handles `@fastify/static`'s single-decorate constraint).
  *
@@ -29,7 +30,9 @@ import type { StaticMount } from './static.js'
  *
  * `C` is the application config type, recovered from the builder `.extend(StaticExt, …)` was reached through.
  */
-export class StaticBuilder<C = unknown> implements FeatureProvider {
+export class StaticBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'static'
+
   #mounts: StaticMount[] = []
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
@@ -86,51 +89,46 @@ export class StaticBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'static',
-
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          schema: staticConfigSchema,
-          values: {
-            mounts: this.#mounts.length > 0 ? this.#mounts.map(dataOf) : undefined,
-            spa: this.#spa === undefined ? undefined : dataOf(this.#spa),
-          },
-        })
-
-        // A callback cannot go through the tree at all — `Value.Convert` cannot clone a function — so each
-        // mount's callbacks are held here and re-attached by position once the slice publishes. A config
-        // source that replaces `static.mounts` replaces the callbacks with it, which is the array rule being
-        // consistent rather than an oversight.
-        const callbacks = this.#mounts.map(callbacksOf)
-        const spaCallbacks = this.#spa === undefined ? {} : callbacksOf(this.#spa)
-
-        // Reaching `.spa(...)` is the activating act; configuration parameterizes the mount but never
-        // switches it on, so that a config file cannot start serving a shell the application never asked for.
-        const spaEnabled = this.#spa !== undefined
-
-        this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: staticConfigSchema,
+      values: {
+        mounts: this.#mounts.length > 0 ? this.#mounts.map(dataOf) : undefined,
+        spa: this.#spa === undefined ? undefined : dataOf(this.#spa),
       },
+    })
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        const resolved = this.#resolved!
-        const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
+    // A callback cannot go through the tree at all — `Value.Convert` cannot clone a function — so each
+    // mount's callbacks are held here and re-attached by position once the slice publishes. A config
+    // source that replaces `static.mounts` replaces the callbacks with it, which is the array rule being
+    // consistent rather than an oversight.
+    const callbacks = this.#mounts.map(callbacksOf)
+    const spaCallbacks = this.#spa === undefined ? {} : callbacksOf(this.#spa)
 
-        // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
-        // and registers it as a Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings
-        // are handed to it directly: the builder is holding them right here, and routing them through a
-        // container key only to read them back at server setup adds a lookup and a key without a decision.
-        kit.container.bind(StaticExtension, t => t.toValue(new StaticExtension(resolved.config.mounts, spa)).extends())
+    // Reaching `.spa(...)` is the activating act; configuration parameterizes the mount but never
+    // switches it on, so that a config file cannot start serving a shell the application never asked for.
+    const spaEnabled = this.#spa !== undefined
 
-        if (spa !== undefined) {
-          kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
-        }
+    this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
+  }
 
-        return Promise.resolve()
-      },
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    const resolved = this.#resolved!
+    const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
+
+    // Bound under its own key and registered with the application's extensions, so the adapter runs it as a
+    // Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings are handed to it directly:
+    // the builder is holding them right here, and routing them through a container key only to read them back
+    // at server setup adds a lookup and a key without a decision.
+    kit.container.bind(StaticExtension, t => t.toValue(new StaticExtension(resolved.config.mounts, spa)))
+    kit.extensions.add(StaticExtension)
+
+    if (spa !== undefined) {
+      kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
     }
+
+    return Promise.resolve()
   }
 }
 

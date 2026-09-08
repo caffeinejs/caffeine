@@ -1,5 +1,5 @@
 import { Scopes, type InjectionToken } from '@caffeinejs/di'
-import { kFeatureSetup, type BootstrapKit, type FeatureLifecycle, type FeatureProvider } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 
 import type { Guard } from './guard.js'
 import { kGlobalGuards } from './keys.js'
@@ -10,7 +10,9 @@ import { kGlobalGuards } from './keys.js'
  *
  * Order of {@link GuardsBuilder.global} is global execution order, before controller- and method-level `@UseGuards`.
  */
-export class GuardsBuilder implements FeatureProvider {
+export class GuardsBuilder implements FeatureLifecycle {
+  readonly [kFeatureName] = 'guards'
+
   readonly #keys: InjectionToken<Guard>[] = []
 
   global(key: InjectionToken<Guard>, ...keys: InjectionToken<Guard>[]): this {
@@ -18,14 +20,8 @@ export class GuardsBuilder implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'guards',
-
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        kit.container.bind(kGlobalGuards, t => t.toValue(this.#keys).lifetime(Scopes.SINGLETON).internal())
-        return Promise.resolve()
-      },
-    }
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    kit.container.bind(kGlobalGuards, t => t.toValue(this.#keys).lifetime(Scopes.SINGLETON).internal())
+    return Promise.resolve()
   }
 }

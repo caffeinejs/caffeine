@@ -1,4 +1,4 @@
-import { type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -43,11 +43,11 @@ class ProgrammaticService implements FeatureLifecycle {
     this.#authz = authz
   }
 
-  get name(): string {
+  get [kFeatureName](): string {
     return 'programmatic'
   }
 
-  bootstrap(kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
     const endpoints = this.#endpoints
     kit.container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER))
 

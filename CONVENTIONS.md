@@ -137,10 +137,10 @@ Do not re-export a symbol (type or value) from another module or package just to
 
 ```ts
 // wrong
-export { kFeatureSetup, type FeatureLifecycle } from '@caffeinejs/std'
+export { kBootstrap, type FeatureLifecycle } from '@caffeinejs/std'
 
 // correct
-import { kFeatureSetup, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, type FeatureLifecycle } from '@caffeinejs/std'
 import type { Services } from './service.js'
 ```
 
@@ -150,15 +150,16 @@ A package’s `index.ts` barrel aggregating that package’s **own** modules is 
 
 Where a value goes depends on who reads it, not on what is convenient:
 
-| The value is…                                                 | Goes to                                | Read with                                   |
-| ------------------------------------------------------------- | -------------------------------------- | ------------------------------------------- |
-| a setting a user tunes from the environment or a file         | a config slice, in `beforeBootstrap`   | `defineFeatureConfig(...)` → `slice.config` |
-| where that slice lives in the tree                            | the application's schema and selector  | `builder.config(c => c.app.thing)`          |
-| a setting code outside the feature's builder must read        | that slice, given a `featureConfigKey` | `config(key)` on the config handle          |
-| something user code injects                                   | a container binding, in `bootstrap`    | `container.get` / constructor injection     |
-| one of many providers a single consumer collects              | a container binding with `.extends()`  | `container.getManyOptional(Base)`           |
-| an extension's own data                                       | that extension's **constructor**       | the field                                   |
-| a framework value the application needs once everything is up | a contribution, in `bootstrap`         | `app.contributions.get(key)`                |
+| The value is…                                                 | Goes to                                  | Read with                                   |
+| ------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------- |
+| a setting a user tunes from the environment or a file         | a config slice, in `beforeBootstrap`     | `defineFeatureConfig(...)` → `slice.config` |
+| where that slice lives in the tree                            | the application's schema and selector    | `builder.config(c => c.app.thing)`          |
+| a setting code outside the feature's builder must read        | that slice, given a `featureConfigKey`   | `config(key)` on the config handle          |
+| something user code injects                                   | a container binding, in `bootstrap`      | `container.get` / constructor injection     |
+| one of many providers a single consumer collects              | a container binding with `.extends()`    | `container.getManyOptional(Base)`           |
+| a start-up hook the platform runs                             | a binding plus `kit.extensions.add(key)` | `extensions.of(Base)`                       |
+| an extension's own data                                       | that extension's **constructor**         | the field                                   |
+| a framework value the application needs once everything is up | a contribution, in `bootstrap`           | `app.contributions.get(key)`                |
 
 A feature never picks its own location in the configuration tree and never adds a field to the resolved
 configuration object. The application declares the whole schema — importing the feature's exported schema
@@ -167,12 +168,16 @@ builder's `.config(selector)`. A feature nothing pointed anywhere resolves **det
 and its builder values alone: it works, and no file, environment variable or argument reaches it.
 
 Do not route an extension's own configuration through a container key it reads back at server setup: the
-builder is holding the value when it constructs the extension. `bind(X).toValue(new X(data)).extends()`.
+builder is holding the value when it constructs the extension. `bind(X).toValue(new X(data))`, then
+`kit.extensions.add(X)` — binding alone registers nothing, and the two calls are one act.
 
-A feature builder is a pure fluent authoring class — its methods return `this`, and it implements
-`FeatureProvider`: a `[kFeatureSetup](): FeatureLifecycle` that hands the application the `beforeBootstrap` /
-`bootstrap` hooks, closing over the builder's accumulated state. The builder is never the lifecycle unit and
-never appears in the application's feature list; `.extend`'s `install` calls `ctx.addFeature(b[kFeatureSetup]())`.
+Extensions run in the order their features were installed, which is the order the application's `.extend(...)`
+calls are written. That is a property of the registry, not of when a `bootstrap` hook reached the `add`, so a
+feature that awaits before registering does not move.
+
+A feature builder is a pure fluent authoring class — its methods return `this` — and it **is** the
+`FeatureLifecycle`: `[kFeatureName]`, an optional `[kBeforeBootstrap]` and `[kBootstrap]`, all symbol-keyed so
+none of it shows on the fluent surface. `.extend`'s `install` calls `ctx.addFeature(builder)`.
 
 Contributions are write-only while services bootstrap and sealed the moment they finish, because services
 bootstrap concurrently — a read before the seal would be answered by whichever service the scheduler reached

@@ -1,4 +1,4 @@
-import { defineFeature, kFeatureSetup, type Feature } from '@caffeinejs/std'
+import { defineFeature, type Feature } from '@caffeinejs/std'
 
 import { CompressBuilder } from './builder.js'
 
@@ -13,6 +13,6 @@ export const CompressExt: Feature<CompressBuilder> = defineFeature({
   install(ctx, configure) {
     const builder = new CompressBuilder()
     configure?.(builder)
-    ctx.addFeature(builder[kFeatureSetup]())
+    ctx.addFeature(builder)
   },
 })

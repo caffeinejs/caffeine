@@ -1,10 +1,4 @@
-import {
-  defineKeyedFeature,
-  kFeatureSetup,
-  type KeyedFeature,
-  type PluginContext,
-  type TypeLambda,
-} from '@caffeinejs/std'
+import { defineKeyedFeature, type KeyedFeature, type PluginContext, type TypeLambda } from '@caffeinejs/std'
 
 import { MessagingBuilder } from './builder.js'
 import type { MessagingContainer } from './engine.js'
@@ -62,7 +56,7 @@ export const messaging: MessagingFeature = defineKeyedFeature({
   install(ctx, instance, configure) {
     const builder = new MessagingBuilder(instance)
     configure?.(builder)
-    ctx.addFeature(builder[kFeatureSetup]())
+    ctx.addFeature(builder)
     registerLifecycle(ctx)
   },
 }) as MessagingFeature

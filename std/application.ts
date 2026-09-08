@@ -3,11 +3,12 @@ import { type Binding, type Container, type InjectionToken, Scopes } from '@caff
 import { ConfigDefinition } from './config/index.js'
 import { Contributions } from './contributions.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
+import { Extensions } from './extensions.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
-import type { BootstrapKit, FeatureLifecycle } from './lifecycle.js'
+import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './lifecycle.js'
 import { $t } from './schema/t.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
@@ -67,6 +68,7 @@ export abstract class BaseApplication {
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #availability = new ApplicationAvailability()
   readonly #contributions = new Contributions()
+  readonly #extensions: Extensions
   readonly #shutdownInit: ShutdownOptions | undefined
   readonly #config: ConfigDefinition
 
@@ -79,6 +81,7 @@ export abstract class BaseApplication {
 
   constructor(init: ApplicationInit) {
     this.#container = init.container
+    this.#extensions = new Extensions(this.#container)
     this.#services = init.services
     this.#hookBindings = init.hookBindings
     this.#hooks = init.hooks
@@ -116,6 +119,14 @@ export abstract class BaseApplication {
    */
   get contributions(): Contributions {
     return this.#contributions
+  }
+
+  /**
+   * The extensions the features registered. Resolving through it needs an initialized container, so it is for
+   * the {@link setup} step and later.
+   */
+  protected get extensions(): Extensions {
+    return this.#extensions
   }
 
   /** Registers a lifecycle listener. Throws if the same listener is already registered for the event. */
@@ -177,7 +188,7 @@ export abstract class BaseApplication {
 
     await Promise.all(
       services.map(service =>
-        Promise.resolve(service.beforeBootstrap?.({ config: this.#config, container: this.#container })),
+        Promise.resolve(service[kBeforeBootstrap]?.({ config: this.#config, container: this.#container })),
       ),
     )
     await this.#config.bootstrap()
@@ -190,9 +201,10 @@ export abstract class BaseApplication {
     this.#name = caffeine.config.name
     this.#profiles = caffeine.config.profiles
 
-    const kit = this.serviceKit()
-
-    await Promise.all(services.map(service => service.bootstrap(kit)))
+    // Each feature gets its own kit, carrying its position in the feature list. Extensions are registered
+    // against that position rather than against the moment the hook reached the call, so what a feature awaits
+    // before registering cannot move it past a feature installed after it.
+    await Promise.all(services.map((service, index) => service[kBootstrap](this.serviceKit(index))))
 
     // Every service has had its turn, so what they contributed is now complete — and closing the step is what
     // lets the rest of the boot read it without the answer depending on which service happened to finish first.
@@ -304,13 +316,20 @@ export abstract class BaseApplication {
     return this.#services
   }
 
-  /** The kit passed to each {@link FeatureLifecycle}. Subclasses may widen it (e.g. add platform handles). */
-  protected serviceKit(): BootstrapKit {
+  /**
+   * The kit passed to the {@link FeatureLifecycle} at `order`. Subclasses may widen it (e.g. add platform
+   * handles).
+   *
+   * @param order - The feature's position in {@link configurers}, which is what the extensions it registers
+   *   are sorted by.
+   */
+  protected serviceKit(order: number): BootstrapKit {
     return {
       container: this.#container,
       availability: this.#availability,
       config: this.#config,
       contributions: this.#contributions,
+      extensions: this.#extensions.at(order),
     }
   }
 

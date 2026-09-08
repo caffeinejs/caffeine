@@ -1,10 +1,11 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
 import {
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-  type FeatureProvider,
 } from '@caffeinejs/std'
 import {
   defineFeatureConfig,
@@ -82,7 +83,9 @@ interface SchemeRegistration {
   preset?: GithubPresetOptions
 }
 
-export class AuthenticationBuilder<C = unknown> implements FeatureProvider {
+export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'auth'
+
   readonly #schemes: Map<string, InjectionToken<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
   readonly #oidcHandlers: OAuthCallbackHandler[] = []
@@ -280,12 +283,12 @@ export class AuthenticationBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'auth',
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => this.#doBeforeBootstrap(kit),
-      bootstrap: (kit: BootstrapKit): Promise<void> => this.#doBootstrap(kit),
-    }
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    this.#doBeforeBootstrap(kit)
+  }
+
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    return this.#doBootstrap(kit)
   }
 
   #doBeforeBootstrap(kit: BeforeBootstrapKit): void {

@@ -1,5 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { $t, type InferSchema, defineFeature, type FeatureLifecycle } from '@caffeinejs/std'
+import { $t, type InferSchema, defineFeature, kBootstrap, kFeatureName, type FeatureLifecycle } from '@caffeinejs/std'
 import { EnvConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import Fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
@@ -17,10 +17,10 @@ function probe() {
     install(ctx, configure) {
       const state: { broker: string | undefined } = { broker: undefined }
       const service: FeatureLifecycle = {
-        get name() {
+        get [kFeatureName]() {
           return 'probe'
         },
-        bootstrap(kit) {
+        [kBootstrap](kit) {
           kit.container.bind(kProbe, t => t.toValue({ broker: state.broker }))
           return Promise.resolve()
         },

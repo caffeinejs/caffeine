@@ -1,4 +1,10 @@
-import { kFeatureSetup, type BeforeBootstrapKit, type FeatureLifecycle, type FeatureProvider } from '@caffeinejs/std'
+import {
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
+  type BeforeBootstrapKit,
+  type FeatureLifecycle,
+} from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigLocation } from '@caffeinejs/std/config'
 
 import { htmlConfigSchema, kHTMLConfig, type HTMLDefaults } from './config.js'
@@ -17,7 +23,9 @@ import { htmlConfigSchema, kHTMLConfig, type HTMLDefaults } from './config.js'
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
-export class HTMLBuilder<C = unknown> implements FeatureProvider {
+export class HTMLBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'html'
+
   #autoDoctype: boolean | undefined
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<HTMLDefaults>
 
@@ -42,22 +50,18 @@ export class HTMLBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'html',
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    defineFeatureConfig<HTMLDefaults>(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      key: kHTMLConfig,
+      schema: htmlConfigSchema,
+      values: { autoDoctype: this.#autoDoctype },
+    })
+  }
 
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        defineFeatureConfig<HTMLDefaults>(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          key: kHTMLConfig,
-          schema: htmlConfigSchema,
-          values: { autoDoctype: this.#autoDoctype },
-        })
-      },
-
-      // Nothing to bind: the settings travel through the configuration, and `HTML(...)` reads them off the
-      // context by key.
-      bootstrap: (): Promise<void> => Promise.resolve(),
-    }
+  // Nothing to bind: the settings travel through the configuration, and `HTML(...)` reads them off the
+  // context by key.
+  [kBootstrap](): Promise<void> {
+    return Promise.resolve()
   }
 }

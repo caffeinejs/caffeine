@@ -1,11 +1,12 @@
 import type { Ctor } from '@caffeinejs/di'
 import {
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type AnySchema,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-  type FeatureProvider,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -51,7 +52,9 @@ export interface OutBindingOptions {
  * `ready()` its `configure()` builds the runtime and binds the engine + `MessageBus` into the container.
  * A second integration is `.extend(messaging('audit'), m => ...)`.
  */
-export class MessagingBuilder<C = unknown> implements FeatureProvider {
+export class MessagingBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'messaging'
+
   readonly #name: string
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>
   readonly #binders = new Map<string, Binder | BinderFactory>()
@@ -112,66 +115,60 @@ export class MessagingBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'messaging',
-
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          schema: messagingConfigSchema,
-          values: {
-            in: configurableHalf(this.#inbound),
-            out: configurableHalf(this.#outbound),
-          },
-        })
-
-        const code = { in: this.#inbound, out: this.#outbound }
-
-        this.#resolved = slice.derive(published => ({
-          // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
-          // created has nothing to attach to and is read by nothing — declaring one is a code act.
-          inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
-          outbound: bindingsOf(code.out, published.out) as Map<string, ProducerBinding>,
-        }))
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: messagingConfigSchema,
+      values: {
+        in: configurableHalf(this.#inbound),
+        out: configurableHalf(this.#outbound),
       },
+    })
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        const binders = new Map<string, Binder>()
-        for (const [name, binder] of this.#binders) {
-          binders.set(name, typeof binder === 'function' ? binder(name) : binder)
-        }
+    const code = { in: this.#inbound, out: this.#outbound }
 
-        const resolved = this.#resolved!
-        const rKey = runtimeKey(this.#name)
-        const bKey = busKey(this.#name)
-        const container = kit.container
+    this.#resolved = slice.derive(published => ({
+      // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
+      // created has nothing to attach to and is read by nothing — declaring one is a code act.
+      inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
+      outbound: bindingsOf(code.out, published.out) as Map<string, ProducerBinding>,
+    }))
+  }
 
-        kit.container.bind(rKey, t =>
-          t.toValue<MessagingRuntime>({
-            container,
-            binders,
-            inbound: resolved.config.inbound,
-            outbound: resolved.config.outbound,
-            ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
-            ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
-            ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
-          }),
-        )
-
-        if (this.#name === DEFAULT_BINDER) {
-          kit.container.bind(MessageBus, t => t.toClass(MessageBus, [rKey]).names(bKey))
-        } else {
-          kit.container.bind(bKey, t => t.toClass(MessageBus, [rKey]))
-        }
-
-        kit.container.bind(containerKey(this.#name), t =>
-          t.toClass(MessagingContainer, [rKey, bKey]).labels(Keys.MESSAGING_CONTAINER),
-        )
-
-        return Promise.resolve()
-      },
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    const binders = new Map<string, Binder>()
+    for (const [name, binder] of this.#binders) {
+      binders.set(name, typeof binder === 'function' ? binder(name) : binder)
     }
+
+    const resolved = this.#resolved!
+    const rKey = runtimeKey(this.#name)
+    const bKey = busKey(this.#name)
+    const container = kit.container
+
+    kit.container.bind(rKey, t =>
+      t.toValue<MessagingRuntime>({
+        container,
+        binders,
+        inbound: resolved.config.inbound,
+        outbound: resolved.config.outbound,
+        ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
+        ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
+        ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
+      }),
+    )
+
+    if (this.#name === DEFAULT_BINDER) {
+      kit.container.bind(MessageBus, t => t.toClass(MessageBus, [rKey]).names(bKey))
+    } else {
+      kit.container.bind(bKey, t => t.toClass(MessageBus, [rKey]))
+    }
+
+    kit.container.bind(containerKey(this.#name), t =>
+      t.toClass(MessagingContainer, [rKey, bKey]).labels(Keys.MESSAGING_CONTAINER),
+    )
+
+    return Promise.resolve()
   }
 }
 

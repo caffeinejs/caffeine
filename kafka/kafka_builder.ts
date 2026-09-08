@@ -1,11 +1,12 @@
 import type { Ctor } from '@caffeinejs/di'
 import {
   HealthIndicator,
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-  type FeatureProvider,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -50,7 +51,9 @@ import { KafkaTemplate } from './template.js'
  * `C` is the application config type, recovered from the builder `.extend(kafka, …)` was reached through, so the
  * selector argument is a `ConfigHandle<C>`.
  */
-export class KafkaBuilder<C = unknown> implements FeatureProvider {
+export class KafkaBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'kafka'
+
   readonly #name: string
   readonly #clients: KafkaClients
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<KafkaConfigSlice>
@@ -203,110 +206,100 @@ export class KafkaBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'kafka',
-
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        const slice = defineFeatureConfig<KafkaConfigSlice>(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          schema: kafkaConfigSchema,
-          values: {
-            // A builder method is a default: `KAFKA__DEFAULT__BROKERS` overrides whatever `.brokers(...)` set.
-            brokers:
-              this.#brokers === undefined
-                ? undefined
-                : Array.isArray(this.#brokers)
-                  ? [...this.#brokers]
-                  : [this.#brokers],
-            clientId: this.#clientId,
-            groupId: this.#groupId,
-            ackMode: this.#ackMode,
-            retry: this.#retry === undefined ? undefined : { ...this.#retry },
-            topicProvisioning: this.#topicProvisioning === undefined ? undefined : { ...this.#topicProvisioning },
-            // Only the boolean form can travel through a config tree; the object form is two callbacks.
-            deadLetter: typeof this.#deadLetter === 'boolean' ? this.#deadLetter : undefined,
-          },
-        })
-
-        // Everything a configuration tree cannot carry, folded back in when the slice publishes.
-        const code = {
-          serializers: this.#serializers,
-          deserializers: this.#deserializers,
-          retryStrategy: this.#retryStrategy,
-          deadLetterManager: this.#deadLetterManager,
-          deadLetter: typeof this.#deadLetter === 'object' ? this.#deadLetter : undefined,
-          notRetryable: this.#notRetryable,
-          retryable: this.#retryable,
-          classifier: this.#classifier,
-          recoverer: this.#recoverer,
-          onDeserializationError: this.#onDeserializationError,
-          onError: this.#onError,
-        }
-
-        this.#resolved = slice.derive(published => {
-          const brokers = published.brokers ?? []
-
-          // Checked here rather than on the builder: the brokers may arrive from any source, so the only
-          // moment the answer is known is once the whole chain has merged. The failure surfaces as the
-          // slice's, naming the instance that could not be configured.
-          if (brokers.length === 0 || brokers.some(broker => broker.length === 0)) {
-            throw new ErrKafkaMissingBrokers()
-          }
-
-          return resolveConfig(
-            {
-              ...published,
-              brokers,
-              ...code,
-              // `code.deadLetter` is only the object form; a `false` from configuration must still be honoured.
-              deadLetter: code.deadLetter ?? published.deadLetter,
-            },
-            { serializers: defaultSerializers, deserializers: defaultDeserializers },
-          )
-        })
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    const slice = defineFeatureConfig<KafkaConfigSlice>(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: kafkaConfigSchema,
+      values: {
+        // A builder method is a default: `KAFKA__DEFAULT__BROKERS` overrides whatever `.brokers(...)` set.
+        brokers:
+          this.#brokers === undefined ? undefined : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers],
+        clientId: this.#clientId,
+        groupId: this.#groupId,
+        ackMode: this.#ackMode,
+        retry: this.#retry === undefined ? undefined : { ...this.#retry },
+        topicProvisioning: this.#topicProvisioning === undefined ? undefined : { ...this.#topicProvisioning },
+        // Only the boolean form can travel through a config tree; the object form is two callbacks.
+        deadLetter: typeof this.#deadLetter === 'boolean' ? this.#deadLetter : undefined,
       },
+    })
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        const resolved = this.#resolved!
-        const rKey = runtimeKey(this.#name)
-        const tKey = kafkaTemplate(this.#name)
-        const container = kit.container
-
-        kit.container.bind(rKey, t =>
-          t
-            // The config object is the slice's own and is live, so a refresh reaches whatever reads through it.
-            .toValue<KafkaRuntime>({
-              name: this.#name,
-              container,
-              config: resolved.config,
-              clients: this.#clients,
-            }),
-        )
-
-        // The default instance's template is bound under the KafkaTemplate class (so it can be injected by
-        // type), carrying tKey as a name alias. Named instances bind under their name key only.
-        if (this.#name === DEFAULT_INSTANCE) {
-          kit.container.bind(KafkaTemplate, t => t.toClass(KafkaTemplate, [rKey]).names(tKey))
-        } else {
-          kit.container.bind(tKey, t => t.toClass(KafkaTemplate, [rKey]))
-        }
-
-        kit.container.bind(containerKey(this.#name), t =>
-          t.toClass(KafkaListenerContainer, [rKey, tKey]).labels(Keys.KAFKA_CONTAINER),
-        )
-
-        // Registered once, covering every configured instance. Inert unless the application exposes the
-        // probes, and then it is what makes readiness mean "serving HTTP *and* consuming".
-        if (!kit.container.has(KafkaHealthIndicator)) {
-          const indicatorContainer = kit.container
-          kit.container.bind(KafkaHealthIndicator, t =>
-            t.toFactory(() => new KafkaHealthIndicator(indicatorContainer)).extends(HealthIndicator),
-          )
-        }
-
-        return Promise.resolve()
-      },
+    // Everything a configuration tree cannot carry, folded back in when the slice publishes.
+    const code = {
+      serializers: this.#serializers,
+      deserializers: this.#deserializers,
+      retryStrategy: this.#retryStrategy,
+      deadLetterManager: this.#deadLetterManager,
+      deadLetter: typeof this.#deadLetter === 'object' ? this.#deadLetter : undefined,
+      notRetryable: this.#notRetryable,
+      retryable: this.#retryable,
+      classifier: this.#classifier,
+      recoverer: this.#recoverer,
+      onDeserializationError: this.#onDeserializationError,
+      onError: this.#onError,
     }
+
+    this.#resolved = slice.derive(published => {
+      const brokers = published.brokers ?? []
+
+      // Checked here rather than on the builder: the brokers may arrive from any source, so the only
+      // moment the answer is known is once the whole chain has merged. The failure surfaces as the
+      // slice's, naming the instance that could not be configured.
+      if (brokers.length === 0 || brokers.some(broker => broker.length === 0)) {
+        throw new ErrKafkaMissingBrokers()
+      }
+
+      return resolveConfig(
+        {
+          ...published,
+          brokers,
+          ...code,
+          // `code.deadLetter` is only the object form; a `false` from configuration must still be honoured.
+          deadLetter: code.deadLetter ?? published.deadLetter,
+        },
+        { serializers: defaultSerializers, deserializers: defaultDeserializers },
+      )
+    })
+  }
+
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    const resolved = this.#resolved!
+    const rKey = runtimeKey(this.#name)
+    const tKey = kafkaTemplate(this.#name)
+    const container = kit.container
+
+    kit.container.bind(rKey, t =>
+      t
+        // The config object is the slice's own and is live, so a refresh reaches whatever reads through it.
+        .toValue<KafkaRuntime>({
+          name: this.#name,
+          container,
+          config: resolved.config,
+          clients: this.#clients,
+        }),
+    )
+
+    // The default instance's template is bound under the KafkaTemplate class (so it can be injected by
+    // type), carrying tKey as a name alias. Named instances bind under their name key only.
+    if (this.#name === DEFAULT_INSTANCE) {
+      kit.container.bind(KafkaTemplate, t => t.toClass(KafkaTemplate, [rKey]).names(tKey))
+    } else {
+      kit.container.bind(tKey, t => t.toClass(KafkaTemplate, [rKey]))
+    }
+
+    kit.container.bind(containerKey(this.#name), t =>
+      t.toClass(KafkaListenerContainer, [rKey, tKey]).labels(Keys.KAFKA_CONTAINER),
+    )
+
+    // Registered once, covering every configured instance. Inert unless the application exposes the
+    // probes, and then it is what makes readiness mean "serving HTTP *and* consuming".
+    if (!kit.container.has(KafkaHealthIndicator)) {
+      const indicatorContainer = kit.container
+      kit.container.bind(KafkaHealthIndicator, t =>
+        t.toFactory(() => new KafkaHealthIndicator(indicatorContainer)).extends(HealthIndicator),
+      )
+    }
+
+    return Promise.resolve()
   }
 }

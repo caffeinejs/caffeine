@@ -1,4 +1,4 @@
-import { Contributions, kFeatureSetup, type BootstrapKit } from '@caffeinejs/std'
+import { Contributions, kBootstrap, type BootstrapKit } from '@caffeinejs/std'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
@@ -63,14 +63,14 @@ function makeKit(): { kit: BootstrapKit; contributions: Contributions } {
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  await builder[kFeatureSetup]().bootstrap(makeKit().kit)
+  await builder[kBootstrap](makeKit().kit)
 }
 
 async function configureAndReadOIDCMeta(build: (b: AuthenticationBuilder) => void): Promise<OIDCMeta> {
   const builder = new AuthenticationBuilder()
   build(builder)
   const { kit, contributions } = makeKit()
-  await builder[kFeatureSetup]().bootstrap(kit)
+  await builder[kBootstrap](kit)
   contributions.seal()
   return contributions.get(kOIDCContribution)
 }
@@ -367,7 +367,7 @@ describe('Forward wiring through configure', () => {
     builder.addStrategy('Target', target as never)
     builder.addStrategy('auth', forward)
     builder.default('auth')
-    await builder[kFeatureSetup]().bootstrap(makeKit().kit)
+    await builder[kBootstrap](makeKit().kit)
 
     // Before the fix this threw reading `defaultAuthenticateScheme` of undefined.
     await expect(forward.authenticate(makeCtx())).resolves.toMatchObject({ succeeded: true })

@@ -1,4 +1,4 @@
-import { defineFeature, kFeatureSetup, type Feature, type TypeLambda } from '@caffeinejs/std'
+import { defineFeature, type Feature, type TypeLambda } from '@caffeinejs/std'
 
 import { OpenAPIBuilder } from './builder.js'
 
@@ -20,6 +20,6 @@ export const OpenAPIExt: OpenAPIFeature = defineFeature({
   install(ctx, configure) {
     const builder = new OpenAPIBuilder()
     configure?.(builder)
-    ctx.addFeature(builder[kFeatureSetup]())
+    ctx.addFeature(builder)
   },
 }) as OpenAPIFeature

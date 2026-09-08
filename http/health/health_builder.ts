@@ -1,10 +1,11 @@
 import {
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type Duration,
   type FeatureLifecycle,
-  type FeatureProvider,
   type ShutdownSignal,
   type SignalDispatcher,
 } from '@caffeinejs/std'
@@ -44,7 +45,9 @@ import {
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
-export class HealthBuilder<C = unknown> implements FeatureProvider {
+export class HealthBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'health'
+
   readonly #config: HealthConfig = {}
   #dispatcher: SignalDispatcher | undefined
   #selector: ((c: ConfigHandle<C>) => ConfigLocation<HealthConfig>) | undefined
@@ -145,34 +148,28 @@ export class HealthBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'health',
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: healthConfigSchema,
+      values: { ...this.#config },
+    })
+    const dispatcher = this.#dispatcher
 
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          schema: healthConfigSchema,
-          values: { ...this.#config },
-        })
-        const dispatcher = this.#dispatcher
+    // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer
+    // decides.
+    this.#resolved = slice.derive(config =>
+      finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })),
+    )
+  }
 
-        // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer
-        // decides.
-        this.#resolved = slice.derive(config =>
-          finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })),
-        )
-      },
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags —
+    // which are read per request — follow a refresh. The fields consumed once at boot, the probe routes
+    // and the installed signals, simply stop mattering afterwards; nothing re-registers a route because a
+    // value changed underneath it.
+    kit.contributions.contribute(kHealthContribution, this.#resolved!.config)
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags —
-        // which are read per request — follow a refresh. The fields consumed once at boot, the probe routes
-        // and the installed signals, simply stop mattering afterwards; nothing re-registers a route because a
-        // value changed underneath it.
-        kit.contributions.contribute(kHealthContribution, this.#resolved!.config)
-
-        return Promise.resolve()
-      },
-    }
+    return Promise.resolve()
   }
 }

@@ -1,4 +1,4 @@
-import { defineFeature, kFeatureSetup, type Feature } from '@caffeinejs/std'
+import { defineFeature, type Feature } from '@caffeinejs/std'
 
 import { MultipartBuilder } from './builder.js'
 
@@ -16,6 +16,6 @@ export const MultipartExt: Feature<MultipartBuilder> = defineFeature({
   install(ctx, configure) {
     const builder = new MultipartBuilder()
     configure?.(builder)
-    ctx.addFeature(builder[kFeatureSetup]())
+    ctx.addFeature(builder)
   },
 })

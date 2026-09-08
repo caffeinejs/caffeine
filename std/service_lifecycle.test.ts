@@ -3,8 +3,16 @@ import { describe, expect, it } from 'vitest'
 
 import { InlineConfigProvider, type ConfigHandle, type ConfigSlice } from './config/index.js'
 import { ErrContributionPhase, contributionKey } from './contributions.js'
+import type { Extension } from './extensions.js'
 import { createApplication } from './index.js'
-import { type BeforeBootstrapKit, type BootstrapKit, type FeatureLifecycle } from './lifecycle.js'
+import {
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
+  type FeatureLifecycle,
+} from './lifecycle.js'
 import { $t } from './schema/t.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
@@ -21,16 +29,16 @@ class WidgetService implements FeatureLifecycle {
   slice: ConfigSlice<WidgetConfig> | undefined
   bound: number | undefined
 
-  get name(): string {
+  get [kFeatureName](): string {
     return 'widget'
   }
 
-  beforeBootstrap(kit: BeforeBootstrapKit): void {
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
     this.steps.push('declare')
     this.slice = kit.config.slice(['widget'], widgetSchema)
   }
 
-  bootstrap(kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
     this.steps.push('configure')
     this.bound = this.slice!.config.size
     kit.container.bind(token<number | undefined>('widget.size'), t => t.toValue(this.bound))
@@ -69,11 +77,11 @@ describe('service lifecycle', () => {
     class TooEarly implements FeatureLifecycle {
       error: unknown
 
-      get name(): string {
+      get [kFeatureName](): string {
         return 'too-early'
       }
 
-      beforeBootstrap(kit: BeforeBootstrapKit): void {
+      [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
         const slice = kit.config.slice(['widget'], widgetSchema)
         try {
           void slice.config
@@ -82,7 +90,7 @@ describe('service lifecycle', () => {
         }
       }
 
-      bootstrap(): Promise<void> {
+      [kBootstrap](): Promise<void> {
         return Promise.resolve()
       }
     }
@@ -99,10 +107,10 @@ describe('service lifecycle', () => {
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
       .addFeature({
-        get name(): string {
+        get [kFeatureName](): string {
           return 'noop'
         },
-        bootstrap(): Promise<void> {
+        [kBootstrap](): Promise<void> {
           configured = true
           return Promise.resolve()
         },
@@ -118,16 +126,16 @@ describe('service lifecycle', () => {
     class Strict implements FeatureLifecycle {
       configured: boolean = false
 
-      get name(): string {
+      get [kFeatureName](): string {
         return 'strict'
       }
 
-      beforeBootstrap(kit: BeforeBootstrapKit) {
+      [kBeforeBootstrap](kit: BeforeBootstrapKit) {
         // The tree carries a number here, so a string schema cannot validate.
         kit.config.slice(['widget', 'size'], $t.Object({ nested: $t.String() }))
       }
 
-      bootstrap(kit: BootstrapKit): Promise<void> {
+      [kBootstrap](kit: BootstrapKit): Promise<void> {
         this.configured = true
         return Promise.resolve()
       }
@@ -144,11 +152,11 @@ describe('contributions in the lifecycle', () => {
   const kWidget = contributionKey<number>('test:widget.size')
 
   class ContributingService implements FeatureLifecycle {
-    get name(): string {
+    get [kFeatureName](): string {
       return 'contributor'
     }
 
-    bootstrap(kit: BootstrapKit): Promise<void> {
+    [kBootstrap](kit: BootstrapKit): Promise<void> {
       kit.contributions.contribute(kWidget, 7)
       return Promise.resolve()
     }
@@ -170,11 +178,11 @@ describe('contributions in the lifecycle', () => {
     let caught: unknown
 
     class ReadingService implements FeatureLifecycle {
-      get name(): string {
+      get [kFeatureName](): string {
         return 'reader'
       }
 
-      bootstrap(kit: BootstrapKit): Promise<void> {
+      [kBootstrap](kit: BootstrapKit): Promise<void> {
         try {
           kit.contributions.get(kWidget)
         } catch (error) {
@@ -192,5 +200,34 @@ describe('contributions in the lifecycle', () => {
     await app.ready()
 
     expect(caught).toBeInstanceOf(ErrContributionPhase)
+  })
+})
+
+describe('extension registration', () => {
+  // What the registry does with the ordinals is `Extensions`' own test; what `std` owes a feature is a
+  // registrar on its kit, and one that is distinct per feature — that is what carries the install position.
+  it('hands every feature its own registrar, usable while it binds', async () => {
+    const registrars: unknown[] = []
+
+    const registering = (name: string): FeatureLifecycle => ({
+      [kFeatureName]: name,
+      async [kBootstrap](kit: BootstrapKit): Promise<void> {
+        await Promise.resolve()
+        const key = token<Extension>(Symbol(`ext.${name}`))
+        kit.container.bind(key, t => t.toValue({ name, configure: () => undefined }))
+        kit.extensions.add(key)
+        registrars.push(kit.extensions)
+      },
+    })
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .addFeature(registering('first'))
+      .addFeature(registering('second'))
+      .build()
+
+    await app.ready()
+
+    expect(registrars).toHaveLength(2)
+    expect(registrars[0]).not.toBe(registrars[1])
   })
 })

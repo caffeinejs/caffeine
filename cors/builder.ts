@@ -1,14 +1,16 @@
-import { kFeatureSetup, type BootstrapKit, type FeatureLifecycle, type FeatureProvider } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 
 import { CorsExtension, type CorsOptions } from './extension.js'
 
 /**
  * Configures `@fastify/cors`. Bound via `.extend(CORSExt, c => …)`.
  *
- * Installing the feature is the activating act: its lifecycle binds {@link CorsExtension}, which the adapter
- * discovers via `getManyOptional(ServerExtension)` and registers as a Fastify plugin.
+ * Installing the feature is the activating act: its lifecycle binds {@link CorsExtension} and registers it with
+ * the application's extensions, and the adapter runs it as a Fastify plugin.
  */
-export class CorsBuilder implements FeatureProvider {
+export class CorsBuilder implements FeatureLifecycle {
+  readonly [kFeatureName] = 'cors'
+
   #options: CorsOptions = {}
 
   /**
@@ -19,14 +21,10 @@ export class CorsBuilder implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'cors',
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    kit.container.bind(CorsExtension, t => t.toValue(new CorsExtension(this.#options)))
+    kit.extensions.add(CorsExtension)
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        kit.container.bind(CorsExtension, t => t.toValue(new CorsExtension(this.#options)).extends())
-        return Promise.resolve()
-      },
-    }
+    return Promise.resolve()
   }
 }

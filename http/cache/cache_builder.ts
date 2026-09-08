@@ -1,10 +1,11 @@
 import {
   $t,
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-  type FeatureProvider,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -44,7 +45,9 @@ export const cacheConfigSchema = $t.Object({
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
-export class CacheBuilder<C = unknown> implements FeatureProvider {
+export class CacheBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'cache'
+
   #store: CacheStore | undefined
   #etagGenerator: ETagGenerator | undefined
   #statusHeader: string | undefined
@@ -77,40 +80,34 @@ export class CacheBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'cache',
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    this.#resolved = defineFeatureConfig<CacheConfig>(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: cacheConfigSchema,
+      defaults: { ...DEFAULT_CACHE_CONFIG },
+      values: { statusHeader: this.#statusHeader },
+    })
+  }
 
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        this.#resolved = defineFeatureConfig<CacheConfig>(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          schema: cacheConfigSchema,
-          defaults: { ...DEFAULT_CACHE_CONFIG },
-          values: { statusHeader: this.#statusHeader },
-        })
-      },
-
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        const store = this.#store
-        if (store !== undefined) {
-          kit.container.bind(CacheStore, t => t.toValue(store).internal())
-        }
-
-        const etagGenerator = this.#etagGenerator
-        if (etagGenerator !== undefined) {
-          kit.container.bind(kETagGenerator, t => t.toValue(etagGenerator).internal())
-        }
-
-        kit.container.bind(kCacheStatusHeader, t =>
-          t
-            // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but
-            // a header name that followed a refresh is the behaviour every other config value has.
-            .toFactory(() => this.#resolved!.config.statusHeader)
-            .internal(),
-        )
-
-        return Promise.resolve()
-      },
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    const store = this.#store
+    if (store !== undefined) {
+      kit.container.bind(CacheStore, t => t.toValue(store).internal())
     }
+
+    const etagGenerator = this.#etagGenerator
+    if (etagGenerator !== undefined) {
+      kit.container.bind(kETagGenerator, t => t.toValue(etagGenerator).internal())
+    }
+
+    kit.container.bind(kCacheStatusHeader, t =>
+      t
+        // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but
+        // a header name that followed a refresh is the behaviour every other config value has.
+        .toFactory(() => this.#resolved!.config.statusHeader)
+        .internal(),
+    )
+
+    return Promise.resolve()
   }
 }

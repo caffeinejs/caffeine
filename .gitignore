@@ -152,6 +152,7 @@ skills-lock.json
 .codex/
 .agents/
 .claude/skills/*
+.claude/plans/*
 
 # Java
 target/

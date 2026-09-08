@@ -1,10 +1,11 @@
 import {
   $t,
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-  type FeatureProvider,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigHandle, type ConfigLocation, type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -64,7 +65,9 @@ export const serverConfigSchema = $t.Object({
  * `C` is the application config type (flows from the builder once `.config(...)` is declared), so the selector
  * argument `c` is `ConfigHandle<C>`.
  */
-export class ServerBuilder<C = unknown> implements FeatureProvider {
+export class ServerBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'server'
+
   #port: number | undefined
   #host: string | undefined
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<ServerOptions>
@@ -94,30 +97,24 @@ export class ServerBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'server',
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    this.#resolved = defineFeatureConfig(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: serverConfigSchema,
+      defaults: { ...DEFAULT_SERVER_OPTIONS },
+      values: { port: this.#port, host: this.#host },
+    })
+  }
 
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        this.#resolved = defineFeatureConfig(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          schema: serverConfigSchema,
-          defaults: { ...DEFAULT_SERVER_OPTIONS },
-          values: { port: this.#port, host: this.#host },
-        })
-      },
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    // The slice's own object, not a copy: it is live, so its fields keep following refreshes like every
+    // other configuration in the framework.
+    //
+    // The listen address still stops moving where it always did: the application spreads these options
+    // immediately before the adapter binds the socket, and that copy is what the server runs on. Freezing
+    // the whole object here instead would only mean nobody could ever see what configuration now says.
+    kit.contributions.contribute(kServerContribution, this.#resolved!.config)
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        // The slice's own object, not a copy: it is live, so its fields keep following refreshes like every
-        // other configuration in the framework.
-        //
-        // The listen address still stops moving where it always did: the application spreads these options
-        // immediately before the adapter binds the socket, and that copy is what the server runs on. Freezing
-        // the whole object here instead would only mean nobody could ever see what configuration now says.
-        kit.contributions.contribute(kServerContribution, this.#resolved!.config)
-
-        return Promise.resolve()
-      },
-    }
+    return Promise.resolve()
   }
 }

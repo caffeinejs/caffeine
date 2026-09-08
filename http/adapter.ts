@@ -137,10 +137,11 @@ export class FastifyAdapter<
     installHealthProbes(extensionContext)
     installOIDCRoutes(extensionContext)
 
-    // Extensions contributed by other packages, registered as real Fastify plugins so `dependencies`,
-    // `decorators` and the version range are enforced by Fastify — and so each shows up by name in
-    // `printPlugins()`. `fp` skips encapsulation, so an extension still decorates the root instance.
-    for (const extension of container.getManyOptional<ServerExtension>(ServerExtension)) {
+    // Extensions contributed by other packages, in the order their features were installed, registered as real
+    // Fastify plugins so `dependencies`, `decorators` and the version range are enforced by Fastify — and so
+    // each shows up by name in `printPlugins()`. `fp` skips encapsulation, so an extension still decorates the
+    // root instance.
+    for (const extension of input.extensions.of(ServerExtension)) {
       await fastify.register(
         fp(
           // Async so a `configure` that throws synchronously becomes a rejection avvio can carry, rather than

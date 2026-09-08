@@ -1,5 +1,8 @@
 import {
   ApplicationAvailability,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
@@ -44,11 +47,11 @@ export class HealthServiceConfigurer implements FeatureLifecycle {
     this.#configured = configured
   }
 
-  get name(): string {
+  get [kFeatureName](): string {
     return 'health'
   }
 
-  beforeBootstrap(kit: BeforeBootstrapKit): void {
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
     if (this.#configured) {
       return
     }
@@ -58,7 +61,7 @@ export class HealthServiceConfigurer implements FeatureLifecycle {
     this.#resolved = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
   }
 
-  bootstrap(kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
     if (!kit.container.has(ApplicationAvailability)) {
       // The application's own instance, not a container-constructed one: the lifecycle writes to that object, and
       // a second instance would report a state nothing ever updates.

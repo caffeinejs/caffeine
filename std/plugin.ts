@@ -6,8 +6,9 @@ import type { FeatureLifecycle } from './lifecycle.js'
 
 /**
  * Runtime seam handed to a feature at install time. A feature registers its {@link FeatureLifecycle} via
- * {@link addFeature} (it rides the same bootstrap path as the built-in features), may read the DI
- * {@link container}, and may register programmatic lifecycle listeners via {@link on}.
+ * {@link addFeature} — its builder, which implements the lifecycle directly, so it rides the same bootstrap
+ * path as the built-in features. It may also read the DI {@link container} and register programmatic
+ * lifecycle listeners via {@link on}.
  *
  * {@link state} is per application builder. A feature const must not keep install flags on itself —
  * two `createApplication()` calls in one process would share them.

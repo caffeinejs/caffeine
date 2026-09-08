@@ -1,11 +1,12 @@
 import type { Route, RouteGroup } from '@caffeinejs/http'
 import {
-  kFeatureSetup,
+  kBeforeBootstrap,
+  kBootstrap,
+  kFeatureName,
   type AnySchema,
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-  type FeatureProvider,
 } from '@caffeinejs/std'
 import {
   configEquals,
@@ -47,7 +48,9 @@ import type {
  * application already declares. This builder covers the document-level facts nothing else can know (title,
  * version, servers), where the document is served, and who may read it.
  */
-export class OpenAPIBuilder<C = unknown> implements FeatureProvider {
+export class OpenAPIBuilder<C = unknown> implements FeatureLifecycle {
+  readonly [kFeatureName] = 'openapi'
+
   readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
   readonly #store = new OpenAPIDocumentStore()
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<OpenAPIConfigSlice>
@@ -285,66 +288,60 @@ export class OpenAPIBuilder<C = unknown> implements FeatureProvider {
     return this
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'openapi',
+  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
+    const code = this.#options
+    const defaults = defaultOpenAPIOptions()
 
-      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
-        const code = this.#options
-        const defaults = defaultOpenAPIOptions()
+    const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
+      selector: this.#selector as ((c: never) => unknown) | undefined,
+      schema: openapiConfigSchema,
+      defaults: treeCarryable(defaults, () => true),
+      // Only what a builder method actually changed. `#options` starts from the defaults so the setters
+      // can write into `routes` and `infer` without guarding every one, and a key still holding its
+      // default is a default — it belongs in the band below, or an application could not name `info.title`
+      // in its own schema and have it apply.
+      values: treeCarryable(code, (key, value) => !configEquals(value, defaults[key])),
+    })
 
-        const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
-          selector: this.#selector as ((c: never) => unknown) | undefined,
-          schema: openapiConfigSchema,
-          defaults: treeCarryable(defaults, () => true),
-          // Only what a builder method actually changed. `#options` starts from the defaults so the setters
-          // can write into `routes` and `infer` without guarding every one, and a key still holding its
-          // default is a default — it belongs in the band below, or an application could not name `info.title`
-          // in its own schema and have it apply.
-          values: treeCarryable(code, (key, value) => !configEquals(value, defaults[key])),
-        })
+    this.#resolved = slice.derive(published => {
+      // Cloned, not referenced. The validated tree is deep-frozen, and the document these values become is
+      // handed to `transformDocument` to edit in place — a frozen `info` would make that throw. Cloning
+      // here keeps the tree immutable while giving the generator an object it owns.
+      const configured = structuredClone(published) as OpenAPIConfigSlice
 
-        this.#resolved = slice.derive(published => {
-          // Cloned, not referenced. The validated tree is deep-frozen, and the document these values become is
-          // handed to `transformDocument` to edit in place — a frozen `info` would make that throw. Cloning
-          // here keeps the tree immutable while giving the generator an object it owns.
-          const configured = structuredClone(published) as OpenAPIConfigSlice
+      return {
+        ...code,
+        ...configured,
+        // Nested objects merge rather than replace: an application that configures only
+        // `errors.validation` must not lose the defaults for the other two.
+        infer: { ...code.infer, ...configured.infer },
+        errors: { ...code.errors, ...configured.errors },
+        routes: mergeRoutes(code.routes, configured.routes),
+      } as OpenAPIOptions
+    })
+  }
 
-          return {
-            ...code,
-            ...configured,
-            // Nested objects merge rather than replace: an application that configures only
-            // `errors.validation` must not lose the defaults for the other two.
-            infer: { ...code.infer, ...configured.infer },
-            errors: { ...code.errors, ...configured.errors },
-            routes: mergeRoutes(code.routes, configured.routes),
-          } as OpenAPIOptions
-        })
-      },
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    const options = this.#resolved!.config
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        const options = this.#resolved!.config
+    // The store, not the document: bindings must all be registered before `container.init()`, which runs
+    // long before the server phase that generates the document. Resolving the store and reading
+    // `.document` off it is the supported way to reach the document without an HTTP request.
+    kit.container.bind(OpenAPIDocumentStore, t => t.toValue(this.#store).internal())
 
-        // The store, not the document: bindings must all be registered before `container.init()`, which runs
-        // long before the server phase that generates the document. Resolving the store and reading
-        // `.document` off it is the supported way to reach the document without an HTTP request.
-        kit.container.bind(OpenAPIDocumentStore, t => t.toValue(this.#store).internal())
+    // Registers the document endpoints as ordinary routes. Still here, before `buildRouting` runs — but
+    // now fed the *resolved* options, because configuration resolved before this step.
+    const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
 
-        // Registers the document endpoints as ordinary routes. Still here, before `buildRouting` runs — but
-        // now fed the *resolved* options, because configuration resolved before this step.
-        const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
+    kit.container.bind(OpenAPIExtension, t =>
+      t
+        // Reads through the slice, so the generated document reflects the merged configuration. The
+        // extension runs at server setup, which is after `container.init()`.
+        .toValue(new OpenAPIExtension(this.#store, options, paths)),
+    )
+    kit.extensions.add(OpenAPIExtension)
 
-        kit.container.bind(OpenAPIExtension, t =>
-          t
-            // Reads through the slice, so the generated document reflects the merged configuration. The
-            // extension runs at server setup, which is after `container.init()`.
-            .toValue(new OpenAPIExtension(this.#store, options, paths))
-            .extends(),
-        )
-
-        return Promise.resolve()
-      },
-    }
+    return Promise.resolve()
   }
 }
 

@@ -1,5 +1,12 @@
 import type { Container } from '@caffeinejs/di'
-import { BaseApplication, type ApplicationInit, type FeatureLifecycle, type ShutdownOptions } from '@caffeinejs/std'
+import {
+  BaseApplication,
+  kFeatureName,
+  type ApplicationInit,
+  type Extensions,
+  type FeatureLifecycle,
+  type ShutdownOptions,
+} from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
@@ -32,6 +39,8 @@ export interface AdapterIn<R> {
   routeGroups: RouteGroup<R>[]
   services: Services
   middlewares: MiddlewarePipeline
+  /** What the features registered, in the order they were installed. */
+  extensions: Extensions
 }
 
 export interface Adapter<I, R> {
@@ -154,9 +163,9 @@ export abstract class AbstractWebApplication<
 
   protected override configurers(): FeatureLifecycle[] {
     // `.health(...)` registers a feature named `health`; its absence is what makes the fallback configurer
-    // derive its own detached slice. Matched by name because the builder no longer appears in the list — it
-    // hands over a `FeatureLifecycle`, not itself.
-    const healthConfigured = this.services.some(feature => feature.name === 'health')
+    // derive its own detached slice. Matched by name rather than by identity because the question is whether
+    // health was configured at all, and the builder is only one of the things that could answer it.
+    const healthConfigured = this.services.some(feature => feature[kFeatureName] === 'health')
 
     return [
       ...this.services,
@@ -243,6 +252,7 @@ export abstract class AbstractWebApplication<
       routeGroups: this.#routeGroups,
       services,
       middlewares: this.#middlewares,
+      extensions: this.extensions,
     })
   }
 

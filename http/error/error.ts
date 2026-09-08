@@ -1,5 +1,5 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
-import { type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 
 import { Context } from '../context.js'
 import { ActionResult } from '../response.js'
@@ -75,11 +75,11 @@ export class ErrorHandlerProvider {
 }
 
 export class ErrorHandlingServiceConfigurer implements FeatureLifecycle {
-  get name(): string {
+  get [kFeatureName](): string {
     return 'error-handling'
   }
 
-  bootstrap(kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
     const handlerBinding = kit.container.getBindings(ErrorHandler)
     const handlers = new Map<Ctor<Error>, Provider<ErrorHandler<Error>>>()
 

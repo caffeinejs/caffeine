@@ -1,5 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { kFeatureSetup, type BootstrapKit, type FeatureLifecycle, type FeatureProvider } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
@@ -17,7 +17,9 @@ export interface AuthorizationOptions {
   fallbackPolicy?: AuthzPolicy
 }
 
-export class AuthorizationBuilder implements FeatureProvider {
+export class AuthorizationBuilder implements FeatureLifecycle {
+  readonly [kFeatureName] = 'authz'
+
   readonly #policies: Map<string, AuthzPolicy> = new Map()
 
   #authzDecoratorPolicy: AuthzPolicy = new PolicyBuilder().requireAuthenticated().build()
@@ -92,66 +94,58 @@ export class AuthorizationBuilder implements FeatureProvider {
     return this.fallbackPolicy(p => p.requireAuthenticated())
   }
 
-  [kFeatureSetup](): FeatureLifecycle {
-    return {
-      name: 'authz',
+  [kBootstrap](kit: BootstrapKit): Promise<void> {
+    kit.container.bind(AuthenticatedUserHandler, t =>
+      t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
+    )
+    kit.container.bind(RoleHandler, t =>
+      t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
+    )
+    kit.container.bind(ClaimHandler, t =>
+      t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
+    )
+    kit.container.bind(AssertionHandler, t =>
+      t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
+    )
+    kit.container.bind(ResourceHandler, t =>
+      t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
+    )
 
-      bootstrap: (kit: BootstrapKit): Promise<void> => {
-        kit.container.bind(AuthenticatedUserHandler, t =>
-          t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
-        )
-        kit.container.bind(RoleHandler, t =>
-          t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
-        )
-        kit.container.bind(ClaimHandler, t =>
-          t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
-        )
-        kit.container.bind(AssertionHandler, t =>
-          t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
-        )
-        kit.container.bind(ResourceHandler, t =>
-          t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
-        )
+    // Public (not internal): features inject AuthorizationService for imperative resource checks.
+    kit.container.bind(AuthorizationService, t => t.toSelf([kAuthzEvaluators]).lifetime(Scopes.SINGLETON))
 
-        // Public (not internal): features inject AuthorizationService for imperative resource checks.
-        kit.container.bind(AuthorizationService, t => t.toSelf([kAuthzEvaluators]).lifetime(Scopes.SINGLETON))
+    kit.container.bind(kAuthzOpts, t =>
+      t
+        .toValue({
+          authorizeDecoratorDefaultPolicy: this.#authzDecoratorPolicy,
+          fallbackPolicy: this.#fallbackPolicy,
+        })
+        .lifetime(Scopes.SINGLETON)
+        .internal(),
+    )
 
-        kit.container.bind(kAuthzOpts, t =>
-          t
-            .toValue({
-              authorizeDecoratorDefaultPolicy: this.#authzDecoratorPolicy,
-              fallbackPolicy: this.#fallbackPolicy,
-            })
-            .lifetime(Scopes.SINGLETON)
-            .internal(),
-        )
+    kit.container.bind(kAuthzHandlers, t =>
+      t
+        .toFactory(ctx => {
+          const handlers = ctx.container.getMany(AuthzRequirementHandler)
 
-        kit.container.bind(kAuthzHandlers, t =>
-          t
-            .toFactory(ctx => {
-              const handlers = ctx.container.getMany(AuthzRequirementHandler)
+          return new Map(handlers.map(h => [h.kind, h]))
+        })
+        .lifetime(Scopes.SINGLETON)
+        .internal(),
+    )
 
-              return new Map(handlers.map(h => [h.kind, h]))
-            })
-            .lifetime(Scopes.SINGLETON)
-            .internal(),
-        )
+    kit.container.bind(kAuthzEvaluators, t =>
+      t
+        .toFactory(ctx => {
+          const handlers = ctx.container.get<Map<string, AuthzRequirementHandler<AuthzRequirement>>>(kAuthzHandlers)
 
-        kit.container.bind(kAuthzEvaluators, t =>
-          t
-            .toFactory(ctx => {
-              const handlers = ctx.container.get<Map<string, AuthzRequirementHandler<AuthzRequirement>>>(kAuthzHandlers)
+          return new Map(this.#policies.entries().map(([name, policy]) => [name, newPolicyEvaluator(policy, handlers)]))
+        })
+        .lifetime(Scopes.SINGLETON)
+        .internal(),
+    )
 
-              return new Map(
-                this.#policies.entries().map(([name, policy]) => [name, newPolicyEvaluator(policy, handlers)]),
-              )
-            })
-            .lifetime(Scopes.SINGLETON)
-            .internal(),
-        )
-
-        return Promise.resolve()
-      },
-    }
+    return Promise.resolve()
   }
 }

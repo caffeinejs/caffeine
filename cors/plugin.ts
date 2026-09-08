@@ -1,4 +1,4 @@
-import { defineFeature, kFeatureSetup, type Feature } from '@caffeinejs/std'
+import { defineFeature, type Feature } from '@caffeinejs/std'
 
 import { CorsBuilder } from './builder.js'
 
@@ -13,6 +13,6 @@ export const CORSExt: Feature<CorsBuilder> = defineFeature({
   install(ctx, configure) {
     const builder = new CorsBuilder()
     configure?.(builder)
-    ctx.addFeature(builder[kFeatureSetup]())
+    ctx.addFeature(builder)
   },
 })

@@ -2,7 +2,6 @@ import type { NamedToken } from '@caffeinejs/di'
 import {
   AppConfigBuilder,
   BaseApplicationBuilder,
-  kFeatureSetup,
   type ApplicationBuilderOptions,
   type ApplicationConfigMarker,
   type Reconfigured,
@@ -43,21 +42,21 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.#adapterFactory = adapterFactory
 
     this.#authzBuilder = new AuthorizationBuilder()
-    this.addFeature(this.#authzBuilder[kFeatureSetup]())
+    this.addFeature(this.#authzBuilder)
 
     this.#guardsBuilder = new GuardsBuilder()
-    this.addFeature(this.#guardsBuilder[kFeatureSetup]())
+    this.addFeature(this.#guardsBuilder)
 
     // Registered unconditionally: the listen address is read from the configuration tree, so `SERVER__PORT`
     // has to work on an application that never calls `.server()`.
     this.#serverBuilder = new ServerBuilder<unknown>()
-    this.addFeature(this.#serverBuilder[kFeatureSetup]())
+    this.addFeature(this.#serverBuilder)
   }
 
   authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
-      this.addFeature(this.#authBuilder[kFeatureSetup]())
+      this.addFeature(this.#authBuilder)
     }
 
     configure(this.#authBuilder as AuthenticationBuilder<TConfig>)
@@ -90,7 +89,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   cache(configure: (cache: CacheBuilder<TConfig>) => void): this {
     if (this.#cacheBuilder == null) {
       this.#cacheBuilder = new CacheBuilder()
-      this.addFeature(this.#cacheBuilder[kFeatureSetup]())
+      this.addFeature(this.#cacheBuilder)
     }
 
     configure(this.#cacheBuilder as CacheBuilder<TConfig>)
@@ -135,7 +134,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   health(configure?: (health: HealthBuilder<TConfig>) => void): this {
     if (this.#healthBuilder == null) {
       this.#healthBuilder = new HealthBuilder<unknown>()
-      this.addFeature(this.#healthBuilder[kFeatureSetup]())
+      this.addFeature(this.#healthBuilder)
     }
 
     configure?.(this.#healthBuilder as HealthBuilder<TConfig>)

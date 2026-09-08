@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
-import { type FeatureLifecycle } from './lifecycle.js'
+import { kBeforeBootstrap, kBootstrap, kFeatureName, type FeatureLifecycle } from './lifecycle.js'
 import { defineFeature, defineKeyedFeature, ErrFeatureAlreadyInstalled } from './plugin.js'
 
 const kSentinel = token<Record<string, unknown>>(Symbol('extend-sentinel'))
@@ -16,10 +16,10 @@ function tracker(name = 'track') {
     install(ctx, configure) {
       const state: { value: string | undefined } = { value: undefined }
       const service: FeatureLifecycle = {
-        get name() {
+        get [kFeatureName]() {
           return 'track'
         },
-        bootstrap(kit) {
+        [kBootstrap](kit) {
           kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
           return Promise.resolve()
         },
@@ -87,10 +87,10 @@ describe('BaseApplicationBuilder.extend', () => {
       defaultInstance: 'default',
       install(ctx) {
         ctx.addFeature({
-          get name() {
+          get [kFeatureName]() {
             return 'keyed'
           },
-          bootstrap() {
+          [kBootstrap]() {
             return Promise.resolve()
           },
         })
@@ -109,10 +109,10 @@ describe('BaseApplicationBuilder.extend', () => {
       defaultInstance: 'default',
       install(ctx) {
         ctx.addFeature({
-          get name() {
+          get [kFeatureName]() {
             return 'keyed'
           },
-          bootstrap() {
+          [kBootstrap]() {
             return Promise.resolve()
           },
         })

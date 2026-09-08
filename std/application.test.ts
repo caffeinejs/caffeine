@@ -6,6 +6,8 @@ import {
   $t,
   type InferSchema,
   defineFeature,
+  kBootstrap,
+  kFeatureName,
   OnApplicationReady,
   OnApplicationRun,
   OnApplicationShutdown,
@@ -178,10 +180,10 @@ describe('Application lifecycle', () => {
       name: 'probe',
       install(ctx, configure) {
         ctx.addFeature({
-          get name() {
+          get [kFeatureName]() {
             return 'probe'
           },
-          bootstrap(kit) {
+          [kBootstrap](kit) {
             kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
             return Promise.resolve()
           },

@@ -1,4 +1,4 @@
-import { defineFeature, kFeatureSetup, type Feature, type TypeLambda } from '@caffeinejs/std'
+import { defineFeature, type Feature, type TypeLambda } from '@caffeinejs/std'
 
 import { HTMLBuilder } from './builder.js'
 
@@ -21,6 +21,6 @@ export const HTMLExt: HTMLFeature = defineFeature({
   install(ctx, configure) {
     const builder = new HTMLBuilder()
     configure?.(builder)
-    ctx.addFeature(builder[kFeatureSetup]())
+    ctx.addFeature(builder)
   },
 }) as HTMLFeature
