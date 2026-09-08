@@ -1,4 +1,4 @@
-import { Contributions, kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+import { kBootstrap, type BootstrapKit } from '@caffeinejs/std'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
@@ -7,9 +7,9 @@ import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
-import { kOIDCContribution } from '../keys.js'
 import { OIDCAuthenticationHandler } from './handler.js'
 import type { OIDCMeta } from './index.js'
+import { OIDCRoutesExtension } from './oidc_routes.js'
 import { resolveOIDCOptions, sanitizeSchemeName } from './options.js'
 
 const SESSION_SECRET = 'multi-idp-test-secret-at-least-32ch!!'
@@ -43,9 +43,9 @@ function makeCtx(cookies: Record<string, string> = {}) {
   } as unknown as Context
 }
 
-/** Minimal service kit double — bootstrap only touches the container and the contributions. */
-function makeKit(): { kit: BootstrapKit; contributions: Contributions } {
-  const contributions = new Contributions()
+/** Minimal service kit double — bootstrap only touches the container and the extension registry. */
+function makeKit(): { kit: BootstrapKit; registered: Map<unknown, unknown> } {
+  const registered = new Map<unknown, unknown>()
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
   })
@@ -54,10 +54,15 @@ function makeKit(): { kit: BootstrapKit; contributions: Contributions } {
       bind: binding,
       wrap: (v: unknown) => ({ get: () => v }),
     },
-    contributions,
+    extensions: {
+      add: () => undefined,
+      register: (token: unknown, extension: unknown) => {
+        registered.set(token, extension)
+      },
+    },
   } as unknown as BootstrapKit
 
-  return { kit, contributions }
+  return { kit, registered }
 }
 
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
@@ -66,13 +71,14 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
   await builder[kBootstrap](makeKit().kit)
 }
 
+/** Registering the extension is what configuring OIDC produces, so the meta is read back off it. */
 async function configureAndReadOIDCMeta(build: (b: AuthenticationBuilder) => void): Promise<OIDCMeta> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  const { kit, contributions } = makeKit()
+  const { kit, registered } = makeKit()
   await builder[kBootstrap](kit)
-  contributions.seal()
-  return contributions.get(kOIDCContribution)
+
+  return (registered.get(OIDCRoutesExtension) as OIDCRoutesExtension).meta
 }
 
 /**

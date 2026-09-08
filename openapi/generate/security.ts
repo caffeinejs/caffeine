@@ -137,7 +137,6 @@ function obtainedBy(descriptor: AuthSchemeDescriptor): string | undefined {
 export function deriveSecurity(
   route: Route<unknown>,
   schemes: Record<string, SecuritySchemeObject> | undefined,
-  defaultSchemeName: string | undefined,
 ): SecurityRequirementObject[] | undefined {
   const authz = route.authorization
 
@@ -149,11 +148,8 @@ export function deriveSecurity(
     return undefined
   }
 
-  const requested = authz.options?.schemes?.length
-    ? authz.options.schemes
-    : defaultSchemeName === undefined
-      ? []
-      : [defaultSchemeName]
+  // Already folded while the route was compiled: a route naming no scheme carries the application's default.
+  const requested = authz.schemes
 
   // A requirement may only name a scheme that `components.securitySchemes` defines, so anything undescribable
   // is dropped here rather than emitted as a dangling reference.

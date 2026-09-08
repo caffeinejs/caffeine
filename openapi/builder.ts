@@ -1,20 +1,6 @@
 import type { Route, RouteGroup } from '@caffeinejs/http'
-import {
-  kBeforeBootstrap,
-  kBootstrap,
-  kFeatureName,
-  type AnySchema,
-  type BeforeBootstrapKit,
-  type BootstrapKit,
-  type FeatureLifecycle,
-} from '@caffeinejs/std'
-import {
-  configEquals,
-  defineFeatureConfig,
-  type ConfigHandle,
-  type ConfigLocation,
-  type ConfigSlice,
-} from '@caffeinejs/std/config'
+import { FeatureBuilder, kFeatureName, type AnySchema, type BootstrapKit } from '@caffeinejs/std'
+import { configEquals, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { OPENAPI_CONFIG_KEYS, openapiConfigSchema, type OpenAPIConfigSlice } from './config.js'
 import { OpenAPIDocumentStore } from './document_store.js'
@@ -48,23 +34,15 @@ import type {
  * application already declares. This builder covers the document-level facts nothing else can know (title,
  * version, servers), where the document is served, and who may read it.
  */
-export class OpenAPIBuilder<C = unknown> implements FeatureLifecycle {
+export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<OpenAPIConfigSlice, C> {
   readonly [kFeatureName] = 'openapi'
+
+  protected readonly schema = openapiConfigSchema
+  protected readonly defaults = treeCarryable(defaultOpenAPIOptions(), () => true)
 
   readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
   readonly #store = new OpenAPIDocumentStore()
-  #selector?: (c: ConfigHandle<C>) => ConfigLocation<OpenAPIConfigSlice>
   #resolved?: ConfigSlice<OpenAPIOptions>
-
-  /**
-   * Places the OpenAPI settings elsewhere in the configuration tree, e.g. `o.config(c => c.app.docs)`.
-   *
-   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
-   */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<OpenAPIConfigSlice>): this {
-    this.#selector = selector
-    return this
-  }
 
   /** The OpenAPI version to emit. Defaults to `3.1.1`; `3.2.0` unlocks the QUERY method and 3.2-only fields. */
   version(version: OpenAPIVersion): this {
@@ -288,22 +266,22 @@ export class OpenAPIBuilder<C = unknown> implements FeatureLifecycle {
     return this
   }
 
-  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-    const code = this.#options
+  /**
+   * Only what a builder method actually changed. `#options` starts from the defaults so the setters can write
+   * into `routes` and `infer` without guarding every one, and a key still holding its default *is* a default —
+   * it belongs in the `FRAMEWORK` band, or an application could not name `info.title` in its own schema and
+   * have it apply.
+   */
+  protected override configValues(): Record<string, unknown> {
     const defaults = defaultOpenAPIOptions()
 
-    const slice = defineFeatureConfig<OpenAPIConfigSlice>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: openapiConfigSchema,
-      defaults: treeCarryable(defaults, () => true),
-      // Only what a builder method actually changed. `#options` starts from the defaults so the setters
-      // can write into `routes` and `infer` without guarding every one, and a key still holding its
-      // default is a default — it belongs in the band below, or an application could not name `info.title`
-      // in its own schema and have it apply.
-      values: treeCarryable(code, (key, value) => !configEquals(value, defaults[key])),
-    })
+    return treeCarryable(this.#options, (key, value) => !configEquals(value, defaults[key]))
+  }
 
-    this.#resolved = slice.derive(published => {
+  protected override beforeBootstrap(): void {
+    const code = this.#options
+
+    this.#resolved = this.derive(published => {
       // Cloned, not referenced. The validated tree is deep-frozen, and the document these values become is
       // handed to `transformDocument` to edit in place — a frozen `info` would make that throw. Cloning
       // here keeps the tree immutable while giving the generator an object it owns.
@@ -321,7 +299,7 @@ export class OpenAPIBuilder<C = unknown> implements FeatureLifecycle {
     })
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): Promise<void> {
     const options = this.#resolved!.config
 
     // The store, not the document: bindings must all be registered before `container.init()`, which runs
@@ -333,13 +311,9 @@ export class OpenAPIBuilder<C = unknown> implements FeatureLifecycle {
     // now fed the *resolved* options, because configuration resolved before this step.
     const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
 
-    kit.container.bind(OpenAPIExtension, t =>
-      t
-        // Reads through the slice, so the generated document reflects the merged configuration. The
-        // extension runs at server setup, which is after `container.init()`.
-        .toValue(new OpenAPIExtension(this.#store, options, paths)),
-    )
-    kit.extensions.add(OpenAPIExtension)
+    // Reads through the slice, so the generated document reflects the merged configuration. The extension
+    // runs at server setup, which is after `container.init()`.
+    kit.extensions.register(OpenAPIExtension, new OpenAPIExtension(this.#store, options, paths))
 
     return Promise.resolve()
   }

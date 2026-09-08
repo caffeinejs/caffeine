@@ -14,7 +14,7 @@ import { defaultOpenAPIOptions } from '../options.js'
 export function fixtureRouter(
   path: string,
   configure: (router: RouteGroupBuilder) => void,
-  options: { prefix?: string; name?: string } = {},
+  options: { prefix?: string; name?: string; defaultScheme?: string } = {},
 ): RouteGroup<unknown> {
   // A fresh class per call: `registerRouteGroup` is get-or-create and `routes()` appends, so a shared key would
   // accumulate the routes of every previous fixture.
@@ -38,6 +38,16 @@ export function fixtureRouter(
       // Mirrors buildRouting: any authz declared at either level is protection unless something opted out.
       const hasDecoratorProtection = spec.authz !== undefined || route.authz !== undefined
       const isAnonymous = !!(spec.authz?.allowAnonymous || route.authz?.allowAnonymous)
+      const authz = route.authz ?? spec.authz
+      // Also mirrors buildRouting: the effective schemes are folded while the route compiles, so a route
+      // naming none carries the application's default rather than leaving the generator to find it.
+      const named = authz?.schemes
+      const schemes =
+        named !== undefined && named.length > 0
+          ? named
+          : options.defaultScheme === undefined
+            ? []
+            : [options.defaultScheme]
 
       return {
         path: route.path,
@@ -52,7 +62,8 @@ export function fixtureRouter(
         extras: route.extras,
         authorization: {
           hasProtection: hasDecoratorProtection && !isAnonymous,
-          options: route.authz ?? spec.authz,
+          options: authz,
+          schemes,
         },
       }
     }),

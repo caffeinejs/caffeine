@@ -4,6 +4,7 @@ import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } fr
 import { Context } from '../context.js'
 import { ActionResult } from '../response.js'
 import { ErrConfiguration } from './common.js'
+import { ErrorHandlingExtension } from './error_handling_extension.js'
 import { solutions } from './util.js'
 
 export const kErrorHandler = Symbol('caffeine:http:error_handler')
@@ -121,6 +122,7 @@ export class ErrorHandlingServiceConfigurer implements FeatureLifecycle {
     kit.container.bind(ErrorHandlerProvider, t =>
       t.toValue(new ErrorHandlerProvider(handlers)).lifetime(Scopes.SINGLETON).internal(),
     )
+    kit.extensions.register(ErrorHandlingExtension, new ErrorHandlingExtension())
 
     return Promise.resolve()
   }

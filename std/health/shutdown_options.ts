@@ -1,3 +1,5 @@
+import { token } from '@caffeinejs/di'
+
 import { type Duration, parseDuration } from '../duration/index.js'
 import { type SignalDispatcher, type ShutdownSignal, detectSignalDispatcher } from './signals.js'
 
@@ -34,6 +36,15 @@ export function isTestEnvironment(env: EnvLike = hostEnv()): boolean {
 export function toMillis(value: Duration): number {
   return typeof value === 'number' ? value : Math.round(parseDuration(value) * 1000)
 }
+
+/**
+ * Where the feature that owns the drain publishes its policy — health, in an HTTP application.
+ *
+ * The application reads it once the container has initialized and shuts down on what it says, which is how a
+ * feature configures the drain without the application knowing which feature that is. Nothing bound, and the
+ * builder's own policy applies; nothing there either, and {@link defaultShutdownOptions} does.
+ */
+export const kShutdownPolicy = token<ShutdownOptions>(Symbol('caffeine.shutdown.policy'))
 
 /** The resolved, millisecond-normalized shutdown policy. */
 export interface ShutdownOptions {

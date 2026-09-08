@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AllowAnonymous,
+  AuthenticationSchemeProvider,
   Authorize,
   Controller,
   Get,
@@ -21,7 +22,7 @@ import {
 } from '../../../index.js'
 import { authConfigSchema } from '../config.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
-import { kAuthContribution, kAuthSchemeDescriptors } from '../keys.js'
+import { kAuthSchemeDescriptors } from '../keys.js'
 
 // The application owns the schema: it declares where the authentication block lives — importing the feature's
 // own schema for the scheme-independent half — and `a.config(c => c.auth)` points the feature at it. `schemes`
@@ -218,7 +219,7 @@ describe('authentication configuration', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kAuthContribution).defaultAuthenticateScheme).toBe('Bearer')
+    expect(app.container.get(AuthenticationSchemeProvider).defaultAuthenticateScheme).toBe('Bearer')
 
     await app.close()
   })

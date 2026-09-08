@@ -6,6 +6,7 @@ import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
 import { Guard } from '../guards/index.js'
 import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
 import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
+import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
 import {
   AuthorizationOptions,
   AuthzRequirement,
@@ -53,6 +54,10 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
   const compiledGuards = new Map<GuardRef, CompiledGuard>()
   const globalGuardKeys = container.get<readonly GuardRef[]>(kGlobalGuards)
   const globalGuards = compileGuardKeys(container, globalGuardKeys, 'application', compiledGuards)
+
+  // Absent when the application configured no authentication, which leaves every route naming no scheme of
+  // its own with none.
+  const defaultScheme = container.getOptional(AuthenticationSchemeProvider)?.defaultAuthenticateScheme
 
   return function compileRouteGroup<R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): RouteGroup<R> {
     const compileRoute = (route: RouteSpec<R>): Route<R> => {
@@ -124,13 +129,17 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
           // the one a configured fallback policy has to reach, and compileRoutePolicy is what knows
           // whether there is one. It returns undefined when the route really is ungated.
           const authorizer = compileRoutePolicy(authzOptions, authzEvaluators, authzHandlers, spec.authz, route.authz)
+          const authzOpts = mergeAuthz(spec.authz, route.authz)
 
           return {
             // Drives the "authorization configured but authentication is not" start-up check, so it has
             // to follow what actually gates the route rather than what was written on it.
             hasProtection: authorizer !== undefined,
-            options: mergeAuthz(spec.authz, route.authz),
+            options: authzOpts,
             authorizer,
+            // Folded in here, where the application's default is known, so nothing downstream has to reach
+            // into the authentication feature to find out which scheme an unnamed route ends up on.
+            schemes: effectiveSchemes(authzOpts?.schemes, defaultScheme),
           }
         })(),
       }
@@ -271,4 +280,19 @@ function compileGuardOptions<R>(router: RouteGroupSpec<R>, route: RouteSpec<R>):
   }
 
   return guardOptions
+}
+
+/**
+ * The scheme names that authenticate a route: the ones it named, or the application's default when it named
+ * none.
+ *
+ * Resolved once per route, while it is compiled, so nothing downstream has to know that "named no scheme"
+ * means "whatever the authentication feature defaults to".
+ */
+function effectiveSchemes(named: readonly string[] | undefined, defaultScheme: string | undefined): readonly string[] {
+  if (named !== undefined && named.length > 0) {
+    return named
+  }
+
+  return defaultScheme === undefined ? [] : [defaultScheme]
 }

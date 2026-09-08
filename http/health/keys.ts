@@ -1,13 +1,13 @@
-import { contributionKey } from '@caffeinejs/std'
+import { featureConfigKey } from '@caffeinejs/std/config'
 
 import type { HealthOptions } from './options.js'
 
 /**
- * The resolved {@link HealthOptions}. Contributed by the health builder when the application configured one and
- * by the health service configurer otherwise, so it is always present — the feature resolves to a disabled
- * configuration rather than an absent one.
+ * The resolved {@link HealthOptions}. Every HTTP application registers the health feature, so the key always
+ * answers — an application that configured nothing resolves to a disabled configuration rather than an absent
+ * one.
  */
-export const kHealthContribution = contributionKey<HealthOptions>('http:health.options')
+export const kHealthConfig = featureConfigKey<HealthOptions>('http:health')
 
 /**
  * Fastify route-config marker set on the probe routes. The adapter's server-level `onRequest` hook reads it to

@@ -33,8 +33,6 @@ export interface GenerateInput {
   options: OpenAPIOptions
   /** How each registered authentication scheme expects credentials, when the application configured any. */
   schemes?: Map<string, AuthSchemeDescriptor>
-  /** The application's default authenticate scheme, used when a guarded route names none of its own. */
-  defaultScheme?: string
   /** Collects non-fatal problems — a route the target version cannot represent, for instance. */
   onWarning?: (message: string) => void
 }
@@ -152,8 +150,7 @@ function addRoute(ctx: AddRouteInput): void {
         : { ...requestBody, ...detail.requestBody, content: { ...requestBody.content, ...detail.requestBody.content } }
   }
 
-  const security =
-    detail?.security ?? deriveSecurity(route, ctx.securitySchemes, input.defaultScheme) ?? group?.security
+  const security = detail?.security ?? deriveSecurity(route, ctx.securitySchemes) ?? group?.security
   if (security !== undefined) {
     operation.security = security
   }

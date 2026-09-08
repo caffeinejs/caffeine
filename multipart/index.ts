@@ -1,6 +1,7 @@
 export { MultipartBuilder } from './builder.js'
+export { multipartConfigSchema, type MultipartConfig } from './config.js'
 export { MultipartExtension, type MultipartOptions } from './extension.js'
 export { multipart, type MultipartContext, type MultipartHelpers } from './helpers.js'
 export type * from './multipart.js'
 export { $multipart, type MultipartPickers } from './pickers.js'
-export { MultipartExt } from './plugin.js'
+export { MultipartExt, type MultipartFeature } from './plugin.js'

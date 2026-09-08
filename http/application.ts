@@ -1,27 +1,13 @@
 import type { Container } from '@caffeinejs/di'
-import {
-  BaseApplication,
-  kFeatureName,
-  type ApplicationInit,
-  type Extensions,
-  type FeatureLifecycle,
-  type ShutdownOptions,
-} from '@caffeinejs/std'
+import { BaseApplication, type ApplicationInit, type Extensions, type FeatureLifecycle } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
+import { HTTPCoreFeature } from './core_feature.js'
 import { ErrConfiguration } from './error/common.js'
-import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/error.js'
+import { ErrorHandlingServiceConfigurer } from './error/error.js'
 import { solutions } from './error/util.js'
-import {
-  ErrShutdownTimeout,
-  HealthRegistry,
-  HealthServiceConfigurer,
-  ProbeEndpoint,
-  kHealthContribution,
-  loadHealthIndicators,
-} from './health/index.js'
-import type { HealthServices } from './health/services.js'
+import { ErrShutdownTimeout, HealthRegistry } from './health/index.js'
 import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
 import type { RouteGroup } from './route.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
@@ -29,15 +15,10 @@ import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource } from './routing/programmatic/source.js'
 import { Authentication } from './security/auth/authentication_middleware.js'
-import { kAuthContribution, kOIDCContribution } from './security/auth/keys.js'
-import { AuthenticationSchemeProvider } from './security/auth/scheme_provider.js'
-import { AuthenticationService } from './security/auth/service.js'
-import { ServerOptions, kServerContribution, type ServerAddress } from './server/index.js'
-import type { Services } from './service.js'
+import { type ServerAddress } from './server/index.js'
 
 export interface AdapterIn<R> {
   routeGroups: RouteGroup<R>[]
-  services: Services
   middlewares: MiddlewarePipeline
   /** What the features registered, in the order they were installed. */
   extensions: Extensions
@@ -70,7 +51,7 @@ export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> 
 
 /**
  * The HTTP application: a {@link BaseApplication} whose lifecycle steps drive a Fastify {@link Adapter}.
- * `setup()` builds routing + the resolved {@link Services} and sets the adapter up; `start()` runs it;
+ * `setup()` builds routing and sets the adapter up; `start()` runs it;
  * `stop()` tears it down. Base handles the container, services, and lifecycle hooks.
  */
 export abstract class AbstractWebApplication<
@@ -91,7 +72,6 @@ export abstract class AbstractWebApplication<
   #routeGroups: RouteGroup<R>[] = []
   #mounted: Router<any, any, any, any, any>[] = []
   #built = false
-  #health: HealthServices | undefined
 
   constructor(init: ApplicationInit, adapter: A) {
     super(init)
@@ -162,17 +142,9 @@ export abstract class AbstractWebApplication<
   }
 
   protected override configurers(): FeatureLifecycle[] {
-    // `.health(...)` registers a feature named `health`; its absence is what makes the fallback configurer
-    // derive its own detached slice. Matched by name rather than by identity because the question is whether
-    // health was configured at all, and the builder is only one of the things that could answer it.
-    const healthConfigured = this.services.some(feature => feature[kFeatureName] === 'health')
-
-    return [
-      ...this.services,
-      new ErrorHandlingServiceConfigurer(),
-      new CacheServiceConfigurer(),
-      new HealthServiceConfigurer(healthConfigured),
-    ]
+    // Error handling leads, so its `core` extension is the first thing registered on the server and every
+    // route and hook the rest register is already covered by it.
+    return [new ErrorHandlingServiceConfigurer(), ...this.services, new CacheServiceConfigurer(), new HTTPCoreFeature()]
   }
 
   /**
@@ -225,32 +197,8 @@ export abstract class AbstractWebApplication<
     this.#routeGroups = buildRouting<R>(this.routeSources(), this.container)
     this.#built = true
 
-    // Copy into a fresh object: the adapter's `listen()` mutates what it receives.
-    const server: ServerOptions = { ...this.contributions.get(kServerContribution) }
-
-    const health = this.#buildHealth()
-    this.#health = health
-
-    // Configuring authentication binds the coordinator, and nothing else does — so its presence *is* the
-    // feature being on, with no separate flag to be written and then read out of sync with it.
-    const coordinator = this.container.getOptional(AuthenticationService)
-
-    const services: Services = {
-      auth: {
-        enabled: coordinator !== undefined,
-        coordinator,
-        options: this.contributions.find(kAuthContribution),
-        schemes: this.container.getOptional(AuthenticationSchemeProvider),
-      },
-      oidc: this.contributions.find(kOIDCContribution),
-      errorHandling: this.container.get(ErrorHandlerProvider),
-      server,
-      health,
-    }
-
     await this.#adapter.setup({
       routeGroups: this.#routeGroups,
-      services,
       middlewares: this.#middlewares,
       extensions: this.extensions,
     })
@@ -260,27 +208,9 @@ export abstract class AbstractWebApplication<
     return this.#adapter.run()
   }
 
-  /**
-   * The drain policy, taken from the resolved health options rather than the builder options — `.health(...)` is
-   * the HTTP application's way of configuring it, and wins.
-   */
-  protected override shutdownOptions(): ShutdownOptions {
-    const health = this.#health
-    if (health === undefined) {
-      return super.shutdownOptions()
-    }
-
-    return {
-      drainDelayMs: health.options.drainDelayMs,
-      shutdownTimeoutMs: health.options.shutdownTimeoutMs,
-      signals: health.options.signals,
-      dispatcher: health.options.dispatcher,
-    }
-  }
-
   /** Drops cached probe evaluations so the first poll after the flip reflects the drain, not the last good run. */
   protected override beforeDrain(): void {
-    this.#health?.registry.invalidate()
+    this.container.getOptional(HealthRegistry)?.invalidate()
   }
 
   /**
@@ -289,7 +219,7 @@ export abstract class AbstractWebApplication<
    * with it, logs included.
    */
   protected override async stop(): Promise<void> {
-    const timeoutMs = this.#health?.options.shutdownTimeoutMs ?? 0
+    const timeoutMs = this.shutdownOptions().shutdownTimeoutMs
     const teardown = this.#adapter.teardown()
 
     if (timeoutMs <= 0) {
@@ -317,14 +247,6 @@ export abstract class AbstractWebApplication<
     } finally {
       clearTimeout(timer)
     }
-  }
-
-  #buildHealth(): HealthServices {
-    const options = this.contributions.get(kHealthContribution)
-    const availability = this.availability
-    const registry = new HealthRegistry(loadHealthIndicators(this.container), options)
-
-    return { options, availability, registry, probes: new ProbeEndpoint(availability, registry, options) }
   }
 }
 

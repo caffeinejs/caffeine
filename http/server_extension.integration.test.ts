@@ -1,11 +1,20 @@
-import { CaffeineIoC, type Ctor } from '@caffeinejs/di'
-import { defineFeature, kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import { CaffeineIoC, token } from '@caffeinejs/di'
+import {
+  defineFeature,
+  kBootstrap,
+  kExtensionStage,
+  kFeatureName,
+  type BootstrapKit,
+  type ExtensionStage,
+  type Feature,
+} from '@caffeinejs/std'
 import fastify, { type FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
 import {
   Controller,
+  ErrorHandlerProvider,
   Get,
   ServerExtension,
   type ServerExtensionContext,
@@ -38,7 +47,9 @@ class Recorder extends ServerExtension {
  * comes from the install position rather than from when the hook got there.
  */
 function featureFor(extension: ServerExtension, slow = false): Feature {
-  const key = extension.constructor as Ctor<ServerExtension>
+  // One key per registration rather than the constructor: two extensions of the same class are two
+  // registrations, and keying by the class would have the second overwrite the first.
+  const key = token<ServerExtension>(Symbol(`ext.${extension.name}`))
 
   return defineFeature({
     name: extension.name,
@@ -73,8 +84,9 @@ describe('ServerExtension registration', () => {
 
     expect(recorder.seen).toBeDefined()
     expect(recorder.seen!.routeGroups.length).toBeGreaterThan(0)
-    expect(recorder.seen!.container).toBeDefined()
-    expect(recorder.seen!.services.errorHandling).toBeDefined()
+    expect(recorder.seen!.server).toBeDefined()
+    // What a first-party feature produced is reached through the container, exactly as an application would.
+    expect(recorder.seen!.container.get(ErrorHandlerProvider)).toBeDefined()
 
     expect((await app.fetch('/ping')).status).toBe(200)
     await app.close()
@@ -186,6 +198,73 @@ function appWith(...features: Feature[]) {
   }
   return app.build()
 }
+
+/**
+ * The stage bands, exercised end to end.
+ *
+ * The framework's own wiring has to bracket everything a package contributes, whatever order the
+ * application's `.extend(...)` calls happen to be written in — that is the whole reason `kExtensionStage`
+ * exists, and install order alone cannot express it.
+ */
+describe('ServerExtension stages', () => {
+  class Staged extends ServerExtension {
+    readonly name: string
+    readonly [kExtensionStage]?: ExtensionStage
+
+    constructor(
+      name: string,
+      private readonly log: string[],
+      stage?: ExtensionStage,
+    ) {
+      super()
+      this.name = name
+      this[kExtensionStage] = stage
+    }
+
+    configure = (): void => {
+      this.log.push(this.name)
+    }
+  }
+
+  it('runs core first and fallback last, against the install order', async () => {
+    const log: string[] = []
+    const app = appWith(
+      featureFor(new Staged('late', log, 'fallback')),
+      featureFor(new Staged('plain', log)),
+      featureFor(new Staged('early', log, 'core')),
+    )
+
+    await app.ready()
+
+    expect(log).toEqual(['early', 'plain', 'late'])
+    await app.close()
+  })
+
+  // An extension that says nothing is a third-party one, and must never land in a framework band.
+  it('treats an unmarked extension as default', async () => {
+    const log: string[] = []
+    const app = appWith(featureFor(new Staged('first', log)), featureFor(new Staged('second', log)))
+
+    await app.ready()
+
+    expect(log).toEqual(['first', 'second'])
+    await app.close()
+  })
+
+  // The not-found handler is `fallback` for a reason: a fallback serving files needs whatever an extension
+  // decorated the server with, and it derives the owned paths from every provider already registered.
+  it('registers the framework not-found handler after a package extension', async () => {
+    const log: string[] = []
+    const app = appWith(featureFor(new Staged('package', log)))
+
+    await app.ready()
+
+    expect(log).toEqual(['package'])
+    // Nothing matched, and the fallback chain the `fallback` stage installed is what answered.
+    expect((await app.fetch('/nothing-here')).status).toBe(404)
+    await app.close()
+  })
+})
 
 describe('ServerExtension ordering', () => {
   it('runs extensions in the order their features were installed', async () => {

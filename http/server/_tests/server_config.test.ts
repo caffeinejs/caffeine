@@ -5,6 +5,7 @@ import { type InferSchema, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   ConfigPriority,
+  Configuration,
   EnvConfigProvider,
   InlineConfigProvider,
   type ConfigHandle,
@@ -14,7 +15,7 @@ import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../../index.js'
-import { DEFAULT_SERVER_OPTIONS, kServerContribution } from '../index.js'
+import { DEFAULT_SERVER_OPTIONS, kServerConfig, type ServerOptions } from '../index.js'
 
 const schema = $t.Object({
   server: $t.Object({ host: $t.String(), port: $t.Number() }),
@@ -28,6 +29,14 @@ const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
 /** An env source over a fixed map, so the tests never touch the real environment. */
 function env(values: Record<string, string>): ConfigProvider {
   return new EnvConfigProvider({ env: values })
+}
+
+/**
+ * What the adapter reads: the server settings by key, wherever the application put them — and whether or not
+ * the application declared a configuration of its own.
+ */
+function serverConfig(app: WebApplication): ServerOptions {
+  return app.container.get(Configuration).config(kServerConfig)!
 }
 
 describe('server builder + config', () => {
@@ -71,7 +80,7 @@ describe('server builder + config', () => {
     await app.ready()
 
     // The environment wins: a port compiled into the image is a default, not an override.
-    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 8080 })
+    expect(serverConfig(app)).toEqual({ host: '127.0.0.1', port: 8080 })
   })
 
   it('falls back to the code-set port when the environment says nothing', async () => {
@@ -87,7 +96,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 3000 })
+    expect(serverConfig(app)).toEqual({ host: '127.0.0.1', port: 3000 })
   })
 
   it('falls back to the framework defaults when neither says anything', async () => {
@@ -95,7 +104,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution)).toEqual(DEFAULT_SERVER_OPTIONS)
+    expect(serverConfig(app)).toEqual(DEFAULT_SERVER_OPTIONS)
   })
 
   // Declaring `server` in the schema is not on its own an instruction to configure the server from it: a
@@ -109,7 +118,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution)).toEqual(DEFAULT_SERVER_OPTIONS)
+    expect(serverConfig(app)).toEqual(DEFAULT_SERVER_OPTIONS)
   })
 
   it('lets command-line arguments beat both the environment and the code', async () => {
@@ -125,7 +134,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 9090 })
+    expect(serverConfig(app)).toEqual({ host: '127.0.0.1', port: 9090 })
   })
 
   it('re-points the whole feature — reads and code-set defaults — through the selector', async () => {
@@ -142,7 +151,7 @@ describe('server builder + config', () => {
     await app.ready()
 
     // `port` came from the builder at the block the application named, `host` from the environment at the same one.
-    expect(app.contributions.get(kServerContribution)).toEqual({ host: '127.0.0.1', port: 4567 })
+    expect(serverConfig(app)).toEqual({ host: '127.0.0.1', port: 4567 })
   })
 
   it('lets the environment override the block the application named', async () => {
@@ -158,7 +167,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution).port).toBe(8082)
+    expect(serverConfig(app).port).toBe(8082)
   })
 
   it('resolves against the defaults when a selector is used without an application schema', async () => {
@@ -169,7 +178,7 @@ describe('server builder + config', () => {
 
     await app.ready()
 
-    expect(app.contributions.get(kServerContribution)).toEqual({ host: DEFAULT_SERVER_OPTIONS.host, port: 4444 })
+    expect(serverConfig(app)).toEqual({ host: DEFAULT_SERVER_OPTIONS.host, port: 4444 })
   })
 
   it('follows a config refresh, without the bound socket moving', async () => {
@@ -195,7 +204,7 @@ describe('server builder + config', () => {
 
     // The options are configuration like any other, so they report what configuration now says.
     expect(app.container.get(kConfig).server.port).toBe(1234)
-    expect(app.contributions.get(kServerContribution)).toEqual({ host: '0.0.0.0', port: 1234 })
+    expect(serverConfig(app)).toEqual({ host: '0.0.0.0', port: 1234 })
 
     // The socket does not move: the address was fixed when the adapter took these values and listened. That is
     // the server's business, not a property of the configuration layer.

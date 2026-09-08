@@ -1,19 +1,6 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
-import {
-  kBeforeBootstrap,
-  kBootstrap,
-  kFeatureName,
-  type BeforeBootstrapKit,
-  type BootstrapKit,
-  type FeatureLifecycle,
-} from '@caffeinejs/std'
-import {
-  defineFeatureConfig,
-  type ConfigLocation,
-  type ConfigHandle,
-  type ConfigSchema,
-  type ConfigSlice,
-} from '@caffeinejs/std/config'
+import { FeatureBuilder, kFeatureName, type BeforeBootstrapKit, type BootstrapKit } from '@caffeinejs/std'
+import { type ConfigSchema, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
@@ -48,11 +35,12 @@ import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import { JWTService } from './jwt/jwt_service.js'
 import { jwtServiceKey } from './jwt/keys.js'
-import { kAuthContribution, kAuthSchemeDescriptors, kOIDCContribution } from './keys.js'
+import { kAuthSchemeDescriptors } from './keys.js'
 import { githubOAuth2Preset, OAuth2AuthenticationHandler, OAuth2AuthenticationOptionsBuilder } from './oauth/index.js'
 import type { GithubPresetOptions } from './oauth/provider/github.js'
 import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import type { OAuthCallbackHandler, OIDCMeta } from './oidc/index.js'
+import { OIDCRoutesExtension } from './oidc/oidc_routes.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
 import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
 import { OpaqueTokenStore } from './opaque/opaque_token_store.js'
@@ -83,8 +71,10 @@ interface SchemeRegistration {
   preset?: GithubPresetOptions
 }
 
-export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
+export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfigSlice, C> {
   readonly [kFeatureName] = 'auth'
+
+  protected readonly schema = authConfigSchema
 
   readonly #schemes: Map<string, InjectionToken<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
@@ -101,12 +91,11 @@ export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
   #refresh: RefreshTokenOptions | undefined
-  #selector?: (c: ConfigHandle<C>) => ConfigLocation<AuthConfigSlice>
-  #authSlice: ConfigSlice<AuthConfigSlice> | undefined
   #credentialsSlice: ConfigSlice<CredentialsServiceOptions> | undefined
   #refreshSlice: ConfigSlice<Record<string, unknown>> | undefined
 
   constructor(options: Partial<AuthenticationOptions> = {}) {
+    super()
     this.#options = options
   }
 
@@ -114,17 +103,6 @@ export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
   addStrategy(name: string, key: InjectionToken<AuthenticationHandler>): this
   addStrategy(name: string, keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler): this {
     this.#schemes.set(name, keyOrHandler)
-    return this
-  }
-
-  /**
-   * Places the authentication settings elsewhere in the configuration tree, e.g. `a.config(c => c.app.auth)`.
-   *
-   * The selector names a location, not a value: it is evaluated once, while declaring, to record the path.
-   * Both `auth.*` and every `auth.schemes.<name>.*` beneath it move together.
-   */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<AuthConfigSlice>): this {
-    this.#selector = selector
     return this
   }
 
@@ -283,28 +261,22 @@ export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
     return this
   }
 
-  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-    this.#doBeforeBootstrap(kit)
+  protected override configValues(): Record<string, unknown> {
+    return {
+      defaultAuthenticateScheme: this.#options.defaultAuthenticateScheme,
+      defaultChallengeScheme: this.#options.defaultChallengeScheme,
+      defaultForbidScheme: this.#options.defaultForbidScheme,
+    }
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): Promise<void> {
     return this.#doBootstrap(kit)
   }
 
-  #doBeforeBootstrap(kit: BeforeBootstrapKit): void {
-    this.#authSlice = defineFeatureConfig<AuthConfigSlice>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: authConfigSchema,
-      values: {
-        defaultAuthenticateScheme: this.#options.defaultAuthenticateScheme,
-        defaultChallengeScheme: this.#options.defaultChallengeScheme,
-        defaultForbidScheme: this.#options.defaultForbidScheme,
-      },
-    })
-
+  protected override beforeBootstrap(kit: BeforeBootstrapKit): void {
     // Read back rather than recomputed, so the schemes follow the block they belong to wherever `.config(...)`
     // put it — and stay detached along with it when the application placed it nowhere.
-    const base = this.#authSlice.parts
+    const base = this.slice.parts
 
     for (const registration of this.#registrations) {
       this.#slices.set(
@@ -469,7 +441,8 @@ export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
   #doBootstrap(kit: BootstrapKit): Promise<void> {
     this.#buildSchemes()
 
-    const configuredDefaults = this.#authSlice?.config ?? {}
+    // Absent for a builder driven directly rather than by an application, which then has only what code set.
+    const configuredDefaults = this.declared ? this.slice.config : {}
     const opts: Partial<AuthenticationOptions> = { ...this.#options, ...stripUndefined(configuredDefaults) }
     const firstScheme = this.#schemes.keys().next().value as string | undefined
 
@@ -538,9 +511,10 @@ export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
       }
     }
 
+    // The scheme provider carries the resolved options — the default authenticate, challenge and forbid
+    // schemes, and the registered names — so binding it is the whole of publishing them.
     kit.container.bind(AuthenticationService, t => t.toValue(service).internal())
     kit.container.bind(AuthenticationSchemeProvider, t => t.toValue(schemeProvider).internal())
-    kit.contributions.contribute(kAuthContribution, options)
     kit.container.bind(kAuthSchemeDescriptors, t => t.toValue(this.#descriptors).internal())
 
     // Share each JWT scheme's service (verify + sign) for injection into token-issuing controllers.
@@ -597,7 +571,10 @@ export class AuthenticationBuilder<C = unknown> implements FeatureLifecycle {
         handlers: this.#oidcHandlers.map(h => ({ callbackPath: h.callbackPath, handler: h })),
         unreachableCandidates: this.#unreachableCandidates(defaultScheme),
       }
-      kit.contributions.contribute(kOIDCContribution, meta)
+
+      // Registered only here, so "no OIDC strategy was configured" is expressed as the extension not
+      // existing rather than as a flag it would have to read back and check.
+      kit.extensions.register(OIDCRoutesExtension, new OIDCRoutesExtension(meta))
     }
 
     return Promise.resolve()

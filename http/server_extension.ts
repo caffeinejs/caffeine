@@ -2,13 +2,11 @@ import type { Extension, ExtensionIn } from '@caffeinejs/std'
 import type { FastifyInstance } from 'fastify'
 
 import type { RouteGroup } from './route.js'
-import type { Services } from './service.js'
 
 /** The resolved application, handed to an extension at start-up. */
 export interface ServerExtensionContext extends ExtensionIn {
   /** The root server. Extensions run un-encapsulated, so a decoration here reaches every controller. */
   server: FastifyInstance
-  services: Services
   /** Every route the application resolved, already built — read it, do not expect to add to it. */
   routeGroups: RouteGroup<any>[]
 }

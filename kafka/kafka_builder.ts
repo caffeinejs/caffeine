@@ -1,14 +1,6 @@
 import type { Ctor } from '@caffeinejs/di'
-import {
-  HealthIndicator,
-  kBeforeBootstrap,
-  kBootstrap,
-  kFeatureName,
-  type BeforeBootstrapKit,
-  type BootstrapKit,
-  type FeatureLifecycle,
-} from '@caffeinejs/std'
-import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
+import { FeatureBuilder, HealthIndicator, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { type ConfigSlice } from '@caffeinejs/std/config'
 
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import {
@@ -51,12 +43,13 @@ import { KafkaTemplate } from './template.js'
  * `C` is the application config type, recovered from the builder `.extend(kafka, …)` was reached through, so the
  * selector argument is a `ConfigHandle<C>`.
  */
-export class KafkaBuilder<C = unknown> implements FeatureLifecycle {
+export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, C> {
   readonly [kFeatureName] = 'kafka'
+
+  protected readonly schema = kafkaConfigSchema
 
   readonly #name: string
   readonly #clients: KafkaClients
-  #selector?: (c: ConfigHandle<C>) => ConfigLocation<KafkaConfigSlice>
   #brokers?: string | string[]
   #clientId?: string
   #groupId?: string
@@ -77,6 +70,7 @@ export class KafkaBuilder<C = unknown> implements FeatureLifecycle {
   #resolved?: ConfigSlice<ResolvedKafkaConfig>
 
   constructor(clients: KafkaClients, name: string = DEFAULT_INSTANCE) {
+    super()
     this.#clients = clients
     this.#name = name
   }
@@ -195,35 +189,22 @@ export class KafkaBuilder<C = unknown> implements FeatureLifecycle {
     return this
   }
 
-  /**
-   * Places this instance's settings elsewhere in the configuration tree, e.g. `k.config(c => c.app.events)`.
-   *
-   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
-   * Both the reads and the defaults written by the builder methods follow it.
-   */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<KafkaConfigSlice>): this {
-    this.#selector = selector
-    return this
+  protected override configValues(): Record<string, unknown> {
+    return {
+      // A builder method is a default: `KAFKA__DEFAULT__BROKERS` overrides whatever `.brokers(...)` set.
+      brokers:
+        this.#brokers === undefined ? undefined : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers],
+      clientId: this.#clientId,
+      groupId: this.#groupId,
+      ackMode: this.#ackMode,
+      retry: this.#retry === undefined ? undefined : { ...this.#retry },
+      topicProvisioning: this.#topicProvisioning === undefined ? undefined : { ...this.#topicProvisioning },
+      // Only the boolean form can travel through a config tree; the object form is two callbacks.
+      deadLetter: typeof this.#deadLetter === 'boolean' ? this.#deadLetter : undefined,
+    }
   }
 
-  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-    const slice = defineFeatureConfig<KafkaConfigSlice>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: kafkaConfigSchema,
-      values: {
-        // A builder method is a default: `KAFKA__DEFAULT__BROKERS` overrides whatever `.brokers(...)` set.
-        brokers:
-          this.#brokers === undefined ? undefined : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers],
-        clientId: this.#clientId,
-        groupId: this.#groupId,
-        ackMode: this.#ackMode,
-        retry: this.#retry === undefined ? undefined : { ...this.#retry },
-        topicProvisioning: this.#topicProvisioning === undefined ? undefined : { ...this.#topicProvisioning },
-        // Only the boolean form can travel through a config tree; the object form is two callbacks.
-        deadLetter: typeof this.#deadLetter === 'boolean' ? this.#deadLetter : undefined,
-      },
-    })
-
+  protected override beforeBootstrap(): void {
     // Everything a configuration tree cannot carry, folded back in when the slice publishes.
     const code = {
       serializers: this.#serializers,
@@ -239,7 +220,7 @@ export class KafkaBuilder<C = unknown> implements FeatureLifecycle {
       onError: this.#onError,
     }
 
-    this.#resolved = slice.derive(published => {
+    this.#resolved = this.derive(published => {
       const brokers = published.brokers ?? []
 
       // Checked here rather than on the builder: the brokers may arrive from any source, so the only
@@ -262,7 +243,7 @@ export class KafkaBuilder<C = unknown> implements FeatureLifecycle {
     })
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): Promise<void> {
     const resolved = this.#resolved!
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)

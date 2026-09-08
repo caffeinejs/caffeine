@@ -1,21 +1,44 @@
+import { kExtensionStage, type ExtensionStage } from '@caffeinejs/std'
+
 import { joinPaths } from '../../../internal/paths/index.js'
-import type { ServerExtensionContext } from '../../../server_extension.js'
-import { isOIDCError } from './index.js'
+import { ServerExtension, type ServerExtensionContext } from '../../../server_extension.js'
+import { isOIDCError, type OIDCMeta } from './index.js'
 
 /**
- * Registers the OIDC/OAuth2 callback routes, validates their paths do not collide with controller
- * routes, and asserts `@fastify/cookie` is present at start-up. Only active when OIDC is configured.
+ * Registers the OIDC/OAuth2 callback routes.
+ *
+ * Registered by the authentication builder only when an OIDC strategy was configured, so there is no "is it
+ * on" question to answer here — the absence of this extension is the answer.
+ *
+ * `core`, so the callback routes are in place before a package outside `http` registers anything that could
+ * shadow them.
+ */
+export class OIDCRoutesExtension extends ServerExtension {
+  readonly name = 'caffeine-oidc-routes'
+  readonly [kExtensionStage]: ExtensionStage = 'core'
+
+  /** The callback routes to register and the strategies that may turn out to be unreachable. */
+  readonly meta: OIDCMeta
+
+  constructor(meta: OIDCMeta) {
+    super()
+    this.meta = meta
+  }
+
+  configure(ctx: ServerExtensionContext): void {
+    installOIDCRoutes(ctx, this.meta)
+  }
+}
+
+/**
+ * Registers the callback routes, validates their paths do not collide with controller routes, and asserts
+ * `@fastify/cookie` is present at start-up.
  *
  * The cookie check is hand-rolled rather than declared as a Fastify plugin `decorators` requirement on
  * purpose: Fastify's assertion names the missing decorator (`cookies`), while this one names the package
  * the user has to install and register.
  */
-export function installOIDCRoutes(ctx: ServerExtensionContext): void {
-  const oidc = ctx.services.oidc
-  if (!oidc) {
-    return
-  }
-
+export function installOIDCRoutes(ctx: ServerExtensionContext, oidc: OIDCMeta): void {
   const server = ctx.server
   const compiledPaths = new Set(ctx.routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))))
 

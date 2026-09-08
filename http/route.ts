@@ -89,6 +89,17 @@ export interface RouteAuthorization {
   hasProtection: boolean
   options?: RouteAuthzOptions
   authorizer?: AuthzRouteService
+
+  /**
+   * The scheme names that actually authenticate this route: the ones it named, or the application's default
+   * authenticate scheme when it named none. Empty when no scheme is registered.
+   *
+   * Resolved while the route is compiled, so a reader — the OpenAPI generator, most of all — describes what
+   * the route really requires without having to find the authentication feature and ask it what the default
+   * is. It says nothing about whether the route is gated: {@link hasProtection} and
+   * {@link RouteAuthzOptions.allowAnonymous} answer that, and a route may name schemes without being gated.
+   */
+  schemes: readonly string[]
 }
 
 /**

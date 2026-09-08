@@ -310,16 +310,13 @@ describe('security', () => {
   })
 
   it('emits a security requirement from @Authorize', () => {
-    const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').authorize({ schemes: ['Bearer'] })]),
+    const router = fixtureRouter(
+      '/pets',
+      r => r.routes([fixtureRoute('POST', '/', 'create').authorize({ schemes: ['Bearer'] })]),
+      { defaultScheme: 'Bearer' },
     )
 
-    const document = generateDocument({
-      routeGroups: [router],
-      options: fixtureOptions(),
-      schemes,
-      defaultScheme: 'Bearer',
-    })
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions(), schemes })
 
     expect(operationAt(document, '/pets', 'post')?.security).toEqual([{ Bearer: [] }])
   })
@@ -334,17 +331,15 @@ describe('security', () => {
     expect(operationAt(document, '/pets')?.security).toEqual([])
   })
 
-  it('falls back to the default scheme when the route names none', () => {
-    const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').authorize({ roles: ['ops'] })]),
+  // The default is folded in while the route compiles, so the generator never asks what it is.
+  it('documents the default scheme when the route names none', () => {
+    const router = fixtureRouter(
+      '/pets',
+      r => r.routes([fixtureRoute('POST', '/', 'create').authorize({ roles: ['ops'] })]),
+      { defaultScheme: 'Bearer' },
     )
 
-    const document = generateDocument({
-      routeGroups: [router],
-      options: fixtureOptions(),
-      schemes,
-      defaultScheme: 'Bearer',
-    })
+    const document = generateDocument({ routeGroups: [router], options: fixtureOptions(), schemes })
 
     expect(operationAt(document, '/pets', 'post')?.security).toEqual([{ Bearer: [] }])
   })

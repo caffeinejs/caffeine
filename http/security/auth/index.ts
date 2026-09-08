@@ -34,7 +34,7 @@ export {
   type JWTServiceOptions,
   type JWTSignOptions,
 } from './jwt/index.js'
-export { kAuthContribution, kAuthSchemeDescriptors, kOIDCContribution } from './keys.js'
+export { kAuthSchemeDescriptors } from './keys.js'
 export {
   googleOIDCPreset,
   OIDCAuthenticationHandler,

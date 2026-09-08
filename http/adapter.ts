@@ -20,23 +20,20 @@ import { type CacheDeps, type CacheOptions, attachCacheHooks, resolveCacheDeps }
 import { type CacheInvalidateOptions, attachCacheInvalidateHook } from './cache/cache_invalidate.js'
 import { FastifyContext } from './context.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
-import { installGlobalErrorHandler, installRouteGroupErrorHandler } from './error/error_handling.js'
-import { installFormBodyParser } from './form/index.js'
+import { installRouteGroupErrorHandler } from './error/error_handling.js'
+import { ErrorHandlingExtension } from './error/error_handling_extension.js'
 import { attachGuardHook } from './guards/attach.js'
 import { kGuardOptions } from './guards/keys.js'
-import { installHealthProbes } from './health/index.js'
 import { joinPaths } from './internal/paths/index.js'
 import { type AdapterRouteOptions } from './internal/route_hooks.js'
 import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
-import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import type { RouteCompilers } from './routing/dispatch.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { Authentication } from './security/auth/authentication_middleware.js'
-import { installOIDCRoutes } from './security/auth/oidc/oidc_routes.js'
 import type { Principal } from './security/index.js'
-import { DEFAULT_SERVER_OPTIONS, ServerOptions, type ServerAddress } from './server/index.js'
+import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerConfig, type ServerAddress } from './server/index.js'
 import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
 
 /** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
@@ -81,9 +78,6 @@ export class FastifyAdapter<
     const container = this.#container
     const routeGroups = input.routeGroups as RouteGroup<REQ>[]
     const fastify = this.#fastify
-    const services = input.services
-
-    this.#serverOptions = services.server
 
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
@@ -98,6 +92,11 @@ export class FastifyAdapter<
 
     // One resolution for the whole server: each context takes its own snapshot off it, on first read.
     const configuration = container.get(Configuration)
+
+    // Copied out of the live settings: `listen()` mutates what it is handed, and the address has to stop
+    // moving once the socket is bound. An application that never registered the server feature runs on the
+    // defaults.
+    this.#serverOptions = { ...(configuration.config(kServerConfig) ?? DEFAULT_SERVER_OPTIONS) }
 
     if (container.hasRequestScoped) {
       const man = container.requestScopeManager
@@ -126,21 +125,13 @@ export class FastifyAdapter<
     const extensionContext: ServerExtensionContext = {
       server: fastify,
       container,
-      services,
       routeGroups,
     }
 
-    // The built-in features. Plain calls in a stated order rather than a discovered list: they are this
-    // package's own code, and nothing about them is pluggable.
-    const globalErrorHandler = installGlobalErrorHandler(fastify, services.errorHandling)
-    installFormBodyParser(fastify)
-    installHealthProbes(extensionContext)
-    installOIDCRoutes(extensionContext)
-
-    // Extensions contributed by other packages, in the order their features were installed, registered as real
-    // Fastify plugins so `dependencies`, `decorators` and the version range are enforced by Fastify — and so
-    // each shows up by name in `printPlugins()`. `fp` skips encapsulation, so an extension still decorates the
-    // root instance.
+    // Every extension, this package's own included, in stage order and then in feature-install order.
+    // Registered as real Fastify plugins so `dependencies`, `decorators` and the version range are enforced by
+    // Fastify — and so each shows up by name in `printPlugins()`. `fp` skips encapsulation, so an extension
+    // still decorates the root instance.
     for (const extension of input.extensions.of(ServerExtension)) {
       await fastify.register(
         fp(
@@ -159,9 +150,9 @@ export class FastifyAdapter<
       )
     }
 
-    // After the extensions, not up with the other built-ins: a fallback may be bound by an extension, and one
-    // serving files needs the `reply.sendFile` that `@fastify/static` decorates while it registers.
-    installNotFoundHandler(extensionContext, container.getManyOptional<NotFoundFallback>(NotFoundFallback))
+    // Installed by the `core` extension above; read back here because each route group's own encapsulated
+    // handler resolves to it last.
+    const globalErrorHandler = container.get(ErrorHandlingExtension).globalErrorHandler
 
     await middlewares.setupAll(extensionContext)
 
