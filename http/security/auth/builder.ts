@@ -3,6 +3,7 @@ import { FeatureBuilder, kFeatureName, type BeforeBootstrapKit, type BootstrapKi
 import { type ConfigSchema, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { Context } from '../../context.js'
+import { ServerOwnedPaths } from '../../server_owned_paths.js'
 import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
@@ -49,6 +50,13 @@ import { RefreshTokenService } from './refresh/refresh_token_service.js'
 import { RefreshTokenStore } from './refresh/refresh_token_store.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
+
+/** The OIDC/OAuth callback paths, so a SPA fallback does not treat them as unmatched client routes. */
+class OIDCOwnedPaths extends ServerOwnedPaths {
+  constructor(readonly paths: readonly string[]) {
+    super()
+  }
+}
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
@@ -575,6 +583,12 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
       // Registered only here, so "no OIDC strategy was configured" is expressed as the extension not
       // existing rather than as a flag it would have to read back and check.
       kit.extensions.register(OIDCRoutesExtension, new OIDCRoutesExtension(meta))
+      kit.container.bind(OIDCOwnedPaths, t =>
+        t
+          .toValue(new OIDCOwnedPaths(meta.handlers.map(h => h.callbackPath)))
+          .extends(ServerOwnedPaths)
+          .internal(),
+      )
     }
 
     return Promise.resolve()

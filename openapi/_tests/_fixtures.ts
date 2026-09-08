@@ -1,4 +1,4 @@
-import { RouteBuilder, type Route, type RouteGroup, type RouteGroupBuilder } from '@caffeinejs/http'
+import { mergeAuthz, RouteBuilder, type Route, type RouteGroup, type RouteGroupBuilder } from '@caffeinejs/http'
 import { getRouteGroup, registerRouteGroup } from '@caffeinejs/http/decorators/registrar'
 
 import type { OpenAPIOptions } from '../options.js'
@@ -38,7 +38,7 @@ export function fixtureRouter(
       // Mirrors buildRouting: any authz declared at either level is protection unless something opted out.
       const hasDecoratorProtection = spec.authz !== undefined || route.authz !== undefined
       const isAnonymous = !!(spec.authz?.allowAnonymous || route.authz?.allowAnonymous)
-      const authz = route.authz ?? spec.authz
+      const authz = mergeAuthz(spec.authz, route.authz)
       // Also mirrors buildRouting: the effective schemes are folded while the route compiles, so a route
       // naming none carries the application's default rather than leaving the generator to find it.
       const named = authz?.schemes

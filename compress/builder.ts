@@ -37,7 +37,7 @@ export class CompressBuilder<C = unknown> extends FeatureBuilder<CompressConfig,
   }
 
   protected bootstrap(kit: BootstrapKit): Promise<void> {
-    const options = { ...this.slice.config.options, ...this.#callbacks } as CompressOptions
+    const options = { ...this.#callbacks, ...this.slice.config.options } as CompressOptions
     kit.extensions.register(CompressExtension, new CompressExtension(options))
 
     return Promise.resolve()
