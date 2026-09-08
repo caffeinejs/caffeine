@@ -1,5 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { defineFeature, type Service } from '@caffeinejs/std'
+import { defineFeature, type FeatureLifecycle } from '@caffeinejs/std'
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Get, createWebApplication } from '../index.js'
@@ -58,7 +58,7 @@ describe('createWebApplication default Fastify form', () => {
       singleton: true,
       install(ctx, configure) {
         const state: { value: string | undefined } = { value: undefined }
-        const service: Service = {
+        const service: FeatureLifecycle = {
           bootstrap(kit) {
             kit.container.bind(kProbe, t => t.toValue({ value: state.value }))
             return Promise.resolve()
@@ -68,7 +68,7 @@ describe('createWebApplication default Fastify form', () => {
             return 'probe'
           },
         }
-        ctx.addService(service)
+        ctx.addFeature(service)
         configure?.({
           capture(value: string) {
             state.value = value

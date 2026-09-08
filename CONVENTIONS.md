@@ -137,10 +137,10 @@ Do not re-export a symbol (type or value) from another module or package just to
 
 ```ts
 // wrong
-export { kServiceConfigure, type Service } from '@caffeinejs/std'
+export { kFeatureSetup, type FeatureLifecycle } from '@caffeinejs/std'
 
 // correct
-import { kServiceConfigure, type Service } from '@caffeinejs/std'
+import { kFeatureSetup, type FeatureLifecycle } from '@caffeinejs/std'
 import type { Services } from './service.js'
 ```
 
@@ -168,6 +168,11 @@ and its builder values alone: it works, and no file, environment variable or arg
 
 Do not route an extension's own configuration through a container key it reads back at server setup: the
 builder is holding the value when it constructs the extension. `bind(X).toValue(new X(data)).extends()`.
+
+A feature builder is a pure fluent authoring class — its methods return `this`, and it implements
+`FeatureProvider`: a `[kFeatureSetup](): FeatureLifecycle` that hands the application the `beforeBootstrap` /
+`bootstrap` hooks, closing over the builder's accumulated state. The builder is never the lifecycle unit and
+never appears in the application's feature list; `.extend`'s `install` calls `ctx.addFeature(b[kFeatureSetup]())`.
 
 Contributions are write-only while services bootstrap and sealed the moment they finish, because services
 bootstrap concurrently — a read before the seal would be answered by whichever service the scheduler reached

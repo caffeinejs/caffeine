@@ -1,4 +1,4 @@
-import { defineFeature, type Feature, type ServiceAPI } from '@caffeinejs/std'
+import { defineFeature, kFeatureSetup, type Feature } from '@caffeinejs/std'
 
 import { CompressBuilder } from './builder.js'
 
@@ -7,12 +7,12 @@ import { CompressBuilder } from './builder.js'
  * with Fastify defaults; pass a callback to configure through {@link CompressBuilder.options}. Per-route
  * overrides use the `compress()` extension or the `@Compress` decorator.
  */
-export const CompressExt: Feature<ServiceAPI<CompressBuilder>> = defineFeature({
+export const CompressExt: Feature<CompressBuilder> = defineFeature({
   name: 'compress',
   singleton: true,
   install(ctx, configure) {
     const builder = new CompressBuilder()
     configure?.(builder)
-    ctx.addService(builder)
+    ctx.addFeature(builder[kFeatureSetup]())
   },
 })

@@ -1,12 +1,12 @@
-import { defineFeature, type Feature, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
+import { defineFeature, kFeatureSetup, type Feature, type TypeLambda } from '@caffeinejs/std'
 
 import { StaticBuilder } from './builder.js'
 
 interface StaticBuilderF extends TypeLambda {
-  readonly Out: ServiceAPI<StaticBuilder<this['In']>>
+  readonly Out: StaticBuilder<this['In']>
 }
 
-export interface StaticFeature extends Feature<ServiceAPI<StaticBuilder>> {
+export interface StaticFeature extends Feature<StaticBuilder> {
   readonly _F: StaticBuilderF
 }
 
@@ -20,6 +20,6 @@ export const StaticExt: StaticFeature = defineFeature({
   install(ctx, configure) {
     const builder = new StaticBuilder()
     configure?.(builder)
-    ctx.addService(builder)
+    ctx.addFeature(builder[kFeatureSetup]())
   },
 }) as StaticFeature

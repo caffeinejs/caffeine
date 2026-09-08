@@ -1,5 +1,5 @@
 import { Scopes, type Ctor } from '@caffeinejs/di'
-import { HealthIndicator, type HealthReport, type ServiceAPI, down, up } from '@caffeinejs/std'
+import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -55,7 +55,7 @@ function bindIndicators(app: WebApplication, ...indicators: Array<Ctor<HealthInd
 }
 
 async function start(
-  configure?: (health: ServiceAPI<HealthBuilder<unknown>>) => void,
+  configure?: (health: HealthBuilder<unknown>) => void,
   ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>
 ): Promise<WebApplication> {
   const app = createWebApplication(fastifyAdapterFactory(fastify()))

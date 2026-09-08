@@ -14,8 +14,8 @@ import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.
 import { type ShutdownConfig, resolveShutdownOptions } from './health/shutdown_options.js'
 import { detectSignalDispatcher } from './health/signals.js'
 import { ApplicationHooks } from './hooks.js'
+import type { FeatureLifecycle } from './lifecycle.js'
 import type { BuilderOf, Feature, PluginContext } from './plugin.js'
-import type { Service } from './service.js'
 
 export interface ApplicationBuilderOptions {
   container?: Container | Options
@@ -38,7 +38,7 @@ export interface ApplicationBuilderOptions {
  */
 export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #container: Container
-  readonly #services: Service[] = []
+  readonly #services: FeatureLifecycle[] = []
   readonly #hooks = new ApplicationHooks<BaseApplication>()
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #shutdown: ShutdownConfig | undefined
@@ -91,8 +91,8 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     return this.#config
   }
 
-  addService(service: Service): this {
-    this.#services.push(service)
+  addFeature(feature: FeatureLifecycle): this {
+    this.#services.push(feature)
     return this
   }
 
@@ -151,8 +151,8 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     configure?: (b: BuilderOf<NoInfer<F>, ConfigTypeOf<this>>) => void,
   ): this {
     const ctx: PluginContext = {
-      addService: service => {
-        this.addService(service)
+      addFeature: feature => {
+        this.addFeature(feature)
       },
       container: this.container,
       on: (event, listener) => {

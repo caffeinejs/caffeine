@@ -1,4 +1,3 @@
-import type { ServiceAPI } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -25,7 +24,7 @@ class DrainController {
 
 void [DrainController]
 
-async function start(configure: (health: ServiceAPI<HealthBuilder<unknown>>) => void): Promise<WebApplication> {
+async function start(configure: (health: HealthBuilder<unknown>) => void): Promise<WebApplication> {
   const app = createWebApplication(fastifyAdapterFactory(fastify())).health(configure).build()
 
   await app.run()

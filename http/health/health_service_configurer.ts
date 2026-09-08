@@ -1,10 +1,10 @@
 import {
   ApplicationAvailability,
-  type ServiceBeforeBootstrapIn,
-  type Service,
-  ServiceBootstrapIn,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
+  type FeatureLifecycle,
 } from '@caffeinejs/std'
-import type { ConfigSlice } from '@caffeinejs/std/config'
+import { defineFeatureConfig, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { kHealthContribution } from './keys.js'
 import {
@@ -30,9 +30,9 @@ import {
  *
  * Always registered after the `HealthBuilder`, so a configured setup wins.
  */
-export class HealthServiceConfigurer implements Service {
+export class HealthServiceConfigurer implements FeatureLifecycle {
   readonly #configured: boolean
-  #options: ConfigSlice<HealthOptions> | undefined
+  #resolved: ConfigSlice<HealthOptions> | undefined
 
   /**
    * @param configured - Whether a {@link HealthBuilder} is among the application's services. Passed in rather
@@ -48,17 +48,17 @@ export class HealthServiceConfigurer implements Service {
     return 'health'
   }
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
+  beforeBootstrap(kit: BeforeBootstrapKit): void {
     if (this.#configured) {
       return
     }
 
     // Detached: no builder ran, so nothing named a location for these settings.
-    const slice: ConfigSlice<HealthConfig> = kit.config.slice(undefined, healthConfigSchema)
-    this.#options = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
+    const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, { schema: healthConfigSchema })
+    this.#resolved = slice.derive(config => finalizeHealthOptions(mergeHealthConfig(config)))
   }
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+  bootstrap(kit: BootstrapKit): Promise<void> {
     if (!kit.container.has(ApplicationAvailability)) {
       // The application's own instance, not a container-constructed one: the lifecycle writes to that object, and
       // a second instance would report a state nothing ever updates.
@@ -67,8 +67,8 @@ export class HealthServiceConfigurer implements Service {
 
     // Only ever set when no `HealthBuilder` is registered — `beforeBootstrap` returns early otherwise — so
     // this is the whole of "nobody configured health", with no need to ask whether the builder got there first.
-    if (this.#options !== undefined) {
-      kit.contributions.contribute(kHealthContribution, this.#options.config)
+    if (this.#resolved !== undefined) {
+      kit.contributions.contribute(kHealthContribution, this.#resolved.config)
     }
 
     return Promise.resolve()

@@ -1,4 +1,11 @@
-import { $t, ServiceBeforeBootstrapIn, ServiceBootstrapIn, Service, type ServiceAPI } from '@caffeinejs/std'
+import {
+  $t,
+  kFeatureSetup,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
+  type FeatureLifecycle,
+  type FeatureProvider,
+} from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { ETagGenerator } from './cache.js'
@@ -37,29 +44,25 @@ export const cacheConfigSchema = $t.Object({
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
-export class CacheBuilder<C = unknown> implements Service {
+export class CacheBuilder<C = unknown> implements FeatureProvider {
   #store: CacheStore | undefined
   #etagGenerator: ETagGenerator | undefined
   #statusHeader: string | undefined
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<CacheConfig>
-  #slice: ConfigSlice<CacheConfig> | undefined
+  #resolved: ConfigSlice<CacheConfig> | undefined
 
-  get name(): string {
-    return 'cache'
-  }
-
-  store(store: CacheStore): ServiceAPI<this> {
+  store(store: CacheStore): this {
     this.#store = store
     return this
   }
 
-  etagGenerator(generator: ETagGenerator): ServiceAPI<this> {
+  etagGenerator(generator: ETagGenerator): this {
     this.#etagGenerator = generator
     return this
   }
 
   /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/BYPASS. */
-  statusHeader(name: string): ServiceAPI<this> {
+  statusHeader(name: string): this {
     this.#statusHeader = name
     return this
   }
@@ -69,39 +72,45 @@ export class CacheBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<CacheConfig>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<CacheConfig>): this {
     this.#selector = selector
     return this
   }
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
-    this.#slice = defineFeatureConfig<CacheConfig>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: cacheConfigSchema,
-      defaults: { ...DEFAULT_CACHE_CONFIG },
-      values: { statusHeader: this.#statusHeader },
-    })
-  }
+  [kFeatureSetup](): FeatureLifecycle {
+    return {
+      name: 'cache',
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    const store = this.#store
-    if (store !== undefined) {
-      kit.container.bind(CacheStore, t => t.toValue(store).internal())
+      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
+        this.#resolved = defineFeatureConfig<CacheConfig>(kit.config, {
+          selector: this.#selector as ((c: never) => unknown) | undefined,
+          schema: cacheConfigSchema,
+          defaults: { ...DEFAULT_CACHE_CONFIG },
+          values: { statusHeader: this.#statusHeader },
+        })
+      },
+
+      bootstrap: (kit: BootstrapKit): Promise<void> => {
+        const store = this.#store
+        if (store !== undefined) {
+          kit.container.bind(CacheStore, t => t.toValue(store).internal())
+        }
+
+        const etagGenerator = this.#etagGenerator
+        if (etagGenerator !== undefined) {
+          kit.container.bind(kETagGenerator, t => t.toValue(etagGenerator).internal())
+        }
+
+        kit.container.bind(kCacheStatusHeader, t =>
+          t
+            // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but
+            // a header name that followed a refresh is the behaviour every other config value has.
+            .toFactory(() => this.#resolved!.config.statusHeader)
+            .internal(),
+        )
+
+        return Promise.resolve()
+      },
     }
-
-    const etagGenerator = this.#etagGenerator
-    if (etagGenerator !== undefined) {
-      kit.container.bind(kETagGenerator, t => t.toValue(etagGenerator).internal())
-    }
-
-    kit.container.bind(kCacheStatusHeader, t =>
-      t
-        // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but a
-        // header name that followed a refresh is the behaviour every other config value has.
-        .toFactory(() => this.#slice!.config.statusHeader)
-        .internal(),
-    )
-
-    return Promise.resolve()
   }
 }

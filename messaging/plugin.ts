@@ -1,8 +1,8 @@
 import {
   defineKeyedFeature,
+  kFeatureSetup,
   type KeyedFeature,
   type PluginContext,
-  type ServiceAPI,
   type TypeLambda,
 } from '@caffeinejs/std'
 
@@ -11,13 +11,13 @@ import type { MessagingContainer } from './engine.js'
 import { DEFAULT_BINDER, Keys } from './symbols.js'
 
 /** The builder callback that configures one messaging integration, over an application config type `C`. */
-export type MessagingConfigure<C = unknown> = (m: ServiceAPI<MessagingBuilder<C>>) => void
+export type MessagingConfigure<C = unknown> = (m: MessagingBuilder<C>) => void
 
 interface MessagingBuilderF extends TypeLambda {
-  readonly Out: ServiceAPI<MessagingBuilder<this['In']>>
+  readonly Out: MessagingBuilder<this['In']>
 }
 
-export interface MessagingFeature extends KeyedFeature<ServiceAPI<MessagingBuilder>, MessagingBuilderF> {
+export interface MessagingFeature extends KeyedFeature<MessagingBuilder, MessagingBuilderF> {
   readonly _F: MessagingBuilderF
 }
 
@@ -62,7 +62,7 @@ export const messaging: MessagingFeature = defineKeyedFeature({
   install(ctx, instance, configure) {
     const builder = new MessagingBuilder(instance)
     configure?.(builder)
-    ctx.addService(builder)
+    ctx.addFeature(builder[kFeatureSetup]())
     registerLifecycle(ctx)
   },
 }) as MessagingFeature

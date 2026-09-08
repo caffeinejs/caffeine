@@ -1,12 +1,12 @@
-import { defineFeature, type Feature, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
+import { defineFeature, kFeatureSetup, type Feature, type TypeLambda } from '@caffeinejs/std'
 
 import { OpenAPIBuilder } from './builder.js'
 
 interface OpenAPIBuilderF extends TypeLambda {
-  readonly Out: ServiceAPI<OpenAPIBuilder<this['In']>>
+  readonly Out: OpenAPIBuilder<this['In']>
 }
 
-export interface OpenAPIFeature extends Feature<ServiceAPI<OpenAPIBuilder>> {
+export interface OpenAPIFeature extends Feature<OpenAPIBuilder> {
   readonly _F: OpenAPIBuilderF
 }
 
@@ -20,6 +20,6 @@ export const OpenAPIExt: OpenAPIFeature = defineFeature({
   install(ctx, configure) {
     const builder = new OpenAPIBuilder()
     configure?.(builder)
-    ctx.addService(builder)
+    ctx.addFeature(builder[kFeatureSetup]())
   },
 }) as OpenAPIFeature

@@ -4,8 +4,8 @@ import { z } from 'zod'
 
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
+import { type FeatureLifecycle } from './lifecycle.js'
 import { defineFeature, defineKeyedFeature, ErrFeatureAlreadyInstalled } from './plugin.js'
-import { type Service } from './service.js'
 
 const kSentinel = token<Record<string, unknown>>(Symbol('extend-sentinel'))
 
@@ -15,7 +15,7 @@ function tracker(name = 'track') {
     singleton: true,
     install(ctx, configure) {
       const state: { value: string | undefined } = { value: undefined }
-      const service: Service = {
+      const service: FeatureLifecycle = {
         get name() {
           return 'track'
         },
@@ -24,7 +24,7 @@ function tracker(name = 'track') {
           return Promise.resolve()
         },
       }
-      ctx.addService(service)
+      ctx.addFeature(service)
       configure?.({
         capture(value: string) {
           state.value = value
@@ -86,7 +86,7 @@ describe('BaseApplicationBuilder.extend', () => {
       name: 'keyed',
       defaultInstance: 'default',
       install(ctx) {
-        ctx.addService({
+        ctx.addFeature({
           get name() {
             return 'keyed'
           },
@@ -108,7 +108,7 @@ describe('BaseApplicationBuilder.extend', () => {
       name: 'keyed',
       defaultInstance: 'default',
       install(ctx) {
-        ctx.addService({
+        ctx.addFeature({
           get name() {
             return 'keyed'
           },

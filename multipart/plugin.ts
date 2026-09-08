@@ -1,4 +1,4 @@
-import { defineFeature, type Feature, type ServiceAPI } from '@caffeinejs/std'
+import { defineFeature, kFeatureSetup, type Feature } from '@caffeinejs/std'
 
 import { MultipartBuilder } from './builder.js'
 
@@ -10,12 +10,12 @@ import { MultipartBuilder } from './builder.js'
  * Import `$multipart` from `@caffeinejs/multipart` at the controller (or any module that builds
  * `@Args([...])`) — the feature does not patch HTTP `$p`.
  */
-export const MultipartExt: Feature<ServiceAPI<MultipartBuilder>> = defineFeature({
+export const MultipartExt: Feature<MultipartBuilder> = defineFeature({
   name: 'multipart',
   singleton: true,
   install(ctx, configure) {
     const builder = new MultipartBuilder()
     configure?.(builder)
-    ctx.addService(builder)
+    ctx.addFeature(builder[kFeatureSetup]())
   },
 })

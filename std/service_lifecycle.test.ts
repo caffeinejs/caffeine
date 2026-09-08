@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { InlineConfigProvider, type ConfigHandle, type ConfigSlice } from './config/index.js'
 import { ErrContributionPhase, contributionKey } from './contributions.js'
 import { createApplication } from './index.js'
+import { type BeforeBootstrapKit, type BootstrapKit, type FeatureLifecycle } from './lifecycle.js'
 import { $t } from './schema/t.js'
-import { type ServiceBeforeBootstrapIn, type Service, type ServiceBootstrapIn } from './service.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
 const kConfig = token<ConfigHandle<{ widget: { size: number } }>>(Symbol('app.config'))
@@ -16,7 +16,7 @@ interface WidgetConfig {
 }
 
 /** A minimal feature: declares a slice, then binds what it resolved to. */
-class WidgetService implements Service {
+class WidgetService implements FeatureLifecycle {
   readonly steps: string[] = []
   slice: ConfigSlice<WidgetConfig> | undefined
   bound: number | undefined
@@ -25,12 +25,12 @@ class WidgetService implements Service {
     return 'widget'
   }
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
+  beforeBootstrap(kit: BeforeBootstrapKit): void {
     this.steps.push('declare')
     this.slice = kit.config.slice(['widget'], widgetSchema)
   }
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+  bootstrap(kit: BootstrapKit): Promise<void> {
     this.steps.push('configure')
     this.bound = this.slice!.config.size
     kit.container.bind(token<number | undefined>('widget.size'), t => t.toValue(this.bound))
@@ -38,9 +38,9 @@ class WidgetService implements Service {
   }
 }
 
-function appWith(service: Service, size: number) {
+function appWith(service: FeatureLifecycle, size: number) {
   return createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    .addService(service)
+    .addFeature(service)
     .config(schema, kConfig, c => c.source(new InlineConfigProvider({ widget: { size } })))
     .build()
 }
@@ -66,14 +66,14 @@ describe('service lifecycle', () => {
   })
 
   it('refuses a slice read from the declare step, where nothing has resolved yet', async () => {
-    class TooEarly implements Service {
+    class TooEarly implements FeatureLifecycle {
       error: unknown
 
       get name(): string {
         return 'too-early'
       }
 
-      beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
+      beforeBootstrap(kit: BeforeBootstrapKit): void {
         const slice = kit.config.slice(['widget'], widgetSchema)
         try {
           void slice.config
@@ -98,7 +98,7 @@ describe('service lifecycle', () => {
     let configured = false
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .addService({
+      .addFeature({
         get name(): string {
           return 'noop'
         },
@@ -115,19 +115,19 @@ describe('service lifecycle', () => {
   })
 
   it('fails start-up when a slice cannot be resolved, before anything binds', async () => {
-    class Strict implements Service {
+    class Strict implements FeatureLifecycle {
       configured: boolean = false
 
       get name(): string {
         return 'strict'
       }
 
-      beforeBootstrap(kit: ServiceBeforeBootstrapIn) {
+      beforeBootstrap(kit: BeforeBootstrapKit) {
         // The tree carries a number here, so a string schema cannot validate.
         kit.config.slice(['widget', 'size'], $t.Object({ nested: $t.String() }))
       }
 
-      bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+      bootstrap(kit: BootstrapKit): Promise<void> {
         this.configured = true
         return Promise.resolve()
       }
@@ -143,12 +143,12 @@ describe('service lifecycle', () => {
 describe('contributions in the lifecycle', () => {
   const kWidget = contributionKey<number>('test:widget.size')
 
-  class ContributingService implements Service {
+  class ContributingService implements FeatureLifecycle {
     get name(): string {
       return 'contributor'
     }
 
-    bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+    bootstrap(kit: BootstrapKit): Promise<void> {
       kit.contributions.contribute(kWidget, 7)
       return Promise.resolve()
     }
@@ -156,7 +156,7 @@ describe('contributions in the lifecycle', () => {
 
   it('seals what services contributed, and the application can read it', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .addService(new ContributingService())
+      .addFeature(new ContributingService())
       .build()
 
     await app.ready()
@@ -169,12 +169,12 @@ describe('contributions in the lifecycle', () => {
   it('refuses a read from inside bootstrap, where the answer would be a race', async () => {
     let caught: unknown
 
-    class ReadingService implements Service {
+    class ReadingService implements FeatureLifecycle {
       get name(): string {
         return 'reader'
       }
 
-      bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+      bootstrap(kit: BootstrapKit): Promise<void> {
         try {
           kit.contributions.get(kWidget)
         } catch (error) {
@@ -185,8 +185,8 @@ describe('contributions in the lifecycle', () => {
     }
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .addService(new ContributingService())
-      .addService(new ReadingService())
+      .addFeature(new ContributingService())
+      .addFeature(new ReadingService())
       .build()
 
     await app.ready()

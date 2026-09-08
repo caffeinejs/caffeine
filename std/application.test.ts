@@ -177,7 +177,7 @@ describe('Application lifecycle', () => {
     const probe = defineFeature<{ probe(value: string): void }>({
       name: 'probe',
       install(ctx, configure) {
-        ctx.addService({
+        ctx.addFeature({
           get name() {
             return 'probe'
           },

@@ -1,5 +1,5 @@
 import { ErrConfiguration } from '@caffeinejs/http'
-import { defineKeyedFeature, type KeyedFeature, type TypeLambda } from '@caffeinejs/std'
+import { defineKeyedFeature, kFeatureSetup, type KeyedFeature, type TypeLambda } from '@caffeinejs/std'
 
 import { ViewBuilder } from './builder.js'
 import { ViewOptionsProvider } from './options_provider.js'
@@ -35,7 +35,7 @@ export const ViewExt: ViewFeature = defineKeyedFeature({
     if (provider == null) {
       provider = new ViewOptionsProvider()
       ctx.state.set(PROVIDER, provider)
-      ctx.addService(provider)
+      ctx.addFeature(provider[kFeatureSetup]())
     }
 
     const builder = new ViewBuilder(instance === DEFAULT_ENGINE ? undefined : instance)

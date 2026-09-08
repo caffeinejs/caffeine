@@ -2,10 +2,10 @@ import type { NamedToken } from '@caffeinejs/di'
 import {
   AppConfigBuilder,
   BaseApplicationBuilder,
+  kFeatureSetup,
   type ApplicationBuilderOptions,
   type ApplicationConfigMarker,
   type Reconfigured,
-  type ServiceAPI,
 } from '@caffeinejs/std'
 import type { ConfigHandle, ConfigSchema, InferConfig } from '@caffeinejs/std/config'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
@@ -43,21 +43,21 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.#adapterFactory = adapterFactory
 
     this.#authzBuilder = new AuthorizationBuilder()
-    this.addService(this.#authzBuilder)
+    this.addFeature(this.#authzBuilder[kFeatureSetup]())
 
     this.#guardsBuilder = new GuardsBuilder()
-    this.addService(this.#guardsBuilder)
+    this.addFeature(this.#guardsBuilder[kFeatureSetup]())
 
     // Registered unconditionally: the listen address is read from the configuration tree, so `SERVER__PORT`
     // has to work on an application that never calls `.server()`.
     this.#serverBuilder = new ServerBuilder<unknown>()
-    this.addService(this.#serverBuilder)
+    this.addFeature(this.#serverBuilder[kFeatureSetup]())
   }
 
-  authentication(configure: (auth: ServiceAPI<AuthenticationBuilder<TConfig>>) => void): this {
+  authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
-      this.addService(this.#authBuilder)
+      this.addFeature(this.#authBuilder[kFeatureSetup]())
     }
 
     configure(this.#authBuilder as AuthenticationBuilder<TConfig>)
@@ -65,7 +65,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  authorization(configure: (authz: ServiceAPI<AuthorizationBuilder>) => void): this {
+  authorization(configure: (authz: AuthorizationBuilder) => void): this {
     configure(this.#authzBuilder)
     return this
   }
@@ -82,15 +82,15 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    *   .guards(g => g.use(RolesGuard).use(kNamedAuthGuard))
    * ```
    */
-  guards(configure: (guards: ServiceAPI<GuardsBuilder>) => void): this {
+  guards(configure: (guards: GuardsBuilder) => void): this {
     configure(this.#guardsBuilder)
     return this
   }
 
-  cache(configure: (cache: ServiceAPI<CacheBuilder<TConfig>>) => void): this {
+  cache(configure: (cache: CacheBuilder<TConfig>) => void): this {
     if (this.#cacheBuilder == null) {
       this.#cacheBuilder = new CacheBuilder()
-      this.addService(this.#cacheBuilder)
+      this.addFeature(this.#cacheBuilder[kFeatureSetup]())
     }
 
     configure(this.#cacheBuilder as CacheBuilder<TConfig>)
@@ -132,10 +132,10 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * and the signal handlers are installed either way, because dropping in-flight requests on shutdown is not a
    * behaviour anyone opts into deliberately.
    */
-  health(configure?: (health: ServiceAPI<HealthBuilder<TConfig>>) => void): this {
+  health(configure?: (health: HealthBuilder<TConfig>) => void): this {
     if (this.#healthBuilder == null) {
       this.#healthBuilder = new HealthBuilder<unknown>()
-      this.addService(this.#healthBuilder)
+      this.addFeature(this.#healthBuilder[kFeatureSetup]())
     }
 
     configure?.(this.#healthBuilder as HealthBuilder<TConfig>)
@@ -143,7 +143,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  server(configure: (server: ServiceAPI<ServerBuilder<TConfig>>) => void): this {
+  server(configure: (server: ServerBuilder<TConfig>) => void): this {
     configure(this.#serverBuilder as ServerBuilder<TConfig>)
     return this
   }

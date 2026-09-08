@@ -1,5 +1,11 @@
 import { NotFoundFallback } from '@caffeinejs/http'
-import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, ServiceBootstrapIn } from '@caffeinejs/std'
+import {
+  kFeatureSetup,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
+  type FeatureLifecycle,
+  type FeatureProvider,
+} from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { staticConfigSchema, type StaticConfigSlice } from './config.js'
@@ -13,7 +19,7 @@ import type { StaticMount } from './static.js'
  * Configures static file serving over `@fastify/static`. Bound via
  * `.extend(StaticExt, s => s.serve(dir, { prefix: '/static' }))`.
  *
- * A {@link Service}, like `ViewBuilder`/`ServerBuilder` — its `bootstrap` hands the assembled mounts to the
+ * The fluent builder is pure authoring; its {@link kFeatureSetup} lifecycle hands the assembled mounts to the
  * {@link StaticExtension} it binds. Each `.serve(...)` call adds one mount; multiple mounts serve multiple
  * directories (the {@link StaticExtension} handles `@fastify/static`'s single-decorate constraint).
  *
@@ -23,22 +29,18 @@ import type { StaticMount } from './static.js'
  *
  * `C` is the application config type, recovered from the builder `.extend(StaticExt, …)` was reached through.
  */
-export class StaticBuilder<C = unknown> implements Service {
+export class StaticBuilder<C = unknown> implements FeatureProvider {
   #mounts: StaticMount[] = []
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<StaticConfigSlice>
   #resolved?: ConfigSlice<ResolvedStatic>
 
-  get name(): string {
-    return 'static'
-  }
-
   /**
    * Serves `root` as static files. `options` is the full `@fastify/static` options object minus `root`
    * (`prefix`, `index`, `wildcard`, `maxAge`, ...). Call again to serve additional directories.
    */
-  serve(root: string, options?: Omit<StaticMount, 'root'>): ServiceAPI<this> {
+  serve(root: string, options?: Omit<StaticMount, 'root'>): this {
     this.#mounts.push({ root, ...options } as StaticMount)
     return this
   }
@@ -60,7 +62,7 @@ export class StaticBuilder<C = unknown> implements Service {
    * .extend(StaticExt, s => s.spa('site/dist'))
    * ```
    */
-  spa(root: string, options?: SPAOptions): ServiceAPI<this> {
+  spa(root: string, options?: SPAOptions): this {
     this.#spaRoots.push(root)
 
     // A code-level mistake, caught where it is made: two `.spa()` calls cannot both be right, and the answer
@@ -79,50 +81,56 @@ export class StaticBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<StaticConfigSlice>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<StaticConfigSlice>): this {
     this.#selector = selector
     return this
   }
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
-    const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: staticConfigSchema,
-      values: {
-        mounts: this.#mounts.length > 0 ? this.#mounts.map(dataOf) : undefined,
-        spa: this.#spa === undefined ? undefined : dataOf(this.#spa),
+  [kFeatureSetup](): FeatureLifecycle {
+    return {
+      name: 'static',
+
+      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
+        const slice = defineFeatureConfig<StaticConfigSlice>(kit.config, {
+          selector: this.#selector as ((c: never) => unknown) | undefined,
+          schema: staticConfigSchema,
+          values: {
+            mounts: this.#mounts.length > 0 ? this.#mounts.map(dataOf) : undefined,
+            spa: this.#spa === undefined ? undefined : dataOf(this.#spa),
+          },
+        })
+
+        // A callback cannot go through the tree at all — `Value.Convert` cannot clone a function — so each
+        // mount's callbacks are held here and re-attached by position once the slice publishes. A config
+        // source that replaces `static.mounts` replaces the callbacks with it, which is the array rule being
+        // consistent rather than an oversight.
+        const callbacks = this.#mounts.map(callbacksOf)
+        const spaCallbacks = this.#spa === undefined ? {} : callbacksOf(this.#spa)
+
+        // Reaching `.spa(...)` is the activating act; configuration parameterizes the mount but never
+        // switches it on, so that a config file cannot start serving a shell the application never asked for.
+        const spaEnabled = this.#spa !== undefined
+
+        this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
       },
-    })
 
-    // A callback cannot go through the tree at all — `Value.Convert` cannot clone a function — so each
-    // mount's callbacks are held here and re-attached by position once the slice publishes. A config source
-    // that replaces `static.mounts` replaces the callbacks with it, which is the array rule being consistent
-    // rather than an oversight.
-    const callbacks = this.#mounts.map(callbacksOf)
-    const spaCallbacks = this.#spa === undefined ? {} : callbacksOf(this.#spa)
+      bootstrap: (kit: BootstrapKit): Promise<void> => {
+        const resolved = this.#resolved!
+        const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
 
-    // Reaching `.spa(...)` is the activating act; configuration parameterizes the mount but never switches it
-    // on, so that a config file cannot start serving a shell the application never asked for.
-    const spaEnabled = this.#spa !== undefined
+        // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
+        // and registers it as a Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings
+        // are handed to it directly: the builder is holding them right here, and routing them through a
+        // container key only to read them back at server setup adds a lookup and a key without a decision.
+        kit.container.bind(StaticExtension, t => t.toValue(new StaticExtension(resolved.config.mounts, spa)).extends())
 
-    this.#resolved = slice.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
-  }
+        if (spa !== undefined) {
+          kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
+        }
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    const resolved = this.#resolved!
-    const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
-
-    // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
-    // and registers it as a Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings
-    // are handed to it directly: the builder is holding them right here, and routing them through a container
-    // key only to read them back at server setup adds a lookup and a key without adding a decision.
-    kit.container.bind(StaticExtension, t => t.toValue(new StaticExtension(resolved.config.mounts, spa)).extends())
-
-    if (spa !== undefined) {
-      kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
+        return Promise.resolve()
+      },
     }
-
-    return Promise.resolve()
   }
 }
 

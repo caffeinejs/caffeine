@@ -1,10 +1,11 @@
 import type { Ctor } from '@caffeinejs/di'
 import {
-  type ServiceBeforeBootstrapIn,
-  type Service,
-  type ServiceAPI,
-  AnySchema,
-  ServiceBootstrapIn,
+  kFeatureSetup,
+  type AnySchema,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
+  type FeatureLifecycle,
+  type FeatureProvider,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -50,7 +51,7 @@ export interface OutBindingOptions {
  * `ready()` its `configure()` builds the runtime and binds the engine + `MessageBus` into the container.
  * A second integration is `.extend(messaging('audit'), m => ...)`.
  */
-export class MessagingBuilder<C = unknown> implements Service {
+export class MessagingBuilder<C = unknown> implements FeatureProvider {
   readonly #name: string
   #selector?: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>
   readonly #binders = new Map<string, Binder | BinderFactory>()
@@ -65,42 +66,38 @@ export class MessagingBuilder<C = unknown> implements Service {
     this.#name = name
   }
 
-  get name(): string {
-    return 'messaging'
-  }
-
   /** Handles inbound messages that fail their binding's schema (runs instead of the handler; skips + advances). */
-  onInvalidMessage(handler: InvalidMessageHandler): ServiceAPI<this> {
+  onInvalidMessage(handler: InvalidMessageHandler): this {
     this.#onInvalidMessage = handler
     return this
   }
 
   /** Observation hook fired when the pipeline gives up on a message (logging/metrics); does not decide recovery. */
-  onError(observer: ErrorObserver): ServiceAPI<this> {
+  onError(observer: ErrorObserver): this {
     this.#onError = observer
     return this
   }
 
   /** Terminal recoverer invoked once retries are exhausted; e.g. `bus.send` the failed message to a DLT binding. */
-  recoverer(recoverer: Recoverer): ServiceAPI<this> {
+  recoverer(recoverer: Recoverer): this {
     this.#recoverer = recoverer
     return this
   }
 
   /** Registers a binder instance under `name`; a binding's `via` selects it. Accepts a binder or a factory. */
-  use(name: string, binder: Binder | BinderFactory): ServiceAPI<this> {
+  use(name: string, binder: Binder | BinderFactory): this {
     this.#binders.set(name, binder)
     return this
   }
 
   /** Declares an inbound binding: a logical name `@Consume` attaches to, mapped to a binder destination. */
-  in(binding: string, options: InBindingOptions): ServiceAPI<this> {
+  in(binding: string, options: InBindingOptions): this {
     this.#inbound.set(binding, options)
     return this
   }
 
   /** Declares an outbound binding: a logical name `bus.send` publishes to, mapped to a binder destination. */
-  out(binding: string, options: OutBindingOptions): ServiceAPI<this> {
+  out(binding: string, options: OutBindingOptions): this {
     this.#outbound.set(binding, options)
     return this
   }
@@ -110,65 +107,71 @@ export class MessagingBuilder<C = unknown> implements Service {
    *
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<MessagingConfigSlice>): this {
     this.#selector = selector
     return this
   }
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
-    const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: messagingConfigSchema,
-      values: {
-        in: configurableHalf(this.#inbound),
-        out: configurableHalf(this.#outbound),
+  [kFeatureSetup](): FeatureLifecycle {
+    return {
+      name: 'messaging',
+
+      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
+        const slice = defineFeatureConfig<MessagingConfigSlice>(kit.config, {
+          selector: this.#selector as ((c: never) => unknown) | undefined,
+          schema: messagingConfigSchema,
+          values: {
+            in: configurableHalf(this.#inbound),
+            out: configurableHalf(this.#outbound),
+          },
+        })
+
+        const code = { in: this.#inbound, out: this.#outbound }
+
+        this.#resolved = slice.derive(published => ({
+          // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
+          // created has nothing to attach to and is read by nothing — declaring one is a code act.
+          inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
+          outbound: bindingsOf(code.out, published.out) as Map<string, ProducerBinding>,
+        }))
       },
-    })
 
-    const code = { in: this.#inbound, out: this.#outbound }
+      bootstrap: (kit: BootstrapKit): Promise<void> => {
+        const binders = new Map<string, Binder>()
+        for (const [name, binder] of this.#binders) {
+          binders.set(name, typeof binder === 'function' ? binder(name) : binder)
+        }
 
-    this.#resolved = slice.derive(published => ({
-      // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
-      // created has nothing to attach to and is read by nothing — declaring one is a code act.
-      inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
-      outbound: bindingsOf(code.out, published.out) as Map<string, ProducerBinding>,
-    }))
-  }
+        const resolved = this.#resolved!
+        const rKey = runtimeKey(this.#name)
+        const bKey = busKey(this.#name)
+        const container = kit.container
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    const binders = new Map<string, Binder>()
-    for (const [name, binder] of this.#binders) {
-      binders.set(name, typeof binder === 'function' ? binder(name) : binder)
+        kit.container.bind(rKey, t =>
+          t.toValue<MessagingRuntime>({
+            container,
+            binders,
+            inbound: resolved.config.inbound,
+            outbound: resolved.config.outbound,
+            ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
+            ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
+            ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
+          }),
+        )
+
+        if (this.#name === DEFAULT_BINDER) {
+          kit.container.bind(MessageBus, t => t.toClass(MessageBus, [rKey]).names(bKey))
+        } else {
+          kit.container.bind(bKey, t => t.toClass(MessageBus, [rKey]))
+        }
+
+        kit.container.bind(containerKey(this.#name), t =>
+          t.toClass(MessagingContainer, [rKey, bKey]).labels(Keys.MESSAGING_CONTAINER),
+        )
+
+        return Promise.resolve()
+      },
     }
-
-    const resolved = this.#resolved!
-    const rKey = runtimeKey(this.#name)
-    const bKey = busKey(this.#name)
-    const container = kit.container
-
-    kit.container.bind(rKey, t =>
-      t.toValue<MessagingRuntime>({
-        container,
-        binders,
-        inbound: resolved.config.inbound,
-        outbound: resolved.config.outbound,
-        ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
-        ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
-        ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
-      }),
-    )
-
-    if (this.#name === DEFAULT_BINDER) {
-      kit.container.bind(MessageBus, t => t.toClass(MessageBus, [rKey]).names(bKey))
-    } else {
-      kit.container.bind(bKey, t => t.toClass(MessageBus, [rKey]))
-    }
-
-    kit.container.bind(containerKey(this.#name), t =>
-      t.toClass(MessagingContainer, [rKey, bKey]).labels(Keys.MESSAGING_CONTAINER),
-    )
-
-    return Promise.resolve()
   }
 }
 

@@ -7,13 +7,12 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import type { ServiceAPI } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { Compress, CompressBuilder, compress, CompressExt } from '../index.js'
 
-function compressApp(configure?: (c: ServiceAPI<CompressBuilder>) => void) {
+function compressApp(configure?: (c: CompressBuilder) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CompressExt, configure ?? (() => undefined))
 }
 

@@ -1,11 +1,12 @@
 import {
-  type ServiceBeforeBootstrapIn,
+  kFeatureSetup,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
   type Duration,
+  type FeatureLifecycle,
+  type FeatureProvider,
   type ShutdownSignal,
   type SignalDispatcher,
-  Service,
-  type ServiceAPI,
-  type ServiceBootstrapIn,
 } from '@caffeinejs/std'
 import { defineFeatureConfig, type ConfigLocation, type ConfigHandle, type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -35,7 +36,7 @@ import {
  * builder and is merged in afterwards. Health indicators are not configured here — they are container-managed
  * beans discovered through `HealthIndicator`.
  *
- * A {@link Service}: its `bootstrap` contributes {@link HealthOptions} under {@link kHealthContribution}. The
+ * Its lifecycle contributes {@link HealthOptions} under {@link kHealthContribution}. The
  * contributed object is live, like every other configuration in the framework — the probe budgets and the
  * response-shaping flags are read per request, so a refresh reaches them. The fields consumed once at boot, the
  * probe routes and the installed signals, simply stop mattering afterwards: nothing re-registers a route because
@@ -43,24 +44,20 @@ import {
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
-export class HealthBuilder<C = unknown> implements Service {
+export class HealthBuilder<C = unknown> implements FeatureProvider {
   readonly #config: HealthConfig = {}
   #dispatcher: SignalDispatcher | undefined
   #selector: ((c: ConfigHandle<C>) => ConfigLocation<HealthConfig>) | undefined
-  #options: ConfigSlice<HealthOptions> | undefined
-
-  get name(): string {
-    return 'health'
-  }
+  #resolved: ConfigSlice<HealthOptions> | undefined
 
   /** Forces the probes on or off, overriding the Kubernetes auto-detection. */
-  enabled(enabled: boolean = true): ServiceAPI<this> {
+  enabled(enabled: boolean = true): this {
     this.#config.enabled = enabled
     return this
   }
 
   /** Overrides one or more probe paths. Defaults: `/livez`, `/readyz`, `/startupz`. */
-  paths(paths: Partial<HealthPaths>): ServiceAPI<this> {
+  paths(paths: Partial<HealthPaths>): this {
     this.#config.paths = { ...this.#config.paths, ...paths }
     return this
   }
@@ -69,13 +66,13 @@ export class HealthBuilder<C = unknown> implements Service {
    * How long to keep serving after readiness starts refusing, before the server closes. Covers the orchestrator's
    * routing-table propagation lag; traffic still arrives during this window and is answered normally.
    */
-  drainDelay(delay: Duration): ServiceAPI<this> {
+  drainDelay(delay: Duration): this {
     this.#config.drainDelay = delay
     return this
   }
 
   /** The budget for in-flight requests to finish once the server is closing. */
-  shutdownTimeout(timeout: Duration): ServiceAPI<this> {
+  shutdownTimeout(timeout: Duration): this {
     this.#config.shutdownTimeout = timeout
     return this
   }
@@ -84,43 +81,43 @@ export class HealthBuilder<C = unknown> implements Service {
    * The pod's `terminationGracePeriodSeconds`. It cannot be read from inside the pod, so it must be mirrored here
    * (or injected through the downward API) for the boot-time budget check to mean anything.
    */
-  terminationGracePeriod(period: Duration): ServiceAPI<this> {
+  terminationGracePeriod(period: Duration): this {
     this.#config.terminationGracePeriod = period
     return this
   }
 
   /** Per-indicator budget. An indicator exceeding it is aborted and reported down. */
-  indicatorTimeout(timeout: Duration): ServiceAPI<this> {
+  indicatorTimeout(timeout: Duration): this {
     this.#config.indicatorTimeout = timeout
     return this
   }
 
   /** Whole-probe budget, regardless of indicator count. */
-  probeDeadline(deadline: Duration): ServiceAPI<this> {
+  probeDeadline(deadline: Duration): this {
     this.#config.probeDeadline = deadline
     return this
   }
 
   /** How long an evaluation is reused. Bounds the load the probes place on the dependencies they check. */
-  cacheTTL(ttl: Duration): ServiceAPI<this> {
+  cacheTTL(ttl: Duration): this {
     this.#config.cacheTTL = ttl
     return this
   }
 
   /** Allows `?verbose` to expand the response body. Off by default: the body names your dependencies. */
-  verbose(verbose: boolean = true): ServiceAPI<this> {
+  verbose(verbose: boolean = true): this {
     this.#config.verbose = verbose
     return this
   }
 
   /** Allows `?exclude=<name>` to skip an indicator. Off by default: it lets a caller make readiness lie. */
-  exclude(exclude: boolean = true): ServiceAPI<this> {
+  exclude(exclude: boolean = true): this {
     this.#config.exclude = exclude
     return this
   }
 
   /** The signals that trigger a graceful shutdown, or `false` to install no handlers. */
-  signals(signals: readonly ShutdownSignal[] | false): ServiceAPI<this> {
+  signals(signals: readonly ShutdownSignal[] | false): this {
     this.#config.signals = signals === false ? false : [...signals]
     return this
   }
@@ -132,7 +129,7 @@ export class HealthBuilder<C = unknown> implements Service {
    *
    * Not configuration — a function cannot live in a configuration tree — so this one is code-only.
    */
-  dispatcher(dispatcher: SignalDispatcher): ServiceAPI<this> {
+  dispatcher(dispatcher: SignalDispatcher): this {
     this.#dispatcher = dispatcher
     return this
   }
@@ -143,32 +140,39 @@ export class HealthBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
    * Both the reads and the defaults written by the builder methods follow it.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<HealthConfig>): ServiceAPI<this> {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<HealthConfig>): this {
     this.#selector = selector
     return this
   }
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
-    const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: healthConfigSchema,
-      values: { ...this.#config },
-    })
-    const dispatcher = this.#dispatcher
+  [kFeatureSetup](): FeatureLifecycle {
+    return {
+      name: 'health',
 
-    // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
-    this.#options = slice.derive(config =>
-      finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })),
-    )
-  }
+      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
+        const slice: ConfigSlice<HealthConfig> = defineFeatureConfig(kit.config, {
+          selector: this.#selector as ((c: never) => unknown) | undefined,
+          schema: healthConfigSchema,
+          values: { ...this.#config },
+        })
+        const dispatcher = this.#dispatcher
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags —
-    // which are read per request — follow a refresh. The fields consumed once at boot, the probe routes and
-    // the installed signals, simply stop mattering afterwards; nothing re-registers a route because a value
-    // changed underneath it.
-    kit.contributions.contribute(kHealthContribution, this.#options!.config)
+        // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer
+        // decides.
+        this.#resolved = slice.derive(config =>
+          finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault: true })),
+        )
+      },
 
-    return Promise.resolve()
+      bootstrap: (kit: BootstrapKit): Promise<void> => {
+        // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags —
+        // which are read per request — follow a refresh. The fields consumed once at boot, the probe routes
+        // and the installed signals, simply stop mattering afterwards; nothing re-registers a route because a
+        // value changed underneath it.
+        kit.contributions.contribute(kHealthContribution, this.#resolved!.config)
+
+        return Promise.resolve()
+      },
+    }
   }
 }

@@ -1,12 +1,12 @@
-import { defineFeature, type Feature, type ServiceAPI, type TypeLambda } from '@caffeinejs/std'
+import { defineFeature, kFeatureSetup, type Feature, type TypeLambda } from '@caffeinejs/std'
 
 import { HTMLBuilder } from './builder.js'
 
 interface HTMLBuilderF extends TypeLambda {
-  readonly Out: ServiceAPI<HTMLBuilder<this['In']>>
+  readonly Out: HTMLBuilder<this['In']>
 }
 
-export interface HTMLFeature extends Feature<ServiceAPI<HTMLBuilder>> {
+export interface HTMLFeature extends Feature<HTMLBuilder> {
   readonly _F: HTMLBuilderF
 }
 
@@ -21,6 +21,6 @@ export const HTMLExt: HTMLFeature = defineFeature({
   install(ctx, configure) {
     const builder = new HTMLBuilder()
     configure?.(builder)
-    ctx.addService(builder)
+    ctx.addFeature(builder[kFeatureSetup]())
   },
 }) as HTMLFeature

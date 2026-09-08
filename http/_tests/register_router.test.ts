@@ -1,4 +1,4 @@
-import { type Service, type ServiceBootstrapIn } from '@caffeinejs/std'
+import { type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -28,7 +28,7 @@ function signToken(payload: Record<string, unknown>): Promise<string> {
  * Stands in for what a package outside http does: bind its own controller and register its routes during
  * `configure()`, before `buildRouting` runs.
  */
-class ProgrammaticService implements Service {
+class ProgrammaticService implements FeatureLifecycle {
   readonly #authz: RouteAuthzOptions | undefined
   // A fresh class per service, not a module-level one. `registerRouteGroup` is get-or-create and `routes()` appends,
   // so a shared constructor identity would accumulate a duplicate route for every application built in the
@@ -47,7 +47,7 @@ class ProgrammaticService implements Service {
     return 'programmatic'
   }
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+  bootstrap(kit: BootstrapKit): Promise<void> {
     const endpoints = this.#endpoints
     kit.container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER))
 
@@ -80,7 +80,7 @@ describe('registerRouteGroup', () => {
 
   it('routes a controller bound during configure()', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.addService(new ProgrammaticService())
+    builder.addFeature(new ProgrammaticService())
     app = builder.build()
     await app.ready()
 
@@ -93,7 +93,7 @@ describe('registerRouteGroup', () => {
   it('applies authentication and authorization to the registered route', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    builder.addService(new ProgrammaticService({ schemes: ['Bearer'] }))
+    builder.addFeature(new ProgrammaticService({ schemes: ['Bearer'] }))
     app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 
@@ -111,7 +111,7 @@ describe('registerRouteGroup', () => {
   it('enforces role requirements on the registered route', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    builder.addService(new ProgrammaticService({ roles: ['ops'] }))
+    builder.addFeature(new ProgrammaticService({ roles: ['ops'] }))
     app = builder.build().useAuthenticationAndAuthorization()
     await app.ready()
 

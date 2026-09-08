@@ -2,18 +2,18 @@ import type { Container } from '@caffeinejs/di'
 
 import type { ApplicationEvent } from './decorators/lifecycle_registry.js'
 import { ErrCaffeine } from './error.js'
-import type { Service } from './service.js'
+import type { FeatureLifecycle } from './lifecycle.js'
 
 /**
- * Runtime seam handed to a feature at install time. A feature registers its configurer via
- * {@link addService} (it rides the same `bootstrap()` path as the built-in services), may read the DI
+ * Runtime seam handed to a feature at install time. A feature registers its {@link FeatureLifecycle} via
+ * {@link addFeature} (it rides the same bootstrap path as the built-in features), may read the DI
  * {@link container}, and may register programmatic lifecycle listeners via {@link on}.
  *
  * {@link state} is per application builder. A feature const must not keep install flags on itself —
  * two `createApplication()` calls in one process would share them.
  */
 export interface PluginContext {
-  addService(service: Service): void
+  addFeature(feature: FeatureLifecycle): void
   readonly container: Container
   on(event: ApplicationEvent, listener: (app: { readonly container: Container }) => void | Promise<void>): void
   readonly state: Map<string, unknown>

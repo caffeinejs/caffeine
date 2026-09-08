@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import { BaseApplication, type ApplicationInit, type Service, type ShutdownOptions } from '@caffeinejs/std'
+import { BaseApplication, type ApplicationInit, type FeatureLifecycle, type ShutdownOptions } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
@@ -8,7 +8,6 @@ import { ErrorHandlerProvider, ErrorHandlingServiceConfigurer } from './error/er
 import { solutions } from './error/util.js'
 import {
   ErrShutdownTimeout,
-  HealthBuilder,
   HealthRegistry,
   HealthServiceConfigurer,
   ProbeEndpoint,
@@ -153,12 +152,17 @@ export abstract class AbstractWebApplication<
     return this.use(new Authentication(), 'onRequest')
   }
 
-  protected override configurers(): Service[] {
+  protected override configurers(): FeatureLifecycle[] {
+    // `.health(...)` registers a feature named `health`; its absence is what makes the fallback configurer
+    // derive its own detached slice. Matched by name because the builder no longer appears in the list — it
+    // hands over a `FeatureLifecycle`, not itself.
+    const healthConfigured = this.services.some(feature => feature.name === 'health')
+
     return [
       ...this.services,
       new ErrorHandlingServiceConfigurer(),
       new CacheServiceConfigurer(),
-      new HealthServiceConfigurer(this.services.some(service => service instanceof HealthBuilder)),
+      new HealthServiceConfigurer(healthConfigured),
     ]
   }
 

@@ -1,5 +1,11 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
-import { type ServiceBeforeBootstrapIn, type Service, type ServiceAPI, type ServiceBootstrapIn } from '@caffeinejs/std'
+import {
+  kFeatureSetup,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
+  type FeatureLifecycle,
+  type FeatureProvider,
+} from '@caffeinejs/std'
 import {
   defineFeatureConfig,
   type ConfigLocation,
@@ -76,7 +82,7 @@ interface SchemeRegistration {
   preset?: GithubPresetOptions
 }
 
-export class AuthenticationBuilder<C = unknown> implements Service {
+export class AuthenticationBuilder<C = unknown> implements FeatureProvider {
   readonly #schemes: Map<string, InjectionToken<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
   readonly #oidcHandlers: OAuthCallbackHandler[] = []
@@ -92,7 +98,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
   #refresh: RefreshTokenOptions | undefined
-  #selector?: (c: never) => unknown
+  #selector?: (c: ConfigHandle<C>) => ConfigLocation<AuthConfigSlice>
   #authSlice: ConfigSlice<AuthConfigSlice> | undefined
   #credentialsSlice: ConfigSlice<CredentialsServiceOptions> | undefined
   #refreshSlice: ConfigSlice<Record<string, unknown>> | undefined
@@ -101,16 +107,9 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     this.#options = options
   }
 
-  get name(): string {
-    return 'auth'
-  }
-
-  addStrategy(name: string, handler: AuthenticationHandler): ServiceAPI<this>
-  addStrategy(name: string, key: InjectionToken<AuthenticationHandler>): ServiceAPI<this>
-  addStrategy(
-    name: string,
-    keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler,
-  ): ServiceAPI<this> {
+  addStrategy(name: string, handler: AuthenticationHandler): this
+  addStrategy(name: string, key: InjectionToken<AuthenticationHandler>): this
+  addStrategy(name: string, keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler): this {
     this.#schemes.set(name, keyOrHandler)
     return this
   }
@@ -121,8 +120,8 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * The selector names a location, not a value: it is evaluated once, while declaring, to record the path.
    * Both `auth.*` and every `auth.schemes.<name>.*` beneath it move together.
    */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<AuthConfigSlice>): ServiceAPI<this> {
-    this.#selector = selector as (c: never) => unknown
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<AuthConfigSlice>): this {
+    this.#selector = selector
     return this
   }
 
@@ -147,12 +146,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     this.#descriptors.set(name, descriptor)
   }
 
-  addJWTBearer(opts: (opts: JWTAuthenticationOptionsBuilder) => void): ServiceAPI<this>
-  addJWTBearer(name: string, opts: (opts: JWTAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addJWTBearer(opts: (opts: JWTAuthenticationOptionsBuilder) => void): this
+  addJWTBearer(name: string, opts: (opts: JWTAuthenticationOptionsBuilder) => void): this
   addJWTBearer(
     optsOrName: ((opts: JWTAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: JWTAuthenticationOptionsBuilder) => void,
-  ): ServiceAPI<this> {
+  ): this {
     const name = typeof optsOrName === 'string' ? optsOrName : 'Bearer'
     const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
@@ -162,12 +161,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this.#register(name, 'jwt', optsFn as (builder: never) => void)
   }
 
-  addBasic(opts: (opts: BasicAuthenticationOptionsBuilder) => void): ServiceAPI<this>
-  addBasic(name: string, opts: (opts: BasicAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addBasic(opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
+  addBasic(name: string, opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
   addBasic(
     optsOrName: ((opts: BasicAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: BasicAuthenticationOptionsBuilder) => void,
-  ): ServiceAPI<this> {
+  ): this {
     const name = typeof optsOrName === 'string' ? optsOrName : 'Basic'
     const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
@@ -177,12 +176,12 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this.#register(name, 'basic', optsFn as (builder: never) => void)
   }
 
-  addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): ServiceAPI<this>
-  addCookie(name: string, opts: (opts: CookieAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
+  addCookie(name: string, opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
   addCookie(
     optsOrName: ((opts: CookieAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: CookieAuthenticationOptionsBuilder) => void,
-  ): ServiceAPI<this> {
+  ): this {
     const name = typeof optsOrName === 'string' ? optsOrName : 'Cookie'
     const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
@@ -197,18 +196,18 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * `PasswordHasher` (`ScryptPasswordHasher`, overridable). The user must bind a `UserProvider`
    * implementation to the container. Not a scheme — pair it with `addCookie` for session login.
    */
-  addCredentials(options: CredentialsServiceOptions = {}): ServiceAPI<this> {
+  addCredentials(options: CredentialsServiceOptions = {}): this {
     this.#credentials = options
     return this
   }
 
-  addOpaqueToken(): ServiceAPI<this>
-  addOpaqueToken(opts: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): ServiceAPI<this>
-  addOpaqueToken(name: string, opts?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): ServiceAPI<this>
+  addOpaqueToken(): this
+  addOpaqueToken(opts: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): this
+  addOpaqueToken(name: string, opts?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void): this
   addOpaqueToken(
     optsOrName?: ((opts: OpaqueTokenAuthenticationOptionsBuilder) => void) | string,
     options?: (opts: OpaqueTokenAuthenticationOptionsBuilder) => void,
-  ): ServiceAPI<this> {
+  ): this {
     const name = typeof optsOrName === 'string' ? optsOrName : 'OpaqueToken'
     const optsFn = typeof optsOrName === 'string' ? options : optsOrName
 
@@ -217,11 +216,11 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     return this.#register(name, 'opaque', (optsFn ?? noOptions) as (builder: never) => void)
   }
 
-  addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): ServiceAPI<this> {
+  addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
     return this.#register(name, 'oidc', configure as (builder: never) => void)
   }
 
-  addOIDCGoogle(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): ServiceAPI<this> {
+  addOIDCGoogle(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
     return this.addOIDC(name, opts => {
       opts.discoveryURL(GOOGLE_ISSUER).issuer(GOOGLE_ISSUER)
       configure(opts)
@@ -234,7 +233,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * Prefer `addOIDC` wherever a provider supports it: a signed id_token is a stronger identity
    * assertion than a JSON body fetched with a bearer token.
    */
-  addOAuth2(name: string, configure: (opts: OAuth2AuthenticationOptionsBuilder) => void): ServiceAPI<this> {
+  addOAuth2(name: string, configure: (opts: OAuth2AuthenticationOptionsBuilder) => void): this {
     return this.#register(name, 'oauth', configure as (builder: never) => void)
   }
 
@@ -242,31 +241,31 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     name: string,
     configure: (opts: OAuth2AuthenticationOptionsBuilder) => void,
     preset: GithubPresetOptions = {},
-  ): ServiceAPI<this> {
+  ): this {
     return this.#register(name, 'github', configure as (builder: never) => void, preset)
   }
 
-  forward(name: string, selector: (ctx: Context) => string | Promise<string>): ServiceAPI<this> {
+  forward(name: string, selector: (ctx: Context) => string | Promise<string>): this {
     const handler = new ForwardAuthenticationHandler(selector)
     return this.addStrategy(name, handler)
   }
 
-  default(name: string): ServiceAPI<this> {
+  default(name: string): this {
     this.#options.defaultAuthenticateScheme = name
     return this
   }
 
-  defaultChallenge(name: string): ServiceAPI<this> {
+  defaultChallenge(name: string): this {
     this.#options.defaultChallengeScheme = name
     return this
   }
 
-  defaultForbid(name: string): ServiceAPI<this> {
+  defaultForbid(name: string): this {
     this.#options.defaultForbidScheme = name
     return this
   }
 
-  mapUser(mapper: PrincipalMapper | InjectionToken<PrincipalMapper>): ServiceAPI<this> {
+  mapUser(mapper: PrincipalMapper | InjectionToken<PrincipalMapper>): this {
     this.#mapper = mapper
     return this
   }
@@ -276,14 +275,22 @@ export class AuthenticationBuilder<C = unknown> implements Service {
    * revoke) that signs access tokens with the default JWT scheme's shared service and persists refresh
    * tokens in the container-bound {@link RefreshTokenStore}. Requires a JWT bearer scheme.
    */
-  addRefreshTokens(configure: (options: RefreshTokenOptionsBuilder) => void): ServiceAPI<this> {
+  addRefreshTokens(configure: (options: RefreshTokenOptionsBuilder) => void): this {
     this.#refreshConfigure = configure
     return this
   }
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
+  [kFeatureSetup](): FeatureLifecycle {
+    return {
+      name: 'auth',
+      beforeBootstrap: (kit: BeforeBootstrapKit): void => this.#doBeforeBootstrap(kit),
+      bootstrap: (kit: BootstrapKit): Promise<void> => this.#doBootstrap(kit),
+    }
+  }
+
+  #doBeforeBootstrap(kit: BeforeBootstrapKit): void {
     this.#authSlice = defineFeatureConfig<AuthConfigSlice>(kit.config, {
-      selector: this.#selector,
+      selector: this.#selector as ((c: never) => unknown) | undefined,
       schema: authConfigSchema,
       values: {
         defaultAuthenticateScheme: this.#options.defaultAuthenticateScheme,
@@ -456,7 +463,7 @@ export class AuthenticationBuilder<C = unknown> implements Service {
     }
   }
 
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
+  #doBootstrap(kit: BootstrapKit): Promise<void> {
     this.#buildSchemes()
 
     const configuredDefaults = this.#authSlice?.config ?? {}

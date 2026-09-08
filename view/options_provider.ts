@@ -1,5 +1,11 @@
 import { ErrConfiguration } from '@caffeinejs/http'
-import { type ServiceBeforeBootstrapIn, type Service, ServiceBootstrapIn } from '@caffeinejs/std'
+import {
+  kFeatureSetup,
+  type BeforeBootstrapKit,
+  type BootstrapKit,
+  type FeatureLifecycle,
+  type FeatureProvider,
+} from '@caffeinejs/std'
 
 import { ViewBuilder } from './builder.js'
 import { ViewExtension } from './extension.js'
@@ -11,7 +17,7 @@ import type { ViewOptions } from './view.js'
  * adds one {@link ViewBuilder}; the {@link ViewExtension} it hands itself to registers `@fastify/view`
  * once per {@link all} entry.
  */
-export class ViewOptionsProvider implements Service {
+export class ViewOptionsProvider implements FeatureProvider {
   // Keyed by engine name; the `undefined` key is the default engine.
   readonly #builders = new Map<string | undefined, ViewBuilder>()
 
@@ -52,25 +58,27 @@ export class ViewOptionsProvider implements Service {
     return out
   }
 
-  get name(): string {
-    return 'view'
-  }
+  [kFeatureSetup](): FeatureLifecycle {
+    return {
+      name: 'view',
 
-  beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
-    // Registers each engine's slice, and validates it while doing so — `register` throws when no engine was
-    // configured, which has to surface here rather than from `build()`: by the time anything builds, the
-    // adapter is already wiring routes.
-    for (const builder of this.#builders.values()) {
-      builder.register(kit.config)
+      beforeBootstrap: (kit: BeforeBootstrapKit): void => {
+        // Registers each engine's slice, and validates it while doing so — `register` throws when no engine
+        // was configured, which has to surface here rather than from `build()`: by the time anything builds,
+        // the adapter is already wiring routes.
+        for (const builder of this.#builders.values()) {
+          builder.register(kit.config)
+        }
+      },
+
+      bootstrap: (kit: BootstrapKit): Promise<void> => {
+        // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
+        // and registers it as a Fastify plugin — http no longer hardcodes it. The provider goes in directly
+        // rather than through a container key it would only be read back out of at server setup.
+        kit.container.bind(ViewExtension, t => t.toValue(new ViewExtension(this)).extends())
+
+        return Promise.resolve()
+      },
     }
-  }
-
-  bootstrap(kit: ServiceBootstrapIn): Promise<void> {
-    // Self-register the extension so the adapter discovers it via getManyOptional(ServerExtension)
-    // and registers it as a Fastify plugin — http no longer hardcodes it. The provider goes in directly
-    // rather than through a container key it would only be read back out of at server setup.
-    kit.container.bind(ViewExtension, t => t.toValue(new ViewExtension(this)).extends())
-
-    return Promise.resolve()
   }
 }

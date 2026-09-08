@@ -1,8 +1,8 @@
 import {
   defineKeyedFeature,
+  kFeatureSetup,
   type KeyedFeature,
   type PluginContext,
-  type ServiceAPI,
   type TypeLambda,
 } from '@caffeinejs/std'
 
@@ -19,13 +19,13 @@ export interface KafkaPluginOptions {
 }
 
 /** The builder callback that configures one kafka instance, over an application config type `C`. */
-export type KafkaConfigure<C = unknown> = (k: ServiceAPI<KafkaBuilder<C>>) => void
+export type KafkaConfigure<C = unknown> = (k: KafkaBuilder<C>) => void
 
 interface KafkaBuilderF extends TypeLambda {
-  readonly Out: ServiceAPI<KafkaBuilder<this['In']>>
+  readonly Out: KafkaBuilder<this['In']>
 }
 
-export interface KafkaFeature extends KeyedFeature<ServiceAPI<KafkaBuilder>, KafkaBuilderF> {
+export interface KafkaFeature extends KeyedFeature<KafkaBuilder, KafkaBuilderF> {
   with(options: KafkaPluginOptions): KafkaFeature
   readonly _F: KafkaBuilderF
 }
@@ -66,13 +66,13 @@ function registerLifecycle(ctx: PluginContext): void {
 
 function createKafka(options: KafkaPluginOptions = {}): KafkaFeature {
   const clients = options.clients ?? defaultKafkaClients
-  const feature = defineKeyedFeature<ServiceAPI<KafkaBuilder>>({
+  const feature = defineKeyedFeature<KafkaBuilder>({
     name: 'kafka',
     defaultInstance: DEFAULT_INSTANCE,
     install(ctx, instance, configure) {
       const builder = new KafkaBuilder(clients, instance)
       configure?.(builder)
-      ctx.addService(builder)
+      ctx.addFeature(builder[kFeatureSetup]())
       registerLifecycle(ctx)
     },
   })

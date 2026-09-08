@@ -7,8 +7,8 @@ import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
+import type { BootstrapKit, FeatureLifecycle } from './lifecycle.js'
 import { $t } from './schema/t.js'
-import { type Service, ServiceBootstrapIn } from './service.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
 export interface HookBinding {
@@ -19,7 +19,7 @@ export interface HookBinding {
 /** Construction input for a {@link BaseApplication}, produced by an {@link BaseApplicationBuilder}. */
 export interface ApplicationInit {
   container: Container
-  services: Service[]
+  services: FeatureLifecycle[]
   // The hook-bearing bindings collected via `onBindingRegistered`, or `'scan'` to discover them by a
   // one-time singleton scan (used when the container was supplied pre-wired).
   hookBindings: HookBinding[] | 'scan'
@@ -62,7 +62,7 @@ export const caffeineConfigSchema = $t.Object({
  */
 export abstract class BaseApplication {
   readonly #container: Container
-  readonly #services: Service[]
+  readonly #services: FeatureLifecycle[]
   readonly #hooks: ApplicationHooks<BaseApplication>
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #availability = new ApplicationAvailability()
@@ -299,13 +299,13 @@ export abstract class BaseApplication {
     return this.#ready
   }
 
-  /** The services registered on the builder (before any framework-prepended configurers). */
-  protected get services(): readonly Service[] {
+  /** The features registered on the builder (before any framework-prepended ones). */
+  protected get services(): readonly FeatureLifecycle[] {
     return this.#services
   }
 
-  /** The kit passed to each {@link Service}. Subclasses may widen it (e.g. add platform handles). */
-  protected serviceKit(): ServiceBootstrapIn {
+  /** The kit passed to each {@link FeatureLifecycle}. Subclasses may widen it (e.g. add platform handles). */
+  protected serviceKit(): BootstrapKit {
     return {
       container: this.#container,
       availability: this.#availability,
@@ -314,8 +314,8 @@ export abstract class BaseApplication {
     }
   }
 
-  /** The services configured before `container.init()`. Subclasses may prepend framework configurers. */
-  protected configurers(): Service[] {
+  /** The features bootstrapped before `container.init()`. Subclasses may prepend framework ones. */
+  protected configurers(): FeatureLifecycle[] {
     return [...this.#services]
   }
 

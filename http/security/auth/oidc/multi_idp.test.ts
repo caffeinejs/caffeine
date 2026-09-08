@@ -1,4 +1,4 @@
-import { Contributions, type ServiceBootstrapIn } from '@caffeinejs/std'
+import { Contributions, kFeatureSetup, type BootstrapKit } from '@caffeinejs/std'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
@@ -44,7 +44,7 @@ function makeCtx(cookies: Record<string, string> = {}) {
 }
 
 /** Minimal service kit double — bootstrap only touches the container and the contributions. */
-function makeKit(): { kit: ServiceBootstrapIn; contributions: Contributions } {
+function makeKit(): { kit: BootstrapKit; contributions: Contributions } {
   const contributions = new Contributions()
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
@@ -55,7 +55,7 @@ function makeKit(): { kit: ServiceBootstrapIn; contributions: Contributions } {
       wrap: (v: unknown) => ({ get: () => v }),
     },
     contributions,
-  } as unknown as ServiceBootstrapIn
+  } as unknown as BootstrapKit
 
   return { kit, contributions }
 }
@@ -63,14 +63,14 @@ function makeKit(): { kit: ServiceBootstrapIn; contributions: Contributions } {
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  await builder.bootstrap(makeKit().kit)
+  await builder[kFeatureSetup]().bootstrap(makeKit().kit)
 }
 
 async function configureAndReadOIDCMeta(build: (b: AuthenticationBuilder) => void): Promise<OIDCMeta> {
   const builder = new AuthenticationBuilder()
   build(builder)
   const { kit, contributions } = makeKit()
-  await builder.bootstrap(kit)
+  await builder[kFeatureSetup]().bootstrap(kit)
   contributions.seal()
   return contributions.get(kOIDCContribution)
 }
@@ -367,7 +367,7 @@ describe('Forward wiring through configure', () => {
     builder.addStrategy('Target', target as never)
     builder.addStrategy('auth', forward)
     builder.default('auth')
-    await builder.bootstrap(makeKit().kit)
+    await builder[kFeatureSetup]().bootstrap(makeKit().kit)
 
     // Before the fix this threw reading `defaultAuthenticateScheme` of undefined.
     await expect(forward.authenticate(makeCtx())).resolves.toMatchObject({ succeeded: true })

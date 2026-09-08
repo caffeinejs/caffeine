@@ -1,5 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { type InferSchema, type Service, type ServiceBeforeBootstrapIn, $t } from '@caffeinejs/std'
+import { type InferSchema, type BeforeBootstrapKit, type FeatureLifecycle, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   InlineConfigProvider,
@@ -194,14 +194,14 @@ describe('ctx.config(featureKey)', () => {
   const kWidget = featureConfigKey<WidgetConfig>('widget')
 
   /** A feature registering its slice under a key, the way a first-party package's builder does. */
-  class WidgetService implements Service {
+  class WidgetService implements FeatureLifecycle {
     constructor(private readonly at?: (c: never) => unknown) {}
 
     get name(): string {
       return 'widget'
     }
 
-    beforeBootstrap(kit: ServiceBeforeBootstrapIn): void {
+    beforeBootstrap(kit: BeforeBootstrapKit): void {
       defineFeatureConfig<WidgetConfig>(kit.config, {
         selector: this.at ?? ((c: never) => (c as { widget: unknown }).widget),
         key: kWidget,
@@ -220,7 +220,7 @@ describe('ctx.config(featureKey)', () => {
     const routes = new Router('/widget').get('/', ctx => ({ size: ctx.config(kWidget)?.size }))
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
-    builder.addService(new WidgetService())
+    builder.addFeature(new WidgetService())
     const app = builder.build().mount(routes)
 
     await app.ready()
@@ -234,7 +234,7 @@ describe('ctx.config(featureKey)', () => {
     const routes = new Router('/widget').get('/', ctx => ({ size: ctx.config(kWidget)?.size }))
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
-    builder.addService(new WidgetService(c => (c as { app: { widget: unknown } }).app.widget))
+    builder.addFeature(new WidgetService(c => (c as { app: { widget: unknown } }).app.widget))
     const app = builder.build().mount(routes)
 
     await app.ready()
