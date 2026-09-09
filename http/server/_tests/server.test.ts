@@ -57,6 +57,28 @@ describe('server builder + run()', () => {
     expect(address.port).toBeGreaterThan(0)
   })
 
+  it('run() resolves to the bound address, already dial-able on a wildcard bind', async () => {
+    @Controller('/srv-info')
+    class InfoController {
+      @Get('/ping')
+      ping() {
+        return { ok: true }
+      }
+    }
+
+    void [InfoController]
+
+    // Default build: wildcard host, port 0. The value run() hands back is the one a caller can log or open
+    // straight away — no second call, no rebuilding an origin from a wildcard AddressInfo.
+    app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+
+    const info = await app.run()
+
+    expect(info.address).toEqual(app.address)
+    expect(info.address?.port).toBeGreaterThan(0)
+    expect(info.address?.origin).toBe(`http://127.0.0.1:${info.address?.port}`)
+  })
+
   it('run() auto-readies when ready() was not called explicitly', async () => {
     @Controller('/auto')
     class AutoController {

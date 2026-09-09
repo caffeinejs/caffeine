@@ -16,6 +16,18 @@ export interface ApplicationInit {
   config?: ConfigDefinition
 }
 
+/**
+ * Post-run information {@link BaseApplication.run} resolves to. Application kinds widen it — the HTTP
+ * application adds where the server bound — so a caller can `run().then(info => …)` without holding the
+ * application reference.
+ */
+export interface RunInfo {
+  /** The resolved application name from `caffeine.name`. */
+  readonly name: string
+  /** The active configuration profiles. */
+  readonly profiles: readonly string[]
+}
+
 /** Where the framework's own block lives in the configuration tree. */
 export const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
 
@@ -175,8 +187,8 @@ export abstract class BaseApplication {
     this.#ready = true
   }
 
-  /** Readies the application if needed, then starts it. */
-  async run(): Promise<void> {
+  /** Readies the application if needed, starts it, and resolves to its {@link RunInfo}. */
+  async run(): Promise<RunInfo> {
     if (!this.#ready) {
       await this.ready()
     }
@@ -189,6 +201,8 @@ export abstract class BaseApplication {
     await this.start()
 
     this.#availability.markStarted().acceptTraffic()
+
+    return this.runInfo()
   }
 
   /**
@@ -259,6 +273,11 @@ export abstract class BaseApplication {
   /** Ran once availability has started refusing, before the drain delay. Subclasses invalidate caches here. */
   protected beforeDrain(): void | Promise<void> {
     // Nothing to invalidate in a bare application.
+  }
+
+  /** Assembles the {@link RunInfo} that {@link run} resolves to. Subclasses override to widen it. */
+  protected runInfo(): RunInfo {
+    return { name: this.name, profiles: this.profiles }
   }
 
   /** Whether `ready()` has completed. */

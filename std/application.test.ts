@@ -179,6 +179,21 @@ describe('application name and profiles', () => {
     expect(container.has(EuOnly)).toBe(true)
   })
 
+  it('run() resolves to the application name and active profiles', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .config(caffeineSchema, kConfig, c =>
+        c.source(new InlineConfigProvider({ caffeine: { name: 'petstore', profiles: ['eu'] } })),
+      )
+      .build()
+
+    // The point: a caller reads post-start identity straight off run(), without keeping the app handle to
+    // poll app.name / app.profiles.
+    const info = await app.run()
+    await app.close()
+
+    expect(info).toEqual({ name: 'petstore', profiles: ['eu'] })
+  })
+
   it('deduplicates caffeine.profiles before applying them', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
       .config(caffeineSchema, kConfig, c =>

@@ -1,5 +1,11 @@
 import type { Container } from '@caffeinejs/di'
-import { BaseApplication, type ApplicationInit, type Extensions, type FeatureLifecycle } from '@caffeinejs/std'
+import {
+  BaseApplication,
+  type ApplicationInit,
+  type Extensions,
+  type FeatureLifecycle,
+  type RunInfo,
+} from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
@@ -22,6 +28,16 @@ export interface AdapterIn<R> {
   middlewares: MiddlewarePipeline
   /** What the features registered, in the order they were installed. */
   extensions: Extensions
+}
+
+/** {@link RunInfo} widened with where the HTTP server bound. */
+export interface WebRunInfo extends RunInfo {
+  /**
+   * Where the server is listening, from {@link AbstractWebApplication.address}. `undefined` only for a bind
+   * with no host and port to report: a unix socket, a named pipe, or an adapter that opens no socket. A TCP
+   * bind is set by the time {@link AbstractWebApplication.run} resolves.
+   */
+  readonly address: ServerAddress | undefined
 }
 
 export interface Adapter<I, R> {
@@ -206,6 +222,15 @@ export abstract class AbstractWebApplication<
 
   protected override start(): Promise<void> {
     return this.#adapter.run()
+  }
+
+  protected override runInfo(): WebRunInfo {
+    return { ...super.runInfo(), address: this.address }
+  }
+
+  override run(): Promise<WebRunInfo> {
+    // runInfo() is overridden, so what base run() resolves to is already a WebRunInfo.
+    return super.run() as Promise<WebRunInfo>
   }
 
   /** Drops cached probe evaluations so the first poll after the flip reflects the drain, not the last good run. */

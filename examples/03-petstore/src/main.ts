@@ -10,4 +10,8 @@ const app = buildApp(await createContainer())
 // No signal handling here. `.shutdown()` installs SIGTERM/SIGINT, refuses readiness, waits out the
 // routing-table lag while still serving, closes the server, and lets the process exit on its own — calling
 // process.exit() straight after close() would truncate the very logs describing the shutdown.
-await app.run()
+const { address } = await app.run()
+
+if (address !== undefined) {
+  console.log(`Petstore listening on ${address.origin}`)
+}
