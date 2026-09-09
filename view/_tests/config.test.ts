@@ -40,7 +40,7 @@ describe('view configuration', () => {
   it('lets the environment override a builder-set root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ VIEW__DEFAULT__ROOT: ejsRoot }), ConfigPriority.ENV))
-      .extend(ViewExt, v =>
+      .extend(ViewExt(), v =>
         v
           .config(c => c.view.default)
           .engine({ handlebars })
@@ -67,7 +67,7 @@ describe('view configuration', () => {
           }),
         ),
       )
-      .extend(ViewExt, v =>
+      .extend(ViewExt(), v =>
         v
           .config(c => c.view.default)
           .engine({ handlebars })
@@ -91,7 +91,7 @@ describe('view configuration', () => {
           }),
         ),
       )
-      .extend(ViewExt, v =>
+      .extend(ViewExt(), v =>
         v
           .config(c => c.view.default)
           .engine({ handlebars })
@@ -133,7 +133,7 @@ describe('view configuration', () => {
         ),
       )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(ViewExt, v =>
+      .extend(ViewExt(), v =>
         v
           .config(c => c.app.templates)
           .engine({ handlebars })

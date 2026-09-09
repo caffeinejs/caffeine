@@ -3,11 +3,11 @@ import { type Binding, type Container, type InjectionToken, Scopes } from '@caff
 import { ConfigDefinition } from './config/index.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { Extensions } from './extensions.js'
+import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './feature.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { GracefulShutdown } from './health/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
-import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './lifecycle.js'
 import { $t } from './schema/t.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */

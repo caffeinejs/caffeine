@@ -5,7 +5,7 @@ import { multipartConfigSchema, type MultipartConfig } from './config.js'
 import { MultipartExtension, type MultipartOptions } from './extension.js'
 
 /**
- * Configures `@fastify/multipart`. Bound via `.extend(MultipartExt)`.
+ * Configures `@fastify/multipart`. Bound via `.extend(MultipartExt())`.
  *
  * Installing the feature is the activating act: its lifecycle binds {@link MultipartExtension} and registers it
  * with the application's extensions, and the adapter runs it as a Fastify plugin. Configuration parameterizes

@@ -3,7 +3,7 @@ import { FeatureBuilder, kFeatureName } from '@caffeinejs/std'
 import { htmlConfigSchema, kHTMLConfig, type HTMLDefaults } from './config.js'
 
 /**
- * Sets what every `HTML(...)` response starts from. Bound via `.extend(HTMLExt, h => …)`.
+ * Sets what every `HTML(...)` response starts from. Bound via `.extend(HTMLExt(), h => …)`.
  *
  * `h.autoDoctype(false)` does not hold the value on the builder — it goes through the configuration, and a
  * rendering response reads what resolved. {@link config} is what places those settings in the configuration

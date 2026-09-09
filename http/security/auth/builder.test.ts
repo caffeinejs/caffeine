@@ -15,7 +15,7 @@ function makeKit(): BootstrapKit {
     container: { bind, wrap } as unknown as Container,
     availability: new ApplicationAvailability(),
     config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
-    extensions: { add: () => undefined, register: () => undefined },
+    extensions: { register: () => undefined },
   }
 }
 

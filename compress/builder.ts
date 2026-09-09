@@ -5,7 +5,7 @@ import { compressConfigSchema, type CompressConfig } from './config.js'
 import { CompressExtension, type CompressOptions } from './extension.js'
 
 /**
- * Configures `@fastify/compress`. Bound via `.extend(CompressExt, c => …)`.
+ * Configures `@fastify/compress`. Bound via `.extend(CompressExt(), c => …)`.
  *
  * Installing the feature is the activating act: its lifecycle binds {@link CompressExtension} and registers it
  * with the application's extensions, and the adapter runs it as a Fastify plugin. Configuration parameterizes

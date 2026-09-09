@@ -76,7 +76,7 @@ describe('openapi configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ OPENAPI__SERVERS__0__URL: 'https://api.prod.example.com' }), ConfigPriority.ENV),
       )
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .info({ title: 'Things', version: '1.0.0' })
@@ -101,7 +101,7 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .info({ title: 'From Code', version: '1.0.0' })
@@ -126,7 +126,7 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .info({ title: 'Things', version: '1.0.0' })
@@ -147,7 +147,7 @@ describe('openapi configuration', () => {
   it('serves the documentation page at a configured route', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__DOCS: '/reference' }), ConfigPriority.ENV))
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .info({ title: 'Things', version: '1.0.0' })
@@ -166,7 +166,7 @@ describe('openapi configuration', () => {
   it('switches an endpoint off when configuration says false', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__YAML: 'false' }), ConfigPriority.ENV))
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .info({ title: 'Things', version: '1.0.0' })
@@ -201,7 +201,7 @@ describe('openapi configuration', () => {
         ),
       )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.app.docs)
           .info({ title: 'Code', version: '1.0.0' })
@@ -225,7 +225,7 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .public()
@@ -282,7 +282,7 @@ describe('openapi defaults and the schema band', () => {
   it('lets the application schema default a block the feature also defaults', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(defaultedSchema, kDefaultedConfig)
-      .extend(OpenAPIExt, o => o.config(c => c.openapi).public())
+      .extend(OpenAPIExt(), o => o.config(c => c.openapi).public())
       .build()
 
     await app.ready()
@@ -297,7 +297,7 @@ describe('openapi defaults and the schema band', () => {
   it('keeps a schema-declared server list the feature would otherwise claim away', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(defaultedSchema, kDefaultedConfig)
-      .extend(OpenAPIExt, o => o.config(c => c.openapi).public())
+      .extend(OpenAPIExt(), o => o.config(c => c.openapi).public())
       .build()
 
     await app.ready()
@@ -309,7 +309,7 @@ describe('openapi defaults and the schema band', () => {
   it('still lets a builder call beat the schema default', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(defaultedSchema, kDefaultedConfig)
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .info({ title: 'From Code', version: '1.0.0' })
@@ -327,7 +327,7 @@ describe('openapi defaults and the schema band', () => {
       .config(defaultedSchema, kDefaultedConfig, c =>
         c.source(env({ OPENAPI__INFO__TITLE: 'From Env' }), ConfigPriority.ENV),
       )
-      .extend(OpenAPIExt, o =>
+      .extend(OpenAPIExt(), o =>
         o
           .config(c => c.openapi)
           .info({ title: 'From Code', version: '1.0.0' })

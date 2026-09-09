@@ -46,12 +46,12 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   const builder = createWebApplication(fastifyAdapterFactory(server), {
     container,
   })
-    .extend(ViewExt, v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
-    .extend(StaticExt, s => s.serve(publicRoot, { prefix: '/static' }))
+    .extend(ViewExt(), v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
+    .extend(StaticExt(), s => s.serve(publicRoot, { prefix: '/static' }))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
     // $p pickers are the source, and @APIGroup/@Operation add only what those cannot say. 3.2.0 because
     // QUERY /pets needs it: a 3.1 path item has no field for a non-standard method.
-    .extend(OpenAPIExt, o =>
+    .extend(OpenAPIExt(), o =>
       o
         .version('3.2.0')
         .info({
@@ -75,7 +75,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
         .errors({ validation: 422 })
         .errorSchema(apiErrorSchema),
     )
-    .extend(MultipartExt)
+    .extend(MultipartExt())
     .authentication(auth =>
       auth
         // Basic, for the API documentation only. Demo credentials, overridable from the environment.

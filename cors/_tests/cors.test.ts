@@ -13,7 +13,7 @@ import { describe, it, expect } from 'vitest'
 import { CORS, CorsBuilder, cors, CORSExt } from '../index.js'
 
 function corsApp(configure: (c: CorsBuilder) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CORSExt, configure)
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CORSExt(), configure as never)
 }
 
 describe('CORS', () => {

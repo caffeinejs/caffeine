@@ -120,7 +120,7 @@ class IntegrationConsumer {
 const up = await brokerUp()
 
 describe.skipIf(!up)('kafka integration (real broker)', () => {
-  const app = createApplication({}).extend(kafka, k =>
+  const app = createApplication({}).extend(kafka(), k =>
     k
       .brokers(BROKER)
       .clientId('caffeine-kafka-it')

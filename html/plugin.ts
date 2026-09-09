@@ -1,26 +1,10 @@
-import { defineFeature, type Feature, type TypeLambda } from '@caffeinejs/std'
+import { feature, type Feature } from '@caffeinejs/std'
 
 import { HTMLBuilder } from './builder.js'
 
-interface HTMLBuilderF extends TypeLambda {
-  readonly Out: HTMLBuilder<this['In']>
-}
-
-export interface HTMLFeature extends Feature<HTMLBuilder> {
-  readonly _F: HTMLBuilderF
-}
-
 /**
- * The `@caffeinejs/html` application feature. `.extend(HTMLExt)` publishes application-wide
- * `HTML(...)` response defaults; pass a callback to change them through {@link HTMLBuilder.autoDoctype}.
- * Installing it is optional: `HTML(...)` renders without it.
+ * The `@caffeinejs/html` application feature. `.extend(HTMLExt())` publishes application-wide `HTML(...)`
+ * response defaults; pass a callback to change them through {@link HTMLBuilder.autoDoctype}. Installing it
+ * is optional: `HTML(...)` renders without it.
  */
-export const HTMLExt: HTMLFeature = defineFeature({
-  name: 'html',
-  singleton: true,
-  install(ctx, configure) {
-    const builder = new HTMLBuilder()
-    configure?.(builder)
-    ctx.addFeature(builder)
-  },
-}) as HTMLFeature
+export const HTMLExt = (): Feature<HTMLBuilder> => feature('html', () => new HTMLBuilder())

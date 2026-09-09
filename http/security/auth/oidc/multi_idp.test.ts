@@ -55,7 +55,6 @@ function makeKit(): { kit: BootstrapKit; registered: Map<unknown, unknown> } {
       wrap: (v: unknown) => ({ get: () => v }),
     },
     extensions: {
-      add: () => undefined,
       register: (token: unknown, extension: unknown) => {
         registered.set(token, extension)
       },

@@ -4,8 +4,9 @@ import { describe, it, expect, vi } from 'vitest'
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
 import {
   $t,
+  type BootstrapKit,
   type InferSchema,
-  defineFeature,
+  feature,
   kBootstrap,
   kFeatureName,
   OnApplicationReady,
@@ -176,25 +177,16 @@ describe('Application lifecycle', () => {
     const kSentinel = token<Record<string, unknown>>(Symbol('sentinel'))
     const state: { value: string | undefined } = { value: undefined }
 
-    const probe = defineFeature<{ probe(value: string): void }>({
-      name: 'probe',
-      install(ctx, configure) {
-        ctx.addFeature({
-          get [kFeatureName]() {
-            return 'probe'
-          },
-          [kBootstrap](kit) {
-            kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
-            return Promise.resolve()
-          },
-        })
-        configure?.({
-          probe: (value: string) => {
-            state.value = value
-          },
-        })
+    const probe = feature('probe', () => ({
+      [kFeatureName]: 'probe',
+      probe(value: string) {
+        state.value = value
       },
-    })
+      [kBootstrap](kit: BootstrapKit) {
+        kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
+        return Promise.resolve()
+      },
+    }))
 
     const app = createApplication({}).extend(probe, p => p.probe('hello'))
 

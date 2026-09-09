@@ -1,6 +1,8 @@
 import type { Container, ContainerBindingOps } from '@caffeinejs/di'
 
 import type { ConfigDefinition } from './config/index.js'
+import type { ApplicationEvent } from './decorators/lifecycle_registry.js'
+import { ErrCaffeine } from './error.js'
 import type { ExtensionRegistrar } from './extensions.js'
 import type { ApplicationAvailability } from './health/availability.js'
 
@@ -54,7 +56,7 @@ export interface BootstrapKit {
 
 /**
  * The keys a feature's lifecycle hangs off. Symbols so the lifecycle stays off the builder's autocomplete:
- * `.extend(StaticExt, s => …)` sees the fluent surface and nothing else.
+ * `.extend(staticFiles(), s => …)` sees the fluent surface and nothing else.
  */
 export const kFeatureName = Symbol('caffeine.feature.name')
 export const kBeforeBootstrap = Symbol('caffeine.feature.beforeBootstrap')
@@ -80,4 +82,60 @@ export interface FeatureLifecycle {
    * Runs after configuration resolves and before the container initializes. Bind runtime artifacts here.
    */
   [kBootstrap](kit: BootstrapKit): Promise<void>
+}
+
+/**
+ * Runtime seam handed to a feature at install time. A feature registers its {@link FeatureLifecycle} via
+ * {@link addFeature} — its builder, which implements the lifecycle directly, so it rides the same bootstrap
+ * path as the built-in features. It may also read the DI {@link container} and register programmatic
+ * lifecycle listeners via {@link on}.
+ *
+ * {@link state} is per application builder. A feature const must not keep install flags on itself —
+ * two `createApplication()` calls in one process would share them.
+ */
+export interface PluginContext {
+  addFeature(feature: FeatureLifecycle): void
+  readonly container: Container
+  on(event: ApplicationEvent, listener: (app: { readonly container: Container }) => void | Promise<void>): void
+  readonly state: Map<string, unknown>
+}
+
+/**
+ * A feature installed with `.extend(feature, configure?)`. A package's factory function returns one:
+ * `cors()`, `kafka()`, `kafka('orders')`. `B` is the builder handed to `configure`.
+ *
+ * {@link name} is the identity `.extend` deduplicates on. A feature that accepts an instance name folds it
+ * into `name` (`kafka` vs `kafka:orders`), so one image cannot install the same instance twice.
+ */
+export interface Feature<B = unknown> {
+  readonly name: string
+  install(ctx: PluginContext, configure?: (builder: B) => void): void
+}
+
+/**
+ * Builds a {@link Feature} that constructs one builder, runs `configure` against it, and registers it.
+ *
+ * The shape every simple feature takes. A feature that needs more at install time — a shared lifecycle
+ * listener, a lazily created provider, an instance name — writes its own function returning a {@link Feature}.
+ *
+ * ```ts
+ * export const cors = (): Feature<CorsBuilder> => feature('cors', () => new CorsBuilder())
+ * ```
+ */
+export function feature<B extends FeatureLifecycle>(name: string, create: () => B): Feature<B> {
+  return {
+    name,
+    install(ctx, configure) {
+      const builder = create()
+      configure?.(builder)
+      ctx.addFeature(builder)
+    },
+  }
+}
+
+/** Thrown when `.extend` installs a feature whose {@link Feature.name} is already installed. */
+export class ErrFeatureAlreadyInstalled extends ErrCaffeine {
+  constructor(feature: string) {
+    super(`Cannot install feature "${feature}": it is already installed`, 'ERR_FEATURE_ALREADY_INSTALLED')
+  }
 }

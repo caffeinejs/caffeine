@@ -13,7 +13,10 @@ import { describe, it, expect } from 'vitest'
 import { Compress, CompressBuilder, compress, CompressExt } from '../index.js'
 
 function compressApp(configure?: (c: CompressBuilder) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CompressExt, configure ?? (() => undefined))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(
+    CompressExt(),
+    (configure ?? (() => undefined)) as never,
+  )
 }
 
 describe('Compress', () => {

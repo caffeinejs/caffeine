@@ -83,7 +83,7 @@ function buildApp(configure: (o: OpenAPIBuilder) => void = () => {}): WebApplica
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder(configure?: (o: OpenAPIBuilder) => void) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt, configure)
+    .extend(OpenAPIExt(), configure as never)
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }
 
