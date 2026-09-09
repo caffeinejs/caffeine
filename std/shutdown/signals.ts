@@ -31,8 +31,8 @@ export interface SignalDispatcher {
   error(message: string, error: unknown): void
 }
 
-/** The warning type every diagnostic this framework emits is tagged with, so callers can filter on it. */
-export const WARNING_TYPE = 'CaffeineHealthWarning'
+/** The warning type every graceful-shutdown diagnostic is tagged with, so callers can filter on it. */
+export const WARNING_TYPE = 'CaffeineShutdownWarning'
 
 interface ProcessLike {
   pid?: number

@@ -1,9 +1,9 @@
+import type { ShutdownBuilder } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import type { WebApplication } from '../application.js'
 import { ErrShutdownTimeout } from '../health/errors.js'
-import type { HealthBuilder } from '../health/health_builder.js'
 import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
@@ -24,8 +24,9 @@ class DrainController {
 
 void [DrainController]
 
-async function start(configure: (health: HealthBuilder<unknown>) => void): Promise<WebApplication> {
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).health(configure).build()
+async function start(configure: (shutdown: ShutdownBuilder<unknown>) => void): Promise<WebApplication> {
+  // `.health()` mounts the probes the readiness/liveness assertions poll; `.shutdown()` owns the drain.
+  const app = createWebApplication(fastifyAdapterFactory(fastify())).health().shutdown(configure).build()
 
   await app.run()
 
@@ -44,7 +45,7 @@ function portOf(app: WebApplication): number {
 
 describe('graceful shutdown', () => {
   it('refuses readiness before the drain delay elapses, while liveness stays up', async () => {
-    const app = await start(h => h.drainDelay(300))
+    const app = await start(s => s.drainDelay(300))
 
     expect((await app.fetch('/readyz')).status).toBe(200)
 
@@ -62,7 +63,7 @@ describe('graceful shutdown', () => {
   })
 
   it('keeps serving traffic normally throughout the drain delay', async () => {
-    const app = await start(h => h.drainDelay(300))
+    const app = await start(s => s.drainDelay(300))
     const port = portOf(app)
 
     const closing = app.close()
@@ -79,7 +80,7 @@ describe('graceful shutdown', () => {
   })
 
   it('does not tear the server down until the delay has elapsed', async () => {
-    const app = await start(h => h.drainDelay(300))
+    const app = await start(s => s.drainDelay(300))
 
     const closing = app.close()
 
@@ -91,7 +92,7 @@ describe('graceful shutdown', () => {
   })
 
   it('runs the pre-shutdown hooks after the drain delay, not before', async () => {
-    const app = await start(h => h.drainDelay(300))
+    const app = await start(s => s.drainDelay(300))
 
     let hookAt = 0
     app.on('application:pre-shutdown', () => {
@@ -105,7 +106,7 @@ describe('graceful shutdown', () => {
   })
 
   it('skips the wait when the drain delay is zero', async () => {
-    const app = await start(h => h.drainDelay(0))
+    const app = await start(s => s.drainDelay(0))
 
     const startedAt = Date.now()
     await app.close()
@@ -114,7 +115,7 @@ describe('graceful shutdown', () => {
   })
 
   it('forces connections shut and reports a timeout when in-flight requests overrun the budget', async () => {
-    const app = await start(h => h.drainDelay(0).shutdownTimeout(200))
+    const app = await start(s => s.drainDelay(0).shutdownTimeout(200))
     const port = portOf(app)
 
     const inflight = fetch(`http://127.0.0.1:${port}/drain/slow`).catch(() => undefined)
@@ -130,7 +131,7 @@ describe('graceful shutdown', () => {
   })
 
   it('joins a second close instead of starting another one', async () => {
-    const app = await start(h => h.drainDelay(200))
+    const app = await start(s => s.drainDelay(200))
 
     let hooks = 0
     app.on('application:pre-shutdown', () => {
@@ -155,7 +156,7 @@ describe('graceful shutdown', () => {
   it('installs and removes the configured signal handlers', async () => {
     const before = process.listenerCount('SIGTERM')
 
-    const app = await start(h => h.signals(['SIGTERM']).drainDelay(0))
+    const app = await start(s => s.signals(['SIGTERM']).drainDelay(0))
 
     expect(process.listenerCount('SIGTERM')).toBe(before + 1)
 

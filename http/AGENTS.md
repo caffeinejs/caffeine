@@ -18,9 +18,15 @@ A feature that answers on URLs outside the compiled routing binds a `ServerOwned
 `.extends(ServerOwnedPaths)`, and a fallback reads them with `container.getManyOptional(ServerOwnedPaths)`.
 That is how a SPA shell knows not to swallow `/livez` without `static` importing anything from `health`.
 
-Health is one feature, registered unconditionally like the server. `app.health(...)` only calls
-`markExplicit()`, which is what flips the `enabled` default away from the Kubernetes auto-detection — there is
-no second fallback configurer, and nothing matches on `[kFeatureName] === 'health'`.
+Health is one feature, registered unconditionally like the server, and it is **probes only**. `app.health(...)`
+only calls `markExplicit()`, which is what flips the `enabled` default away from the Kubernetes auto-detection —
+there is no second fallback configurer, and nothing matches on `[kFeatureName] === 'health'`.
+
+Graceful shutdown — the drain delay, the teardown budget, the signals — is its own feature, `ShutdownBuilder`
+from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
+`createWebApplication()` and headless `createApplication()` and configured with `app.shutdown(s => …)`. It
+publishes the resolved policy under `kShutdownPolicy`; `BaseApplication` reads it. Health does not touch
+shutdown any more.
 
 The effective authentication schemes are stamped onto each compiled route (`route.authorization.schemes`)
 while routing is built, where the application's default scheme is known. A reader that documents or describes

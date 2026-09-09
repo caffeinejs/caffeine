@@ -2,11 +2,8 @@ import {
   ApplicationAvailability,
   FeatureBuilder,
   kFeatureName,
-  kShutdownPolicy,
   type BootstrapKit,
   type Duration,
-  type ShutdownSignal,
-  type SignalDispatcher,
 } from '@caffeinejs/std'
 import { type ConfigSlice } from '@caffeinejs/std/config'
 
@@ -14,7 +11,6 @@ import { ServerOwnedPaths } from '../server_owned_paths.js'
 import { kHealthConfig } from './keys.js'
 import { loadHealthIndicators } from './load.js'
 import {
-  finalizeHealthOptions,
   healthConfigSchema,
   mergeHealthConfig,
   type HealthConfig,
@@ -36,25 +32,25 @@ export class HealthOwnedPaths extends ServerOwnedPaths {
 }
 
 /**
- * Configures the health feature: the probe endpoints, the drain policy, and the signals that trigger it.
+ * Configures the health feature: the Kubernetes probe endpoints and their budgets. Graceful shutdown — the
+ * drain policy and the signals that trigger it — is a separate feature, configured with `app.shutdown(...)`.
  *
- * Registered by every HTTP application, so the probes and the drain policy exist whether or not `app.health()`
- * was called. Calling it **enables** the probes regardless of environment; leaving it uncalled enables them
- * only when `KUBERNETES_SERVICE_HOST` is present. An explicit `enabled` in the configuration always wins over
- * both, so `HEALTH__ENABLED=false` switches them off without a code change.
+ * Registered by every HTTP application, so the probes exist whether or not `app.health()` was called. Calling
+ * it **enables** the probes regardless of environment; leaving it uncalled enables them only when
+ * `KUBERNETES_SERVICE_HOST` is present. An explicit `enabled` in the configuration always wins over both, so
+ * `HEALTH__ENABLED=false` switches them off without a code change.
  *
  * There is one read path. A builder method does not hold its value here — it writes into the configuration
- * tree in the `CODE` band, and the feature reads the merged result. So `h.drainDelay('10s')` is a **default**:
- * `HEALTH__DRAINDELAY=30s` or `--health.drainDelay=30s` overrides it.
+ * tree in the `CODE` band, and the feature reads the merged result. So `h.cacheTTL('10s')` is a **default**:
+ * `HEALTH__CACHE_TTL=30s` or `--health.cacheTTL=30s` overrides it.
  *
- * The exception is {@link dispatcher}: a function cannot live in a configuration tree, so it stays on the
- * builder and is merged in afterwards. Health indicators are not configured here — they are container-managed
- * beans discovered through `HealthIndicator`.
+ * Health indicators are not configured here — they are container-managed beans discovered through
+ * `HealthIndicator`.
  *
  * The resolved {@link HealthOptions} are published under {@link kHealthConfig}, and they are live like every
  * other configuration in the framework — the probe budgets and the response-shaping flags are read per
- * request, so a refresh reaches them. The fields consumed once at boot, the probe routes and the installed
- * signals, simply stop mattering afterwards: nothing re-registers a route because a value moved underneath it.
+ * request, so a refresh reaches them. The probe routes, consumed once at boot, simply stop mattering
+ * afterwards: nothing re-registers a route because a value moved underneath it.
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
@@ -63,7 +59,6 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
 
   protected readonly schema = healthConfigSchema
 
-  #dispatcher: SignalDispatcher | undefined
   #explicit = false
   #options: ConfigSlice<HealthOptions> | undefined
 
@@ -86,27 +81,6 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
   /** Overrides one or more probe paths. Defaults: `/livez`, `/readyz`, `/startupz`. */
   paths(paths: Partial<HealthPaths>): this {
     return this.set('paths', { ...this.get('paths'), ...paths } as HealthPaths)
-  }
-
-  /**
-   * How long to keep serving after readiness starts refusing, before the server closes. Covers the orchestrator's
-   * routing-table propagation lag; traffic still arrives during this window and is answered normally.
-   */
-  drainDelay(delay: Duration): this {
-    return this.set('drainDelay', delay)
-  }
-
-  /** The budget for in-flight requests to finish once the server is closing. */
-  shutdownTimeout(timeout: Duration): this {
-    return this.set('shutdownTimeout', timeout)
-  }
-
-  /**
-   * The pod's `terminationGracePeriodSeconds`. It cannot be read from inside the pod, so it must be mirrored here
-   * (or injected through the downward API) for the boot-time budget check to mean anything.
-   */
-  terminationGracePeriod(period: Duration): this {
-    return this.set('terminationGracePeriod', period)
   }
 
   /** Per-indicator budget. An indicator exceeding it is aborted and reported down. */
@@ -134,32 +108,11 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
     return this.set('exclude', exclude)
   }
 
-  /** The signals that trigger a graceful shutdown, or `false` to install no handlers. */
-  signals(signals: readonly ShutdownSignal[] | false): this {
-    return this.set('signals', signals === false ? false : [...signals])
-  }
-
-  /**
-   * Replaces the {@link SignalDispatcher} that delivers signals and diagnostics. The host runtime's is detected
-   * automatically and covers Node, Bun and Deno; supply one to bridge a runtime with native signal handling of its
-   * own, or to observe the shutdown in a test.
-   *
-   * Not configuration — a function cannot live in a configuration tree — so this one is code-only.
-   */
-  dispatcher(dispatcher: SignalDispatcher): this {
-    this.#dispatcher = dispatcher
-    return this
-  }
-
   protected override beforeBootstrap(): void {
-    const dispatcher = this.#dispatcher
     // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
     const enabledDefault = this.#explicit ? true : undefined
 
-    this.#options = this.derive(
-      config => finalizeHealthOptions(mergeHealthConfig(config, { dispatcher, enabledDefault })),
-      kHealthConfig,
-    )
+    this.#options = this.derive(config => mergeHealthConfig(config, { enabledDefault }), kHealthConfig)
   }
 
   protected bootstrap(kit: BootstrapKit): Promise<void> {
@@ -192,19 +145,6 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
     // because health happened to be switched off in this environment.
     kit.container.bind(HealthOwnedPaths, t =>
       t.toValue(new HealthOwnedPaths(options.paths)).extends(ServerOwnedPaths).internal(),
-    )
-
-    // `.health(h => h.drainDelay('10s'))` is how an HTTP application states its drain, so this is where the
-    // application's shutdown budget comes from.
-    kit.container.bind(kShutdownPolicy, t =>
-      t
-        .toValue({
-          drainDelayMs: options.drainDelayMs,
-          shutdownTimeoutMs: options.shutdownTimeoutMs,
-          signals: options.signals,
-          dispatcher: options.dispatcher,
-        })
-        .internal(),
     )
 
     kit.extensions.register(HealthProbesExtension, new HealthProbesExtension(options))

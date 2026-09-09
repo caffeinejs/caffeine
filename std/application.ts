@@ -5,10 +5,10 @@ import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.
 import { Extensions } from './extensions.js'
 import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './feature.js'
 import { ApplicationAvailability } from './health/availability.js'
-import { GracefulShutdown } from './health/shutdown.js'
-import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './health/shutdown_options.js'
 import { ApplicationHooks } from './hooks.js'
 import { $t } from './schema/t.js'
+import { GracefulShutdown } from './shutdown/shutdown.js'
+import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './shutdown/shutdown_options.js'
 
 /** A hook-bearing binding collected at registration time (fast-path discovery). */
 export interface HookBinding {
@@ -24,8 +24,6 @@ export interface ApplicationInit {
   // one-time singleton scan (used when the container was supplied pre-wired).
   hookBindings: HookBinding[] | 'scan'
   hooks: ApplicationHooks<BaseApplication>
-  /** The resolved drain policy. Defaults apply when the builder was given none. */
-  shutdown?: ShutdownOptions
   /** The live configuration definition, handed to every service so it can contribute to the tree. */
   config?: ConfigDefinition
 }
@@ -67,7 +65,6 @@ export abstract class BaseApplication {
   readonly #hookBindings: HookBinding[] | 'scan'
   readonly #availability = new ApplicationAvailability()
   readonly #extensions: Extensions
-  readonly #shutdownInit: ShutdownOptions | undefined
   readonly #config: ConfigDefinition
 
   #name = ''
@@ -84,7 +81,6 @@ export abstract class BaseApplication {
     this.#services = init.services
     this.#hookBindings = init.hookBindings
     this.#hooks = init.hooks
-    this.#shutdownInit = init.shutdown
     // An application constructed without a builder still gets one, so services can register unconditionally.
     // Nothing bootstraps it in that case, which is what a missing config module means.
     this.#config = init.config ?? new ConfigDefinition()
@@ -284,15 +280,15 @@ export abstract class BaseApplication {
   }
 
   /**
-   * The drain policy: what a feature published under {@link kShutdownPolicy}, else what the builder was given,
-   * else {@link defaultShutdownOptions}.
+   * The drain policy: what the shutdown feature published under {@link kShutdownPolicy}, else
+   * {@link defaultShutdownOptions} — the latter only when a shutdown starts before the container has
+   * initialized, since the feature is registered unconditionally and binds the key at bootstrap.
    *
-   * A feature wins over the builder because publishing one is the specific act — `.health(h =>
-   * h.drainDelay('10s'))` is how an HTTP application states its drain, and it would be pointless if the
-   * builder's own default beat it.
+   * `.shutdown(s => s.drainDelay('10s'))` is how an application states its drain; the feature folds that with
+   * the configuration tree and publishes the resolved policy here.
    */
   protected shutdownOptions(): ShutdownOptions {
-    return this.#shutdownPolicy ?? this.#shutdownInit ?? defaultShutdownOptions()
+    return this.#shutdownPolicy ?? defaultShutdownOptions()
   }
 
   /** Ran once availability has started refusing, before the drain delay. Subclasses invalidate caches here. */

@@ -2,6 +2,7 @@ import type { NamedToken } from '@caffeinejs/di'
 import {
   AppConfigBuilder,
   BaseApplicationBuilder,
+  ShutdownBuilder,
   type ApplicationBuilderOptions,
   type ApplicationConfigMarker,
   type Reconfigured,
@@ -35,6 +36,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   readonly #authzBuilder: AuthorizationBuilder
   readonly #serverBuilder: ServerBuilder<unknown>
   readonly #healthBuilder: HealthBuilder<unknown>
+  readonly #shutdownBuilder: ShutdownBuilder<unknown>
   readonly #guardsBuilder: GuardsBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
@@ -52,10 +54,15 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.#serverBuilder = new ServerBuilder<unknown>()
     this.addFeature(this.#serverBuilder)
 
-    // Likewise: the drain policy applies to every application, probes or not, and `HEALTH__ENABLED=true` has
-    // to switch the probes on without a code change. `.health()` only flips the default for `enabled`.
+    // Likewise: `HEALTH__ENABLED=true` has to switch the probes on without a code change. `.health()` only
+    // flips the default for `enabled`.
     this.#healthBuilder = new HealthBuilder<unknown>()
     this.addFeature(this.#healthBuilder)
+
+    // The drain sequence and its signal handlers apply to every application, probes or not, so
+    // `SHUTDOWN__DRAIN_DELAY` has to work on one that never calls `.shutdown()`.
+    this.#shutdownBuilder = new ShutdownBuilder<unknown>()
+    this.addFeature(this.#shutdownBuilder)
   }
 
   authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
@@ -129,18 +136,27 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   /**
-   * Enables the Kubernetes probes (`/livez`, `/readyz`, `/startupz`) and the graceful shutdown that drives them.
-   * Calling it with no configuration is a complete setup; see {@link HealthBuilder} for what the defaults are.
+   * Enables the Kubernetes probes (`/livez`, `/readyz`, `/startupz`). Calling it with no configuration is a
+   * complete setup; see {@link HealthBuilder} for what the defaults are.
    *
-   * Left uncalled, the probes are exposed only when `KUBERNETES_SERVICE_HOST` is present — but the drain sequence
-   * and the signal handlers are installed either way, because dropping in-flight requests on shutdown is not a
-   * behaviour anyone opts into deliberately.
+   * Left uncalled, the probes are exposed only when `KUBERNETES_SERVICE_HOST` is present. Graceful shutdown —
+   * the drain sequence and the signal handlers — is a separate feature; configure it with {@link shutdown}.
    */
   health(configure?: (health: HealthBuilder<TConfig>) => void): this {
     // The feature is already registered; reaching this is what turns the probes on regardless of environment.
     this.#healthBuilder.markExplicit()
     configure?.(this.#healthBuilder as HealthBuilder<TConfig>)
 
+    return this
+  }
+
+  /**
+   * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
+   * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults —
+   * `s.drainDelay('5s')` is a **default** that `SHUTDOWN__DRAIN_DELAY` or the config tree can still redirect.
+   */
+  shutdown(configure: (shutdown: ShutdownBuilder<TConfig>) => void): this {
+    configure(this.#shutdownBuilder as ShutdownBuilder<TConfig>)
     return this
   }
 
