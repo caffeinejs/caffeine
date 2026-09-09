@@ -110,8 +110,7 @@ describe('graceful shutdown on signals', () => {
     const result = await app.exit
 
     expect(result.code).toBe(0)
-    expect(app.output()).toContain('pre-shutdown')
-    expect(app.output()).toContain('shutdown')
+    expect(app.output()).toContain('container-disposed')
   }, 30_000)
 
   it('runs the shutdown hooks only after the drain delay', async () => {

@@ -5,7 +5,6 @@ import { describe, it, expect, vi } from 'vitest'
 import { CaffeineIoC } from '../../../container.js'
 import { Injectable } from '../../../decorators/injectable.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
-import { PreDestroy } from '../../../decorators/pre_destroy.js'
 import { token } from '../../../key.js'
 import { kSelfRefresh, SelfRefreshable } from '../../../refresher.js'
 import { Scopes } from '../../../scope.js'
@@ -49,8 +48,7 @@ describe('Refresh Scope', function () {
       @Injectable()
       @Lifetime(Scopes.REFRESH)
       class WithCustomDestroy {
-        @PreDestroy()
-        cleanup() {
+        onDestroy() {
           spy()
         }
       }

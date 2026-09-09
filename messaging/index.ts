@@ -27,6 +27,7 @@ export {
   ErrUnknownBinder,
   ErrUnknownBinding,
 } from './errors.js'
+export { MessagingLifecycle } from './lifecycle.js'
 export { isMessage, type Message, message, type MessageHeaders, type MessageInit } from './message.js'
 export { compileArgs } from './pick_compiler.js'
 export { $m, type MessagePickers } from './pickers.js'

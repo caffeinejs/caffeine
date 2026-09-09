@@ -181,3 +181,15 @@ and refresh keep separate caches and a per-scope counter would lose their relati
 `SingletonScope` records creation in `_created`, deliberately kept apart from `_cachedInstances`: the cache-hit
 path in `provide()` must stay a single map lookup with no property load on the value. Only creation writes to
 `_created`, and only disposal reads it.
+
+## Lifecycle hooks are `Binding.bootstrap` / `Binding.preDestroy`
+
+Three things feed those two fields, and `configureBinding` is the one place they converge. A class binding
+opts in by **implementing** `OnBootstrap` / `OnDestroy` (`lifecycle.ts`): after the ctor is known,
+`configureBinding` checks `ctor.prototype.onBootstrap` / `onDestroy` and fills the field if nothing else has.
+`@OnLifecycle({ bootstrap, destroy })` on a `@Provides` method stores functions the same way the old
+`@OnDestroy(fn)` did — through `extendMemberInjectableAttributes` and copied onto the factory config by
+`configuration.ts`. `.bootstrap(fn)` / `.preDestroy(fn)` on `BindingSpec` are the programmatic form. An
+explicit spec value or an `@OnLifecycle` callback wins over the interface method. `bootstrap` still requires
+`Scopes.SINGLETON` — the check in `configureBinding` throws `ErrInvalidBinding` regardless of which form set
+it. There are no `@PreDestroy` / `@OnBootstrap` decorators.

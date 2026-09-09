@@ -1,12 +1,30 @@
+import { Injectable, type OnDestroy } from '@caffeinejs/di'
 import type { ShutdownBuilder } from '@caffeinejs/std'
 import fastify from 'fastify'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 
 import type { WebApplication } from '../application.js'
 import { ErrShutdownTimeout } from '../health/errors.js'
 import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+
+// A container OnDestroy hook runs inside `container.dispose()`, which BaseApplication calls only after the
+// drain delay and after the server has stopped. `onDestroyHook` lets a test observe when that happens.
+let onDestroyHook: (() => void) | undefined
+
+@Injectable()
+class ShutdownProbe implements OnDestroy {
+  onDestroy() {
+    onDestroyHook?.()
+  }
+}
+
+void [ShutdownProbe]
+
+beforeEach(() => {
+  onDestroyHook = undefined
+})
 
 @Controller('/drain')
 class DrainController {
@@ -91,13 +109,13 @@ describe('graceful shutdown', () => {
     expect(app.instance.server.listening).toBe(false)
   })
 
-  it('runs the pre-shutdown hooks after the drain delay, not before', async () => {
+  it('disposes the container after the drain delay, not before', async () => {
     const app = await start(s => s.drainDelay(300))
 
     let hookAt = 0
-    app.on('application:pre-shutdown', () => {
+    onDestroyHook = () => {
       hookAt = Date.now()
-    })
+    }
 
     const startedAt = Date.now()
     await app.close()
@@ -134,9 +152,9 @@ describe('graceful shutdown', () => {
     const app = await start(s => s.drainDelay(200))
 
     let hooks = 0
-    app.on('application:pre-shutdown', () => {
+    onDestroyHook = () => {
       hooks++
-    })
+    }
 
     await Promise.all([app.close(), app.close()])
 

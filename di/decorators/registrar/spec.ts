@@ -354,8 +354,6 @@ export class MemberMetadata {
   #injectableProperties?: Map<Identifier, InjectionDescriptor<unknown>>
   #injectableMethods?: Map<Identifier, InjectionDescriptor<unknown>[]>
   #postConstruct?: string | symbol
-  #preDestroy?: string | symbol
-  #bootstrap?: string | symbol
 
   get members(): Map<Identifier, DecoratedBindingConfig> | undefined {
     return this.#members
@@ -400,28 +398,6 @@ export class MemberMetadata {
     return this
   }
 
-  preDestroy(name: string | symbol): this {
-    if (this.#preDestroy) {
-      throw new ErrInvalidDecorator(
-        `@PreDestroy is already defined on method "${String(this.#preDestroy)}": only 1 @PreDestroy is allowed per class`,
-      )
-    }
-
-    this.#preDestroy = name
-    return this
-  }
-
-  bootstrap(name: string | symbol): this {
-    if (this.#bootstrap) {
-      throw new ErrInvalidDecorator(
-        `@OnBootstrap is already defined on method "${String(this.#bootstrap)}": only 1 @OnBootstrap is allowed per class`,
-      )
-    }
-
-    this.#bootstrap = name
-    return this
-  }
-
   applyTo(config: DecoratedBindingConfig): void {
     if (this.#injectableProperties) {
       config.injectableProperties(this.#injectableProperties)
@@ -433,14 +409,6 @@ export class MemberMetadata {
 
     if (this.#postConstruct) {
       config.postConstruct(this.#postConstruct)
-    }
-
-    if (this.#preDestroy) {
-      config.preDestroy(this.#preDestroy)
-    }
-
-    if (this.#bootstrap) {
-      config.bootstrap(this.#bootstrap)
     }
   }
 }

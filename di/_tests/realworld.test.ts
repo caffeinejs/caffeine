@@ -8,7 +8,6 @@ import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { PostConstruct } from '../decorators/post_construct.js'
-import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Primary } from '../decorators/primary.js'
 import { Provides } from '../decorators/provides.js'
 import { UseFactory } from '../decorators/use_factory.js'
@@ -150,8 +149,7 @@ describe('Real World', function () {
       userSpy()
     }
 
-    @PreDestroy()
-    dispose(): Promise<void> {
+    onDestroy(): Promise<void> {
       destroySpy()
       return Promise.resolve()
     }

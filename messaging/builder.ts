@@ -9,6 +9,7 @@ import { BINDING_CONFIG_KEYS, messagingConfigSchema, type BindingConfig, type Me
 import { MessagingContainer } from './engine.js'
 import type { ErrorClassifier, RetryPolicy } from './error_handling.js'
 import { ErrMissingDestination } from './errors.js'
+import { MessagingLifecycle } from './lifecycle.js'
 import type { ErrorObserver, InvalidMessageHandler, MessagingRuntime, Recoverer } from './runtime.js'
 import { busKey, containerKey, DEFAULT_BINDER, Keys, runtimeKey } from './symbols.js'
 
@@ -149,6 +150,13 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfi
     kit.container.bind(containerKey(this.#name), t =>
       t.toClass(MessagingContainer, [rKey, bKey]).labels(Keys.MESSAGING_CONTAINER),
     )
+
+    // Registered once, covering every configured instance: starts every engine on `container.init()` and
+    // stops it on `container.dispose()`.
+    if (!kit.container.has(MessagingLifecycle)) {
+      const lifecycleContainer = kit.container
+      kit.container.bind(MessagingLifecycle, t => t.toFactory(() => new MessagingLifecycle(lifecycleContainer)))
+    }
 
     return Promise.resolve()
   }

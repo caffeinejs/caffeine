@@ -70,7 +70,7 @@ the intent explicit. Singletons are created eagerly during `init()` unless
 
 A new instance is created every time the binding is resolved. Transient
 instances are not tracked by the container; `dispose()` does not call
-`@PreDestroy` on them.
+their destroy hooks.
 
 ```ts
 @Injectable()

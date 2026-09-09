@@ -1,13 +1,13 @@
 import { Worker } from 'node:worker_threads'
 
-import { Keys, type Provider, type Refresher, $i, Injectable, PostConstruct, PreDestroy } from '@caffeinejs/di'
+import { Keys, type OnDestroy, type Provider, type Refresher, $i, Injectable, PostConstruct } from '@caffeinejs/di'
 
 import { AppConfig } from '../../app.config.js'
 import { DataConfig } from './data.config.js'
 import { WorkerData, WorkerMessage } from './gcs.watcher.worker.js'
 
 @Injectable([AppConfig, Keys.kRefresher, $i.provide(DataConfig)])
-export class GcsWatcher {
+export class GcsWatcher implements OnDestroy {
   private worker?: Worker
 
   constructor(
@@ -65,8 +65,7 @@ export class GcsWatcher {
     console.log('GCS watcher started')
   }
 
-  @PreDestroy()
-  async stop(): Promise<void> {
+  async onDestroy(): Promise<void> {
     await this.worker?.terminate()
     this.worker = undefined
   }

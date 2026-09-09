@@ -19,6 +19,7 @@ import {
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
 import { KafkaHealthIndicator } from './health.js'
+import { KafkaLifecycle } from './lifecycle.js'
 import { KafkaListenerContainer } from './listener_container.js'
 import type { DeadLetterManager } from './retry/dead_letter_manager.js'
 import { retryTopics, type RetryStrategy, type RetryTopicOptions, sharedRetryTopic } from './retry/strategy.js'
@@ -271,6 +272,13 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, 
     kit.container.bind(containerKey(this.#name), t =>
       t.toClass(KafkaListenerContainer, [rKey, tKey]).labels(Keys.KAFKA_CONTAINER),
     )
+
+    // Registered once, covering every configured instance: starts every engine on `container.init()` and
+    // stops it on `container.dispose()`.
+    if (!kit.container.has(KafkaLifecycle)) {
+      const lifecycleContainer = kit.container
+      kit.container.bind(KafkaLifecycle, t => t.toFactory(() => new KafkaLifecycle(lifecycleContainer)))
+    }
 
     // Registered once, covering every configured instance. Inert unless the application exposes the
     // probes, and then it is what makes readiness mean "serving HTTP *and* consuming".

@@ -2,18 +2,17 @@ import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
-import { OnBootstrap } from '../decorators/on_bootstrap.js'
-import { ErrInvalidBinding, ErrInvalidDecorator } from '../errors.js'
+import { ErrInvalidBinding } from '../errors.js'
+import type { OnBootstrap } from '../lifecycle.js'
 import { Scopes } from '../scope.js'
 
 describe('OnBootstrap', function () {
-  it('should call the method decorated with @OnBootstrap() during init(), with the resolved instance as `this`', async function () {
+  it('should call onBootstrap() during init(), with the resolved instance as `this`', async function () {
     const spy = vi.fn()
 
     @Injectable()
-    class Warmer {
-      @OnBootstrap()
-      warm() {
+    class Warmer implements OnBootstrap {
+      onBootstrap() {
         spy(this)
       }
     }
@@ -132,22 +131,19 @@ describe('OnBootstrap', function () {
     expect(order).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
   })
 
-  it('should throw ErrInvalidBinding when combined with TRANSIENT scope', async function () {
-    class Svc {}
+  it('should throw ErrInvalidBinding when an OnBootstrap class is not singleton scoped', function () {
+    class Svc implements OnBootstrap {
+      onBootstrap() {}
+    }
 
     const di = new CaffeineIoC({ decorators: false })
 
     expect(() => {
-      di.bind(Svc, t =>
-        t
-          .toSelf()
-          .lifetime(Scopes.TRANSIENT)
-          .bootstrap(() => {}),
-      )
+      di.bind(Svc, t => t.toSelf().lifetime(Scopes.TRANSIENT))
     }).toThrow(ErrInvalidBinding)
   })
 
-  it('should throw ErrInvalidBinding when combined with REQUEST scope', async function () {
+  it('should throw ErrInvalidBinding when .bootstrap(fn) is combined with REQUEST scope', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
@@ -162,7 +158,7 @@ describe('OnBootstrap', function () {
     }).toThrow(ErrInvalidBinding)
   })
 
-  it('should throw ErrInvalidBinding when combined with REFRESH scope', async function () {
+  it('should throw ErrInvalidBinding when .bootstrap(fn) is combined with REFRESH scope', function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
@@ -198,20 +194,6 @@ describe('OnBootstrap', function () {
     expect(di.ready).toBe(false)
     expect(before).toHaveBeenCalledTimes(1)
     expect(after).not.toHaveBeenCalled()
-  })
-
-  it('should throw ErrInvalidDecorator when @OnBootstrap() is applied twice on the same class', function () {
-    expect(() => {
-      @Injectable()
-      class Bad {
-        @OnBootstrap()
-        first() {}
-
-        @OnBootstrap()
-        second() {}
-      }
-      void Bad
-    }).toThrow(ErrInvalidDecorator)
   })
 
   it('should not re-run bootstrap hooks when init() is called a second time', async function () {

@@ -1,7 +1,7 @@
 import { CaffeineIoC, type Container, type Module, type ModuleFn, type NamedToken, type Options } from '@caffeinejs/di'
 
 import { AppConfigBuilder } from './app_config.js'
-import { Application, type ApplicationInit, type BaseApplication, type HookBinding } from './application.js'
+import { Application, type ApplicationInit, type BaseApplication } from './application.js'
 import {
   ConfigDefinition,
   ConfigModule,
@@ -11,10 +11,8 @@ import {
   type ConfigSchema,
   type InferConfig,
 } from './config/index.js'
-import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { ErrFeatureAlreadyInstalled, type Feature, type FeatureLifecycle, type PluginContext } from './feature.js'
 import type { FeatureBuilder } from './feature_builder.js'
-import { ApplicationHooks } from './hooks.js'
 import { ShutdownBuilder } from './shutdown/shutdown_builder.js'
 import { detectSignalDispatcher } from './shutdown/signals.js'
 
@@ -23,19 +21,16 @@ export interface ApplicationBuilderOptions {
 }
 
 /**
- * Platform-neutral builder foundation: owns container creation, the {@link Service} list, the feature
- * install surface, and the programmatic lifecycle hooks. Concrete builders (headless
- * {@link ApplicationBuilder}, the HTTP `WebApplicationBuilder`) extend it and implement {@link build}.
+ * Platform-neutral builder foundation: owns container creation, the {@link Service} list, and the feature
+ * install surface. Concrete builders (headless {@link ApplicationBuilder}, the HTTP `WebApplicationBuilder`)
+ * extend it and implement {@link build}.
  *
- * Container wiring is **deferred**: the builder constructs the container with `decorators:false`, subscribes
- * to `onBindingRegistered` to collect the hook-bearing bindings (so discovery is O(k), no scan), then calls
- * `autoWire()`. A caller-supplied, already-wired container instead falls back to a one-time singleton scan.
+ * The builder constructs the container with `decorators:false` and calls `autoWire()`; a caller-supplied,
+ * already-wired container is used as-is.
  */
 export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #container: Container
   readonly #services: FeatureLifecycle[] = []
-  readonly #hooks = new ApplicationHooks<BaseApplication>()
-  readonly #hookBindings: HookBinding[] | 'scan'
   readonly #config = new ConfigDefinition()
   readonly #featureState = new Map<string, unknown>()
   readonly #installed = new Set<string>()
@@ -44,23 +39,10 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     const c = options.container
 
     if (c != null && typeof (c as Container).get === 'function') {
-      // Caller supplied a live container — it is already wired, so we cannot intercept registration.
       this.#container = c as Container
-      this.#hookBindings = 'scan'
     } else {
       const opts = c != null ? (c as Partial<Options>) : {}
       this.#container = new CaffeineIoC({ ...opts, decorators: false })
-
-      const collected: HookBinding[] = []
-      // Live reference handed to the app; the listener stays attached so conditional bindings registered
-      // during init() are collected too.
-      this.#hookBindings = collected
-      this.#container.hooks.on('onBindingRegistered', ({ key, binding }) => {
-        const ctor = binding.type
-        if (typeof ctor === 'function' && hooksOf(ctor) !== undefined) {
-          collected.push({ key, ctor })
-        }
-      })
       this.#container.autoWire()
     }
 
@@ -92,21 +74,6 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
 
   addModules(module: Module | ModuleFn, ...modules: Array<Module | ModuleFn>): this {
     this.#container.addModules(module, ...modules)
-    return this
-  }
-
-  on(event: ApplicationEvent, listener: (app: App) => void | Promise<void>): this {
-    this.#hooks.on(event, listener as (app: BaseApplication) => void | Promise<void>)
-    return this
-  }
-
-  once(event: ApplicationEvent, listener: (app: App) => void | Promise<void>): this {
-    this.#hooks.once(event, listener as (app: BaseApplication) => void | Promise<void>)
-    return this
-  }
-
-  off(event: ApplicationEvent, listener: (app: App) => void | Promise<void>): this {
-    this.#hooks.off(event, listener as (app: BaseApplication) => void | Promise<void>)
     return this
   }
 
@@ -160,9 +127,6 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
         this.addFeature(feature)
       },
       container: this.container,
-      on: (event, listener) => {
-        this.on(event, listener as (app: App) => void | Promise<void>)
-      },
       state: this.#featureState,
     }
     feature.install(ctx, configure)
@@ -174,8 +138,6 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     return {
       container: this.#container,
       services: this.#services,
-      hookBindings: this.#hookBindings,
-      hooks: this.#hooks,
       config: this.#config,
     }
   }
