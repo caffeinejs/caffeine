@@ -1,6 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import {
-  defineFeature,
   kBootstrap,
   kExtensionStage,
   kFeatureName,
@@ -51,7 +50,7 @@ function featureFor(extension: ServerExtension, slow = false): Feature {
   // registrations, and keying by the class would have the second overwrite the first.
   const key = token<ServerExtension>(Symbol(`ext.${extension.name}`))
 
-  return defineFeature({
+  return {
     name: extension.name,
     install(ctx) {
       ctx.addFeature({
@@ -63,11 +62,11 @@ function featureFor(extension: ServerExtension, slow = false): Feature {
           }
 
           kit.container.bind(key, t => t.toValue(extension))
-          kit.extensions.add(key)
+          kit.extensions.register(key)
         },
       })
     },
-  })
+  }
 }
 
 function newApp(extension: ServerExtension, server: FastifyInstance = fastify()) {

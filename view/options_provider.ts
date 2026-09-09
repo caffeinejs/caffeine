@@ -14,7 +14,7 @@ import type { ViewOptions } from './view.js'
 
 /**
  * Groups every configured view engine — the default one (`reply.view`) plus any named ones
- * (`reply.<name>`) — behind a single object. Each `.extend(ViewExt, …)` / `.extend(ViewExt('mail'), …)`
+ * (`reply.<name>`) — behind a single object. Each `.extend(ViewExt(), …)` / `.extend(ViewExt('mail'), …)`
  * adds one {@link ViewBuilder}; the {@link ViewExtension} it hands itself to registers `@fastify/view`
  * once per {@link all} entry.
  */

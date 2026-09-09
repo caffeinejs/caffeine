@@ -7,13 +7,17 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
+import type { FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { Compress, CompressBuilder, compress, CompressExt } from '../index.js'
 
-function compressApp(configure?: (c: CompressBuilder) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CompressExt, configure ?? (() => undefined))
+function compressApp(configure?: FeatureConfigurer<CompressBuilder>) {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(
+    CompressExt(),
+    configure ?? (() => undefined),
+  )
 }
 
 describe('Compress', () => {

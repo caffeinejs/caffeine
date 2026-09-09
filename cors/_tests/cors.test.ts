@@ -7,13 +7,14 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
+import type { FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { CORS, CorsBuilder, cors, CORSExt } from '../index.js'
 
-function corsApp(configure: (c: CorsBuilder) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CORSExt, configure)
+function corsApp(configure: FeatureConfigurer<CorsBuilder>) {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CORSExt(), configure)
 }
 
 describe('CORS', () => {

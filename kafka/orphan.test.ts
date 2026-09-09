@@ -27,7 +27,7 @@ class GhostConsumer {
 
 describe('orphan handler detection', () => {
   it('fails fast at run() when a handler targets an unconfigured instance', async () => {
-    const app = createApplication({}).extend(kafka.with({ clients: noopClients() }), k =>
+    const app = createApplication({}).extend(kafka(undefined, { clients: noopClients() }), k =>
       k.brokers('localhost:9092').groupId('g'),
     ) // only the default instance
 

@@ -12,7 +12,7 @@ import {
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
-import { $t, type InferSchema } from '@caffeinejs/std'
+import { $t, type FeatureConfigurer, type InferSchema } from '@caffeinejs/std'
 import { Configuration, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
@@ -117,8 +117,8 @@ class HTMLErrorController {
 
 void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
-function htmlApp(configure?: (h: HTMLBuilder) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(HTMLExt, configure).build()
+function htmlApp(configure?: FeatureConfigurer<HTMLBuilder>) {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(HTMLExt(), configure).build()
 }
 
 describe('HTML', () => {
@@ -203,7 +203,7 @@ describe('HTML', () => {
   it('lets a configuration source override what the builder set', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
-      .extend(HTMLExt, h => h.config(c => c.html).autoDoctype(true))
+      .extend(HTMLExt(), h => h.config(c => c.html).autoDoctype(true))
       .build()
 
     await app.ready()

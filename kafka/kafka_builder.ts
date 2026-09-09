@@ -28,7 +28,7 @@ import { KafkaTemplate } from './template.js'
 
 /**
  * Fluent configuration for one (optionally named) Kafka integration. Follows the repo feature-builder
- * convention (`.extend(kafka, k => k.brokers(...).groupId(...))`): it accumulates settings, then at `ready()`
+ * convention (`.extend(kafka(), k => k.brokers(...).groupId(...))`): it accumulates settings, then at `ready()`
  * time its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
  * the container under per-instance keys. A second integration is `.extend(kafka('orders'), k => ...)`.
  *
@@ -40,7 +40,7 @@ import { KafkaTemplate } from './template.js'
  *
  * Settings live at `kafka.<name>.*`, the unnamed instance at `kafka.default.*`. {@link config} re-points them.
  *
- * `C` is the application config type, recovered from the builder `.extend(kafka, …)` was reached through, so the
+ * `C` is the application config type, recovered from the builder `.extend(kafka(), …)` was reached through, so the
  * selector argument is a `ConfigHandle<C>`.
  */
 export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, C> {

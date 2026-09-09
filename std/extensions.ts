@@ -30,8 +30,8 @@ function stageRank(extension: Extension<ExtensionIn>): number {
 /**
  * A unit of start-up wiring one feature contributes and the platform runs.
  *
- * Bind the implementation under its own key, then hand that key to `kit.extensions.add(...)` — binding alone
- * registers nothing. `kit.extensions.register(...)` does both at once.
+ * `kit.extensions.register(token, extension)` binds the implementation and registers it in one call. Pass a
+ * token alone when the feature has already bound it (a factory, `.extends(...)`, or a per-instance key).
  */
 export interface Extension<T extends ExtensionIn = ExtensionIn> {
   /** Identifies the extension to the platform, and to another extension's {@link dependencies}. */
@@ -46,17 +46,16 @@ export interface Extension<T extends ExtensionIn = ExtensionIn> {
   configure(ctx: T): void | Promise<void>
 }
 
-/** What a feature may do with the registry while it bootstraps: add its own extension key. */
+/** What a feature may do with the registry while it bootstraps: register its own extension. */
 export interface ExtensionRegistrar {
-  add<E extends Extension<ExtensionIn>>(extension: InjectionToken<E>): void
-
   /**
-   * Binds `extension` under `token` and registers it, which is the whole of contributing one.
+   * Registers an extension so the platform runs it at start-up.
    *
-   * The builder is holding the extension when it gets here, so the two steps are one act — and splitting them
-   * is how an extension ends up bound but never run.
+   * Pass `extension` and it is bound under `token` too — the builder is holding it right here, so the bind and
+   * the registration are one act. Omit `extension` when the feature has already bound `token` itself: a
+   * factory binding, a `.extends(...)` chain, or a per-instance key.
    */
-  register<E extends Extension<ExtensionIn>>(token: InjectionToken<E>, extension: E): void
+  register<E extends Extension<ExtensionIn>>(token: InjectionToken<E>, extension?: E): void
 }
 
 interface ExtensionEntry {
@@ -81,19 +80,16 @@ export class Extensions {
     this.#container = container
   }
 
-  /** The registrar for the feature at `order`. Everything it adds sorts at that position. */
+  /** The registrar for the feature at `order`. Everything it registers sorts at that position. */
   at(order: number): ExtensionRegistrar {
-    const add = (token: InjectionToken<unknown>): void => {
-      this.#entries.push({ order, token: token as InjectionToken<Extension<ExtensionIn>> })
-    }
-
     return {
-      add,
       register: (token, extension) => {
-        this.#container.bind(token, t => {
-          t.toValue(extension as never)
-        })
-        add(token)
+        if (extension !== undefined) {
+          this.#container.bind(token, t => {
+            t.toValue(extension as never)
+          })
+        }
+        this.#entries.push({ order, token: token as InjectionToken<Extension<ExtensionIn>> })
       },
     }
   }

@@ -1,5 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { $t, type InferSchema, defineFeature, kBootstrap, kFeatureName, type FeatureLifecycle } from '@caffeinejs/std'
+import { $t, type BootstrapKit, type InferSchema, feature, kBootstrap, kFeatureName } from '@caffeinejs/std'
 import { EnvConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import Fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
@@ -11,27 +11,18 @@ import { createWebApplication, fastifyAdapterFactory } from './index.js'
 const kProbe = token<Record<string, unknown>>(Symbol('probe-sentinel'))
 
 function probe() {
-  return defineFeature<{ capture(broker: string): void }>({
-    name: 'probe',
-    singleton: true,
-    install(ctx, configure) {
-      const state: { broker: string | undefined } = { broker: undefined }
-      const service: FeatureLifecycle = {
-        get [kFeatureName]() {
-          return 'probe'
-        },
-        [kBootstrap](kit) {
-          kit.container.bind(kProbe, t => t.toValue({ broker: state.broker }))
-          return Promise.resolve()
-        },
-      }
-      ctx.addFeature(service)
-      configure?.({
-        capture(broker: string) {
-          state.broker = broker
-        },
-      })
-    },
+  return feature('probe', () => {
+    const state: { broker: string | undefined } = { broker: undefined }
+    return {
+      [kFeatureName]: 'probe',
+      capture(broker: string) {
+        state.broker = broker
+      },
+      [kBootstrap](kit: BootstrapKit) {
+        kit.container.bind(kProbe, t => t.toValue({ broker: state.broker }))
+        return Promise.resolve()
+      },
+    }
   })
 }
 

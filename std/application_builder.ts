@@ -7,15 +7,16 @@ import {
   ConfigModule,
   kConfigDefinition,
   type ConfigHandle,
+  type ConfigLocation,
   type ConfigSchema,
   type InferConfig,
 } from './config/index.js'
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
+import { ErrFeatureAlreadyInstalled, type Feature, type FeatureLifecycle, type PluginContext } from './feature.js'
+import type { FeatureBuilder } from './feature_builder.js'
 import { type ShutdownConfig, resolveShutdownOptions } from './health/shutdown_options.js'
 import { detectSignalDispatcher } from './health/signals.js'
 import { ApplicationHooks } from './hooks.js'
-import type { FeatureLifecycle } from './lifecycle.js'
-import type { BuilderOf, Feature, PluginContext } from './plugin.js'
 
 export interface ApplicationBuilderOptions {
   container?: Container | Options
@@ -44,6 +45,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #shutdown: ShutdownConfig | undefined
   readonly #config = new ConfigDefinition()
   readonly #featureState = new Map<string, unknown>()
+  readonly #installed = new Set<string>()
 
   constructor(options: ApplicationBuilderOptions = {}) {
     this.#shutdown = options.shutdown
@@ -134,22 +136,33 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
 
   /**
    * Installs a feature, running `configure` against its builder in the same call. Callable at any point,
-   * and more than once — once per singleton feature, once per keyed instance (`kafka('orders')`).
+   * and once per {@link Feature.name} — an instanced feature (`kafka('orders')`) carries a distinct name, so
+   * it does not clash with the default instance.
    *
-   * The config type is recovered from this builder, so `k.config(c => c.app.events)` is typed against a
-   * schema declared by `.config(...)` without naming it again. Declare the schema first so the selector sees it.
+   * The config type is recovered from this builder, so `v.config(c => c.app.view)` is typed against a schema
+   * declared by `.config(...)` without naming it again. Declare the schema first so the selector sees it.
    *
    * ```ts
    * createWebApplication()
-   *   .extend(ViewExt, v => v.engine({ handlebars }))
-   *   .extend(StaticExt, s => s.serve(root))
+   *   .extend(view(), v => v.engine({ handlebars }))
+   *   .extend(staticFiles(), s => s.serve(root))
    * ```
+   *
+   * @throws ErrFeatureAlreadyInstalled when a feature with the same {@link Feature.name} is already installed.
    */
-  extend<F>(
+  extend<F extends Feature>(
     this: this,
-    feature: F & Feature,
-    configure?: (b: BuilderOf<NoInfer<F>, ConfigTypeOf<this>>) => void,
-  ): this {
+    feature: F,
+    configure?: (b: ConfiguredBuilder<NoInfer<F>, ConfigTypeOf<this>>) => void,
+  ): this
+  // Implementation signature — hidden from callers, so the builder type the overload computes never has to
+  // be re-derived here just to hand `configure` back to `install` unchanged.
+  extend(feature: Feature, configure?: (b: any) => void): this {
+    if (this.#installed.has(feature.name)) {
+      throw new ErrFeatureAlreadyInstalled(feature.name)
+    }
+    this.#installed.add(feature.name)
+
     const ctx: PluginContext = {
       addFeature: feature => {
         this.addFeature(feature)
@@ -160,7 +173,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
       },
       state: this.#featureState,
     }
-    feature.install(ctx, configure as never)
+    feature.install(ctx, configure)
     return this
   }
 
@@ -200,6 +213,52 @@ export type Reconfigured<Self, Base, Next> = Omit<Self, keyof Base> & Next
  * exactly right: an application that never declared a schema has no shape to select from.
  */
 export type ConfigTypeOf<Self> = Self extends { readonly __config?: infer C } ? C : unknown
+
+/**
+ * The builder `.extend` hands to `configure`, recovered from the feature `F` with its `.config(...)`
+ * selector retyped against the application config type `C`.
+ *
+ * A {@link FeatureBuilder} is generic over its own slice type `T` only; `C` is the application's, known here
+ * and nowhere the feature is authored. Recovering `T` structurally and swapping in the retyped `config` — via
+ * `Omit`, so there is one signature and not an ambiguous overload pair — is all it takes: no phantom on the
+ * builder, no higher-kinded encoding. A builder that is not a `FeatureBuilder` (view's per-engine builder,
+ * `AuthorizationBuilder`) passes through unchanged.
+ *
+ * Call `.config(...)` **first** in a chain. `Omit` does not carry a class's polymorphic `this` through another
+ * method's `this` return, so `k.brokers(x).config(c => c.app.y)` types `c` as `unknown` while
+ * `k.config(c => c.app.y).brokers(x)` reads the application's schema.
+ *
+ * A helper that forwards a `configure` callback through to `.extend` names it with {@link FeatureConfigurer}
+ * rather than casting.
+ */
+export type ConfiguredBuilder<F, C> =
+  F extends Feature<infer B>
+    ? B extends FeatureBuilder<infer T, any>
+      ? RetypedConfig<B, C, T, F>
+      : B extends { config(selector: (c: any) => ConfigLocation<infer T>): unknown }
+        ? RetypedConfig<B, C, T, F>
+        : B
+    : never
+
+type RetypedConfig<B, C, T, F> = Omit<B, 'config'> & {
+  config(selector: (c: ConfigHandle<C>) => ConfigLocation<T>): ConfiguredBuilder<F, C>
+}
+
+/**
+ * The callback `.extend(feature, …)` takes for a feature whose builder is `B`, over application config type
+ * `C`.
+ *
+ * Name it wherever a helper forwards a `configure` through to `.extend` — a test harness, an application
+ * factory — instead of casting at the call site. `{@link ConfiguredBuilder}` swaps the builder's `config`
+ * signature, so a callback annotated with the bare builder type does not fit.
+ *
+ * ```ts
+ * function corsApp(configure: FeatureConfigurer<CorsBuilder>) {
+ *   return createWebApplication().extend(CORSExt(), configure)
+ * }
+ * ```
+ */
+export type FeatureConfigurer<B, C = unknown> = (builder: ConfiguredBuilder<Feature<B>, C>) => void
 
 /**
  * The phantom an application builder carries to name its config type. Never assigned, never read at runtime —

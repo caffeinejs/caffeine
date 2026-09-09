@@ -8,9 +8,9 @@ import {
   type ConfigLocation,
   type ConfigSlice,
 } from './config/index.js'
+import { kFeatureName } from './feature.js'
 import { ErrFeatureNotDeclared, FeatureBuilder } from './feature_builder.js'
 import { createApplication } from './index.js'
-import { kFeatureName } from './lifecycle.js'
 import { $t } from './schema/t.js'
 
 interface GadgetConfig {

@@ -13,7 +13,7 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t, type FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -44,9 +44,9 @@ const HAND_WRITTEN: OpenAPIDocument = {
   },
 }
 
-function build(configure: (o: OpenAPIBuilder) => void): WebApplication {
+function build(configure: FeatureConfigurer<OpenAPIBuilder>): WebApplication {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt, o => {
+    .extend(OpenAPIExt(), o => {
       o.docs(false).public()
       configure(o)
     })

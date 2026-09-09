@@ -5,7 +5,7 @@ import { corsConfigSchema, type CORSConfig } from './config.js'
 import { CorsExtension, type CorsOptions } from './extension.js'
 
 /**
- * Configures `@fastify/cors`. Bound via `.extend(CORSExt, c => …)`.
+ * Configures `@fastify/cors`. Bound via `.extend(CORSExt(), c => …)`.
  *
  * Installing the feature is the activating act: its lifecycle binds {@link CorsExtension} and registers it with
  * the application's extensions, and the adapter runs it as a Fastify plugin. Configuration parameterizes the
