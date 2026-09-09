@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 import { createApplication } from './application_builder.js'
-import type { SignalDispatcher, ShutdownSignal } from './health/signals.js'
+import type { SignalDispatcher, ShutdownSignal } from './shutdown/signals.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -32,7 +32,9 @@ class FakeDispatcher implements SignalDispatcher {
 // BaseApplication — a Kafka consumer with no HTTP server was simply killed mid-message.
 describe('headless application shutdown', () => {
   it('refuses traffic before the drain delay and runs the hooks after it', async () => {
-    const app = createApplication({ shutdown: { drainDelay: 300, signals: false } }).build()
+    const app = createApplication()
+      .shutdown(s => s.drainDelay(300))
+      .build()
 
     await app.run()
 
@@ -59,7 +61,7 @@ describe('headless application shutdown', () => {
   })
 
   it('skips the wait when no drain delay is configured', async () => {
-    const app = createApplication({ shutdown: { signals: false } }).build()
+    const app = createApplication().build()
     await app.run()
 
     const startedAt = Date.now()
@@ -69,7 +71,9 @@ describe('headless application shutdown', () => {
   })
 
   it('joins a second close instead of starting another one', async () => {
-    const app = createApplication({ shutdown: { drainDelay: 100, signals: false } }).build()
+    const app = createApplication()
+      .shutdown(s => s.drainDelay(100))
+      .build()
     await app.run()
 
     let hooks = 0
@@ -84,7 +88,9 @@ describe('headless application shutdown', () => {
 
   it('installs the configured signals and drains when one arrives', async () => {
     const dispatcher = new FakeDispatcher()
-    const app = createApplication({ shutdown: { drainDelay: 50, signals: ['SIGTERM'], dispatcher } }).build()
+    const app = createApplication()
+      .shutdown(s => s.drainDelay(50).signals(['SIGTERM']).dispatcher(dispatcher))
+      .build()
 
     await app.run()
 
@@ -110,7 +116,7 @@ describe('headless application shutdown', () => {
   })
 
   it('still disposes the container when a shutdown hook throws', async () => {
-    const app = createApplication({ shutdown: { signals: false } }).build()
+    const app = createApplication().build()
     await app.run()
 
     app.on('application:pre-shutdown', () => {

@@ -8,6 +8,7 @@ export * from './feature.js'
 export * from './feature_builder.js'
 export * from './health/index.js'
 export * from './hooks.js'
+export * from './shutdown/index.js'
 // The schema dialect is first-class DX, so `$t` and its inference helper live on the root barrel. The rest of the
 // surface (validateSchema, toJSONSchema, the guards) is framework plumbing — import it from '@caffeinejs/std/schema'.
 export type { AnySchema, InferSchema } from './schema/schema.js'

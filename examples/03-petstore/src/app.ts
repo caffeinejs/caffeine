@@ -135,15 +135,19 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
     // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
     .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
     .server(s => s.config(c => c.server))
-    // Kubernetes probes (/livez, /readyz, /startupz) plus the graceful shutdown that drives them: SIGTERM makes
-    // /readyz answer 503 immediately, the drain delay covers the routing-table lag while requests keep being
-    // served normally, and only then does the server close. No preStop sleep in the manifest.
+    // Kubernetes probes: /livez, /readyz, /startupz.
+    .health()
+    // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the
+    // routing-table lag while requests keep being served normally, and only then does the server close. No
+    // preStop sleep in the manifest. Signals are on by default.
     //
     // Tests never need the 25s production shutdown budget; a hung Fastify close would sit on it until
     // hookTimeout. shutdownTimeout(0) waits forever — a small positive budget still force-tears down.
-    .health(h => {
+    .shutdown(s => {
       if (process.env.VITEST !== undefined) {
-        h.drainDelay(0).shutdownTimeout(200)
+        s.drainDelay(0).shutdownTimeout(200)
+      } else {
+        s.drainDelay('5s')
       }
     })
 

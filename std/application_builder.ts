@@ -14,18 +14,12 @@ import {
 import { type ApplicationEvent, hooksOf } from './decorators/lifecycle_registry.js'
 import { ErrFeatureAlreadyInstalled, type Feature, type FeatureLifecycle, type PluginContext } from './feature.js'
 import type { FeatureBuilder } from './feature_builder.js'
-import { type ShutdownConfig, resolveShutdownOptions } from './health/shutdown_options.js'
-import { detectSignalDispatcher } from './health/signals.js'
 import { ApplicationHooks } from './hooks.js'
+import { ShutdownBuilder } from './shutdown/shutdown_builder.js'
+import { detectSignalDispatcher } from './shutdown/signals.js'
 
 export interface ApplicationBuilderOptions {
   container?: Container | Options
-  /**
-   * The graceful-shutdown policy: drain delay, teardown budget, which signals to install, and the dispatcher that
-   * delivers them. Omitted, the defaults apply — signals installed outside a test runner, and a drain delay only
-   * under an orchestrator. The HTTP application takes this from `.health(...)` instead.
-   */
-  shutdown?: ShutdownConfig
 }
 
 /**
@@ -42,13 +36,11 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
   readonly #services: FeatureLifecycle[] = []
   readonly #hooks = new ApplicationHooks<BaseApplication>()
   readonly #hookBindings: HookBinding[] | 'scan'
-  readonly #shutdown: ShutdownConfig | undefined
   readonly #config = new ConfigDefinition()
   readonly #featureState = new Map<string, unknown>()
   readonly #installed = new Set<string>()
 
   constructor(options: ApplicationBuilderOptions = {}) {
-    this.#shutdown = options.shutdown
     const c = options.container
 
     if (c != null && typeof (c as Container).get === 'function') {
@@ -184,7 +176,6 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
       services: this.#services,
       hookBindings: this.#hookBindings,
       hooks: this.#hooks,
-      shutdown: resolveShutdownOptions(this.#shutdown),
       config: this.#config,
     }
   }
@@ -276,8 +267,28 @@ export class ApplicationBuilder<TConfig = unknown>
   /** Phantom — names the application config type for {@link ConfigTypeOf}. Never assigned, never read. */
   declare readonly __config?: TConfig
 
+  // Registered unconditionally: the drain policy applies to every application, so `SHUTDOWN__DRAIN_DELAY` has
+  // to work on one that never calls `.shutdown()`. Held so `.shutdown()` can configure it in place.
+  readonly #shutdownBuilder: ShutdownBuilder<unknown>
+
+  constructor(options: ApplicationBuilderOptions = {}) {
+    super(options)
+    this.#shutdownBuilder = new ShutdownBuilder<unknown>()
+    this.addFeature(this.#shutdownBuilder)
+  }
+
   build(): Application {
     return new Application(this.applicationInit())
+  }
+
+  /**
+   * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
+   * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults —
+   * `s.drainDelay('5s')` is a **default** that `SHUTDOWN__DRAIN_DELAY` or the config tree can still redirect.
+   */
+  shutdown(configure: (shutdown: ShutdownBuilder<TConfig>) => void): this {
+    configure(this.#shutdownBuilder as ShutdownBuilder<TConfig>)
+    return this
   }
 
   /**
