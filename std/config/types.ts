@@ -15,19 +15,17 @@ export interface PropertySource {
 }
 
 /**
- * What a provider is told about the resolution it is taking part in: which application, which profiles, which
- * label, and whether the caller has given up waiting.
+ * What every provider is told about the resolution in progress: the active profiles, deduplicated and in the
+ * order they were declared. Empty when the application named none.
  *
- * Deliberately free of host input. The environment and the command line used to travel here, which made every
- * provider's `load` signature carry two fields only one provider each ever read, and put the host seam in the
- * wrong place — a source that reads *somewhere* should be handed that somewhere by whoever constructed it.
- * {@link EnvConfigProvider} and {@link ArgsConfigProvider} take theirs as constructor options instead.
+ * A profile-blind provider ignores it. {@link FileConfigProvider} reads it to pick up `name-<profile>`
+ * siblings; {@link SpringCloudConfigProvider} reads it to build its request path. Everything else a single
+ * provider needs from its host — an environment accessor, an argv array, a base URL, an application name — is a
+ * constructor option of that provider, not a field here: a source that reads *somewhere* is handed that
+ * somewhere by whoever constructed it.
  */
 export interface ResolutionContext {
-  app: string
-  profiles: string[]
-  label?: string
-  signal?: AbortSignal
+  profiles: readonly string[]
 }
 
 export interface ConfigSnapshot {

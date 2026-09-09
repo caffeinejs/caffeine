@@ -2,6 +2,10 @@ import { ErrConfig } from '../errors.js'
 import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../types.js'
 
 export interface SpringCloudConfigProviderOptions {
+  /** The application name — the first path segment of the config-server request (`/{app}/{profiles}`). */
+  app: string
+  /** The config-server label (a git branch or tag), appended as the trailing path segment when set. */
+  label?: string
   baseURLs: string[]
   headers?: Record<string, string>
   authToken?: string
@@ -15,6 +19,8 @@ export interface SpringCloudConfigProviderOptions {
 }
 
 interface ResolvedOptions {
+  app: string
+  label?: string
   baseURLs: string[]
   headers: Record<string, string>
   authToken: string
@@ -45,6 +51,8 @@ export class SpringCloudConfigProvider implements ConfigProvider {
 
   constructor(options: SpringCloudConfigProviderOptions) {
     this.#options = {
+      app: options.app,
+      label: options.label,
       baseURLs: options.baseURLs.map(u => u.replace(/\/+$/, '')),
       headers: options.headers ?? {},
       authToken: options.authToken ?? '',
@@ -59,16 +67,18 @@ export class SpringCloudConfigProvider implements ConfigProvider {
   }
 
   async load(ctx: ResolutionContext): Promise<PropertySource[]> {
-    const profile = ctx.profiles.map(p => encodeURIComponent(p)).join(',')
-    const labelSegment = ctx.label ? `/${encodeURIComponent(ctx.label)}` : ''
-    const path = `/${encodeURIComponent(ctx.app)}/${profile}${labelSegment}`
+    const { app, label } = this.#options
+    // No active profile falls back to `default`, the segment a Spring config client sends when it has none.
+    const profile = ctx.profiles.map(p => encodeURIComponent(p)).join(',') || 'default'
+    const labelSegment = label ? `/${encodeURIComponent(label)}` : ''
+    const path = `/${encodeURIComponent(app)}/${profile}${labelSegment}`
 
     let lastError: unknown
 
     for (const baseURL of this.#options.baseURLs) {
       try {
-        const payload = await this.#fetch(baseURL + path, ctx.signal)
-        return this.#mapResponse(payload, profile, ctx.label)
+        const payload = await this.#fetch(baseURL + path)
+        return this.#mapResponse(payload, profile, label)
       } catch (err) {
         lastError = err
       }
@@ -80,7 +90,7 @@ export class SpringCloudConfigProvider implements ConfigProvider {
     throw new ErrConfig(`Config provider "${this.id}" failed to load`, 'ERR_CONFIG_PROVIDER', lastError)
   }
 
-  async #fetch(url: string, signal?: AbortSignal): Promise<SCCResponse> {
+  async #fetch(url: string): Promise<SCCResponse> {
     let attempt = 0
     let lastErr: unknown
 
@@ -98,12 +108,11 @@ export class SpringCloudConfigProvider implements ConfigProvider {
       // Timeout starts here — only the HTTP call counts against it
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), this.#options.timeoutMs)
-      const combinedSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
 
       let nonRetriable: Error | undefined
 
       try {
-        const response = await fetch(url, { ...resolvedInit, signal: combinedSignal })
+        const response = await fetch(url, { ...resolvedInit, signal: controller.signal })
         clearTimeout(timeout)
 
         if (!response.ok) {

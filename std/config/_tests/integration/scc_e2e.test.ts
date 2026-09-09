@@ -47,6 +47,7 @@ async function isServerAvailable(): Promise<boolean> {
 
 function makeProvider(overrides: Partial<SpringCloudConfigProviderOptions> = {}): SpringCloudConfigProvider {
   return new SpringCloudConfigProvider({
+    app: 'caffeine',
     baseURLs: [CONFIGSERVER_URL],
     basicAuth: { username: CONFIGSERVER_USERNAME, password: CONFIGSERVER_PASSWORD },
     timeoutMs: TIMEOUT_MS,
@@ -73,7 +74,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     const result = await bootstrapConfig({
       providers: [makeProvider()],
       schema,
-      context: { app: 'caffeine', profiles: ['default'] },
+      profiles: ['default'],
     })
 
     expect(result.config.caffeine.version).toBe('1.0.0')
@@ -87,7 +88,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     const result = await bootstrapConfig({
       providers: [makeProvider()],
       schema,
-      context: { app: 'caffeine', profiles: ['dev'] },
+      profiles: ['dev'],
     })
 
     expect(result.config.caffeine.environment).toBe('development')
@@ -101,7 +102,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     const result = await bootstrapConfig({
       providers: [makeProvider()],
       schema,
-      context: { app: 'caffeine', profiles: ['prod'] },
+      profiles: ['prod'],
     })
 
     expect(result.config.caffeine.environment).toBe('production')
@@ -115,7 +116,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     const result = await bootstrapConfig({
       providers: [makeProvider({ baseURLs: ['http://localhost:19999', CONFIGSERVER_URL] })],
       schema,
-      context: { app: 'caffeine', profiles: ['default'] },
+      profiles: ['default'],
     })
 
     expect(result.config.caffeine.version).toBe('1.0.0')
@@ -136,7 +137,7 @@ describe('SpringCloudConfigProvider e2e', () => {
       bootstrapConfig({
         providers: [provider],
         schema,
-        context: { app: 'caffeine', profiles: ['default'] },
+        profiles: ['default'],
       }),
     ).rejects.toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_PROVIDER' })
   })
@@ -152,8 +153,7 @@ describe('Refresh e2e with live proxy', () => {
 
     const mutableInline = {
       id: 'mutable-inline',
-      load: async () =>
-        new InlineConfigProvider(inlineOverride as never).load({ app: 'caffeine', profiles: ['default'] }),
+      load: async () => new InlineConfigProvider(inlineOverride as never).load({ profiles: ['default'] }),
     }
 
     const APP_TOKEN = token<ConfigHandle<CaffeineConfig>>(Symbol('caffeine.config'))
@@ -163,7 +163,7 @@ describe('Refresh e2e with live proxy', () => {
         token: APP_TOKEN,
         schema,
         providers: [mutableInline, makeProvider()],
-        context: { app: 'caffeine', profiles: ['default'] },
+        profiles: ['default'],
       }),
     )
     await container.init()

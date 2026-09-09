@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { EnvConfigProvider } from '../../providers/env_provider.js'
 import type { ResolutionContext } from '../../types.js'
 
-const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+const ctx: ResolutionContext = { profiles: ['default'] }
 
 describe('EnvConfigProvider', () => {
   it('loads all env vars without prefix, folding underscores into camelCase', async () => {

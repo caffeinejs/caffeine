@@ -16,7 +16,7 @@ describe('ConfigShard refresh', () => {
     const mutableProvider: ConfigProvider = {
       id: 'mutable',
       reloadable: true,
-      load: async () => new InlineConfigProvider(data as never).load({ app: 'test', profiles: ['default'] }),
+      load: async () => new InlineConfigProvider(data as never).load({ profiles: ['default'] }),
     }
     const shard = await ConfigShard.bootstrap<TestConfig>({ providers: [mutableProvider], schema })
     const handle = shard.handle

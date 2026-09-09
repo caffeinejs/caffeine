@@ -5,7 +5,7 @@ import type { ArgsConfigProviderOptions } from '../../providers/args_provider.js
 import { EnvConfigProvider } from '../../providers/env_provider.js'
 import type { ResolutionContext } from '../../types.js'
 
-const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+const ctx: ResolutionContext = { profiles: ['default'] }
 
 async function parse(
   argv: string[],

@@ -33,13 +33,13 @@ const DEFAULTS: WidgetConfig = { size: 1, label: 'widget' }
 async function resolve(definition: ConfigDefinition, extra: readonly ConfigProvider[] = []): Promise<void> {
   definition.sources.addAll(extra, ConfigPriority.ENV)
 
-  const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+  const ctx: ResolutionContext = { profiles: ['default'] }
 
   await bootstrapConfig({
     sources: definition.sources,
     schema: definition.schema,
     slices: definition.slices,
-    context: ctx,
+    profiles: ctx.profiles,
   })
 }
 
@@ -55,7 +55,7 @@ async function resolveHandle(
     schema: definition.schema,
     slices: definition.slices,
     features: definition.features,
-    context: { app: 'test', profiles: ['default'] },
+    profiles: ['default'],
   })
 
   return result.config

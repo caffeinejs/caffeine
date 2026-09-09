@@ -1,6 +1,6 @@
 import { type Container } from '@caffeinejs/di'
 
-import { ConfigDefinition } from './config/index.js'
+import { activeProfiles, ConfigDefinition } from './config/index.js'
 import { Extensions } from './extensions.js'
 import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './feature.js'
 import { ApplicationAvailability } from './health/availability.js'
@@ -98,7 +98,8 @@ export abstract class BaseApplication {
    * Brings the application up to the point where it can serve.
    *
    * 1. the always-on `caffeine` slice is registered, then every service **declares**;
-   * 2. configuration **resolves**, and every slice publishes;
+   * 2. configuration **resolves** — a pre-pass reads `caffeine.profiles` so the real resolve is profile-aware
+   *    — and every slice publishes;
    * 3. `caffeine.name` and `caffeine.profiles` are applied;
    * 4. every service **configures** — binding into the container and registering its extensions, now able to
    *    read its own settings;
@@ -120,6 +121,11 @@ export abstract class BaseApplication {
     this.#config.frameworkDefaults.set(CAFFEINE_CONFIG_NAMESPACE, { ...DEFAULT_CAFFEINE_CONFIG })
     const caffeine = this.#config.slice<CaffeineConfig>(CAFFEINE_CONFIG_NAMESPACE, caffeineConfigSchema)
 
+    // Discovered in a pre-pass so a file or remote source resolves profile-aware: `caffeine.profiles` set from
+    // any source — an environment variable, an argument, a file — drives which `application-<profile>` overlays
+    // load on the resolve that follows.
+    this.#config.profilesPath = [...CAFFEINE_CONFIG_NAMESPACE, 'profiles']
+
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()
 
@@ -130,13 +136,13 @@ export abstract class BaseApplication {
     )
     await this.#config.bootstrap()
 
-    const profiles = caffeine.config.profiles.filter(profile => profile !== '')
+    const profiles = activeProfiles(caffeine.config.profiles)
     if (profiles.length > 0) {
       this.#container.addProfiles(profiles[0], ...profiles.slice(1))
     }
 
     this.#name = caffeine.config.name
-    this.#profiles = caffeine.config.profiles
+    this.#profiles = profiles
 
     // Each feature gets its own kit, carrying its position in the feature list. Extensions are registered
     // against that position rather than against the moment the hook reached the call, so what a feature awaits

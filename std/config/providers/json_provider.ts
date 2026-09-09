@@ -1,4 +1,4 @@
-import { FileConfigProvider } from './file_provider.js'
+import { FileConfigProvider, type FileConfigProviderOptions } from './file_provider.js'
 
 /**
  * Reads configuration from a JSON file.
@@ -8,7 +8,7 @@ import { FileConfigProvider } from './file_provider.js'
  * replacing this one: `new FileConfigProvider('./app.json', text => JSON5.parse(text))`.
  */
 export class JSONConfigProvider extends FileConfigProvider {
-  constructor(filePath: string) {
-    super(filePath, text => JSON.parse(text) as Record<string, unknown>)
+  constructor(filePath: string, options: FileConfigProviderOptions = {}) {
+    super(filePath, text => JSON.parse(text) as Record<string, unknown>, options)
   }
 }

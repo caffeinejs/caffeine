@@ -6,13 +6,14 @@ import { createConfigDiagnostics } from './diagnostics.js'
 import { ConfigEngine } from './engine.js'
 import type { ConfigSliceFailure } from './errors.js'
 import { materialize, readByParts } from './materializer.js'
+import { activeProfiles } from './profiles.js'
 import type { ConfigSchema, InferConfig } from './schema.js'
 import { validateConfig } from './schema.js'
 import { secretPaths } from './secrets.js'
 import type { ConfigSlice, ConfigSliceSpec } from './slice.js'
 import { featureLookup, freezeDeep, sliceLabel } from './slice.js'
 import { ConfigSources } from './sources.js'
-import type { ConfigProvider, ConfigSnapshot, ResolutionContext } from './types.js'
+import type { ConfigProvider, ConfigSnapshot } from './types.js'
 
 export interface BootstrapOptions<T> {
   /** The live source registry. Preferred — it is re-read on every resolve, so late registrations take effect. */
@@ -22,7 +23,20 @@ export interface BootstrapOptions<T> {
   schema: ConfigSchema<T>
   /** Feature slices to validate and publish alongside the root config. */
   slices?: readonly ConfigSliceSpec[]
-  context?: ResolutionContext
+  /**
+   * The active profiles, stated outright. Skips discovery — for a direct or standalone caller that already
+   * knows them. {@link activeProfiles} still normalizes the value, so a duplicate or a blank is harmless.
+   */
+  profiles?: readonly string[]
+  /**
+   * The tree path holding the active-profile list, for the two-phase path: when this is set and `profiles` is
+   * not, resolution runs once with no profile to read this key, then again profile-aware.
+   *
+   * The cost is one extra full resolve per bootstrap and per refresh for an application that names a profile;
+   * one that names none pays nothing, the probe result is reused. Discovery is single-pass — a profile file
+   * that itself sets this key does not trigger another round.
+   */
+  profilesPath?: readonly string[]
   failFast?: boolean
   /**
    * Paths the diagnostics must redact, on top of whatever the root schema marks with `$t.Secret`. The config
@@ -52,8 +66,6 @@ export interface ConfigBootstrapResult<T> {
   secrets: ReadonlySet<string>
 }
 
-const DEFAULT_CONTEXT: ResolutionContext = { app: 'application', profiles: ['default'] }
-
 /** Normalizes the two accepted spellings of "which sources" into the live registry the engine wants. */
 export function sourcesOf<T>(options: BootstrapOptions<T>): ConfigSources {
   return options.sources ?? ConfigSources.of(...(options.providers ?? []))
@@ -71,10 +83,17 @@ export async function bootstrapConfig<S extends AnySchema>(
 ): Promise<ConfigBootstrapResult<InferConfig<S>>>
 export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<ConfigBootstrapResult<T>>
 export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<ConfigBootstrapResult<T>> {
-  const ctx = options.context ?? { ...DEFAULT_CONTEXT, profiles: [...DEFAULT_CONTEXT.profiles] }
   const engine = new ConfigEngine({ sources: sourcesOf(options), failFast: options.failFast })
 
-  const snapshot = await engine.resolve(ctx)
+  let snapshot: ConfigSnapshot
+  if (options.profiles === undefined && options.profilesPath !== undefined) {
+    // Phase 1 — no active profile yet: resolve to discover which profiles the tree declares.
+    const probe = await engine.resolve({ profiles: [] })
+    const profiles = activeProfiles(readByParts(materialize(probe), options.profilesPath))
+    snapshot = profiles.length === 0 ? probe : await engine.resolve({ profiles })
+  } else {
+    snapshot = await engine.resolve({ profiles: activeProfiles(options.profiles ?? []) })
+  }
   const materialized = materialize(snapshot)
 
   const failures = publishSlices(options.slices, materialized)

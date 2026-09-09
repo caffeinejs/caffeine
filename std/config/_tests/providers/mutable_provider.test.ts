@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { MutableConfigProvider } from '../../providers/mutable_provider.js'
 import type { ResolutionContext } from '../../types.js'
 
-const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+const ctx: ResolutionContext = { profiles: ['default'] }
 
 async function entriesOf(provider: MutableConfigProvider): Promise<Record<string, unknown>> {
   const [source] = await provider.load(ctx)

@@ -1,8 +1,12 @@
+import { unlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { CaffeineIoC, Injectable, Profile, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 
-import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
+import { InlineConfigProvider, JSONConfigProvider, type ConfigHandle } from './config/index.js'
 import {
   $t,
   type BootstrapKit,
@@ -173,5 +177,50 @@ describe('application name and profiles', () => {
     await app.ready()
 
     expect(container.has(EuOnly)).toBe(true)
+  })
+
+  it('deduplicates caffeine.profiles before applying them', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .config(caffeineSchema, kConfig, c =>
+        c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu', 'eu', 'dev'] } })),
+      )
+      .build()
+    await app.ready()
+
+    expect(app.profiles).toEqual(['eu', 'dev'])
+  })
+})
+
+describe('profile-segregated config files', () => {
+  const files: string[] = []
+
+  async function writeTmp(name: string, content: string): Promise<string> {
+    const path = join(tmpdir(), name)
+    await writeFile(path, content, 'utf8')
+    files.push(path)
+    return path
+  }
+
+  afterEach(async () => {
+    for (const f of files.splice(0)) {
+      await unlink(f).catch(() => undefined)
+    }
+  })
+
+  it('loads the application-<profile> overlay named by caffeine.profiles', async () => {
+    // End to end: a profile set through a config source drives which file overlay wins, through the
+    // application's two-phase resolve.
+    const base = await writeTmp('app-e2e.json', JSON.stringify({ caffeine: { name: 'base' } }))
+    await writeTmp('app-e2e-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .config(caffeineSchema, kConfig, c =>
+        c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })).source(new JSONConfigProvider(base)),
+      )
+      .build()
+    await app.ready()
+
+    expect(app.name).toBe('eu-app')
+    expect(app.profiles).toEqual(['eu'])
   })
 })

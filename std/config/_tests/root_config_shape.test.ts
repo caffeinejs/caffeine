@@ -29,7 +29,7 @@ describe('the resolved root configuration', () => {
       sources: definition.sources,
       schema: definition.schema,
       slices: definition.slices,
-      context: { app: 'test', profiles: ['default'] },
+      profiles: ['default'],
     })
   }
 

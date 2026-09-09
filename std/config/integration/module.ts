@@ -7,7 +7,7 @@ import type { ConfigDefinition } from '../definition.js'
 import type { ConfigSchema } from '../schema.js'
 import type { ConfigSlice, ConfigSliceSpec } from '../slice.js'
 import type { ConfigSources } from '../sources.js'
-import type { ConfigProvider, ResolutionContext } from '../types.js'
+import type { ConfigProvider } from '../types.js'
 import { ConfigShard } from './shard.js'
 
 export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:refresh-label')
@@ -23,7 +23,10 @@ export interface ConfigModuleOptions<T> {
   slices?: readonly ConfigSliceSpec[]
   /** The slices published under a feature key, which the resolved handle answers a key with. */
   features?: ReadonlyMap<symbol, ConfigSlice<unknown>>
-  context?: ResolutionContext
+  /** The active profiles, stated outright. See {@link BootstrapOptions.profiles}. */
+  profiles?: readonly string[]
+  /** The tree path holding the active-profile list, for the two-phase path. See {@link BootstrapOptions.profilesPath}. */
+  profilesPath?: readonly string[]
   failFast?: boolean
   /** Paths the diagnostics must redact, on top of whatever the root schema marks with `$t.Secret`. */
   secrets?: ReadonlySet<string>
@@ -54,7 +57,8 @@ export function ConfigModule<T>(options: ConfigModuleOptions<T> | ConfigDefiniti
           schema: (options as ConfigModuleOptions<T>).schema,
           slices: (options as ConfigModuleOptions<T>).slices,
           features: (options as ConfigModuleOptions<T>).features,
-          context: (options as ConfigModuleOptions<T>).context,
+          profiles: (options as ConfigModuleOptions<T>).profiles,
+          profilesPath: (options as ConfigModuleOptions<T>).profilesPath,
           failFast: (options as ConfigModuleOptions<T>).failFast,
           secrets: (options as ConfigModuleOptions<T>).secrets,
         }

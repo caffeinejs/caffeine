@@ -10,7 +10,7 @@ import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { REDACTED, isSecretPath, secretPaths } from '../secrets.js'
 import type { ResolutionContext } from '../types.js'
 
-const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+const ctx: ResolutionContext = { profiles: ['default'] }
 
 describe('secretPaths', () => {
   it('finds a marked leaf', () => {
@@ -103,7 +103,7 @@ describe('diagnostics redaction', () => {
       schema: definition.schema,
       slices: definition.slices,
       secrets: definition.secrets,
-      context: ctx,
+      profiles: ctx.profiles,
     })
 
     return { result, slice }
@@ -153,7 +153,7 @@ describe('diagnostics redaction', () => {
     const result = await bootstrapConfig({
       schema: $t.Object({ apiKey: $t.Secret($t.String()) }),
       providers: [new InlineConfigProvider({ apiKey: 'root-level-secret' })],
-      context: ctx,
+      profiles: ctx.profiles,
     })
 
     expect(result.validated.apiKey).toBe('root-level-secret')
@@ -164,7 +164,7 @@ describe('diagnostics redaction', () => {
     const result = await bootstrapConfig({
       schema: $t.Object({ host: $t.String() }),
       providers: [new InlineConfigProvider({ host: 'localhost' })],
-      context: ctx,
+      profiles: ctx.profiles,
     })
 
     expect(result.diagnostics.valueAt('host')).toBe('localhost')

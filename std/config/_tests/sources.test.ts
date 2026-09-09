@@ -6,7 +6,7 @@ import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { ConfigPriority, ConfigSources } from '../sources.js'
 import type { ConfigProvider, ResolutionContext } from '../types.js'
 
-const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+const ctx: ResolutionContext = { profiles: ['default'] }
 
 function provider(id: string, value: string): ConfigProvider {
   const inline = new InlineConfigProvider({ db: { host: value } }, id)

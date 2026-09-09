@@ -62,7 +62,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     return this.#container
   }
 
-  /** The live configuration definition: its sources, root schema, resolution context and feature slices. */
+  /** The live configuration definition: its sources, root schema, profile path and feature slices. */
   get configDefinition(): ConfigDefinition {
     return this.#config
   }

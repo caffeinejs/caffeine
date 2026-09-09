@@ -4,7 +4,7 @@ import { ConfigEngine } from '../engine.js'
 import { ConfigSources } from '../sources.js'
 import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 
-const ctx: ResolutionContext = { app: 'test', profiles: ['default'] }
+const ctx: ResolutionContext = { profiles: ['default'] }
 
 function makeProvider(id: string, sources: PropertySource[], fail = false): ConfigProvider {
   return {

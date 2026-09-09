@@ -5,12 +5,11 @@ import {
   type ConfigDefinition,
   type ConfigPriorityValue,
   type ConfigProvider,
-  type ResolutionContext,
 } from './config/index.js'
 
 /**
  * Fluent definition of the application configuration sources, passed to
- * `.config(schema, key, c => c.source(...).context(...))`.
+ * `.config(schema, key, c => c.source(...))`.
  *
  * The schema and the key the resolved configuration is bound under are supplied to `.config()` directly (not
  * through this builder), so the application config type is inferred from the schema regardless of the callback's
@@ -55,12 +54,6 @@ export class AppConfigBuilder<T = unknown> {
    */
   args(options: ArgsConfigProviderOptions = {}): this {
     this.#definition.sources.add(new ArgsConfigProvider(options), ConfigPriority.ARGS)
-    return this
-  }
-
-  /** Sets the resolution context (app name, profiles, label, ...). */
-  context(context: ResolutionContext): this {
-    this.#definition.context = context
     return this
   }
 

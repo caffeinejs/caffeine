@@ -74,12 +74,12 @@ describe('ConfigModule', () => {
     const appProvider: ConfigProvider = {
       id: 'app',
       reloadable: true,
-      load: async () => new InlineConfigProvider(appData as never).load({ app: 'test', profiles: ['default'] }),
+      load: async () => new InlineConfigProvider(appData as never).load({ profiles: ['default'] }),
     }
     const dbProvider: ConfigProvider = {
       id: 'db',
       reloadable: true,
-      load: async () => new InlineConfigProvider(dbData as never).load({ app: 'test', profiles: ['default'] }),
+      load: async () => new InlineConfigProvider(dbData as never).load({ profiles: ['default'] }),
     }
 
     const container = new CaffeineIoC()
@@ -112,7 +112,7 @@ describe('ConfigModule', () => {
       load: async () => {
         const { InlineConfigProvider } = await import('../../providers/inline_provider.js')
         const p = new InlineConfigProvider(data as never)
-        return p.load({ app: 'test', profiles: ['default'] })
+        return p.load({ profiles: ['default'] })
       },
     }
 

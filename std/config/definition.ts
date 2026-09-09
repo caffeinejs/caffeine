@@ -8,16 +8,14 @@ import { declaredDefaults, type ConfigSchema, passthroughConfigSchema } from './
 import { secretPaths } from './secrets.js'
 import { ConfigSlice, type ConfigSliceSpec } from './slice.js'
 import { ConfigPriority, ConfigSources } from './sources.js'
-import type { ConfigValue, ResolutionContext } from './types.js'
+import type { ConfigValue } from './types.js'
 
 /** DI key for the {@link ConfigDefinition} the application builder owns. Features resolve it to register a slice. */
 export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs/std:config.definition'))
 
-const DEFAULT_CONTEXT = (): ResolutionContext => ({ app: 'application', profiles: ['default'] })
-
 /**
- * The live description of an application's configuration: its sources, its root schema, its resolution context,
- * and the feature slices carved out of the resulting tree.
+ * The live description of an application's configuration: its sources, its root schema, where its active
+ * profiles are read from, and the feature slices carved out of the resulting tree.
  *
  * Live is the whole point. The previous design snapshotted the provider list when `.config()` was called, which
  * meant nothing registered afterwards could ever be seen — and feature builders necessarily run afterwards, at
@@ -53,7 +51,12 @@ export class ConfigDefinition {
   /** Values set through feature builder methods. Defaults too: file, env and args all win over them. */
   readonly codeValues = new MutableConfigProvider('code')
 
-  context: ResolutionContext = DEFAULT_CONTEXT()
+  /**
+   * The tree path holding the application's active-profile list, e.g. `['caffeine', 'profiles']`. The host
+   * points it here before {@link bootstrap}; `std/config` never assumes a location. Unset, resolution runs
+   * with no active profile — no profile-segregated file or overlay is loaded.
+   */
+  profilesPath: readonly string[] | undefined
   failFast: boolean | undefined
   /**
    * Paths marked with `$t.Secret`, collected as each slice registers and from the root schema at bootstrap.
@@ -115,7 +118,7 @@ export class ConfigDefinition {
       // caller that named it.
       schema: this.schema,
       slices: this.slices,
-      context: this.context,
+      profilesPath: this.profilesPath,
       failFast: this.failFast,
       secrets: this.secrets,
       features: this.features,

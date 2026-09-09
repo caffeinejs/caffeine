@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SpringCloudConfigProvider } from '../../providers/scc_provider.js'
 import type { ResolutionContext } from '../../types.js'
 
-const ctx: ResolutionContext = { app: 'caffeine', profiles: ['default'] }
+const ctx: ResolutionContext = { profiles: ['default'] }
 
 function mockFetch(responses: Array<{ ok: boolean; status?: number; body?: unknown }>) {
   let call = 0
@@ -40,7 +40,7 @@ describe('SpringCloudConfigProvider', () => {
 
   it('maps propertySources to PropertySource list in order', async () => {
     vi.stubGlobal('fetch', mockFetch([{ ok: true, body: successBody }]))
-    const provider = new SpringCloudConfigProvider({ baseURLs: ['http://localhost:8888'], retries: 0 })
+    const provider = new SpringCloudConfigProvider({ app: 'caffeine', baseURLs: ['http://localhost:8888'], retries: 0 })
 
     const sources = await provider.load(ctx)
     const names = sources.map(s => s.name)
@@ -50,7 +50,7 @@ describe('SpringCloudConfigProvider', () => {
 
   it('imports version and state metadata', async () => {
     vi.stubGlobal('fetch', mockFetch([{ ok: true, body: successBody }]))
-    const provider = new SpringCloudConfigProvider({ baseURLs: ['http://localhost:8888'], retries: 0 })
+    const provider = new SpringCloudConfigProvider({ app: 'caffeine', baseURLs: ['http://localhost:8888'], retries: 0 })
 
     const sources = await provider.load(ctx)
     const meta = sources.find(s => s.name === 'spring-cloud-config:metadata')
@@ -61,7 +61,7 @@ describe('SpringCloudConfigProvider', () => {
 
   it('metadata source is first in the returned array', async () => {
     vi.stubGlobal('fetch', mockFetch([{ ok: true, body: successBody }]))
-    const provider = new SpringCloudConfigProvider({ baseURLs: ['http://localhost:8888'], retries: 0 })
+    const provider = new SpringCloudConfigProvider({ app: 'caffeine', baseURLs: ['http://localhost:8888'], retries: 0 })
 
     const sources = await provider.load(ctx)
     expect(sources[0].name).toBe('spring-cloud-config:metadata')
@@ -75,6 +75,7 @@ describe('SpringCloudConfigProvider', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:19999', 'http://localhost:8888'],
       retries: 0,
     })
@@ -86,6 +87,7 @@ describe('SpringCloudConfigProvider', () => {
   it('throws ERR_CONFIG_PROVIDER when all URLs fail and optional is false', async () => {
     vi.stubGlobal('fetch', mockFetch([{ ok: false, status: 503 }]))
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:19999'],
       retries: 0,
       optional: false,
@@ -97,6 +99,7 @@ describe('SpringCloudConfigProvider', () => {
   it('returns empty array when all URLs fail and optional is true', async () => {
     vi.stubGlobal('fetch', mockFetch([{ ok: false, status: 503 }]))
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:19999'],
       retries: 0,
       optional: true,
@@ -108,7 +111,7 @@ describe('SpringCloudConfigProvider', () => {
 
   it('sets origin as scc:<source-name>', async () => {
     vi.stubGlobal('fetch', mockFetch([{ ok: true, body: successBody }]))
-    const provider = new SpringCloudConfigProvider({ baseURLs: ['http://localhost:8888'], retries: 0 })
+    const provider = new SpringCloudConfigProvider({ app: 'caffeine', baseURLs: ['http://localhost:8888'], retries: 0 })
 
     const sources = await provider.load(ctx)
     const ps = sources.find(s => s.name === 'spring-cloud-config:file:caffeine.yml')!
@@ -119,8 +122,8 @@ describe('SpringCloudConfigProvider', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => successBody })
     vi.stubGlobal('fetch', fetchMock)
 
-    const provider = new SpringCloudConfigProvider({ baseURLs: ['http://localhost:8888'], retries: 0 })
-    await provider.load({ app: 'caffeine', profiles: ['default', 'dev'] })
+    const provider = new SpringCloudConfigProvider({ app: 'caffeine', baseURLs: ['http://localhost:8888'], retries: 0 })
+    await provider.load({ profiles: ['default', 'dev'] })
 
     const url = (fetchMock.mock.calls[0] as [string, RequestInit])[0]
     expect(url).toContain('/caffeine/default,dev')
@@ -132,6 +135,7 @@ describe('SpringCloudConfigProvider', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:8888'],
       basicAuth: { username: 'user', password: 'pass' },
       retries: 0,
@@ -147,6 +151,7 @@ describe('SpringCloudConfigProvider', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:8888'],
       authToken: 'mytoken',
       basicAuth: { username: 'user', password: 'pass' },
@@ -169,6 +174,7 @@ describe('SpringCloudConfigProvider', () => {
     )
 
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:8888'],
       retries: 3,
       optional: false,
@@ -184,6 +190,7 @@ describe('SpringCloudConfigProvider', () => {
 
     const dispatcher = {} as RequestInit['dispatcher']
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:8888'],
       dispatcher,
       retries: 0,
@@ -199,6 +206,7 @@ describe('SpringCloudConfigProvider', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:8888'],
       beforeRequest: async (_url, init) => ({
         ...init,
@@ -223,6 +231,7 @@ describe('SpringCloudConfigProvider', () => {
     )
 
     const provider = new SpringCloudConfigProvider({
+      app: 'caffeine',
       baseURLs: ['http://localhost:8888'],
       beforeRequest: async (_url, init) => {
         hookCalls++
