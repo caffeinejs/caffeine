@@ -23,7 +23,6 @@ import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { installRouteGroupErrorHandler } from './error/error_handling.js'
 import { ErrorHandlingExtension } from './error/error_handling_extension.js'
 import { attachGuardHook } from './guards/attach.js'
-import { kGuardOptions } from './guards/keys.js'
 import { joinPaths } from './internal/paths/index.js'
 import { type AdapterRouteOptions } from './internal/route_hooks.js'
 import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
@@ -213,15 +212,6 @@ export class FastifyAdapter<
               for (const [k, v] of route.options) {
                 options[k] = v
               }
-            }
-
-            // Guard Options
-            if (route.guardOptions) {
-              const opts: Record<string | symbol, unknown> = {}
-              for (const [k, v] of Object.entries(route.guardOptions)) {
-                opts[k] = v
-              }
-              config[kGuardOptions] = opts
             }
 
             const status = route.statusCode!

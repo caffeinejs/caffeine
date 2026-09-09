@@ -272,8 +272,8 @@ describe('testClient()', () => {
 
   describe('given a builder to configure', () => {
     it('should apply what "configure" set before the application was built', async () => {
-      class DenyGuard extends Guard {
-        canActivate(): GuardReturn {
+      class DenyGuard implements Guard {
+        guard(): GuardReturn {
           return false
         }
       }

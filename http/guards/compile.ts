@@ -1,8 +1,8 @@
-import { Scopes, type Binding, type Container, type InjectionToken, type Provider } from '@caffeinejs/di'
+import { Scopes, type Binding, type Container, type Provider } from '@caffeinejs/di'
 
 import { ErrConfiguration } from '../error/common.js'
 import { solutions } from '../error/util.js'
-import { Guard } from './guard.js'
+import type { Guard } from './guard.js'
 import type { GuardRef } from './keys.js'
 
 export type CompiledGuard =
@@ -43,8 +43,8 @@ function compileOne(
   }
 
   const name = typeof key === 'function' ? key.name : String(key)
-  const bindings = container.getBindings(key)
-  if (bindings.length === 0) {
+  const binding = container.getBinding(key) as Binding<Guard> | undefined
+  if (binding === undefined) {
     throw new ErrConfiguration(
       `Cannot resolve guard "${name}" referenced by "${owner}": no binding registered` +
         solutions(
@@ -54,13 +54,17 @@ function compileOne(
     )
   }
 
-  const binding = container.getBinding(key) as Binding<Guard>
-  if (!isGuardBinding(binding, key)) {
+  // Registration is by strong-typed key, so the key is trusted. This is a shape check, not a gate:
+  // when a class prototype is reachable it must carry the `guard()` method; a factory or value
+  // binding has no prototype to inspect and is taken on trust.
+  const proto = (typeof binding.type === 'function' ? binding.type : typeof key === 'function' ? key : undefined)
+    ?.prototype as { guard?: unknown } | undefined
+  if (proto !== undefined && typeof proto.guard !== 'function') {
     throw new ErrConfiguration(
-      `Cannot use "${name}" as a guard in "${owner}": it is not a container-managed Guard` +
+      `Cannot use "${name}" as a guard in "${owner}": no "guard" method` +
         solutions(
-          `"${name}" must extend Guard`,
-          'List only Guard subclasses in "@UseGuards" or "guards(g => g.use(...))"',
+          `A guard must expose a "guard(input)" method`,
+          'List only guards in "@UseGuards" or "guards(g => g.global(...))"',
         ),
     )
   }
@@ -74,13 +78,4 @@ function compileOne(
 
   compiledByKey.set(key, compiled)
   return compiled
-}
-
-function isGuardBinding(binding: Binding, key: InjectionToken<Guard>): boolean {
-  if (typeof key === 'function' && key.prototype instanceof Guard) {
-    return true
-  }
-
-  const type = binding.type
-  return typeof type === 'function' && type.prototype instanceof Guard
 }

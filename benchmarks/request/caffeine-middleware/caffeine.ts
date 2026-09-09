@@ -40,8 +40,8 @@ const responseSchema = {
 }
 
 @Injectable()
-class ApiKeyGuard extends Guard {
-  canActivate(input: GuardInput<unknown>): boolean {
+class ApiKeyGuard implements Guard {
+  guard(input: GuardInput): boolean {
     if (input.context.req.header('x-api-key') !== 'benchmark') {
       throw new ErrHTTPUnauthorized()
     }

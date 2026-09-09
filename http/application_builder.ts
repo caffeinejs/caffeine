@@ -90,7 +90,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    *
    * ```ts
    * createWebApplication()
-   *   .guards(g => g.use(RolesGuard).use(kNamedAuthGuard))
+   *   .guards(g => g.global(RolesGuard, kNamedAuthGuard))
    * ```
    */
   guards(configure: (guards: GuardsBuilder) => void): this {

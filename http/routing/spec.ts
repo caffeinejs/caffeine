@@ -2,7 +2,7 @@ import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
 import type { ErrorHandlerRef } from '../error/error.js'
-import { Guard } from '../guards/guard.js'
+import type { Guard } from '../guards/guard.js'
 import type { RouteValidationSchema } from '../route.js'
 import type { RouteInvoker } from './dispatch.js'
 
@@ -27,7 +27,6 @@ export interface RouteGroupSpec<R> {
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
-  guardOptions?: Record<string | symbol, unknown>
 }
 
 export interface RouteSpec<R> {
@@ -54,7 +53,6 @@ export interface RouteSpec<R> {
   extras?: Map<symbol, unknown>
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
-  guardOptions?: Record<string | symbol, unknown>
 }
 
 export interface RouteAuthzOptions {

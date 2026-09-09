@@ -1,2 +1,3 @@
 export { GuardsBuilder } from './builder.js'
-export { Guard, type GuardContext, type GuardInput, type GuardResult, type GuardReturn } from './guard.js'
+export { GuardResult } from './guard.js'
+export type { Guard, GuardContext, GuardInput, GuardReturn } from './guard.js'

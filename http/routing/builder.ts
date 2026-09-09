@@ -2,7 +2,7 @@ import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
 import type { ErrorHandlerRef } from '../error/error.js'
-import { Guard } from '../guards/guard.js'
+import type { Guard } from '../guards/guard.js'
 import type { RouteValidationSchema } from '../route.js'
 import { mergeValue } from './_merge.js'
 import type { RouteInvoker } from './dispatch.js'
@@ -24,7 +24,6 @@ export class RouteGroupBuilder {
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
-  #guardOptions?: Record<string | symbol, unknown>
 
   path(path: string) {
     this.#path = path
@@ -91,20 +90,6 @@ export class RouteGroupBuilder {
     return this
   }
 
-  guardOptions<K extends string | symbol>(key: K, value: unknown): this
-  guardOptions<K extends string | symbol>(options: Record<K, unknown>): this
-  guardOptions<K extends string | symbol>(keyOrOptions: K | Record<K, unknown>, value?: unknown): this {
-    this.#guardOptions ??= {}
-    if (typeof keyOrOptions === 'string' || typeof keyOrOptions === 'symbol') {
-      this.#guardOptions[keyOrOptions] = value
-    } else {
-      for (const [key, value] of Object.entries(keyOrOptions)) {
-        this.#guardOptions[key] = value
-      }
-    }
-    return this
-  }
-
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -164,7 +149,6 @@ export class RouteGroupBuilder {
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
       guards: this.#guards,
-      guardOptions: this.#guardOptions,
     }
   }
 }
@@ -188,7 +172,6 @@ export class RouteBuilder {
   #extras?: Map<symbol, unknown>
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
-  #guardOptions?: Record<string | symbol, unknown>
 
   header(name: string, value: string | string[]) {
     this.#header ??= new Map()
@@ -271,20 +254,6 @@ export class RouteBuilder {
     return this
   }
 
-  guardOptions<K extends string | symbol>(key: K, value: unknown): this
-  guardOptions<K extends string | symbol>(options: Record<K, unknown>): this
-  guardOptions<K extends string | symbol>(keyOrOptions: K | Record<K, unknown>, value?: unknown): this {
-    this.#guardOptions ??= {}
-    if (typeof keyOrOptions === 'string' || typeof keyOrOptions === 'symbol') {
-      this.#guardOptions[keyOrOptions] = value
-    } else {
-      for (const [key, value] of Object.entries(keyOrOptions)) {
-        this.#guardOptions[key] = value
-      }
-    }
-    return this
-  }
-
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -347,7 +316,6 @@ export class RouteBuilder {
       extras: this.#extras,
       catchBy: this.#catchBy,
       guards: this.#guards,
-      guardOptions: this.#guardOptions,
     }
   }
 }

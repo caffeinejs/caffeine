@@ -48,16 +48,16 @@ describe('programmatic router parity with the decorator feature set', () => {
       const seen: string[] = []
 
       @Injectable()
-      class TraceGuard extends Guard {
-        canActivate(input: GuardInput): boolean {
+      class TraceGuard implements Guard {
+        guard(input: GuardInput): boolean {
           seen.push(String(input.target.handler))
           return true
         }
       }
 
       @Injectable()
-      class DenyGuard extends Guard {
-        canActivate(): boolean {
+      class DenyGuard implements Guard {
+        guard(): boolean {
           return false
         }
       }

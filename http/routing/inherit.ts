@@ -61,7 +61,6 @@ export function inheritGroupSpec<R>(outer: RouteGroupSpec<R>, inner: RouteGroupS
     options: mergeMap(outer.options, inner.options),
     extras: mergeMap(outer.extras, inner.extras),
     guards: concat(outer.guards, inner.guards),
-    guardOptions: mergeRecord(outer.guardOptions, inner.guardOptions),
     catchBy: inner.catchBy?.length ? inner.catchBy : outer.catchBy,
   }
 }
@@ -75,20 +74,6 @@ function mergeMap<K, V>(outer: Map<K, V> | undefined, inner: Map<K, V> | undefin
   }
 
   return new Map([...outer, ...inner])
-}
-
-function mergeRecord<V>(
-  outer: Record<string | symbol, V> | undefined,
-  inner: Record<string | symbol, V> | undefined,
-): Record<string | symbol, V> | undefined {
-  if (outer === undefined) {
-    return inner
-  }
-  if (inner === undefined) {
-    return outer
-  }
-
-  return { ...outer, ...inner }
 }
 
 function concat<T>(outer: T[] | undefined, inner: T[] | undefined): T[] | undefined {

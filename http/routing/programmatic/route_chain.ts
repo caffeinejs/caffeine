@@ -99,13 +99,6 @@ export class RouteChain<
     return this
   }
 
-  guardOptions<K extends string | symbol>(key: K, value: unknown): this
-  guardOptions<K extends string | symbol>(options: Record<K, unknown>): this
-  guardOptions<K extends string | symbol>(keyOrOptions: K | Record<K, unknown>, value?: unknown): this {
-    this.#state.builder.guardOptions(keyOrOptions as K, value)
-    return this
-  }
-
   catchBy(handlers: ErrorHandlerRef[]): this {
     this.#state.builder.catchBy(handlers)
     return this

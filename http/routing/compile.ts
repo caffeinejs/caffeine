@@ -3,7 +3,7 @@ import { Container, Ctor, InjectionToken } from '@caffeinejs/di'
 import { CatchMetadata, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
 import { solutions } from '../error/util.js'
 import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
-import { Guard } from '../guards/index.js'
+import type { Guard } from '../guards/index.js'
 import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
 import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
@@ -123,7 +123,6 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         extras: route.extras,
         catchBy: buildCatchByMap(container, route.catchBy, owner),
         guards: compileRouteGuardChain(container, compiledGuards, globalGuards, spec.guards, route.guards, owner),
-        guardOptions: compileGuardOptions(spec, route),
         authorization: (() => {
           // Always compiled, never gated on a decorator being present: an undecorated route is exactly
           // the one a configured fallback policy has to reach, and compileRoutePolicy is what knows
@@ -262,24 +261,6 @@ function buildCatchByMap(
   }
 
   return map
-}
-
-function compileGuardOptions<R>(router: RouteGroupSpec<R>, route: RouteSpec<R>): Record<string | symbol, unknown> {
-  const guardOptions: Record<string | symbol, unknown> = {}
-
-  if (router.guardOptions) {
-    for (const [k, v] of Object.entries(router.guardOptions)) {
-      guardOptions[k] = v
-    }
-  }
-
-  if (route.guardOptions) {
-    for (const [k, v] of Object.entries(route.guardOptions)) {
-      guardOptions[k] = v
-    }
-  }
-
-  return guardOptions
 }
 
 /**

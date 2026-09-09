@@ -8,7 +8,7 @@ import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
  * Attaches one or more container-managed {@link Guard} classes to a controller or a single route.
  *
  * Guards are referenced by class or by a name given with `@Named`, and are resolved through the
- * container. Execution order is global (`.guards(g => g.use(...))`), then controller, then method.
+ * container. Execution order is global (`.guards(g => g.global(...))`), then controller, then method.
  * All must allow the request; the first denial wins.
  *
  * @param guards - Guard classes, or `@Named` identifiers of Guard classes. At least one is required.

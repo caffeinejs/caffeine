@@ -38,50 +38,50 @@ function buildApp() {
 
 describe('guard', () => {
   @Injectable()
-  class AllowGuard extends Guard {
-    canActivate(): boolean {
+  class AllowGuard implements Guard {
+    guard(): boolean {
       return true
     }
   }
 
   @Injectable()
-  class DenyGuard extends Guard {
-    canActivate(): boolean {
+  class DenyGuard implements Guard {
+    guard(): boolean {
       return false
     }
   }
 
   @Injectable()
-  class ResultAllowGuard extends Guard {
-    canActivate(): GuardResult {
+  class ResultAllowGuard implements Guard {
+    guard(): GuardResult {
       return { ok: true, reason: 'ignored' }
     }
   }
 
   @Injectable()
-  class ResultDenyGuard extends Guard {
-    canActivate(): GuardResult {
+  class ResultDenyGuard implements Guard {
+    guard(): GuardResult {
       return { ok: false, reason: 'nope' }
     }
   }
 
   @Injectable()
-  class AsyncAllowGuard extends Guard {
-    canActivate(): Promise<boolean> {
+  class AsyncAllowGuard implements Guard {
+    guard(): Promise<boolean> {
       return Promise.resolve(true)
     }
   }
 
   @Injectable()
-  class AsyncDenyGuard extends Guard {
-    canActivate(): Promise<boolean> {
+  class AsyncDenyGuard implements Guard {
+    guard(): Promise<boolean> {
       return Promise.resolve(false)
     }
   }
 
   @Injectable()
-  class AsyncResultDenyGuard extends Guard {
-    canActivate(): Promise<GuardResult> {
+  class AsyncResultDenyGuard implements Guard {
+    guard(): Promise<GuardResult> {
       return Promise.resolve({ ok: false, reason: 'later' })
     }
   }
@@ -223,48 +223,48 @@ describe('use_guards', () => {
   const order: string[] = []
 
   @Injectable()
-  class GlobalGuard extends Guard {
-    canActivate(): boolean {
+  class GlobalGuard implements Guard {
+    guard(): boolean {
       order.push('global')
       return true
     }
   }
 
   @Injectable()
-  class ControllerGuard extends Guard {
-    canActivate(): boolean {
+  class ControllerGuard implements Guard {
+    guard(): boolean {
       order.push('controller')
       return true
     }
   }
 
   @Injectable()
-  class MethodGuard extends Guard {
-    canActivate(): boolean {
+  class MethodGuard implements Guard {
+    guard(): boolean {
       order.push('method')
       return true
     }
   }
 
   @Injectable()
-  class FirstGuard extends Guard {
-    canActivate(): boolean {
+  class FirstGuard implements Guard {
+    guard(): boolean {
       order.push('first')
       return true
     }
   }
 
   @Injectable()
-  class OrderedDenyGuard extends Guard {
-    canActivate(): boolean {
+  class OrderedDenyGuard implements Guard {
+    guard(): boolean {
       order.push('deny')
       return false
     }
   }
 
   @Injectable()
-  class UnreachedGuard extends Guard {
-    canActivate(): boolean {
+  class UnreachedGuard implements Guard {
+    guard(): boolean {
       order.push('unreached')
       return true
     }
@@ -333,8 +333,8 @@ describe('use_guards', () => {
 
 describe('builder', () => {
   @Injectable()
-  class ListedGuard extends Guard {
-    canActivate(): boolean {
+  class ListedGuard implements Guard {
+    guard(): boolean {
       return true
     }
   }
@@ -407,22 +407,22 @@ describe('builder', () => {
 
 describe('denial', () => {
   @Injectable()
-  class FalseGuard extends Guard {
-    canActivate(): boolean {
+  class FalseGuard implements Guard {
+    guard(): boolean {
       return false
     }
   }
 
   @Injectable()
-  class ReasonGuard extends Guard {
-    canActivate(): GuardResult {
+  class ReasonGuard implements Guard {
+    guard(): GuardResult {
       return { ok: false, reason: 'token expired' }
     }
   }
 
   @Injectable()
-  class UnauthorizedGuard extends Guard {
-    canActivate(): never {
+  class UnauthorizedGuard implements Guard {
+    guard(): never {
       throw new ErrHTTPUnauthorized()
     }
   }
@@ -504,8 +504,8 @@ describe('denial', () => {
 
 describe('on_request', () => {
   @Injectable()
-  class HeaderGuard extends Guard {
-    canActivate(input: GuardInput<unknown>): boolean {
+  class HeaderGuard implements Guard {
+    guard(input: GuardInput): boolean {
       // `body` is off the guard's view of the request by type; reached through a cast, it answers undefined,
       // which is the point: the guard runs before the body has been parsed.
       return (
@@ -555,11 +555,11 @@ describe('on_request', () => {
 })
 
 describe('target', () => {
-  let seen: GuardInput<unknown>['target'] | undefined
+  let seen: GuardInput['target'] | undefined
 
   @Injectable()
-  class RecordingGuard extends Guard {
-    canActivate(input: GuardInput<unknown>): boolean {
+  class RecordingGuard implements Guard {
+    guard(input: GuardInput): boolean {
       seen = input.target
       return true
     }
@@ -609,8 +609,8 @@ describe('authorization', () => {
   }
 
   @Injectable()
-  class AuthGuard extends Guard {
-    canActivate(input: GuardInput<unknown>): boolean {
+  class AuthGuard implements Guard {
+    guard(input: GuardInput): boolean {
       const header = input.context.req.header('authorization')
       if (header == null || !header.startsWith('Bearer ')) {
         throw new ErrHTTPUnauthorized()
@@ -629,8 +629,8 @@ describe('authorization', () => {
   }
 
   @Injectable()
-  class RolesGuard extends Guard {
-    canActivate(input: GuardInput<unknown>): boolean {
+  class RolesGuard implements Guard {
+    guard(input: GuardInput): boolean {
       const cfg = input.context.routeConfig as FastifyContextConfig
       const required = getMetadataOverride<Role[]>(
         cfg.caffeine?.target as Function,
@@ -723,25 +723,23 @@ describe('scope', () => {
 
   @Injectable()
   @Lifetime(Scopes.REQUEST)
-  class RequestGuard extends Guard {
+  class RequestGuard implements Guard {
     constructor() {
-      super()
       requestScoped++
     }
 
-    canActivate(): boolean {
+    guard(): boolean {
       return true
     }
   }
 
   @Injectable()
-  class SingletonGuard extends Guard {
+  class SingletonGuard implements Guard {
     constructor() {
-      super()
       singleton++
     }
 
-    canActivate(): boolean {
+    guard(): boolean {
       return true
     }
   }
@@ -796,8 +794,8 @@ describe('scope', () => {
 
 describe('zero_cost', () => {
   @Injectable()
-  class HookGuard extends Guard {
-    canActivate(): boolean {
+  class HookGuard implements Guard {
+    guard(): boolean {
       return true
     }
   }
@@ -849,10 +847,42 @@ describe('zero_cost', () => {
   })
 })
 
+describe('structural_guard', () => {
+  // `Guard` is an interface: a class is a guard because it has a `guard()` method, not because it
+  // extends a base. A class that never names `Guard` still compiles and runs.
+  @Injectable()
+  class BareGuard {
+    guard(): boolean {
+      return false
+    }
+  }
+
+  @Controller('/bare-guard')
+  class BareGuardController {
+    @UseGuards(BareGuard)
+    @Get('/')
+    ok() {
+      return { ok: true }
+    }
+  }
+
+  void [BareGuard, BareGuardController]
+
+  it('runs a guard class that does not declare "implements Guard"', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const res = await app.fetch('/bare-guard')
+    expect(res.status).toBe(403)
+
+    await app.close()
+  })
+})
+
 describe('use_guards_unbound', () => {
   it('rejects when the referenced guard has no binding', async () => {
-    class UnboundGuard extends Guard {
-      canActivate(): boolean {
+    class UnboundGuard implements Guard {
+      guard(): boolean {
         return true
       }
     }

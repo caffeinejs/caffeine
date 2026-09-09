@@ -6,18 +6,14 @@ import { ErrHTTPForbidden } from '../error/http.js'
 import { addRouteHook, type AdapterRouteOptions } from '../internal/route_hooks.js'
 import type { CompiledGuard } from './compile.js'
 import type { Guard, GuardContext, GuardInput, GuardResult, GuardReturn, GuardTarget } from './guard.js'
-import { kGuardOptions } from './keys.js'
 
 const RESOURCE_FORBIDDEN = 'Resource forbidden'
 
 /**
  * Attaches a callback-style route `onRequest` hook that runs `chain`. The hook is not `async`:
- * sync `canActivate` results call `done()` without a microtask.
+ * sync `guard()` results call `done()` without a microtask.
  */
 export function attachGuardHook(routeDef: AdapterRouteOptions, chain: CompiledGuard[], target: GuardTarget): void {
-  // Read here rather than per request: both are fixed for the route by the time it is registered.
-  const opts = routeDef.config?.[kGuardOptions]
-
   addRouteHook(routeDef, 'onRequest', (request, _reply, done) => {
     const ctx = (request as FastifyRequest).httpContext as GuardContext | undefined
     if (ctx == null) {
@@ -25,23 +21,18 @@ export function attachGuardHook(routeDef: AdapterRouteOptions, chain: CompiledGu
       return
     }
 
-    const input: GuardInput<unknown> = { context: ctx, target, opts }
+    const input: GuardInput = { context: ctx, target }
 
     runGuards(input, chain, 0, done)
   })
 }
 
-function runGuards(
-  input: GuardInput<unknown>,
-  chain: CompiledGuard[],
-  start: number,
-  done: (err?: Error) => void,
-): void {
+function runGuards(input: GuardInput, chain: CompiledGuard[], start: number, done: (err?: Error) => void): void {
   for (let i = start; i < chain.length; i++) {
     const guard = resolve(chain[i])
     let result: GuardReturn
     try {
-      result = guard.canActivate(input)
+      result = guard.guard(input)
     } catch (err) {
       done(err as Error)
       return
