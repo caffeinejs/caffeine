@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import { join, parse } from 'node:path'
 
 import { ErrConfig } from '../errors.js'
 import { flattenObject } from '../flatten.js'
@@ -21,6 +22,10 @@ export type ConfigFileParser = (text: string) => Record<string, unknown>
  * ```ts
  * new FileConfigProvider('./config/app.yaml', text => YAML.parse(text))
  * ```
+ *
+ * Each active profile also loads a sibling named `{stem}-{profile}{ext}` next to that path, when the file
+ * exists. Later profiles override earlier ones, and every profile file overrides the constructor path. A
+ * missing sibling is skipped; a missing constructor path still fails.
  */
 export class FileConfigProvider implements ConfigProvider {
   readonly id: string
@@ -33,14 +38,59 @@ export class FileConfigProvider implements ConfigProvider {
     this.id = `file:${filePath}`
   }
 
-  async load(_ctx: ResolutionContext): Promise<PropertySource[]> {
-    const text = await readFile(this.#filePath, 'utf8')
-    const parsed = this.#parsed(text)
+  async load(ctx: ResolutionContext): Promise<PropertySource[]> {
+    const sources: PropertySource[] = []
+
+    // Last unique profile first: mergeSources is first-wins, so this is the only order that makes a later
+    // profile override an earlier one and every profile override the constructor path.
+    for (const profile of uniqueProfiles(ctx.profiles).toReversed()) {
+      assertProfileSegment(profile)
+
+      const source = await this.#loadFile(this.#profilePath(profile), profile)
+      if (source !== undefined) {
+        sources.push(source)
+      }
+    }
+
+    sources.push(await this.#loadFile(this.#filePath))
+    return sources
+  }
+
+  #profilePath(profile: string): string {
+    const { dir, name, ext } = parse(this.#filePath)
+    return join(dir, `${name}-${profile}${ext}`)
+  }
+
+  /**
+   * Reads one file into a property source. `profile` set means the file is optional: `ENOENT` yields nothing
+   * rather than failing, and matching entries carry that profile. The constructor path is required.
+   */
+  async #loadFile(filePath: string): Promise<PropertySource>
+  async #loadFile(filePath: string, profile: string): Promise<PropertySource | undefined>
+  async #loadFile(filePath: string, profile?: string): Promise<PropertySource | undefined> {
+    let text: string
+
+    try {
+      text = await readFile(filePath, 'utf8')
+    } catch (error) {
+      if (profile !== undefined && isENOENT(error)) {
+        return undefined
+      }
+      throw error
+    }
+
+    const origin = `file:${filePath}`
     const entries = new Map<string, ConfigEntry>()
 
-    flattenObject(parsed, this.id, '', entries)
+    flattenObject(this.#parsed(filePath, text), origin, '', entries)
 
-    return [{ name: this.id, entries }]
+    if (profile !== undefined) {
+      for (const entry of entries.values()) {
+        entry.profile = profile
+      }
+    }
+
+    return { name: origin, entries }
   }
 
   /**
@@ -53,14 +103,14 @@ export class FileConfigProvider implements ConfigProvider {
    * scalar into a single empty-string key, so a file that is a list rather than a mapping would merge as a
    * plausible-looking set of nonsense keys instead of failing.
    */
-  #parsed(text: string): Record<string, unknown> {
+  #parsed(filePath: string, text: string): Record<string, unknown> {
     let parsed: unknown
 
     try {
       parsed = this.#parse(text)
     } catch (error) {
       throw new ErrConfig(
-        `Cannot parse config file "${this.#filePath}": ${error instanceof Error ? error.message : String(error)}`,
+        `Cannot parse config file "${filePath}": ${error instanceof Error ? error.message : String(error)}`,
         'ERR_CONFIG_FILE_PARSE',
         error,
         'Check the file for a syntax error',
@@ -70,7 +120,7 @@ export class FileConfigProvider implements ConfigProvider {
 
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new ErrConfig(
-        `Cannot parse config file "${this.#filePath}": the parser returned ${describe(parsed)},` +
+        `Cannot parse config file "${filePath}": the parser returned ${describe(parsed)},` +
           ' but a config file must be a mapping at the top level',
         'ERR_CONFIG_FILE_PARSE',
         undefined,
@@ -81,6 +131,37 @@ export class FileConfigProvider implements ConfigProvider {
 
     return parsed as Record<string, unknown>
   }
+}
+
+function uniqueProfiles(profiles: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+
+  for (const profile of profiles) {
+    if (profile === '' || seen.has(profile)) {
+      continue
+    }
+    seen.add(profile)
+    out.push(profile)
+  }
+
+  return out
+}
+
+/** A profile becomes a filename segment; anything that can walk out of the config directory is refused. */
+function assertProfileSegment(profile: string): void {
+  if (profile === '.' || profile === '..' || profile.includes('/') || profile.includes('\\')) {
+    throw new ErrConfig(
+      `Cannot load profile config for "${profile}": a profile name must be a single path segment`,
+      'ERR_CONFIG_PROFILE',
+      undefined,
+      'Use a profile name without path separators or ".."',
+    )
+  }
+}
+
+function isENOENT(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
 function describe(value: unknown): string {
