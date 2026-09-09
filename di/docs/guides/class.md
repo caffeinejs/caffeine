@@ -151,21 +151,22 @@ class CacheService {
 }
 ```
 
-## Pre-destroy hook
+## Destroy hook
 
-`@PreDestroy()` on a method registers a teardown callback that runs when the
-container is disposed via `await di.dispose()`, or the instance is reset. Use it to release resources like
-connections, timers, or file handles.
+A class that implements the `OnDestroy` interface has its `onDestroy()` method
+run when the container is disposed via `await di.dispose()`, or the instance is
+reset. Use it to release resources like connections, timers, or file handles.
+The container detects the method on the prototype at registration — no decorator.
 
 :::info
-Pre-destroy hooks can be async.
+Destroy hooks can be async.
 :::
 
 ```ts
-import { Injectable, PreDestroy } from '@caffeinejs/di/decorators'
+import { Injectable, type OnDestroy } from '@caffeinejs/di'
 
 @Injectable([Config])
-class CacheService {
+class CacheService implements OnDestroy {
   private client!: CacheClient
 
   constructor(private readonly config: Config) {}
@@ -175,12 +176,16 @@ class CacheService {
     this.client = new CacheClient(this.config.cacheUrl)
   }
 
-  @PreDestroy()
-  async disconnect() {
+  async onDestroy() {
     await this.client.close()
   }
 }
 ```
+
+## Bootstrap hook
+
+A class that implements `OnBootstrap` has its `onBootstrap()` method run during
+`init()`, after every binding has been resolved. Singleton-scoped bindings only.
 
 ## Injection order
 

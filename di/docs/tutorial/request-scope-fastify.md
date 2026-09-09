@@ -101,7 +101,7 @@ export async function buildServer(container: Container) {
 }
 ```
 
-`onClose` disposes the container when Fastify shuts down, running any `@PreDestroy`
+`onClose` disposes the container when Fastify shuts down, running any `onDestroy`
 hooks on singleton services.
 
 ---

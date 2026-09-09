@@ -9,7 +9,6 @@ import { Configuration } from '../decorators/configuration.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
-import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Primary } from '../decorators/primary.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
@@ -31,8 +30,7 @@ describe('Scope removal does not affect existing containers', function () {
 
     @Injectable()
     class Destroyable {
-      @PreDestroy()
-      destroy() {}
+      onDestroy() {}
     }
 
     di.bind(Destroyable, t => t.toSelf().lifetime(kCustom))
@@ -181,8 +179,7 @@ describe('Container Operations', function () {
 
         constructor(readonly value: string) {}
 
-        @PreDestroy()
-        destroy() {
+        onDestroy() {
           spy()
         }
       }
@@ -235,8 +232,7 @@ describe('Container Operations', function () {
       @Injectable()
       @Named(kShared)
       class SharedA {
-        @PreDestroy()
-        destroy() {
+        onDestroy() {
           spyA()
           throw new Error('SharedA destroy error')
         }
@@ -245,8 +241,7 @@ describe('Container Operations', function () {
       @Injectable()
       @Named(kShared)
       class SharedB {
-        @PreDestroy()
-        destroy() {
+        onDestroy() {
           spyB()
         }
       }
@@ -325,8 +320,7 @@ describe('resetInstance — binding stays registered after preDestroy (H-1)', fu
 
     @Injectable()
     class WithDestroy {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         spy()
       }
     }
@@ -384,16 +378,14 @@ describe('dispose() (L-1, L-5)', function () {
   it('should reject with AggregateError when multiple preDestroy hooks fail', async function () {
     @Injectable()
     class SvcA {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         throw new Error('svc-a error')
       }
     }
 
     @Injectable()
     class SvcB {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         throw new Error('svc-b error')
       }
     }
@@ -412,13 +404,12 @@ describe('dispose() (L-1, L-5)', function () {
     expect((err as AggregateError).errors).toHaveLength(2)
   })
 
-  it('should run PreDestroy hooks and drop ready when disposed through an `await using` block', async function () {
+  it('should run onDestroy hooks and drop ready when disposed through an `await using` block', async function () {
     const destroy = vi.fn()
 
     @Injectable()
     class Resource {
-      @PreDestroy()
-      close() {
+      onDestroy() {
         destroy()
       }
     }
@@ -440,16 +431,14 @@ describe('dispose() (L-1, L-5)', function () {
   it('should reject from [Symbol.asyncDispose]() with the same AggregateError dispose() produces', async function () {
     @Injectable()
     class SvcA {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         throw new Error('svc-a error')
       }
     }
 
     @Injectable()
     class SvcB {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         throw new Error('svc-b error')
       }
     }

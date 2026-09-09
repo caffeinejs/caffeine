@@ -1,4 +1,5 @@
-import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
+import { CaffeineIoC, Injectable, Profile, token } from '@caffeinejs/di'
+import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
@@ -9,10 +10,6 @@ import {
   feature,
   kBootstrap,
   kFeatureName,
-  OnApplicationReady,
-  OnApplicationRun,
-  OnApplicationShutdown,
-  OnPreApplicationShutdown,
   createApplication,
 } from './index.js'
 
@@ -31,85 +28,31 @@ function appWith(configure: (container: CaffeineIoC) => void) {
 }
 
 describe('Application lifecycle', () => {
-  it('fires the lifecycle decorators across ready/run/close, in order', async () => {
+  it('runs a container OnBootstrap hook during ready() and an OnDestroy hook during close()', async () => {
     const order: string[] = []
 
-    class Beacon {
-      @OnApplicationReady()
-      onReady() {
-        order.push('ready')
+    class Beacon implements OnBootstrap, OnDestroy {
+      onBootstrap() {
+        order.push('bootstrap')
       }
 
-      @OnApplicationRun()
-      onRun() {
-        order.push('run')
-      }
-
-      @OnPreApplicationShutdown()
-      onPre() {
-        order.push('pre')
-      }
-
-      @OnApplicationShutdown()
-      onDown() {
-        order.push('down')
+      onDestroy() {
+        order.push('destroy')
       }
     }
 
     const app = appWith(c => c.bind(Beacon, t => t.toClass(Beacon)))
 
     await app.ready()
-    expect(order).toEqual(['ready'])
+    expect(order).toEqual(['bootstrap'])
     await app.run()
-    expect(order).toEqual(['ready', 'run'])
     await app.close()
-    expect(order).toEqual(['ready', 'run', 'pre', 'down'])
+    expect(order).toEqual(['bootstrap', 'destroy'])
   })
 
-  it('runs programmatic listeners, passing the application instance', async () => {
-    const seen: unknown[] = []
-    const app = appWith(() => {})
-
-    app.on('application:ready', a => {
-      seen.push(a)
-    })
-    await app.ready()
-
-    expect(seen).toEqual([app])
-  })
-
-  it('off removes a listener before it fires', async () => {
-    const app = appWith(() => {})
-    const fn = vi.fn()
-
-    app.on('application:ready', fn).off('application:ready', fn)
-    await app.ready()
-
-    expect(fn).not.toHaveBeenCalled()
-  })
-
-  it('once registers a listener that runs when the event fires', async () => {
-    const app = appWith(() => {})
-    const fn = vi.fn()
-
-    app.once('application:ready', fn)
-    await app.ready()
-
-    expect(fn).toHaveBeenCalledOnce()
-  })
-
-  it('rejects registering the same listener twice for an event', () => {
-    const app = appWith(() => {})
-    const fn = (): void => {}
-
-    app.on('application:ready', fn)
-    expect(() => app.on('application:ready', fn)).toThrow(/already registered/)
-  })
-
-  it('fail-fast: a throwing ready hook aborts ready()', async () => {
-    class Boom {
-      @OnApplicationReady()
-      go() {
+  it('fail-fast: a throwing onBootstrap hook aborts ready()', async () => {
+    class Boom implements OnBootstrap {
+      onBootstrap() {
         throw new Error('boom')
       }
     }
@@ -119,19 +62,17 @@ describe('Application lifecycle', () => {
     await expect(app.ready()).rejects.toThrow('boom')
   })
 
-  it('best-effort shutdown: every hook runs, errors aggregate, and the container is still disposed', async () => {
+  it('shutdown: a throwing onDestroy hook aggregates, and the container is still disposed', async () => {
     const ran: string[] = []
 
-    class Failing {
-      @OnApplicationShutdown()
-      a() {
+    class Failing implements OnDestroy {
+      onDestroy() {
         ran.push('a')
         throw new Error('e1')
       }
     }
-    class Ok {
-      @OnApplicationShutdown()
-      b() {
+    class Ok implements OnDestroy {
+      onDestroy() {
         ran.push('b')
       }
     }
@@ -147,30 +88,6 @@ describe('Application lifecycle', () => {
     await expect(app.close()).rejects.toThrow(AggregateError)
     expect(ran.sort()).toEqual(['a', 'b'])
     expect(dispose).toHaveBeenCalledOnce()
-  })
-
-  it('does not fire hooks on non-singleton beans', async () => {
-    const fired = vi.fn()
-
-    class Transient {
-      @OnApplicationReady()
-      go() {
-        fired()
-      }
-    }
-
-    const app = appWith(c => c.bind(Transient, t => t.toClass(Transient).lifetime(Scopes.TRANSIENT)))
-    await app.ready()
-
-    expect(fired).not.toHaveBeenCalled()
-  })
-
-  it('discovers hook beans via onBindingRegistered on an autowired container', async () => {
-    const app = createApplication().build()
-    await app.ready()
-
-    // GlobalWarmup (module scope, @Injectable) is picked up by autoWire and its ready hook fires.
-    expect(warmups).toContain('warm')
   })
 
   it('installs a feature and rides the configure() path', async () => {
@@ -258,15 +175,3 @@ describe('application name and profiles', () => {
     expect(container.has(EuOnly)).toBe(true)
   })
 })
-
-const warmups: string[] = []
-
-@Injectable()
-class GlobalWarmup {
-  @OnApplicationReady()
-  warm() {
-    warmups.push('warm')
-  }
-}
-
-void [GlobalWarmup]

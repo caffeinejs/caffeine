@@ -1,11 +1,19 @@
+import { Injectable, type OnBootstrap, type OnDestroy } from '@caffeinejs/di'
 import fastify from 'fastify'
 import { describe, it, expect, vi } from 'vitest'
 
 import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 describe('Adapter Lifecycle', () => {
-  it('onReady hook fires after routes are registered', async () => {
+  it('a container OnBootstrap hook runs before the first request is served', async () => {
     const order: string[] = []
+
+    @Injectable()
+    class Warmup implements OnBootstrap {
+      onBootstrap() {
+        order.push('bootstrap')
+      }
+    }
 
     @Controller('/lc')
     class LifecycleController {
@@ -16,53 +24,28 @@ describe('Adapter Lifecycle', () => {
       }
     }
 
-    void [LifecycleController]
+    void [LifecycleController, Warmup]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
-
-    app.onReady(async () => {
-      order.push('ready-hook')
-    })
 
     await app.ready()
 
     const res = await app.fetch('/lc/ping')
 
     expect(res.status).toBe(200)
-    expect(order).toEqual(['ready-hook', 'request'])
+    expect(order).toEqual(['bootstrap', 'request'])
   })
 
-  it('multiple onReady hooks fire in registration order', async () => {
-    @Controller('/lc2')
-    class Lc2Controller {
-      @Get('/ping')
-      ping() {
-        return {}
+  it('a container OnDestroy hook runs during close()', async () => {
+    const closeFired = vi.fn()
+
+    @Injectable()
+    class Resource implements OnDestroy {
+      onDestroy() {
+        closeFired()
       }
     }
 
-    void [Lc2Controller]
-
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
-
-    const order: number[] = []
-    app
-      .onReady(async () => {
-        order.push(1)
-      })
-      .onReady(async () => {
-        order.push(2)
-      })
-      .onReady(async () => {
-        order.push(3)
-      })
-
-    await app.ready()
-
-    expect(order).toEqual([1, 2, 3])
-  })
-
-  it('onClose hook fires during close()', async () => {
     @Controller('/lc3')
     class Lc3Controller {
       @Get('/ping')
@@ -71,14 +54,9 @@ describe('Adapter Lifecycle', () => {
       }
     }
 
-    void [Lc3Controller]
+    void [Lc3Controller, Resource]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
-
-    const closeFired = vi.fn()
-    app.onClose(async () => {
-      closeFired()
-    })
 
     await app.ready()
     await app.close()

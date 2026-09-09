@@ -6,20 +6,19 @@ import { CaffeineIoC } from '../container.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
-import { OnDestroy } from '../decorators/on_destroy.js'
-import { PreDestroy } from '../decorators/pre_destroy.js'
+import { OnLifecycle } from '../decorators/on_lifecycle.js'
 import { Provides } from '../decorators/provides.js'
 import { ErrInvalidDecorator } from '../errors.js'
 import { token } from '../key.js'
+import type { OnDestroy } from '../lifecycle.js'
 import { Scopes } from '../scope.js'
 
-describe('PreDestroy', function () {
-  it('should call method decorated with @PreDestroy() when the container is disposed', async function () {
+describe('OnDestroy interface', function () {
+  it('should call onDestroy() on a class binding when the container is disposed', async function () {
     const nmspy = vi.fn()
     const mspy = vi.fn()
 
-    class NonManaged {
-      @PreDestroy()
+    class NonManaged implements OnDestroy {
       onDestroy() {
         nmspy()
       }
@@ -27,8 +26,7 @@ describe('PreDestroy', function () {
     void NonManaged
 
     @Injectable()
-    class Managed {
-      @PreDestroy()
+    class Managed implements OnDestroy {
       onDestroy() {
         mspy()
       }
@@ -43,8 +41,8 @@ describe('PreDestroy', function () {
     expect(mspy).toHaveBeenCalledTimes(1)
   })
 
-  describe('OnDestroy', function () {
-    it('should call the fn with the produced instance on dispose', async function () {
+  describe('@OnLifecycle', function () {
+    it('should call the destroy fn with the produced instance on dispose', async function () {
       const spy = vi.fn()
 
       class ConnOPD {
@@ -53,7 +51,7 @@ describe('PreDestroy', function () {
 
       @Configuration()
       class AppConfigOPD {
-        @OnDestroy((c: ConnOPD) => spy(c))
+        @OnLifecycle<ConnOPD>({ destroy: c => spy(c) })
         @Provides(ConnOPD)
         conn(): ConnOPD {
           return new ConnOPD()
@@ -72,7 +70,32 @@ describe('PreDestroy', function () {
       expect(spy).toHaveBeenCalledWith(instance)
     })
 
-    it('should await an async fn on dispose', async function () {
+    it('should call the bootstrap fn with the produced instance during init()', async function () {
+      const spy = vi.fn()
+
+      class ClientOPD {
+        readonly id = randomUUID()
+      }
+
+      @Configuration()
+      class ClientConfigOPD {
+        @OnLifecycle<ClientOPD>({ bootstrap: c => spy(c) })
+        @Provides(ClientOPD)
+        client(): ClientOPD {
+          return new ClientOPD()
+        }
+      }
+
+      void ClientConfigOPD
+
+      const di = new CaffeineIoC()
+      await di.init()
+
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy).toHaveBeenCalledWith(di.get(ClientOPD))
+    })
+
+    it('should await an async destroy fn on dispose', async function () {
       const order: string[] = []
 
       class CacheOPD {
@@ -81,9 +104,11 @@ describe('PreDestroy', function () {
 
       @Configuration()
       class CacheConfigOPD {
-        @OnDestroy(async (_c: CacheOPD) => {
-          await Promise.resolve()
-          order.push('destroyed')
+        @OnLifecycle<CacheOPD>({
+          destroy: async () => {
+            await Promise.resolve()
+            order.push('destroyed')
+          },
         })
         @Provides(CacheOPD)
         cache(): CacheOPD {
@@ -102,7 +127,7 @@ describe('PreDestroy', function () {
       expect(order).toEqual(['destroyed'])
     })
 
-    it('should not call fn when the instance was never resolved (lazy, not cached)', async function () {
+    it('should not call the destroy fn when the instance was never resolved (lazy, not cached)', async function () {
       const spy = vi.fn()
 
       class SvcOPD {}
@@ -110,7 +135,7 @@ describe('PreDestroy', function () {
       @Configuration()
       class SvcConfigOPD {
         @Lazy()
-        @OnDestroy((_s: SvcOPD) => spy(_s))
+        @OnLifecycle<SvcOPD>({ destroy: s => spy(s) })
         @Provides(SvcOPD)
         svc(): SvcOPD {
           return new SvcOPD()
@@ -130,22 +155,21 @@ describe('PreDestroy', function () {
 
     it('should throw ErrInvalidDecorator when used on a non-method', function () {
       expect(() => {
-        const fn = OnDestroy(() => {})
+        const fn = OnLifecycle({ destroy: () => {} })
         fn(class Foo {}, { kind: 'class', name: 'Foo' } as unknown as DecoratorContext)
       }).toThrow(ErrInvalidDecorator)
     })
   })
 
   describe('resetBinding()', function () {
-    it('should reset the cached instance when @PreDestroy throws', async function () {
+    it('should reset the cached instance when onDestroy throws', async function () {
       const destroySpy = vi.fn()
 
       @Injectable()
-      class Svc {
+      class Svc implements OnDestroy {
         readonly id = randomUUID()
 
-        @PreDestroy()
-        destroy() {
+        onDestroy() {
           destroySpy()
           throw new Error('preDestroy boom')
         }
@@ -166,15 +190,14 @@ describe('PreDestroy', function () {
       expect(after.id).not.toBe(before.id)
     })
 
-    it('should reset the cached instance when @PreDestroy succeeds', async function () {
+    it('should reset the cached instance when onDestroy succeeds', async function () {
       const destroySpy = vi.fn()
 
       @Injectable()
-      class Svc {
+      class Svc implements OnDestroy {
         readonly id = randomUUID()
 
-        @PreDestroy()
-        destroy() {
+        onDestroy() {
           destroySpy()
         }
       }

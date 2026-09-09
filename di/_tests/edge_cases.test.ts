@@ -9,7 +9,6 @@ import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Interceptor } from '../decorators/interceptor.js'
 import { PostConstruct } from '../decorators/post_construct.js'
-import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Primary } from '../decorators/primary.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
@@ -168,13 +167,12 @@ describe('C1: @PostConstruct on TRANSIENT — called for every new instance', fu
   })
 })
 
-describe('C2: @PreDestroy on TRANSIENT — never called by dispose()', function () {
-  it('should not invoke @PreDestroy on transient instances when the container is disposed', async function () {
+describe('C2: onDestroy on TRANSIENT — never called by dispose()', function () {
+  it('should not invoke onDestroy on transient instances when the container is disposed', async function () {
     const destroySpy = vi.fn()
 
     @Injectable()
     class EC_C2Transient {
-      @PreDestroy()
       onDestroy() {
         destroySpy()
       }
@@ -490,32 +488,29 @@ describe('F1: @PostConstruct throws — error propagates from init()', function 
   })
 })
 
-describe('F2: dispose() calls @PreDestroy on all resolved singletons', function () {
-  it('should invoke @PreDestroy on every singleton that was resolved before dispose', async function () {
+describe('F2: dispose() calls onDestroy on all resolved singletons', function () {
+  it('should invoke onDestroy on every singleton that was resolved before dispose', async function () {
     const spy1 = vi.fn()
     const spy2 = vi.fn()
     const spy3Async = vi.fn()
 
     @Injectable()
     class EC_F2Svc1 {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         spy1()
       }
     }
 
     @Injectable()
     class EC_F2Svc2 {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         spy2()
       }
     }
 
     @Injectable()
     class EC_F2Svc3 {
-      @PreDestroy()
-      async destroy() {
+      async onDestroy() {
         spy3Async()
       }
     }

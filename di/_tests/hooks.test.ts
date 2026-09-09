@@ -10,14 +10,13 @@ import { Lazy } from '../decorators/index.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { PostConstruct } from '../decorators/post_construct.js'
-import { PreDestroy } from '../decorators/pre_destroy.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { HookListener } from '../hooks.js'
 import { token } from '../key.js'
 
 describe('Hooks', function () {
-  describe('Pre Destroy', function () {
+  describe('On Destroy', function () {
     const destroySpy = vi.fn()
     const destroyAsyncSpy = vi.fn()
     const destroyContainerScopedSpy = vi.fn()
@@ -25,8 +24,7 @@ describe('Hooks', function () {
     @Injectable()
     @Profile('hooks-pre-destroy')
     class Dep {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         destroySpy()
       }
     }
@@ -34,8 +32,7 @@ describe('Hooks', function () {
     @Injectable()
     @Profile('hooks-pre-destroy')
     class ContainerDep {
-      @PreDestroy()
-      destroy() {
+      onDestroy() {
         destroyContainerScopedSpy()
       }
     }
@@ -43,8 +40,7 @@ describe('Hooks', function () {
     @Injectable()
     @Profile('hooks-pre-destroy')
     class AsyncDep {
-      @PreDestroy()
-      destroy(): Promise<void> {
+      onDestroy(): Promise<void> {
         return new Promise(resolve =>
           setTimeout(() => {
             destroyAsyncSpy()
@@ -271,8 +267,7 @@ describe('Hooks', function () {
 
     // 1
     class Incomplete {
-      @PreDestroy()
-      hi() {}
+      onDestroy() {}
     }
 
     // 1

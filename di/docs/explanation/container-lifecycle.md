@@ -50,6 +50,9 @@ During init, the container does all its heavy lifting:
    factories are awaited in dependency order.
 8. **PostConstruct hooks** — `@PostConstruct` (and `.postConstruct()`) callbacks
    run after each instance is created.
+9. **Bootstrap hooks** — once every binding is resolved, `OnBootstrap` classes
+   (and `@OnLifecycle` `bootstrap` / `.bootstrap()` callbacks) run in dependency
+   order, each awaited before the next. Singleton bindings only.
 
 `init()` is async because it awaits async factories. Skipping `init()` and
 calling `get()` immediately is not safe — bindings may not be compiled and
@@ -88,7 +91,8 @@ await di.dispose()
 
 Disposal tears down the container:
 
-1. **PreDestroy hooks** — `@PreDestroy` (and `.preDestroy()`) callbacks are
+1. **Destroy hooks** — an `OnDestroy` class's `onDestroy()`, an `@OnLifecycle`
+   `destroy` callback, and `.preDestroy()` callbacks are
    called on every cached instance in **reverse creation order** — the last
    thing created is the first to be destroyed, so a dependency is still usable
    while the hook of whatever depends on it runs.
@@ -101,7 +105,7 @@ Disposal tears down the container:
 4. **State cleared** — instances are released.
 
 Transient instances are not tracked by the container, so `dispose()` does not
-call their `@PreDestroy` hooks. Request-scoped instances are destroyed by their
+call their destroy hooks. Request-scoped instances are destroyed by their
 own scope block, on the same reverse-creation-order rule, not by `dispose()`.
 
 ---
@@ -144,9 +148,9 @@ one directly — inject `$i.provide()` and read it per use.
 
 ## Summary
 
-| Phase        | How to enter           | What happens                         |
-| ------------ | ---------------------- | ------------------------------------ |
-| Construction | `new CaffeineIoC(...)` | Bindings registered, no instances    |
-| Init         | `await di.init()`      | Graph validated, singletons created  |
-| Resolution   | `di.get(...)`          | Instances returned per scope rules   |
-| Disposal     | `await di.dispose()`   | PreDestroy hooks, instances released |
+| Phase        | How to enter           | What happens                        |
+| ------------ | ---------------------- | ----------------------------------- |
+| Construction | `new CaffeineIoC(...)` | Bindings registered, no instances   |
+| Init         | `await di.init()`      | Graph validated, singletons created |
+| Resolution   | `di.get(...)`          | Instances returned per scope rules  |
+| Disposal     | `await di.dispose()`   | Destroy hooks, instances released   |

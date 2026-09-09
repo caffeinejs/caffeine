@@ -1,3 +1,4 @@
+import { CaffeineIoC, type OnDestroy } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
 import { createApplication } from './application_builder.js'
@@ -31,8 +32,19 @@ class FakeDispatcher implements SignalDispatcher {
 // A headless application had no signal handling and no drain at all before graceful shutdown moved into
 // BaseApplication — a Kafka consumer with no HTTP server was simply killed mid-message.
 describe('headless application shutdown', () => {
-  it('refuses traffic before the drain delay and runs the hooks after it', async () => {
-    const app = createApplication()
+  it('refuses traffic before the drain delay and disposes the container after it', async () => {
+    let hookAt = 0
+
+    class Recorder implements OnDestroy {
+      onDestroy() {
+        hookAt = Date.now()
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Recorder, t => t.toSelf())
+
+    const app = createApplication({ container })
       .shutdown(s => s.drainDelay(300))
       .build()
 
@@ -40,11 +52,6 @@ describe('headless application shutdown', () => {
 
     expect(app.availability.ready).toBe('accepting')
     expect(app.availability.started).toBe(true)
-
-    let hookAt = 0
-    app.on('application:pre-shutdown', () => {
-      hookAt = Date.now()
-    })
 
     const startedAt = Date.now()
     const closing = app.close()
@@ -71,15 +78,21 @@ describe('headless application shutdown', () => {
   })
 
   it('joins a second close instead of starting another one', async () => {
-    const app = createApplication()
+    let hooks = 0
+
+    class Recorder implements OnDestroy {
+      onDestroy() {
+        hooks++
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Recorder, t => t.toSelf())
+
+    const app = createApplication({ container })
       .shutdown(s => s.drainDelay(100))
       .build()
     await app.run()
-
-    let hooks = 0
-    app.on('application:pre-shutdown', () => {
-      hooks++
-    })
 
     await Promise.all([app.close(), app.close()])
 
@@ -115,13 +128,18 @@ describe('headless application shutdown', () => {
     await app.close()
   })
 
-  it('still disposes the container when a shutdown hook throws', async () => {
-    const app = createApplication().build()
-    await app.run()
+  it('still disposes the container when a destroy hook throws', async () => {
+    class Failing implements OnDestroy {
+      onDestroy() {
+        throw new Error('hook failed')
+      }
+    }
 
-    app.on('application:pre-shutdown', () => {
-      throw new Error('hook failed')
-    })
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Failing, t => t.toSelf())
+
+    const app = createApplication({ container }).build()
+    await app.run()
 
     await expect(app.close()).rejects.toThrow(AggregateError)
     await sleep(0)

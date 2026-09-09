@@ -1,4 +1,4 @@
-import { Configuration, OnDestroy, Provides } from '@caffeinejs/di'
+import { Configuration, OnLifecycle, Provides } from '@caffeinejs/di'
 import { Pool } from 'pg'
 
 import { AppConfig } from '../../app.config.js'
@@ -9,7 +9,7 @@ export class DatabaseConfig {
   constructor(private readonly config: AppConfig) {}
 
   @Provides(kPgPool)
-  @OnDestroy((pool: Pool) => pool.end())
+  @OnLifecycle<Pool>({ destroy: pool => pool.end() })
   pgPool(): Pool {
     return new Pool({
       connectionString: this.config.databaseURL,

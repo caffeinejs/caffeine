@@ -39,11 +39,11 @@ identical in both flavours; differences are noted inline where they exist.
 - [@UseFactory](#usefactory)
 - [@UseAsyncFactory](#useasyncfactory)
 - [@PostConstruct](#postconstruct)
-- [@OnDestroy](#ondestroy)
+- [@OnLifecycle](#onlifecycle)
 - [@Configuration](#configuration)
 - [@Provides](#provides)
 - [@Async](#async)
-- [@PreDestroy](#predestroy)
+- [Lifecycle interfaces](#lifecycle-interfaces)
 - [@Inject](#inject)
 
 ---
@@ -324,14 +324,28 @@ class DatabasePool {
 }
 ```
 
-### @OnDestroy
+### @OnLifecycle
 
 ```ts
-@OnDestroy(fn: (value: T) => void | Promise<void>)
+@OnLifecycle<T>(options: { bootstrap?: (instance: T) => unknown; destroy?: (instance: T) => unknown })
 ```
 
-Registers a callback to run before the instance is destroyed. Class-level
-equivalent of `@PreDestroy`.
+Configures bootstrap and pre-destroy callbacks for a bean produced by a
+`@Provides` method inside a `@Configuration` class. Each callback receives the
+produced instance and may be asynchronous. `bootstrap` runs during `init()`
+after every binding is resolved; `destroy` runs before the container is
+disposed.
+
+```ts
+@Configuration()
+class InfraConfig {
+  @OnLifecycle<Pool>({ bootstrap: p => p.connect(), destroy: p => p.end() })
+  @Provides(Pool)
+  pool(): Pool {
+    return new Pool()
+  }
+}
+```
 
 ---
 
@@ -394,14 +408,29 @@ class RemoteConfig {
 }
 ```
 
-### @PreDestroy
+### Lifecycle interfaces
+
+A class binding opts into the container lifecycle by implementing an interface —
+no decorator. At registration the container checks the class prototype for the
+method and wires it.
 
 ```ts
-@PreDestroy(fn?: (value: T) => void | Promise<void>)
+import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
+
+@Injectable()
+class Cache implements OnBootstrap, OnDestroy {
+  onBootstrap() {
+    /* runs during init(), after every binding is resolved. Singleton only. */
+  }
+
+  onDestroy() {
+    /* runs before dispose(), in reverse creation order. */
+  }
+}
 ```
 
-Registers a pre-destroy callback for a `@Provides` binding. When used without
-arguments on a method, marks that method as the pre-destroy hook.
+An explicit `.bootstrap(fn)` / `.preDestroy(fn)` on the binding spec, or an
+`@OnLifecycle` callback, takes precedence over the interface method.
 
 ---
 

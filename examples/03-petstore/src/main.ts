@@ -1,13 +1,11 @@
 import 'dotenv/config'
 import { createContainer } from './app.container.js'
 import { buildApp } from './app.js'
-import { prisma } from './util/db/index.js'
 
 const app = buildApp(await createContainer())
 
-// Closing the pool belongs after the drain, not before it: `application:pre-shutdown` runs once readiness has
-// already been refusing for the drain delay, so no in-flight request loses its connection mid-query.
-app.on('application:pre-shutdown', () => prisma.$disconnect())
+// The Prisma handle disconnects itself on container dispose — see `PrismaConfig` — which the framework runs
+// after the drain delay and after the server has stopped.
 
 // No signal handling here. `.shutdown()` installs SIGTERM/SIGINT, refuses readiness, waits out the
 // routing-table lag while still serving, closes the server, and lets the process exit on its own — calling

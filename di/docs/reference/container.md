@@ -316,7 +316,8 @@ await di.init()
 dispose(): Promise<void>
 ```
 
-Destroys the container. Runs `@PreDestroy` hooks on every cached instance in
+Destroys the container. Runs destroy hooks (an `OnDestroy` class's `onDestroy()`,
+an `@OnLifecycle` `destroy` callback, `.preDestroy()`) on every cached instance in
 reverse creation order, one at a time, and once per instance — two bindings
 holding the same object destroy it once. Hooks that throw do not stop the rest;
 they are reported together as an `AggregateError`.

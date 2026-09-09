@@ -31,7 +31,7 @@ Starts a new request scope context and runs `fn` inside it. All
 `REQUEST`-scoped bindings resolved within the callback — at any depth — return
 the same instance for the duration of the call. Always returns a `Promise`
 that resolves after all request-scoped instances are destroyed (including any
-`@PreDestroy` hooks). Await it when cleanup ordering matters.
+`onDestroy` hooks). Await it when cleanup ordering matters.
 
 The scope ends when `fn` settles, so `fn` has to stay pending for as long as the
 work that depends on the scope. A callback that only hands control to the next

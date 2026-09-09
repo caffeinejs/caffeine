@@ -115,6 +115,9 @@ export function Configuration<T>(injections?: Injection[]) {
       if (fb.preDestroy !== undefined) {
         factoryConfig.preDestroy(fb.preDestroy)
       }
+      if (fb.bootstrap !== undefined) {
+        factoryConfig.bootstrap(fb.bootstrap)
+      }
 
       addProvidedBindings(factory.bindingKey, factoryConfig)
     }

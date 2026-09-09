@@ -5,9 +5,21 @@ import { describe, expect, it } from 'vitest'
 
 import { inMemoryBinder } from './binder.testkit.js'
 import { messagingConfigSchema } from './config.js'
+import { Consume } from './decorators/consume.js'
+import { MessageHandler } from './decorators/message_handler.js'
 import { messaging } from './plugin.js'
 import type { MessagingRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
+
+// Every inbound binding needs a consumer: the engine now starts during `ready()` (via the `MessagingLifecycle`
+// OnBootstrap hook), so a routeless inbound binding fails there rather than at `run()`.
+@MessageHandler()
+class OrdersConsumer {
+  @Consume('orders')
+  on() {}
+}
+
+void [OrdersConsumer]
 
 // The application owns the schema: it declares one block per messaging instance — by importing the feature's
 // own schema, given a default so a block a test never configures still materializes — and each `.extend`

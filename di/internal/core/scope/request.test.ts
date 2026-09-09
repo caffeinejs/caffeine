@@ -8,7 +8,6 @@ import { Injectable } from '../../../decorators/injectable.js'
 import { Lazy } from '../../../decorators/lazy.js'
 import { Lifetime } from '../../../decorators/lifetime.js'
 import { PostConstruct } from '../../../decorators/post_construct.js'
-import { PreDestroy } from '../../../decorators/pre_destroy.js'
 import { ErrOutOfScope } from '../../../errors.js'
 import { CaffeineIoC, Scopes } from '../../../index.nodejs.js'
 import { token } from '../../../key.js'
@@ -38,8 +37,7 @@ describe('Request Scope', function () {
         initSpy()
       }
 
-      @PreDestroy()
-      dispose() {
+      onDestroy() {
         destroySpy()
       }
     }

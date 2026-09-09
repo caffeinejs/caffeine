@@ -69,8 +69,9 @@ interface Group {
 
 /**
  * The per-instance runtime engine. One is bound (labelled {@link Keys.KAFKA_CONTAINER}) by each
- * {@link KafkaBuilder}; the plugin drives every engine's {@link start}/{@link stop} from `application:run` /
- * `application:pre-shutdown`. {@link start} enumerates the `@KafkaHandler` classes tagged for this instance,
+ * {@link KafkaBuilder}; `KafkaLifecycle` drives every engine's {@link start}/{@link stop} from
+ * `container.init()` / `container.dispose()`. {@link start} enumerates the `@KafkaHandler` classes tagged for
+ * this instance,
  * groups their `@KafkaListener` methods by group id, creates one consumer per group (plus an isolated retry
  * consumer when a non-blocking retry strategy declares retry topics), and dispatches each message through the
  * route's {@link RetryStrategy}. {@link stop} closes every consumer and this instance's producer.

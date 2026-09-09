@@ -35,6 +35,7 @@ import { checkScopes } from './internal/core/scope/validations.js'
 import { notNil } from './internal/util/assert/index.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
 import { keyStr, InjectionToken, Identifier, NamedToken, TokenValue } from './key.js'
+import type { OnBootstrap, OnDestroy } from './lifecycle.js'
 import { MetadataReader } from './metadata_reader.js'
 import { runModules, type Module, type ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
@@ -1057,9 +1058,9 @@ export class CaffeineIoC implements Container {
   /**
    * Initializes the container.
    * It compiles the bindings and prepares them for resolution, so it must be called before the container
-   * can be used for resolution. Once every binding is resolved, runs every registered bootstrap hook (see
-   * `@OnBootstrap` / `.bootstrap()`) in dependency order, forcing resolution of any lazy singleton binding
-   * that registered one.
+   * can be used for resolution. Once every binding is resolved, runs every registered bootstrap hook (an
+   * `OnBootstrap` class, `@OnLifecycle({ bootstrap })`, or `.bootstrap()`) in dependency order, forcing
+   * resolution of any lazy singleton binding that registered one.
    */
   async init(): Promise<void> {
     if (this._ready) {
@@ -1299,6 +1300,15 @@ export class CaffeineIoC implements Container {
             `Cannot configure "${keyStr(key)}": method "${String(methodName)}" has ${method.length} parameter(s) but ${injections.length} injection key(s) were specified`,
           )
         }
+      }
+
+      // A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit
+      // hook set on the spec (or an @OnLifecycle callback) still wins.
+      if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
+        binding.bootstrap = (instance: T) => (instance as OnBootstrap).onBootstrap()
+      }
+      if (binding.preDestroy === undefined && typeof ctor.prototype?.onDestroy === 'function') {
+        binding.preDestroy = (instance: T) => (instance as OnDestroy).onDestroy()
       }
     }
 

@@ -1,37 +1,17 @@
-import { type Feature, type PluginContext } from '@caffeinejs/std'
+import { type Feature } from '@caffeinejs/std'
 
 import { MessagingBuilder } from './builder.js'
-import type { MessagingContainer } from './engine.js'
-import { DEFAULT_BINDER, Keys } from './symbols.js'
+import { DEFAULT_BINDER } from './symbols.js'
 
 /** The builder callback that configures one messaging integration, over an application config type `C`. */
 export type MessagingConfigure<C = unknown> = (m: MessagingBuilder<C>) => void
 
-const LIFECYCLE = 'messaging:lifecycle'
-
-function registerLifecycle(ctx: PluginContext): void {
-  if (ctx.state.has(LIFECYCLE)) {
-    return
-  }
-  ctx.state.set(LIFECYCLE, true)
-
-  ctx.on('application:run', async app => {
-    for (const { binding } of app.container.getBindingsByLabel(Keys.MESSAGING_CONTAINER)) {
-      await app.container.wrapBinding<MessagingContainer>(binding).get().start()
-    }
-  })
-  ctx.on('application:pre-shutdown', async app => {
-    for (const { binding } of app.container.getBindingsByLabel(Keys.MESSAGING_CONTAINER)) {
-      await app.container.wrapBinding<MessagingContainer>(binding).get().stop()
-    }
-  })
-}
-
 /**
- * The portable messaging feature. `.extend(messaging(), m => …)` registers binder instances and bindings;
- * the engine starts on `application:run` and stops on `application:pre-shutdown`. `.extend(messaging('audit'),
- * m => …)` configures a named binder set. Additive — a single-binder app that only uses a binder package's
- * own sugar (e.g. `.extend(kafka(), …)`) does not need this feature.
+ * The portable messaging feature. `.extend(messaging(), m => …)` registers binder instances and bindings; a
+ * single `MessagingLifecycle` bean (bound once) starts every engine during `container.init()` and stops it
+ * during `container.dispose()`. `.extend(messaging('audit'), m => …)` configures a named binder set. Additive
+ * — a single-binder app that only uses a binder package's own sugar (e.g. `.extend(kafka(), …)`) does not
+ * need this feature.
  *
  * ```ts
  * const app = createApplication()
@@ -49,7 +29,6 @@ export function messaging(instance: string = DEFAULT_BINDER): Feature<MessagingB
       const builder = new MessagingBuilder(instance)
       configure?.(builder)
       ctx.addFeature(builder)
-      registerLifecycle(ctx)
     },
   }
 }
