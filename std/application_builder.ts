@@ -154,7 +154,10 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
     this: this,
     feature: F,
     configure?: (b: ConfiguredBuilder<NoInfer<F>, ConfigTypeOf<this>>) => void,
-  ): this {
+  ): this
+  // Implementation signature — hidden from callers, so the builder type the overload computes never has to
+  // be re-derived here just to hand `configure` back to `install` unchanged.
+  extend(feature: Feature, configure?: (b: any) => void): this {
     if (this.#installed.has(feature.name)) {
       throw new ErrFeatureAlreadyInstalled(feature.name)
     }
@@ -170,7 +173,7 @@ export abstract class BaseApplicationBuilder<App extends BaseApplication> {
       },
       state: this.#featureState,
     }
-    feature.install(ctx, configure as never)
+    feature.install(ctx, configure)
     return this
   }
 
@@ -220,6 +223,13 @@ export type ConfigTypeOf<Self> = Self extends { readonly __config?: infer C } ? 
  * `Omit`, so there is one signature and not an ambiguous overload pair — is all it takes: no phantom on the
  * builder, no higher-kinded encoding. A builder that is not a `FeatureBuilder` (view's per-engine builder,
  * `AuthorizationBuilder`) passes through unchanged.
+ *
+ * Call `.config(...)` **first** in a chain. `Omit` does not carry a class's polymorphic `this` through another
+ * method's `this` return, so `k.brokers(x).config(c => c.app.y)` types `c` as `unknown` while
+ * `k.config(c => c.app.y).brokers(x)` reads the application's schema.
+ *
+ * A helper that forwards a `configure` callback through to `.extend` names it with {@link FeatureConfigurer}
+ * rather than casting.
  */
 export type ConfiguredBuilder<F, C> =
   F extends Feature<infer B>
@@ -233,6 +243,22 @@ export type ConfiguredBuilder<F, C> =
 type RetypedConfig<B, C, T, F> = Omit<B, 'config'> & {
   config(selector: (c: ConfigHandle<C>) => ConfigLocation<T>): ConfiguredBuilder<F, C>
 }
+
+/**
+ * The callback `.extend(feature, …)` takes for a feature whose builder is `B`, over application config type
+ * `C`.
+ *
+ * Name it wherever a helper forwards a `configure` through to `.extend` — a test harness, an application
+ * factory — instead of casting at the call site. `{@link ConfiguredBuilder}` swaps the builder's `config`
+ * signature, so a callback annotated with the bare builder type does not fit.
+ *
+ * ```ts
+ * function corsApp(configure: FeatureConfigurer<CorsBuilder>) {
+ *   return createWebApplication().extend(CORSExt(), configure)
+ * }
+ * ```
+ */
+export type FeatureConfigurer<B, C = unknown> = (builder: ConfiguredBuilder<Feature<B>, C>) => void
 
 /**
  * The phantom an application builder carries to name its config type. Never assigned, never read at runtime —

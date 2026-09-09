@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import type { FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -23,9 +24,9 @@ void [APIController]
 describe('SPA fallback', () => {
   let app: WebApplication | undefined
 
-  const start = async (configure: (builder: StaticBuilder) => void) => {
+  const start = async (configure: FeatureConfigurer<StaticBuilder>) => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt(), configure as never)
+      .extend(StaticExt(), configure)
       .build()
     await app.ready()
 

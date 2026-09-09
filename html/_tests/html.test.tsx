@@ -12,7 +12,7 @@ import {
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
-import { $t, type InferSchema } from '@caffeinejs/std'
+import { $t, type FeatureConfigurer, type InferSchema } from '@caffeinejs/std'
 import { Configuration, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
@@ -117,10 +117,8 @@ class HTMLErrorController {
 
 void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
-function htmlApp(configure?: (h: HTMLBuilder) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(HTMLExt(), configure as never)
-    .build()
+function htmlApp(configure?: FeatureConfigurer<HTMLBuilder>) {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(HTMLExt(), configure).build()
 }
 
 describe('HTML', () => {

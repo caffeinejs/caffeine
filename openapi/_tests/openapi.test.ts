@@ -13,7 +13,7 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
-import { $t } from '@caffeinejs/std'
+import { $t, type FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -74,16 +74,16 @@ class PetsController {
 }
 void [PetsController]
 
-function buildApp(configure: (o: OpenAPIBuilder) => void = () => {}): WebApplication {
+function buildApp(configure: FeatureConfigurer<OpenAPIBuilder> = () => {}): WebApplication {
   return newBuilder(configure).build().useAuthenticationAndAuthorization() as WebApplication
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an
 // application declaring authorization without authentication refuses to start. It also means every test
 // exercises the securityScheme derivation rather than only the unauthenticated path.
-function newBuilder(configure?: (o: OpenAPIBuilder) => void) {
+function newBuilder(configure?: FeatureConfigurer<OpenAPIBuilder>) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt(), configure as never)
+    .extend(OpenAPIExt(), configure)
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }
 
