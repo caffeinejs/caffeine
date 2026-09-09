@@ -118,7 +118,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfi
     }))
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)
@@ -157,8 +157,6 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfi
       const lifecycleContainer = kit.container
       kit.container.bind(MessagingLifecycle, t => t.toFactory(() => new MessagingLifecycle(lifecycleContainer)))
     }
-
-    return Promise.resolve()
   }
 }
 

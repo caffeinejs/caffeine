@@ -80,7 +80,7 @@ export interface FeatureLifecycle {
   /**
    * Runs after configuration resolves and before the container initializes. Bind runtime artifacts here.
    */
-  [kBootstrap](kit: BootstrapKit): Promise<void>
+  [kBootstrap](kit: BootstrapKit): void | Promise<void>
 }
 
 /**

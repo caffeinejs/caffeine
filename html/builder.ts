@@ -30,9 +30,8 @@ export class HTMLBuilder<C = unknown> extends FeatureBuilder<HTMLDefaults, C> {
     return this.set('autoDoctype', enabled)
   }
 
-  // Nothing to bind: the settings travel through the configuration, and `HTML(...)` reads them off the
-  // context by key.
-  protected bootstrap(): Promise<void> {
-    return Promise.resolve()
+  protected bootstrap(): void {
+    // Nothing to bind: the settings travel through the configuration, and `HTML(...)` reads them off the
+    // context by key.
   }
 }

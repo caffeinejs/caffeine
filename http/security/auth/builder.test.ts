@@ -39,27 +39,27 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
     )
   })
 
-  it('does not throw when exactly one strategy is registered and no default is set', async () => {
+  it('does not throw when exactly one strategy is registered and no default is set', () => {
     const builder = new AuthenticationBuilder()
     builder.addBasic(o => o.validate(vi.fn()))
 
-    await expect(builder[kBootstrap](makeKit())).resolves.toBeUndefined()
+    expect(builder[kBootstrap](makeKit())).toBeUndefined()
   })
 
-  it('does not throw when an explicit default is set with one strategy', async () => {
+  it('does not throw when an explicit default is set with one strategy', () => {
     const builder = new AuthenticationBuilder()
     builder.addBasic(o => o.validate(vi.fn())).default('Basic')
 
-    await expect(builder[kBootstrap](makeKit())).resolves.toBeUndefined()
+    expect(builder[kBootstrap](makeKit())).toBeUndefined()
   })
 
-  it('does not throw when an explicit default is set with multiple strategies', async () => {
+  it('does not throw when an explicit default is set with multiple strategies', () => {
     const builder = new AuthenticationBuilder()
     builder
       .addBasic(o => o.validate(vi.fn()))
       .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
       .default('Basic')
 
-    await expect(builder[kBootstrap](makeKit())).resolves.toBeUndefined()
+    expect(builder[kBootstrap](makeKit())).toBeUndefined()
   })
 })

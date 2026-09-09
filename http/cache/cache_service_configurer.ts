@@ -8,11 +8,9 @@ export class CacheServiceConfigurer implements FeatureLifecycle {
     return 'cache'
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): void {
     if (!kit.container.has(CacheStore)) {
       kit.container.bind(CacheStore, t => t.toClass(MemoryCacheStore).lifetime(Scopes.SINGLETON).internal())
     }
-
-    return Promise.resolve()
   }
 }

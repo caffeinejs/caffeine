@@ -244,7 +244,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, 
     })
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     const resolved = this.#resolved!
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)
@@ -288,7 +288,5 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, 
         t.toFactory(() => new KafkaHealthIndicator(indicatorContainer)).extends(HealthIndicator),
       )
     }
-
-    return Promise.resolve()
   }
 }

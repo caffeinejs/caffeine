@@ -49,10 +49,8 @@ export class HTTPCoreFeature implements FeatureLifecycle {
     return 'http-core'
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): void {
     kit.extensions.register(FormBodyExtension, new FormBodyExtension())
     kit.extensions.register(NotFoundExtension, new NotFoundExtension())
-
-    return Promise.resolve()
   }
 }

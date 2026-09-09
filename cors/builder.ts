@@ -37,10 +37,8 @@ export class CorsBuilder<C = unknown> extends FeatureBuilder<CORSConfig, C> {
     return this.set('options', data)
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     const options = { ...this.#callbacks, ...this.slice.config.options } as CorsOptions
     kit.extensions.register(CorsExtension, new CorsExtension(options))
-
-    return Promise.resolve()
   }
 }

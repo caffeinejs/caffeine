@@ -94,7 +94,7 @@ export class AuthorizationBuilder implements FeatureLifecycle {
     return this.fallbackPolicy(p => p.requireAuthenticated())
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): void {
     kit.container.bind(AuthenticatedUserHandler, t =>
       t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
     )
@@ -145,7 +145,5 @@ export class AuthorizationBuilder implements FeatureLifecycle {
         .lifetime(Scopes.SINGLETON)
         .internal(),
     )
-
-    return Promise.resolve()
   }
 }

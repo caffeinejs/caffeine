@@ -60,7 +60,7 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
     return this.set('statusHeader', name)
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     const store = this.#store
     if (store !== undefined) {
       kit.container.bind(CacheStore, t => t.toValue(store).internal())
@@ -78,7 +78,5 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
         .toFactory(() => this.slice.config.statusHeader)
         .internal(),
     )
-
-    return Promise.resolve()
   }
 }

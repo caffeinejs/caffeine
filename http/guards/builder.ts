@@ -20,8 +20,7 @@ export class GuardsBuilder implements FeatureLifecycle {
     return this
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): void {
     kit.container.bind(kGlobalGuards, t => t.toValue(this.#keys).lifetime(Scopes.SINGLETON).internal())
-    return Promise.resolve()
   }
 }

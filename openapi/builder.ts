@@ -299,7 +299,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<OpenAPIConfigSli
     })
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     const options = this.#resolved!.config
 
     // The store, not the document: bindings must all be registered before `container.init()`, which runs
@@ -314,8 +314,6 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<OpenAPIConfigSli
     // Reads through the slice, so the generated document reflects the merged configuration. The extension
     // runs at server setup, which is after `container.init()`.
     kit.extensions.register(OpenAPIExtension, new OpenAPIExtension(this.#store, options, paths))
-
-    return Promise.resolve()
   }
 }
 

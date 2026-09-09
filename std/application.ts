@@ -129,11 +129,17 @@ export abstract class BaseApplication {
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()
 
-    await Promise.all(
-      services.map(service =>
-        Promise.resolve(service[kBeforeBootstrap]?.({ config: this.#config, container: this.#container })),
-      ),
-    )
+    const beforeBootstrapKit = { config: this.#config, container: this.#container }
+    const beforeBootstrapPending: Promise<void>[] = []
+    for (const service of services) {
+      const result = service[kBeforeBootstrap]?.(beforeBootstrapKit)
+      if (result) {
+        beforeBootstrapPending.push(result)
+      }
+    }
+    if (beforeBootstrapPending.length > 0) {
+      await Promise.all(beforeBootstrapPending)
+    }
     await this.#config.bootstrap()
 
     const profiles = activeProfiles(caffeine.config.profiles)
@@ -147,7 +153,16 @@ export abstract class BaseApplication {
     // Each feature gets its own kit, carrying its position in the feature list. Extensions are registered
     // against that position rather than against the moment the hook reached the call, so what a feature awaits
     // before registering cannot move it past a feature installed after it.
-    await Promise.all(services.map((service, index) => service[kBootstrap](this.serviceKit(index))))
+    const bootstrapPending: Promise<void>[] = []
+    services.forEach((service, index) => {
+      const result = service[kBootstrap](this.serviceKit(index))
+      if (result) {
+        bootstrapPending.push(result)
+      }
+    })
+    if (bootstrapPending.length > 0) {
+      await Promise.all(bootstrapPending)
+    }
 
     await this.#container.init()
 

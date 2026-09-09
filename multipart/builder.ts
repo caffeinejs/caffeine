@@ -37,10 +37,8 @@ export class MultipartBuilder<C = unknown> extends FeatureBuilder<MultipartConfi
     return this.set('options', data)
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     const options = { ...this.#callbacks, ...this.slice.config.options } as MultipartOptions
     kit.extensions.register(MultipartExtension, new MultipartExtension(options))
-
-    return Promise.resolve()
   }
 }

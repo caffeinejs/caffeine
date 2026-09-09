@@ -72,8 +72,7 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<ServerOptions, C>
     return this.set('host', host)
   }
 
-  // Nothing to bind: the adapter reads the settings by key.
-  protected bootstrap(): Promise<void> {
-    return Promise.resolve()
+  protected bootstrap(): void {
+    // Nothing to bind: the adapter reads the settings by key.
   }
 }

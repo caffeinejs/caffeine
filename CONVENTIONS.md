@@ -207,9 +207,8 @@ export class ThingBuilder<C = unknown> extends FeatureBuilder<ThingConfig, C> {
     return this.set('size', size)
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     kit.extensions.register(ThingExtension, new ThingExtension(this.slice.config))
-    return Promise.resolve()
   }
 }
 ```

@@ -115,7 +115,7 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
     this.#options = this.derive(config => mergeHealthConfig(config, { enabledDefault }), kHealthConfig)
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags — which
     // are read per request — follow a refresh.
     const options = this.#options!.config
@@ -148,7 +148,5 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
     )
 
     kit.extensions.register(HealthProbesExtension, new HealthProbesExtension(options))
-
-    return Promise.resolve()
   }
 }

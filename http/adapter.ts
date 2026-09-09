@@ -135,10 +135,9 @@ export class FastifyAdapter<
       await fastify.register(
         fp(
           // Async so a `configure` that throws synchronously becomes a rejection avvio can carry, rather than
-          // escaping the plugin call and stalling the boot.
-          async instance => {
-            await extension.configure({ ...extensionContext, server: instance })
-          },
+          // escaping the plugin call and stalling the boot. Its result is returned rather than awaited: a
+          // synchronous `configure` gives back `undefined` and the plugin resolves without a further microtask.
+          async instance => extension.configure({ ...extensionContext, server: instance }),
           {
             name: extension.name,
             dependencies: extension.dependencies as string[] | undefined,

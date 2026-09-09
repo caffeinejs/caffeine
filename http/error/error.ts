@@ -80,7 +80,7 @@ export class ErrorHandlingServiceConfigurer implements FeatureLifecycle {
     return 'error-handling'
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): void {
     const handlerBinding = kit.container.getBindings(ErrorHandler)
     const handlers = new Map<Ctor<Error>, Provider<ErrorHandler<Error>>>()
 
@@ -123,7 +123,5 @@ export class ErrorHandlingServiceConfigurer implements FeatureLifecycle {
       t.toValue(new ErrorHandlerProvider(handlers)).lifetime(Scopes.SINGLETON).internal(),
     )
     kit.extensions.register(ErrorHandlingExtension, new ErrorHandlingExtension())
-
-    return Promise.resolve()
   }
 }

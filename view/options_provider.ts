@@ -70,11 +70,9 @@ export class ViewOptionsProvider implements FeatureLifecycle {
     }
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): void {
     // Registered with the application's extensions, so the adapter runs it as a Fastify plugin. The provider
     // goes in directly rather than through a container key it would only be read back out of at server setup.
     kit.extensions.register(ViewExtension, new ViewExtension(this))
-
-    return Promise.resolve()
   }
 }

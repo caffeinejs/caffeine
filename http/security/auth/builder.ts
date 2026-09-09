@@ -277,8 +277,8 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
     }
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
-    return this.#doBootstrap(kit)
+  protected bootstrap(kit: BootstrapKit): void {
+    this.#doBootstrap(kit)
   }
 
   protected override beforeBootstrap(kit: BeforeBootstrapKit): void {
@@ -446,7 +446,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
     }
   }
 
-  #doBootstrap(kit: BootstrapKit): Promise<void> {
+  #doBootstrap(kit: BootstrapKit): void {
     this.#buildSchemes()
 
     // Absent for a builder driven directly rather than by an application, which then has only what code set.
@@ -590,8 +590,6 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
           .internal(),
       )
     }
-
-    return Promise.resolve()
   }
 
   /**

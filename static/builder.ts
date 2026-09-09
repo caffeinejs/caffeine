@@ -93,7 +93,7 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<StaticConfigSlice
     this.#resolved = this.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     const resolved = this.#resolved!
     const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
 
@@ -106,8 +106,6 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<StaticConfigSlice
     if (spa !== undefined) {
       kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
     }
-
-    return Promise.resolve()
   }
 }
 

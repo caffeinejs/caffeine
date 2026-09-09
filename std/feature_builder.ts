@@ -159,7 +159,7 @@ export abstract class FeatureBuilder<T, C = unknown> implements FeatureLifecycle
    * Binds what this feature produces and registers its extensions. Runs after configuration has resolved and
    * before the container initializes, so {@link slice}'s values are readable and binding is still open.
    */
-  protected abstract bootstrap(kit: BootstrapKit): Promise<void>
+  protected abstract bootstrap(kit: BootstrapKit): void | Promise<void>
 
   [kBeforeBootstrap](kit: BeforeBootstrapKit): void | Promise<void> {
     this.#definition = kit.config
@@ -174,7 +174,7 @@ export abstract class FeatureBuilder<T, C = unknown> implements FeatureLifecycle
     return this.beforeBootstrap?.(kit)
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kBootstrap](kit: BootstrapKit): void | Promise<void> {
     return this.bootstrap(kit)
   }
 }

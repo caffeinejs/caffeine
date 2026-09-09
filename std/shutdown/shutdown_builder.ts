@@ -81,9 +81,8 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<ShutdownConfig,
     this.#options = this.derive(config => finalizeShutdownOptions(mergeShutdownConfig(config, { dispatcher })))
   }
 
-  protected bootstrap(kit: BootstrapKit): Promise<void> {
+  protected bootstrap(kit: BootstrapKit): void {
     // The derived slice's own object: it is live, so a refresh reaches the drain and teardown budgets.
     kit.container.bind(kShutdownPolicy, t => t.toValue(this.#options!.config).internal())
-    return Promise.resolve()
   }
 }
