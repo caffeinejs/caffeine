@@ -32,10 +32,10 @@ class MixedFormatConsumer {
 describe('per-listener deserializers', () => {
   it('runs the two listeners on separate consumers with their own deserializers', async () => {
     const broker = new FakeBroker({ applyDeserializers: true })
-    const kfk = kafka.with({ clients: broker.clients() })
+    const kfk = (i?: string) => kafka(i, { clients: broker.clients() })
     const app = createApplication({})
       // Instance default = identity (so the JSON side passes through); the avro listener overrides it.
-      .extend(kfk, k =>
+      .extend(kfk(), k =>
         k
           .brokers('b')
           .groupId('pld-group')

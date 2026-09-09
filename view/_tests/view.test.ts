@@ -12,7 +12,7 @@ const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
 
 function viewApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(ViewExt, v =>
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(ViewExt(), v =>
     v.engine({ handlebars }).root(templatesRoot).extension('hbs'),
   )
 }
@@ -80,7 +80,7 @@ describe('view feature', () => {
     void [ContextController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt, v =>
+      .extend(ViewExt(), v =>
         v.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }),
       )
       .build()
@@ -103,7 +103,7 @@ describe('view feature', () => {
     void [NamespacedController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .extend(ViewExt(), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .build()
     await app.ready()
 
@@ -233,7 +233,7 @@ describe('view feature', () => {
     void [MultiController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .extend(ViewExt(), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .extend(ViewExt('ejs'), v => v.engine({ ejs }).root(ejsRoot).extension('ejs'))
       .build()
     await app.ready()
@@ -267,7 +267,7 @@ describe('view feature', () => {
     void [SameEngineController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt, v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .extend(ViewExt(), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
       .extend(ViewExt('alt'), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
       .build()
     await app.ready()

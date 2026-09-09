@@ -172,9 +172,9 @@ builder's `.config(selector)`. A feature nothing pointed anywhere resolves **det
 and its builder values alone: it works, and no file, environment variable or argument reaches it.
 
 Do not route an extension's own configuration through a container key it reads back at server setup: the
-builder is holding the value when it constructs the extension. `kit.extensions.register(X, new X(data))` does
-the binding and the registration together, because they are one act — `add(key)` alone binds nothing and
-`bind(key)` alone registers nothing.
+builder is holding the value when it constructs the extension. `kit.extensions.register(X, new X(data))` binds
+`X` and registers it in one call. Pass a token alone — `kit.extensions.register(X)` — only when the feature
+already bound it itself (a factory, a `.extends(...)` chain, a per-instance key).
 
 Extensions run in `kExtensionStage` order, then in the order their features were installed — which is the
 order the application's `.extend(...)` calls are written. The install position is a property of the registry,
@@ -190,7 +190,7 @@ authored against.
 
 Extend `FeatureBuilder<T, C>` from `@caffeinejs/std`. It is a pure fluent authoring class — its methods return
 `this` — and it **is** the `FeatureLifecycle`, with `[kFeatureName]`, `[kBeforeBootstrap]` and `[kBootstrap]`
-symbol-keyed so none of it shows on the fluent surface. `.extend`'s `install` calls `ctx.addFeature(builder)`.
+symbol-keyed so none of it shows on the fluent surface.
 
 The base owns the whole configuration path: `.config(selector)`, the two bands, registering the slice and
 publishing it under a key. A subclass declares `schema` (and optionally `configKey` and `defaults`), writes
@@ -213,6 +213,29 @@ export class ThingBuilder<C = unknown> extends FeatureBuilder<ThingConfig, C> {
   }
 }
 ```
+
+The package exports a **factory function** that returns a `Feature<ThingBuilder>` — always called, never a
+bare value: `.extend(thing(), t => t.size(3))`. Use the `feature(name, () => new ThingBuilder())` helper from
+`@caffeinejs/std` for the common case; it constructs the builder, runs the `.extend` callback against it, and
+calls `ctx.addFeature`. A feature that needs more at install time — an instance name, a once-registered
+lifecycle listener, a lazily created provider — writes its own function returning `Feature`:
+
+```ts
+export function thing(instance: string = 'default'): Feature<ThingBuilder> {
+  return {
+    name: instance === 'default' ? 'thing' : `thing:${instance}`,
+    install(ctx, configure) {
+      const builder = new ThingBuilder(instance)
+      configure?.(builder)
+      ctx.addFeature(builder)
+    },
+  }
+}
+```
+
+`.extend` deduplicates on `Feature.name`, so a feature that accepts an instance name folds it into the name
+(`thing` vs `thing:orders`) and one image cannot install the same instance twice. There is no `singleton`
+flag and no separate keyed-feature factory.
 
 Three hooks cover what `set` cannot express. `configValues()` replaces the whole `CODE` band, for a builder
 holding one options object its setters mutate. `beforeBootstrap()` runs once the slice exists and is where a

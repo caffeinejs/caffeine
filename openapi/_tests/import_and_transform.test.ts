@@ -46,9 +46,9 @@ const HAND_WRITTEN: OpenAPIDocument = {
 
 function build(configure: (o: OpenAPIBuilder) => void): WebApplication {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt, o => {
+    .extend(OpenAPIExt(), o => {
       o.docs(false).public()
-      configure(o)
+      configure(o as OpenAPIBuilder)
     })
     .build() as WebApplication
 }

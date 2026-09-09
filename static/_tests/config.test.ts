@@ -49,7 +49,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt, s => s.config(c => c.static))
+      .extend(StaticExt(), s => s.config(c => c.static))
       .build()
 
     await app.ready()
@@ -61,7 +61,7 @@ describe('static configuration', () => {
   it('lets the environment override a builder-set mount root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ STATIC__MOUNTS__0__ROOT: fixtures }), ConfigPriority.ENV))
-      .extend(StaticExt, s => s.config(c => c.static).serve(dist, { prefix: '/assets/' }))
+      .extend(StaticExt(), s => s.config(c => c.static).serve(dist, { prefix: '/assets/' }))
       .build()
 
     await app.ready()
@@ -75,7 +75,7 @@ describe('static configuration', () => {
     const setHeaders = (): void => undefined
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt, s => s.serve(fixtures, { prefix: '/assets/', setHeaders }))
+      .extend(StaticExt(), s => s.serve(fixtures, { prefix: '/assets/', setHeaders }))
       .build()
 
     await app.ready()
@@ -94,7 +94,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt, s => s.config(c => c.static).spa(dist))
+      .extend(StaticExt(), s => s.config(c => c.static).spa(dist))
       .build()
 
     await app.ready()
@@ -114,7 +114,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt, s => s.config(c => c.static).serve(fixtures))
+      .extend(StaticExt(), s => s.config(c => c.static).serve(fixtures))
       .build()
 
     await app.ready()
@@ -133,7 +133,7 @@ describe('static configuration', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ app: { assets: {} } })))
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(StaticExt, s => s.config(c => c.app.assets).serve(fixtures, { prefix: '/moved/' }))
+      .extend(StaticExt(), s => s.config(c => c.app.assets).serve(fixtures, { prefix: '/moved/' }))
       .build()
 
     await app.ready()

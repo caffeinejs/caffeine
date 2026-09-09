@@ -57,9 +57,9 @@ describe('Extensions', () => {
   it('orders by the registering feature, not by when it registered', async () => {
     const extensions = new Extensions(await containerWith(First, Second, Third))
 
-    extensions.at(2).add(Third)
-    extensions.at(0).add(First)
-    extensions.at(1).add(Second)
+    extensions.at(2).register(Third)
+    extensions.at(0).register(First)
+    extensions.at(1).register(Second)
 
     expect(extensions.of(Probe).map(p => p.name)).toEqual(['first', 'second', 'third'])
   })
@@ -67,8 +67,8 @@ describe('Extensions', () => {
   it('keeps the order one feature added its own extensions in', async () => {
     const extensions = new Extensions(await containerWith(First, Second))
 
-    extensions.at(0).add(Second)
-    extensions.at(0).add(First)
+    extensions.at(0).register(Second)
+    extensions.at(0).register(First)
 
     expect(extensions.of(Probe).map(p => p.name)).toEqual(['second', 'first'])
   })
@@ -77,8 +77,8 @@ describe('Extensions', () => {
   it('skips a registered extension of another kind', async () => {
     const extensions = new Extensions(await containerWith(First, Other))
 
-    extensions.at(0).add(First)
-    extensions.at(1).add(Other)
+    extensions.at(0).register(First)
+    extensions.at(1).register(Other)
 
     expect(extensions.of(Probe).map(p => p.name)).toEqual(['first'])
   })
@@ -88,9 +88,9 @@ describe('Extensions', () => {
   it('runs core before default and fallback after, whatever the install order says', async () => {
     const extensions = new Extensions(await containerWith(First, Core, Fallback))
 
-    extensions.at(0).add(Fallback)
-    extensions.at(1).add(First)
-    extensions.at(2).add(Core)
+    extensions.at(0).register(Fallback)
+    extensions.at(1).register(First)
+    extensions.at(2).register(Core)
 
     expect(extensions.of(Probe).map(p => p.name)).toEqual(['core', 'first', 'fallback'])
   })
@@ -98,9 +98,9 @@ describe('Extensions', () => {
   it('falls back to install order within one stage', async () => {
     const extensions = new Extensions(await containerWith(First, Second, Core))
 
-    extensions.at(0).add(Second)
-    extensions.at(1).add(Core)
-    extensions.at(2).add(First)
+    extensions.at(0).register(Second)
+    extensions.at(1).register(Core)
+    extensions.at(2).register(First)
 
     expect(extensions.of(Probe).map(p => p.name)).toEqual(['core', 'second', 'first'])
   })
@@ -109,8 +109,8 @@ describe('Extensions', () => {
   it('treats an unmarked extension as default', async () => {
     const extensions = new Extensions(await containerWith(First, Fallback))
 
-    extensions.at(0).add(Fallback)
-    extensions.at(1).add(First)
+    extensions.at(0).register(Fallback)
+    extensions.at(1).register(First)
 
     expect(extensions.of(Probe).map(p => p.name)).toEqual(['first', 'fallback'])
   })
@@ -134,7 +134,7 @@ describe('Extensions', () => {
     await container.init()
 
     const extensions = new Extensions(container)
-    extensions.at(0).add(First)
+    extensions.at(0).register(First)
 
     expect(extensions.of(Probe)[0]).toBe(instance)
   })

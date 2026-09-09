@@ -118,7 +118,9 @@ class HTMLErrorController {
 void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
 function htmlApp(configure?: (h: HTMLBuilder) => void) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(HTMLExt, configure).build()
+  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .extend(HTMLExt(), configure as never)
+    .build()
 }
 
 describe('HTML', () => {
@@ -203,7 +205,7 @@ describe('HTML', () => {
   it('lets a configuration source override what the builder set', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
-      .extend(HTMLExt, h => h.config(c => c.html).autoDoctype(true))
+      .extend(HTMLExt(), h => h.config(c => c.html).autoDoctype(true))
       .build()
 
     await app.ready()

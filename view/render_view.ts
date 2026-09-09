@@ -26,7 +26,7 @@ export function renderView(view: ViewResult, res: ViewCapableReply): ActionResul
 
   if (typeof render !== 'function') {
     const named =
-      engine === 'view' ? '.extend(ViewExt, v => v.engine(...))' : `.extend(ViewExt("${engine}"), v => v.engine(...))`
+      engine === 'view' ? '.extend(ViewExt(), v => v.engine(...))' : `.extend(ViewExt("${engine}"), v => v.engine(...))`
     throw new ErrConfiguration(`Cannot render view: engine "${engine}" is not configured. Call ${named}`)
   }
 

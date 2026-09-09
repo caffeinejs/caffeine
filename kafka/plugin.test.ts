@@ -22,15 +22,15 @@ function noopClients(): KafkaClients {
 
 describe('kafka feature', () => {
   it('returns the same builder from .extend()', () => {
-    const kfk = kafka.with({ clients: noopClients() })
+    const kfk = (i?: string) => kafka(i, { clients: noopClients() })
     const app = createApplication({})
-    expect(app.extend(kfk, k => k.brokers('localhost:9092'))).toBe(app)
+    expect(app.extend(kfk(), k => k.brokers('localhost:9092'))).toBe(app)
   })
 
   it('binds the default template and a labelled engine through configure()', async () => {
     const container = new CaffeineIoC()
-    const kfk = kafka.with({ clients: noopClients() })
-    const app = createApplication({ container }).extend(kfk, k => k.brokers('localhost:9092').groupId('g'))
+    const kfk = (i?: string) => kafka(i, { clients: noopClients() })
+    const app = createApplication({ container }).extend(kfk(), k => k.brokers('localhost:9092').groupId('g'))
 
     const built = app.build()
     await built.ready()
@@ -44,9 +44,9 @@ describe('kafka feature', () => {
   })
 
   it('binds distinct templates for multiple named instances', async () => {
-    const kfk = kafka.with({ clients: noopClients() })
+    const kfk = (i?: string) => kafka(i, { clients: noopClients() })
     const app = createApplication({})
-      .extend(kfk, k => k.brokers('b1').groupId('g'))
+      .extend(kfk(), k => k.brokers('b1').groupId('g'))
       .extend(kfk('orders'), k => k.brokers('b2').groupId('g'))
 
     const built = app.build()
@@ -65,8 +65,8 @@ describe('kafka feature', () => {
   // Brokers may arrive from any source now, so the check runs once the whole chain has merged — which makes
   // it the slice's failure, naming the instance that could not be configured.
   it('rejects at ready() when an instance has no brokers', async () => {
-    const kfk = kafka.with({ clients: noopClients() })
-    const app = createApplication({}).extend(kfk, k => k.groupId('g')) // no brokers
+    const kfk = (i?: string) => kafka(i, { clients: noopClients() })
+    const app = createApplication({}).extend(kfk(), k => k.groupId('g')) // no brokers
 
     const error = await app
       .build()
@@ -84,8 +84,8 @@ describe('kafka feature', () => {
   })
 
   it('throws when the same instance is installed twice', () => {
-    const kfk = kafka.with({ clients: noopClients() })
-    expect(() => createApplication({}).extend(kfk).extend(kfk)).toThrow(ErrFeatureAlreadyInstalled)
+    const kfk = (i?: string) => kafka(i, { clients: noopClients() })
+    expect(() => createApplication({}).extend(kfk()).extend(kfk())).toThrow(ErrFeatureAlreadyInstalled)
     expect(() => createApplication({}).extend(kfk('orders')).extend(kfk('orders'))).toThrow(ErrFeatureAlreadyInstalled)
   })
 })

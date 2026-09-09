@@ -17,7 +17,7 @@ import type { ViewOptions } from './view.js'
  * set any option supported by the `@fastify/view` plugin.
  *
  * One builder assembles one engine registration. Multiple engines are declared with
- * `.extend(ViewExt, …)` and `.extend(ViewExt('mail'), …)`; the {@link ViewOptionsProvider}
+ * `.extend(ViewExt(), …)` and `.extend(ViewExt('mail'), …)`; the {@link ViewOptionsProvider}
  * owns them and reads each via {@link build}.
  *
  * Everything `@fastify/view` takes as data — `root`, `viewExt`, `layout`, the production cache — is read

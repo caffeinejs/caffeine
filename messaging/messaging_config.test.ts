@@ -32,7 +32,7 @@ describe('messaging configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV),
       )
-      .extend(messaging, m =>
+      .extend(messaging(), m =>
         m
           .config(c => c.messaging.default)
           .use('primary', inMemoryBinder())
@@ -60,7 +60,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging, m =>
+      .extend(messaging(), m =>
         m
           .config(c => c.messaging.default)
           .use('primary', inMemoryBinder())
@@ -84,7 +84,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging, m =>
+      .extend(messaging(), m =>
         m
           .config(c => c.messaging.default)
           .use('primary', inMemoryBinder())
@@ -119,7 +119,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging, m =>
+      .extend(messaging(), m =>
         m
           .config(c => c.messaging.default)
           .use('primary', inMemoryBinder())
@@ -155,7 +155,7 @@ describe('messaging configuration', () => {
         ),
       )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(messaging, m =>
+      .extend(messaging(), m =>
         m
           .config(c => c.app.events)
           .use('primary', inMemoryBinder())
@@ -180,7 +180,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging, m =>
+      .extend(messaging(), m =>
         m
           .config(c => c.messaging.default)
           .use('primary', inMemoryBinder())

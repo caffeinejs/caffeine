@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 
 import { InlineConfigProvider, type ConfigHandle, type ConfigSlice } from './config/index.js'
 import type { Extension } from './extensions.js'
-import { createApplication } from './index.js'
 import {
   kBeforeBootstrap,
   kBootstrap,
@@ -11,7 +10,8 @@ import {
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-} from './lifecycle.js'
+} from './feature.js'
+import { createApplication } from './index.js'
 import { $t } from './schema/t.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
@@ -159,7 +159,7 @@ describe('extension registration', () => {
         await Promise.resolve()
         const key = token<Extension>(Symbol(`ext.${name}`))
         kit.container.bind(key, t => t.toValue({ name, configure: () => undefined }))
-        kit.extensions.add(key)
+        kit.extensions.register(key)
         registrars.push(kit.extensions)
       },
     })

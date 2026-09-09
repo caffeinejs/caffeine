@@ -12,7 +12,7 @@ import {
   type BeforeBootstrapKit,
   type BootstrapKit,
   type FeatureLifecycle,
-} from './lifecycle.js'
+} from './feature.js'
 
 export class ErrFeatureNotDeclared extends ErrCaffeine {
   constructor(feature: string) {

@@ -12,7 +12,7 @@ const BOUNDARY = '----TestBoundary123'
 type ME = { name: string; value: string } | { name: string; filename: string; content: string; mime?: string }
 
 function multipartApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(MultipartExt)
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(MultipartExt())
 }
 
 function multipartBody(entries: Array<ME>): Uint8Array {

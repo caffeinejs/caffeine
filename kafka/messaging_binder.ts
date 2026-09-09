@@ -49,16 +49,16 @@ export interface KafkaBinderOptions {
 /**
  * A `@caffeinejs/messaging` {@link Binder} backed by Kafka — the additive "Fork Y" wrap. It reuses the existing
  * {@link KafkaClients} seam but is a separate, thinner consume path from `KafkaListenerContainer`; the direct
- * `.extend(kafka, …)` API is untouched. Register it on the messaging builder:
+ * `.extend(kafka(), …)` API is untouched. Register it on the messaging builder:
  *
  * ```ts
- * .extend(messaging, m => m
+ * .extend(messaging(), m => m
  *   .use('kafka', kafkaBinder({ brokers: 'localhost:9092', groupId: 'svc' }))
  *   .in('orders', { destination: 'orders', via: 'kafka' }))
  * ```
  *
  * Retry is the portable `blockingRetry` driven by the messaging engine; Kafka-native non-blocking retry topics
- * and dead-letter recovery stay on the `.extend(kafka, …)` path.
+ * and dead-letter recovery stay on the `.extend(kafka(), …)` path.
  */
 export function kafkaBinder(options: KafkaBinderOptions): BinderFactory {
   if (options.brokers === undefined || options.brokers.length === 0) {

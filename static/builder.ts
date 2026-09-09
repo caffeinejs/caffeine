@@ -11,7 +11,7 @@ import type { StaticMount } from './static.js'
 
 /**
  * Configures static file serving over `@fastify/static`. Bound via
- * `.extend(StaticExt, s => s.serve(dir, { prefix: '/static' }))`.
+ * `.extend(StaticExt(), s => s.serve(dir, { prefix: '/static' }))`.
  *
  * The fluent methods are pure authoring; the lifecycle behind the symbol keys hands the assembled mounts to the
  * {@link StaticExtension} it binds. Each `.serve(...)` call adds one mount; multiple mounts serve multiple
@@ -21,7 +21,7 @@ import type { StaticMount } from './static.js'
  * the `CODE` band, and the feature reads the merged result. So `s.serve('public')` is a **default**: a
  * `static.mounts` in a config file replaces it. Settings live at `static.*`; {@link config} re-points them.
  *
- * `C` is the application config type, recovered from the builder `.extend(StaticExt, …)` was reached through.
+ * `C` is the application config type, recovered from the builder `.extend(StaticExt(), …)` was reached through.
  */
 export class StaticBuilder<C = unknown> extends FeatureBuilder<StaticConfigSlice, C> {
   readonly [kFeatureName] = 'static'
@@ -60,7 +60,7 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<StaticConfigSlice
    * being listed anywhere. `exclude`/`include` are there for what routing cannot know.
    *
    * ```ts
-   * .extend(StaticExt, s => s.spa('site/dist'))
+   * .extend(StaticExt(), s => s.spa('site/dist'))
    * ```
    */
   spa(root: string, options?: SPAOptions): this {
@@ -101,8 +101,7 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<StaticConfigSlice
     // Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings are handed to it directly:
     // the builder is holding them right here, and routing them through a container key only to read them back
     // at server setup adds a lookup and a key without a decision.
-    kit.container.bind(StaticExtension, t => t.toValue(new StaticExtension(resolved.config.mounts, spa)))
-    kit.extensions.add(StaticExtension)
+    kit.extensions.register(StaticExtension, new StaticExtension(resolved.config.mounts, spa))
 
     if (spa !== undefined) {
       kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
