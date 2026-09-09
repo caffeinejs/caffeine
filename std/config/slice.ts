@@ -1,3 +1,4 @@
+import { coalesce, readEnv } from './_escape.js'
 import type { FeatureConfigLookup } from './accessor.js'
 import { ErrConfig } from './errors.js'
 import type { ConfigChangeListener } from './notifier.js'
@@ -78,6 +79,29 @@ export class ConfigSlice<T> {
   /** A detached, deep-frozen copy of the current values. Unaffected by later refreshes. */
   snapshot(): T {
     return this.#require()
+  }
+
+  /**
+   * Reads an environment variable straight from `process.env`, outside the configuration entirely: no schema,
+   * no provider chain, no coercion. The escape hatch for a value that was never wired into the config.
+   *
+   * @param fallback - Returned when the variable is unset.
+   */
+  env(name: string): string | undefined
+  env(name: string, fallback: string): string
+  env(name: string, fallback?: string): string | undefined {
+    return readEnv(name, fallback)
+  }
+
+  /**
+   * The value `selector` reads from this slice's {@link config}, or `alternative` when that read yields `null` /
+   * `undefined` or throws.
+   *
+   * @throws ErrConfig `ERR_CONFIG_NOT_RESOLVED` when the slice has not published yet — reading too early is a
+   *   lifecycle error, not a missing value.
+   */
+  either<R, A>(selector: (c: T) => R, alternative: A): NonNullable<R> | A {
+    return coalesce(this.config, selector, alternative)
   }
 
   /** The failure from the most recent publish, or `undefined` when the last one succeeded. */

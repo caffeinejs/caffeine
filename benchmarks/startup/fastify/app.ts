@@ -23,7 +23,7 @@ import { PaymentService } from './payment/payment.service.js'
 import { LoggerService } from './shared/logger.service.js'
 import { NotifierService } from './shared/notifier.service.js'
 
-console.time('start')
+const started = performance.now()
 
 const logger = new LoggerService()
 const notifier = new NotifierService(logger)
@@ -56,5 +56,6 @@ app.register(createOrderRouter(orderCtrl), { prefix: '/orders' })
 app.register(createPaymentRouter(paymentCtrl), { prefix: '/payments' })
 
 await app.listen({ port: 3010, host: '127.0.0.1' })
-console.timeEnd('start')
+process.stdout.write(`start: ${(performance.now() - started).toFixed(3)}ms\n`)
+await app.close()
 process.exit(0)

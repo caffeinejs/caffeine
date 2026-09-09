@@ -95,6 +95,55 @@ describe('Configuration', () => {
     expect(configuration.revision).toBe(1)
   })
 
+  describe('env', () => {
+    it('reads straight from process.env with no coercion', async () => {
+      const { configuration } = await setup()
+      process.env.CAFFEINE_CONFIG_ENV_TEST = 'true'
+
+      try {
+        // A provider would coerce "true" to a boolean; the escape hatch hands back the raw string.
+        expect(configuration.env('CAFFEINE_CONFIG_ENV_TEST')).toBe('true')
+      } finally {
+        delete process.env.CAFFEINE_CONFIG_ENV_TEST
+      }
+    })
+
+    it('returns undefined, or the fallback, when the variable is unset', async () => {
+      const { configuration } = await setup()
+      delete process.env.CAFFEINE_CONFIG_ENV_ABSENT
+
+      expect(configuration.env('CAFFEINE_CONFIG_ENV_ABSENT')).toBeUndefined()
+      expect(configuration.env('CAFFEINE_CONFIG_ENV_ABSENT', 'default')).toBe('default')
+    })
+  })
+
+  describe('either', () => {
+    it('reads the selected value from the live handle', async () => {
+      const { container, configuration, mutable } = await setup()
+
+      expect(configuration.either(c => c.server.port, 1)).toBe(3000)
+
+      mutable.set('server.port', 8080)
+      await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
+
+      // Live, not latched: a refresh is visible through the selector.
+      expect(configuration.either(c => c.server.port, 1)).toBe(8080)
+    })
+
+    it('falls back when the selector throws on an undeclared path', async () => {
+      const { configuration } = await setup()
+
+      // `misc` is not in the schema, so `misc.value` deep-reads through `undefined` and throws.
+      expect(configuration.either(c => (c as unknown as { misc: { value: number } }).misc.value, 42)).toBe(42)
+    })
+
+    it('falls back when the selector yields null or undefined', async () => {
+      const { configuration } = await setup()
+
+      expect(configuration.either(c => (c.server as { host?: string }).host, 'localhost')).toBe('localhost')
+    })
+  })
+
   it('does not collide with an application field named "snapshot"', async () => {
     const definition = new ConfigDefinition(APP_CONFIG)
     definition.sources.add(new MutableConfigProvider('test').set('snapshot', 'a config value of mine'))

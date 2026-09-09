@@ -24,7 +24,7 @@ import { PaymentService } from './payment/payment.service.js'
 import { LoggerService } from './shared/logger.service.js'
 import { NotifierService } from './shared/notifier.service.js'
 
-console.time('start')
+const started = performance.now()
 
 const logger = new LoggerService()
 const notifier = new NotifierService(logger)
@@ -56,7 +56,7 @@ app.route('/cart', createCartRouter(cartCtrl))
 app.route('/orders', createOrderRouter(orderCtrl))
 app.route('/payments', createPaymentRouter(paymentCtrl))
 
-serve({ fetch: app.fetch, port: 3011, hostname: '127.0.0.1' }, () => {
-  console.timeEnd('start')
-  process.exit(0)
+const server = serve({ fetch: app.fetch, port: 3011, hostname: '127.0.0.1' }, () => {
+  process.stdout.write(`start: ${(performance.now() - started).toFixed(3)}ms\n`)
+  server.close(() => process.exit(0))
 })

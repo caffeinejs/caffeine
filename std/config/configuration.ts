@@ -1,3 +1,4 @@
+import { coalesce, readEnv } from './_escape.js'
 import type { ConfigHandle } from './accessor.js'
 import type { ConfigDiagnostics } from './diagnostics.js'
 import type { ConfigChangeListener } from './notifier.js'
@@ -91,5 +92,25 @@ export class Configuration<T> {
    */
   settled(): Promise<void> {
     return this.#source.settled()
+  }
+
+  /**
+   * Reads an environment variable straight from `process.env`, outside the configuration entirely: no schema,
+   * no provider chain, no coercion. The escape hatch for a value that was never wired into the config.
+   *
+   * @param fallback - Returned when the variable is unset.
+   */
+  env(name: string): string | undefined
+  env(name: string, fallback: string): string
+  env(name: string, fallback?: string): string | undefined {
+    return readEnv(name, fallback)
+  }
+
+  /**
+   * The value `selector` reads from the live {@link config}, or `alternative` when that read yields `null` /
+   * `undefined` or throws — a deep read through a path the schema left optional or undeclared.
+   */
+  either<R, A>(selector: (c: ConfigHandle<T>) => R, alternative: A): NonNullable<R> | A {
+    return coalesce(this.config, selector, alternative)
   }
 }

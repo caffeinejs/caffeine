@@ -7,6 +7,7 @@ import { printMachineInfo } from '../machine-info.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const WARMUP = 5
 const ITERATIONS = 50
+const TIMEOUT_MS = 15_000
 
 function parseTimeEnd(output: string): number | null {
   const ms = output.match(/^start: ([\d.]+)ms$/m)
@@ -22,27 +23,50 @@ function parseTimeEnd(output: string): number | null {
 
 function measure(script: string): Promise<number> {
   return new Promise((res, rej) => {
-    let out = ''
+    let stdout = ''
+    let stderr = ''
+    let timedOut = false
     const proc = spawn('node', [script], { stdio: ['ignore', 'pipe', 'pipe'] })
     proc.stdout.on('data', (chunk: Buffer) => {
-      out += chunk.toString()
+      stdout += chunk.toString()
     })
-    proc.on('close', () => {
-      const ms = parseTimeEnd(out)
+    proc.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+    const timer = setTimeout(() => {
+      timedOut = true
+      proc.kill('SIGKILL')
+    }, TIMEOUT_MS)
+    proc.on('close', (code, signal) => {
+      clearTimeout(timer)
+      if (timedOut) {
+        rej(new Error(`Timed out after ${TIMEOUT_MS}ms: ${script}\nstdout: ${stdout}\nstderr: ${stderr}`))
+        return
+      }
+      const ms = parseTimeEnd(stdout) ?? parseTimeEnd(stderr)
       if (ms !== null) {
         res(ms)
       } else {
-        rej(new Error(`No timing in output of ${script}: ${out}`))
+        rej(
+          new Error(
+            `No timing in output of ${script} (exit ${code}${signal != null ? `/${signal}` : ''}):\nstdout: ${stdout}\nstderr: ${stderr}`,
+          ),
+        )
       }
     })
-    proc.on('error', rej)
+    proc.on('error', err => {
+      clearTimeout(timer)
+      rej(err)
+    })
   })
 }
 
-async function measureN(script: string, warmup: number, n: number): Promise<number[]> {
+async function measureN(name: string, script: string, warmup: number, n: number): Promise<number[]> {
+  console.log(`${name}: warming up (${warmup})...`)
   for (let i = 0; i < warmup; i++) {
     await measure(script)
   }
+  console.log(`${name}: measuring (${n})...`)
   const samples: number[] = []
   for (let i = 0; i < n; i++) {
     samples.push(await measure(script))
@@ -74,12 +98,10 @@ function row(label: string, s: ReturnType<typeof stats>): string {
 
 const dist = resolve(__dirname, 'dist')
 
-console.log(`Warming up (${WARMUP} iterations each)...`)
-
-const nestSamples = await measureN(resolve(dist, 'nestjs/app.js'), WARMUP, ITERATIONS)
-const caffeineSamples = await measureN(resolve(dist, 'caffeine/app.js'), WARMUP, ITERATIONS)
-const fastifySamples = await measureN(resolve(dist, 'fastify/app.js'), WARMUP, ITERATIONS)
-const honoSamples = await measureN(resolve(dist, 'hono/app.js'), WARMUP, ITERATIONS)
+const nestSamples = await measureN('nestjs', resolve(dist, 'nestjs/app.js'), WARMUP, ITERATIONS)
+const caffeineSamples = await measureN('caffeine', resolve(dist, 'caffeine/app.js'), WARMUP, ITERATIONS)
+const fastifySamples = await measureN('fastify', resolve(dist, 'fastify/app.js'), WARMUP, ITERATIONS)
+const honoSamples = await measureN('hono', resolve(dist, 'hono/app.js'), WARMUP, ITERATIONS)
 
 const results = [
   { name: 'nestjs', s: stats(nestSamples) },

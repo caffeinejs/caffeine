@@ -563,3 +563,43 @@ describe('a feature resolving its own two bands', () => {
     expect(second.config).toEqual({ size: 5, label: 'second' })
   })
 })
+
+describe('a slice escape hatch', () => {
+  it('reads an environment variable straight from process.env, no coercion', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const slice = defineFeatureConfig<WidgetConfig>(definition, { schema: widgetSchema, defaults: { ...DEFAULTS } })
+    await resolve(definition)
+
+    process.env.CAFFEINE_SLICE_ENV_TEST = '7'
+    try {
+      expect(slice.env('CAFFEINE_SLICE_ENV_TEST')).toBe('7')
+      expect(slice.env('CAFFEINE_SLICE_ENV_ABSENT', 'fallback')).toBe('fallback')
+    } finally {
+      delete process.env.CAFFEINE_SLICE_ENV_TEST
+    }
+  })
+
+  it('reads the selected value, and falls back when the selector throws or yields nothing', async () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const slice = defineFeatureConfig<WidgetConfig>(definition, {
+      schema: widgetSchema,
+      defaults: { ...DEFAULTS },
+      values: { size: 7 },
+    })
+    await resolve(definition)
+
+    expect(slice.either(c => c.size, 1)).toBe(7)
+    // `extra` is not in the schema: the deep read blows up and the alternative stands.
+    expect(slice.either(c => (c as unknown as { extra: { on: boolean } }).extra.on, false)).toBe(false)
+  })
+
+  // Reading before the slice publishes is a lifecycle bug; `$either` must surface it, not swallow it.
+  it('propagates ERR_CONFIG_NOT_RESOLVED when read before bootstrap', () => {
+    const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
+    const slice = defineFeatureConfig<WidgetConfig>(definition, { schema: widgetSchema, defaults: { ...DEFAULTS } })
+
+    expect(() => slice.either(c => c.size, 1)).toThrow(
+      expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_NOT_RESOLVED' }),
+    )
+  })
+})
