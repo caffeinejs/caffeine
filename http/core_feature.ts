@@ -7,6 +7,7 @@ import {
   type FeatureLifecycle,
 } from '@caffeinejs/std'
 
+import { ConstraintVaryExtension } from './constraints/vary_extension.js'
 import { installFormBodyParser } from './form/index.js'
 import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
 import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
@@ -51,6 +52,7 @@ export class HTTPCoreFeature implements FeatureLifecycle {
 
   [kBootstrap](kit: BootstrapKit): void {
     kit.extensions.register(FormBodyExtension, new FormBodyExtension())
+    kit.extensions.register(ConstraintVaryExtension, new ConstraintVaryExtension())
     kit.extensions.register(NotFoundExtension, new NotFoundExtension())
   }
 }

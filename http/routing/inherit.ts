@@ -59,6 +59,7 @@ export function inheritGroupSpec<R>(outer: RouteGroupSpec<R>, inner: RouteGroupS
     authz: mergeAuthz(outer.authz, inner.authz),
     config: mergeMap(outer.config, inner.config),
     options: mergeMap(outer.options, inner.options),
+    constraints: mergeMap(outer.constraints, inner.constraints),
     extras: mergeMap(outer.extras, inner.extras),
     guards: concat(outer.guards, inner.guards),
     catchBy: inner.catchBy?.length ? inner.catchBy : outer.catchBy,

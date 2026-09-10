@@ -56,6 +56,13 @@ export function deriveParameters(
     }
   }
 
+  for (const header of fromConstraints(route)) {
+    const id = key(header.name, 'header')
+    if (!found.has(id)) {
+      found.set(id, header)
+    }
+  }
+
   // The template is the last word on path parameters: one without a Parameter Object is a spec violation, and
   // a schema that declared a path property the template does not carry is not a path parameter at all.
   const inTemplate = new Set(pathParams.map(p => p.name))
@@ -147,6 +154,27 @@ function fromPickers(route: Route<unknown>): ParameterObject[] {
       required: location === 'path',
       schema: { type: 'string' },
     })
+  }
+
+  return parameters
+}
+
+/**
+ * A required header parameter for each route-selection constraint that reads one — `Accept-Version` on a
+ * versioned route. The value the route requires is not the request's, so the schema stays an open string.
+ */
+function fromConstraints(route: Route<unknown>): ParameterObject[] {
+  if (route.constraints === undefined) {
+    return []
+  }
+
+  const parameters: ParameterObject[] = []
+  for (const resolved of route.constraints.values()) {
+    if (resolved.header === undefined || CREDENTIAL_HEADERS.has(resolved.header.toLowerCase())) {
+      continue
+    }
+
+    parameters.push({ name: resolved.header, in: 'header', required: true, schema: { type: 'string' } })
   }
 
   return parameters

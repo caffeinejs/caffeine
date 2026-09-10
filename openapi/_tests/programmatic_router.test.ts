@@ -96,4 +96,29 @@ describe('openapi from a programmatic router', () => {
     expect(create?.requestBody).toBeDefined()
     expect(Object.keys(create?.responses ?? {})).toContain('201')
   })
+
+  it('lists the Accept-Version header parameter for a versioned route, from the compiled constraint', async () => {
+    const pets = new Router('/versioned-pets').name('VersionedPets').version('1.0.0')
+    pets
+      .get('/')
+      .name('list')
+      .handler(() => [])
+
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(OpenAPIExt(), o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public())
+      .build()
+      .mount(pets) as WebApplication
+
+    await app.ready()
+
+    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const list = operationAt(document, '/versioned-pets')
+
+    expect(list?.parameters).toContainEqual(
+      expect.objectContaining({ name: 'Accept-Version', in: 'header', required: true }),
+    )
+
+    await app.close()
+    app = undefined
+  })
 })

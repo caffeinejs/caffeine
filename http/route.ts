@@ -78,10 +78,23 @@ export interface Route<R = FastifyRequest> {
   statusCode?: number
   config?: Map<string, unknown>
   options?: Map<string, unknown>
+  /**
+   * The route-selection constraints in force, each resolved against the constraint registry while the route is
+   * compiled — so a reader (the OpenAPI generator, most of all) has the request header a constraint reads
+   * without finding the registry and asking it. Follows the same precedent as {@link RouteAuthorization.schemes}.
+   */
+  constraints?: Map<string, ResolvedConstraint>
   extras?: Map<symbol, unknown>
   catchBy?: CatchByMap
   guards?: CompiledGuard[]
   authorization: RouteAuthorization
+}
+
+/** One route-selection constraint, compiled: the value the route requires and the request header it reads. */
+export interface ResolvedConstraint {
+  value: unknown
+  /** The request header find-my-way matches against, when the strategy reads one. `Accept-Version` for `version`. */
+  header?: string
 }
 
 export interface RouteAuthorization {

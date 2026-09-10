@@ -228,4 +228,22 @@ describe('programmatic router parity with the decorator feature set', () => {
       await app.close()
     })
   })
+
+  describe('given a version constraint', () => {
+    it('should select a programmatic route by Accept-Version exactly as a decorated one', async () => {
+      const v1 = new Router('/pets').name('ParityPetsV1').version('1.0.0')
+      v1.get('/').handler(() => ({ v: 1 }))
+      const v2 = new Router('/pets').name('ParityPetsV2').version('2.0.0')
+      v2.get('/').handler(() => ({ v: 2 }))
+
+      const app = createWebApplication().build().mount(v1, v2)
+      await app.ready()
+
+      expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
+      expect(await (await app.fetch('/pets', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ v: 2 })
+      expect((await app.fetch('/pets')).status).toBe(404)
+
+      await app.close()
+    })
+  })
 })

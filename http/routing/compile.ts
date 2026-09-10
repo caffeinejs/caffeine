@@ -1,11 +1,13 @@
 import { Container, Ctor, InjectionToken } from '@caffeinejs/di'
 
+import { kConstraintRegistry } from '../constraints/keys.js'
+import type { ConstraintRegistry } from '../constraints/registry.js'
 import { CatchMetadata, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
 import { solutions } from '../error/util.js'
 import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
 import type { Guard } from '../guards/index.js'
 import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
-import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
+import { CatchByMap, ResolvedConstraint, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
 import {
   AuthorizationOptions,
@@ -50,6 +52,10 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
   const authzEvaluators: Map<string, PolicyEvaluator> = container.get(kAuthzEvaluators)
   const authzHandlers: Map<string, AuthzRequirementHandler<AuthzRequirement>> = container.get(kAuthzHandlers)
   const authzOptions: AuthorizationOptions = container.get(kAuthzOpts)
+
+  // Always bound: the constraints feature is registered unconditionally, like authorization, and holds at
+  // least the built-in `version` entry.
+  const constraintRegistry: ConstraintRegistry = container.get(kConstraintRegistry)
 
   const compiledGuards = new Map<GuardRef, CompiledGuard>()
   const globalGuardKeys = container.get<readonly GuardRef[]>(kGlobalGuards)
@@ -102,6 +108,8 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
 
       const owner = `${meta.name}.${String(route.name)}`
 
+      const constraints = compileConstraints(constraintRegistry, spec.constraints, route.constraints, options, owner)
+
       return {
         path: route.path,
         method: route.method,
@@ -120,6 +128,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         statusCode: route.statusCode,
         config: config,
         options: options,
+        constraints,
         extras: route.extras,
         catchBy: buildCatchByMap(container, route.catchBy, owner),
         guards: compileRouteGuardChain(container, compiledGuards, globalGuards, spec.guards, route.guards, owner),
@@ -270,6 +279,67 @@ function buildCatchByMap(
  * Resolved once per route, while it is compiled, so nothing downstream has to know that "named no scheme"
  * means "whatever the authentication feature defaults to".
  */
+/**
+ * Merges the group's and the route's route-selection constraints — route wins per key — and resolves each name
+ * against the registry, so the compiled route carries the request header a constraint reads.
+ *
+ * Throws when a name is not registered, and when a `constraints` key also arrives through `fst` (the two would
+ * disagree silently otherwise; a non-colliding `fst` constraint such as `host` is left alone).
+ */
+function compileConstraints(
+  registry: ConstraintRegistry,
+  groupConstraints: Map<string, unknown> | undefined,
+  routeConstraints: Map<string, unknown> | undefined,
+  options: Map<string, unknown>,
+  owner: string,
+): Map<string, ResolvedConstraint> | undefined {
+  if (groupConstraints === undefined && routeConstraints === undefined) {
+    return undefined
+  }
+
+  const merged = new Map<string, unknown>()
+  for (const [name, value] of groupConstraints ?? []) {
+    merged.set(name, value)
+  }
+  for (const [name, value] of routeConstraints ?? []) {
+    merged.set(name, value)
+  }
+
+  if (merged.size === 0) {
+    return undefined
+  }
+
+  const fstConstraints = options.get('constraints')
+  if (fstConstraints !== null && typeof fstConstraints === 'object') {
+    for (const key of Object.keys(fstConstraints as Record<string, unknown>)) {
+      if (merged.has(key)) {
+        throw new ErrConfiguration(
+          `Cannot compile "${owner}": constraint "${key}" is set by both "fst({ constraints })" and "@Constraint" or ".constraint()"` +
+            solutions(`Remove "${key}" from the "fst({ constraints })" call`, 'Declare each constraint one way only'),
+        )
+      }
+    }
+  }
+
+  const resolved = new Map<string, ResolvedConstraint>()
+  for (const [name, value] of merged) {
+    const entry = registry.get(name)
+    if (entry === undefined) {
+      throw new ErrConfiguration(
+        `Cannot compile "${owner}": unknown route constraint "${name}"` +
+          solutions(
+            'Register a strategy with "app.constraints(c => c.register(strategy))"',
+            `Registered constraints: ${registry.names().join(', ')}`,
+          ),
+      )
+    }
+
+    resolved.set(name, { value, header: entry.header })
+  }
+
+  return resolved
+}
+
 function effectiveSchemes(named: readonly string[] | undefined, defaultScheme: string | undefined): readonly string[] {
   if (named !== undefined && named.length > 0) {
     return named

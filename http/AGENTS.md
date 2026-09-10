@@ -55,6 +55,18 @@ Applied with `.with(ext, ...rest)` on `Router` and `RouteChain`. An extension ma
 
 `fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 
+## Route-selection constraints and API versions
+
+Version is a **routing key**, not a runtime `switch`: two handlers for the same method and URL are selected during matching, so it is a Fastify route constraint (`constraints/`). There is one mechanism with two spellings and one sugar:
+
+- `@Constraint(name, value)` / `.constraint(name, value)` — a first-class constraint. `name` is resolved against the constraint registry while the route compiles; an unknown name fails at `ready()`. The value and the request header it reads land on `Route.constraints` (a `Map<string, ResolvedConstraint>`), the same "fold it in where the app default is known" precedent as `route.authorization.schemes` — the OpenAPI generator reads the header from there.
+- `@Version(v)` / `.version(v)` — sugar for the `version` constraint. `version` is always registered: Fastify's built-in semver matcher on `Accept-Version`. It is **not** a path — `@Prefix('/v1')` is URI versioning and stays a separate concern.
+- `app.constraints(c => c.register(strategy, { header }))` — registers a custom find-my-way constraint strategy (synchronous only). Held on the builder, installed by a `core` extension with `addConstraintStrategy` before any route registers.
+
+Group constraints inherit to routes that do not set the same key (route wins, via `compile.ts` — same as `config`/`options`). `fst({ constraints: { … } })` still works for `host` and anything the framework has no opinion about; a `constraints` key set **both** through `fst` and first-class fails at compile rather than disagreeing silently. `ConstraintVaryExtension` (`core`, always registered) adds every constraint header to `Vary` when any route is constrained. A constraint miss is Fastify's 404 — it does not reach `@Catch`, and no default version is invented. `ServerOwnedPaths` (probes, OIDC callbacks) never carry a constraint.
+
+Do not add a version argument to the inline verb form, an app-level `enableVersioning()` switch, a `VERSION_NEUTRAL` catch-all, or a global default version.
+
 ## Route-type accumulation
 
 `Router<GD, GP, R>`'s third parameter accumulates a `RouteDef` union, read back with `RoutesOf<T>` through a `__routes` phantom on both `Router` and `AbstractWebApplication`. It is groundwork for a typed client; there is no client yet, and the flat union is deliberate so the client's shape can be decided later.

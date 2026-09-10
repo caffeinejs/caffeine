@@ -14,6 +14,7 @@ import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { CacheBuilder } from './cache/cache_builder.js'
+import { ConstraintsBuilder } from './constraints/builder.js'
 import { GuardsBuilder } from './guards/builder.js'
 import { HealthBuilder } from './health/health_builder.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
@@ -38,6 +39,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   readonly #healthBuilder: HealthBuilder<unknown>
   readonly #shutdownBuilder: ShutdownBuilder<unknown>
   readonly #guardsBuilder: GuardsBuilder
+  readonly #constraintsBuilder: ConstraintsBuilder
 
   constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
     super(options)
@@ -48,6 +50,11 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 
     this.#guardsBuilder = new GuardsBuilder()
     this.addFeature(this.#guardsBuilder)
+
+    // Registered unconditionally: `version` route selection and the `Vary` header work without a `.constraints()`
+    // call, and the compiler always resolves route constraints against the bound registry.
+    this.#constraintsBuilder = new ConstraintsBuilder()
+    this.addFeature(this.#constraintsBuilder)
 
     // Registered unconditionally: the listen address is read from the configuration tree, so `SERVER__PORT`
     // has to work on an application that never calls `.server()`.
@@ -95,6 +102,22 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    */
   guards(configure: (guards: GuardsBuilder) => void): this {
     configure(this.#guardsBuilder)
+    return this
+  }
+
+  /**
+   * Registers custom route-selection constraint strategies, so a route selects on them with
+   * `@Constraint(name, value)` or `.constraint(name, value)`.
+   *
+   * `version` is available without this — it is Fastify's built-in semver matcher on `Accept-Version`.
+   *
+   * ```ts
+   * createWebApplication()
+   *   .constraints(c => c.register(tenantConstraint, { header: 'X-Tenant' }))
+   * ```
+   */
+  constraints(configure: (constraints: ConstraintsBuilder) => void): this {
+    configure(this.#constraintsBuilder)
     return this
   }
 

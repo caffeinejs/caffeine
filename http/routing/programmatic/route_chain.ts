@@ -6,6 +6,7 @@ import {
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
 
+import { VERSION_CONSTRAINT } from '../../constraints/registry.js'
 import type { ErrorHandlerRef } from '../../error/error.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RouteValidationSchema } from '../../route.js'
@@ -145,6 +146,24 @@ export class RouteChain<
   extras<K extends symbol>(extras: Map<K, unknown>): this
   extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
     this.#state.builder.extras(keyOrExtras as K, value)
+    return this
+  }
+
+  /**
+   * Selects the route on a registered route constraint, overriding the same constraint set on the group. `name`
+   * must be registered — `version` always is, others through `app.constraints(...)`.
+   */
+  constraint(name: string, value: unknown): this {
+    this.#state.builder.constraint(name, value)
+    return this
+  }
+
+  /**
+   * Binds the route to an API version, selected by the `Accept-Version` request header, overriding a group
+   * `.version()`. Sugar for `.constraint('version', version)`.
+   */
+  version(version: string): this {
+    this.#state.builder.constraint(VERSION_CONSTRAINT, version)
     return this
   }
 
