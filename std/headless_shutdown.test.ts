@@ -30,7 +30,7 @@ class FakeDispatcher implements SignalDispatcher {
 }
 
 // A headless application had no signal handling and no drain at all before graceful shutdown moved into
-// BaseApplication — a Kafka consumer with no HTTP server was simply killed mid-message.
+// Application — a Kafka consumer with no HTTP server was simply killed mid-message.
 describe('headless application shutdown', () => {
   it('refuses traffic before the drain delay and disposes the container after it', async () => {
     let hookAt = 0

@@ -25,7 +25,7 @@ there is no second fallback configurer, and nothing matches on `[kFeatureName] =
 Graceful shutdown — the drain delay, the teardown budget, the signals — is its own feature, `ShutdownBuilder`
 from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
 `createWebApplication()` and headless `createApplication()` and configured with `app.shutdown(s => …)`. It
-publishes the resolved policy under `kShutdownPolicy`; `BaseApplication` reads it. Health does not touch
+publishes the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch
 shutdown any more.
 
 The effective authentication schemes are stamped onto each compiled route (`route.authorization.schemes`)
@@ -69,7 +69,7 @@ Do not add a version argument to the inline verb form, an app-level `enableVersi
 
 ## Route-type accumulation
 
-`Router<GD, GP, R>`'s third parameter accumulates a `RouteDef` union, read back with `RoutesOf<T>` through a `__routes` phantom on both `Router` and `AbstractWebApplication`. It is groundwork for a typed client; there is no client yet, and the flat union is deliberate so the client's shape can be decided later.
+`Router<GD, GP, R>`'s third parameter accumulates a `RouteDef` union, read back with `RoutesOf<T>` through a `__routes` phantom on both `Router` and `WebApplication`. It is groundwork for a typed client; there is no client yet, and the flat union is deliberate so the client's shape can be decided later.
 
 The carrier is the **return value**, not the variable: `.handler()` gives back the router re-typed with the route just closed, so a chain accumulates. Statement style leaves one handle per statement, each naming the same router with one route in its type; `blend(...)` (or `mount(...)`, or `app.mount(...)`) unions them. The variable the routes were opened from stays `never`, and the verb methods cannot mutate a shared type — do not try to "fix" either.
 

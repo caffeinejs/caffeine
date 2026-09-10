@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import {
-  BaseApplication,
+  Application,
   type ApplicationInit,
   type Extensions,
   type FeatureLifecycle,
@@ -33,9 +33,9 @@ export interface AdapterIn<R> {
 /** {@link RunInfo} widened with where the HTTP server bound. */
 export interface WebRunInfo extends RunInfo {
   /**
-   * Where the server is listening, from {@link AbstractWebApplication.address}. `undefined` only for a bind
+   * Where the server is listening, from {@link WebApplication.address}. `undefined` only for a bind
    * with no host and port to report: a unix socket, a named pipe, or an adapter that opens no socket. A TCP
-   * bind is set by the time {@link AbstractWebApplication.run} resolves.
+   * bind is set by the time {@link WebApplication.run} resolves.
    */
   readonly address: ServerAddress | undefined
 }
@@ -66,17 +66,17 @@ export interface AdapterFactoryIn {
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> = (input: AdapterFactoryIn) => A
 
 /**
- * The HTTP application: a {@link BaseApplication} whose lifecycle steps drive a Fastify {@link Adapter}.
+ * The HTTP application: an {@link Application} whose lifecycle steps drive a Fastify {@link Adapter}.
  * `setup()` builds routing and sets the adapter up; `start()` runs it;
- * `stop()` tears it down. Base handles the container, services, and lifecycle hooks.
+ * `stop()` tears it down. `Application` handles the container, services, and lifecycle hooks.
  */
-export abstract class AbstractWebApplication<
-  I,
-  R,
+export class WebApplication<
+  I = FastifyInstance,
+  R = FastifyRequest,
   A extends Adapter<I, R> = Adapter<I, R>,
   ROUTES = never,
   DEPS = never,
-> extends BaseApplication {
+> extends Application {
   /** Phantom — names the routes mounted on this application, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: ROUTES
 
@@ -274,14 +274,6 @@ export abstract class AbstractWebApplication<
     }
   }
 }
-
-export class WebApplication<
-  I = FastifyInstance,
-  R = FastifyRequest,
-  A extends Adapter<I, R> = Adapter<I, R>,
-  ROUTES = never,
-  DEPS = never,
-> extends AbstractWebApplication<I, R, A, ROUTES, DEPS> {}
 
 /** The routes one router declares, distributed so a union of routers folds into a union of their routes. */
 type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R> ? R : never

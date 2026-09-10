@@ -9,7 +9,7 @@ import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '..
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
-// A container OnDestroy hook runs inside `container.dispose()`, which BaseApplication calls only after the
+// A container OnDestroy hook runs inside `container.dispose()`, which Application calls only after the
 // drain delay and after the server has stopped. `onDestroyHook` lets a test observe when that happens.
 let onDestroyHook: (() => void) | undefined
 

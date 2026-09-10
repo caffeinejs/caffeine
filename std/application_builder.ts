@@ -1,7 +1,7 @@
 import { CaffeineIoC, type Container, type Module, type ModuleFn, type NamedToken, type Options } from '@caffeinejs/di'
 
 import { AppConfigBuilder } from './app_config.js'
-import { Application, type ApplicationInit, type BaseApplication } from './application.js'
+import { Application, type ApplicationInit } from './application.js'
 import {
   ConfigDefinition,
   ConfigModule,
@@ -28,7 +28,7 @@ export interface ApplicationBuilderOptions {
  * The builder constructs the container with `decorators:false` and calls `autoWire()`; a caller-supplied,
  * already-wired container is used as-is.
  */
-export abstract class BaseApplicationBuilder<App extends BaseApplication> {
+export abstract class BaseApplicationBuilder<App extends Application> {
   readonly #container: Container
   readonly #services: FeatureLifecycle[] = []
   readonly #config = new ConfigDefinition()

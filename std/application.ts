@@ -8,7 +8,7 @@ import { $t } from './schema/t.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
 import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './shutdown/shutdown_options.js'
 
-/** Construction input for a {@link BaseApplication}, produced by an {@link BaseApplicationBuilder}. */
+/** Construction input for an {@link Application}, produced by a {@link BaseApplicationBuilder}. */
 export interface ApplicationInit {
   container: Container
   services: FeatureLifecycle[]
@@ -17,7 +17,7 @@ export interface ApplicationInit {
 }
 
 /**
- * Post-run information {@link BaseApplication.run} resolves to. Application kinds widen it — the HTTP
+ * Post-run information {@link Application.run} resolves to. Application kinds widen it — the HTTP
  * application adds where the server bound — so a caller can `run().then(info => …)` without holding the
  * application reference.
  */
@@ -48,13 +48,12 @@ export const caffeineConfigSchema = $t.Object({
 })
 
 /**
- * Platform-neutral application foundation: owns the DI container, the configuration {@link Service}s, and
- * the lifecycle (ready → run → close). Bootstrap and destroy hooks live on the container: a class binding
- * that implements `OnBootstrap` / `OnDestroy` runs during `container.init()` / `container.dispose()`.
- * Concrete apps (headless {@link Application}, the HTTP `WebApplication`) extend it and fill the protected
- * `setup`/`start`/`stop` steps.
+ * A headless application: owns the DI container, the configuration {@link Service}s, and the lifecycle
+ * (ready → run → close), with no serving platform. Bootstrap and destroy hooks live on the container: a class
+ * binding that implements `OnBootstrap` / `OnDestroy` runs during `container.init()` / `container.dispose()`.
+ * The HTTP `WebApplication` extends this and fills the protected `setup`/`start`/`stop` steps.
  */
-export abstract class BaseApplication {
+export class Application {
   readonly #container: Container
   readonly #services: FeatureLifecycle[]
   readonly #availability = new ApplicationAvailability()
@@ -334,6 +333,3 @@ function delay(ms: number): Promise<void> {
     setTimeout(resolve, ms).unref?.()
   })
 }
-
-/** A headless application: DI container + lifecycle, no serving platform. */
-export class Application extends BaseApplication {}
