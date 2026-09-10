@@ -15,16 +15,15 @@ function spy(seen: ResolutionContext[]): ConfigProvider {
 }
 
 describe('ConfigDefinition', () => {
-  // `profiles` is the only way a hand-built definition — the form `ConfigModule` now requires — states its
-  // active profiles outright. It must reach the engine, and it must suppress the `profilesPath` two-phase
-  // discovery: a probe pass would show up here as a leading resolve with an empty profile list.
-  it('forwards stated profiles and skips profilesPath discovery', async () => {
+  // `profiles` is the only way a hand-built definition — the form `ConfigModule` requires — states its active
+  // profiles. It has to reach the engine on the one and only resolve: a second entry here would mean a source
+  // was loaded twice to work out what the first load should have asked for.
+  it('forwards stated profiles on a single resolve', async () => {
     const seen: ResolutionContext[] = []
 
     const definition = new ConfigDefinition()
     definition.schema = passthroughConfigSchema
     definition.profiles = ['prod']
-    definition.profilesPath = ['caffeine', 'profiles']
     definition.sources.add(spy(seen))
 
     await definition.bootstrap()
@@ -32,17 +31,15 @@ describe('ConfigDefinition', () => {
     expect(seen).toEqual([{ profiles: ['prod'] }])
   })
 
-  it('falls back to profilesPath discovery when no profiles are stated', async () => {
+  it('resolves with no profile when none were stated', async () => {
     const seen: ResolutionContext[] = []
 
     const definition = new ConfigDefinition()
     definition.schema = passthroughConfigSchema
-    definition.profilesPath = ['caffeine', 'profiles']
     definition.sources.add(spy(seen))
 
     await definition.bootstrap()
 
-    // One probe with no profile; nothing declared one, so the probe result is reused rather than resolved again.
     expect(seen).toEqual([{ profiles: [] }])
   })
 })

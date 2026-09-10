@@ -119,6 +119,11 @@ describe('Application lifecycle', () => {
 })
 
 describe('application name and profiles', () => {
+  // `hostProfiles` reads the real environment, so a stub left behind would leak into the next case.
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   @Injectable()
   @Profile('eu')
   class EuOnly {}
@@ -139,24 +144,27 @@ describe('application name and profiles', () => {
     expect(app.name).toBe('petstore')
   })
 
-  it('applies caffeine.profiles to the container', async () => {
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
-      .build()
+  it('applies CAFFEINE__PROFILES to the container', async () => {
+    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).build()
     await app.ready()
 
     expect(app.container.profiles.has('eu')).toBe(true)
   })
 
-  it('unions config profiles onto a user-supplied container', async () => {
+  // The container's own set is a profile source in its own right, and the three up-front sources union
+  // rather than replace each other: a container built for `test` still picks up what the environment names.
+  it('unions the environment onto a user-supplied container', async () => {
+    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+
     const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
-    const app = createApplication({ container })
-      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
-      .build()
+    const app = createApplication({ container }).build()
     await app.ready()
 
     expect(container.profiles.has('test')).toBe(true)
     expect(container.profiles.has('eu')).toBe(true)
+    expect(app.profiles).toEqual(['test', 'eu'])
   })
 
   it('does not register a @Profile bean without matching config profiles', async () => {
@@ -168,22 +176,22 @@ describe('application name and profiles', () => {
     expect(container.has(EuOnly)).toBe(false)
   })
 
-  it('registers a @Profile bean when caffeine.profiles includes it', async () => {
+  it('registers a @Profile bean when the active profiles include it', async () => {
+    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf())
-    const app = createApplication({ container })
-      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
-      .build()
+    const app = createApplication({ container }).build()
     await app.ready()
 
     expect(container.has(EuOnly)).toBe(true)
   })
 
   it('run() resolves to the application name and active profiles', async () => {
+    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(caffeineSchema, kConfig, c =>
-        c.source(new InlineConfigProvider({ caffeine: { name: 'petstore', profiles: ['eu'] } })),
-      )
+      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { name: 'petstore' } })))
       .build()
 
     // The point: a caller reads post-start identity straight off run(), without keeping the app handle to
@@ -194,15 +202,27 @@ describe('application name and profiles', () => {
     expect(info).toEqual({ name: 'petstore', profiles: ['eu'] })
   })
 
-  it('deduplicates caffeine.profiles before applying them', async () => {
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(caffeineSchema, kConfig, c =>
-        c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu', 'eu', 'dev'] } })),
-      )
-      .build()
+  it('deduplicates the active profiles before applying them', async () => {
+    vi.stubEnv('CAFFEINE__PROFILES', 'eu,eu,dev')
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).build()
     await app.ready()
 
     expect(app.profiles).toEqual(['eu', 'dev'])
+  })
+
+  // A value that only exists once the tree has resolved cannot decide what that resolve reads, so an inline
+  // source never selects a config file overlay. It still reaches the tree, and with nothing named up front
+  // the application falls back to it.
+  it('ignores a source-declared profile once anything named one up front', async () => {
+    const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
+    const app = createApplication({ container })
+      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+      .build()
+    await app.ready()
+
+    expect(app.profiles).toEqual(['test'])
+    expect(container.profiles.has('eu')).toBe(false)
   })
 })
 
@@ -222,20 +242,31 @@ describe('profile-segregated config files', () => {
     }
   })
 
-  it('loads the application-<profile> overlay named by caffeine.profiles', async () => {
-    // End to end: a profile set through a config source drives which file overlay wins, through the
-    // application's two-phase resolve.
-    const base = await writeTmp('app-e2e.json', JSON.stringify({ caffeine: { name: 'base' } }))
+  it('loads the overlay named by the base file own caffeine.profiles', async () => {
+    // End to end, and the reason the file provider reads its own base: nothing named a profile up front, so
+    // the base file decides, on the single resolve, which sibling layers over it.
+    const base = await writeTmp('app-e2e.json', JSON.stringify({ caffeine: { name: 'base', profiles: ['eu'] } }))
     await writeTmp('app-e2e-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(caffeineSchema, kConfig, c =>
-        c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })).source(new JSONConfigProvider(base)),
-      )
+      .config(caffeineSchema, kConfig, c => c.source(new JSONConfigProvider(base)))
       .build()
     await app.ready()
 
     expect(app.name).toBe('eu-app')
     expect(app.profiles).toEqual(['eu'])
+  })
+
+  it('loads the overlay named by the container own profiles', async () => {
+    const base = await writeTmp('app-ctr.json', JSON.stringify({ caffeine: { name: 'base' } }))
+    await writeTmp('app-ctr-test.json', JSON.stringify({ caffeine: { name: 'test-app' } }))
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false, profiles: ['test'] }) })
+      .config(caffeineSchema, kConfig, c => c.source(new JSONConfigProvider(base)))
+      .build()
+    await app.ready()
+
+    expect(app.name).toBe('test-app')
+    expect(app.profiles).toEqual(['test'])
   })
 })

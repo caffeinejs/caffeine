@@ -32,6 +32,33 @@ describe('ConfigShard refresh', () => {
     expect(handle.count).toBe(42)
   })
 
+  // The refresh path used to pay the probe too: a profile-declaring application re-loaded every source twice
+  // on every refresh, so a config server was polled twice per tick. The profiles are settled before the
+  // shard exists now, and a refresh is one load per source.
+  it('loads each source once per refresh, profiles or not', async () => {
+    let loads = 0
+    const provider: ConfigProvider = {
+      id: 'counting',
+      reloadable: true,
+      load: async ctx => {
+        loads++
+        return new InlineConfigProvider({ value: 'v', count: 1 } as never).load(ctx)
+      },
+    }
+
+    const shard = await ConfigShard.bootstrap<TestConfig>({
+      sources: ConfigSources.of(provider),
+      schema,
+      profiles: ['prod'],
+    })
+
+    expect(loads).toBe(1)
+
+    await shard[kSelfRefresh]()
+
+    expect(loads).toBe(2)
+  })
+
   it('invalid refresh payload does not replace active config', async () => {
     // count starts as a valid number, then becomes a non-numeric string that fails `z.number()` on refresh.
     let payload: Record<string, unknown> = { value: 'safe', count: 1 }

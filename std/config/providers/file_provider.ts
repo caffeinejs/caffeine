@@ -4,6 +4,8 @@ import { basename, dirname, extname, join } from 'node:path'
 import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../config.js'
 import { ErrConfig } from '../errors.js'
 import { flattenObject } from '../flatten.js'
+import { readByParts } from '../materializer.js'
+import { activeProfiles, PROFILES_KEY } from '../profiles.js'
 
 /** Turns a config file's text into the object its keys are flattened from. May be synchronous or asynchronous. */
 export type ConfigFileParser = (text: string) => Record<string, unknown> | Promise<Record<string, unknown>>
@@ -27,6 +29,11 @@ export interface FileConfigProviderOptions {
  * Given `./config/app.json` and active profiles `['eu', 'canary']`, the provider reads `./config/app.json`,
  * then `./config/app-eu.json`, then `./config/app-canary.json`. A profile file overrides the base, and a
  * later active profile overrides an earlier one. Any file that is not there is skipped.
+ *
+ * When nothing named a profile up front — no container profile, no `--caffeine.profiles`, no
+ * `CAFFEINE__PROFILES` — the **base file decides**, from the `caffeine.profiles` it declares. That read is why
+ * the base is parsed before the siblings, and why only the base is consulted: an overlay naming the overlays
+ * would need a second pass over every source, which is the cost this arrangement exists to avoid.
  *
  * The parser is a constructor argument rather than something looked up by file extension, because a registry
  * keyed by extension has to live somewhere shared: the previous design held a process-wide map that any
@@ -54,21 +61,29 @@ export class FileConfigProvider implements ConfigProvider {
   }
 
   async load(ctx: ResolutionContext): Promise<PropertySource[]> {
+    // Parsed first, because it may be the thing that decides which siblings to read at all.
+    const base = await this.#readFile(this.#filePath, this.#optional)
+
+    // Nothing named a profile up front — no container profile, no argument, no environment variable — so the
+    // base file speaks for itself. `activeProfiles` normalizes, so `"eu,dev"` and `["eu","dev"]` mean the same
+    // here as anywhere else. Only the base is ever consulted: an overlay deciding which overlays to load would
+    // be a second round of exactly the resolve this design removes.
+    const profiles = ctx.profiles.length > 0 ? ctx.profiles : activeProfiles(readByParts(base, PROFILES_KEY))
     const sources: PropertySource[] = []
 
     // Higher-priority sibling first: the engine merge is first-wins, so a later active profile must be read
     // before an earlier one, and every profile file before the base.
-    for (let i = ctx.profiles.length - 1; i >= 0; i--) {
-      const profile = ctx.profiles[i]
-      const source = await this.#read(this.#profilePath(profile), profile, true)
-      if (source !== undefined) {
-        sources.push(source)
+    for (let i = profiles.length - 1; i >= 0; i--) {
+      const profile = profiles[i]
+      const path = this.#profilePath(profile)
+      const parsed = await this.#readFile(path, true)
+      if (parsed !== undefined) {
+        sources.push(this.#toSource(path, parsed, profile))
       }
     }
 
-    const base = await this.#read(this.#filePath, undefined, this.#optional)
     if (base !== undefined) {
-      sources.push(base)
+      sources.push(this.#toSource(this.#filePath, base))
     }
 
     return sources
@@ -81,8 +96,14 @@ export class FileConfigProvider implements ConfigProvider {
     return join(dirname(this.#filePath), `${stem}-${profile}${ext}`)
   }
 
-  /** Reads and parses one file, or returns `undefined` when it is absent and that is allowed. */
-  async #read(path: string, profile: string | undefined, optional: boolean): Promise<PropertySource | undefined> {
+  /**
+   * Reads and parses one file, or returns `undefined` when it is absent and that is allowed.
+   *
+   * Separate from {@link #toSource} because the base file is read for two reasons: the settings it carries,
+   * and — when nothing named a profile up front — the profile list that decides which siblings to read. Only
+   * the parsed object answers the second question, and it must be answered before the flattening.
+   */
+  async #readFile(path: string, optional: boolean): Promise<Record<string, unknown> | undefined> {
     let text: string
     try {
       text = await readFile(path, 'utf8')
@@ -93,7 +114,11 @@ export class FileConfigProvider implements ConfigProvider {
       throw error
     }
 
-    const parsed = await this.#parsed(path, text)
+    return this.#parsed(path, text)
+  }
+
+  /** Flattens one parsed file into the property source the engine merges, stamped with its profile. */
+  #toSource(path: string, parsed: Record<string, unknown>, profile?: string): PropertySource {
     const name = `file:${path}`
     const entries = new Map<string, ConfigEntry>()
 

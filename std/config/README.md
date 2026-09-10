@@ -190,9 +190,7 @@ returns `PropertySource[]`, and optionally `reloadable` + `revision()` for cheap
 
 ## Profiles
 
-An active profile (`dev`, `eu`, `canary`) selects overlay files and can be set from any source. The
-list lives at `caffeine.profiles`, and discovery is **two-phase**: resolution runs once with no
-profile to read that key, then again profile-aware if one was named.
+An active profile (`dev`, `eu`, `canary`) selects overlay config files:
 
 ```text
 ./config/app.json          base
@@ -200,9 +198,33 @@ profile to read that key, then again profile-aware if one was named.
 ./config/app-canary.json   loaded when 'canary' is active, overrides both
 ```
 
-The cost is one extra full resolve per bootstrap for an application that names a profile; one that
-names none pays nothing. `activeProfiles(raw)` normalizes the value — a duplicate or a blank is
-harmless.
+Which profiles are active is settled **before anything resolves** — a value that only exists after a
+resolve cannot decide what that resolve reads. Three sources name them, and they union:
+
+| Source                                                    | Read by                                        |
+| --------------------------------------------------------- | ---------------------------------------------- |
+| The container — `new CaffeineIoC({ profiles: ['test'] })` | the application, off `container.profiles`      |
+| Command line — `--caffeine.profiles=eu,dev`               | `hostProfiles()`, straight from `process.argv` |
+| Environment — `CAFFEINE__PROFILES=eu,dev`                 | `hostProfiles()`, straight from `process.env`  |
+
+`hostProfiles()` reads the host directly: no provider, no merge, no resolve. An argument beats an
+environment variable, and both go through `activeProfiles(raw)`, so `eu,dev` splits and a duplicate
+or a blank is harmless.
+
+**If none of the three named a profile — and only then — the base config file speaks for itself:**
+`FileConfigProvider` reads `caffeine.profiles` out of the base object it already parses and picks its
+own overlays. Only the base, never an overlay; an overlay deciding which overlays to load would be
+the second resolve this design exists to remove.
+
+Setting `caffeine.profiles` anywhere else — an inline source, a config server — selects nothing. The
+value still reaches the tree, but by the time it exists every file has already been read.
+
+> Name the profiles in one place. If something named a profile up front _and_ a base file also sets
+> `caffeine.profiles`, the up-front set wins everywhere it matters — overlays, `@Profile` beans,
+> `app.profiles` — but the resolved `caffeine.profiles` field still shows the file's literal value.
+
+The whole application resolves **once** at start-up and once per refresh, whether or not a profile is
+active.
 
 ---
 
@@ -295,7 +317,7 @@ All in [`config.ts`](./config.ts):
 
 Runtime pieces exported from [`index.ts`](./index.ts): `ConfigSlice`, `ConfigSources`,
 `ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`, `featureConfigKey`,
-`defineFeatureConfig`, `configEquals`, `splitOptionBag`, `activeProfiles`, the seven providers, and
+`defineFeatureConfig`, `configEquals`, `splitOptionBag`, `activeProfiles`, `hostProfiles`, the seven providers, and
 the `ErrConfig*` classes.
 
 ---

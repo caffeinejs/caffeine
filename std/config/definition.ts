@@ -51,16 +51,11 @@ export class ConfigDefinition {
   readonly codeValues = new MutableConfigProvider('code')
 
   /**
-   * The active profiles, stated outright. Skips discovery, so {@link profilesPath} is not consulted — for a
-   * caller that already knows them rather than one that has to read them out of the tree.
+   * The active profiles, decided before {@link bootstrap} runs — the host unions the container's own set with
+   * whatever `--caffeine.profiles` or `CAFFEINE__PROFILES` named. Left empty, `FileConfigProvider` falls back
+   * to the `caffeine.profiles` its base file declares.
    */
   profiles: readonly string[] | undefined
-  /**
-   * The tree path holding the application's active-profile list, e.g. `['caffeine', 'profiles']`. The host
-   * points it here before {@link bootstrap}; `std/config` never assumes a location. Unset, resolution runs
-   * with no active profile — no profile-segregated file or overlay is loaded.
-   */
-  profilesPath: readonly string[] | undefined
   failFast: boolean | undefined
   /**
    * Paths marked with `$t.Secret`, collected as each slice registers and from the root schema at bootstrap.
@@ -118,7 +113,6 @@ export class ConfigDefinition {
       schema: this.schema,
       slices: this.slices,
       profiles: this.profiles,
-      profilesPath: this.profilesPath,
       failFast: this.failFast,
       secrets: this.secrets,
       features: this.features,

@@ -1,6 +1,6 @@
 import { type Container } from '@caffeinejs/di'
 
-import { activeProfiles, ConfigDefinition } from './config/index.js'
+import { activeProfiles, ConfigDefinition, hostProfiles } from './config/index.js'
 import { Extensions } from './extensions.js'
 import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './feature.js'
 import { ApplicationAvailability } from './health/availability.js'
@@ -108,10 +108,10 @@ export class Application {
   /**
    * Brings the application up to the point where it can serve.
    *
-   * 1. the always-on `caffeine` slice is registered, then every service **declares**;
-   * 2. configuration **resolves** — a pre-pass reads `caffeine.profiles` so the real resolve is profile-aware
-   *    — and every slice publishes;
-   * 3. `caffeine.name` and `caffeine.profiles` are applied;
+   * 1. the always-on `caffeine` slice is registered, the active profiles are decided, then every service
+   *    **declares**;
+   * 2. configuration **resolves**, once, already profile-aware, and every slice publishes;
+   * 3. `caffeine.name` and the active profiles are applied;
    * 4. every service **configures** — binding into the container and registering its extensions, now able to
    *    read its own settings;
    * 5. the container initializes and the platform is set up.
@@ -132,10 +132,17 @@ export class Application {
     this.#config.frameworkDefaults.set(CAFFEINE_CONFIG_NAMESPACE, { ...DEFAULT_CAFFEINE_CONFIG })
     const caffeine = this.#config.slice<CaffeineConfig>(CAFFEINE_CONFIG_NAMESPACE, caffeineConfigSchema)
 
-    // Discovered in a pre-pass so a file or remote source resolves profile-aware: `caffeine.profiles` set from
-    // any source — an environment variable, an argument, a file — drives which `application-<profile>` overlays
-    // load on the resolve that follows.
-    this.#config.profilesPath = [...CAFFEINE_CONFIG_NAMESPACE, 'profiles']
+    // Decided before anything resolves, so the resolve that follows is profile-aware on its first and only
+    // pass. The container's own set counts: `new CaffeineIoC({ profiles: ['test'] })` names a profile as
+    // surely as an argument does, and the three union the way `addProfiles` always has. Symbols are skipped —
+    // a profile that names a config file has to be a string.
+    //
+    // Empty, and only then, `FileConfigProvider` falls back to the `caffeine.profiles` its base file declares.
+    const named = activeProfiles([
+      ...[...this.#container.profiles].filter(profile => typeof profile === 'string'),
+      ...hostProfiles(),
+    ])
+    this.#config.profiles = named
 
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
     const services = this.configurers()
@@ -153,7 +160,9 @@ export class Application {
     }
     await this.#config.bootstrap()
 
-    const profiles = activeProfiles(caffeine.config.profiles)
+    // What was named up front wins. Nothing was, so the base config file decided — and its value reached the
+    // tree on the same resolve.
+    const profiles = named.length > 0 ? named : activeProfiles(caffeine.config.profiles)
     if (profiles.length > 0) {
       this.#container.addProfiles(profiles[0], ...profiles.slice(1))
     }

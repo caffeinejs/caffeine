@@ -172,6 +172,53 @@ describe('FileConfigProvider profile files', () => {
     expect(sources[0].name).toBe(`file:${base}`)
   })
 
+  // Nothing named a profile up front, so the base file decides which sibling layers over it. This is what
+  // replaced the probe resolve: the provider answers the question from the object it was going to parse
+  // anyway, instead of the engine loading every source once to find out.
+  it('selects its own overlay from the caffeine.profiles its base declares', async () => {
+    const base = await writeTmp('self.json', JSON.stringify({ caffeine: { profiles: ['eu'] }, region: 'base' }))
+    await writeTmp('self-eu.json', JSON.stringify({ region: 'eu' }))
+
+    const merged = mergeEntries(await new FileConfigProvider(base, parse).load({ profiles: [] }))
+
+    expect(merged['region']).toBe('eu')
+  })
+
+  it('accepts delimited text for its own caffeine.profiles', async () => {
+    const base = await writeTmp(
+      'self-text.json',
+      JSON.stringify({ caffeine: { profiles: 'eu,canary' }, region: 'base' }),
+    )
+    await writeTmp('self-text-eu.json', JSON.stringify({ region: 'eu' }))
+    await writeTmp('self-text-canary.json', JSON.stringify({ region: 'canary' }))
+
+    const merged = mergeEntries(await new FileConfigProvider(base, parse).load({ profiles: [] }))
+
+    expect(merged['region']).toBe('canary')
+  })
+
+  // Anything named up front — the container's set, an argument, an environment variable — settles it, and the
+  // base file does not get a second vote.
+  it('lets the given profiles override the ones its base declares', async () => {
+    const base = await writeTmp('self-beaten.json', JSON.stringify({ caffeine: { profiles: ['dev'] }, region: 'base' }))
+    await writeTmp('self-beaten-dev.json', JSON.stringify({ region: 'dev' }))
+    await writeTmp('self-beaten-eu.json', JSON.stringify({ region: 'eu' }))
+
+    const merged = mergeEntries(await new FileConfigProvider(base, parse).load({ profiles: ['eu'] }))
+
+    expect(merged['region']).toBe('eu')
+  })
+
+  it('selects no overlay when its base declares no profile', async () => {
+    const base = await writeTmp('self-none.json', JSON.stringify({ region: 'base' }))
+    await writeTmp('self-none-eu.json', JSON.stringify({ region: 'eu' }))
+
+    const sources = await new FileConfigProvider(base, parse).load({ profiles: [] })
+
+    expect(sources).toHaveLength(1)
+    expect(mergeEntries(sources)['region']).toBe('base')
+  })
+
   it('skips a missing base file by default', async () => {
     // Matches a Spring `application.yml` that is simply not on the path: absent means "does not apply".
     const provider = new JSONConfigProvider(join(tmpdir(), 'does-not-exist-xyz.json'))

@@ -25,19 +25,15 @@ export interface BootstrapOptions<T> {
   /** Feature slices to validate and publish alongside the root config. */
   slices?: readonly ConfigSliceSpec[]
   /**
-   * The active profiles, stated outright. Skips discovery — for a direct or standalone caller that already
-   * knows them. {@link activeProfiles} still normalizes the value, so a duplicate or a blank is harmless.
+   * The active profiles, decided before anything resolves — the container's own set, a `--caffeine.profiles`
+   * argument, `CAFFEINE__PROFILES`, or a caller that simply knows them. {@link activeProfiles} normalizes the
+   * value, so a duplicate or a blank is harmless.
+   *
+   * Left empty, no source is told a profile and {@link FileConfigProvider} falls back to the `caffeine.profiles`
+   * its own base file declares. Nothing else in the tree can name a profile: a value that only exists after a
+   * resolve cannot decide what that resolve reads.
    */
   profiles?: readonly string[]
-  /**
-   * The tree path holding the active-profile list, for the two-phase path: when this is set and `profiles` is
-   * not, resolution runs once with no profile to read this key, then again profile-aware.
-   *
-   * The cost is one extra full resolve per bootstrap and per refresh for an application that names a profile;
-   * one that names none pays nothing, the probe result is reused. Discovery is single-pass — a profile file
-   * that itself sets this key does not trigger another round.
-   */
-  profilesPath?: readonly string[]
   failFast?: boolean
   /**
    * Paths the diagnostics must redact, on top of whatever the root schema marks with `$t.Secret`. The config
@@ -81,15 +77,9 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
 export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<ConfigBootstrapResult<T>> {
   const engine = new ConfigEngine({ sources: options.sources, failFast: options.failFast })
 
-  let snapshot: ConfigSnapshot
-  if (options.profiles === undefined && options.profilesPath !== undefined) {
-    // Phase 1 — no active profile yet: resolve to discover which profiles the tree declares.
-    const probe = await engine.resolve({ profiles: [] })
-    const profiles = activeProfiles(readByParts(materialize(probe), options.profilesPath))
-    snapshot = profiles.length === 0 ? probe : await engine.resolve({ profiles })
-  } else {
-    snapshot = await engine.resolve({ profiles: activeProfiles(options.profiles ?? []) })
-  }
+  // One resolve. The active profiles were decided before this was called, so no source has to be loaded twice
+  // to find out what the next load should ask for.
+  const snapshot = await engine.resolve({ profiles: activeProfiles(options.profiles ?? []) })
   const materialized = materialize(snapshot)
 
   const failures = publishSlices(options.slices, materialized)
