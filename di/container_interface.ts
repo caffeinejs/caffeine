@@ -4,7 +4,7 @@ import { Binding } from './binding.js'
 import { BindingSpec } from './binding_spec.js'
 import { HookListener } from './hooks.js'
 import { Injection, ResolveInjection } from './injection.js'
-import { Identifier, InjectionToken, NamedToken, TokenValue } from './key.js'
+import { InjectionToken, NamedToken, TokenValue } from './key.js'
 import { MetadataReader } from './metadata_reader.js'
 import type { Module, ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
@@ -34,7 +34,7 @@ export interface Options {
    *
    * @defaultValue `[]`
    */
-  profiles?: Identifier[]
+  profiles?: string[]
 
   /**
    * The default scope used for bindings that do not specify one explicitly.
@@ -114,7 +114,7 @@ export interface BindingDescriptor {
  * @see {@link CaffeineIoC} for the implementation of the container and more information.
  */
 export interface Container extends AsyncDisposable {
-  readonly profiles: ReadonlySet<Identifier>
+  readonly profiles: ReadonlySet<string>
   readonly parent?: Container
   readonly size: number
   readonly hooks: HookListener
@@ -172,7 +172,7 @@ export interface Container extends AsyncDisposable {
 
   addModules(module: Module | ModuleFn, ...rest: Array<Module | ModuleFn>): void
 
-  addProfiles(profile: Identifier, ...profiles: Identifier[]): void
+  addProfiles(profile: string, ...profiles: string[]): void
 
   resetInstances(): Promise<void>
 

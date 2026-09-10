@@ -567,7 +567,7 @@ export class BindingSpec<TValue, K = unknown> {
    * container.bind(key, t => t.toClass(MockEmailService).profiles('test', 'development'))
    * ```
    */
-  profiles(profile: Identifier, ...profiles: Identifier[]): this {
+  profiles(profile: string, ...profiles: string[]): this {
     notNil(profile, `Parameter profile must not be null or undefined`)
 
     this.binding.profiles.add(profile)

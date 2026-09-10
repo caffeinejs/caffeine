@@ -200,7 +200,7 @@ cover the same ground with less ceremony.
 | --------------------------- | ----------------------------------------------- | -------------------------- |
 | `defaultScopeId`            | `Identifier`                                    | `Scopes.SINGLETON`         |
 | `lazy`                      | `boolean`                                       | `false`                    |
-| `profiles`                  | `Identifier[]`                                  | `[]`                       |
+| `profiles`                  | `string[]`                                      | `[]`                       |
 | `checks.scopes`             | `'compatible-scopes-only' \| 'no-mix' \| 'off'` | `'compatible-scopes-only'` |
 | `checks.circularReferences` | `boolean`                                       | `true`                     |
 | `parent`                    | `Container`                                     | `undefined`                |

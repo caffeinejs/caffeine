@@ -101,7 +101,7 @@ export class CaffeineIoC implements Container {
   readonly refresher!: Refresher
   readonly requestScopeManager!: RequestScopeManager
 
-  private readonly _profiles: Set<Identifier>
+  private readonly _profiles: Set<string>
   private _ready = false
   private _initializing = false
   private _compiled = false
@@ -185,7 +185,7 @@ export class CaffeineIoC implements Container {
    * Active profiles. Bindings restricted with `@Profile` or `.profiles()` are
    * only registered when one of their profiles is in this set.
    */
-  get profiles(): ReadonlySet<Identifier> {
+  get profiles(): ReadonlySet<string> {
     return this._profiles
   }
 
@@ -800,7 +800,7 @@ export class CaffeineIoC implements Container {
    *
    * @throws {@link ErrInvalidContainerState} if the container has already been compiled
    */
-  addProfiles(profile: Identifier, ...profiles: Identifier[]): void {
+  addProfiles(profile: string, ...profiles: string[]): void {
     if (this._ready || this._compiled) {
       throw new ErrInvalidContainerState('Cannot add profiles once the container has been compiled')
     }
@@ -1207,7 +1207,7 @@ export class CaffeineIoC implements Container {
    */
   toString(): string {
     return (
-      `${this.constructor.name}(profiles=[${[...this.profiles].map(String).join(', ')}], count=${this.size}) {` +
+      `${this.constructor.name}(profiles=[${[...this.profiles].join(', ')}], count=${this.size}) {` +
       '\n' +
       Array.from(this.entries())
         .map(
@@ -1456,7 +1456,7 @@ export class CaffeineIoC implements Container {
     return this.matchesProfiles(binding.profiles)
   }
 
-  private matchesProfiles(profiles: Set<Identifier> | undefined): boolean {
+  private matchesProfiles(profiles: Set<string> | undefined): boolean {
     if (!profiles || profiles.size === 0) {
       return true
     }

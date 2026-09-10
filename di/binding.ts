@@ -64,7 +64,7 @@ export interface Binding<T = any> {
    * The profiles the binding is associated with.
    * The container will only consider bindings with profiles that match its active profiles.
    */
-  profiles: Set<Identifier>
+  profiles: Set<string>
 
   /**
    * The scope the binding is associated with.

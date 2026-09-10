@@ -134,14 +134,10 @@ export class Application {
 
     // Decided before anything resolves, so the resolve that follows is profile-aware on its first and only
     // pass. The container's own set counts: `new CaffeineIoC({ profiles: ['test'] })` names a profile as
-    // surely as an argument does, and the three union the way `addProfiles` always has. Symbols are skipped —
-    // a profile that names a config file has to be a string.
+    // surely as an argument does, and the three union the way `addProfiles` always has.
     //
     // Empty, and only then, `FileConfigProvider` falls back to the `caffeine.profiles` its base file declares.
-    const named = activeProfiles([
-      ...[...this.#container.profiles].filter(profile => typeof profile === 'string'),
-      ...hostProfiles(),
-    ])
+    const named = activeProfiles([...this.#container.profiles, ...hostProfiles()])
     this.#config.profiles = named
 
     // Captured once: a subclass assembles this list per call, and both steps must reach the same services.

@@ -2,13 +2,13 @@ import { Binding } from '../../binding.js'
 import { ErrInvalidDecorator } from '../../errors.js'
 import { Injection } from '../../injection.js'
 import { notNil } from '../../internal/util/assert/index.js'
-import { Identifier, InjectionToken } from '../../key.js'
+import { InjectionToken } from '../../key.js'
 import { normalizeInjections } from '../util/util.js'
 import { DecoratedBindingConfig, MemberMetadata } from './spec.js'
 import { idfy, MemberKind, TypeID } from './types.js'
 
 const Bindings = new Map<InjectionToken, DecoratedBindingConfig>()
-const ByProfile = new Map<Identifier, Set<InjectionToken>>()
+const ByProfile = new Map<string, Set<InjectionToken>>()
 const ProvidedBindings: Array<[InjectionToken, DecoratedBindingConfig]> = []
 const MetadataWeakMap = new WeakMap<TypeID, MemberMetadata>()
 const Injectables = new Set<InjectionToken>()
@@ -185,7 +185,7 @@ export function decoratorConfigToBinding<T>(config: DecoratedBindingConfig): Bin
  */
 export interface DecoratorRegistrySnapshot {
   readonly bindings: Map<InjectionToken, DecoratedBindingConfig>
-  readonly byProfile: Map<Identifier, Set<InjectionToken>>
+  readonly byProfile: Map<string, Set<InjectionToken>>
   readonly providedBindings: Array<[InjectionToken, DecoratedBindingConfig]>
   readonly injectables: Set<InjectionToken>
 }

@@ -18,7 +18,7 @@ All fields are optional. Omitting them produces the defaults shown below.
 ### `profiles`
 
 ```ts
-profiles?: Identifier[]
+profiles?: string[]
 ```
 
 **Default:** `[]`
@@ -252,7 +252,7 @@ const di = new CaffeineIoC({
 
 | Field                       | Type                        | Default                    |
 | --------------------------- | --------------------------- | -------------------------- |
-| `profiles`                  | `Identifier[]`              | `[]`                       |
+| `profiles`                  | `string[]`                  | `[]`                       |
 | `defaultScopeId`            | `Identifier`                | `Scopes.SINGLETON`         |
 | `lazy`                      | `boolean`                   | `false`                    |
 | `parent`                    | `Container`                 | `undefined`                |

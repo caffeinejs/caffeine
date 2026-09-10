@@ -10,7 +10,7 @@ import { Ctor } from '../../types.js'
 import { normalizeInjections, normalizeInjection } from '../util/index.js'
 
 export class DecoratedBindingConfig {
-  #profiles?: Set<Identifier>
+  #profiles?: Set<string>
   #scopeID?: NamedToken<Scope>
   #names?: Identifier[]
   #factory?: Factory<unknown> | AsyncFactory<unknown>
@@ -43,7 +43,7 @@ export class DecoratedBindingConfig {
     this.#key = key
   }
 
-  get getProfiles(): Set<Identifier> | undefined {
+  get getProfiles(): Set<string> | undefined {
     return this.#profiles
   }
 
@@ -91,7 +91,7 @@ export class DecoratedBindingConfig {
     return this.#source
   }
 
-  profiles(profiles: Identifier | Identifier[]): this {
+  profiles(profiles: string | string[]): this {
     this.#profiles ??= new Set()
 
     const incoming = Array.isArray(profiles) ? profiles : [profiles]

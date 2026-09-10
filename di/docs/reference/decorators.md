@@ -165,7 +165,7 @@ Defers instantiation until first access instead of during `init()`.
 ### @Profile
 
 ```ts
-@Profile(profile: Identifier, ...profiles: Identifier[])
+@Profile(profile: string, ...profiles: string[])
 ```
 
 Activates this binding only when one of the given profiles is active. The

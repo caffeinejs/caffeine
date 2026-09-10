@@ -1,5 +1,4 @@
 import { notNil } from '../internal/util/assert/not_nil.js'
-import { Identifier } from '../key.js'
 import { Ctor } from '../types.js'
 import { extendInjectableAttributes } from './registrar/index.js'
 
@@ -17,7 +16,7 @@ import { extendInjectableAttributes } from './registrar/index.js'
  * class MockEmailService implements EmailService {}
  * ```
  */
-export function Profile(profile: Identifier, ...profiles: Identifier[]) {
+export function Profile(profile: string, ...profiles: string[]) {
   notNil(profile, `@${Profile.name}(): parameter profile is required.`)
 
   return (target: Ctor, context: ClassDecoratorContext) => {

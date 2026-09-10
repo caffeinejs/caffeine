@@ -58,7 +58,7 @@ constructor to pick up all `@Injectable` classes registered so far.
 
 | Option                      | Type                        | Default                    | Description                                                                                                                                                                     |
 | --------------------------- | --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profiles`                  | `Identifier[]`              | `[]`                       | Active profiles. Bindings restricted with `@Profile` or `.profiles()` are included only when their profile is in this list. Can be extended with `addProfiles()` until compile. |
+| `profiles`                  | `string[]`                  | `[]`                       | Active profiles. Bindings restricted with `@Profile` or `.profiles()` are included only when their profile is in this list. Can be extended with `addProfiles()` until compile. |
 | `defaultScopeId`            | `Identifier`                | `Scopes.SINGLETON`         | Scope used for bindings that do not specify one.                                                                                                                                |
 | `parent`                    | `Container`                 | —                          | Parent container. Unresolved keys are looked up in the parent.                                                                                                                  |
 | `lazy`                      | `boolean`                   | `false`                    | When `true`, singletons are not instantiated during `init()` — they are created on first access.                                                                                |
@@ -198,7 +198,7 @@ created.
 ### addProfiles
 
 ```ts
-addProfiles(profile: Identifier, ...profiles: Identifier[]): void
+addProfiles(profile: string, ...profiles: string[]): void
 ```
 
 Adds profiles to the container's active set. Profile matching runs during
@@ -454,13 +454,13 @@ instances are discarded.
 
 ## Properties
 
-| Property              | Type                      | Description                                                 |
-| --------------------- | ------------------------- | ----------------------------------------------------------- |
-| `ready`               | `boolean`                 | `true` after `init()` completes.                            |
-| `size`                | `number`                  | Number of bindings registered.                              |
-| `profiles`            | `ReadonlySet<Identifier>` | Active profiles.                                            |
-| `parent`              | `Container \| undefined`  | Parent container.                                           |
-| `hooks`               | `HookListener`            | Container lifecycle event emitter. See [Hooks](./hooks.md). |
-| `postProcessors`      | `Set<PostProcessor>`      | Post-init hooks run on every instance.                      |
-| `refresher`           | `Refresher`               | Controls `REFRESH` scope resets.                            |
-| `requestScopeManager` | `RequestScopeManager`     | Controls `REQUEST` scope contexts.                          |
+| Property              | Type                     | Description                                                 |
+| --------------------- | ------------------------ | ----------------------------------------------------------- |
+| `ready`               | `boolean`                | `true` after `init()` completes.                            |
+| `size`                | `number`                 | Number of bindings registered.                              |
+| `profiles`            | `ReadonlySet<string>`    | Active profiles.                                            |
+| `parent`              | `Container \| undefined` | Parent container.                                           |
+| `hooks`               | `HookListener`           | Container lifecycle event emitter. See [Hooks](./hooks.md). |
+| `postProcessors`      | `Set<PostProcessor>`     | Post-init hooks run on every instance.                      |
+| `refresher`           | `Refresher`              | Controls `REFRESH` scope resets.                            |
+| `requestScopeManager` | `RequestScopeManager`    | Controls `REQUEST` scope contexts.                          |

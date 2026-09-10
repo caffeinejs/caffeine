@@ -1,14 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import type {
-  BindingSpec,
-  Container,
-  Identifier,
-  InjectionToken,
-  Module,
-  ModuleFn,
-  Snapshot,
-  TokenValue,
-} from '@caffeinejs/di'
+import type { BindingSpec, Container, InjectionToken, Module, ModuleFn, Snapshot, TokenValue } from '@caffeinejs/di'
 
 import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
@@ -37,7 +28,7 @@ export class TestContainer {
 
   #asyncPolicy: Set<InjectionToken> | null = null
   #focusRoots: Set<InjectionToken> | null = null
-  #profiles: Identifier[] | null = null
+  #profiles: string[] | null = null
   #modules: Array<Module | ModuleFn> = []
   #lazy: boolean = true
 
@@ -70,7 +61,7 @@ export class TestContainer {
   /**
    * Activates the given profiles in the test container.
    */
-  profiles(profile: Identifier, ...rest: Identifier[]): this {
+  profiles(profile: string, ...rest: string[]): this {
     if (this.#profiles == null) {
       this.#profiles = []
     }
