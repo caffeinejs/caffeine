@@ -1,12 +1,12 @@
-import { CaffeineIoC, Keys, token } from '@caffeinejs/di'
+import { CaffeineIoC, Keys, token, type NamedToken } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import type { ConfigHandle } from '../../accessor.js'
+import type { ConfigHandle, ConfigProvider, ConfigSchema } from '../../config.js'
 import { Configuration } from '../../configuration.js'
+import { ConfigDefinition } from '../../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
-import type { ConfigProvider } from '../../types.js'
 
 const schema = z.object({
   http: z.object({ host: z.string(), port: z.coerce.number() }),
@@ -16,12 +16,19 @@ type AppConfig = z.infer<typeof schema>
 
 const APP_CONFIG = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
 
+function define<T>(
+  configSchema: ConfigSchema<unknown>,
+  provider: ConfigProvider,
+  key?: NamedToken<ConfigHandle<T>>,
+): ConfigDefinition {
+  const definition = new ConfigDefinition(key)
+  definition.schema = configSchema
+  definition.sources.add(provider)
+  return definition
+}
+
 function makeModule(data: Record<string, unknown>) {
-  return ConfigModule<AppConfig>({
-    token: APP_CONFIG,
-    schema,
-    providers: [new InlineConfigProvider(data as never)],
-  })
+  return ConfigModule<AppConfig>(define(schema, new InlineConfigProvider(data as never), APP_CONFIG))
 }
 
 describe('ConfigModule', () => {
@@ -39,10 +46,9 @@ describe('ConfigModule', () => {
   it('binds no root key when none was given, and still binds the rest', async () => {
     const container = new CaffeineIoC()
     container.addModules(
-      ConfigModule<AppConfig>({
-        schema,
-        providers: [new InlineConfigProvider({ http: { host: 'h', port: 80 }, db: { url: 'u' } } as never)],
-      }),
+      ConfigModule<AppConfig>(
+        define(schema, new InlineConfigProvider({ http: { host: 'h', port: 80 }, db: { url: 'u' } } as never)),
+      ),
     )
     await container.init()
 
@@ -84,8 +90,8 @@ describe('ConfigModule', () => {
 
     const container = new CaffeineIoC()
     container.addModules(
-      ConfigModule<AppConfig>({ token: APP_CONFIG, schema, providers: [appProvider] }),
-      ConfigModule<DBConfig>({ token: DB_TOKEN, schema: dbSchema, providers: [dbProvider] }),
+      ConfigModule<AppConfig>(define(schema, appProvider, APP_CONFIG)),
+      ConfigModule<DBConfig>(define(dbSchema, dbProvider, DB_TOKEN)),
     )
     await container.init()
 
@@ -117,7 +123,7 @@ describe('ConfigModule', () => {
     }
 
     const container = new CaffeineIoC()
-    container.addModules(ConfigModule<AppConfig>({ token: APP_CONFIG, schema, providers: [mutableProvider] }))
+    container.addModules(ConfigModule<AppConfig>(define(schema, mutableProvider, APP_CONFIG)))
     await container.init()
 
     const config = container.get(APP_CONFIG)

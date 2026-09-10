@@ -1,5 +1,5 @@
-/** Notified when configuration changes. May be async; a refresh never waits for it. */
-export type ConfigChangeListener<T> = (config: T, previous: T) => void | Promise<void>
+import type { ConfigChangeListener } from './config.js'
+import { messageOf } from './errors.js'
 
 /** What one listener is owed: the value it last saw, and the newest value it has not seen yet. */
 interface Delivery<T> {
@@ -199,8 +199,4 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   const prototype = Object.getPrototypeOf(value) as unknown
 
   return prototype === Object.prototype || prototype === null
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

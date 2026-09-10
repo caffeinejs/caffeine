@@ -1,13 +1,14 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { beforeAll, describe, expect, it } from 'vitest'
 
-import type { ConfigHandle } from '../../accessor.js'
 import { bootstrapConfig } from '../../bootstrap.js'
+import type { ConfigHandle, ConfigSchema } from '../../config.js'
+import { ConfigDefinition } from '../../definition.js'
 import { SpringCloudConfigProvider } from '../../index.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import type { SpringCloudConfigProviderOptions } from '../../providers/scc_provider.js'
-import type { ConfigSchema } from '../../schema.js'
+import { ConfigSources } from '../../sources.js'
 
 const CONFIGSERVER_URL = process.env['CONFIGSERVER_URL'] ?? 'http://localhost:8888'
 const CONFIGSERVER_USERNAME = process.env['CONFIGSERVER_USERNAME'] ?? 'configuser'
@@ -72,7 +73,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     }
 
     const result = await bootstrapConfig({
-      providers: [makeProvider()],
+      sources: ConfigSources.of(makeProvider()),
       schema,
       profiles: ['default'],
     })
@@ -86,7 +87,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     }
 
     const result = await bootstrapConfig({
-      providers: [makeProvider()],
+      sources: ConfigSources.of(makeProvider()),
       schema,
       profiles: ['dev'],
     })
@@ -100,7 +101,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     }
 
     const result = await bootstrapConfig({
-      providers: [makeProvider()],
+      sources: ConfigSources.of(makeProvider()),
       schema,
       profiles: ['prod'],
     })
@@ -114,7 +115,7 @@ describe('SpringCloudConfigProvider e2e', () => {
     }
 
     const result = await bootstrapConfig({
-      providers: [makeProvider({ baseURLs: ['http://localhost:19999', CONFIGSERVER_URL] })],
+      sources: ConfigSources.of(makeProvider({ baseURLs: ['http://localhost:19999', CONFIGSERVER_URL] })),
       schema,
       profiles: ['default'],
     })
@@ -135,7 +136,7 @@ describe('SpringCloudConfigProvider e2e', () => {
 
     await expect(
       bootstrapConfig({
-        providers: [provider],
+        sources: ConfigSources.of(provider),
         schema,
         profiles: ['default'],
       }),
@@ -157,15 +158,13 @@ describe('Refresh e2e with live proxy', () => {
     }
 
     const APP_TOKEN = token<ConfigHandle<CaffeineConfig>>(Symbol('caffeine.config'))
+    const definition = new ConfigDefinition(APP_TOKEN)
+    definition.schema = schema
+    definition.sources.addAll([mutableInline, makeProvider()])
+    definition.profiles = ['default']
+
     const container = new CaffeineIoC()
-    container.addModules(
-      ConfigModule<CaffeineConfig>({
-        token: APP_TOKEN,
-        schema,
-        providers: [mutableInline, makeProvider()],
-        profiles: ['default'],
-      }),
-    )
+    container.addModules(ConfigModule<CaffeineConfig>(definition))
     await container.init()
 
     const config = container.get(APP_TOKEN)

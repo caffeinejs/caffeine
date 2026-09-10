@@ -1,5 +1,5 @@
+import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../config.js'
 import { ErrConfig } from '../errors.js'
-import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../types.js'
 
 export interface SpringCloudConfigProviderOptions {
   /** The application name — the first path segment of the config-server request (`/{app}/{profiles}`). */

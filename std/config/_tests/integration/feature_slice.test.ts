@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { $t } from '../../../schema/t.js'
-import type { ConfigHandle } from '../../accessor.js'
+import type { ConfigHandle } from '../../config.js'
 import { Configuration } from '../../configuration.js'
 import { ConfigDefinition } from '../../definition.js'
 import { ErrConfigSlices, ErrConfigValidation } from '../../errors.js'

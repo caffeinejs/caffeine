@@ -1,67 +1,6 @@
+import type { ConfigHandle, FeatureConfigLookup } from './config.js'
 import { ErrConfig } from './errors.js'
-import type { FeatureConfigKey } from './feature_key.js'
-
-/**
- * The read-only projection of a config type.
- *
- * Arrays are matched as `readonly (infer U)[]`, not `Array<infer U>`: the latter misses a field already
- * declared `readonly string[]`, and misses `string[] | undefined` entirely (a union matches neither branch and
- * falls through unchanged — mutable). Distributing over the union keeps an optional array an array, and object
- * elements are projected too, so `Server[]` does not hand back mutable `Server`s inside a read-only list.
- */
-export type ConfigAccessors<T> = {
-  readonly [K in keyof T]: ConfigValueOf<T[K]>
-}
-
-type ConfigValueOf<V> = V extends readonly (infer U)[]
-  ? ReadonlyArray<ConfigValueOf<U>>
-  : V extends (...args: never[]) => unknown
-    ? V
-    : V extends object
-      ? ConfigAccessors<V>
-      : V
-
-/**
- * A location in a config tree a feature's settings may be pointed at.
- *
- * {@link ConfigAccessors} with every property optional, all the way down. That is what lets an application
- * declare only part of a feature's shape — `$t.Object({ port: $t.Number() })` where the feature wants
- * `{ port, host }` — and still name it with `.config(...)`. The fields it left out arrive from the feature's
- * defaults, its builder, or the environment, and the feature reads one merged object either way.
- *
- * Arrays stay read-only and the conditional stays in a helper for the same two reasons {@link ConfigAccessors}
- * gives: a declared `string[]` reads back off a handle as `readonly string[]`, and a union has to distribute.
- *
- * All-optional means the weak-type rule is what keeps an unrelated subtree out — a location sharing no
- * property name with `T` is rejected. One that shares a compatible name is not, and that surfaces when the
- * slice validates rather than at the selector.
- */
-export type ConfigLocation<T> = {
-  readonly [K in keyof T]?: ConfigLocationValue<T[K]>
-}
-
-type ConfigLocationValue<V> = V extends readonly (infer U)[]
-  ? ReadonlyArray<ConfigLocationValue<U>>
-  : V extends (...args: never[]) => unknown
-    ? V
-    : V extends object
-      ? ConfigLocation<V>
-      : V
-
-/** Answers a feature key with that feature's configuration, or `undefined` when nothing registered it. */
-export type FeatureConfigLookup = (key: symbol) => unknown
-
-/**
- * The root of a config tree: the application's own shape, plus the call that reads a feature's configuration
- * by {@link FeatureConfigKey}.
- *
- * A call rather than a member, because every member name is one an application could have declared in its own
- * configuration — the collision {@link Configuration.snapshot} is deliberately kept off the tree to avoid. Only
- * the root is callable; a nested node is a plain {@link ConfigAccessors} projection.
- */
-export type ConfigHandle<T> = ConfigAccessors<T> & {
-  <F>(key: FeatureConfigKey<F>): F | undefined
-}
+import type { ConfigSlice } from './slice.js'
 
 /**
  * A live view of a validated config tree.
@@ -174,4 +113,28 @@ function buildNode<T>(source: () => T, revision: (() => number) | undefined, fea
       return typeof prop === 'string' && keys().includes(prop)
     },
   })
+}
+
+/**
+ * Turns the feature registry into what a config handle answers a {@link FeatureConfigKey} with.
+ *
+ * `read` is what makes the same registry serve both handles: the live one hands back {@link ConfigSlice.config},
+ * the per-request snapshot {@link ConfigSlice.snapshot}, so a feature's configuration follows the same rule as
+ * the tree it was read through.
+ *
+ * A key nothing registered reads `undefined` — a feature the application never installed is absent, not an
+ * error. A slice that failed to resolve still throws, because that is a broken feature rather than a missing one.
+ */
+export function featureLookup(
+  features: ReadonlyMap<symbol, ConfigSlice<unknown>> | undefined,
+  read: (slice: ConfigSlice<unknown>) => unknown,
+): FeatureConfigLookup | undefined {
+  if (features === undefined) {
+    return undefined
+  }
+
+  return key => {
+    const slice = features.get(key)
+    return slice === undefined ? undefined : read(slice)
+  }
 }

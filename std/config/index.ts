@@ -1,24 +1,30 @@
-export type { ConfigAccessors, ConfigHandle, ConfigLocation, FeatureConfigLookup } from './accessor.js'
-export type { BootstrapOptions, ConfigBootstrapResult } from './bootstrap.js'
-export { bootstrapConfig, notifySlices, publishSlices, sourcesOf } from './bootstrap.js'
-export type { ConfigurationSource } from './configuration.js'
+export type {
+  ConfigAccessors,
+  ConfigChangeListener,
+  ConfigDiagnostics,
+  ConfigEntry,
+  ConfigHandle,
+  ConfigLocation,
+  ConfigPrimitive,
+  ConfigProvider,
+  ConfigSchema,
+  ConfigSliceFailure,
+  ConfigSnapshot,
+  ConfigValue,
+  FeatureConfigKey,
+  InferConfig,
+  PropertySource,
+  ResolutionContext,
+} from './config.js'
 export { Configuration } from './configuration.js'
 export { ConfigDefinition, kConfigDefinition } from './definition.js'
-export type { ConfigDiagnostics } from './diagnostics.js'
-export type { ConfigSliceFailure } from './errors.js'
 export { ErrConfig, ErrConfigSlices, ErrConfigValidation } from './errors.js'
-export type { FeatureConfigSpec } from './feature.js'
 export { defineFeatureConfig } from './feature.js'
-export type { FeatureConfigKey } from './feature_key.js'
 export { featureConfigKey } from './feature_key.js'
-export type { ConfigModuleOptions } from './integration/module.js'
 export { CONFIG_REFRESH_LABEL, ConfigModule } from './integration/module.js'
-export { readByParts, readByPath } from './materializer.js'
-export type { ConfigChangeListener } from './notifier.js'
 export { configEquals } from './notifier.js'
 export type { SplitOptionBag } from './option_bag.js'
 export { splitOptionBag } from './option_bag.js'
-export { joinPath, splitPath, toPathParts } from './path.js'
 export { activeProfiles } from './profiles.js'
 export type { ArgsConfigProviderOptions } from './providers/args_provider.js'
 export { ArgsConfigProvider } from './providers/args_provider.js'
@@ -31,20 +37,6 @@ export { JSONConfigProvider } from './providers/json_provider.js'
 export { MutableConfigProvider } from './providers/mutable_provider.js'
 export type { SpringCloudConfigProviderOptions } from './providers/scc_provider.js'
 export { SpringCloudConfigProvider } from './providers/scc_provider.js'
-export type { ConfigSchema, InferConfig } from './schema.js'
-export { passthroughConfigSchema, validateConfig } from './schema.js'
-export { isSecretPath, redact, REDACTED, secretPaths } from './secrets.js'
-export { selectorPath } from './selector_path.js'
-export type { ConfigSliceSpec } from './slice.js'
-export { ConfigSlice, featureLookup, freezeDeep, sliceLabel } from './slice.js'
+export { ConfigSlice } from './slice.js'
 export type { ConfigPriorityValue } from './sources.js'
 export { ConfigPriority, ConfigSources } from './sources.js'
-export type {
-  ConfigEntry,
-  ConfigPrimitive,
-  ConfigProvider,
-  ConfigSnapshot,
-  ConfigValue,
-  PropertySource,
-  ResolutionContext,
-} from './types.js'

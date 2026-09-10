@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { createLiveAccessors, type ConfigHandle, type ConfigLocation } from '../accessor.js'
+import { createLiveAccessors } from '../accessor.js'
+import type { ConfigHandle, ConfigLocation } from '../config.js'
 import { featureConfigKey } from '../feature_key.js'
 
 interface AppConfig {

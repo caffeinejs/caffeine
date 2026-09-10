@@ -1,9 +1,12 @@
-import type { ConfigHandle, ConfigLocation } from './config/accessor.js'
-import type { ConfigDefinition } from './config/definition.js'
-import { defineFeatureConfig } from './config/feature.js'
-import type { FeatureConfigKey } from './config/feature_key.js'
-import type { ConfigSchema } from './config/schema.js'
-import type { ConfigSlice } from './config/slice.js'
+import {
+  defineFeatureConfig,
+  type ConfigDefinition,
+  type ConfigHandle,
+  type ConfigLocation,
+  type ConfigSchema,
+  type ConfigSlice,
+  type FeatureConfigKey,
+} from './config/index.js'
 import { ErrCaffeine } from './error.js'
 import {
   kBeforeBootstrap,

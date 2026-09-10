@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { ResolutionContext } from '../../config.js'
 import { SpringCloudConfigProvider } from '../../providers/scc_provider.js'
-import type { ResolutionContext } from '../../types.js'
 
 const ctx: ResolutionContext = { profiles: ['default'] }
 

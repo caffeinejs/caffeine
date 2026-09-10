@@ -1,5 +1,5 @@
 import { isSecretSchema } from '../schema/t.js'
-import { joinPath, splitPath } from './path.js'
+import { escapeSegment, hasPrefixIn, joinPath } from './path.js'
 
 /** What a redacted value reads as. A fixed string, so a dump stays the same shape it would otherwise be. */
 export const REDACTED = '[redacted]'
@@ -67,24 +67,7 @@ function collect(node: unknown, path: readonly string[], out: string[], seen: Se
  * has to hide `auth.credentials.password` too, or marking the parent would be a false reassurance.
  */
 export function isSecretPath(secrets: ReadonlySet<string>, path: string): boolean {
-  if (secrets.size === 0) {
-    return false
-  }
-  if (secrets.has(path)) {
-    return true
-  }
-
-  const parts = splitPath(path)
-  let prefix = ''
-
-  for (const part of parts) {
-    prefix = prefix === '' ? part : `${prefix}.${part}`
-    if (secrets.has(prefix)) {
-      return true
-    }
-  }
-
-  return false
+  return hasPrefixIn(path, secrets)
 }
 
 /**
@@ -111,7 +94,9 @@ export function redact(secrets: ReadonlySet<string>, path: string, value: unknow
 
   const out: Record<string, unknown> = {}
   for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-    out[key] = redact(secrets, path === '' ? key : `${path}.${key}`, nested)
+    // `escapeSegment`, so a child whose name holds a literal dot is probed as the one key `secretPaths` wrote.
+    const childPath = path === '' ? escapeSegment(key) : `${path}.${escapeSegment(key)}`
+    out[key] = redact(secrets, childPath, nested)
   }
 
   return out

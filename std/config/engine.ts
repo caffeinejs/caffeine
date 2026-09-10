@@ -1,14 +1,12 @@
+import type { ConfigSnapshot, PropertySource, ResolutionContext } from './config.js'
 import { ErrConfig } from './errors.js'
-import { splitPath } from './path.js'
+import { hasPrefixIn, isIndexSegment, joinPath, splitPath } from './path.js'
 import type { ConfigSources } from './sources.js'
-import type { ConfigSnapshot, PropertySource, ResolutionContext } from './types.js'
 
 export interface ConfigEngineOptions {
   sources: ConfigSources
   failFast?: boolean
 }
-
-const INDEX = /^(0|[1-9]\d*)$/
 
 export class ConfigEngine {
   readonly #options: ConfigEngineOptions
@@ -74,7 +72,7 @@ export function mergeSources(sources: readonly PropertySource[]): ConfigSnapshot
     const claims = claimsOf(source)
 
     for (const [key, entry] of source.entries) {
-      if (isUnderClaim(key, claimed)) {
+      if (hasPrefixIn(key, claimed)) {
         continue
       }
       if (!values.has(key)) {
@@ -111,13 +109,15 @@ function claimsOf(source: PropertySource): Set<string> {
     claims.add(key)
 
     const parts = splitPath(key)
-    const at = parts.findIndex(part => INDEX.test(part))
+    const at = parts.findIndex(part => isIndexSegment(part))
 
     if (at <= 0) {
       continue
     }
 
-    const prefix = parts.slice(0, at).join('.')
+    // Encoded the way `hasPrefixIn` re-encodes what it probes, so a claimed parent whose own segment holds a
+    // literal dot still owns its children.
+    const prefix = joinPath(parts.slice(0, at))
     claims.add(prefix)
 
     let seen = indices.get(prefix)
@@ -145,26 +145,4 @@ function claimsOf(source: PropertySource): Set<string> {
   }
 
   return claims
-}
-
-/** Whether `key` sits beneath an array some earlier source already owns. */
-function isUnderClaim(key: string, claimed: Set<string>): boolean {
-  if (claimed.size === 0) {
-    return false
-  }
-  if (claimed.has(key)) {
-    return true
-  }
-
-  const parts = splitPath(key)
-  let prefix = ''
-
-  for (const part of parts) {
-    prefix = prefix === '' ? part : `${prefix}.${part}`
-    if (claimed.has(prefix)) {
-      return true
-    }
-  }
-
-  return false
 }

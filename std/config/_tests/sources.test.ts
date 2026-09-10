@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ConfigProvider, ResolutionContext } from '../config.js'
 import { ConfigEngine } from '../engine.js'
 import { materialize } from '../materializer.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { ConfigPriority, ConfigSources } from '../sources.js'
-import type { ConfigProvider, ResolutionContext } from '../types.js'
 
 const ctx: ResolutionContext = { profiles: ['default'] }
 
@@ -195,6 +195,38 @@ describe('array merging across bands', () => {
       .add(tree('env', { server: { port: 8080 } }), ConfigPriority.ENV)
 
     expect((await materializedFrom(sources)).server).toEqual({ host: 'code-host', port: 8080 })
+  })
+
+  it('replaces an array whose parent segment holds a literal dot', async () => {
+    // A parent named `a.b` is claimed as the escaped key `a\.b` (`claimsOf` via `joinPath`); the merge probe
+    // (`hasPrefixIn`) has to re-encode ancestors the same way. If the two ever drift apart, the lower band's
+    // third element survives a list the higher band replaced.
+    const escapedKeys = (id: string, entries: Array<[string, unknown]>): ConfigProvider => ({
+      id,
+      load: () =>
+        Promise.resolve([
+          { name: id, entries: new Map(entries.map(([k, v]) => [k, { key: k, value: v as never, origin: id }])) },
+        ]),
+    })
+
+    const sources = new ConfigSources()
+      .add(
+        escapedKeys('code', [
+          ['a\\.b.0', 'a'],
+          ['a\\.b.1', 'b'],
+          ['a\\.b.2', 'c'],
+        ]),
+        ConfigPriority.CODE,
+      )
+      .add(
+        escapedKeys('env', [
+          ['a\\.b.0', 'x'],
+          ['a\\.b.1', 'y'],
+        ]),
+        ConfigPriority.ENV,
+      )
+
+    expect((await materializedFrom(sources))['a.b']).toEqual(['x', 'y'])
   })
 
   it('rejects a higher band that supplies only some indices', async () => {

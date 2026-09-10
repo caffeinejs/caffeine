@@ -1,25 +1,6 @@
-import type { ConfigSliceFailure } from './errors.js'
+import type { ConfigDiagnostics, ConfigEntry, ConfigSliceFailure, ConfigSnapshot, ConfigValue } from './config.js'
 import { readByPath } from './materializer.js'
 import { isSecretPath, redact } from './secrets.js'
-import type { ConfigEntry, ConfigSnapshot, ConfigValue } from './types.js'
-
-export interface ConfigDiagnostics {
-  originOf(path: string): string | undefined
-  /** The value at `path`, with anything marked `$t.Secret` replaced by `[redacted]`. */
-  valueAt(path: string): unknown
-  /**
-   * The resolved sources and merged values, secrets redacted.
-   *
-   * Redacted because this is the one thing here built to be dumped whole — to a log line, a debug endpoint, a
-   * crash report — and a secret that survives that trip is a secret in a log.
-   */
-  readonly snapshot: ConfigSnapshot
-  /**
-   * The features whose configuration failed to resolve on the most recent pass. Empty when everything
-   * resolved. After a refresh these are the only features still serving values from an earlier one.
-   */
-  readonly sliceErrors: readonly ConfigSliceFailure[]
-}
 
 export function createConfigDiagnostics<T>(
   validated: T,

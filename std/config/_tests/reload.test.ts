@@ -2,7 +2,7 @@ import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
 import { $t } from '../../schema/t.js'
-import type { ConfigHandle } from '../accessor.js'
+import type { ConfigHandle, ConfigProvider, PropertySource, ResolutionContext } from '../config.js'
 import { Configuration } from '../configuration.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
@@ -11,7 +11,6 @@ import { EnvConfigProvider } from '../providers/env_provider.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
-import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 
 const APP_CONFIG = token<ConfigHandle<{ port: number }>>(Symbol('app.config'))
 const schema = $t.Object({ port: $t.Number({ default: 0 }) })

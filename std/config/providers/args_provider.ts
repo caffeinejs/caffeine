@@ -1,4 +1,4 @@
-import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
+import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../config.js'
 import { coerceText } from './_coerce.js'
 
 export interface ArgsConfigProviderOptions {

@@ -1,18 +1,8 @@
-declare const kFeatureConfigType: unique symbol
+import type { FeatureConfigKey } from './config.js'
+
 declare const kFeatureConfigNeedsType: unique symbol
 
-/** Phantom brand that attaches a config type to a feature key without a runtime object. */
-export interface FeatureConfigBrand<in out T> {
-  readonly [kFeatureConfigType]: T
-}
-
 type FeatureConfigNeedsTypeArg = { readonly [kFeatureConfigNeedsType]: true }
-
-/**
- * A symbol branded with the configuration it addresses. The return value is the plain symbol; `T` exists only
- * at the type level.
- */
-export type FeatureConfigKey<T> = symbol & FeatureConfigBrand<T>
 
 /**
  * Names a feature's configuration, so code that does not own the builder can read it.

@@ -7,13 +7,13 @@ import { z } from 'zod'
 
 import { $t } from '../../../schema/t.js'
 import { bootstrapConfig } from '../../bootstrap.js'
+import type { ConfigProvider, ResolutionContext } from '../../config.js'
 import { ArgsConfigProvider } from '../../providers/args_provider.js'
 import { EnvConfigProvider } from '../../providers/env_provider.js'
 import { FileConfigProvider } from '../../providers/file_provider.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { JSONConfigProvider } from '../../providers/json_provider.js'
 import { ConfigPriority, ConfigSources } from '../../sources.js'
-import type { ConfigProvider, ResolutionContext } from '../../types.js'
 
 // `server` is present in every scenario below. `db` and `app` may be absent from all sources, so they carry an
 // explicit object default — this is what the "missing everywhere" case (schema default, no source origin) tests.
@@ -56,7 +56,7 @@ describe('config multi-source precedence & provenance', () => {
     const ctx: ResolutionContext = { profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
-      providers: [p.env, p.file, p.inline],
+      sources: ConfigSources.of(p.env, p.file, p.inline),
       schema,
       profiles: ctx.profiles,
     })
@@ -83,7 +83,7 @@ describe('config multi-source precedence & provenance', () => {
     const ctx: ResolutionContext = { profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
-      providers: [p.inline, p.file, p.env],
+      sources: ConfigSources.of(p.inline, p.file, p.env),
       schema,
       profiles: ctx.profiles,
     })
@@ -107,7 +107,7 @@ describe('config multi-source precedence & provenance', () => {
       )
 
     const { config, diagnostics } = await bootstrapConfig({
-      providers: [new FileConfigProvider(iniPath, ini)],
+      sources: ConfigSources.of(new FileConfigProvider(iniPath, ini)),
       schema,
       profiles: ctx.profiles,
     })
@@ -126,7 +126,7 @@ describe('config array flatten + typed handle', () => {
 
   it('materializes arrays as Array fields and preserves ConfigHandle typing', async () => {
     const { config, validated } = await bootstrapConfig({
-      providers: [new InlineConfigProvider({ tags: ['a', 'b'], items: [{ id: 1 }] })],
+      sources: ConfigSources.of(new InlineConfigProvider({ tags: ['a', 'b'], items: [{ id: 1 }] })),
       schema: arraySchema,
     })
 
@@ -151,10 +151,10 @@ describe('config array flatten + typed handle', () => {
     const ctx: ResolutionContext = { profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
-      providers: [
+      sources: ConfigSources.of(
         new EnvConfigProvider({ prefix: 'APP_', env: { APP_TAGS__0: 'override' } }),
         new JSONConfigProvider(filePath),
-      ],
+      ),
       schema: arraySchema,
       profiles: ctx.profiles,
     })
@@ -223,7 +223,7 @@ describe('a list set as text', () => {
   it('gives the same answer from the command line as from the environment', async () => {
     // `_coerce` exists so a setting moving between the two cannot change type; the codec must not break that.
     const { validated } = await bootstrapConfig({
-      providers: [new ArgsConfigProvider({ argv: ['--tags=a,b,c'] })],
+      sources: ConfigSources.of(new ArgsConfigProvider({ argv: ['--tags=a,b,c'] })),
       schema: listSchema,
       profiles: ctx.profiles,
     })
@@ -235,7 +235,7 @@ describe('a list set as text', () => {
     const jsonSchema = $t.Object({ db: $t.JSON($t.Object({ host: $t.String(), port: $t.Number() })) })
 
     const { validated } = await bootstrapConfig({
-      providers: [envSource({ DB: '{"host":"h","port":5432}' })],
+      sources: ConfigSources.of(envSource({ DB: '{"host":"h","port":5432}' })),
       schema: jsonSchema,
       profiles: ctx.profiles,
     })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ResolutionContext } from '../../config.js'
 import { MutableConfigProvider } from '../../providers/mutable_provider.js'
-import type { ResolutionContext } from '../../types.js'
 
 const ctx: ResolutionContext = { profiles: ['default'] }
 

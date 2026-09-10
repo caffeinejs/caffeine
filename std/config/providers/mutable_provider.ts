@@ -1,6 +1,6 @@
+import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../config.js'
 import { flattenObject } from '../flatten.js'
 import { joinPath, toPathParts } from '../path.js'
-import type { ConfigEntry, ConfigProvider, ConfigValue, PropertySource, ResolutionContext } from '../types.js'
 
 /**
  * A source whose contents can change at any time.

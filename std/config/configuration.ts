@@ -1,7 +1,5 @@
 import { coalesce, readEnv } from './_escape.js'
-import type { ConfigHandle } from './accessor.js'
-import type { ConfigDiagnostics } from './diagnostics.js'
-import type { ConfigChangeListener } from './notifier.js'
+import type { ConfigChangeListener, ConfigDiagnostics, ConfigHandle } from './config.js'
 
 /** What {@link Configuration} needs from the resolved configuration, without depending on the shard directly. */
 export interface ConfigurationSource<T> {

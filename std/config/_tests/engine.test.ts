@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ConfigProvider, PropertySource, ResolutionContext } from '../config.js'
 import { ConfigEngine } from '../engine.js'
 import { ConfigSources } from '../sources.js'
-import type { ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
 
 const ctx: ResolutionContext = { profiles: ['default'] }
 

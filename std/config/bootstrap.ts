@@ -1,25 +1,26 @@
 import type { AnySchema } from '../schema/schema.js'
-import type { ConfigHandle } from './accessor.js'
-import { createLiveAccessors } from './accessor.js'
-import type { ConfigDiagnostics } from './diagnostics.js'
+import { createLiveAccessors, featureLookup } from './accessor.js'
+import type {
+  ConfigDiagnostics,
+  ConfigHandle,
+  ConfigSchema,
+  ConfigSliceFailure,
+  ConfigSnapshot,
+  InferConfig,
+} from './config.js'
 import { createConfigDiagnostics } from './diagnostics.js'
 import { ConfigEngine } from './engine.js'
-import type { ConfigSliceFailure } from './errors.js'
-import { materialize, readByParts } from './materializer.js'
+import { freezeDeep, materialize, readByParts } from './materializer.js'
 import { activeProfiles } from './profiles.js'
-import type { ConfigSchema, InferConfig } from './schema.js'
 import { validateConfig } from './schema.js'
 import { secretPaths } from './secrets.js'
 import type { ConfigSlice, ConfigSliceSpec } from './slice.js'
-import { featureLookup, freezeDeep, sliceLabel } from './slice.js'
-import { ConfigSources } from './sources.js'
-import type { ConfigProvider, ConfigSnapshot } from './types.js'
+import { sliceLabel } from './slice.js'
+import type { ConfigSources } from './sources.js'
 
 export interface BootstrapOptions<T> {
-  /** The live source registry. Preferred — it is re-read on every resolve, so late registrations take effect. */
-  sources?: ConfigSources
-  /** Convenience for a fixed set of sources; equivalent to a registry holding them in the `USER` band. */
-  providers?: ConfigProvider[]
+  /** The live source registry. Re-read on every resolve, so a late registration takes effect. */
+  sources: ConfigSources
   schema: ConfigSchema<T>
   /** Feature slices to validate and publish alongside the root config. */
   slices?: readonly ConfigSliceSpec[]
@@ -66,11 +67,6 @@ export interface ConfigBootstrapResult<T> {
   secrets: ReadonlySet<string>
 }
 
-/** Normalizes the two accepted spellings of "which sources" into the live registry the engine wants. */
-export function sourcesOf<T>(options: BootstrapOptions<T>): ConfigSources {
-  return options.sources ?? ConfigSources.of(...(options.providers ?? []))
-}
-
 /**
  * Resolves every provider, materializes the result, and validates it against the schema.
  *
@@ -83,7 +79,7 @@ export async function bootstrapConfig<S extends AnySchema>(
 ): Promise<ConfigBootstrapResult<InferConfig<S>>>
 export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<ConfigBootstrapResult<T>>
 export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<ConfigBootstrapResult<T>> {
-  const engine = new ConfigEngine({ sources: sourcesOf(options), failFast: options.failFast })
+  const engine = new ConfigEngine({ sources: options.sources, failFast: options.failFast })
 
   let snapshot: ConfigSnapshot
   if (options.profiles === undefined && options.profilesPath !== undefined) {

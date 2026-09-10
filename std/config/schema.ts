@@ -1,25 +1,10 @@
-import type { TSchema } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
-import { isTypeBoxSchema, type AnySchema, type InferSchema } from '../schema/schema.js'
+import { isTypeBoxSchema, type AnySchema } from '../schema/schema.js'
 import { validateSchema } from '../schema/validate.js'
+import type { ConfigSchema } from './config.js'
 import { ErrConfigValidation } from './errors.js'
-
-/**
- * A configuration schema: either the `$t` dialect (TypeBox, the first-class choice) or any
- * {@link https://standardschema.dev | Standard Schema} — zod v4, valibot, arktype and others.
- *
- * Configuration is the one place where a foreign library is supported without reservation: Caffeine calls the
- * library's own validator, so refinements and transforms run exactly as authored. This is unlike HTTP routes, where
- * validation is delegated to Fastify's Ajv and the schema must survive a projection to JSON Schema.
- *
- * The type parameter is phantom — it names the validated shape for call sites that declare a schema up front.
- */
-export type ConfigSchema<T = unknown> = TSchema | StandardSchemaV1<unknown, T>
-
-/** Infers the validated output type carried by a {@link ConfigSchema}. */
-export type InferConfig<S extends AnySchema> = InferSchema<S>
 
 /**
  * The schema an application that never declared one gets. Configuration is now unconditional — features read

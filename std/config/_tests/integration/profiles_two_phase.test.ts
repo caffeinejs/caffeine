@@ -5,11 +5,12 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { bootstrapConfig } from '../../bootstrap.js'
+import type { ConfigProvider, ResolutionContext } from '../../config.js'
 import { FileConfigProvider } from '../../providers/file_provider.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { JSONConfigProvider } from '../../providers/json_provider.js'
 import { passthroughConfigSchema } from '../../schema.js'
-import type { ConfigProvider, ResolutionContext } from '../../types.js'
+import { ConfigSources } from '../../sources.js'
 
 const PROFILES_PATH = ['caffeine', 'profiles'] as const
 const tmp: string[] = []
@@ -37,10 +38,10 @@ describe('two-phase profile discovery', () => {
     await writeTmp('tp-app-prod.json', JSON.stringify({ db: { host: 'prod' } }))
 
     const result = await bootstrapConfig({
-      providers: [
+      sources: ConfigSources.of(
         new InlineConfigProvider({ caffeine: { profiles: 'prod' } }),
         new FileConfigProvider(base, text => JSON.parse(text) as Record<string, unknown>),
-      ],
+      ),
       schema: passthroughConfigSchema,
       profilesPath: PROFILES_PATH,
     })
@@ -53,7 +54,7 @@ describe('two-phase profile discovery', () => {
     const load = vi.spyOn(FileConfigProvider.prototype, 'load')
 
     await bootstrapConfig({
-      providers: [new JSONConfigProvider(base)],
+      sources: ConfigSources.of(new JSONConfigProvider(base)),
       schema: passthroughConfigSchema,
       profilesPath: PROFILES_PATH,
     })
@@ -62,7 +63,10 @@ describe('two-phase profile discovery', () => {
     load.mockClear()
 
     await bootstrapConfig({
-      providers: [new InlineConfigProvider({ caffeine: { profiles: ['dev'] } }), new JSONConfigProvider(base)],
+      sources: ConfigSources.of(
+        new InlineConfigProvider({ caffeine: { profiles: ['dev'] } }),
+        new JSONConfigProvider(base),
+      ),
       schema: passthroughConfigSchema,
       profilesPath: PROFILES_PATH,
     })
@@ -80,7 +84,7 @@ describe('two-phase profile discovery', () => {
     }
 
     await bootstrapConfig({
-      providers: [new InlineConfigProvider({ caffeine: { profiles: ['eu', 'dev', 'eu'] } }), spy],
+      sources: ConfigSources.of(new InlineConfigProvider({ caffeine: { profiles: ['eu', 'dev', 'eu'] } }), spy),
       schema: passthroughConfigSchema,
       profilesPath: PROFILES_PATH,
     })

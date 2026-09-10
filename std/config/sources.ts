@@ -1,4 +1,4 @@
-import type { ConfigProvider } from './types.js'
+import type { ConfigProvider } from './config.js'
 
 /**
  * Where a source sits in the precedence chain. Higher wins.

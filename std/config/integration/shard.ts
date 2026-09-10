@@ -1,18 +1,22 @@
 import { kSelfRefresh, type SelfRefreshable } from '@caffeinejs/di'
 
-import type { ConfigHandle } from '../accessor.js'
-import { createLiveAccessors } from '../accessor.js'
+import { createLiveAccessors, featureLookup } from '../accessor.js'
 import type { ConfigBootstrapResult, BootstrapOptions } from '../bootstrap.js'
-import { bootstrapConfig, notifySlices, sourcesOf } from '../bootstrap.js'
-import type { ConfigDiagnostics } from '../diagnostics.js'
+import { bootstrapConfig, notifySlices } from '../bootstrap.js'
+import type {
+  ConfigChangeListener,
+  ConfigDiagnostics,
+  ConfigHandle,
+  ConfigProvider,
+  ConfigSliceFailure,
+  ConfigSnapshot,
+} from '../config.js'
+import type { ConfigurationSource } from '../configuration.js'
 import { createConfigDiagnostics } from '../diagnostics.js'
-import { ErrConfigSlices, type ConfigSliceFailure } from '../errors.js'
-import type { ConfigChangeListener } from '../notifier.js'
+import { ErrConfigSlices, messageOf } from '../errors.js'
 import { ConfigNotifier } from '../notifier.js'
-import { featureLookup } from '../slice.js'
-import type { ConfigProvider, ConfigSnapshot } from '../types.js'
 
-export class ConfigShard<T> implements SelfRefreshable {
+export class ConfigShard<T> implements SelfRefreshable, ConfigurationSource<T> {
   #validated: T
   #snapshot: ConfigSnapshot
   #failures: readonly ConfigSliceFailure[]
@@ -47,7 +51,7 @@ export class ConfigShard<T> implements SelfRefreshable {
     this.#failures = result.failures
     this.#secrets = result.secrets
     this.#options = options
-    const sources = sourcesOf(options)
+    const sources = options.sources
     this.#stamps = stampsOf(sources.resolved())
     this.#sources = sources.revision
     this.handle = createLiveAccessors(
@@ -123,7 +127,7 @@ export class ConfigShard<T> implements SelfRefreshable {
    * {@link diagnostics}, and the warning hook reports it without anyone having to ask.
    */
   async [kSelfRefresh](): Promise<void> {
-    const sources = sourcesOf(this.#options)
+    const sources = this.#options.sources
     const providers = sources.resolved()
 
     if (!this.#mayHaveChanged(sources.revision, providers)) {
@@ -157,11 +161,7 @@ export class ConfigShard<T> implements SelfRefreshable {
   }
 
   async dispose(): Promise<void> {
-    await Promise.all(
-      sourcesOf(this.#options)
-        .resolved()
-        .map(p => Promise.resolve(p.dispose?.())),
-    )
+    await Promise.all(this.#options.sources.resolved().map(p => Promise.resolve(p.dispose?.())))
   }
 
   /**
@@ -204,8 +204,4 @@ function stampsOf(providers: readonly ConfigProvider[]): ReadonlyMap<string, unk
   }
 
   return stamps
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

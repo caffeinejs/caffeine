@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
 import { bootstrapConfig } from '../bootstrap.js'
+import type { ConfigProvider } from '../config.js'
 import { ConfigDefinition } from '../definition.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { ConfigPriority } from '../sources.js'
-import type { ConfigProvider } from '../types.js'
 
 /**
  * The resolved configuration object is the application's schema and nothing else.

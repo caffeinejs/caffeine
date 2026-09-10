@@ -1,9 +1,7 @@
 import { coalesce, readEnv } from './_escape.js'
-import type { FeatureConfigLookup } from './accessor.js'
+import type { ConfigChangeListener, ConfigSchema } from './config.js'
 import { ErrConfig } from './errors.js'
-import type { ConfigChangeListener } from './notifier.js'
 import { ConfigNotifier } from './notifier.js'
-import type { ConfigSchema } from './schema.js'
 
 /**
  * A feature's configuration.
@@ -237,30 +235,6 @@ export class ConfigSlice<T> {
   }
 }
 
-/**
- * Turns the feature registry into what a config handle answers a {@link FeatureConfigKey} with.
- *
- * `read` is what makes the same registry serve both handles: the live one hands back {@link ConfigSlice.config},
- * the per-request snapshot {@link ConfigSlice.snapshot}, so a feature's configuration follows the same rule as
- * the tree it was read through.
- *
- * A key nothing registered reads `undefined` — a feature the application never installed is absent, not an
- * error. A slice that failed to resolve still throws, because that is a broken feature rather than a missing one.
- */
-export function featureLookup(
-  features: ReadonlyMap<symbol, ConfigSlice<unknown>> | undefined,
-  read: (slice: ConfigSlice<unknown>) => unknown,
-): FeatureConfigLookup | undefined {
-  if (features === undefined) {
-    return undefined
-  }
-
-  return key => {
-    const slice = features.get(key)
-    return slice === undefined ? undefined : read(slice)
-  }
-}
-
 /** How a slice names itself in an error, a warning or the diagnostics. */
 export function sliceLabel(parts: readonly string[] | undefined): string {
   if (parts === undefined) {
@@ -282,17 +256,4 @@ export interface ConfigSliceSpec<T = unknown> {
   slice: ConfigSlice<T>
   /** The input a detached slice validates. Ignored for a slice that has a location. */
   local?: Record<string, unknown>
-}
-
-/** Freezes a validated tree, so nothing downstream can mutate shared configuration. */
-export function freezeDeep<T>(value: T): T {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
-    return value
-  }
-
-  for (const key of Object.keys(value as object)) {
-    freezeDeep((value as Record<string, unknown>)[key])
-  }
-
-  return Object.freeze(value)
 }

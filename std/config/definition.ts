@@ -1,14 +1,13 @@
 import { token, type NamedToken } from '@caffeinejs/di'
 
+import type { ConfigSchema, FeatureConfigKey, ConfigValue } from './config.js'
 import { ErrConfig } from './errors.js'
-import type { FeatureConfigKey } from './feature_key.js'
 import { ConfigShard } from './integration/shard.js'
 import { MutableConfigProvider } from './providers/mutable_provider.js'
-import { declaredDefaults, type ConfigSchema, passthroughConfigSchema } from './schema.js'
+import { declaredDefaults, passthroughConfigSchema } from './schema.js'
 import { secretPaths } from './secrets.js'
 import { ConfigSlice, type ConfigSliceSpec } from './slice.js'
 import { ConfigPriority, ConfigSources } from './sources.js'
-import type { ConfigValue } from './types.js'
 
 /** DI key for the {@link ConfigDefinition} the application builder owns. Features resolve it to register a slice. */
 export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs/std:config.definition'))
@@ -51,6 +50,11 @@ export class ConfigDefinition {
   /** Values set through feature builder methods. Defaults too: file, env and args all win over them. */
   readonly codeValues = new MutableConfigProvider('code')
 
+  /**
+   * The active profiles, stated outright. Skips discovery, so {@link profilesPath} is not consulted — for a
+   * caller that already knows them rather than one that has to read them out of the tree.
+   */
+  profiles: readonly string[] | undefined
   /**
    * The tree path holding the application's active-profile list, e.g. `['caffeine', 'profiles']`. The host
    * points it here before {@link bootstrap}; `std/config` never assumes a location. Unset, resolution runs
@@ -98,11 +102,6 @@ export class ConfigDefinition {
     return this.#shard !== undefined
   }
 
-  /** The resolved configuration, once {@link bootstrap} has run. The config module binds what this holds. */
-  get shard(): ConfigShard<unknown> | undefined {
-    return this.#shard
-  }
-
   /**
    * Resolves every source, validates the tree, and publishes each feature slice. Idempotent — the second call
    * hands back the same shard rather than resolving again.
@@ -118,6 +117,7 @@ export class ConfigDefinition {
       // caller that named it.
       schema: this.schema,
       slices: this.slices,
+      profiles: this.profiles,
       profilesPath: this.profilesPath,
       failFast: this.failFast,
       secrets: this.secrets,

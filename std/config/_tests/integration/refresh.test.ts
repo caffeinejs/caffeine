@@ -2,10 +2,11 @@ import { kSelfRefresh } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import type { ConfigProvider } from '../../config.js'
 import { ErrConfigValidation } from '../../errors.js'
 import { ConfigShard } from '../../integration/shard.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
-import type { ConfigProvider } from '../../types.js'
+import { ConfigSources } from '../../sources.js'
 
 const schema = z.object({ value: z.string(), count: z.number() })
 type TestConfig = z.infer<typeof schema>
@@ -18,7 +19,7 @@ describe('ConfigShard refresh', () => {
       reloadable: true,
       load: async () => new InlineConfigProvider(data as never).load({ profiles: ['default'] }),
     }
-    const shard = await ConfigShard.bootstrap<TestConfig>({ providers: [mutableProvider], schema })
+    const shard = await ConfigShard.bootstrap<TestConfig>({ sources: ConfigSources.of(mutableProvider), schema })
     const handle = shard.handle
 
     expect(handle.value).toBe('before')
@@ -40,7 +41,7 @@ describe('ConfigShard refresh', () => {
       load: ctx => new InlineConfigProvider(payload as never).load(ctx),
     }
 
-    const shard = await ConfigShard.bootstrap<TestConfig>({ providers: [provider], schema })
+    const shard = await ConfigShard.bootstrap<TestConfig>({ sources: ConfigSources.of(provider), schema })
 
     const handle = shard.handle
     expect(handle.value).toBe('safe')
@@ -54,7 +55,7 @@ describe('ConfigShard refresh', () => {
   it('concurrent refresh calls produce consistent final state', async () => {
     let seq = 0
     const shard = await ConfigShard.bootstrap<TestConfig>({
-      providers: [new InlineConfigProvider({ value: 'v0', count: 0 } as never)],
+      sources: ConfigSources.of(new InlineConfigProvider({ value: 'v0', count: 0 } as never)),
       schema,
     })
 

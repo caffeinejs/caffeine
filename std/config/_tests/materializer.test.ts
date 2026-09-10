@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ConfigEntry, ConfigSnapshot } from '../config.js'
 import { materialize, readByPath } from '../materializer.js'
-import type { ConfigEntry, ConfigSnapshot } from '../types.js'
 
 function makeSnapshot(data: Record<string, unknown>, origin = 'test'): ConfigSnapshot {
   const values = new Map<string, ConfigEntry>(

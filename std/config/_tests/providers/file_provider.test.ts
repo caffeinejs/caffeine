@@ -4,9 +4,9 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import type { ResolutionContext } from '../../config.js'
 import { FileConfigProvider, type ConfigFileParser } from '../../providers/file_provider.js'
 import { JSONConfigProvider } from '../../providers/json_provider.js'
-import type { ResolutionContext } from '../../types.js'
 
 const ctx: ResolutionContext = { profiles: [] }
 const tmp: string[] = []

@@ -1,7 +1,5 @@
-import { splitPath } from './path.js'
-import type { ConfigSnapshot } from './types.js'
-
-const INDEX_KEY = /^(0|[1-9]\d*)$/
+import type { ConfigSnapshot } from './config.js'
+import { isIndexSegment, splitPath } from './path.js'
 
 export function materialize(snapshot: ConfigSnapshot): Record<string, unknown> {
   const result: Record<string, unknown> = {}
@@ -62,7 +60,7 @@ function promoteNumericObjects(value: unknown): unknown {
   }
 
   const keys = Object.keys(promoted)
-  if (keys.length === 0 || !keys.every(k => INDEX_KEY.test(k))) {
+  if (keys.length === 0 || !keys.every(k => isIndexSegment(k))) {
     return promoted
   }
 
@@ -81,6 +79,19 @@ function promoteNumericObjects(value: unknown): unknown {
   return arr
 }
 
+/** Freezes a validated tree, so nothing downstream can mutate shared configuration. */
+export function freezeDeep<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value
+  }
+
+  for (const key of Object.keys(value as object)) {
+    freezeDeep((value as Record<string, unknown>)[key])
+  }
+
+  return Object.freeze(value)
+}
+
 export function readByPath(obj: unknown, path: string): unknown {
   return readByParts(obj, splitPath(path))
 }
@@ -97,7 +108,7 @@ export function readByParts(obj: unknown, parts: readonly string[]): unknown {
       return undefined
     }
     if (Array.isArray(acc)) {
-      if (!INDEX_KEY.test(part)) {
+      if (!isIndexSegment(part)) {
         return undefined
       }
       acc = acc[Number(part)]

@@ -4,11 +4,12 @@ import { z } from 'zod'
 
 import { $t } from '../../schema/t.js'
 import { bootstrapConfig } from '../bootstrap.js'
+import type { ResolutionContext } from '../config.js'
 import { ConfigDefinition } from '../definition.js'
 import { defineFeatureConfig } from '../feature.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
-import { REDACTED, isSecretPath, secretPaths } from '../secrets.js'
-import type { ResolutionContext } from '../types.js'
+import { REDACTED, isSecretPath, redact, secretPaths } from '../secrets.js'
+import { ConfigSources } from '../sources.js'
 
 const ctx: ResolutionContext = { profiles: ['default'] }
 
@@ -76,6 +77,31 @@ describe('isSecretPath', () => {
     expect(isSecretPath(secrets, 'auth.issuer')).toBe(false)
     expect(isSecretPath(secrets, 'auth')).toBe(false)
     expect(isSecretPath(secrets, 'db')).toBe(false)
+  })
+
+  // `secretPaths` records a property named `a.b` as the single escaped segment `a\.b` (via `joinPath`). The
+  // prefix probe re-encodes each ancestor the same way, so marking that object still hides its children — and
+  // the two-segment key `a.b` stays a different thing from the one-segment `a\.b`.
+  it('matches beneath a marked path whose segment holds a literal dot', () => {
+    const dotted = new Set(['a\\.b'])
+
+    expect(isSecretPath(dotted, 'a\\.b')).toBe(true)
+    expect(isSecretPath(dotted, 'a\\.b.password')).toBe(true)
+    expect(isSecretPath(dotted, 'a.b.password')).toBe(false)
+  })
+})
+
+describe('redact', () => {
+  // A subtree read must not walk past the escape either: the child path it rebuilds has to be the key
+  // `secretPaths` wrote, or the nested value comes back in the clear.
+  it('redacts a child of a marked object whose name holds a literal dot', () => {
+    const secrets = new Set(['creds\\.v2'])
+    const value = { 'creds.v2': { token: 'super-secret', extra: { deep: 'also-secret' } } }
+
+    expect(redact(secrets, '', value)).toEqual({
+      'creds.v2': REDACTED,
+    })
+    expect(redact(secrets, 'creds\\.v2.extra', { deep: 'also-secret' })).toBe(REDACTED)
   })
 })
 
@@ -152,7 +178,7 @@ describe('diagnostics redaction', () => {
   it('redacts a secret the application declared on its own root schema', async () => {
     const result = await bootstrapConfig({
       schema: $t.Object({ apiKey: $t.Secret($t.String()) }),
-      providers: [new InlineConfigProvider({ apiKey: 'root-level-secret' })],
+      sources: ConfigSources.of(new InlineConfigProvider({ apiKey: 'root-level-secret' })),
       profiles: ctx.profiles,
     })
 
@@ -163,7 +189,7 @@ describe('diagnostics redaction', () => {
   it('leaves diagnostics alone when nothing was marked', async () => {
     const result = await bootstrapConfig({
       schema: $t.Object({ host: $t.String() }),
-      providers: [new InlineConfigProvider({ host: 'localhost' })],
+      sources: ConfigSources.of(new InlineConfigProvider({ host: 'localhost' })),
       profiles: ctx.profiles,
     })
 

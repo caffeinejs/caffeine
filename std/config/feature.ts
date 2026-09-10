@@ -1,12 +1,10 @@
+import type { ConfigSchema, FeatureConfigKey, ConfigEntry, ConfigValue, PropertySource } from './config.js'
 import type { ConfigDefinition } from './definition.js'
 import { mergeSources } from './engine.js'
-import type { FeatureConfigKey } from './feature_key.js'
 import { flattenObject } from './flatten.js'
 import { materialize } from './materializer.js'
-import type { ConfigSchema } from './schema.js'
 import { selectorPath } from './selector_path.js'
 import type { ConfigSlice } from './slice.js'
-import type { ConfigEntry, ConfigValue, PropertySource } from './types.js'
 
 /**
  * What a feature needs to resolve its settings.

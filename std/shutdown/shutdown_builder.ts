@@ -1,4 +1,4 @@
-import type { ConfigSlice } from '../config/slice.js'
+import type { ConfigSlice } from '../config/index.js'
 import type { Duration } from '../duration/index.js'
 import { type BootstrapKit, kFeatureName } from '../feature.js'
 import { FeatureBuilder } from '../feature_builder.js'

@@ -5,6 +5,7 @@ import { bootstrapConfig } from '../bootstrap.js'
 import { ErrConfigValidation } from '../errors.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { validateConfig } from '../schema.js'
+import { ConfigSources } from '../sources.js'
 
 const schema = $t.Object({
   server: $t.Object({
@@ -51,7 +52,7 @@ describe('validateConfig with the $t dialect', () => {
   it('works end to end through bootstrapConfig', async () => {
     const { config } = await bootstrapConfig({
       schema,
-      providers: [new InlineConfigProvider({ server: { host: '127.0.0.1', port: 1234 } })],
+      sources: ConfigSources.of(new InlineConfigProvider({ server: { host: '127.0.0.1', port: 1234 } })),
     })
     expect(config.server.host).toBe('127.0.0.1')
     expect(config.server.port).toBe(1234)

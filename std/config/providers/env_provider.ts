@@ -1,4 +1,4 @@
-import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../types.js'
+import type { ConfigEntry, ConfigProvider, PropertySource, ResolutionContext } from '../config.js'
 import { coerceText } from './_coerce.js'
 
 /** The environment as a plain record, or a function returning one — `() => Deno.env.toObject()`, say. */

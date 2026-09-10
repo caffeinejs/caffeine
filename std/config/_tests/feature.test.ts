@@ -3,16 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import { $t } from '../../schema/t.js'
-import type { ConfigHandle } from '../accessor.js'
 import { bootstrapConfig } from '../bootstrap.js'
+import type { ConfigHandle, ConfigSchema, ConfigProvider, ResolutionContext } from '../config.js'
 import { ConfigDefinition } from '../definition.js'
 import { defineFeatureConfig } from '../feature.js'
 import { featureConfigKey } from '../feature_key.js'
 import { EnvConfigProvider } from '../providers/env_provider.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
-import type { ConfigSchema } from '../schema.js'
 import { ConfigPriority } from '../sources.js'
-import type { ConfigProvider, ResolutionContext } from '../types.js'
 
 interface WidgetConfig {
   size: number
