@@ -53,6 +53,8 @@ The inline forms are implemented by calling `RouteChain` — `chain.handler(fn)`
 
 Applied with `.with(ext, ...rest)` on `Router` and `RouteChain`. An extension may write anything on the builder except `path`, `method`, `parameters` and the handler — `flatten.ts` overwrites those.
 
+A feature that must attach a real Fastify hook to the routes it applies to — resolved from the container, not closed over at decorator time — registers a `RouteContributor` (`route_contributor.ts`) from its bootstrap: `configure(ctx)` runs once to resolve dependencies, `onRoute(routeDef)` runs per route and calls `addRouteHook`. `@caffeinejs/caching` is the one consumer; the adapter has no cache-specific wiring. Do not reach for this for anything a `RouteExtension` writing plain route config can express.
+
 `fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 
 ## Route-selection constraints and API versions

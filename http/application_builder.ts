@@ -13,7 +13,6 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
 import { AdapterFactory, WebApplication, type Adapter } from './application.js'
-import { CacheBuilder } from './cache/cache_builder.js'
 import { ConstraintsBuilder } from './constraints/builder.js'
 import { GuardsBuilder } from './guards/builder.js'
 import { HealthBuilder } from './health/health_builder.js'
@@ -34,7 +33,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   readonly #adapterFactory: AdapterFactory<I, REQ, A>
 
   #authBuilder: AuthenticationBuilder | undefined
-  #cacheBuilder: CacheBuilder<unknown> | undefined
   readonly #authzBuilder: AuthorizationBuilder
   readonly #serverBuilder: ServerBuilder<unknown>
   readonly #healthBuilder: HealthBuilder<unknown>
@@ -123,17 +121,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    */
   constraints(configure: (constraints: ConstraintsBuilder) => void): this {
     configure(this.#constraintsBuilder)
-    return this
-  }
-
-  cache(configure: (cache: CacheBuilder<TConfig>) => void): this {
-    if (this.#cacheBuilder == null) {
-      this.#cacheBuilder = new CacheBuilder()
-      this.addFeature(this.#cacheBuilder)
-    }
-
-    configure(this.#cacheBuilder as CacheBuilder<TConfig>)
-
     return this
   }
 

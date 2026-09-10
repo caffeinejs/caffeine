@@ -1,4 +1,4 @@
-import type { AdapterRouteOptions } from './internal/route_hooks.js'
+import type { AdapterRouteOptions } from './route_hooks.js'
 import type { AnyRouteExtension } from './routing/programmatic/extension.js'
 
 /**
@@ -22,8 +22,8 @@ export type FastifyRouteOptions = Omit<
  * The Fastify escape hatch: options passed to the route as the adapter registers it.
  *
  * For what the router has no opinion about and no reason to grow one — a lifecycle hook, a custom serializer, a
- * route-level log level. A hook set here keeps its place ahead of the hooks the adapter attaches for caching,
- * guards and the request scope.
+ * route-level log level. A hook set here keeps its place ahead of the hooks attached for guards, the request
+ * scope and any route contributor.
  *
  * ```ts
  * uploads

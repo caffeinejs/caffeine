@@ -6,7 +6,6 @@ import { type Principal } from './security/identity.js'
 declare module 'fastify' {
   interface FastifyRequest {
     httpContext: FastifyContext
-    responseCached: boolean
     routeTarget: Record<string | symbol, (...args: unknown[]) => unknown> | null
     user: Principal
   }

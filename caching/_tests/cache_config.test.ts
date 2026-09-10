@@ -1,15 +1,14 @@
 import { token } from '@caffeinejs/di'
+import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { $t, type InferSchema } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
-import { cacheConfigSchema } from './cache_builder.js'
-import { kCacheStatusHeader } from './keys.js'
+import { cacheConfigSchema, caching, kCacheStatusHeader } from '../index.js'
 
 // The application owns the schema: it declares where the cache block lives — by importing the feature's own
-// schema — and `.cache(c => c.config(...))` points the feature at it.
+// schema — and `.extend(caching(), c => c.config(...))` points the feature at it.
 const rootSchema = $t.Object({ cache: cacheConfigSchema })
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
@@ -27,7 +26,7 @@ describe('cache configuration', () => {
 
   it('defaults the status header when nothing configures it', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .cache(() => undefined)
+      .extend(caching())
       .build()
 
     await app.ready()
@@ -39,7 +38,7 @@ describe('cache configuration', () => {
   it('lets the environment override a builder-set status header', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ CACHE__STATUS_HEADER: 'X-Edge-Cache' }), ConfigPriority.ENV))
-      .cache(c => c.config(c => c.cache).statusHeader('X-From-Code'))
+      .extend(caching(), c => c.config(c => c.cache).statusHeader('X-From-Code'))
       .build()
 
     await app.ready()
@@ -61,7 +60,7 @@ describe('cache configuration', () => {
           }),
         ),
       )
-      .cache(c => c.config(x => x.app.cache).statusHeader('X-From-Code'))
+      .extend(caching(), c => c.config(x => x.app.cache).statusHeader('X-From-Code'))
       .build()
 
     await app.ready()
@@ -69,8 +68,8 @@ describe('cache configuration', () => {
     expect(headerOf(app)).toBe('X-Moved')
   })
 
-  // Activation is the builder call, never the tree.
-  it('binds nothing when the application never called cache()', async () => {
+  // Activation is installing the feature, never the tree.
+  it('binds nothing when the caching feature is not installed', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(new InlineConfigProvider({ cache: { statusHeader: 'X-Ghost' } })))
       .build()

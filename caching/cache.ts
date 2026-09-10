@@ -1,14 +1,15 @@
 import type { Container } from '@caffeinejs/di'
-import { Duration, parseDuration } from '@caffeinejs/std'
-import { FastifyRequest } from 'fastify'
-
-import { FastifyContextRequest } from '../context.js'
 import {
+  FastifyContextRequest,
   addRouteHook,
   type AdapterReply,
   type AdapterRequest,
   type AdapterRouteOptions,
-} from '../internal/route_hooks.js'
+} from '@caffeinejs/http'
+import { Duration, parseDuration } from '@caffeinejs/std'
+import { FastifyRequest } from 'fastify'
+
+import './_fastify.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { CacheStore } from './store.js'

@@ -1,47 +1,20 @@
 import fastify, { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
-import {
-  Cache,
-  CacheInvalidate,
-  Controller,
-  Get,
-  Post,
-  type WebApplication,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '../index.js'
+import { Controller, Get, type WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 /**
  * What a route costs when it uses none of the features that attach hooks.
  *
- * The pipeline and the cache both attach per route rather than per server, so an application that uses
- * neither must register routes with empty hook slots — not slots holding an empty or one-element array. This
- * is the guard against a later change quietly making some hook unconditional.
+ * The pipeline, guards and any route contributor attach per route rather than per server, so an application
+ * that uses none of them must register routes with empty hook slots — not slots holding an empty or
+ * one-element array. This is the guard against a later change quietly making some hook unconditional.
  */
 
 @Controller('/hooks')
 class HookController {
   @Get('/plain')
   plain() {
-    return { ok: true }
-  }
-
-  @Cache({ ttl: '5m' })
-  @Get('/cached')
-  cached() {
-    return { ok: true }
-  }
-
-  @Cache(false)
-  @Get('/uncached')
-  uncached() {
-    return { ok: true }
-  }
-
-  @CacheInvalidate({ paths: ['/hooks/cached'] })
-  @Post('/mutate')
-  mutate() {
     return { ok: true }
   }
 }
@@ -72,26 +45,5 @@ describe('route hook slots', () => {
     expect(route).toBeDefined()
     expect(route.onRequest).toBeUndefined()
     expect(route.onSend).toBeUndefined()
-  })
-
-  it('gives a @Cache route a function in each slot, not a one-element array', () => {
-    const route = registered.get('GET /hooks/cached')!
-
-    expect(typeof route.onRequest).toBe('function')
-    expect(typeof route.onSend).toBe('function')
-  })
-
-  it('gives a @Cache(false) route the store hook only — it has nothing to serve', () => {
-    const route = registered.get('GET /hooks/uncached')!
-
-    expect(route.onRequest).toBeUndefined()
-    expect(typeof route.onSend).toBe('function')
-  })
-
-  it('gives a @CacheInvalidate route the eviction hook only', () => {
-    const route = registered.get('POST /hooks/mutate')!
-
-    expect(route.onRequest).toBeUndefined()
-    expect(typeof route.onSend).toBe('function')
   })
 })

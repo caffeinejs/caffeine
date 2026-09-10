@@ -70,6 +70,7 @@ jobs:
             http/dist \
             cors/dist \
             compress/dist \
+            caching/dist \
             html/dist \
             multipart/dist \
             view/dist \
@@ -107,6 +108,7 @@ jobs:
             http/dist/
             cors/dist/
             compress/dist/
+            caching/dist/
             html/dist/
             multipart/dist/
             view/dist/

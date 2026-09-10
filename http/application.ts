@@ -8,7 +8,6 @@ import {
 } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
-import { CacheServiceConfigurer } from './cache/cache_service_configurer.js'
 import { HTTPCoreFeature } from './core_feature.js'
 import { ErrConfiguration } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
@@ -146,7 +145,7 @@ export class WebApplication<
   protected override configurers(): FeatureLifecycle[] {
     // Error handling leads, so its `core` extension is the first thing registered on the server and every
     // route and hook the rest register is already covered by it.
-    return [new ErrorHandlingServiceConfigurer(), ...this.services, new CacheServiceConfigurer(), new HTTPCoreFeature()]
+    return [new ErrorHandlingServiceConfigurer(), ...this.services, new HTTPCoreFeature()]
   }
 
   /**

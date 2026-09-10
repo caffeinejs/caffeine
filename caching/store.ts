@@ -7,9 +7,8 @@ import { CacheEntry } from './cache.js'
  *
  * Abstract class rather than an interface so it is a runtime value: it doubles as the DI token and the
  * base class. Bind a concrete store (`bind(CacheStore).toClass(RedisStore)` or
- * `bind(RedisStore).toSelf().extends(CacheStore)`), like `RefreshTokenStore` / `OpaqueTokenStore` /
- * `RememberMeTokenStore`. When no binding is registered, {@link MemoryCacheStore} resolves as a
- * fallback.
+ * `bind(RedisStore).toSelf().extends(CacheStore)`). When no binding is registered, {@link MemoryCacheStore}
+ * resolves as a fallback.
  */
 
 export abstract class CacheStore {

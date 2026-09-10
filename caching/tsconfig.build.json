@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
+  "references": [
+    {
+      "path": "../http/tsconfig.build.json"
+    },
+    {
+      "path": "../std/tsconfig.build.json"
+    },
+    {
+      "path": "../di/tsconfig.build.json"
+    }
+  ],
+  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
+}

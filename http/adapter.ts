@@ -16,17 +16,17 @@ import fp from 'fastify-plugin'
 
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
-import { type CacheDeps, type CacheOptions, attachCacheHooks, resolveCacheDeps } from './cache/cache.js'
-import { type CacheInvalidateOptions, attachCacheInvalidateHook } from './cache/cache_invalidate.js'
 import { FastifyContext } from './context.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
+import { ErrConfiguration } from './error/common.js'
 import { installRouteGroupErrorHandler } from './error/error_handling.js'
 import { ErrorHandlingExtension } from './error/error_handling_extension.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
-import { type AdapterRouteOptions } from './internal/route_hooks.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
+import { RouteContributor } from './route_contributor.js'
+import { type AdapterRouteOptions } from './route_hooks.js'
 import type { RouteCompilers } from './routing/dispatch.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import type { Principal } from './security/index.js'
@@ -155,9 +155,27 @@ export class FastifyAdapter<
     // Installed after the extensions so the hooks run inside a server that already has its error handler.
     middlewares.installHooks(fastify)
 
-    // Resolved once, not per route and never per request. Unconditional, as the cache configurer's server
-    // phase was: an application that binds a store gets it constructed at start-up either way.
-    const cacheDeps: CacheDeps = resolveCacheDeps(container)
+    // Per-route wiring a feature outside this package contributes — caching, most of all. Started once here,
+    // then called for every route below; a route none of them touch keeps its hook slots undefined.
+    const routeContributors = input.extensions.of(RouteContributor)
+    for (const contributor of routeContributors) {
+      await contributor.configure({ container, server: fastify, routeGroups })
+    }
+
+    if (
+      routeContributors.length === 0 &&
+      routeGroups.some(group =>
+        group.routes.some(
+          route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
+        ),
+      )
+    ) {
+      throw new ErrConfiguration(
+        'Routes are decorated with @Cache or @CacheInvalidate but the caching feature is not installed: ' +
+          'add ".extend(caching())" to the application builder',
+      )
+    }
+
     const compilers = this.#compilers
 
     for (const router of routeGroups) {
@@ -166,8 +184,6 @@ export class FastifyAdapter<
 
       fastify.register(
         async server => {
-          server.decorateRequest('responseCached', false)
-
           installRouteGroupErrorHandler(server, router, globalErrorHandler)
 
           // Whatever preparation the source that built this group needs — resolving the instance a `@Catch`
@@ -314,16 +330,10 @@ export class FastifyAdapter<
                 >
               ).route(def)
 
-            // Cache, attached only to the routes that asked for it. A route with neither decorator leaves both
-            // hook slots undefined and pays nothing.
-            const cacheOpts = config.cache as CacheOptions | false | undefined
-            if (cacheOpts !== undefined) {
-              attachCacheHooks(routeDef, cacheOpts, cacheDeps)
-            }
-
-            const invalidateOpts = config.cacheInvalidate as CacheInvalidateOptions | false | undefined
-            if (invalidateOpts !== undefined && invalidateOpts !== false) {
-              attachCacheInvalidateHook(routeDef, invalidateOpts, cacheDeps.store)
+            // Route contributors (caching) run before guards, so a cache hit short-circuits ahead of a guard.
+            // Each reads `routeDef.config` and attaches to the routes that asked; the rest pay nothing.
+            for (const contributor of routeContributors) {
+              contributor.onRoute(routeDef)
             }
 
             if (route.guards !== undefined && route.guards.length > 0) {

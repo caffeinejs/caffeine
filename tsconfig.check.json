@@ -20,6 +20,9 @@
       "path": "./compress"
     },
     {
+      "path": "./caching"
+    },
+    {
       "path": "./html"
     },
     {

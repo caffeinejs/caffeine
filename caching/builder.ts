@@ -1,38 +1,23 @@
-import { $t, FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { Scopes } from '@caffeinejs/di'
+import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 
 import { ETagGenerator } from './cache.js'
+import { cacheConfigSchema, DEFAULT_CACHE_CONFIG, type CacheConfig } from './config.js'
+import { CacheRouteContributor } from './contributor.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
-import { CacheStore } from './store.js'
-
-/** The cache feature's slice of the configuration tree. */
-export interface CacheConfig {
-  /** The cache-status response header name, carrying HIT/MISS/BYPASS. */
-  statusHeader: string
-}
-
-export const DEFAULT_CACHE_CONFIG: CacheConfig = { statusHeader: 'X-Cache' }
-
-/**
- * The shape the cache expects wherever the application decides to keep its settings. Import it into an
- * application schema and point the builder at it with `c.config(c => c.app.cache)`.
- */
-export const cacheConfigSchema = $t.Object({
-  statusHeader: $t.String({ default: DEFAULT_CACHE_CONFIG.statusHeader }),
-})
+import { CacheStore, MemoryCacheStore } from './store.js'
 
 /**
  * Configures the cache feature: the {@link CacheStore} that backs cached responses and the
- * {@link ETagGenerator} used to hash payloads. Bound via `app.cache(c => c.store(...).etagGenerator(...))`.
+ * {@link ETagGenerator} used to hash payloads. Bound via `.extend(caching(), c => c.store(...).etagGenerator(...))`.
  *
- * The recommended way to supply a custom store; a raw `container.bind(CacheStore)` also works. When no
- * store is set here, the always-on default `MemoryCacheStore` applies (see `CacheServiceConfigurer`).
+ * Installing the feature is the activating act: the bootstrap binds the store, registers
+ * {@link CacheRouteContributor} with the application's extensions, and the adapter runs it while it
+ * registers routes. Configuration parameterizes the feature but never switches it on.
  *
  * `statusHeader` is read from the configuration tree at `cache.*`, so `CACHE__STATUS_HEADER=X-Edge-Cache`
  * overrides whatever the builder set. The store and the generator cannot be configuration — one is an
  * instance and the other a function — so they stay builder-only.
- *
- * There is no `enabled` flag: reaching `app.cache(...)` is what switches the feature on, and a configuration
- * value that could switch it on instead would make a config file able to start a feature nobody asked for.
  *
  * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
  */
@@ -64,6 +49,9 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
     const store = this.#store
     if (store !== undefined) {
       kit.container.bind(CacheStore, t => t.toValue(store).internal())
+    } else if (!kit.container.has(CacheStore)) {
+      // The default store, bound only when the feature is installed and nothing else bound one.
+      kit.container.bind(CacheStore, t => t.toClass(MemoryCacheStore).lifetime(Scopes.SINGLETON).internal())
     }
 
     const etagGenerator = this.#etagGenerator
@@ -78,5 +66,7 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
         .toFactory(() => this.slice.config.statusHeader)
         .internal(),
     )
+
+    kit.extensions.register(CacheRouteContributor, new CacheRouteContributor())
   }
 }

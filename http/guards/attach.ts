@@ -3,7 +3,7 @@ import { STATUS_CODES } from 'http'
 import type { FastifyRequest } from 'fastify'
 
 import { ErrHTTPForbidden } from '../error/http.js'
-import { addRouteHook, type AdapterRouteOptions } from '../internal/route_hooks.js'
+import { addRouteHook, type AdapterRouteOptions } from '../route_hooks.js'
 import type { CompiledGuard } from './compile.js'
 import type { Guard, GuardContext, GuardInput, GuardResult, GuardReturn, GuardTarget } from './guard.js'
 

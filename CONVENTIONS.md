@@ -24,6 +24,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`http/`](http/AGENTS.md)                                                           | `@caffeinejs/http`                       |
 | [`cors/`](cors/AGENTS.md)                                                           | `@caffeinejs/cors`                       |
 | [`compress/`](compress/AGENTS.md)                                                   | `@caffeinejs/compress`                   |
+| [`caching/`](caching/AGENTS.md)                                                     | `@caffeinejs/caching`                    |
 | [`html/`](html/AGENTS.md)                                                           | `@caffeinejs/html`                       |
 | [`kafka/`](kafka/AGENTS.md)                                                         | `@caffeinejs/kafka`                      |
 | [`openapi/`](openapi/AGENTS.md)                                                     | `@caffeinejs/openapi`                    |
