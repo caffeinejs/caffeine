@@ -1,5 +1,13 @@
 export type Duration = number | string
 
+/**
+ * JSON Schema `pattern` for a {@link Duration} string.
+ *
+ * Anchored; mirrors the grammar {@link parseDuration} accepts — one or more `<number><unit>`
+ * segments, units `ms|s|m|h|d`. Rejects input {@link parseDuration} would otherwise read as `0`.
+ */
+export const DURATION_PATTERN = '^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$'
+
 const re = /(\d+(?:\.\d+)?)(ms|s|m|h|d)/g
 
 export function parseDuration(value: Duration): number {

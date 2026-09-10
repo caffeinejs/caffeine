@@ -198,6 +198,39 @@ describe('$t.JSON', () => {
   })
 })
 
+describe('$t.Duration', () => {
+  it('decodes duration text to whole milliseconds', () => {
+    expect(Value.Decode($t.Duration(), '5s')).toBe(5_000)
+    expect(Value.Decode($t.Duration(), '1h30m')).toBe(5_400_000)
+    expect(Value.Decode($t.Duration(), '300ms')).toBe(300)
+    expect(Value.Decode($t.Duration(), '1.5h')).toBe(5_400_000)
+  })
+
+  it('decodes inside an object', () => {
+    const schema = $t.Object({ ttl: $t.Duration() })
+
+    expect(Value.Decode(schema, { ttl: '2s' })).toEqual({ ttl: 2_000 })
+  })
+
+  it('rejects a string that is not a duration', () => {
+    // The pattern is the whole point: without it parseDuration would read these as 0 and the misconfiguration
+    // would reach a timer silently.
+    expect(() => Value.Decode($t.Duration(), '5 hours')).toThrow()
+    expect(() => Value.Decode($t.Duration(), '')).toThrow()
+    expect(() => Value.Decode($t.Duration(), '10x')).toThrow()
+  })
+
+  it('rejects a bare number, whose unit would be ambiguous', () => {
+    expect(() => Value.Decode($t.Duration(), 5_000)).toThrow()
+  })
+
+  it('types as a number, since that is what a consumer reads back', () => {
+    const schema = $t.Object({ ttl: $t.Duration() })
+
+    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ ttl: number }>()
+  })
+})
+
 describe('$t.File', () => {
   it('emits the JSON Schema spelling of an upload', () => {
     expect(JSON.parse(JSON.stringify($t.File()))).toEqual({ type: 'string', format: 'binary' })

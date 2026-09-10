@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { parseDuration } from './index.js'
+import { DURATION_PATTERN, parseDuration } from './index.js'
 
 describe('parseDuration', () => {
   describe('numbers', () => {
@@ -60,5 +60,23 @@ describe('parseDuration', () => {
       expect(parseDuration('')).toBe(0)
       expect(parseDuration('invalid')).toBe(0)
     })
+  })
+})
+
+describe('DURATION_PATTERN', () => {
+  // The config-validation gate in front of parseDuration, which returns 0 for anything it does not recognize.
+  // A field typed $t.Duration must reject those strings before they are ever parsed.
+  const re = new RegExp(DURATION_PATTERN)
+
+  it('matches the grammar parseDuration accepts', () => {
+    for (const value of ['1h30m', '300ms', '1.5h', '1h30m10s', '0s', '7d']) {
+      expect(re.test(value)).toBe(true)
+    }
+  })
+
+  it('rejects anything parseDuration would read as 0', () => {
+    for (const value of ['5 hours', '', 'invalid', '10x', '1h ', 'h', '1']) {
+      expect(re.test(value)).toBe(false)
+    }
   })
 })
