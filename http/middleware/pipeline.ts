@@ -269,8 +269,8 @@ export class MiddlewarePipeline {
  * upstream `try { await next() }` catches it just the same.
  */
 export function compose(handles: readonly Handle[]): Chain {
-  // The single-middleware group is the common case — one `useAuthenticationAndAuthorization()` produces
-  // exactly that — and it needs neither the index walk nor its closure.
+  // A single-middleware group is the common case — most applications register one middleware per hook, if
+  // any — and it needs neither the index walk nor its closure.
   if (handles.length === 1) {
     const only = handles[0]
 

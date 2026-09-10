@@ -151,12 +151,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
       }
     })
 
-  const app = builder
-    .build()
-    // The request pipeline, configured on the built application rather than the builder. Authentication and
-    // authorization are one call because ordering them is the mistake worth designing out — and an
-    // application with protected routes that omits this line refuses to start.
-    .useAuthenticationAndAuthorization()
+  const app = builder.build()
 
   return app
 }

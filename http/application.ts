@@ -20,7 +20,6 @@ import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource } from './routing/programmatic/source.js'
-import { Authentication } from './security/auth/authentication_middleware.js'
 import { type ServerAddress } from './server/index.js'
 
 export interface AdapterIn<R> {
@@ -142,19 +141,6 @@ export class WebApplication<
   use<V, C>(middleware: MiddlewareRef<V, C>, hook: MiddlewareHook = 'handler'): this {
     this.#middlewares.add(middleware, hook)
     return this
-  }
-
-  /**
-   * Registers authentication — and, with it, authorization — at `onRequest`.
-   *
-   * The two are one middleware and one call because ordering them is the mistake worth designing out.
-   * There is deliberately no `useAuthorization()` to get wrong.
-   *
-   * An application with protected routes that never calls this fails at start-up rather than serving them
-   * unguarded.
-   */
-  useAuthenticationAndAuthorization(): this {
-    return this.use(new Authentication(), 'onRequest')
   }
 
   protected override configurers(): FeatureLifecycle[] {

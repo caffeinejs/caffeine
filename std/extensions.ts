@@ -16,12 +16,14 @@ export const kExtensionStage = Symbol('caffeine.extension.stage')
 
 /**
  * `core` is start-up wiring the rest builds on: the error handler, the body parsers, the routes the framework
- * serves itself. `fallback` is what may only run once everything else has registered — the not-found handler,
- * which needs whatever an extension decorated the server with. Everything else is `default`.
+ * serves itself. `gate` is request gating that has to sit behind every `default` extension — after CORS, and
+ * after anything a package contributed that a rejected request still needs to pass through — but ahead of the
+ * `fallback` band. `fallback` is what may only run once everything else has registered — the not-found
+ * handler, which needs whatever an extension decorated the server with. Everything else is `default`.
  */
-export type ExtensionStage = 'core' | 'default' | 'fallback'
+export type ExtensionStage = 'core' | 'default' | 'gate' | 'fallback'
 
-const STAGE_RANK: Record<ExtensionStage, number> = { core: 0, default: 1, fallback: 2 }
+const STAGE_RANK: Record<ExtensionStage, number> = { core: 0, default: 1, gate: 2, fallback: 3 }
 
 function stageRank(extension: Extension<ExtensionIn>): number {
   return STAGE_RANK[extension[kExtensionStage] ?? 'default']

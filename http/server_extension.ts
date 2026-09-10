@@ -26,8 +26,9 @@ export interface ServerExtensionContext extends ExtensionIn {
  * The adapter registers each as a Fastify plugin, so it appears by name in `fastify.printPlugins()` and in
  * avvio's boot timings, and the metadata below is enforced by Fastify itself.
  *
- * **For per-request work, write a `Middleware` instead.** This runs once, at start-up, and never sees a
- * request.
+ * `configure` runs once, at start-up, and never sees a request. Per-request work is a Fastify hook the
+ * extension adds here (`ctx.server.addHook(...)`); an application author's own per-request logic is an
+ * `app.use()` middleware.
  */
 export abstract class ServerExtension implements Extension<ServerExtensionContext> {
   /** Identifies the extension to Fastify: shown in `printPlugins()` and named in dependency failures. */

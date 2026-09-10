@@ -273,7 +273,6 @@ describe('health probes', () => {
       )
       .health()
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.run()
 

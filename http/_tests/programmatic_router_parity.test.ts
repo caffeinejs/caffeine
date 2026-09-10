@@ -98,7 +98,7 @@ describe('programmatic router parity with the decorator feature set', () => {
 
       const builder = createWebApplication(fastifyAdapterFactory(fastify()))
       builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-      const app = builder.build().useAuthenticationAndAuthorization().mount(router)
+      const app = builder.build().mount(router)
       await app.ready()
 
       expect((await app.fetch('/secure/private')).status).toBe(401)
@@ -120,7 +120,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const handler = new FakeAuthHandler()
       const builder = createWebApplication(fastifyAdapterFactory(fastify()))
       builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-      const app = builder.build().useAuthenticationAndAuthorization().mount(router)
+      const app = builder.build().mount(router)
       await app.ready()
 
       handler.result = successTicket([{ type: 'roles', value: 'staff' }])

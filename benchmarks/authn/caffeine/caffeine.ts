@@ -36,7 +36,6 @@ void [AppController]
 const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
   .authentication(auth => auth.addJWTBearer(b => b.secret(SECRET).issuer(ISSUER).audience(AUDIENCE).expiresIn('1h')))
   .build()
-  .useAuthenticationAndAuthorization()
 
 await app.ready()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

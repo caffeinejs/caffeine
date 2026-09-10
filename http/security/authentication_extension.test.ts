@@ -11,8 +11,7 @@ import {
   Claim,
   type Context,
   Controller,
-  ErrAuthenticationMiddlewareMissing,
-  ErrAuthenticationNotConfigured,
+  ErrAuthenticationRequired,
   Get,
   Identity,
   Post,
@@ -23,14 +22,14 @@ import {
 } from '../index.js'
 
 /**
- * The authentication middleware — authentication and the authorization that is folded into it.
+ * The authentication extension — authentication and the authorization that is folded into it.
  *
- * The cases here are the ones the two configurers it replaced documented at length: the reset a route's own
- * schemes perform, the per-scheme challenge against the single forbid, and the start-up failures that keep a
- * misconfiguration from becoming a silently unguarded route.
+ * The cases here are the ones it documents at length: the reset a route's own schemes perform, the per-scheme
+ * challenge against the single forbid, and the start-up failure that keeps a misconfiguration from becoming a
+ * silently unguarded route.
  */
 
-/** Authenticates any request carrying `x-user`, and counts what the middleware asked of it. */
+/** Authenticates any request carrying `x-user`, and counts what the extension asked of it. */
 class HeaderSchemeHandler extends BaseAuthenticationHandler<object> {
   challenges = 0
   forbids = 0
@@ -71,8 +70,8 @@ class HeaderSchemeHandler extends BaseAuthenticationHandler<object> {
  *
  * Not a convenience: `@Controller` registers into a global registry and each container snapshots it, so a
  * controller declared in one test is present in every application built afterwards — including the ones that
- * name `First`/`Second`. The start-up check reads every route, so every application has to know every scheme
- * some route names.
+ * name `First`/`Second`. The extension reads every route at start-up, so every application has to know every
+ * scheme some route names.
  */
 function newApp() {
   const byDefault = new HeaderSchemeHandler('Default', 'x-default')
@@ -84,13 +83,13 @@ function newApp() {
     auth.addStrategy('Default', byDefault).addStrategy('First', first).addStrategy('Second', second).default('Default'),
   )
 
-  return { app: builder.build().useAuthenticationAndAuthorization(), byDefault, first, second }
+  return { app: builder.build(), byDefault, first, second }
 }
 
-describe('authentication middleware — start-up', () => {
-  it('refuses to start when a route is protected and the middleware is not registered', async () => {
+describe('authentication extension — start-up', () => {
+  it('refuses to start when a route is protected but authentication is not configured', async () => {
     @Authorize()
-    @Controller('/mw-auth-missing')
+    @Controller('/ext-auth-missing')
     class MissingController {
       @Get('/')
       list() {
@@ -99,26 +98,20 @@ describe('authentication middleware — start-up', () => {
     }
     void [MissingController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
-    builder.authentication(auth =>
-      auth.addStrategy('Header', new HeaderSchemeHandler('Header', 'x-user')).default('Header'),
-    )
+    // No `.authentication(...)`: the extension is still registered unconditionally, and it is what refuses
+    // the application rather than serve the guarded route to anonymous callers.
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
 
-    await expect(builder.build().ready()).rejects.toThrow(ErrAuthenticationMiddlewareMissing)
+    await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
   })
 
-  it('refuses to start when the middleware is registered without authentication configured', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build().useAuthenticationAndAuthorization()
-
-    await expect(app.ready()).rejects.toThrow(ErrAuthenticationNotConfigured)
-  })
-
-  // The "route names a scheme nothing registered" case lives in auth_middleware_unknown_scheme.test.ts:
+  // The "route names a scheme nothing registered" case lives in
+  // authentication_extension_unknown_scheme.test.ts:
   // `@Controller` registers globally and every container built afterwards snapshots that registry, so a
   // controller declared to fail start-up would fail every application built later in the same file.
 })
 
-describe('authentication middleware — requests', () => {
+describe('authentication extension — requests', () => {
   it('answers 401 before validating the body, so the schema is not described to an anonymous caller', async () => {
     let handlerRan = false
 

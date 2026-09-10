@@ -117,7 +117,7 @@ async function buildApp() {
       .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())
       .addRefreshTokens(o => o.refreshTTL('30d').resolve(sub => (sub === 'alice' ? alicePrincipal() : null))),
   )
-  const app = builder.build().useAuthenticationAndAuthorization()
+  const app = builder.build()
   await app.ready()
   return { app, store }
 }

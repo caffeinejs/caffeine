@@ -25,6 +25,10 @@ class Core extends Probe {
   readonly name = 'core'
   readonly [kExtensionStage]: ExtensionStage = 'core'
 }
+class Gate extends Probe {
+  readonly name = 'gate'
+  readonly [kExtensionStage]: ExtensionStage = 'gate'
+}
 class Fallback extends Probe {
   readonly name = 'fallback'
   readonly [kExtensionStage]: ExtensionStage = 'fallback'
@@ -93,6 +97,18 @@ describe('Extensions', () => {
     extensions.at(2).register(Core)
 
     expect(extensions.of(Probe).map(p => p.name)).toEqual(['core', 'first', 'fallback'])
+  })
+
+  // `gate` sits between `default` and `fallback`: a request-gating hook registers behind every default
+  // extension (CORS included) but ahead of the not-found fallback.
+  it('runs gate after default and before fallback, whatever the install order says', async () => {
+    const extensions = new Extensions(await containerWith(First, Gate, Fallback))
+
+    extensions.at(0).register(Fallback)
+    extensions.at(1).register(Gate)
+    extensions.at(2).register(First)
+
+    expect(extensions.of(Probe).map(p => p.name)).toEqual(['first', 'gate', 'fallback'])
   })
 
   it('falls back to install order within one stage', async () => {

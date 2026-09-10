@@ -40,3 +40,22 @@ export class ErrAuthConfiguration extends ErrCaffeineWebApplication {
     this.name = 'ErrAuthConfiguration'
   }
 }
+
+/**
+ * ErrAuthenticationRequired is thrown at start-up when routes are protected but authentication is not
+ * configured.
+ *
+ * Authorization is folded into the authentication hook, and configuring authentication is what binds the
+ * scheme provider the hook runs. Without it a protected route would reject every caller with no scheme to
+ * fault, so the application does not start.
+ */
+export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
+  constructor() {
+    super(
+      'Cannot start application: routes are protected but authentication is not configured: call ' +
+        '.authentication(auth => ...) on the application builder',
+      'ERR_AUTHENTICATION_REQUIRED',
+    )
+    this.name = 'ErrAuthenticationRequired'
+  }
+}

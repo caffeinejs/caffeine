@@ -75,7 +75,7 @@ class PetsController {
 void [PetsController]
 
 function buildApp(configure: FeatureConfigurer<OpenAPIBuilder> = () => {}): WebApplication {
-  return newBuilder(configure).build().useAuthenticationAndAuthorization() as WebApplication
+  return newBuilder(configure).build() as WebApplication
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an

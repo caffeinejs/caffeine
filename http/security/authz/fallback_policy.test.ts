@@ -69,7 +69,7 @@ function buildApp(withFallback: boolean): WebApplication {
     builder.authorization(authz => authz.requireAuthenticatedByDefault())
   }
 
-  return builder.build().useAuthenticationAndAuthorization() as WebApplication
+  return builder.build() as WebApplication
 }
 
 describe('fallbackPolicy', () => {

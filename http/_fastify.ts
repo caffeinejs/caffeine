@@ -22,8 +22,8 @@ declare module 'fastify' {
       catchBy?: CatchByMap
       /**
        * What the route declared about authentication and authorization, carried here because the
-       * authentication middleware is registered once for the whole server and only learns which route it is
-       * on at request time.
+       * authentication hook is added once for the whole server and only learns which route it is on at
+       * request time.
        */
       auth?: {
         schemes?: readonly string[]

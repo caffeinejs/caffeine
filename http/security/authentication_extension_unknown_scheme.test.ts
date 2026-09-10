@@ -41,13 +41,11 @@ class TypoController {
 }
 void [TypoController]
 
-describe('authentication middleware — unknown scheme', () => {
+describe('authentication extension — unknown scheme', () => {
   it('refuses to start when a route names a scheme nothing registered', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('Header', new NeverAuthenticates()).default('Header'))
 
-    await expect(builder.build().useAuthenticationAndAuthorization().ready()).rejects.toThrow(
-      'Cannot resolve authentication scheme "Typo"',
-    )
+    await expect(builder.build().ready()).rejects.toThrow('Cannot resolve authentication scheme "Typo"')
   })
 })

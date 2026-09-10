@@ -25,12 +25,10 @@ import { ErrorHandlingExtension } from './error/error_handling_extension.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
 import { type AdapterRouteOptions } from './internal/route_hooks.js'
-import { ErrAuthenticationMiddlewareMissing } from './middleware/errors.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import type { RouteCompilers } from './routing/dispatch.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
-import { Authentication } from './security/auth/authentication_middleware.js'
 import type { Principal } from './security/index.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerConfig, type ServerAddress } from './server/index.js'
 import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
@@ -153,14 +151,6 @@ export class FastifyAdapter<
     const globalErrorHandler = container.get(ErrorHandlingExtension).globalErrorHandler
 
     await middlewares.setupAll(extensionContext)
-
-    // The pipeline is explicit, which leaves exactly one way to disable every guard in the application:
-    // forget to register the authentication middleware. An application that protects routes and then
-    // serves them to anonymous callers must not start.
-    const anyRouteNeedsAuthz = routeGroups.some(r => r.routes.some(rt => rt.authorization.hasProtection))
-    if (anyRouteNeedsAuthz && !middlewares.has(Authentication)) {
-      throw new ErrAuthenticationMiddlewareMissing()
-    }
 
     // Installed after the extensions so the hooks run inside a server that already has its error handler.
     middlewares.installHooks(fastify)

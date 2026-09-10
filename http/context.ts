@@ -126,7 +126,7 @@ export interface Context<
   get signal(): AbortSignal
 
   /**
-   * The request's principal. The authentication middleware is the expected writer; a handler that needs a
+   * The request's principal. The authentication hook is the expected writer; a handler that needs a
    * different identity for a downstream call should pass it explicitly rather than reassign this.
    */
   user: Principal

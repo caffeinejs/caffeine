@@ -85,7 +85,6 @@ describe('authentication configuration', () => {
         a.config(c => c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.ready()
 
@@ -107,7 +106,6 @@ describe('authentication configuration', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .authentication(a => a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.ready()
 
@@ -128,7 +126,6 @@ describe('authentication configuration', () => {
         a.config(c => c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.ready()
 
@@ -185,7 +182,6 @@ describe('authentication configuration', () => {
           .default('Basic'),
       )
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.ready()
 
@@ -215,7 +211,6 @@ describe('authentication configuration', () => {
           .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.ready()
 
@@ -247,7 +242,6 @@ describe('authentication configuration', () => {
           ),
       )
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.ready()
 
@@ -281,7 +275,6 @@ describe('authentication configuration', () => {
         a.config(c => c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )
       .build()
-      .useAuthenticationAndAuthorization()
 
     await app.ready()
 

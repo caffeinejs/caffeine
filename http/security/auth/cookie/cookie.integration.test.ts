@@ -141,7 +141,7 @@ async function buildApp() {
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication(fastifyAdapterFactory(f), { container })
   builder.authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials())
-  const app = builder.build().useAuthenticationAndAuthorization()
+  const app = builder.build()
   await app.ready()
   return app
 }
@@ -247,7 +247,7 @@ async function buildDurableApp(graceSeconds?: number) {
       })
       .addCredentials(),
   )
-  const app = builder.build().useAuthenticationAndAuthorization()
+  const app = builder.build()
   await app.ready()
   return { app, store }
 }

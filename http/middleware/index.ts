@@ -1,9 +1,4 @@
-export {
-  ErrAuthenticationMiddlewareMissing,
-  ErrAuthenticationNotConfigured,
-  ErrNextCalledTwice,
-  ErrPipelineSealed,
-} from './errors.js'
+export { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
 export {
   isMiddlewareClass,
   isMiddlewareInstance,

@@ -69,7 +69,7 @@ function buildApp() {
         .scopes('openid', 'profile', 'email'),
     ),
   )
-  return builder.build().useAuthenticationAndAuthorization()
+  return builder.build()
 }
 
 const serverUp = await oauthServerUp()

@@ -11,10 +11,10 @@ import {
 } from '../index.js'
 
 /**
- * The other half of the authentication middleware's start-up check: applications that must NOT be refused.
+ * The other half of the authentication extension's start-up check: applications that must NOT be refused.
  *
- * Nothing here registers the middleware, and nothing here needs to — an application with no guarded route
- * has nothing for it to guard.
+ * Nothing here configures authentication, and nothing here needs to — an application with no guarded route
+ * has nothing for the extension to guard.
  *
  * A separate file because `@Controller` registers into a process-global registry at decoration time, so every
  * application built in a module sees every controller that module has decorated. A test asserting "this app
