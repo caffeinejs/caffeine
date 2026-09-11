@@ -1,8 +1,16 @@
 import { type Container } from '@caffeinejs/di'
 
 import { activeProfiles, ConfigDefinition, hostProfiles } from './config/index.js'
-import { Extensions } from './extensions.js'
-import { kBeforeBootstrap, kBootstrap, type BootstrapKit, type FeatureLifecycle } from './feature.js'
+import {
+  ErrFeatureAlreadyInstalled,
+  kBeforeBootstrap,
+  kBootstrap,
+  type BootstrapKit,
+  type ExtensionRegistrar,
+  type Feature,
+  type FeatureLifecycle,
+  type PluginContext,
+} from './feature.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { $t } from './schema/t.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
@@ -14,6 +22,16 @@ export interface ApplicationInit {
   services: FeatureLifecycle[]
   /** The live configuration definition, handed to every service so it can contribute to the tree. */
   config?: ConfigDefinition
+
+  /**
+   * The names `.extend` has already installed. Shared with the builder rather than copied: an application that
+   * installs features of its own — the HTTP one does, for what a router or a controller declared — has to
+   * deduplicate against what the builder installed, and be deduplicated against in turn.
+   */
+  installed?: Set<string>
+
+  /** The builder's per-install feature state, shared for the same reason as {@link installed}. */
+  featureState?: Map<string, unknown>
 }
 
 /**
@@ -30,6 +48,13 @@ export interface RunInfo {
 
 /** Where the framework's own block lives in the configuration tree. */
 export const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
+
+/** An application with no platform runs no extensions, so what a feature contributes is dropped. */
+const NOOP_REGISTRAR: ExtensionRegistrar = {
+  register() {
+    return undefined
+  },
+}
 
 /**
  * The framework's own configuration: read from `caffeine.*` by every application, whether or not the
@@ -57,8 +82,9 @@ export class Application {
   readonly #container: Container
   readonly #services: FeatureLifecycle[]
   readonly #availability = new ApplicationAvailability()
-  readonly #extensions: Extensions
   readonly #config: ConfigDefinition
+  readonly #installed: Set<string>
+  readonly #featureState: Map<string, unknown>
 
   #name = ''
   #profiles: string[] = []
@@ -69,8 +95,9 @@ export class Application {
 
   constructor(init: ApplicationInit) {
     this.#container = init.container
-    this.#extensions = new Extensions(this.#container)
     this.#services = init.services
+    this.#installed = init.installed ?? new Set()
+    this.#featureState = init.featureState ?? new Map()
     // An application constructed without a builder still gets one, so services can register unconditionally.
     // Nothing bootstraps it in that case, which is what a missing config module means.
     this.#config = init.config ?? new ConfigDefinition()
@@ -98,11 +125,39 @@ export class Application {
   }
 
   /**
-   * The extensions the features registered. Resolving through it needs an initialized container, so it is for
-   * the {@link setup} step and later.
+   * Installs a feature the application itself found rather than the builder — what a mounted router or a
+   * controller declared — and hands back the lifecycles it added.
+   *
+   * Only callable from {@link configurers}, which runs before the declare phase: later than that and the
+   * feature has missed its chance to register a configuration slice.
+   *
+   * @throws ErrFeatureAlreadyInstalled when the builder, or another router, already installed this name.
    */
-  protected get extensions(): Extensions {
-    return this.#extensions
+  protected installFeature(feature: Feature, configure?: (builder: never) => void): FeatureLifecycle[] {
+    if (this.#installed.has(feature.name)) {
+      throw new ErrFeatureAlreadyInstalled(feature.name)
+    }
+    this.#installed.add(feature.name)
+
+    const added: FeatureLifecycle[] = []
+    const ctx: PluginContext = {
+      addFeature: lifecycle => {
+        added.push(lifecycle)
+      },
+      container: this.#container,
+      state: this.#featureState,
+    }
+    feature.install(ctx, configure as ((builder: unknown) => void) | undefined)
+
+    return added
+  }
+
+  /**
+   * Where the feature at `order` contributes start-up wiring. A headless application runs none, so what a
+   * feature registers here goes nowhere; a platform overrides this with a registrar of its own.
+   */
+  protected extensionRegistrar(_order: number): ExtensionRegistrar {
+    return NOOP_REGISTRAR
   }
 
   /**
@@ -298,15 +353,15 @@ export class Application {
    * The kit passed to the {@link FeatureLifecycle} at `order`. Subclasses may widen it (e.g. add platform
    * handles).
    *
-   * @param order - The feature's position in {@link configurers}, which is what the extensions it registers
-   *   are sorted by.
+   * @param order - The feature's position in {@link configurers}, which is the order what it registers with
+   *   {@link BootstrapKit.extensions} runs in.
    */
   protected serviceKit(order: number): BootstrapKit {
     return {
       container: this.#container,
       availability: this.#availability,
       config: this.#config,
-      extensions: this.#extensions.at(order),
+      extensions: this.extensionRegistrar(order),
     }
   }
 

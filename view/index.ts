@@ -1,5 +1,5 @@
 export * from './builder.js'
-export * from './extension.js'
+export * from './view_plugin.js'
 export * from './options_provider.js'
 export * from './plugin.js'
 export * from './render_view.js'

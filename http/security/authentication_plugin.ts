@@ -1,12 +1,32 @@
-import { kExtensionStage, type ExtensionStage } from '@caffeinejs/std'
+import type { Container } from '@caffeinejs/di'
 import type { FastifyContextConfig } from 'fastify'
+import fp from 'fastify-plugin'
 
 import type { Context } from '../context.js'
-import { ServerExtension, type ServerExtensionContext } from '../server_extension.js'
+import type { HTTPPlugin } from '../plugin.js'
+import type { RouteGroup } from '../route.js'
 import { ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
 import { AuthenticationService } from './auth/service.js'
 import { mergePrincipals, newAnonymousUser, type Principal } from './index.js'
+
+/**
+ * Refuses an application that protects a route and never configured authentication.
+ *
+ * Checked apart from the gate because the gate exists only when `.authentication(...)` was called, and an
+ * application that never called it is exactly the case being refused.
+ *
+ * @throws ErrAuthenticationRequired when a route declares protection and nothing can authenticate a caller.
+ */
+export function assertAuthenticationConfigured(container: Container, routeGroups: readonly RouteGroup<any>[]): void {
+  if (container.getOptional(AuthenticationService) !== undefined) {
+    return
+  }
+
+  if (routeGroups.some(group => group.routes.some(route => route.authorization.hasProtection))) {
+    throw new ErrAuthenticationRequired()
+  }
+}
 
 /**
  * Authenticates the request and, when the route is protected, authorizes it — in that order, in one Fastify
@@ -16,37 +36,28 @@ import { mergePrincipals, newAnonymousUser, type Principal } from './index.js'
  * with it the mistake of authorizing an identity nothing has established yet.
  *
  * The hook is added at `onRequest`, before the body is parsed or validated: an unauthenticated caller must
- * be answered 401, not a 400 describing the route's schema. The extension is in the `gate` stage so the hook
- * registers behind every `default` extension — CORS in particular, whose headers a rejected cross-origin
- * request still needs on its way out.
+ * be answered 401, not a 400 describing the route's schema. Where the hook lands among the others is where
+ * `.authentication(...)` was written: a plugin extended before it — CORS, whose headers a rejected
+ * cross-origin request still needs on its way out — runs first, and one extended after it does not run for
+ * a request the gate rejected.
  */
-export class AuthenticationExtension extends ServerExtension {
-  readonly name = 'caffeine-authentication'
-  readonly [kExtensionStage]: ExtensionStage = 'gate'
-
-  configure(ctx: ServerExtensionContext): void {
+export function authenticationPlugin(): HTTPPlugin {
+  const plugin: HTTPPlugin = async (instance, { container, routeGroups }) => {
     // Configuring authentication binds the coordinator and the scheme provider, and nothing else does — so
     // their presence *is* the feature being on, with no separate flag to be written and then read out of
     // sync with it.
-    const service = ctx.container.getOptional(AuthenticationService)
-    const schemeProvider = ctx.container.getOptional(AuthenticationSchemeProvider)
-
-    const anyProtected = ctx.routeGroups.some(group => group.routes.some(route => route.authorization.hasProtection))
+    const service = container.getOptional(AuthenticationService)
+    const schemeProvider = container.getOptional(AuthenticationSchemeProvider)
 
     if (service === undefined || schemeProvider === undefined) {
-      // A protected route with no scheme to run would reject every caller with nothing to point at. Refuse
-      // at start-up rather than serve it.
-      if (anyProtected) {
-        throw new ErrAuthenticationRequired()
-      }
       return
     }
 
     // A name that resolves to nothing authenticates nobody, and the failure is invisible: the route would
-    // reject every caller with no indication of why. Rejecting here means a typo is a start-up error next to
-    // the decorator that caused it, not a support ticket. Validated even though `authenticate()` also throws
-    // on the same condition — start-up is where a fixed, known-ahead-of-time reference belongs.
-    for (const group of ctx.routeGroups) {
+    // reject every caller with no indication of why. Rejecting here means a typo is a start-up error next
+    // to the decorator that caused it, not a support ticket. Validated even though `authenticate()` also
+    // throws on the same condition — start-up is where a fixed, known-ahead-of-time reference belongs.
+    for (const group of routeGroups) {
       for (const route of group.routes) {
         for (const scheme of route.authorization.options?.schemes ?? []) {
           if (!schemeProvider.schemeNames.includes(scheme)) {
@@ -56,11 +67,12 @@ export class AuthenticationExtension extends ServerExtension {
       }
     }
 
+    const gate = new AuthenticationGate()
     const defaultScheme = schemeProvider.defaultAuthenticateScheme
 
     // Callback style, not `async`: a synchronous pass still needs the authenticate promise, but keeping the
     // hook itself callback-shaped is what a hand-written Fastify hook does and matches the guard hook.
-    ctx.server.addHook('onRequest', (request, reply, done) => {
+    instance.addHook('onRequest', (request, reply, done) => {
       // Probe routes are answered without a context — see the adapter's onRequest hook.
       const context = request.httpContext as Context | undefined
       if (context == null) {
@@ -68,7 +80,7 @@ export class AuthenticationExtension extends ServerExtension {
         return
       }
 
-      this.#gate(context, service, defaultScheme).then(passed => {
+      gate.run(context, service, defaultScheme).then(passed => {
         if (passed) {
           done()
           return
@@ -83,7 +95,12 @@ export class AuthenticationExtension extends ServerExtension {
     })
   }
 
-  async #gate(ctx: Context, service: AuthenticationService, defaultScheme: string): Promise<boolean> {
+  return fp(plugin, { name: 'caffeine-authentication' })
+}
+
+/** The per-request decision, kept off the plugin so the authenticate helpers stay private to it. */
+class AuthenticationGate {
+  async run(ctx: Context, service: AuthenticationService, defaultScheme: string): Promise<boolean> {
     // `routeConfig` carries whatever the adapter recorded about the route; this hook is added by the Fastify
     // adapter, so that is the shape it reads.
     const route = (ctx.routeConfig as FastifyContextConfig).caffeine?.auth

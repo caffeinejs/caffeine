@@ -12,26 +12,31 @@ import {
   type RawRequestDefaultExpression,
   type RawServerBase,
 } from 'fastify'
-import fp from 'fastify-plugin'
 
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import { FastifyContext } from './context.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { ErrConfiguration } from './error/common.js'
-import { installRouteGroupErrorHandler } from './error/error_handling.js'
-import { ErrorHandlingExtension } from './error/error_handling_extension.js'
+import { GlobalErrorHandlerRef, installRouteGroupErrorHandler } from './error/error_handling.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
+import type { HTTPPluginOptions } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
-import { RouteContributor } from './route_contributor.js'
 import { type AdapterRouteOptions } from './route_hooks.js'
 import type { RouteCompilers } from './routing/dispatch.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
-import type { Principal } from './security/index.js'
+import { assertAuthenticationConfigured, type Principal } from './security/index.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerConfig, type ServerAddress } from './server/index.js'
-import { ServerExtension, type ServerExtensionContext } from './server_extension.js'
+
+/**
+ * The name `@caffeinejs/caching` registers its plugin under.
+ *
+ * The one place this package names another: `@Cache` and the feature that serves it ship together, so a route
+ * carrying the config with no plugin to read it is a missing `.extend(caching())` and nothing else.
+ */
+const CACHING_PLUGIN = 'caffeine-caching'
 
 /** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
 type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error) => void) => void
@@ -119,51 +124,32 @@ export class FastifyAdapter<
       })
     }
 
-    const extensionContext: ServerExtensionContext = {
-      server: fastify,
-      container,
-      routeGroups,
+    const pluginOptions: HTTPPluginOptions = { container, routeGroups }
+    const plugins = input.plugins
+
+    // Every plugin the features contributed, in the order their features were installed — this package's own
+    // included. Registered one at a time and awaited, so a plugin sees what the one before it decorated. A
+    // plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every route; an
+    // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
+    for (const plugin of plugins.root()) {
+      await fastify.register(plugin, pluginOptions)
     }
 
-    // Every extension, this package's own included, in stage order and then in feature-install order.
-    // Registered as real Fastify plugins so `dependencies`, `decorators` and the version range are enforced by
-    // Fastify — and so each shows up by name in `printPlugins()`. `fp` skips encapsulation, so an extension
-    // still decorates the root instance.
-    for (const extension of input.extensions.of(ServerExtension)) {
-      await fastify.register(
-        fp(
-          // Async so a `configure` that throws synchronously becomes a rejection avvio can carry, rather than
-          // escaping the plugin call and stalling the boot. Its result is returned rather than awaited: a
-          // synchronous `configure` gives back `undefined` and the plugin resolves without a further microtask.
-          async instance => extension.configure({ ...extensionContext, server: instance }),
-          {
-            name: extension.name,
-            dependencies: extension.dependencies as string[] | undefined,
-            decorators: extension.decorators,
-            fastify: extension.fastify,
-          },
-        ),
-      )
-    }
+    // Installed by the error-handling plugin above; read back here because each route group's own
+    // encapsulated handler resolves to it last.
+    const globalErrorHandler = container.get(GlobalErrorHandlerRef).handler
 
-    // Installed by the `core` extension above; read back here because each route group's own encapsulated
-    // handler resolves to it last.
-    const globalErrorHandler = container.get(ErrorHandlingExtension).globalErrorHandler
+    await middlewares.setupAll({ ...pluginOptions, server: fastify })
 
-    await middlewares.setupAll(extensionContext)
-
-    // Installed after the extensions so the hooks run inside a server that already has its error handler.
+    // Installed after the plugins so the hooks run inside a server that already has its error handler.
     middlewares.installHooks(fastify)
 
-    // Per-route wiring a feature outside this package contributes — caching, most of all. Started once here,
-    // then called for every route below; a route none of them touch keeps its hook slots undefined.
-    const routeContributors = input.extensions.of(RouteContributor)
-    for (const contributor of routeContributors) {
-      await contributor.configure({ container, server: fastify, routeGroups })
-    }
+    // What the application declared and no installed feature can serve. Both are start-up failures rather
+    // than a route that quietly never does what its decorator says.
+    assertAuthenticationConfigured(container, routeGroups)
 
     if (
-      routeContributors.length === 0 &&
+      !fastify.hasPlugin(CACHING_PLUGIN) &&
       routeGroups.some(group =>
         group.routes.some(
           route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
@@ -185,6 +171,15 @@ export class FastifyAdapter<
       fastify.register(
         async server => {
           installRouteGroupErrorHandler(server, router, globalErrorHandler)
+
+          // What a mounted router or a controller installed with `.extend(...)` / `@Use(...)`. The same
+          // plugin as an application-level one, registered in this group's context instead of on the root
+          // server — so a `fastify-plugin`-wrapped plugin covers this group's routes and no others.
+          for (const scope of router.scopes ?? []) {
+            for (const plugin of plugins.of(scope)) {
+              await server.register(plugin, pluginOptions)
+            }
+          }
 
           // Whatever preparation the source that built this group needs — resolving the instance a `@Catch`
           // method will run on, for one. Registered as given, so it costs what the hook it replaces cost.
@@ -329,12 +324,6 @@ export class FastifyAdapter<
                   RawReplyDefaultExpression<RawServerBase>
                 >
               ).route(def)
-
-            // Route contributors (caching) run before guards, so a cache hit short-circuits ahead of a guard.
-            // Each reads `routeDef.config` and attaches to the routes that asked; the rest pay nothing.
-            for (const contributor of routeContributors) {
-              contributor.onRoute(routeDef)
-            }
 
             if (route.guards !== undefined && route.guards.length > 0) {
               // Built here rather than in the hook: it is the same object for every request on this route.

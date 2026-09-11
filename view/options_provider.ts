@@ -1,4 +1,4 @@
-import { ErrConfiguration } from '@caffeinejs/http'
+import { ErrConfiguration, registerPlugin } from '@caffeinejs/http'
 import {
   kBeforeBootstrap,
   kBootstrap,
@@ -9,13 +9,13 @@ import {
 } from '@caffeinejs/std'
 
 import { ViewBuilder } from './builder.js'
-import { ViewExtension } from './extension.js'
 import type { ViewOptions } from './view.js'
+import { viewPlugin } from './view_plugin.js'
 
 /**
  * Groups every configured view engine — the default one (`reply.view`) plus any named ones
  * (`reply.<name>`) — behind a single object. Each `.extend(ViewExt(), …)` / `.extend(ViewExt('mail'), …)`
- * adds one {@link ViewBuilder}; the {@link ViewExtension} it hands itself to registers `@fastify/view`
+ * adds one {@link ViewBuilder}; the plugin it hands itself to registers `@fastify/view`
  * once per {@link all} entry.
  */
 export class ViewOptionsProvider implements FeatureLifecycle {
@@ -73,6 +73,6 @@ export class ViewOptionsProvider implements FeatureLifecycle {
   [kBootstrap](kit: BootstrapKit): void {
     // Registered with the application's extensions, so the adapter runs it as a Fastify plugin. The provider
     // goes in directly rather than through a container key it would only be read back out of at server setup.
-    kit.extensions.register(ViewExtension, new ViewExtension(this))
+    registerPlugin(kit, viewPlugin(this))
   }
 }

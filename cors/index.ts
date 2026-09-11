@@ -1,5 +1,5 @@
 export { CorsBuilder } from './builder.js'
 export { corsConfigSchema, type CORSConfig } from './config.js'
 export { CORS, cors } from './cors.js'
-export { CorsExtension, type CorsOptions } from './extension.js'
+export { corsPlugin, type CorsOptions } from './cors_plugin.js'
 export { CORSExt } from './plugin.js'

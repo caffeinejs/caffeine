@@ -3,11 +3,17 @@ import { fileURLToPath } from 'node:url'
 import { token } from '@caffeinejs/di'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { $t, type InferSchema } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import {
+  ConfigPriority,
+  Configuration,
+  EnvConfigProvider,
+  InlineConfigProvider,
+  type ConfigHandle,
+} from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { StaticExtension, StaticExt } from '../index.js'
+import { kStaticConfig, StaticExt } from '../index.js'
 import type { StaticMount } from '../static.js'
 
 // The application owns the schema: it declares where the static block lives and `s.config(c => c.static)`
@@ -38,7 +44,10 @@ describe('static configuration', () => {
     app = undefined
   })
 
-  const mountsOf = (built: WebApplication): readonly StaticMount[] => built.container.get(StaticExtension).mounts
+  // What the feature actually serves, read the way any code outside the builder reads it: off the resolved
+  // configuration the feature published under its own key.
+  const resolved = (built: WebApplication) => built.container.get(Configuration).config(kStaticConfig)!
+  const mountsOf = (built: WebApplication): readonly StaticMount[] => resolved(built).mounts
 
   it('reads mounts from the configuration tree with no serve() call at all', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
@@ -99,7 +108,7 @@ describe('static configuration', () => {
 
     await app.ready()
 
-    const settings = app.container.get(StaticExtension).spa!
+    const settings = resolved(app).spa!
     expect(settings.root).toBe(dist)
     expect(settings.navigationOnly).toBe(false)
   })
@@ -119,7 +128,7 @@ describe('static configuration', () => {
 
     await app.ready()
 
-    expect(app.container.get(StaticExtension).spa).toBeUndefined()
+    expect(resolved(app).spa).toBeUndefined()
   })
 
   it('re-points reads and code-set defaults together via .config()', async () => {

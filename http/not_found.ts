@@ -5,8 +5,8 @@ import { ErrCaffeineWebApplication } from './error/common.js'
 import { ErrHTTPNotFound } from './error/http.js'
 import { solutions } from './error/util.js'
 import { joinPaths } from './internal/paths/paths.js'
+import type { HTTPPluginContext } from './plugin.js'
 import type { RouteGroup } from './route.js'
-import type { ServerExtensionContext } from './server_extension.js'
 import { ServerOwnedPaths, serverOwnedPaths } from './server_owned_paths.js'
 
 /**
@@ -112,7 +112,7 @@ export function isServerOwned(owned: readonly string[], path: string): boolean {
  * Throwing rather than replying is what puts an unmatched URL through the application's error handling, so a
  * global `@Catch(ErrHTTPNotFound)` sees it and the body matches a 404 a handler threw.
  */
-export function installNotFoundHandler(ctx: ServerExtensionContext, fallbacks: readonly NotFoundFallback[]): void {
+export function installNotFoundHandler(ctx: HTTPPluginContext, fallbacks: readonly NotFoundFallback[]): void {
   const owned = deriveServerOwnedPaths(
     ctx.routeGroups,
     serverOwnedPaths(ctx.container.getManyOptional(ServerOwnedPaths)),

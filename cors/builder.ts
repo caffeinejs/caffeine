@@ -1,13 +1,14 @@
+import { registerPlugin } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 import { splitOptionBag } from '@caffeinejs/std/config'
 
 import { corsConfigSchema, type CORSConfig } from './config.js'
-import { CorsExtension, type CorsOptions } from './extension.js'
+import { corsPlugin, type CorsOptions } from './cors_plugin.js'
 
 /**
  * Configures `@fastify/cors`. Bound via `.extend(CORSExt(), c => …)`.
  *
- * Installing the feature is the activating act: its lifecycle binds {@link CorsExtension} and registers it with
+ * Installing the feature is the activating act: its lifecycle contributes the CORS plugin and registers it with
  * the application's extensions, and the adapter runs it as a Fastify plugin. Configuration parameterizes the
  * mount but never switches it on, so a config file cannot start answering preflights for an application that
  * never asked.
@@ -39,6 +40,6 @@ export class CorsBuilder<C = unknown> extends FeatureBuilder<CORSConfig, C> {
 
   protected bootstrap(kit: BootstrapKit): void {
     const options = { ...this.#callbacks, ...this.slice.config.options } as CorsOptions
-    kit.extensions.register(CorsExtension, new CorsExtension(options))
+    registerPlugin(kit, corsPlugin(options))
   }
 }

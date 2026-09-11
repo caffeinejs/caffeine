@@ -2,17 +2,29 @@
 
 Adapter is Fastify. Controllers are `@Controller` + `@Get` / `@Post` / … + `@Args` / `$p`. Throw `ErrHTTPNotFound` (and other `ErrHTTP*`) from handlers. Do not invent Nest `HttpException`.
 
-## The built-ins are extensions
+## The built-ins are plugins
 
-There is no `Services` record and no `Contributions`. Everything this package wires at start-up — the error
-handler, the form body parser, the health probes, the OIDC callback routes, the not-found handler — is an
-ordinary `ServerExtension` its own feature registers, and `adapter.setup()` has one registration loop with no
-special cases in front of or behind it.
+There is no `Services` record, no `Contributions`, and no `ServerExtension`. Everything this package wires at
+start-up — the error handler, the form body parser, the health probes, the OIDC callback routes, the
+authentication gate, the not-found handler — is an ordinary Fastify plugin (`HTTPPlugin`) its own feature
+hands over with `registerPlugin(kit, plugin)`, and `adapter.setup()` has one registration loop.
 
-What separates them from a package's extension is `kExtensionStage` alone: `core` for the four that must
-precede anything contributed, `fallback` for the not-found handler, which needs whatever an extension
-decorated the server with and every `ServerOwnedPaths` provider already registered. Do not reintroduce a
-direct `install*()` call in the adapter; write the extension and give it a stage.
+Wrap a plugin in `fastify-plugin` and its hooks and decorations apply to the context it was registered in;
+leave it unwrapped and they stay inside the plugin, covering only what the plugin itself registered. The
+plugin does not pick that context — the application registers it on the root server, and `router.extend(...)`
+/ `@Use(...)` register it inside one route group's context. Every first-party plugin here is wrapped.
+
+Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
+holds the only two framework slots — `ErrorHandlingServiceConfigurer` and `HTTPCoreFeature` lead,
+`HTTPFallbackFeature` trails — and everything between them, this package's features and the user's alike,
+runs in `.extend(...)` order. Do not reintroduce a stage, and do not reintroduce a direct `install*()` call in
+the adapter: write the plugin and put its feature in the right place.
+
+The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
+`.authentication(...)` was written: `cors()` extended before it still stamps its headers on a 401, and a hook
+extended after it does not run for a request the gate rejected. The start-up refusal of an application that
+protects a route and never configured authentication is not the gate's — it is a `routeGroups` scan in the
+adapter (`assertAuthenticationConfigured`), because the case being refused is the one where no gate exists.
 
 A feature that answers on URLs outside the compiled routing binds a `ServerOwnedPaths` provider with
 `.extends(ServerOwnedPaths)`, and a fallback reads them with `container.getManyOptional(ServerOwnedPaths)`.
@@ -30,8 +42,8 @@ shutdown any more.
 
 The effective authentication schemes are stamped onto each compiled route (`route.authorization.schemes`)
 while routing is built, where the application's default scheme is known. A reader that documents or describes
-a route takes them from there; extensions run before any Fastify route exists, so `routeOptions.config` is not
-available to them.
+a route takes them from there; plugins register before any Fastify route exists, so `routeOptions.config` is
+not available to them outside an `onRoute` hook.
 
 ## Two route sources
 
@@ -53,7 +65,15 @@ The inline forms are implemented by calling `RouteChain` — `chain.handler(fn)`
 
 Applied with `.with(ext, ...rest)` on `Router` and `RouteChain`. An extension may write anything on the builder except `path`, `method`, `parameters` and the handler — `flatten.ts` overwrites those.
 
-A feature that must attach a real Fastify hook to the routes it applies to — resolved from the container, not closed over at decorator time — registers a `RouteContributor` (`route_contributor.ts`) from its bootstrap: `configure(ctx)` runs once to resolve dependencies, `onRoute(routeDef)` runs per route and calls `addRouteHook`. `@caffeinejs/caching` is the one consumer; the adapter has no cache-specific wiring. Do not reach for this for anything a `RouteExtension` writing plain route config can express.
+A feature that must attach a real Fastify hook to the routes it applies to — resolved from the container, not closed over at decorator time — does it from Fastify's own `onRoute` hook inside its plugin: resolve the dependencies once as the plugin registers, then call `addRouteHook` per route. `@caffeinejs/caching` is the one consumer, and the adapter's only cache-specific line is the start-up refusal of `@Cache` with no caching plugin registered. The hook fires while each route registers, which is after the adapter attached its own — `@UseGuards` included — so what it adds runs behind them. Do not reach for this for anything a `RouteExtension` writing plain route config can express.
+
+## Installing a feature on one group
+
+`router.extend(feature, configure?)` and `@Use(feature, configure?)` install a feature whose plugin registers inside that route group's Fastify context instead of on the root server. The feature itself is installed on the application — one config slice, one bootstrap — and only the plugin is scoped, which is why the same `Feature.name` on the application and on a router is `ErrFeatureAlreadyInstalled`, and why two groups wanting different settings install two instances (`cors()` and `cors('pets')`).
+
+The install happens in `WebApplication.configurers()`, which runs before the declare phase: that is the last moment a feature can register a configuration slice, and the reason `mount()` must be called before the application is ready. `RouteGroup.scopes` carries what installed the plugins for a group — a programmatic group lists its own router and every router it is nested under, so `.extend(...)` inherits downward the way `.with(...)` does; a controller group lists the class.
+
+The configure callback is **not** re-typed against the application's configuration the way `builder.extend` is: a router or a controller is written without knowing which application it will end up in, so a `.config(c => …)` selector there sees `unknown`.
 
 `fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 
@@ -63,9 +83,9 @@ Version is a **routing key**, not a runtime `switch`: two handlers for the same 
 
 - `@Constraint(name, value)` / `.constraint(name, value)` — a first-class constraint. `name` is resolved against the constraint registry while the route compiles; an unknown name fails at `ready()`. The value and the request header it reads land on `Route.constraints` (a `Map<string, ResolvedConstraint>`), the same "fold it in where the app default is known" precedent as `route.authorization.schemes` — the OpenAPI generator reads the header from there.
 - `@Version(v)` / `.version(v)` — sugar for the `version` constraint. `version` is always registered: Fastify's built-in semver matcher on `Accept-Version`. It is **not** a path — `@Prefix('/v1')` is URI versioning and stays a separate concern.
-- `app.constraints(c => c.register(strategy, { header }))` — registers a custom find-my-way constraint strategy (synchronous only). Held on the builder, installed by a `core` extension with `addConstraintStrategy` before any route registers.
+- `app.constraints(c => c.register(strategy, { header }))` — registers a custom find-my-way constraint strategy (synchronous only). Held on the builder, installed by `constraintsPlugin` with `addConstraintStrategy` before any route registers.
 
-Group constraints inherit to routes that do not set the same key (route wins, via `compile.ts` — same as `config`/`options`). `fst({ constraints: { … } })` still works for `host` and anything the framework has no opinion about; a `constraints` key set **both** through `fst` and first-class fails at compile rather than disagreeing silently. `ConstraintVaryExtension` (`core`, always registered) adds every constraint header to `Vary` when any route is constrained. A constraint miss is Fastify's 404 — it does not reach `@Catch`, and no default version is invented. `ServerOwnedPaths` (probes, OIDC callbacks) never carry a constraint.
+Group constraints inherit to routes that do not set the same key (route wins, via `compile.ts` — same as `config`/`options`). `fst({ constraints: { … } })` still works for `host` and anything the framework has no opinion about; a `constraints` key set **both** through `fst` and first-class fails at compile rather than disagreeing silently. `constraintVaryPlugin` (contributed by `HTTPCoreFeature`, always) adds every constraint header to `Vary` when any route is constrained. A constraint miss is Fastify's 404 — it does not reach `@Catch`, and no default version is invented. `ServerOwnedPaths` (probes, OIDC callbacks) never carry a constraint.
 
 Do not add a version argument to the inline verb form, an app-level `enableVersioning()` switch, a `VERSION_NEUTRAL` catch-all, or a global default version.
 

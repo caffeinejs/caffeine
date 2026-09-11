@@ -7,6 +7,7 @@ import {
 } from '@caffeinejs/std'
 import { type ConfigSlice } from '@caffeinejs/std/config'
 
+import { registerPlugin } from '../plugin.js'
 import { ServerOwnedPaths } from '../server_owned_paths.js'
 import { kHealthConfig } from './keys.js'
 import { loadHealthIndicators } from './load.js'
@@ -18,7 +19,7 @@ import {
   type HealthPaths,
 } from './options.js'
 import { ProbeEndpoint } from './probes.js'
-import { HealthProbesExtension } from './probes_extension.js'
+import { healthProbesPlugin } from './probes_plugin.js'
 import { HealthRegistry } from './registry.js'
 
 /** The probe paths, declared so a fallback knows the server owns them. */
@@ -147,6 +148,6 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
       t.toValue(new HealthOwnedPaths(options.paths)).extends(ServerOwnedPaths).internal(),
     )
 
-    kit.extensions.register(HealthProbesExtension, new HealthProbesExtension(options))
+    registerPlugin(kit, healthProbesPlugin(options))
   }
 }

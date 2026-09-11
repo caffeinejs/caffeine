@@ -5,12 +5,13 @@ import {
   type AuthSchemeDescriptor,
   AuthenticationSchemeProvider,
   AuthenticationService,
-  ServerExtension,
+  type HTTPPlugin,
+  type HTTPPluginContext,
   type RouteGroup,
-  type ServerExtensionContext,
   kAuthSchemeDescriptors,
   solutions,
 } from '@caffeinejs/http'
+import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
 import type { OpenAPIDocumentStore } from './document_store.js'
@@ -25,36 +26,22 @@ import { readScalarBundle, scalarPage } from './ui/scalar.js'
 /**
  * Generates the document during the server phase and fills the store the endpoints read.
  *
- * The server phase is the one moment where every route is resolved and nothing has been registered with
- * Fastify yet, so the document describes the whole application — including routes other extensions
- * contributed.
+ * The plugin phase is the one moment where every route is resolved and nothing has been registered with
+ * Fastify yet, so the document describes the whole application — including routes other plugins contributed.
+ * It touches the server itself not at all: the endpoints that serve the document were registered from the
+ * builder's bootstrap.
  *
  * Generation is eager and failures are fatal. A malformed document is not something a consumer recovers from
  * at request time, and one that silently omits routes is worse than one that never shipped; the framework
  * already refuses to start on an unconvertible route schema, and this matches it.
  */
-export class OpenAPIExtension extends ServerExtension {
-  readonly name = 'openapi'
-
-  /** The resolved options the document is generated from. */
-  readonly options: OpenAPIOptions
-
-  readonly #store: OpenAPIDocumentStore
-  readonly #paths: EndpointPaths
-
-  constructor(store: OpenAPIDocumentStore, options: OpenAPIOptions, paths: EndpointPaths) {
-    super()
-    this.#store = store
-    this.options = options
-    this.#paths = paths
-  }
-
-  configure = (ctx: ServerExtensionContext): void => {
-    const options = this.options
+export function openapiPlugin(store: OpenAPIDocumentStore, options: OpenAPIOptions, paths: EndpointPaths): HTTPPlugin {
+  const plugin: HTTPPlugin = async (instance, opts) => {
+    const ctx: HTTPPluginContext = { ...opts, server: instance }
 
     const descriptors = ctx.container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
-    this.#assertSchemesExist(ctx)
-    this.#warnIfUnprotected(ctx)
+    assertSchemesExist(ctx, options)
+    warnIfUnprotected(ctx, options)
 
     const warnings: string[] = []
     const generated =
@@ -82,90 +69,92 @@ export class OpenAPIExtension extends ServerExtension {
       process.emitWarning(warning, 'CaffeineOpenAPIWarning')
     }
 
-    this.#store.fill({
+    store.fill({
       document,
       json: JSON.stringify(document),
       yaml: toYAML(document),
-      ...this.#ui(),
+      ...ui(options, paths),
     })
   }
 
-  /** Builds the documentation page and its bundle, or nothing when no UI is served. */
-  #ui(): { docsPage?: string; asset?: string } {
-    const { docs, asset, json } = this.#paths
-    if (docs === undefined || asset === undefined) {
-      return {}
-    }
+  return fp(plugin, { name: 'openapi' })
+}
 
-    const base = this.options.routes.base
-
-    return {
-      docsPage: scalarPage({
-        title: this.options.info.title,
-        specURL: publicURL(base, json),
-        assetURL: publicURL(base, asset),
-        configuration: this.options.ui,
-      }),
-      asset: readScalarBundle(),
-    }
+/** Builds the documentation page and its bundle, or nothing when no UI is served. */
+function ui(options: OpenAPIOptions, paths: EndpointPaths): { docsPage?: string; asset?: string } {
+  const { docs, asset, json } = paths
+  if (docs === undefined || asset === undefined) {
+    return {}
   }
 
-  /**
-   * Rejects a `.secure(s => s.schemes(...))` naming a scheme that was never registered.
-   *
-   * Without this the name matches nothing and the endpoints are protected by the authenticated-user
-   * requirement alone — quieter than intended, and invisible until someone tests it.
-   */
-  #assertSchemesExist(ctx: ServerExtensionContext): void {
-    const wanted = this.options.secure?.schemes ?? []
-    if (wanted.length === 0) {
-      return
-    }
+  const base = options.routes.base
 
-    const provider = ctx.container.getOptional(AuthenticationSchemeProvider)
-    const known = provider?.schemeNames ?? []
+  return {
+    docsPage: scalarPage({
+      title: options.info.title,
+      specURL: publicURL(base, json),
+      assetURL: publicURL(base, asset),
+      configuration: options.ui,
+    }),
+    asset: readScalarBundle(),
+  }
+}
 
-    for (const name of wanted) {
-      if (!known.includes(name)) {
-        throw new ErrOpenAPIConfiguration(
-          `Cannot secure the OpenAPI endpoints: no authentication scheme named "${name}" is registered` +
-            solutions(
-              known.length === 0
-                ? 'Register a scheme with .authentication(auth => auth.addJWTBearer(...)) before securing the document'
-                : `Use one of the registered schemes: ${known.map(n => `"${n}"`).join(', ')}`,
-            ),
-        )
-      }
-    }
+/**
+ * Rejects a `.secure(s => s.schemes(...))` naming a scheme that was never registered.
+ *
+ * Without this the name matches nothing and the endpoints are protected by the authenticated-user
+ * requirement alone — quieter than intended, and invisible until someone tests it.
+ */
+function assertSchemesExist(ctx: HTTPPluginContext, options: OpenAPIOptions): void {
+  const wanted = options.secure?.schemes ?? []
+  if (wanted.length === 0) {
+    return
   }
 
-  /**
-   * Warns when a secured application serves its documentation to anyone.
-   *
-   * Not an error: a public API with authenticated write routes is a normal, correct shape, and the petstore
-   * is exactly that. But an unlisted description of every endpoint and every auth scheme is worth one line of
-   * output when nobody stated it was intended, and `.public()` silences it.
-   */
-  #warnIfUnprotected(ctx: ServerExtensionContext): void {
-    if (this.options.secureExplicit || this.options.secure !== undefined) {
-      return
-    }
+  const provider = ctx.container.getOptional(AuthenticationSchemeProvider)
+  const known = provider?.schemeNames ?? []
 
-    // Configuring authentication binds the coordinator, and nothing else does, so its presence is the feature
-    // being on.
-    if (!ctx.container.has(AuthenticationService)) {
-      return
+  for (const name of wanted) {
+    if (!known.includes(name)) {
+      throw new ErrOpenAPIConfiguration(
+        `Cannot secure the OpenAPI endpoints: no authentication scheme named "${name}" is registered` +
+          solutions(
+            known.length === 0
+              ? 'Register a scheme with .authentication(auth => auth.addJWTBearer(...)) before securing the document'
+              : `Use one of the registered schemes: ${known.map(n => `"${n}"`).join(', ')}`,
+          ),
+      )
     }
-
-    process.emitWarning(
-      'The OpenAPI document is served publicly while authentication is configured' +
-        solutions(
-          'Call .secure(s => s.schemes("Bearer")) on the OpenAPI builder to require authentication',
-          'Call .public() to state that public access is intended and silence this warning',
-        ),
-      'CaffeineOpenAPIWarning',
-    )
   }
+}
+
+/**
+ * Warns when a secured application serves its documentation to anyone.
+ *
+ * Not an error: a public API with authenticated write routes is a normal, correct shape, and the petstore
+ * is exactly that. But an unlisted description of every endpoint and every auth scheme is worth one line of
+ * output when nobody stated it was intended, and `.public()` silences it.
+ */
+function warnIfUnprotected(ctx: HTTPPluginContext, options: OpenAPIOptions): void {
+  if (options.secureExplicit || options.secure !== undefined) {
+    return
+  }
+
+  // Configuring authentication binds the coordinator, and nothing else does, so its presence is the feature
+  // being on.
+  if (!ctx.container.has(AuthenticationService)) {
+    return
+  }
+
+  process.emitWarning(
+    'The OpenAPI document is served publicly while authentication is configured' +
+      solutions(
+        'Call .secure(s => s.schemes("Bearer")) on the OpenAPI builder to require authentication',
+        'Call .public() to state that public access is intended and silence this warning',
+      ),
+    'CaffeineOpenAPIWarning',
+  )
 }
 
 /**

@@ -1,8 +1,9 @@
 import { Scopes } from '@caffeinejs/di'
 import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 
-import { ConstraintRegistryExtension } from './extension.js'
+import { registerPlugin } from '../plugin.js'
 import { kConstraintRegistry } from './keys.js'
+import { constraintsPlugin } from './plugin.js'
 import { ConstraintRegistry, type RegisteredConstraint } from './registry.js'
 import type { ConstraintStrategy } from './strategy.js'
 
@@ -36,7 +37,7 @@ export class ConstraintsBuilder implements FeatureLifecycle {
     kit.container.bind(kConstraintRegistry, t => t.toValue(registry).lifetime(Scopes.SINGLETON).internal())
 
     if (registry.strategies().length > 0) {
-      kit.extensions.register(ConstraintRegistryExtension, new ConstraintRegistryExtension(registry))
+      registerPlugin(kit, constraintsPlugin(registry))
     }
   }
 }

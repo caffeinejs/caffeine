@@ -1,11 +1,12 @@
-import type { Route, RouteGroup } from '@caffeinejs/http'
+import { registerPlugin, type Route, type RouteGroup } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type AnySchema, type BootstrapKit } from '@caffeinejs/std'
 import { configEquals, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { OPENAPI_CONFIG_KEYS, openapiConfigSchema, type OpenAPIConfigSlice } from './config.js'
 import { OpenAPIDocumentStore } from './document_store.js'
 import { registerEndpoints } from './endpoints.js'
-import { OpenAPIExtension } from './extension.js'
+import { kOpenAPIConfig } from './keys.js'
+import { openapiPlugin } from './openapi_plugin.js'
 import {
   type ErrorStatusOptions,
   type InferenceOptions,
@@ -296,7 +297,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<OpenAPIConfigSli
         errors: { ...code.errors, ...configured.errors },
         routes: mergeRoutes(code.routes, configured.routes),
       } as OpenAPIOptions
-    })
+    }, kOpenAPIConfig)
   }
 
   protected bootstrap(kit: BootstrapKit): void {
@@ -313,7 +314,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<OpenAPIConfigSli
 
     // Reads through the slice, so the generated document reflects the merged configuration. The extension
     // runs at server setup, which is after `container.init()`.
-    kit.extensions.register(OpenAPIExtension, new OpenAPIExtension(this.#store, options, paths))
+    registerPlugin(kit, openapiPlugin(this.#store, options, paths))
   }
 }
 

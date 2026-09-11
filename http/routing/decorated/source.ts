@@ -1,6 +1,7 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 
 import { getRouteGroup } from '../../decorators/registrar/registrar.js'
+import { controllerFeatures } from '../../decorators/use.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
 import { solutions } from '../../error/util.js'
 import { kErrorUnhandled, type RouteGroup, type RouteGroupErrorHandler } from '../../route.js'
@@ -45,7 +46,13 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
       const spec = rd.toRouteGroup<R>()
       const provider = container.wrap(key as InjectionToken<ControllerInstance>)
 
-      routeGroups[i] = ctx.compileRouteGroup(spec, meta<R>(spec, key, binding.scopeID === Scopes.SINGLETON, provider))
+      const group = ctx.compileRouteGroup(spec, meta<R>(spec, key, binding.scopeID === Scopes.SINGLETON, provider))
+
+      if (typeof key === 'function' && controllerFeatures(key).length > 0) {
+        group.scopes = [key]
+      }
+
+      routeGroups[i] = group
     }
 
     return routeGroups

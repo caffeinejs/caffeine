@@ -1,13 +1,14 @@
+import { registerPlugin } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 import { splitOptionBag } from '@caffeinejs/std/config'
 
 import { multipartConfigSchema, type MultipartConfig } from './config.js'
-import { MultipartExtension, type MultipartOptions } from './extension.js'
+import { multipartPlugin, type MultipartOptions } from './multipart_plugin.js'
 
 /**
  * Configures `@fastify/multipart`. Bound via `.extend(MultipartExt())`.
  *
- * Installing the feature is the activating act: its lifecycle binds {@link MultipartExtension} and registers it
+ * Installing the feature is the activating act: its lifecycle contributes the multipart plugin and registers it
  * with the application's extensions, and the adapter runs it as a Fastify plugin. Configuration parameterizes
  * the mount but never switches it on.
  *
@@ -39,6 +40,6 @@ export class MultipartBuilder<C = unknown> extends FeatureBuilder<MultipartConfi
 
   protected bootstrap(kit: BootstrapKit): void {
     const options = { ...this.#callbacks, ...this.slice.config.options } as MultipartOptions
-    kit.extensions.register(MultipartExtension, new MultipartExtension(options))
+    registerPlugin(kit, multipartPlugin(options))
   }
 }

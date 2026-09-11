@@ -3,7 +3,9 @@ import { FeatureBuilder, kFeatureName, type BeforeBootstrapKit, type BootstrapKi
 import { type ConfigSchema, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { Context } from '../../context.js'
+import { registerPlugin } from '../../plugin.js'
 import { ServerOwnedPaths } from '../../server_owned_paths.js'
+import { authenticationPlugin } from '../authentication_plugin.js'
 import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
@@ -41,7 +43,7 @@ import { githubOAuth2Preset, OAuth2AuthenticationHandler, OAuth2AuthenticationOp
 import type { GithubPresetOptions } from './oauth/provider/github.js'
 import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import type { OAuthCallbackHandler, OIDCMeta } from './oidc/index.js'
-import { OIDCRoutesExtension } from './oidc/oidc_routes.js'
+import { oidcRoutesPlugin } from './oidc/oidc_routes.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
 import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
 import { OpaqueTokenStore } from './opaque/opaque_token_store.js'
@@ -279,6 +281,10 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
 
   protected bootstrap(kit: BootstrapKit): void {
     this.#doBootstrap(kit)
+
+    // The gate lands where `.authentication(...)` was written: everything extended before it runs ahead of
+    // the hook, everything after it only for a request the hook let through.
+    registerPlugin(kit, authenticationPlugin())
   }
 
   protected override beforeBootstrap(kit: BeforeBootstrapKit): void {
@@ -582,7 +588,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
 
       // Registered only here, so "no OIDC strategy was configured" is expressed as the extension not
       // existing rather than as a flag it would have to read back and check.
-      kit.extensions.register(OIDCRoutesExtension, new OIDCRoutesExtension(meta))
+      registerPlugin(kit, oidcRoutesPlugin(meta))
       kit.container.bind(OIDCOwnedPaths, t =>
         t
           .toValue(new OIDCOwnedPaths(meta.handlers.map(h => h.callbackPath)))

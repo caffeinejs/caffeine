@@ -5,6 +5,6 @@ export { CacheStore, MemoryCacheStore, type MemoryCacheStoreOptions } from './st
 export { kCacheStatusHeader, kETagGenerator } from './keys.js'
 export { cacheConfigSchema, DEFAULT_CACHE_CONFIG, type CacheConfig } from './config.js'
 export { CacheBuilder } from './builder.js'
-export { CacheRouteContributor } from './contributor.js'
+export { cachePlugin } from './cache_plugin.js'
 export { Cache, cache, CacheInvalidate, cacheInvalidate } from './decorators.js'
 export { caching } from './plugin.js'

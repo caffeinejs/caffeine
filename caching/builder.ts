@@ -1,9 +1,10 @@
 import { Scopes } from '@caffeinejs/di'
+import { registerPlugin } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 
 import { ETagGenerator } from './cache.js'
+import { cachePlugin } from './cache_plugin.js'
 import { cacheConfigSchema, DEFAULT_CACHE_CONFIG, type CacheConfig } from './config.js'
-import { CacheRouteContributor } from './contributor.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { CacheStore, MemoryCacheStore } from './store.js'
 
@@ -11,9 +12,9 @@ import { CacheStore, MemoryCacheStore } from './store.js'
  * Configures the cache feature: the {@link CacheStore} that backs cached responses and the
  * {@link ETagGenerator} used to hash payloads. Bound via `.extend(caching(), c => c.store(...).etagGenerator(...))`.
  *
- * Installing the feature is the activating act: the bootstrap binds the store, registers
- * {@link CacheRouteContributor} with the application's extensions, and the adapter runs it while it
- * registers routes. Configuration parameterizes the feature but never switches it on.
+ * Installing the feature is the activating act: the bootstrap binds the store and contributes the cache
+ * plugin, which attaches the hooks from an `onRoute` hook as each route registers. Configuration
+ * parameterizes the feature but never switches it on.
  *
  * `statusHeader` is read from the configuration tree at `cache.*`, so `CACHE__STATUS_HEADER=X-Edge-Cache`
  * overrides whatever the builder set. The store and the generator cannot be configuration — one is an
@@ -67,6 +68,6 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
         .internal(),
     )
 
-    kit.extensions.register(CacheRouteContributor, new CacheRouteContributor())
+    registerPlugin(kit, cachePlugin())
   }
 }

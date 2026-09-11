@@ -5,11 +5,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Cache, caching } from '../index.js'
 
 /**
- * The caching feature reaches routes through the public `RouteContributor` seam, not through the adapter.
- * These tests pin that wiring: the contributor runs, decorates the request, and touches only the routes
- * that declared cache config.
+ * The caching feature reaches routes through Fastify's own `onRoute` hook, not through the adapter. These
+ * tests pin that wiring: the plugin registers, decorates the request, and touches only the routes that
+ * declared cache config.
  */
-describe('CacheRouteContributor wiring', () => {
+describe('cache plugin wiring', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
@@ -44,10 +44,10 @@ describe('CacheRouteContributor wiring', () => {
     close = () => app.close()
     await app.ready()
 
-    // configure() ran: the request decoration is in place.
+    // The plugin registered: the request decoration is in place.
     expect(server.hasRequestDecorator('responseCached')).toBe(true)
 
-    // onRoute() only touched the decorated route.
+    // The onRoute hook only touched the decorated route.
     expect(registered.get('GET /contrib/plain')!.onSend).toBeUndefined()
     expect(typeof registered.get('GET /contrib/cached')!.onSend).toBe('function')
   })

@@ -2,8 +2,23 @@ import type { Container, ContainerBindingOps } from '@caffeinejs/di'
 
 import type { ConfigDefinition } from './config/index.js'
 import { ErrCaffeine } from './error.js'
-import type { ExtensionRegistrar } from './extensions.js'
 import type { ApplicationAvailability } from './health/availability.js'
+
+/**
+ * Where a feature hands the platform a unit of start-up wiring.
+ *
+ * What the platform does with `extension` is the platform's business — the HTTP application takes a Fastify
+ * plugin and registers it. A headless application takes nothing, so its registrar is a no-op and a feature
+ * that contributes one is simply inert there.
+ */
+export interface ExtensionRegistrar<E = unknown> {
+  /**
+   * Contributes one extension. What is registered runs in the order the application's features were
+   * installed, not in the order their bootstrap hooks happened to reach this call — features bootstrap
+   * concurrently, so an `await` before this does not move it.
+   */
+  register(extension: E): void
+}
 
 /**
  * What a feature may touch while declaring: the configuration definition, and nothing else.
@@ -46,10 +61,7 @@ export interface BootstrapKit {
    */
   availability: ApplicationAvailability
 
-  /**
-   * Where a feature registers an extension it has bound. What it adds runs in the order the application's
-   * features were installed, not in the order their bootstrap hooks happened to reach this call.
-   */
+  /** Where a feature contributes start-up wiring the platform runs. */
   extensions: ExtensionRegistrar
 }
 

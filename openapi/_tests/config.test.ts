@@ -8,11 +8,17 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $t, type InferSchema } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import {
+  ConfigPriority,
+  Configuration,
+  EnvConfigProvider,
+  InlineConfigProvider,
+  type ConfigHandle,
+} from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { OpenAPIExtension } from '../extension.js'
+import { kOpenAPIConfig } from '../keys.js'
 import { OpenAPIExt } from '../plugin.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
 
@@ -137,7 +143,7 @@ describe('openapi configuration', () => {
     await app.ready()
 
     // 422 came from configuration; 401/403 are still the defaults the builder started from.
-    const options = app.container.get(OpenAPIExtension).options
+    const options = app.container.get(Configuration).config(kOpenAPIConfig)!
     expect(options.errors).toEqual({ validation: 422, unauthorized: 401, forbidden: 403 })
     // `routes` was not configured here, so it is still what the builder started from.
     expect(options.routes.json).toBe('/openapi.json')
@@ -176,7 +182,7 @@ describe('openapi configuration', () => {
 
     await app.ready()
 
-    expect(app.container.get(OpenAPIExtension).options.routes.yaml).toBeUndefined()
+    expect(app.container.get(Configuration).config(kOpenAPIConfig)!.routes.yaml).toBeUndefined()
     expect((await app.fetch('/openapi.yaml')).status).toBe(404)
   })
 

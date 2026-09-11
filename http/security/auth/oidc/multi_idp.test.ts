@@ -2,14 +2,13 @@ import { kBootstrap, type BootstrapKit } from '@caffeinejs/std'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
+import type { HTTPPlugin } from '../../../plugin.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import { OIDCAuthenticationHandler } from './handler.js'
-import type { OIDCMeta } from './index.js'
-import { OIDCRoutesExtension } from './oidc_routes.js'
 import { resolveOIDCOptions, sanitizeSchemeName } from './options.js'
 
 const SESSION_SECRET = 'multi-idp-test-secret-at-least-32ch!!'
@@ -43,9 +42,9 @@ function makeCtx(cookies: Record<string, string> = {}) {
   } as unknown as Context
 }
 
-/** Minimal service kit double — bootstrap only touches the container and the extension registry. */
-function makeKit(): { kit: BootstrapKit; registered: Map<unknown, unknown> } {
-  const registered = new Map<unknown, unknown>()
+/** Minimal service kit double — bootstrap only touches the container and the plugin registry. */
+function makeKit(): { kit: BootstrapKit; registered: HTTPPlugin[] } {
+  const registered: HTTPPlugin[] = []
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
   })
@@ -55,8 +54,8 @@ function makeKit(): { kit: BootstrapKit; registered: Map<unknown, unknown> } {
       wrap: (v: unknown) => ({ get: () => v }),
     },
     extensions: {
-      register: (token: unknown, extension: unknown) => {
-        registered.set(token, extension)
+      register: (plugin: HTTPPlugin) => {
+        registered.push(plugin)
       },
     },
   } as unknown as BootstrapKit
@@ -70,14 +69,34 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
   await builder[kBootstrap](makeKit().kit)
 }
 
-/** Registering the extension is what configuring OIDC produces, so the meta is read back off it. */
-async function configureAndReadOIDCMeta(build: (b: AuthenticationBuilder) => void): Promise<OIDCMeta> {
+/**
+ * Runs what configuring OIDC produced and collects the warnings it emitted.
+ *
+ * An unreachable strategy is only ever observable as a warning, so the plugin is registered against a server
+ * double and the process warnings are captured — the same thing an application would see on its console.
+ */
+async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => void): Promise<string[]> {
   const builder = new AuthenticationBuilder()
   build(builder)
   const { kit, registered } = makeKit()
   await builder[kBootstrap](kit)
 
-  return (registered.get(OIDCRoutesExtension) as OIDCRoutesExtension).meta
+  const warnings: string[] = []
+  const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(warning => {
+    warnings.push(String(warning))
+  })
+
+  const server = { get: vi.fn(), addHook: vi.fn() }
+
+  try {
+    for (const plugin of registered) {
+      await plugin(server as never, { container: { getOptional: () => undefined } as never, routeGroups: [] })
+    }
+  } finally {
+    emitWarning.mockRestore()
+  }
+
+  return warnings
 }
 
 /**
@@ -251,24 +270,25 @@ describe('startup validation', () => {
   })
 
   it('T-MULTI-07b: reports the strategies that no request could reach', async () => {
-    const meta = await configureAndReadOIDCMeta(b => {
+    const warnings = await configureAndCollectWarnings(b => {
       addOIDC(b, 'Google', GOOGLE)
       addOIDC(b, 'Okta', OKTA)
       b.default('Google')
     })
 
     // Google is the default; Okta depends on a route naming it, which the builder cannot see.
-    expect(meta.unreachableCandidates).toEqual(['Okta'])
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('"Okta" can never authenticate a request')
   })
 
   it('T-MULTI-07c: reports nothing when a Forward default can select any of them', async () => {
-    const meta = await configureAndReadOIDCMeta(b => {
+    const warnings = await configureAndCollectWarnings(b => {
       addOIDC(b, 'Google', GOOGLE)
       addOIDC(b, 'Okta', OKTA)
       b.forward('auth', () => 'Google').default('auth')
     })
 
-    expect(meta.unreachableCandidates).toEqual([])
+    expect(warnings).toEqual([])
   })
 
   it('T-MULTI-08: accepts several OIDC strategies behind a Forward default', async () => {

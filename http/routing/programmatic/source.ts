@@ -39,10 +39,37 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
       seen.add(state)
 
       for (const flat of flattenRouter<R>(state, ctx.container)) {
-        groups.push(ctx.compileRouteGroup(flat.spec, { name: flat.name }))
+        const group = ctx.compileRouteGroup(flat.spec, { name: flat.name })
+        group.scopes = flat.scopes
+        groups.push(group)
       }
     }
 
     return groups
   }
+}
+
+/** Every router state reachable from `routers`, parents before children, each one seen once. */
+export function routerStates(routers: readonly Router<any, any, any, any, any>[]): RouterState[] {
+  const out: RouterState[] = []
+  const seen = new Set<RouterState>()
+
+  const visit = (state: RouterState): void => {
+    if (seen.has(state)) {
+      return
+    }
+
+    seen.add(state)
+    out.push(state)
+
+    for (const child of state.children) {
+      visit(child)
+    }
+  }
+
+  for (const router of routers) {
+    visit(stateOf(router)!)
+  }
+
+  return out
 }

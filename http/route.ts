@@ -45,6 +45,15 @@ export interface RouteGroup<R = FastifyRequest> {
   handleError?: RouteGroupErrorHandler<R>
   catchBy?: CatchByMap
   extras?: Map<symbol, unknown>
+
+  /**
+   * What installed the features whose plugins register inside this group's context, outermost first.
+   *
+   * A programmatic group lists its own router and every router it is nested under, so a plugin extended on a
+   * parent reaches the groups below it the way `.with(...)` configuration does. A controller group lists the
+   * class. Undefined when nothing scoped anything here.
+   */
+  scopes?: readonly object[]
 }
 
 /**

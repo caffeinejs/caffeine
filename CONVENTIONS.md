@@ -151,20 +151,20 @@ A package’s `index.ts` barrel aggregating that package’s **own** modules is 
 
 Where a value goes depends on who reads it, not on what is convenient:
 
-| The value is…                                          | Goes to                                   | Read with                               |
-| ------------------------------------------------------ | ----------------------------------------- | --------------------------------------- |
-| a setting a user tunes from the environment or a file  | this feature's config slice               | `this.set(key, value)` → `this.slice`   |
-| where that slice lives in the tree                     | the application's schema and selector     | `builder.config(c => c.app.thing)`      |
-| a setting code outside the feature's builder must read | that slice, given a `configKey`           | `config(key)` on the config handle      |
-| something user code injects                            | a container binding, in `bootstrap`       | `container.get` / constructor injection |
-| one of many providers a single consumer collects       | a container binding with `.extends()`     | `container.getManyOptional(Base)`       |
-| a start-up hook the platform runs                      | `kit.extensions.register(key, extension)` | `extensions.of(Base)`                   |
-| an extension's own data                                | that extension's **constructor**          | the field                               |
+| The value is…                                          | Goes to                                | Read with                               |
+| ------------------------------------------------------ | -------------------------------------- | --------------------------------------- |
+| a setting a user tunes from the environment or a file  | this feature's config slice            | `this.set(key, value)` → `this.slice`   |
+| where that slice lives in the tree                     | the application's schema and selector  | `builder.config(c => c.app.thing)`      |
+| a setting code outside the feature's builder must read | that slice, given a `configKey`        | `config(key)` on the config handle      |
+| something user code injects                            | a container binding, in `bootstrap`    | `container.get` / constructor injection |
+| one of many providers a single consumer collects       | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
+| start-up wiring the platform runs                      | `registerPlugin(kit, plugin)`          | the platform registers it               |
+| a plugin's own data                                    | the **closure** the plugin is built in | the captured value                      |
 
 Those are the only answers, and there is no eighth. A value the application needs once everything is up is
 either configuration — so it goes in the slice, under a key — or an artifact, so it is a binding. There is no
 side channel between a feature and the application, and no first-party bag a package reaches into: `http` used
-to hand every extension a `Services` record assembled from four `Contributions` keys, and both are gone.
+to hand every plugin a `Services` record assembled from four `Contributions` keys, and both are gone.
 
 A feature never picks its own location in the configuration tree and never adds a field to the resolved
 configuration object. The application declares the whole schema — importing the feature's exported schema
@@ -172,20 +172,26 @@ configuration object. The application declares the whole schema — importing th
 builder's `.config(selector)`. A feature nothing pointed anywhere resolves **detached**, from its own defaults
 and its builder values alone: it works, and no file, environment variable or argument reaches it.
 
-Do not route an extension's own configuration through a container key it reads back at server setup: the
-builder is holding the value when it constructs the extension. `kit.extensions.register(X, new X(data))` binds
-`X` and registers it in one call. Pass a token alone — `kit.extensions.register(X)` — only when the feature
-already bound it itself (a factory, a `.extends(...)` chain, a per-instance key).
+Do not route a plugin's own configuration through a container key it reads back at server setup: the builder
+is holding the value when it builds the plugin, so the plugin closes over it. `registerPlugin(kit, thingPlugin(this.slice.config))`
+is the whole act — there is no token to bind and no registry entry to look up.
 
-Extensions run in `kExtensionStage` order, then in the order their features were installed — which is the
-order the application's `.extend(...)` calls are written. The install position is a property of the registry,
-not of when a `bootstrap` hook reached the call, so a feature that awaits before registering does not move.
+An HTTP feature's start-up wiring **is** a Fastify plugin (`HTTPPlugin` in `@caffeinejs/http`), and nothing
+wraps it. Wrap it in `fastify-plugin` and its hooks and decorations apply to the context it was registered
+in; leave it unwrapped and they stay inside the plugin. The plugin does not choose that context: the
+application registers it on the root server, a `router.extend(...)` or a `@Use(...)` registers it inside that
+route group — so one wrapped plugin covers every route or one group's routes, according to who asked for it.
 
-**`kExtensionStage` is framework-internal.** A package outside the framework sets nothing and lands in
-`default`; `core` is wiring the rest builds on (the error handler, the body parsers, the routes the framework
-serves itself) and `fallback` is what may only run once everything else has registered (the not-found
-handler). It is symbol-keyed for the same reason `kFeatureName` is: it stays off the surface a feature is
-authored against.
+Plugins register in the order their features were installed, which is the order the application's
+`.extend(...)` calls are written. There are no stages and nothing is sorted by what a plugin is: a feature
+that must precede another is extended first. The install position is a property of the registry, not of when
+a `bootstrap` hook reached the call, so a feature that awaits before registering does not move.
+
+Two framework slots bracket that list, in `WebApplication.configurers()` and nowhere else: error handling
+leads, so every route and hook the rest register is already covered by it, and the not-found handler trails,
+because it needs whatever the others decorated the server with. Everything else, this package's own features
+included, sits between them in `.extend(...)` order — the authentication gate included, which is why
+`.authentication(...)` is written after `cors()` and before a hook that reads `req.user`.
 
 ## Writing a feature builder
 
@@ -209,7 +215,7 @@ export class ThingBuilder<C = unknown> extends FeatureBuilder<ThingConfig, C> {
   }
 
   protected bootstrap(kit: BootstrapKit): void {
-    kit.extensions.register(ThingExtension, new ThingExtension(this.slice.config))
+    registerPlugin(kit, thingPlugin(this.slice.config))
   }
 }
 ```

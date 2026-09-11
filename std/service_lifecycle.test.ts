@@ -1,14 +1,15 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { Application } from './application.js'
 import { InlineConfigProvider, type ConfigHandle, type ConfigSlice } from './config/index.js'
-import type { Extension } from './extensions.js'
 import {
   kBeforeBootstrap,
   kBootstrap,
   kFeatureName,
   type BeforeBootstrapKit,
   type BootstrapKit,
+  type ExtensionRegistrar,
   type FeatureLifecycle,
 } from './feature.js'
 import { createApplication } from './index.js'
@@ -148,30 +149,48 @@ describe('service lifecycle', () => {
 })
 
 describe('extension registration', () => {
-  // What the registry does with the ordinals is `Extensions`' own test; what `std` owes a feature is a
-  // registrar on its kit, and one that is distinct per feature — that is what carries the install position.
-  it('hands every feature its own registrar, usable while it binds', async () => {
-    const registrars: unknown[] = []
+  // What a platform does with what it is handed is the platform's own test. What `std` owes it is the
+  // install position: every feature is asked for a registrar under its own index, and the index is the
+  // feature's place in the list rather than the order the bootstrap hooks happened to reach the call. That
+  // is the whole ordering model now that there are no stages, so a feature that awaits first must not move.
+  it('asks for a registrar under each feature position, whatever a bootstrap awaits', async () => {
+    const asked: number[] = []
+    const registered: Array<[number, string]> = []
 
-    const registering = (name: string): FeatureLifecycle => ({
+    const registering = (name: string, awaits: number): FeatureLifecycle => ({
       [kFeatureName]: name,
       async [kBootstrap](kit: BootstrapKit): Promise<void> {
-        await Promise.resolve()
-        const key = token<Extension>(Symbol(`ext.${name}`))
-        kit.container.bind(key, t => t.toValue({ name, configure: () => undefined }))
-        kit.extensions.register(key)
-        registrars.push(kit.extensions)
+        for (let i = 0; i < awaits; i++) {
+          await Promise.resolve()
+        }
+        kit.extensions.register(name)
       },
     })
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .addFeature(registering('first'))
-      .addFeature(registering('second'))
-      .build()
+    class Recording extends Application {
+      protected override extensionRegistrar(order: number): ExtensionRegistrar {
+        asked.push(order)
+
+        return {
+          register: extension => {
+            registered.push([order, extension as string])
+          },
+        }
+      }
+    }
+
+    // "slow" bootstraps second but awaits longer, so it registers last in wall-clock order.
+    const app = new Recording({
+      container: new CaffeineIoC({ decorators: false }),
+      services: [registering('slow', 3), registering('quick', 0)],
+    })
 
     await app.ready()
 
-    expect(registrars).toHaveLength(2)
-    expect(registrars[0]).not.toBe(registrars[1])
+    expect(asked).toEqual([0, 1])
+    expect(registered).toEqual([
+      [1, 'quick'],
+      [0, 'slow'],
+    ])
   })
 })

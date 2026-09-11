@@ -1,6 +1,6 @@
 export * from './builder.js'
-export * from './extension.js'
 export * from './keys.js'
+export * from './plugin.js'
 export * from './registry.js'
 export type * from './strategy.js'
-export * from './vary_extension.js'
+export * from './vary_plugin.js'

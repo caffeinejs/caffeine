@@ -2,30 +2,34 @@ import type { Container } from '@caffeinejs/di'
 import {
   Application,
   type ApplicationInit,
-  type Extensions,
+  type ExtensionRegistrar,
   type FeatureLifecycle,
   type RunInfo,
 } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
-import { HTTPCoreFeature } from './core_feature.js'
+import { HTTPCoreFeature, HTTPFallbackFeature } from './core_feature.js'
+import { controllerFeatures } from './decorators/use.js'
 import { ErrConfiguration } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
 import { solutions } from './error/util.js'
 import { ErrShutdownTimeout, HealthRegistry } from './health/index.js'
 import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
+import type { HTTPPlugin, ScopedFeatureInstall } from './plugin.js'
+import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
-import { FluentRouteSource } from './routing/programmatic/source.js'
+import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
 import { type ServerAddress } from './server/index.js'
+import { Keys } from './symbols.js'
 
 export interface AdapterIn<R> {
   routeGroups: RouteGroup<R>[]
   middlewares: MiddlewarePipeline
-  /** What the features registered, in the order they were installed. */
-  extensions: Extensions
+  /** What the features contributed, in the order they were installed. */
+  plugins: HTTPPlugins
 }
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
@@ -83,6 +87,9 @@ export class WebApplication<
 
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
+  readonly #plugins = new HTTPPlugins()
+  /** Feature position in {@link configurers} to what installed it, for everything a router or controller added. */
+  readonly #scopes = new Map<number, object>()
   #routeGroups: RouteGroup<R>[] = []
   #mounted: Router<any, any, any, any, any>[] = []
   #built = false
@@ -142,10 +149,62 @@ export class WebApplication<
     return this
   }
 
+  protected override extensionRegistrar(order: number): ExtensionRegistrar<HTTPPlugin> {
+    return this.#plugins.registrarFor(order, this.#scopes.get(order))
+  }
+
+  /**
+   * The bootstrap order, which is the order the plugins register in.
+   *
+   * Two framework slots bracket what the application installed, and nothing sits between them: error handling
+   * leads, so every route and hook the rest register is already covered by it, and the not-found handler
+   * trails, because it needs whatever the others decorated the server with. Everything in between — this
+   * package's own features and the user's alike — runs in the order `.extend(...)` was written.
+   *
+   * The features a mounted router or a controller declared are installed here too, after the application's
+   * own. This runs before the declare phase, which is the last moment a feature can still register a
+   * configuration slice — and it is why `mount()` has to happen before the application is ready.
+   */
   protected override configurers(): FeatureLifecycle[] {
-    // Error handling leads, so its `core` extension is the first thing registered on the server and every
-    // route and hook the rest register is already covered by it.
-    return [new ErrorHandlingServiceConfigurer(), ...this.services, new HTTPCoreFeature()]
+    const features: FeatureLifecycle[] = [new ErrorHandlingServiceConfigurer(), new HTTPCoreFeature(), ...this.services]
+
+    this.#scopes.clear()
+
+    for (const [scope, install] of this.#scopedInstalls()) {
+      for (const lifecycle of this.installFeature(install.feature, install.configure)) {
+        this.#scopes.set(features.length, scope)
+        features.push(lifecycle)
+      }
+    }
+
+    features.push(new HTTPFallbackFeature())
+
+    return features
+  }
+
+  /** Every feature a mounted router or a controller declared, paired with what declared it. */
+  #scopedInstalls(): Array<[object, ScopedFeatureInstall]> {
+    const out: Array<[object, ScopedFeatureInstall]> = []
+
+    for (const state of routerStates(this.#mounted)) {
+      for (const install of state.installs) {
+        out.push([state, install])
+      }
+    }
+
+    // Snapshotted by the container when it was constructed, so every controller the application can resolve
+    // is already known here — long before routing is built.
+    for (const { key } of this.container.getBindingsByLabel(Keys.CONTROLLER)) {
+      if (typeof key !== 'function') {
+        continue
+      }
+
+      for (const install of controllerFeatures(key)) {
+        out.push([key, install])
+      }
+    }
+
+    return out
   }
 
   /**
@@ -201,7 +260,7 @@ export class WebApplication<
     await this.#adapter.setup({
       routeGroups: this.#routeGroups,
       middlewares: this.#middlewares,
-      extensions: this.extensions,
+      plugins: this.#plugins,
     })
   }
 

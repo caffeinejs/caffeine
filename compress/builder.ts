@@ -1,13 +1,14 @@
+import { registerPlugin } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 import { splitOptionBag } from '@caffeinejs/std/config'
 
+import { compressPlugin, type CompressOptions } from './compress_plugin.js'
 import { compressConfigSchema, type CompressConfig } from './config.js'
-import { CompressExtension, type CompressOptions } from './extension.js'
 
 /**
  * Configures `@fastify/compress`. Bound via `.extend(CompressExt(), c => …)`.
  *
- * Installing the feature is the activating act: its lifecycle binds {@link CompressExtension} and registers it
+ * Installing the feature is the activating act: its lifecycle contributes the compression plugin and registers it
  * with the application's extensions, and the adapter runs it as a Fastify plugin. Configuration parameterizes
  * the mount but never switches it on.
  *
@@ -38,6 +39,6 @@ export class CompressBuilder<C = unknown> extends FeatureBuilder<CompressConfig,
 
   protected bootstrap(kit: BootstrapKit): void {
     const options = { ...this.#callbacks, ...this.slice.config.options } as CompressOptions
-    kit.extensions.register(CompressExtension, new CompressExtension(options))
+    registerPlugin(kit, compressPlugin(options))
   }
 }

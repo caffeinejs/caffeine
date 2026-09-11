@@ -14,7 +14,7 @@ import { Cache, CacheInvalidate, caching } from '../index.js'
 /**
  * What the caching hooks cost when a route uses them, and what they cost a route that does not.
  *
- * The cache attaches per route, through the `RouteContributor` seam — so a decorated route holds a function
+ * The cache attaches per route, from Fastify's own `onRoute` hook — so a decorated route holds a function
  * in its hook slot, not a one-element array, and a route in the same application that declared nothing holds
  * `undefined`. This is the guard against a later change making a cache hook unconditional.
  */

@@ -2,7 +2,7 @@ import type { FastifyContextConfig, FastifyReply, FastifyRequest } from 'fastify
 
 import { solutions } from '../error/util.js'
 import { joinPaths } from '../internal/paths/paths.js'
-import type { ServerExtensionContext } from '../server_extension.js'
+import type { HTTPPluginContext } from '../plugin.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { kHealthRoute } from './keys.js'
 import type { HealthOptions } from './options.js'
@@ -21,7 +21,7 @@ interface ProbeRequestQuery {
  * no authentication middleware can reach a probe, no "allow anonymous" annotation is needed, and no
  * misconfigured guard can make the kubelet see a 401.
  */
-export function installHealthProbes(ctx: ServerExtensionContext, options: HealthOptions, probes: ProbeEndpoint): void {
+export function installHealthProbes(ctx: HTTPPluginContext, options: HealthOptions, probes: ProbeEndpoint): void {
   const paths = options.paths
   assertNoCollision(ctx, [paths.live, paths.ready, paths.startup])
 
@@ -30,7 +30,7 @@ export function installHealthProbes(ctx: ServerExtensionContext, options: Health
   mount(ctx, paths.startup, query => probes.startup(query))
 }
 
-function mount(ctx: ServerExtensionContext, path: string, handle: (query: ProbeQuery) => Promise<ProbeResponse>): void {
+function mount(ctx: HTTPPluginContext, path: string, handle: (query: ProbeQuery) => Promise<ProbeResponse>): void {
   ctx.server.route({
     method: ['GET', 'HEAD'],
     url: path,
@@ -66,7 +66,7 @@ function probeQuery(query: ProbeRequestQuery): ProbeQuery {
   }
 }
 
-function assertNoCollision(ctx: ServerExtensionContext, probePaths: readonly string[]): void {
+function assertNoCollision(ctx: HTTPPluginContext, probePaths: readonly string[]): void {
   const taken = new Set(probePaths)
 
   for (const router of ctx.routeGroups) {

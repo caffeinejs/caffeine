@@ -17,7 +17,6 @@ import { ConstraintsBuilder } from './constraints/builder.js'
 import { GuardsBuilder } from './guards/builder.js'
 import { HealthBuilder } from './health/health_builder.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
-import { AuthenticationConfigurer } from './security/authentication_configurer.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { ServerBuilder } from './server/index.js'
 
@@ -47,10 +46,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.#authzBuilder = new AuthorizationBuilder()
     this.addFeature(this.#authzBuilder)
 
-    // Registered unconditionally: the authentication extension is what refuses an application that protects a
-    // route and never called `.authentication(...)`, so it has to run even when nothing configured it.
-    this.addFeature(new AuthenticationConfigurer())
-
     this.#guardsBuilder = new GuardsBuilder()
     this.addFeature(this.#guardsBuilder)
 
@@ -75,6 +70,13 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     this.addFeature(this.#shutdownBuilder)
   }
 
+  /**
+   * Configures authentication, and puts the gate where this call is written.
+   *
+   * The `onRequest` hook that authenticates and authorizes registers at this position among the plugins, so a
+   * feature extended before this call runs ahead of it — `cors()`, whose headers a rejected cross-origin
+   * request still needs — and one extended after it never runs for a request the gate rejected.
+   */
   authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()

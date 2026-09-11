@@ -1,6 +1,6 @@
 import { configureRoute, configureRouteGroup, type AnyRouteExtension } from '@caffeinejs/http'
 
-import type { CompressOptions } from './extension.js'
+import type { CompressOptions } from './compress_plugin.js'
 
 /**
  * Compresses the response, or turns compression off for the route with `false`.

@@ -1,33 +1,21 @@
-import { kExtensionStage, type ExtensionStage } from '@caffeinejs/std'
+import fp from 'fastify-plugin'
 
 import { joinPaths } from '../../../internal/paths/index.js'
-import { ServerExtension, type ServerExtensionContext } from '../../../server_extension.js'
+import type { HTTPPlugin, HTTPPluginContext } from '../../../plugin.js'
 import { isOIDCError, type OIDCMeta } from './index.js'
 
 /**
  * Registers the OIDC/OAuth2 callback routes.
  *
- * Registered by the authentication builder only when an OIDC strategy was configured, so there is no "is it
- * on" question to answer here — the absence of this extension is the answer.
- *
- * `core`, so the callback routes are in place before a package outside `http` registers anything that could
- * shadow them.
+ * Contributed by the authentication builder only when an OIDC strategy was configured, so there is no "is it
+ * on" question to answer here — the absence of this plugin is the answer.
  */
-export class OIDCRoutesExtension extends ServerExtension {
-  readonly name = 'caffeine-oidc-routes'
-  readonly [kExtensionStage]: ExtensionStage = 'core'
-
-  /** The callback routes to register and the strategies that may turn out to be unreachable. */
-  readonly meta: OIDCMeta
-
-  constructor(meta: OIDCMeta) {
-    super()
-    this.meta = meta
+export function oidcRoutesPlugin(meta: OIDCMeta): HTTPPlugin {
+  const plugin: HTTPPlugin = async (instance, opts) => {
+    installOIDCRoutes({ ...opts, server: instance }, meta)
   }
 
-  configure(ctx: ServerExtensionContext): void {
-    installOIDCRoutes(ctx, this.meta)
-  }
+  return fp(plugin, { name: 'caffeine-oidc-routes' })
 }
 
 /**
@@ -38,7 +26,7 @@ export class OIDCRoutesExtension extends ServerExtension {
  * purpose: Fastify's assertion names the missing decorator (`cookies`), while this one names the package
  * the user has to install and register.
  */
-export function installOIDCRoutes(ctx: ServerExtensionContext, oidc: OIDCMeta): void {
+export function installOIDCRoutes(ctx: HTTPPluginContext, oidc: OIDCMeta): void {
   const server = ctx.server
   const compiledPaths = new Set(ctx.routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))))
 

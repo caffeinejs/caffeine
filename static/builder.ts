@@ -1,21 +1,22 @@
-import { NotFoundFallback } from '@caffeinejs/http'
+import { NotFoundFallback, registerPlugin } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 import { splitOptionBag, type ConfigSlice } from '@caffeinejs/std/config'
 
 import { staticConfigSchema, type StaticConfigSlice } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
-import { StaticExtension } from './extension.js'
+import { kStaticConfig } from './keys.js'
 import { resolveSPASettings, type SPAOptions, type SPASettings } from './spa.js'
 import { SPAFallback } from './spa_fallback.js'
-import type { StaticMount } from './static.js'
+import type { ResolvedStatic, StaticMount } from './static.js'
+import { staticPlugin } from './static_plugin.js'
 
 /**
  * Configures static file serving over `@fastify/static`. Bound via
  * `.extend(StaticExt(), s => s.serve(dir, { prefix: '/static' }))`.
  *
  * The fluent methods are pure authoring; the lifecycle behind the symbol keys hands the assembled mounts to the
- * {@link StaticExtension} it binds. Each `.serve(...)` call adds one mount; multiple mounts serve multiple
- * directories (the {@link StaticExtension} handles `@fastify/static`'s single-decorate constraint).
+ * plugin it contributes. Each `.serve(...)` call adds one mount; multiple mounts serve multiple
+ * directories (the plugin handles `@fastify/static`'s single-decorate constraint).
  *
  * There is one read path. A builder method does not hold its value — it writes into the configuration tree in
  * the `CODE` band, and the feature reads the merged result. So `s.serve('public')` is a **default**: a
@@ -90,28 +91,25 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<StaticConfigSlice
     // switches it on, so that a config file cannot start serving a shell the application never asked for.
     const spaEnabled = this.#spa !== undefined
 
-    this.#resolved = this.derive(published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks))
+    this.#resolved = this.derive(
+      published => resolveStatic(published, spaEnabled, callbacks, spaCallbacks),
+      kStaticConfig,
+    )
   }
 
   protected bootstrap(kit: BootstrapKit): void {
     const resolved = this.#resolved!
     const spa = this.#spa === undefined ? undefined : settingsOf(resolved.config)
 
-    // Bound under its own key and registered with the application's extensions, so the adapter runs it as a
-    // Fastify plugin — http no longer hardcodes it. The mounts and the SPA settings are handed to it directly:
-    // the builder is holding them right here, and routing them through a container key only to read them back
-    // at server setup adds a lookup and a key without a decision.
-    kit.extensions.register(StaticExtension, new StaticExtension(resolved.config.mounts, spa))
+    // The mounts and the SPA settings are handed to the plugin directly: the builder is holding them right
+    // here, and routing them through a container key only to read them back at server setup adds a lookup
+    // and a key without a decision.
+    registerPlugin(kit, staticPlugin(resolved.config.mounts, spa))
 
     if (spa !== undefined) {
       kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(spa)).extends(NotFoundFallback))
     }
   }
-}
-
-interface ResolvedStatic {
-  mounts: StaticMount[]
-  spa: SPASettings | undefined
 }
 
 function settingsOf(resolved: ResolvedStatic): SPASettings {

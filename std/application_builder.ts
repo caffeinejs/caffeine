@@ -139,6 +139,8 @@ export abstract class BaseApplicationBuilder<App extends Application> {
       container: this.#container,
       services: this.#services,
       config: this.#config,
+      installed: this.#installed,
+      featureState: this.#featureState,
     }
   }
 

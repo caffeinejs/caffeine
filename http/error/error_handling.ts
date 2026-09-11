@@ -1,13 +1,54 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import fp from 'fastify-plugin'
 
 import { FastifyContext } from '../context.js'
+import type { HTTPPlugin } from '../plugin.js'
 import { Responder } from '../response.js'
 import { kErrorUnhandled, type RouteGroup } from '../route.js'
-import type { ErrorHandlerProvider } from './error.js'
-import { resolveByErrorChain } from './error.js'
+import { ErrCaffeineWebApplication } from './common.js'
+import { ErrorHandlerProvider, resolveByErrorChain } from './error.js'
 import { ErrHTTP, httpErrorBody } from './http.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
+
+/**
+ * Holds the application-wide handler the {@link globalErrorHandlerPlugin} installed.
+ *
+ * Bound by the error-handling feature and read back by the adapter, because each route group's own
+ * encapsulated handler falls back to it rather than installing one of its own.
+ */
+export class GlobalErrorHandlerRef {
+  #handler: GlobalErrorHandler | undefined
+
+  get handler(): GlobalErrorHandler {
+    if (this.#handler === undefined) {
+      throw new ErrCaffeineWebApplication(
+        'Cannot read the global error handler: the error handling plugin has not registered yet',
+        'ERR_ERROR_HANDLER_NOT_INSTALLED',
+      )
+    }
+
+    return this.#handler
+  }
+
+  set handler(handler: GlobalErrorHandler) {
+    this.#handler = handler
+  }
+}
+
+/**
+ * Installs the application-wide error handler on the root server.
+ *
+ * Contributed by the feature the application bootstraps first, so every route and hook registered afterwards
+ * is already covered by it — including the ones a package outside `http` contributes.
+ */
+export function globalErrorHandlerPlugin(ref: GlobalErrorHandlerRef): HTTPPlugin {
+  const plugin: HTTPPlugin = async (instance, { container }) => {
+    ref.handler = installGlobalErrorHandler(instance, container.get(ErrorHandlerProvider))
+  }
+
+  return fp(plugin, { name: 'caffeine-error-handling' })
+}
 
 /**
  * Installs the application-wide error handler on the root instance, and returns it so the encapsulated

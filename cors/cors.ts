@@ -1,6 +1,6 @@
 import { configureRoute, configureRouteGroup, type AnyRouteExtension } from '@caffeinejs/http'
 
-import type { CorsOptions } from './extension.js'
+import type { CorsOptions } from './cors_plugin.js'
 
 /**
  * Sets per-route CORS options, or turns CORS off for the route with `false`.

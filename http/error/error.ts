@@ -2,9 +2,10 @@ import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
 
 import { Context } from '../context.js'
+import { registerPlugin } from '../plugin.js'
 import { ActionResult } from '../response.js'
 import { ErrConfiguration } from './common.js'
-import { ErrorHandlingExtension } from './error_handling_extension.js'
+import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error_handling.js'
 import { solutions } from './util.js'
 
 export const kErrorHandler = Symbol('caffeine:http:error_handler')
@@ -122,6 +123,9 @@ export class ErrorHandlingServiceConfigurer implements FeatureLifecycle {
     kit.container.bind(ErrorHandlerProvider, t =>
       t.toValue(new ErrorHandlerProvider(handlers)).lifetime(Scopes.SINGLETON).internal(),
     )
-    kit.extensions.register(ErrorHandlingExtension, new ErrorHandlingExtension())
+
+    const ref = new GlobalErrorHandlerRef()
+    kit.container.bind(GlobalErrorHandlerRef, t => t.toValue(ref).lifetime(Scopes.SINGLETON).internal())
+    registerPlugin(kit, globalErrorHandlerPlugin(ref))
   }
 }

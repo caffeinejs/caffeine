@@ -13,6 +13,8 @@ import { compileInjection } from './inject.js'
 export interface FlatRouteGroup<R> {
   spec: RouteGroupSpec<R>
   name: string
+  /** This router and every router it is nested under, outermost first. */
+  scopes: readonly RouterState[]
 }
 
 /**
@@ -24,7 +26,7 @@ export interface FlatRouteGroup<R> {
  */
 export function flattenRouter<R>(root: RouterState, container: Container): FlatRouteGroup<R>[] {
   const out: FlatRouteGroup<R>[] = []
-  walk<R>(root, '', undefined, undefined, container, out)
+  walk<R>(root, '', undefined, undefined, [], container, out)
   return out
 }
 
@@ -33,6 +35,7 @@ function walk<R>(
   parentPath: string,
   parentSpec: RouteGroupSpec<R> | undefined,
   parentInjection: ObjectInjectionSpec | undefined,
+  parentScopes: readonly RouterState[],
   container: Container,
   out: FlatRouteGroup<R>[],
 ): void {
@@ -48,12 +51,16 @@ function walk<R>(
 
   assertUniqueRouteNames(spec.routes, name)
 
+  // A nested group is its own Fastify context, so what a parent router extended cannot reach it through
+  // encapsulation. Carrying the chain is what makes `.extend(...)` inherit the way `.with(...)` does.
+  const scopes = [...parentScopes, state]
+
   if (spec.routes.length > 0) {
-    out.push({ spec, name })
+    out.push({ spec, name, scopes })
   }
 
   for (const child of state.children) {
-    walk<R>(child, path, spec, injection, container, out)
+    walk<R>(child, path, spec, injection, scopes, container, out)
   }
 }
 
