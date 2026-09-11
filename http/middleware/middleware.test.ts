@@ -1,38 +1,21 @@
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
+import cors from 'cors'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
-  Catch,
   type Context,
   Controller,
   ErrPipelineSealed,
   Get,
   type Middleware,
+  type MiddlewareHook,
   type Next,
+  Router,
   createWebApplication,
   fastifyAdapterFactory,
+  kMiddlewareHook,
 } from '../index.js'
-
-// Controllers are registered globally at decoration time and a container snapshots them when it is
-// constructed, so every controller in this file is declared up front rather than inside the test that uses
-// it.
-
-class ErrMiddlewareFailed extends Error {}
-
-@Controller('/mw-catch')
-class CatchingController {
-  @Get('/')
-  list() {
-    return { ok: true }
-  }
-
-  @Catch(ErrMiddlewareFailed)
-  async onFailure(ctx: Context, error: ErrMiddlewareFailed): Promise<void> {
-    ctx.status(500).body({ by: 'controller', error: error.message })
-  }
-}
-void [CatchingController]
 
 @Controller('/mw')
 class MiddlewareController {
@@ -94,22 +77,6 @@ describe('middleware pipeline', () => {
     await app.close()
   })
 
-  it('lets the controller error handler see an error a handler-group middleware threw', async () => {
-    const app = newApp().build()
-    app.use(() => {
-      throw new ErrMiddlewareFailed('middleware exploded')
-    })
-    await app.ready()
-
-    const res = await app.fetch('/mw-catch')
-
-    // The handler group wraps the controller dispatch, so the throw happens inside the controller's own
-    // encapsulated error handler rather than at server level.
-    expect(res.status).toBe(500)
-    expect(await res.json()).toEqual({ by: 'controller', error: 'middleware exploded' })
-    await app.close()
-  })
-
   it('resolves a middleware class from the container, with its dependencies injected', async () => {
     const app = newApp(container => {
       container.bind(Tag, t => t.toValue(new Tag('injected')))
@@ -164,37 +131,43 @@ describe('middleware pipeline', () => {
     await singleton.close()
   })
 
-  it('runs a hook-group middleware before a handler-group one registered earlier', async () => {
+  it('runs an onRequest middleware before a preHandler one', async () => {
     const order: string[] = []
 
     const app = newApp().build()
     app.use((_ctx, next) => {
-      order.push('handler-group')
-      next()
-    })
-    app.use((_ctx, next) => {
       order.push('onRequest')
       next()
-    }, 'onRequest')
+    })
+    app.use(
+      (_ctx, next) => {
+        order.push('preHandler')
+        next()
+      },
+      { hook: 'preHandler' },
+    )
     await app.ready()
 
     await app.fetch('/mw/echo')
 
-    expect(order).toEqual(['onRequest', 'handler-group'])
+    expect(order).toEqual(['onRequest', 'preHandler'])
     await app.close()
   })
 
-  it('short-circuits from a hook group, skipping the handler group and the handler', async () => {
+  it('short-circuits from onRequest, skipping later middleware and the handler', async () => {
     const reached: string[] = []
 
     const app = newApp().build()
-    app.use((_ctx, next) => {
-      reached.push('handler-group')
-      next()
-    })
-    app.use(ctx => {
+    app.use(
+      (_ctx, next) => {
+        reached.push('preHandler')
+        next()
+      },
+      { hook: 'preHandler' },
+    )
+    app.use((ctx, _next) => {
       ctx.status(401).body({ error: 'anonymous' })
-    }, 'onRequest')
+    })
     await app.ready()
 
     const res = await app.fetch('/mw/echo')
@@ -205,11 +178,11 @@ describe('middleware pipeline', () => {
     await app.close()
   })
 
-  it('leaves a reply a hook-group middleware answered itself alone', async () => {
+  it('leaves a reply a middleware answered itself alone', async () => {
     const app = newApp().build()
-    app.use(ctx => {
+    app.use((ctx, _next) => {
       ctx.status(418).body({ answered: 'directly' })
-    }, 'onRequest')
+    })
     await app.ready()
 
     const res = await app.fetch('/mw/echo')
@@ -219,11 +192,100 @@ describe('middleware pipeline', () => {
     await app.close()
   })
 
+  it('answers with CORS headers from Node cors() and still runs the handler', async () => {
+    const app = newApp().build()
+    app.use(cors({ origin: 'http://example.com' }))
+    await app.ready()
+
+    const res = await app.fetch('/mw/echo', { headers: { Origin: 'http://example.com' } })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://example.com')
+    expect(await res.json()).toEqual({ ok: true })
+    await app.close()
+  })
+
+  it('restricts Node cors() to a path prefix', async () => {
+    const app = newApp().build()
+    app.mount(new Router('/api').get('/echo', () => ({ ok: true })))
+    app.use('/api', cors({ origin: 'http://example.com' }))
+    await app.ready()
+
+    const inside = await app.fetch('/api/echo', { headers: { Origin: 'http://example.com' } })
+    const outside = await app.fetch('/mw/echo', { headers: { Origin: 'http://example.com' } })
+
+    expect(inside.status).toBe(200)
+    expect(inside.headers.get('access-control-allow-origin')).toBe('http://example.com')
+    expect(outside.status).toBe(200)
+    expect(outside.headers.get('access-control-allow-origin')).toBeNull()
+    await app.close()
+  })
+
   it('refuses a registration after the application is ready', async () => {
     const app = newApp().build()
     await app.ready()
 
     expect(() => app.use((_ctx, next) => next())).toThrow(ErrPipelineSealed)
+    await app.close()
+  })
+
+  it('runs a class at its hinted hook when use() omits { hook }', async () => {
+    const order: string[] = []
+
+    class Hinted implements Middleware {
+      static get [kMiddlewareHook](): MiddlewareHook {
+        return 'preHandler'
+      }
+
+      handle(_ctx: Context, next: Next): void {
+        order.push('hinted')
+        next()
+      }
+    }
+
+    const app = newApp(container => {
+      container.bind(Hinted, t => t.toClass(Hinted))
+    }).build()
+    app.use((_ctx, next) => {
+      order.push('onRequest')
+      next()
+    })
+    app.use(Hinted)
+    await app.ready()
+
+    await app.fetch('/mw/echo')
+
+    expect(order).toEqual(['onRequest', 'hinted'])
+    await app.close()
+  })
+
+  it('runs a hinted class at onRequest when { hook } overrides the getter', async () => {
+    const order: string[] = []
+
+    class Hinted implements Middleware {
+      static get [kMiddlewareHook](): MiddlewareHook {
+        return 'preHandler'
+      }
+
+      handle(_ctx: Context, next: Next): void {
+        order.push('hinted')
+        next()
+      }
+    }
+
+    const app = newApp(container => {
+      container.bind(Hinted, t => t.toClass(Hinted))
+    }).build()
+    app.use(Hinted, { hook: 'onRequest' })
+    app.use((_ctx, next) => {
+      order.push('second')
+      next()
+    })
+    await app.ready()
+
+    await app.fetch('/mw/echo')
+
+    expect(order).toEqual(['hinted', 'second'])
     await app.close()
   })
 })

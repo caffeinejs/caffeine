@@ -76,7 +76,7 @@ const tenancy: MiddlewareFn<Vars> = (ctx, next) => {
 
 function newApp() {
   const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() }).build()
-  app.use(tenancy, 'onRequest')
+  app.use(tenancy, { hook: 'onRequest' })
   return app
 }
 

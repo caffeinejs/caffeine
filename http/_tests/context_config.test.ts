@@ -80,7 +80,7 @@ describe('ctx.config', () => {
       .build()
       .mount(routes)
 
-    app.use(churn, 'onRequest')
+    app.use(churn, { hook: 'onRequest' })
 
     await app.ready()
 

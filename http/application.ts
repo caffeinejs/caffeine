@@ -14,7 +14,19 @@ import { ErrConfiguration } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
 import { solutions } from './error/util.js'
 import { ErrShutdownTimeout, HealthRegistry } from './health/index.js'
-import { MiddlewarePipeline, type MiddlewareHook, type MiddlewareRef } from './middleware/index.js'
+import {
+  MiddlewarePipeline,
+  isMiddlewareOptions,
+  type MiddlewareConfigFactory,
+  type MiddlewareFn,
+  type MiddlewareHook,
+  type MiddlewareOptions,
+  type MiddlewarePath,
+  type MiddlewareResolvable,
+  type MiddlewareTarget,
+  type Next,
+  type NodeMiddleware,
+} from './middleware/index.js'
 import type { HTTPPlugin, ScopedFeatureInstall } from './plugin.js'
 import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
@@ -79,12 +91,16 @@ export class WebApplication<
   A extends Adapter<I, R> = Adapter<I, R>,
   ROUTES = never,
   DEPS = never,
+  C = unknown,
 > extends Application {
   /** Phantom — names the routes mounted on this application, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: ROUTES
 
   /** Phantom — names what the mounted routers injected, for `DepsOf`. Never assigned, never read. */
   declare readonly __deps?: DEPS
+
+  /** Phantom — names the application config type for `use(c => …)` factories. Never assigned, never read. */
+  declare readonly __config?: C
 
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
@@ -126,27 +142,49 @@ export class WebApplication<
 
   /**
    * Adds a middleware to the request pipeline. Order matters, and it is the order these calls are written
-   * in — within a group.
+   * in — within a hook.
    *
-   * `middleware` may be a function, an instance, a middleware class, or a container key; the last two are
-   * resolved from the container, so a middleware with dependencies is written as a class and injected like
-   * anything else.
+   * The first argument may be a path (`string` or `string[]`); `'*'` means every request. The middleware may
+   * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, a
+   * container key, or `(config) => middleware` called once at start-up with the application's config handle.
    *
-   * `hook` defaults to `handler`, which runs immediately before the controller: not calling `next()` skips
-   * the handler. The four Fastify lifecycle hooks are available for work that must happen before the body
-   * is parsed or validated — see {@link MiddlewareHook}, and note that they run in Fastify's order, not in
-   * registration order relative to another group.
+   * `hook` defaults to `onRequest`. A Caffeine middleware may hint a different hook with
+   * {@link kMiddlewareHook}; `{ hook }` on this call overrides that hint. See {@link MiddlewareHook}. Answer
+   * the request with `ctx.body()` and do not call `next`.
    *
    * ```ts
    * app.use(RequestLogger)
-   * app.use(kRateLimiter, 'onRequest')     // resolved from the container, runs first
+   * app.use('/admin', kRateLimiter, { hook: 'preHandler' })
+   * app.use(c => rateLimit(c.limits))
    * ```
    *
    * A middleware naming the variables it writes is taken at its word: the routers it ends up in front of are
    * declared elsewhere, so nothing here checks that they declare the same ones.
    */
-  use<V, C>(middleware: MiddlewareRef<V, C>, hook: MiddlewareHook = 'handler'): this {
-    this.#middlewares.add(middleware, hook)
+  use<V = Record<never, never>, Conf = Record<never, never>>(
+    target: MiddlewareFn<V, Conf>,
+    options?: MiddlewareOptions,
+  ): this
+  use(target: NodeMiddleware, options?: MiddlewareOptions): this
+  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
+  use(target: MiddlewareConfigFactory<C>, options?: MiddlewareOptions): this
+  use(target: MiddlewareResolvable, options?: MiddlewareOptions): this
+  use<V = Record<never, never>, Conf = Record<never, never>>(
+    path: MiddlewarePath,
+    target: MiddlewareFn<V, Conf>,
+    options?: MiddlewareOptions,
+  ): this
+  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions): this
+  use(path: MiddlewarePath, target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions): this
+  use(path: MiddlewarePath, target: MiddlewareConfigFactory<C>, options?: MiddlewareOptions): this
+  use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions): this
+  use(
+    pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
+    targetOrOptions?: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void),
+    options?: MiddlewareOptions,
+  ): this {
+    const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)
+    this.#middlewares.add(parsed.path, parsed.target, parsed.hook)
     return this
   }
 
@@ -223,7 +261,7 @@ export class WebApplication<
    */
   mount<const RS extends ReadonlyArray<Router<any, any, any, any, any>>>(
     ...routers: RS
-  ): WebApplication<I, R, A, ROUTES | RoutesOfRouter<RS[number]>, DEPS | DepsOfRouter<RS[number]>>
+  ): WebApplication<I, R, A, ROUTES | RoutesOfRouter<RS[number]>, DEPS | DepsOfRouter<RS[number]>, C>
   mount(...routers: Router<any, any, any, any, any>[]): this {
     if (this.#built) {
       throw new ErrConfiguration(
@@ -317,6 +355,31 @@ export class WebApplication<
     } finally {
       clearTimeout(timer)
     }
+  }
+}
+
+function parseUse<C>(
+  pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
+  targetOrOptions: MiddlewareTarget<C> | MiddlewareOptions | ((req: never, res: never, next: Next) => void) | undefined,
+  options: MiddlewareOptions | undefined,
+  argCount: number,
+): { path: MiddlewarePath | undefined; target: unknown; hook?: MiddlewareHook } {
+  const asPath =
+    Array.isArray(pathOrTarget) ||
+    (typeof pathOrTarget === 'string' && argCount >= 2 && !isMiddlewareOptions(targetOrOptions))
+
+  if (asPath) {
+    return {
+      path: pathOrTarget as MiddlewarePath,
+      target: targetOrOptions,
+      hook: options?.hook,
+    }
+  }
+
+  return {
+    path: undefined,
+    target: pathOrTarget,
+    hook: isMiddlewareOptions(targetOrOptions) ? targetOrOptions.hook : undefined,
   }
 }
 

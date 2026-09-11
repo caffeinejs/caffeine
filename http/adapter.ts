@@ -147,7 +147,7 @@ export class FastifyAdapter<
     middlewares.setupAll(container)
 
     // Installed after the plugins so the hooks run inside a server that already has its error handler.
-    middlewares.installHooks(fastify)
+    middlewares.installHooks(fastify, container, configuration)
 
     // What the application declared and no installed feature can serve. Both are start-up failures rather
     // than a route that quietly never does what its decorator says.
@@ -196,10 +196,6 @@ export class FastifyAdapter<
             // Built here, once. The source decides *how* the route is invoked — a method on a singleton, one
             // resolved per request, a plain function — and hands back the function to install.
             const handle = route.dispatch(compilers) as (req: REQ, res: RES) => unknown
-
-            // The `handler` middleware group runs immediately before dispatch. Returns the dispatch
-            // unchanged when nothing is registered there.
-            const dispatch = middlewares.wrapHandler(handle)
 
             // Route Config
             // https://fastify.dev/docs/latest/Reference/Routes/#config
@@ -279,7 +275,7 @@ export class FastifyAdapter<
                   res.code(config.status)
                 }
 
-                const result = dispatch(req as REQ, res as RES)
+                const result = handle(req as REQ, res as RES)
 
                 if (result instanceof Responder) {
                   return result.respond(req.httpContext)

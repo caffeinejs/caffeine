@@ -23,7 +23,7 @@ import { ServerBuilder } from './server/index.js'
 export type WebApplicationBuilderOptions = ApplicationBuilderOptions
 
 export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>, TConfig = unknown>
-  extends BaseApplicationBuilder<WebApplication<I, REQ, A>>
+  extends BaseApplicationBuilder<WebApplication<I, REQ, A, never, never, TConfig>>
   implements ApplicationConfigMarker<TConfig>
 {
   /** Phantom — names the application config type for `ConfigTypeOf`. Never assigned, never read. */
@@ -182,9 +182,9 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
     return this
   }
 
-  build(): WebApplication<I, REQ, A> {
+  build(): WebApplication<I, REQ, A, never, never, TConfig> {
     const adapter = this.#adapterFactory({ container: this.container })
-    return new WebApplication<I, REQ, A>(this.applicationInit(), adapter)
+    return new WebApplication<I, REQ, A, never, never, TConfig>(this.applicationInit(), adapter)
   }
 }
 

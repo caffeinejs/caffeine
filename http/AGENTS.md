@@ -155,7 +155,8 @@ anything a later phase needs — the reason a token was rejected, so `challenge(
 result and is handed back as the third argument to `challenge`. A handler that writes to `ctx.auth`, or keeps its
 own per-request state, is doing the coordinator's job.
 
-`app.use()` infers the variables a middleware declares but does not check them against the routers it ends up in
+`app.use()` registers middleware on Fastify lifecycle hooks (default `onRequest`); it does not wrap the route
+handler. It infers the variables a middleware declares but does not check them against the routers it ends up in
 front of — the routers are declared elsewhere. A middleware naming variables no router declares is not an error.
 
 ## Request scope

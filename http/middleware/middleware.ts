@@ -1,17 +1,48 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
+import type { ConfigHandle } from '@caffeinejs/std/config'
 
 import type { Context } from '../context.js'
 
 /**
+ * Optional preferred Fastify hook for a Caffeine middleware, when `use()` does not pass `{ hook }`.
+ *
+ * Omit it and the middleware runs at `onRequest`. On a class, declare it as a static getter. On a function,
+ * set it as a property.
+ */
+export const kMiddlewareHook = Symbol('@caffeinejs/http:middlewareHook')
+
+/**
  * Continues the rest of the pipeline, or fails it.
  *
- * `next()` runs the remaining middlewares of this group, and the terminal after them — the controller in
- * the `handler` group, Fastify's `done` in a hook group. `next(err)` skips the rest and fails. To answer
- * the request from the middleware itself, write with `ctx.body()` and do not call `next`.
+ * `next()` runs the remaining middlewares of this hook. `next(err)` skips the rest and fails. To answer the
+ * request from the middleware itself, write with `ctx.body()` and do not call `next`.
  *
  * Calling it twice in one middleware is a bug, not a fallback, and throws.
  */
 export type Next = (err?: Error) => void
+
+/**
+ * A Node `(req, res, next)` middleware, as Middie runs it on the raw request and response.
+ */
+export type NodeMiddleware = (req: IncomingMessage, res: ServerResponse, next: Next) => void
+
+/**
+ * Builds a middleware once at start-up from the application's configuration.
+ *
+ * The function is called with the live config handle, so `c.someSetting` and `c(featureKey)` both work. A
+ * later refresh does not rebuild the middleware.
+ */
+export type MiddlewareConfigFactory<C = unknown> = (
+  config: ConfigHandle<C>,
+) => NodeMiddleware | MiddlewareFn | Middleware
+
+export type MiddlewarePath = string | readonly string[]
+
+export interface MiddlewareOptions {
+  hook?: MiddlewareHook
+}
 
 /**
  * The functional form of a middleware. Call `next` to continue; omit it to short-circuit.
@@ -24,6 +55,8 @@ export type Next = (err?: Error) => void
  *   next()
  * }
  * ```
+ *
+ * To run at a later hook, set {@link kMiddlewareHook} on the function. `{ hook }` on `use()` overrides it.
  */
 export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (ctx: Context<V, C>, next: Next) => void
 
@@ -33,6 +66,10 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  *
  * ```ts
  * class Tagger implements Middleware {
+ *   static get [kMiddlewareHook](): MiddlewareHook {
+ *     return 'preHandler'
+ *   }
+ *
  *   handle(ctx: Context, next: Next) {
  *     ctx.header('x-tag', '1')
  *     next()
@@ -41,39 +78,77 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  *
  * app.use(Tagger)
  * ```
+ *
+ * The static getter is optional; without it the class runs at `onRequest`. `{ hook }` on `use()` overrides
+ * {@link kMiddlewareHook}.
  */
 export interface Middleware<V = Record<never, never>, C = Record<never, never>> {
   handle(ctx: Context<V, C>, next: Next): void
 }
 
 /**
- * Where a middleware runs.
+ * Where a middleware runs: a Fastify request-lifecycle hook.
  *
- * `handler` (the default) runs immediately before the controller. Not calling `next()` skips the handler.
- * It covers routes the application's controllers declare — not the ones the framework registers for itself
- * (health probes, the OIDC callback, static files, views), which have no controller to wrap.
- *
- * The rest are Fastify's own request-lifecycle hooks, registered on the server. They cover *every* route,
- * they run in Fastify's order rather than registration order, and their `next()` cannot reach the handler.
- * Use one when the middleware must act before the body is parsed or validated — authentication does, so
- * that an unauthenticated caller is answered 401 rather than a 400 describing the route's schema.
+ * Defaults to `onRequest`. Hooks cover every route, including ones the framework registers for itself, except
+ * probe routes which have no context and are skipped. Use a later hook when the middleware must see a parsed
+ * or validated body.
  */
-export type MiddlewareHook = 'handler' | 'onRequest' | 'preParsing' | 'preValidation' | 'preHandler'
+export type MiddlewareHook =
+  | 'onRequest'
+  | 'preParsing'
+  | 'preValidation'
+  | 'preHandler'
+  | 'preSerialization'
+  | 'onSend'
+  | 'onResponse'
+  | 'onError'
+  | 'onTimeout'
 
 export const MIDDLEWARE_HOOKS: readonly MiddlewareHook[] = [
-  'handler',
   'onRequest',
   'preParsing',
   'preValidation',
   'preHandler',
+  'preSerialization',
+  'onSend',
+  'onResponse',
+  'onError',
+  'onTimeout',
 ]
 
-/** Anything `use()` accepts: a function, an instance, a class, or a container key. */
+export const MIDDLEWARE_HOOKS_WITH_PAYLOAD: readonly MiddlewareHook[] = [
+  'onError',
+  'onSend',
+  'preParsing',
+  'preSerialization',
+]
+
+/** Anything `use()` accepts as its middleware argument. */
+export type MiddlewareTarget<C = unknown> =
+  | NodeMiddleware
+  | MiddlewareFn
+  | Middleware
+  | InjectionToken<Middleware>
+  | MiddlewareConfigFactory<C>
+
+export type MiddlewareResolvable = Middleware | InjectionToken<Middleware>
+
 export type MiddlewareRef<V = Record<never, never>, C = Record<never, never>> =
   | MiddlewareFn<V, C>
   | Middleware<V, C>
-  | Ctor<Middleware<V, C>>
-  | InjectionToken
+  | InjectionToken<Middleware<V, C>>
+
+/** Whether `value` is a `{ hook }` options object rather than a middleware. */
+export function isMiddlewareOptions(value: unknown): value is MiddlewareOptions {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  if (isMiddlewareInstance(value)) {
+    return false
+  }
+  const keys = Object.keys(value)
+  return keys.every(key => key === 'hook')
+}
 
 /** Whether `ref` is a middleware class rather than a plain middleware function. */
 export function isMiddlewareClass(ref: unknown): ref is Ctor<Middleware> {
