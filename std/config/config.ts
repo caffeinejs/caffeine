@@ -9,7 +9,7 @@ import type { AnySchema, InferSchema } from '../schema/schema.js'
  *
  * Type-only and dependency-free within the package, so every other module here may import it and none of them
  * can create a cycle by doing so. The behaviour lives with the code that implements it — `createLiveAccessors`
- * in `accessor.js`, `validateConfig` in `schema.js`, `featureConfigKey` in `feature_key.js`, and so on.
+ * in `accessor.js`, `validateConfig` in `schema.js`, and so on.
  */
 
 export type ConfigPrimitive = string | number | boolean | null
@@ -138,33 +138,13 @@ type ConfigLocationValue<V> = V extends readonly (infer U)[]
       ? ConfigLocation<V>
       : V
 
-/** Answers a feature key with that feature's configuration, or `undefined` when nothing registered it. */
-export type FeatureConfigLookup = (key: symbol) => unknown
-
 /**
- * The root of a config tree: the application's own shape, plus the call that reads a feature's configuration
- * by {@link FeatureConfigKey}.
+ * The root of a config tree: a read-only projection of the shape the application declared.
  *
- * A call rather than a member, because every member name is one an application could have declared in its own
- * configuration — the collision {@link Configuration.snapshot} is deliberately kept off the tree to avoid. Only
- * the root is callable; a nested node is a plain {@link ConfigAccessors} projection.
+ * Every node is live — a read goes through the tree as it stands now, so a value taken from a node rather
+ * than copied out of it follows a refresh.
  */
-export type ConfigHandle<T> = ConfigAccessors<T> & {
-  <F>(key: FeatureConfigKey<F>): F | undefined
-}
-
-declare const kFeatureConfigType: unique symbol
-
-/** Phantom brand that attaches a config type to a feature key without a runtime object. */
-export interface FeatureConfigBrand<in out T> {
-  readonly [kFeatureConfigType]: T
-}
-
-/**
- * A symbol branded with the configuration it addresses. The return value is the plain symbol; `T` exists only
- * at the type level.
- */
-export type FeatureConfigKey<T> = symbol & FeatureConfigBrand<T>
+export type ConfigHandle<T> = ConfigAccessors<T>
 
 /** Notified when configuration changes. May be async; a refresh never waits for it. */
 export type ConfigChangeListener<T> = (config: T, previous: T) => void | Promise<void>

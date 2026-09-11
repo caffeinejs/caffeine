@@ -5,12 +5,11 @@ import {
   type InjectionToken,
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
-import type { Feature } from '@caffeinejs/std'
 
 import { VERSION_CONSTRAINT } from '../../constraints/registry.js'
 import type { ErrorHandlerRef } from '../../error/error.js'
 import type { Guard } from '../../guards/guard.js'
-import type { BuilderOf } from '../../plugin.js'
+import type { HTTPPluginFactory } from '../../plugin.js'
 import type { RouteValidationSchema } from '../../route.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteAuthzOptions } from '../spec.js'
@@ -73,7 +72,7 @@ export class Router<
       path,
       routes: [],
       children: [],
-      installs: [],
+      plugins: [],
     }
 
     attachState(this, this.#state)
@@ -412,26 +411,22 @@ export class Router<
   }
 
   /**
-   * Installs a feature whose plugin is registered inside this group's Fastify context.
+   * Registers a Fastify plugin inside this group's Fastify context.
    *
-   * The same features the application takes, scoped: `router.extend(cors('pets'), c => …)` puts the plugin in
-   * front of this group's routes and the groups nested under it, and nowhere else. The feature itself is
-   * installed on the application, so it declares its configuration and bootstraps exactly once — installing
-   * the same {@link Feature.name} here and on the application is the duplicate it looks like. Two routers
-   * wanting different settings install two instances of the feature (`cors()` and `cors('pets')`).
+   * The same call the application takes, scoped: `router.extend(c => corsPlugin(…))` puts the plugin in front
+   * of this group's routes and the groups nested under it, and nowhere else. The factory runs once during
+   * start-up, with the resolved configuration and the container.
    *
-   * The configure callback is not re-typed against the application's configuration the way the builder's
-   * `.extend` is: a router is written without knowing which application it will be mounted into, so a
-   * `.config(c => …)` selector here sees `unknown`.
-   *
-   * Routing is built during start-up, so this has to be called before the application is ready.
+   * A router is written without knowing which application it will be mounted into, so the configuration here
+   * is typed `unknown`. Routing is built during start-up, so this has to be called before the application is
+   * ready.
    *
    * ```ts
-   * const pets = new Router('/pets').extend(cors('pets'), c => c.origin('https://pets.example'))
+   * const pets = new Router('/pets').extend(() => corsPlugin({ origin: 'https://pets.example' }))
    * ```
    */
-  extend<F extends Feature>(feature: F, configure?: (builder: BuilderOf<F>) => void): this {
-    this.#state.installs.push({ feature, configure: configure as ((builder: never) => void) | undefined })
+  extend(plugin: HTTPPluginFactory): this {
+    this.#state.plugins.push(plugin)
     return this
   }
 

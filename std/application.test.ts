@@ -11,9 +11,9 @@ import {
   $t,
   type BootstrapKit,
   type InferSchema,
-  feature,
   kBootstrap,
   kFeatureName,
+  type Feature,
   createApplication,
 } from './index.js'
 
@@ -94,22 +94,20 @@ describe('Application lifecycle', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
-  it('installs a feature and rides the configure() path', async () => {
+  it('installs a feature and bootstraps it', async () => {
     const kSentinel = token<Record<string, unknown>>(Symbol('sentinel'))
     const state: { value: string | undefined } = { value: undefined }
 
-    const probe = feature('probe', () => ({
+    const probe: Feature = {
       [kFeatureName]: 'probe',
-      probe(value: string) {
-        state.value = value
-      },
       [kBootstrap](kit: BootstrapKit) {
+        state.value = 'hello'
         kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
         return Promise.resolve()
       },
-    }))
+    }
 
-    const app = createApplication({}).extend(probe, p => p.probe('hello'))
+    const app = createApplication({}).extend(probe)
 
     const built = app.build()
     await built.ready()

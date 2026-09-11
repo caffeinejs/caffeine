@@ -28,7 +28,7 @@ import { type AdapterRouteOptions } from './route_hooks.js'
 import type { RouteCompilers } from './routing/dispatch.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { assertAuthenticationConfigured, type Principal } from './security/index.js'
-import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerConfig, type ServerAddress } from './server/index.js'
+import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions, type ServerAddress } from './server/index.js'
 import { Keys } from './symbols.js'
 
 /**
@@ -98,7 +98,7 @@ export class FastifyAdapter<
     // Copied out of the live settings: `listen()` mutates what it is handed, and the address has to stop
     // moving once the socket is bound. An application that never registered the server feature runs on the
     // defaults.
-    this.#serverOptions = { ...(configuration.config(kServerConfig) ?? DEFAULT_SERVER_OPTIONS) }
+    this.#serverOptions = { ...(container.getOptional(kServerOptions) ?? DEFAULT_SERVER_OPTIONS) }
 
     fastify.addHook('onRequest', (req, reply, done) => {
       req.httpContext = new FastifyContext(req, reply, configuration)

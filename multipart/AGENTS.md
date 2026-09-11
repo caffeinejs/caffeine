@@ -12,14 +12,19 @@ An upload route documents itself either way: a decorated one through the picker 
 reads, a context one through a `$t.File()` body schema. That schema slot is not validated — the parts are
 streamed, so `request.body` is never populated.
 
-## The options bag goes through the configuration
+## The package is a plugin, not a feature
 
-`.options({ ... })` does not hold the bag on the builder: it writes it into the feature's config slice in the
-`CODE` band, so a value set in code is a **default** that a file, `MULTIPART__OPTIONS__*`, or a command-line
-argument overrides. `multipartConfigSchema` is exported so an application can splice it into its own schema and
-point the feature at that location with `.config(c => c.app.multipart)`.
+There is no builder and no `Feature` here: the package exports `multipartPlugin(options)` alongside the
+readers. An application registers it with the plugin factory `.extend(...)` takes, reading whatever it wants out
+of the configuration on the way:
 
-The bag is a `Record` in the schema, not a declared mirror of `@fastify/multipart`'s options: the validator strips
-every property a schema does not name, so a partial mirror would silently drop the rest. Callbacks are split
-out with `splitOptionBag(...)` and merged back after the slice publishes — a function cannot travel through a
-configuration tree.
+```ts
+.extend(c => multipartPlugin(c.app.multipart.options))
+```
+
+`multipartConfigSchema` is exported so an application can splice it into its own schema rather than restate the
+fields. The bag is a `Record` there, not a declared mirror of `@fastify/multipart`'s options: the validator strips every
+property a schema does not name, so a partial mirror would silently drop the rest.
+
+A callback option needs no special handling — the bag never travels through a configuration tree, so it is
+written where the plugin is registered and handed over as-is.

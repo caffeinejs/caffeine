@@ -1,10 +1,15 @@
 import type { Ctor } from '@caffeinejs/di'
-import { FeatureBuilder, HealthIndicator, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
-import { type ConfigSlice } from '@caffeinejs/std/config'
+import {
+  FeatureBuilder,
+  HealthIndicator,
+  kFeatureName,
+  type BootstrapKit,
+  type FeatureConfigurer,
+} from '@caffeinejs/std'
+import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import {
-  kafkaConfigSchema,
   type DeserializationErrorHandler,
   type KafkaAckMode,
   type KafkaClients,
@@ -29,9 +34,9 @@ import { KafkaTemplate } from './template.js'
 
 /**
  * Fluent configuration for one (optionally named) Kafka integration. Follows the repo feature-builder
- * convention (`.extend(kafka(), k => k.brokers(...).groupId(...))`): it accumulates settings, then at `ready()`
+ * convention (`.extend(kafka(k => k.brokers(...).groupId(...)))`): it accumulates settings, then at `ready()`
  * time its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
- * the container under per-instance keys. A second integration is `.extend(kafka('orders'), k => ...)`.
+ * the container under per-instance keys. A second integration is `.extend(kafka('orders', k => ...))`.
  *
  * There is one read path for everything a configuration tree can carry. A builder method does not hold its
  * value — it writes into the tree in the `CODE` band, and the instance reads the merged result. So
@@ -39,16 +44,15 @@ import { KafkaTemplate } from './template.js'
  * one image ships to every environment. The members that cannot be configuration — serializers, the
  * classifier, the recoverer, the error hooks — stay on the builder and are merged in afterwards.
  *
- * Settings live at `kafka.<name>.*`, the unnamed instance at `kafka.default.*`. {@link config} re-points them.
- *
- * `C` is the application config type, recovered from the builder `.extend(kafka(), …)` was reached through, so the
- * selector argument is a `ConfigHandle<C>`.
+ * What a fluent method sets is final. To let a deployment repoint the brokers, read them from a node of the
+ * configuration tree with {@link withConfig}.
  */
-export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, C> {
-  readonly [kFeatureName] = 'kafka'
+export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
+  get [kFeatureName](): string {
+    return this.#name === DEFAULT_INSTANCE ? 'kafka' : `kafka:${this.#name}`
+  }
 
-  protected readonly schema = kafkaConfigSchema
-
+  #config: ConfigLocation<KafkaConfigSlice> | undefined
   readonly #name: string
   readonly #clients: KafkaClients
   #brokers?: string | string[]
@@ -68,12 +72,23 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, 
   #recoverer?: KafkaRecoverer
   #onDeserializationError?: DeserializationErrorHandler
   #onError?: (error: unknown, message: KafkaMessage) => void
-  #resolved?: ConfigSlice<ResolvedKafkaConfig>
 
-  constructor(clients: KafkaClients, name: string = DEFAULT_INSTANCE) {
-    super()
+  constructor(clients: KafkaClients, name: string = DEFAULT_INSTANCE, configure?: FeatureConfigurer<never, C>) {
+    super(configure)
     this.#clients = clients
     this.#name = name
+  }
+
+  /**
+   * Reads the settings from a node of the configuration tree, e.g. `c.app.kafka`.
+   *
+   * Applied **over** what the fluent methods set, so `k.brokers(...)` is a default a deployment can redirect.
+   * The serializers, the retry strategy, the classifier, the recoverer and the error hooks are functions and
+   * cannot travel through a tree — they stay on the builder and are merged in either way.
+   */
+  withConfig(config: ConfigLocation<KafkaConfigSlice>): this {
+    this.#config = config
+    return this
   }
 
   /** One or more `host:port` bootstrap brokers. Required. */
@@ -190,75 +205,19 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, 
     return this
   }
 
-  protected override configValues(): Record<string, unknown> {
-    return {
-      // A builder method is a default: `KAFKA__DEFAULT__BROKERS` overrides whatever `.brokers(...)` set.
-      brokers:
-        this.#brokers === undefined ? undefined : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers],
-      clientId: this.#clientId,
-      groupId: this.#groupId,
-      ackMode: this.#ackMode,
-      retry: this.#retry === undefined ? undefined : { ...this.#retry },
-      topicProvisioning: this.#topicProvisioning === undefined ? undefined : { ...this.#topicProvisioning },
-      // Only the boolean form can travel through a config tree; the object form is two callbacks.
-      deadLetter: typeof this.#deadLetter === 'boolean' ? this.#deadLetter : undefined,
-    }
-  }
-
-  protected override beforeBootstrap(): void {
-    // Everything a configuration tree cannot carry, folded back in when the slice publishes.
-    const code = {
-      serializers: this.#serializers,
-      deserializers: this.#deserializers,
-      retryStrategy: this.#retryStrategy,
-      deadLetterManager: this.#deadLetterManager,
-      deadLetter: typeof this.#deadLetter === 'object' ? this.#deadLetter : undefined,
-      notRetryable: this.#notRetryable,
-      retryable: this.#retryable,
-      classifier: this.#classifier,
-      recoverer: this.#recoverer,
-      onDeserializationError: this.#onDeserializationError,
-      onError: this.#onError,
-    }
-
-    this.#resolved = this.derive(published => {
-      const brokers = published.brokers ?? []
-
-      // Checked here rather than on the builder: the brokers may arrive from any source, so the only
-      // moment the answer is known is once the whole chain has merged. The failure surfaces as the
-      // slice's, naming the instance that could not be configured.
-      if (brokers.length === 0 || brokers.some(broker => broker.length === 0)) {
-        throw new ErrKafkaMissingBrokers()
-      }
-
-      return resolveConfig(
-        {
-          ...published,
-          brokers,
-          ...code,
-          // `code.deadLetter` is only the object form; a `false` from configuration must still be honoured.
-          deadLetter: code.deadLetter ?? published.deadLetter,
-        },
-        { serializers: defaultSerializers, deserializers: defaultDeserializers },
-      )
-    })
-  }
-
-  protected bootstrap(kit: BootstrapKit): void {
-    const resolved = this.#resolved!
+  protected bootstrap(kit: BootstrapKit<C>): void {
+    const config = this.#resolve()
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)
     const container = kit.container
 
     kit.container.bind(rKey, t =>
-      t
-        // The config object is the slice's own and is live, so a refresh reaches whatever reads through it.
-        .toValue<KafkaRuntime>({
-          name: this.#name,
-          container,
-          config: resolved.config,
-          clients: this.#clients,
-        }),
+      t.toValue<KafkaRuntime>({
+        name: this.#name,
+        container,
+        config,
+        clients: this.#clients,
+      }),
     )
 
     // The default instance's template is bound under the KafkaTemplate class (so it can be injected by
@@ -288,5 +247,49 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<KafkaConfigSlice, 
         t.toFactory(() => new KafkaHealthIndicator(indicatorContainer)).extends(HealthIndicator),
       )
     }
+  }
+
+  /**
+   * The builder's settings with the configured ones folded over them, plus everything a configuration tree
+   * cannot carry.
+   *
+   * @throws ErrKafkaMissingBrokers when no broker was named from either side. Checked here rather than on the
+   *   builder: the brokers may arrive from either, so this is the first moment the answer is known.
+   */
+  #resolve(): ResolvedKafkaConfig {
+    const brokers =
+      this.#config?.brokers ??
+      (this.#brokers === undefined ? undefined : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers]) ??
+      []
+
+    if (brokers.length === 0 || brokers.some(broker => broker.length === 0)) {
+      throw new ErrKafkaMissingBrokers()
+    }
+
+    return resolveConfig(
+      {
+        brokers,
+        clientId: this.#config?.clientId ?? this.#clientId,
+        groupId: this.#config?.groupId ?? this.#groupId,
+        ackMode: this.#config?.ackMode ?? this.#ackMode,
+        retry: this.#config?.retry ?? this.#retry,
+        topicProvisioning: this.#config?.topicProvisioning ?? this.#topicProvisioning,
+        serializers: this.#serializers,
+        deserializers: this.#deserializers,
+        retryStrategy: this.#retryStrategy,
+        deadLetterManager: this.#deadLetterManager,
+        // Only the boolean form can travel through a tree; the object form is two callbacks. A `false` from
+        // configuration must still be honoured, so the object form wins and the rest falls through.
+        deadLetter:
+          typeof this.#deadLetter === 'object' ? this.#deadLetter : (this.#config?.deadLetter ?? this.#deadLetter),
+        notRetryable: this.#notRetryable,
+        retryable: this.#retryable,
+        classifier: this.#classifier,
+        recoverer: this.#recoverer,
+        onDeserializationError: this.#onDeserializationError,
+        onError: this.#onError,
+      } as never,
+      { serializers: defaultSerializers, deserializers: defaultDeserializers },
+    )
   }
 }

@@ -18,8 +18,8 @@ import {
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { kOpenAPIConfig } from '../keys.js'
-import { OpenAPIExt } from '../plugin.js'
+import { kOpenAPIOptions } from '../keys.js'
+import { openapi } from '../plugin.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
 
 // The application owns the schema, so it declares where the OpenAPI block lives and points the feature there
@@ -76,29 +76,25 @@ describe('openapi configuration', () => {
     app = undefined
   })
 
-  // The plan's headline case: redirect the documented server URL per environment, no rebuild.
-  it('lets the environment override a builder-set server URL', async () => {
+  // The headline case: redirect the documented server URL per environment, no rebuild. `.server(...)` is not
+  // called here, so the block the callback wired is what the document carries.
+  it('reads the server URL from the environment when the code names none', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ OPENAPI__SERVERS__0__URL: 'https://api.prod.example.com' }), ConfigPriority.ENV),
       )
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .info({ title: 'Things', version: '1.0.0' })
-          .server('http://localhost:3000')
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).info({ title: 'Things', version: '1.0.0' }).public()))
       .build()
 
     await app.ready()
 
     const doc = await documentOf(app)
     expect(doc.servers).toEqual([{ url: 'https://api.prod.example.com' }])
+    // Named in code, so it stands whatever the tree carries.
     expect(doc.info.title).toBe('Things')
   })
 
-  it('reads the info block from the configuration tree', async () => {
+  it('reads the info block from the configuration tree when the code names none', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c =>
         c.source(
@@ -107,12 +103,7 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .info({ title: 'From Code', version: '1.0.0' })
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).public()))
       .build()
 
     await app.ready()
@@ -132,18 +123,13 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .info({ title: 'Things', version: '1.0.0' })
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).info({ title: 'Things', version: '1.0.0' }).public()))
       .build()
 
     await app.ready()
 
     // 422 came from configuration; 401/403 are still the defaults the builder started from.
-    const options = app.container.get(Configuration).config(kOpenAPIConfig)!
+    const options = app.container.get(kOpenAPIOptions)
     expect(options.errors).toEqual({ validation: 422, unauthorized: 401, forbidden: 403 })
     // `routes` was not configured here, so it is still what the builder started from.
     expect(options.routes.json).toBe('/openapi.json')
@@ -153,12 +139,7 @@ describe('openapi configuration', () => {
   it('serves the documentation page at a configured route', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__DOCS: '/reference' }), ConfigPriority.ENV))
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .info({ title: 'Things', version: '1.0.0' })
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).info({ title: 'Things', version: '1.0.0' }).public()))
       .build()
 
     await app.ready()
@@ -172,21 +153,16 @@ describe('openapi configuration', () => {
   it('switches an endpoint off when configuration says false', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ OPENAPI__ROUTES__YAML: 'false' }), ConfigPriority.ENV))
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .info({ title: 'Things', version: '1.0.0' })
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).public()))
       .build()
 
     await app.ready()
 
-    expect(app.container.get(Configuration).config(kOpenAPIConfig)!.routes.yaml).toBeUndefined()
+    expect(app.container.get(kOpenAPIOptions).routes.yaml).toBeUndefined()
     expect((await app.fetch('/openapi.yaml')).status).toBe(404)
   })
 
-  it('re-points reads and code-set defaults together via .config()', async () => {
+  it('reads the info block from wherever the application put it', async () => {
     const schema = $t.Object({
       app: $t.Object({
         // Shaped like `InfoObject`, since the selector's return type is checked against the feature's own
@@ -206,13 +182,7 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      // No annotation on the selector: the config type is recovered from the builder.
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.app.docs)
-          .info({ title: 'Code', version: '1.0.0' })
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.app.docs).public()))
       .build()
 
     await app.ready()
@@ -231,13 +201,15 @@ describe('openapi configuration', () => {
           }),
         ),
       )
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .public()
-          .transformDocument(document => {
-            document.info.title = 'Renamed'
-          }),
+      .extend(
+        openapi((o, c) =>
+          o
+            .withConfig(c.openapi)
+            .public()
+            .transformDocument(document => {
+              document.info.title = 'Renamed'
+            }),
+        ),
       )
       .build()
 
@@ -288,7 +260,7 @@ describe('openapi defaults and the schema band', () => {
   it('lets the application schema default a block the feature also defaults', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(defaultedSchema, kDefaultedConfig)
-      .extend(OpenAPIExt(), o => o.config(c => c.openapi).public())
+      .extend(openapi((o, c) => o.withConfig(c.openapi).public()))
       .build()
 
     await app.ready()
@@ -303,7 +275,7 @@ describe('openapi defaults and the schema band', () => {
   it('keeps a schema-declared server list the feature would otherwise claim away', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(defaultedSchema, kDefaultedConfig)
-      .extend(OpenAPIExt(), o => o.config(c => c.openapi).public())
+      .extend(openapi((o, c) => o.withConfig(c.openapi).public()))
       .build()
 
     await app.ready()
@@ -315,12 +287,7 @@ describe('openapi defaults and the schema band', () => {
   it('still lets a builder call beat the schema default', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(defaultedSchema, kDefaultedConfig)
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .info({ title: 'From Code', version: '1.0.0' })
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).info({ title: 'From Code', version: '1.0.0' }).public()))
       .build()
 
     await app.ready()
@@ -328,17 +295,12 @@ describe('openapi defaults and the schema band', () => {
     expect((await documentOf(app)).info.title).toBe('From Code')
   })
 
-  it('still lets the environment beat both', async () => {
+  it('lets the environment beat the schema default when the code names nothing', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(defaultedSchema, kDefaultedConfig, c =>
         c.source(env({ OPENAPI__INFO__TITLE: 'From Env' }), ConfigPriority.ENV),
       )
-      .extend(OpenAPIExt(), o =>
-        o
-          .config(c => c.openapi)
-          .info({ title: 'From Code', version: '1.0.0' })
-          .public(),
-      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).public()))
       .build()
 
     await app.ready()

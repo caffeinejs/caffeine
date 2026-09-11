@@ -19,7 +19,7 @@ export interface DeadLetterRecord {
 /**
  * Uber's reliable-reprocessing loop, as a pluggable surface: inspect the dead-letter topic, purge it, or
  * re-inject its records back into the retry chain once the underlying bug is fixed. Bound per instance; override
- * the builtin with `.extend(kafka(), k => k.deadLetterManager(...))`.
+ * the builtin with `.extend(kafka(k => k.deadLetterManager(...)))`.
  */
 export interface DeadLetterManager {
   /** Reads (peeks) up to `limit` records from a dead-letter topic without committing — for diagnosis. */

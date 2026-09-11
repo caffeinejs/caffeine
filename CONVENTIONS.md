@@ -138,11 +138,11 @@ Do not re-export a symbol (type or value) from another module or package just to
 
 ```ts
 // wrong
-export { kBootstrap, type FeatureLifecycle } from '@caffeinejs/std'
+export { kBootstrap, type BootstrapKit } from '@caffeinejs/std'
 
 // correct
-import { kBootstrap, type FeatureLifecycle } from '@caffeinejs/std'
-import type { Services } from './service.js'
+import { kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+import type { ThingConfig } from './config.js'
 ```
 
 A package’s `index.ts` barrel aggregating that package’s **own** modules is not a passthrough and is fine.
@@ -151,29 +151,42 @@ A package’s `index.ts` barrel aggregating that package’s **own** modules is 
 
 Where a value goes depends on who reads it, not on what is convenient:
 
-| The value is…                                          | Goes to                                | Read with                               |
-| ------------------------------------------------------ | -------------------------------------- | --------------------------------------- |
-| a setting a user tunes from the environment or a file  | this feature's config slice            | `this.set(key, value)` → `this.slice`   |
-| where that slice lives in the tree                     | the application's schema and selector  | `builder.config(c => c.app.thing)`      |
-| a setting code outside the feature's builder must read | that slice, given a `configKey`        | `config(key)` on the config handle      |
-| something user code injects                            | a container binding, in `bootstrap`    | `container.get` / constructor injection |
-| one of many providers a single consumer collects       | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
-| start-up wiring the platform runs                      | `registerPlugin(kit, plugin)`          | the platform registers it               |
-| a plugin's own data                                    | the **closure** the plugin is built in | the captured value                      |
+| The value is…                                         | Goes to                                | Read with                               |
+| ----------------------------------------------------- | -------------------------------------- | --------------------------------------- |
+| a setting a user tunes from the environment or a file | the application's configuration tree   | the configure callback's `c`            |
+| a value the feature runs on                           | an ordinary field on the builder       | the builder reads its own field         |
+| a setting code outside the feature must read          | a container binding, in `bootstrap`    | `container.getOptional(key)`            |
+| something user code injects                           | a container binding, in `bootstrap`    | `container.get` / constructor injection |
+| one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
+| start-up wiring the platform runs                     | `registerPlugin(kit, plugin)`          | the platform registers it               |
+| a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
 
 Those are the only answers, and there is no eighth. A value the application needs once everything is up is
-either configuration — so it goes in the slice, under a key — or an artifact, so it is a binding. There is no
-side channel between a feature and the application, and no first-party bag a package reaches into: `http` used
-to hand every plugin a `Services` record assembled from four `Contributions` keys, and both are gone.
+either configuration — so the callback reads it out of the tree and hands it over — or an artifact, so it is a
+binding. There is no side channel between a feature and the application's configuration: a feature registers
+no slice, publishes no key, and adds no field to the resolved configuration object.
 
-A feature never picks its own location in the configuration tree and never adds a field to the resolved
-configuration object. The application declares the whole schema — importing the feature's exported schema
-(`serverConfigSchema`, `healthConfigSchema`, …) rather than restating it — and names the location with the
-builder's `.config(selector)`. A feature nothing pointed anywhere resolves **detached**, from its own defaults
-and its builder values alone: it works, and no file, environment variable or argument reaches it.
+**A fluent method is the last word.** `s.port(3000)` is what the feature runs on; it is not a default that a
+higher band quietly outranks. Configuration reaches a feature because the application's configure callback
+wired it — `.extend(server((s, c) => s.withConfig(c.app.server)))` — and by no other path. Where the more
+specific of the two is named, the more specific wins: a setter beats the block `withConfig` handed over.
+
+The application declares the whole schema, importing the feature's exported schema (`serverConfigSchema`,
+`healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
+into the tree, since the feature no longer seeds anything there — a block declared with required, undefaulted
+fields and no source to fill them fails validation at `ready()`.
+
+A feature nothing wired runs on its own defaults and its builder values alone: it works, and no file,
+environment variable or argument reaches it.
+
+Liveness is the author's choice rather than something the framework manufactures. A configuration node is a
+live accessor over the current tree, so `b.withConfig(c.app.thing)` follows a refresh while
+`b.port(c.app.thing.port)` reads a number once. A feature whose readers need the folded shape to stay live
+builds it with `liveFold(...)` from `@caffeinejs/std/config`: a stable identity whose fields refold only when
+the settings behind them actually changed.
 
 Do not route a plugin's own configuration through a container key it reads back at server setup: the builder
-is holding the value when it builds the plugin, so the plugin closes over it. `registerPlugin(kit, thingPlugin(this.slice.config))`
+is holding the value when it builds the plugin, so the plugin closes over it. `registerPlugin(kit, thingPlugin(options))`
 is the whole act — there is no token to bind and no registry entry to look up.
 
 An HTTP feature's start-up wiring **is** a Fastify plugin (`HTTPPlugin` in `@caffeinejs/http`), and nothing
@@ -182,81 +195,84 @@ in; leave it unwrapped and they stay inside the plugin. The plugin does not choo
 application registers it on the root server, a `router.extend(...)` or a `@Use(...)` registers it inside that
 route group — so one wrapped plugin covers every route or one group's routes, according to who asked for it.
 
-Plugins register in the order their features were installed, which is the order the application's
-`.extend(...)` calls are written. There are no stages and nothing is sorted by what a plugin is: a feature
-that must precede another is extended first. The install position is a property of the registry, not of when
-a `bootstrap` hook reached the call, so a feature that awaits before registering does not move.
+Plugins register in the order they were written, which is the order of the application's `.extend(...)` calls.
+There are no stages and nothing is sorted by what a plugin is: a feature that must precede another is extended
+first. The install position is a property of the registry, not of when a `bootstrap` hook reached the call, so
+a feature that awaits before registering does not move.
 
 Two framework slots bracket that list, in `WebApplication.configurers()` and nowhere else: error handling
 leads, so every route and hook the rest register is already covered by it, and the not-found handler trails,
 because it needs whatever the others decorated the server with. Everything else, this package's own features
 included, sits between them in `.extend(...)` order — the authentication gate included, which is why
-`.authentication(...)` is written after `cors()` and before a hook that reads `req.user`.
+`.authentication(...)` is written after the CORS plugin and before a hook that reads `req.user`.
 
-## Writing a feature builder
+## Writing a feature
 
-Extend `FeatureBuilder<T, C>` from `@caffeinejs/std`. It is a pure fluent authoring class — its methods return
-`this` — and it **is** the `FeatureLifecycle`, with `[kFeatureName]`, `[kBeforeBootstrap]` and `[kBootstrap]`
-symbol-keyed so none of it shows on the fluent surface.
-
-The base owns the whole configuration path: `.config(selector)`, the two bands, registering the slice and
-publishing it under a key. A subclass declares `schema` (and optionally `configKey` and `defaults`), writes
-into the band from its fluent methods with `set`, and does its binding in `bootstrap`:
+A feature is one interface with two members, both symbol-keyed so none of it shows on a fluent surface:
 
 ```ts
-export class ThingBuilder<C = unknown> extends FeatureBuilder<ThingConfig, C> {
+export interface Feature<C = unknown> {
+  get [kFeatureName](): string
+  [kBootstrap](kit: BootstrapKit<C>): void | Promise<void>
+}
+```
+
+`[kFeatureName]` is the identity `.extend` deduplicates on, so a feature accepting an instance name folds it
+in (`kafka` vs `kafka:orders`) and one image cannot install the same instance twice. `[kBootstrap]` runs after
+configuration has resolved and before the container initializes, so the kit's `config` is readable and binding
+is still open. There is no declare phase and no second hook.
+
+Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which adds exactly one thing: it runs the
+application's configure callbacks against the builder, with the resolved configuration, immediately before
+`bootstrap`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in
+`bootstrap`:
+
+```ts
+export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'thing'
 
-  protected readonly schema = thingConfigSchema
-  protected readonly configKey = kThingConfig
+  #config: ConfigLocation<ThingConfig> | undefined
+  #size: number | undefined
+
+  withConfig(config: ConfigLocation<ThingConfig>): this {
+    this.#config = config
+    return this
+  }
 
   size(size: number): this {
-    return this.set('size', size)
+    this.#size = size
+    return this
   }
 
-  protected bootstrap(kit: BootstrapKit): void {
-    registerPlugin(kit, thingPlugin(this.slice.config))
+  protected bootstrap(kit: BootstrapKit<C>): void {
+    registerPlugin(kit, thingPlugin(this.#size ?? this.#config?.size ?? DEFAULT_SIZE))
   }
 }
 ```
 
-The package exports a **factory function** that returns a `Feature<ThingBuilder>` — always called, never a
-bare value: `.extend(thing(), t => t.size(3))`. Use the `feature(name, () => new ThingBuilder())` helper from
-`@caffeinejs/std` for the common case; it constructs the builder, runs the `.extend` callback against it, and
-calls `ctx.addFeature`. A feature that needs more at install time — an instance name, a once-registered
-lifecycle listener, a lazily created provider — writes its own function returning `Feature`:
+The package exports a **factory function**, generic over the application configuration type so the callback's
+second argument is typed against the schema the application declared:
 
 ```ts
-export function thing(instance: string = 'default'): Feature<ThingBuilder> {
-  return {
-    name: instance === 'default' ? 'thing' : `thing:${instance}`,
-    install(ctx, configure) {
-      const builder = new ThingBuilder(instance)
-      configure?.(builder)
-      ctx.addFeature(builder)
-    },
-  }
+export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C> {
+  return new ThingBuilder<C>(configure as never)
 }
 ```
 
-`.extend` deduplicates on `Feature.name`, so a feature that accepts an instance name folds it into the name
-(`thing` vs `thing:orders`) and one image cannot install the same instance twice. There is no `singleton`
-flag and no separate keyed-feature factory.
+A feature taking an instance name overloads on it, and folds it into `[kFeatureName]`:
 
-Three hooks cover what `set` cannot express. `configValues()` replaces the whole `CODE` band, for a builder
-holding one options object its setters mutate. `beforeBootstrap()` runs once the slice exists and is where a
-`derive(...)` goes — the fold from raw settings into the shape the feature runs on, plus whatever cannot
-travel through a tree. `declared` reports whether the declare step ran at all, which is false only for a
-builder driven directly rather than by an application.
+```ts
+export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
+export function thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
+```
 
-A feature never picks its own location in the configuration tree. An option bag forwarded to a third-party
-library is split with `splitOptionBag(...)`: the data half goes into the slice, the callbacks stay on the
-builder and are merged back, because a function cannot travel through a configuration tree.
+The framework's own pre-registered builders — the server, the probes, the shutdown policy — are constructed
+before an application can name a callback, so `.server(...)` and its siblings hand theirs over with
+`builder[kAddConfigurer](configure)`. Nothing else uses that symbol.
 
-A builder that configures nothing tunable (`AuthorizationBuilder`, `GuardsBuilder`) implements
-`FeatureLifecycle` directly instead — `FeatureBuilder` exists to own a slice, and one without a schema is not
-a feature builder. So does a lifecycle that owns _several_ slices rather than one, as `view` does with its
-per-engine builders.
+A builder that configures nothing tunable (`AuthorizationBuilder`, `GuardsBuilder`) implements `Feature`
+directly instead — `FeatureBuilder` exists to run a configure callback, and one with nothing to configure is
+not a feature builder.
 
 ## Error messages
 

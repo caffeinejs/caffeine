@@ -116,7 +116,7 @@ export interface Context<
    * it is read. A refresh that lands mid-request is not observed once the snapshot has been taken.
    *
    * `C` is declared where the routes are, with `.configType<C>()`. Calling it reads a feature's own
-   * configuration instead — `ctx.config(kHTMLConfig)` — which is how a package with no knowledge of `C` reaches
+   * configuration instead — `ctx.config(kHTMLOptions)` — which is how a package with no knowledge of `C` reaches
    * the settings it registered.
    */
   get config(): ConfigHandle<C>

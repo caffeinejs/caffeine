@@ -3,8 +3,11 @@ import {
   AppConfigBuilder,
   BaseApplicationBuilder,
   ShutdownBuilder,
+  kAddConfigurer,
   type ApplicationBuilderOptions,
   type ApplicationConfigMarker,
+  type Feature,
+  type FeatureConfigurer,
   type Reconfigured,
 } from '@caffeinejs/std'
 import type { ConfigHandle, ConfigSchema, InferConfig } from '@caffeinejs/std/config'
@@ -16,6 +19,8 @@ import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { ConstraintsBuilder } from './constraints/builder.js'
 import { GuardsBuilder } from './guards/builder.js'
 import { HealthBuilder } from './health/health_builder.js'
+import type { HTTPPluginFactory } from './plugin.js'
+import { HTTPPluginFeature } from './plugin_feature.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { ServerBuilder } from './server/index.js'
@@ -71,19 +76,42 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   /**
+   * Installs a feature, or registers a Fastify plugin.
+   *
+   * A feature is an object; a plugin factory is a function, which is the whole discrimination. Both take their
+   * position in one list, so they register in the order these calls are written:
+   *
+   * ```ts
+   * createWebApplication()
+   *   .extend(c => corsPlugin(c.app.cors.options))
+   *   .extend(caching(cache => cache.ttl('5m')))
+   * ```
+   *
+   * A feature is installed once per `kFeatureName`. A plugin has no name a caller chose and is never
+   * deduplicated — two calls register two plugins.
+   */
+  override extend(feature: Feature<TConfig>): this
+  override extend(plugin: HTTPPluginFactory<TConfig>): this
+  override extend(target: Feature<TConfig> | HTTPPluginFactory<TConfig>): this {
+    return typeof target === 'function'
+      ? this.addFeature(new HTTPPluginFeature(target))
+      : super.extend(target as Feature<never>)
+  }
+
+  /**
    * Configures authentication, and puts the gate where this call is written.
    *
    * The `onRequest` hook that authenticates and authorizes registers at this position among the plugins, so a
    * feature extended before this call runs ahead of it — `cors()`, whose headers a rejected cross-origin
    * request still needs — and one extended after it never runs for a request the gate rejected.
    */
-  authentication(configure: (auth: AuthenticationBuilder<TConfig>) => void): this {
+  authentication(configure: FeatureConfigurer<AuthenticationBuilder<TConfig>, TConfig>): this {
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
       this.addFeature(this.#authBuilder)
     }
 
-    configure(this.#authBuilder as AuthenticationBuilder<TConfig>)
+    this.#authBuilder[kAddConfigurer](configure as never)
 
     return this
   }
@@ -129,7 +157,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   /**
    * Declares the application configuration — the schema it is validated against, and the key its resolved
    * `ConfigHandle` is bound under — and re-types the builder to carry the config type `T` (inferred from
-   * `schema`), so features configured afterwards (e.g. `server(s => s.config(c => c.server))`) see a
+   * `schema`), so features configured afterwards (e.g. `server((s, c) => s.withConfig(c.server))`) see a
    * strongly-typed `ConfigHandle<T>`. The optional `configure` callback — any shape — adds sources and context.
    * Declare it first. Runtime returns the same instance; only the declared type changes.
    *
@@ -159,10 +187,12 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * Left uncalled, the probes are exposed only when `KUBERNETES_SERVICE_HOST` is present. Graceful shutdown —
    * the drain sequence and the signal handlers — is a separate feature; configure it with {@link shutdown}.
    */
-  health(configure?: (health: HealthBuilder<TConfig>) => void): this {
+  health(configure?: FeatureConfigurer<HealthBuilder<TConfig>, TConfig>): this {
     // The feature is already registered; reaching this is what turns the probes on regardless of environment.
     this.#healthBuilder.markExplicit()
-    configure?.(this.#healthBuilder as HealthBuilder<TConfig>)
+    if (configure !== undefined) {
+      this.#healthBuilder[kAddConfigurer](configure as never)
+    }
 
     return this
   }
@@ -172,13 +202,13 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults —
    * `s.drainDelay('5s')` is a **default** that `SHUTDOWN__DRAIN_DELAY` or the config tree can still redirect.
    */
-  shutdown(configure: (shutdown: ShutdownBuilder<TConfig>) => void): this {
-    configure(this.#shutdownBuilder as ShutdownBuilder<TConfig>)
+  shutdown(configure: FeatureConfigurer<ShutdownBuilder<TConfig>, TConfig>): this {
+    this.#shutdownBuilder[kAddConfigurer](configure as never)
     return this
   }
 
-  server(configure: (server: ServerBuilder<TConfig>) => void): this {
-    configure(this.#serverBuilder as ServerBuilder<TConfig>)
+  server(configure: FeatureConfigurer<ServerBuilder<TConfig>, TConfig>): this {
+    this.#serverBuilder[kAddConfigurer](configure as never)
     return this
   }
 
@@ -196,7 +226,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
  *
  * ```ts
  * createWebApplication()
- *   .extend(ViewExt(), v => v.engine({ handlebars }))
+ *   .extend(view(v => v.engine({ handlebars })))
  * ```
  */
 // Default Fastify — no adapter factory or Fastify instance required.

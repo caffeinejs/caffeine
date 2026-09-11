@@ -162,8 +162,8 @@ const GROUP = 'kafka-test-default'
 describe('KafkaListenerContainer', () => {
   it('dispatches a produced message to the matching @KafkaListener (singleton)', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka(undefined, { clients: broker.clients() }), k =>
-      k.brokers('localhost:9092').groupId(GROUP),
+    const app = createApplication({}).extend(
+      kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
     const built = app.build()
@@ -180,8 +180,8 @@ describe('KafkaListenerContainer', () => {
 
   it('dispatches within a request scope for a request-scoped handler', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka(undefined, { clients: broker.clients() }), k =>
-      k.brokers('localhost:9092').groupId(GROUP),
+    const app = createApplication({}).extend(
+      kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
     const built = app.build()
@@ -197,11 +197,15 @@ describe('KafkaListenerContainer', () => {
 
   it('routes a handler failure to the onError hook instead of crashing the stream', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka(undefined, { clients: broker.clients() }), k =>
-      k
-        .brokers('localhost:9092')
-        .groupId(GROUP)
-        .onError(error => errorThrown.resolve(error)),
+    const app = createApplication({}).extend(
+      kafka(
+        k =>
+          k
+            .brokers('localhost:9092')
+            .groupId(GROUP)
+            .onError(error => errorThrown.resolve(error)),
+        { clients: broker.clients() },
+      ),
     )
 
     const built = app.build()
@@ -218,8 +222,8 @@ describe('KafkaListenerContainer', () => {
 
   it('extracts handler arguments via @KafkaParams', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(kafka(undefined, { clients: broker.clients() }), k =>
-      k.brokers('localhost:9092').groupId(GROUP),
+    const app = createApplication({}).extend(
+      kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
     const built = app.build()

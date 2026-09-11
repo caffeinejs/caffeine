@@ -1,6 +1,6 @@
 import type { ObjectInjectionSpec } from '@caffeinejs/di'
 
-import type { ScopedFeatureInstall } from '../../plugin.js'
+import type { HTTPPluginFactory } from '../../plugin.js'
 import type { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteInvoker } from '../dispatch.js'
 
@@ -27,8 +27,8 @@ export interface RouterState {
   injection?: ObjectInjectionSpec
   readonly routes: RouteState[]
   readonly children: RouterState[]
-  /** The features `.extend(...)` installed on this router, in the order they were written. */
-  readonly installs: ScopedFeatureInstall[]
+  /** The plugins `.extend(...)` registered on this router, in the order they were written. */
+  readonly plugins: HTTPPluginFactory[]
 }
 
 // Kept off the classes so nothing internal shows up on the public type, and so `flatten` can read a whole tree

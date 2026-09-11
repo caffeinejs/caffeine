@@ -1,5 +1,13 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { $t, type BootstrapKit, type InferSchema, feature, kBootstrap, kFeatureName } from '@caffeinejs/std'
+import {
+  $t,
+  FeatureBuilder,
+  kFeatureName,
+  type BootstrapKit,
+  type Feature,
+  type FeatureConfigurer,
+  type InferSchema,
+} from '@caffeinejs/std'
 import { EnvConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import Fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
@@ -10,27 +18,32 @@ import { createWebApplication, fastifyAdapterFactory } from './index.js'
 // the same `bootstrap()` path as the built-in auth/authz services.
 const kProbe = token<Record<string, unknown>>(Symbol('probe-sentinel'))
 
-function probe() {
-  return feature('probe', () => {
-    const state: { broker: string | undefined } = { broker: undefined }
-    return {
-      [kFeatureName]: 'probe',
-      capture(broker: string) {
-        state.broker = broker
-      },
-      [kBootstrap](kit: BootstrapKit) {
-        kit.container.bind(kProbe, t => t.toValue({ broker: state.broker }))
-        return Promise.resolve()
-      },
-    }
-  })
+class ProbeBuilder<C = unknown> extends FeatureBuilder<C> {
+  readonly [kFeatureName] = 'probe'
+
+  #broker: string | undefined
+
+  capture(broker: string): this {
+    this.#broker = broker
+    return this
+  }
+
+  protected bootstrap(kit: BootstrapKit<C>): Promise<void> {
+    const broker = this.#broker
+    kit.container.bind(kProbe, t => t.toValue({ broker }))
+    return Promise.resolve()
+  }
+}
+
+function probe<C = unknown>(configure?: FeatureConfigurer<ProbeBuilder<C>, C>): Feature<C> {
+  return new ProbeBuilder<C>(configure as never)
 }
 
 describe('builder.extend()', () => {
   it('installs the feature and rides the bootstrap path into the container', async () => {
     const container = new CaffeineIoC()
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }).extend(probe(), t =>
-      t.capture('localhost:9092'),
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }).extend(
+      probe(t => t.capture('localhost:9092')),
     )
 
     const built = app.build()
@@ -69,7 +82,7 @@ describe('builder.extend()', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
       .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-      .extend(probe(), t => t.capture('after-config:9092'))
+      .extend(probe(t => t.capture('after-config:9092')))
 
     const built = app.build()
     await built.ready()
@@ -84,7 +97,7 @@ describe('builder.extend()', () => {
     const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       .extend(probe())
       .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-      .server(s => s.config(c => c.app.server))
+      .server((s, c) => s.withConfig(c.app.server))
 
     expect(typeof app.build).toBe('function')
   })

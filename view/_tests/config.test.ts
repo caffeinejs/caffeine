@@ -8,12 +8,12 @@ import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import type { ViewBuilder } from '../builder.js'
 import { viewConfigSchema } from '../config.js'
-import { ViewExt } from '../plugin.js'
+import { view } from '../plugin.js'
 
 // The application owns the schema: it declares one block per view engine — by importing the feature's own
-// schema, given a default so a block a test never configures still materializes — and each `.extend` points
-// its engine at the matching block.
+// schema, given a default so a block a test never configures still materializes.
 const engineSchema = $t.Object(viewConfigSchema.properties, { default: {} })
 const rootSchema = $t.Object({
   view: $t.Object({ default: engineSchema, mail: engineSchema }, { default: {} }),
@@ -25,17 +25,17 @@ const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.u
 
 const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
 
-// `.extend` hands the configure callback the engine's own builder, and `build()` assembles the options the
-// plugin registers `@fastify/view` with — read after `ready()`, so it reflects the resolved configuration.
+// The options the plugin registers `@fastify/view` with, read after `ready()` so they reflect whatever the
+// configure callback wired.
 const capture = () => {
-  const builders: Array<{ build(): unknown }> = []
+  let builder: ViewBuilder<never> | undefined
 
   return {
-    take: <B extends { build(): unknown }>(builder: B): B => {
-      builders.push(builder)
-      return builder
+    take: <B>(b: B): B => {
+      builder = b as ViewBuilder<never>
+      return b
     },
-    options: (): Array<Record<string, unknown>> => builders.map(builder => builder.build() as Record<string, unknown>),
+    options: (): Array<Record<string, unknown>> => (builder?.all() ?? []) as unknown as Array<Record<string, unknown>>,
   }
 }
 
@@ -47,18 +47,35 @@ describe('view configuration', () => {
     app = undefined
   })
 
-  it('lets the environment override a builder-set root', async () => {
+  // A fluent method is the last word. The environment names a root here and the callback never wired it, so
+  // the root the code set is what the engine runs on.
+  it('keeps a builder-set root when the callback does not read the configuration', async () => {
     const engines = capture()
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ VIEW__DEFAULT__ROOT: ejsRoot }), ConfigPriority.ENV))
-      .extend(ViewExt(), v =>
-        engines
-          .take(v)
-          .config(c => c.view.default)
-          .engine({ handlebars })
-          .root(templatesRoot)
-          .extension('hbs'),
+      .extend(view(v => engines.take(v).engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
+      .build()
+
+    await app.ready()
+
+    const [options] = engines.options()
+    expect(options.root).toBe(templatesRoot)
+  })
+
+  // Wire it, and the environment is what the engine runs on — per key, so a setting the environment does not
+  // name keeps the value the code gave it.
+  it('reads a root from the environment when the callback wires the block', async () => {
+    const engines = capture()
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c => c.source(env({ VIEW__DEFAULT__ROOT: ejsRoot }), ConfigPriority.ENV))
+      .extend(
+        view((v, c) =>
+          engines
+            .take(v)
+            .engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').withConfig(c.view.default)),
+        ),
       )
       .build()
 
@@ -82,12 +99,10 @@ describe('view configuration', () => {
           }),
         ),
       )
-      .extend(ViewExt(), v =>
-        engines
-          .take(v)
-          .config(c => c.view.default)
-          .engine({ handlebars })
-          .extension('hbs'),
+      .extend(
+        view((v, c) =>
+          engines.take(v).engine(e => e.engine({ handlebars }).extension('hbs').withConfig(c.view.default)),
+        ),
       )
       .build()
 
@@ -98,6 +113,7 @@ describe('view configuration', () => {
     expect(options.production).toBe(true)
   })
 
+  // One feature, several engines: each reads its own block, and the named one stamps `propertyName`.
   it('keeps named engines apart, each at the block it was pointed at', async () => {
     const engines = capture()
 
@@ -109,21 +125,12 @@ describe('view configuration', () => {
           }),
         ),
       )
-      .extend(ViewExt(), v =>
-        engines
-          .take(v)
-          .config(c => c.view.default)
-          .engine({ handlebars })
-          .root(templatesRoot)
-          .extension('hbs'),
-      )
-      .extend(ViewExt('mail'), v =>
-        engines
-          .take(v)
-          .config(c => c.view.mail)
-          .engine({ handlebars })
-          .root(templatesRoot)
-          .extension('ejs'),
+      .extend(
+        view((v, c) => {
+          engines.take(v)
+          v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').withConfig(c.view.default))
+          v.engine('mail', e => e.engine({ handlebars }).root(templatesRoot).extension('ejs').withConfig(c.view.mail))
+        }),
       )
       .build()
 
@@ -136,7 +143,8 @@ describe('view configuration', () => {
     expect(mail.propertyName).toBe('mail')
   })
 
-  it('re-points reads and code-set defaults together via .config()', async () => {
+  // Where the block lives is the application's choice, and the callback is what names it.
+  it('reads the settings from wherever the application put the block', async () => {
     const engines = capture()
     const schema = $t.Object({
       app: $t.Object({
@@ -153,13 +161,10 @@ describe('view configuration', () => {
           }),
         ),
       )
-      // No annotation on the selector: the config type is recovered from the builder.
-      .extend(ViewExt(), v =>
-        engines
-          .take(v)
-          .config(c => c.app.templates)
-          .engine({ handlebars })
-          .root(templatesRoot),
+      .extend(
+        view((v, c) =>
+          engines.take(v).engine(e => e.engine({ handlebars }).root(templatesRoot).withConfig(c.app.templates)),
+        ),
       )
       .build()
 

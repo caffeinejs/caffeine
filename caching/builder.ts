@@ -1,33 +1,34 @@
 import { Scopes } from '@caffeinejs/di'
 import { registerPlugin } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { ETagGenerator } from './cache.js'
 import { cachePlugin } from './cache_plugin.js'
-import { cacheConfigSchema, DEFAULT_CACHE_CONFIG, type CacheConfig } from './config.js'
+import { DEFAULT_CACHE_CONFIG, type CacheConfig } from './config.js'
 import { kCacheStatusHeader, kETagGenerator } from './keys.js'
 import { CacheStore, MemoryCacheStore } from './store.js'
 
 /**
  * Configures the cache feature: the {@link CacheStore} that backs cached responses and the
- * {@link ETagGenerator} used to hash payloads. Bound via `.extend(caching(), c => c.store(...).etagGenerator(...))`.
+ * {@link ETagGenerator} used to hash payloads. Bound via `.extend(caching(c => c.store(...).etagGenerator(...)))`.
  *
  * Installing the feature is the activating act: the bootstrap binds the store and contributes the cache
  * plugin, which attaches the hooks from an `onRoute` hook as each route registers. Configuration
  * parameterizes the feature but never switches it on.
  *
- * `statusHeader` is read from the configuration tree at `cache.*`, so `CACHE__STATUS_HEADER=X-Edge-Cache`
- * overrides whatever the builder set. The store and the generator cannot be configuration — one is an
- * instance and the other a function — so they stay builder-only.
+ * The store and the generator cannot come from configuration — one is an instance, the other a function.
+ * `statusHeader` can, read from a node the callback hands over:
  *
- * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
+ * ```ts
+ * .extend(caching((cache, c) => cache.withConfig(c.app.cache)))
+ * ```
  */
-export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
+export class CacheBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'cache'
 
-  protected readonly schema = cacheConfigSchema
-  protected readonly defaults = { ...DEFAULT_CACHE_CONFIG }
-
+  #config: ConfigLocation<CacheConfig> | undefined
+  #statusHeader: string | undefined
   #store: CacheStore | undefined
   #etagGenerator: ETagGenerator | undefined
 
@@ -41,12 +42,24 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
     return this
   }
 
-  /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/BYPASS. */
-  statusHeader(name: string): this {
-    return this.set('statusHeader', name)
+  /**
+   * Reads the settings from a node of the configuration tree, e.g. `c.app.cache`.
+   *
+   * The node is read, never copied, so a refresh reaches the status header. {@link statusHeader} wins over
+   * what the node carries.
+   */
+  withConfig(config: ConfigLocation<CacheConfig>): this {
+    this.#config = config
+    return this
   }
 
-  protected bootstrap(kit: BootstrapKit): void {
+  /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/BYPASS. */
+  statusHeader(name: string): this {
+    this.#statusHeader = name
+    return this
+  }
+
+  protected bootstrap(kit: BootstrapKit<C>): void {
     const store = this.#store
     if (store !== undefined) {
       kit.container.bind(CacheStore, t => t.toValue(store).internal())
@@ -62,9 +75,9 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<CacheConfig, C> {
 
     kit.container.bind(kCacheStatusHeader, t =>
       t
-        // Read through the slice rather than captured: `resolveCacheDeps` reads this once at start-up, but
-        // a header name that followed a refresh is the behaviour every other config value has.
-        .toFactory(() => this.slice.config.statusHeader)
+        // Read through rather than captured: `resolveCacheDeps` reads this once at start-up, but a header name
+        // that follows a refresh is the behaviour every other configured value has.
+        .toFactory(() => this.#statusHeader ?? this.#config?.statusHeader ?? DEFAULT_CACHE_CONFIG.statusHeader)
         .internal(),
     )
 

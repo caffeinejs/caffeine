@@ -1,9 +1,11 @@
-import { feature, type Feature } from '@caffeinejs/std'
+import type { Feature, FeatureConfigurer } from '@caffeinejs/std'
 
 import { StaticBuilder } from './builder.js'
 
 /**
- * The `@caffeinejs/static` application feature. `.extend(StaticExt(), s => s.serve(root))` adds static
- * file serving (`@fastify/static`) without http depending on this package.
+ * The `@caffeinejs/static` application feature. `.extend(staticFiles(s => s.serve(root)))` adds static file
+ * serving (`@fastify/static`) without http depending on this package.
  */
-export const StaticExt = (): Feature<StaticBuilder> => feature('static', () => new StaticBuilder())
+export function staticFiles<C = unknown>(configure?: FeatureConfigurer<StaticBuilder<C>, C>): Feature<C> {
+  return new StaticBuilder<C>(configure as never)
+}

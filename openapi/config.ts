@@ -49,25 +49,6 @@ export interface OpenAPIConfigSlice {
   errors?: Partial<ErrorStatusOptions>
 }
 
-/** The keys {@link OpenAPIConfigSlice} declares, used to split the builder's options into the two halves. */
-export const OPENAPI_CONFIG_KEYS: readonly (keyof OpenAPIConfigSlice)[] = [
-  'routes',
-  'version',
-  'info',
-  'servers',
-  'tags',
-  'externalDocs',
-  'security',
-  'securitySchemes',
-  'deriveSecuritySchemes',
-  'exposeSelf',
-  'dedupeComponents',
-  'validate',
-  'ui',
-  'infer',
-  'errors',
-]
-
 /**
  * A spec object carried through the tree untouched.
  *

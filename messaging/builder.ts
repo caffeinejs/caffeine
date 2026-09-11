@@ -1,11 +1,17 @@
 import type { Ctor } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type AnySchema, type BootstrapKit } from '@caffeinejs/std'
-import { type ConfigSlice } from '@caffeinejs/std/config'
+import {
+  FeatureBuilder,
+  kFeatureName,
+  type AnySchema,
+  type BootstrapKit,
+  type FeatureConfigurer,
+} from '@caffeinejs/std'
+import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
 import { MessageBus } from './bus.js'
-import { BINDING_CONFIG_KEYS, messagingConfigSchema, type BindingConfig, type MessagingConfigSlice } from './config.js'
+import type { BindingConfig, MessagingConfigSlice } from './config.js'
 import { MessagingContainer } from './engine.js'
 import type { ErrorClassifier, RetryPolicy } from './error_handling.js'
 import { ErrMissingDestination } from './errors.js'
@@ -42,14 +48,18 @@ export interface OutBindingOptions {
 /**
  * Fluent configuration for one messaging integration: register binder instances with {@link use}, then declare
  * inbound ({@link in}) and outbound ({@link out}) bindings that map logical names onto binder destinations. At
- * `ready()` its `configure()` builds the runtime and binds the engine + `MessageBus` into the container.
- * A second integration is `.extend(messaging('audit'), m => ...)`.
+ * `ready()` its bootstrap builds the runtime and binds the engine + `MessageBus` into the container.
+ * A second integration is `.extend(messaging('audit', m => ...))`.
+ *
+ * What a fluent method sets is final. To let a deployment repoint a destination, read the bindings from a
+ * node of the configuration tree with {@link withConfig}.
  */
-export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfigSlice, C> {
-  readonly [kFeatureName] = 'messaging'
+export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
+  get [kFeatureName](): string {
+    return this.#name === DEFAULT_BINDER ? 'messaging' : `messaging:${this.#name}`
+  }
 
-  protected readonly schema = messagingConfigSchema
-
+  #config: ConfigLocation<MessagingConfigSlice> | undefined
   readonly #name: string
   readonly #binders = new Map<string, Binder | BinderFactory>()
   readonly #inbound = new Map<string, InBindingOptions>()
@@ -57,10 +67,9 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfi
   #onInvalidMessage?: InvalidMessageHandler
   #onError?: ErrorObserver
   #recoverer?: Recoverer
-  #resolved?: ConfigSlice<{ inbound: Map<string, ConsumerBinding>; outbound: Map<string, ProducerBinding> }>
 
-  constructor(name: string = DEFAULT_BINDER) {
-    super()
+  constructor(name: string = DEFAULT_BINDER, configure?: FeatureConfigurer<never, C>) {
+    super(configure)
     this.#name = name
   }
 
@@ -100,31 +109,27 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfi
     return this
   }
 
-  protected override configValues(): Record<string, unknown> {
-    return {
-      in: configurableHalf(this.#inbound),
-      out: configurableHalf(this.#outbound),
-    }
+  /**
+   * Reads the declared bindings' configurable halves from a node of the configuration tree, e.g.
+   * `c.app.messaging`.
+   *
+   * Applied **over** what `.in(...)` / `.out(...)` set, so a destination written in code is a default. Only
+   * bindings the builder declared are resolved: a binding named in the tree that no `.in(...)` created has
+   * nothing to attach to, and declaring one is a code act.
+   */
+  withConfig(config: ConfigLocation<MessagingConfigSlice>): this {
+    this.#config = config
+    return this
   }
 
-  protected override beforeBootstrap(): void {
-    const code = { in: this.#inbound, out: this.#outbound }
-
-    this.#resolved = this.derive(published => ({
-      // Only the bindings the builder declared are resolved. A binding named in the tree that no `.in(...)`
-      // created has nothing to attach to and is read by nothing — declaring one is a code act.
-      inbound: bindingsOf(code.in, published.in) as Map<string, ConsumerBinding>,
-      outbound: bindingsOf(code.out, published.out) as Map<string, ProducerBinding>,
-    }))
-  }
-
-  protected bootstrap(kit: BootstrapKit): void {
+  protected bootstrap(kit: BootstrapKit<C>): void {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)
     }
 
-    const resolved = this.#resolved!
+    const inbound = bindingsOf(this.#inbound, this.#config?.in) as Map<string, ConsumerBinding>
+    const outbound = bindingsOf(this.#outbound, this.#config?.out) as Map<string, ProducerBinding>
     const rKey = runtimeKey(this.#name)
     const bKey = busKey(this.#name)
     const container = kit.container
@@ -133,8 +138,8 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfi
       t.toValue<MessagingRuntime>({
         container,
         binders,
-        inbound: resolved.config.inbound,
-        outbound: resolved.config.outbound,
+        inbound,
+        outbound,
         ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
         ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
         ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
@@ -160,36 +165,9 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<MessagingConfi
   }
 }
 
-/** The half of each declared binding that can travel through the tree, keyed by binding name. */
-function configurableHalf(
-  declared: ReadonlyMap<string, InBindingOptions | OutBindingOptions>,
-): Record<string, BindingConfig> | undefined {
-  if (declared.size === 0) {
-    return undefined
-  }
-
-  const out: Record<string, BindingConfig> = {}
-
-  for (const [binding, options] of declared) {
-    const held = options as unknown as Record<string, unknown>
-
-    out[binding] = Object.fromEntries(
-      BINDING_CONFIG_KEYS.filter(key => held[key] !== undefined).map(key => [key, held[key]]),
-    )
-  }
-
-  return out
-}
-
-/**
- * Folds each declared binding together with whatever configuration said about it.
- *
- * Code first, configuration over it — a builder value is a default here as everywhere else — and the
- * code-only members (`schema`, `classifier`, the error constructors) ride through untouched.
- */
 function bindingsOf(
   declared: ReadonlyMap<string, InBindingOptions | OutBindingOptions>,
-  configured: Record<string, BindingConfig> | undefined,
+  configured: ConfigLocation<Record<string, BindingConfig>> | undefined,
 ): Map<string, ConsumerBinding | ProducerBinding> {
   const out = new Map<string, ConsumerBinding | ProducerBinding>()
 

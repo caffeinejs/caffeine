@@ -7,7 +7,6 @@ import {
   Configuration,
   ConfigPriority,
   InlineConfigProvider,
-  defineFeatureConfig,
   type ConfigHandle,
   type ConfigProvider,
 } from './config/index.js'
@@ -45,13 +44,6 @@ describe('base .config() builder', () => {
     // The key names a config type the schema cannot produce.
     // @ts-expect-error - key and schema must agree
     createApplication().config(schema, kWrongShape)
-
-    // Naming the config type instead of the handle is rejected too. The handle is not merely the shape with
-    // `readonly` added — it can be *called* with a feature key — so the bare shape no longer describes what
-    // gets bound, and the token brand stops relating the two.
-    const kUnwrapped = token<AppConfig>(Symbol('unwrapped'))
-    // @ts-expect-error - the key names the handle, not the shape the handle projects
-    createApplication().config(schema, kUnwrapped)
   })
 
   // A feature's namespace is in the resolved tree whether or not the application described it, so a key naming
@@ -133,12 +125,8 @@ describe('base .config() builder', () => {
     const container = new CaffeineIoC({ decorators: false })
     const builder = createApplication({ container })
 
-    // A feature registers its slice the way every feature builder does, without the application declaring a root.
-    const slice = defineFeatureConfig<{ size: number }>(builder.configDefinition, {
-      selector: (c: never) => (c as { widget: unknown }).widget,
-      schema: z.object({ size: z.coerce.number() }),
-      defaults: { size: 1 },
-    })
+    // A slice registered straight on the definition, without the application declaring a root schema.
+    const slice = builder.configDefinition.slice(['widget'], z.object({ size: z.coerce.number() }))
     builder.configDefinition.sources.add(new InlineConfigProvider({ widget: { size: 7 } }), ConfigPriority.USER)
 
     const app = builder.build()

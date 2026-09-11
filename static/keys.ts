@@ -1,12 +1,10 @@
-import { featureConfigKey } from '@caffeinejs/std/config'
+import { token } from '@caffeinejs/di'
 
 import type { ResolvedStatic } from './static.js'
 
 /**
- * Where the resolved mounts and SPA settings are published.
+ * What the feature actually serves, after the mounts and the SPA options were folded together.
  *
- * Read with `container.get(Configuration).config(kStaticConfig)` — or `ctx.config(kStaticConfig)` on a
- * request — to see what the feature actually serves after the configuration tree and the builder were
- * folded together. `undefined` when the feature is not installed.
+ * Read with `container.getOptional(kStaticOptions)`. Absent when the feature is not installed.
  */
-export const kStaticConfig = featureConfigKey<ResolvedStatic>('static')
+export const kStaticOptions = token<ResolvedStatic>(Symbol('caffeine.static.options'))

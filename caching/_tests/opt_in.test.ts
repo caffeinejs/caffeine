@@ -88,7 +88,7 @@ describe('caching is opt-in', () => {
     void [HeaderController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(caching(), c => c.statusHeader('X-Edge'))
+      .extend(caching(c => c.statusHeader('X-Edge')))
       .build()
     close = () => app.close()
     await app.ready()

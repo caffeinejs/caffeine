@@ -113,31 +113,40 @@ and every feature still reads its slice.
 
 ## How a feature gets its configuration
 
-A `FeatureBuilder` subclass is a fluent surface over exactly one slice. It names its shape with
-`schema`, writes into the `CODE` band from its methods with `set`, and binds in `bootstrap`.
-Everything between — resolving where the settings live, writing the bands, registering the slice — is
-handled by the base class.
+A feature registers nothing here. The application reads the tree and hands the feature what it wants,
+in the configure callback `.extend(...)` takes:
+
+```ts
+.extend(server((s, c) => s.withConfig(c.app.server)))
+.extend(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+```
 
 ```mermaid
 flowchart TB
-  b["FeatureBuilder — schema + fluent methods"]
-  b -->|".config(c => c.app.thing) was called"| att["attached"]
-  b -->|"no selector"| det["detached"]
-  att --> aw["defaults → FRAMEWORK band at app.thing.*\ncode values → CODE band at app.thing.*\nslice reads app.thing from the merged tree —\nfiles, env and args layer over it"]
-  det --> dw["defaults + code values merged locally\nslice validates that · no external source reaches it\nadds no field to the application's config object"]
+  cb["configure callback — (builder, config)"]
+  cb -->|"reads a node: b.withConfig(c.app.thing)"| live["the builder holds a live accessor
+reads go through the current tree, so a refresh reaches them"]
+  cb -->|"reads a value: b.port(c.app.thing.port)"| snap["the builder holds a number
+fixed at the moment it was read"]
+  cb -->|"reads nothing"| own["the feature runs on its own defaults
+and whatever its fluent methods set"]
 ```
 
-Where the settings live is the **application's** choice, named with the `.config(selector)` the
-application passes — `s.config(c => c.server)`. A feature is never placed somewhere the application
-did not ask for. Without a selector the slice resolves detached: it works, it just has no external
-overrides.
+Three things follow from that:
 
-Two helpers cover what `set` cannot express:
+- **A fluent method is the last word.** `s.port(3000)` is not a default the environment outranks. Where
+  both are named, the more specific wins: a setter beats the block `withConfig` handed over.
+- **Liveness is the author's choice.** A node read through follows a refresh; a scalar copied out of one
+  does not. A feature whose readers need a _folded_ shape to stay live builds it with `liveFold(...)` —
+  a stable identity whose fields refold only when the settings behind them actually changed.
+- **The application's schema is the only schema.** A feature seeds nothing, so a block declared with
+  required, undefaulted fields and no source to fill them fails validation. Splice the feature's exported
+  schema (`serverConfigSchema`, `healthConfigSchema`, …) rather than restating the fields — importing it is
+  what carries the feature's defaults into the tree.
 
-- **`derive(compute, key?)`** — fold the raw settings into the shape the feature runs on (and merge
-  back a dispatcher or handler that cannot travel through a tree). Recomputed on every refresh.
-- **`splitOptionBag(options)`** — split a third-party option bag into the data half that goes in the
-  slice and the callbacks that stay on the builder.
+The callback runs once, when the application bootstraps: after configuration has resolved, and before the
+feature binds anything. An authoring mistake inside it therefore surfaces from `ready()`, not from the
+`.extend(...)` call that wrote it.
 
 ---
 
@@ -146,15 +155,14 @@ Two helpers cover what `set` cannot express:
 | From                      | How                                                                 | Notes                                                        |
 | ------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
 | The application's own key | `container.get(kAppConfig)`                                         | Typed `ConfigHandle<AppConfig>`, live                        |
-| Any feature's settings    | `container.get(Configuration).config(kServerConfig)`                | By `FeatureConfigKey`, `undefined` if not installed          |
+| Any feature's settings    | `container.getOptional(kServerOptions)`                             | A binding the feature made, absent if not installed          |
 | Value injection           | `$i.value(c => c.database.host)`                                    | The handle is bound under the values key; follows refresh    |
-| Inside a feature          | `this.slice.config`                                                 | Stable identity, fields follow every refresh                 |
+| Inside a feature          | whatever the configure callback handed it                           | A node stays live; a value copied out of one does not        |
 | Resolve metadata          | `container.get(Configuration)`                                      | `.snapshot()`, `.revision`, `.diagnostics`, `.onChange(...)` |
 | Escape hatch              | `configuration.env('DATABASE_URL')` / `.either(c => c.x, fallback)` | Straight from `process.env`, or a safe deep read             |
 
-A `FeatureConfigKey` is minted with `featureConfigKey<T>('name')` and published either by a builder's
-`configKey` field or by `derive(fn, key)`. It is addressed by identity, so a feature that relocated
-its settings is still found.
+There is no feature-key registry and no callable config handle: a feature that wants its resolved options
+readable from outside binds them, exactly as `ShutdownBuilder` binds `kShutdownPolicy`.
 
 `Configuration.snapshotHandle` is a handle fixed to one revision — what a request-scoped read latches
 onto, so a refresh landing mid-request cannot change the answers a request already started with.
@@ -281,23 +289,23 @@ describe a slice that holds credentials.
 ```mermaid
 sequenceDiagram
   participant App as ApplicationBuilder
-  participant Feat as each FeatureBuilder
+  participant Feat as each Feature
   participant Def as ConfigDefinition
   participant Shard as ConfigShard
   App->>Def: .config(schema, key, c => c.source(...))
-  Feat->>Def: [kBeforeBootstrap] — defineFeatureConfig: register slice, write bands
-  App->>Def: bootstrap()  (between the two service steps)
+  App->>Def: bootstrap()  (before any feature bootstraps)
   Def->>Shard: ConfigShard.bootstrap(options)
   Shard->>Shard: resolve → materialize → validate root + slices
   Shard-->>Def: handle bound, every slice published
-  App->>Feat: [kBootstrap] — read slice.config, bind what the feature produces
+  App->>Feat: [kBootstrap] — run the configure callback, then bind what the feature produces
   App->>App: container.init()
 ```
 
-`ConfigDefinition` is the mutable description the application builder owns and every feature
-contributes to. It is resolved once, after every feature has declared and before any reads its
-settings — a slice that cannot resolve fails start-up here, which is more legible than failing at
-whatever moment the feature was first used. `ConfigModule` binds what the resolved shard holds.
+`ConfigDefinition` is the mutable description the application builder owns. It is resolved once, before
+any feature bootstraps and while binding is still open — which is what lets a feature be configured from a
+setting it then consumes at binding time. A tree that cannot validate fails start-up here, which is more
+legible than failing at whatever moment something first read it. `ConfigModule` binds what the resolved
+shard holds.
 
 ---
 
@@ -316,8 +324,8 @@ All in [`config.ts`](./config.ts):
 | `ConfigDiagnostics`, `ConfigSliceFailure`                                 | Provenance, redaction, per-feature resolve failures                                  |
 
 Runtime pieces exported from [`index.ts`](./index.ts): `ConfigSlice`, `ConfigSources`,
-`ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`, `featureConfigKey`,
-`defineFeatureConfig`, `configEquals`, `splitOptionBag`, `activeProfiles`, `hostProfiles`, the seven providers, and
+`ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`, `liveFold`,
+`configEquals`, `activeProfiles`, `hostProfiles`, the seven providers, and
 the `ErrConfig*` classes.
 
 ---

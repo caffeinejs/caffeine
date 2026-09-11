@@ -85,12 +85,11 @@ app.mount(pets) // before app.ready()
 - `.with(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
   `bodyAsBuffer()`, `bodyAsStream()` and `fst(options)`; compress ships `compress(opts)` and `encoding(tokens)`;
   openapi ships `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
-- `.extend(feature, configure?)` installs a feature whose Fastify plugin registers in front of that router's
-  routes and the groups nested under it — `pets.extend(cors('pets'), c => c.origin('https://pets.example'))`. The
-  same on a controller is `@Use(feature, configure?)` above `@Controller`. The feature is installed on the
-  application, so installing the same one on the application and on a router is an error; give two groups
-  different settings with two instances of the feature (`cors()` and `cors('pets')`). A `.config(c => ...)`
-  selector there sees `unknown` — a router does not know which application it will be mounted into.
+- `.extend(factory)` registers a Fastify plugin in front of that router's routes and the groups nested under
+  it — `pets.extend(() => corsPlugin({ origin: 'https://pets.example' }))`. The same on a controller is
+  `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
+  deduplicated: two groups wanting different settings pass two factories. The factory's config argument sees
+  `ConfigHandle<unknown>` — a router does not know which application it will be mounted into.
 - `fst({ ... })` is the Fastify escape hatch: lifecycle hooks, `attachValidation`, `logLevel`, custom compilers —
   everything Fastify takes except what the router already decides (`method`, `url`, `schema`, `config`, `handler`,
   `bodyLimit`, `handlerTimeout`).
@@ -161,4 +160,4 @@ await client.pets.post({ body: { name: 'Rex' } })
   resolve the `App` type — `import type` is erased, so nothing ships.
 - Escape hatch for a path built at run time, or a segment named after a verb:
   `client.$request('GET', '/pets/:id', { params: { id: 1 } })`.
-- Static: `.extend(StaticExt(), s => s.serve(root, { prefix: '/static' }))`. That serves files. It is not SPA history fallback. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.
+- Static: `.extend(staticFiles(s => s.serve(root, { prefix: '/static' })))`. That serves files. It is not SPA history fallback. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.

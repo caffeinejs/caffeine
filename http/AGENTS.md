@@ -14,6 +14,13 @@ leave it unwrapped and they stay inside the plugin, covering only what the plugi
 plugin does not pick that context — the application registers it on the root server, and `router.extend(...)`
 / `@Use(...)` register it inside one route group's context. Every first-party plugin here is wrapped.
 
+`.extend(...)` takes a feature **or** a plugin factory, and tells them apart by `typeof`: a feature is an
+object carrying `[kFeatureName]`, a factory is a function `(config, container) => HTTPPlugin`. Both land in
+one list, so they register in the order the calls were written. Always a factory, never a bare plugin — both
+are functions, so accepting both would mean sniffing arity. A plugin needing no configuration is written
+`.extend(() => myPlugin)`. A feature is installed once per name; a plugin has no name a caller chose and is
+never deduplicated, so two calls register two plugins.
+
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
 holds the only two framework slots — `ErrorHandlingServiceConfigurer` and `HTTPCoreFeature` lead,
 `HTTPFallbackFeature` trails — and everything between them, this package's features and the user's alike,
@@ -21,7 +28,7 @@ runs in `.extend(...)` order. Do not reintroduce a stage, and do not reintroduce
 the adapter: write the plugin and put its feature in the right place.
 
 The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
-`.authentication(...)` was written: `cors()` extended before it still stamps its headers on a 401, and a hook
+`.authentication(...)` was written: a CORS plugin extended before it still stamps its headers on a 401, and a hook
 extended after it does not run for a request the gate rejected. The start-up refusal of an application that
 protects a route and never configured authentication is not the gate's — it is a `routeGroups` scan in the
 adapter (`assertAuthenticationConfigured`), because the case being refused is the one where no gate exists.
@@ -36,9 +43,14 @@ there is no second fallback configurer, and nothing matches on `[kFeatureName] =
 
 Graceful shutdown — the drain delay, the teardown budget, the signals — is its own feature, `ShutdownBuilder`
 from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
-`createWebApplication()` and headless `createApplication()` and configured with `app.shutdown(s => …)`. It
-publishes the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch
-shutdown any more.
+`createWebApplication()` and headless `createApplication()` and configured with `app.shutdown((s, c) => …)`.
+It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch shutdown
+any more.
+
+The resolved options of the built-ins are **container bindings**, not configuration keys: `kServerOptions`,
+`kHealthOptions`, `kStaticOptions`, `kOpenAPIOptions`. There is no `featureConfigKey` and `ctx.config` is not
+callable — a package that needs its settings on a request either binds them and resolves them, or decorates
+the Fastify instance as `@caffeinejs/html` does.
 
 The effective authentication schemes are stamped onto each compiled route (`route.authorization.schemes`)
 while routing is built, where the application's default scheme is known. A reader that documents or describes
@@ -69,11 +81,11 @@ A feature that must attach a real Fastify hook to the routes it applies to — r
 
 ## Installing a feature on one group
 
-`router.extend(feature, configure?)` and `@Use(feature, configure?)` install a feature whose plugin registers inside that route group's Fastify context instead of on the root server. The feature itself is installed on the application — one config slice, one bootstrap — and only the plugin is scoped, which is why the same `Feature.name` on the application and on a router is `ErrFeatureAlreadyInstalled`, and why two groups wanting different settings install two instances (`cors()` and `cors('pets')`).
+`router.extend(factory)` and `@Use(factory)` register a Fastify plugin inside that route group's context instead of on the root server. A router takes **only** plugins: scoping was always about where the plugin registers, and a router installs no feature, declares no configuration and is never deduplicated — two routers wanting different settings pass two factories.
 
-The install happens in `WebApplication.configurers()`, which runs before the declare phase: that is the last moment a feature can register a configuration slice, and the reason `mount()` must be called before the application is ready. `RouteGroup.scopes` carries what installed the plugins for a group — a programmatic group lists its own router and every router it is nested under, so `.extend(...)` inherits downward the way `.with(...)` does; a controller group lists the class.
+The factories are resolved in `WebApplication.setup()`, where configuration has resolved and the container has initialized, so one sees exactly what a factory passed to the application's `.extend(...)` sees. `RouteGroup.scopes` carries what registered the plugins for a group — a programmatic group lists its own router and every router it is nested under, so `.extend(...)` inherits downward the way `.with(...)` does; a controller group lists the class.
 
-The configure callback is **not** re-typed against the application's configuration the way `builder.extend` is: a router or a controller is written without knowing which application it will end up in, so a `.config(c => …)` selector there sees `unknown`.
+The factory's configuration argument is **not** re-typed against the application's the way `builder.extend` is: a router or a controller is written without knowing which application it will end up in, so it sees `ConfigHandle<unknown>`.
 
 `fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 
@@ -114,15 +126,15 @@ One global `@Catch` per error class. Duplicate global for the same class fails a
 
 Where a value goes depends on who reads it and how long it lives:
 
-| The value is…                                             | Goes to                                     | Read with                   |
-| --------------------------------------------------------- | ------------------------------------------- | --------------------------- |
-| an injectable service with a lifecycle                    | a request-scoped binding (`Scopes.REQUEST`) | `container.get` / injection |
-| a plain value one middleware computes and a handler reads | `ctx.state`                                 | `ctx.state.get(key)`        |
-| the authenticated principal                               | `ctx.user`                                  | `ctx.user`                  |
-| what each authentication scheme decided                   | `ctx.auth`                                  | `ctx.auth?.find(scheme)`    |
-| what the route declared                                   | the route config                            | `ctx.routeConfig`           |
-| the application configuration                             | a snapshot on the context                   | `ctx.config`                |
-| another feature's own configuration                       | that feature's keyed config slice           | `ctx.config(key)`           |
+| The value is…                                             | Goes to                                     | Read with                    |
+| --------------------------------------------------------- | ------------------------------------------- | ---------------------------- |
+| an injectable service with a lifecycle                    | a request-scoped binding (`Scopes.REQUEST`) | `container.get` / injection  |
+| a plain value one middleware computes and a handler reads | `ctx.state`                                 | `ctx.state.get(key)`         |
+| the authenticated principal                               | `ctx.user`                                  | `ctx.user`                   |
+| what each authentication scheme decided                   | `ctx.auth`                                  | `ctx.auth?.find(scheme)`     |
+| what the route declared                                   | the route config                            | `ctx.routeConfig`            |
+| the application configuration                             | a snapshot on the context                   | `ctx.config`                 |
+| another feature's own configuration                       | a container binding that feature made       | `container.getOptional(key)` |
 
 `ctx.state` is a `Map` on the context, allocated on first touch. It does not participate in DI: no binding, no
 destroy callback, no scope. What it may hold is named by the `V` type parameter a router declares with
@@ -134,10 +146,11 @@ mid-request is not observed by a request already under way. Its type is named by
 router — named apart from `.config()`, which writes the adapter's per-route configuration. The values come from
 the application's configuration whether or not a router declared the type.
 
-Calling it — `ctx.config(kHTMLConfig)` — reads a feature's own slice instead, by `featureConfigKey`. That is
-the path for a package, which knows neither `C` nor where the slice ended up, since `.config(selector)` is the
-application's choice and may not have been made at all. A key nothing registered reads `undefined`, so a
-package can fall back to its own defaults rather than require the feature to be installed.
+`ctx.config` is **not** callable. A package that needs its own settings on a request cannot read them off the
+context — it knows neither `C` nor where the application put the block. It either binds them in `bootstrap`
+and resolves them from the container, or decorates the Fastify instance and reads the decoration back off
+`ctx.fst.request.server`, which is what `@caffeinejs/html` does and what keeps a plugin registered on one
+route group from parameterizing the rest.
 
 `ctx.state` is application space. A first-party package does not write to it: a framework value gets a dedicated
 member, as authentication does with `ctx.user`, or goes on the route config. One flat key namespace shared by an

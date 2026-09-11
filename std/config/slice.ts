@@ -24,10 +24,7 @@ export class ConfigSlice<T> {
    * and its builder alone.
    */
   readonly parts: readonly string[] | undefined
-  readonly #derivations: Array<(value: T) => void> = []
-  readonly #derived: Array<{ notify: () => void; settled: () => Promise<void> }> = []
   readonly #notifier: ConfigNotifier<T>
-  readonly #report: () => ((message: string) => void) | undefined
   #current: T | undefined
   #config: T | undefined
   #published = false
@@ -42,7 +39,6 @@ export class ConfigSlice<T> {
     report: () => ((message: string) => void) | undefined = () => undefined,
   ) {
     this.parts = parts
-    this.#report = report
     this.#notifier = new ConfigNotifier<T>(() => sliceLabel(this.parts), report)
   }
 
@@ -128,9 +124,9 @@ export class ConfigSlice<T> {
     return this.#notifier.add(listener)
   }
 
-  /** Resolves once no change notification is in flight or pending, here or in anything derived from this. */
-  async settled(): Promise<void> {
-    await Promise.all([this.#notifier.settled(), ...this.#derived.map(derived => derived.settled())])
+  /** Resolves once no change notification is in flight or pending. */
+  settled(): Promise<void> {
+    return this.#notifier.settled()
   }
 
   /** Framework-internal: called by the config shard on bootstrap and on every refresh. */
@@ -138,10 +134,6 @@ export class ConfigSlice<T> {
     this.#current = value
     this.#published = true
     this.#error = undefined
-
-    for (const derivation of this.#derivations) {
-      derivation(value)
-    }
 
     this.#notifier.record(value)
   }
@@ -154,10 +146,6 @@ export class ConfigSlice<T> {
    */
   notify(): void {
     this.#notifier.flush()
-
-    for (const derived of this.#derived) {
-      derived.notify()
-    }
   }
 
   /**
@@ -168,33 +156,6 @@ export class ConfigSlice<T> {
    */
   fail(error: unknown): void {
     this.#error = error
-  }
-
-  /**
-   * Configuration computed from this slice — the shape a feature actually wants, folded over its defaults and
-   * merged with whatever cannot travel through a configuration tree (a dispatcher, a handler, a class).
-   *
-   * Recomputed **when the slice publishes**, not when the result is read. That ordering matters: deriving a
-   * feature's options can reject a combination that validates field by field but not as a whole, and a refresh
-   * is where that has to surface — not later, from inside whatever happened to read it first.
-   */
-  derive<U>(compute: (config: T) => U): ConfigSlice<U> {
-    const derived = new ConfigSlice<U>(this.parts, this.#report)
-
-    const recompute = (value: T): void => {
-      derived.publish(compute(value))
-    }
-
-    this.#derivations.push(recompute)
-    // A feature holds the derived slice, not this one, so its listeners have to be reached by the same notify
-    // pass — and only after every slice has published.
-    this.#derived.push({ notify: () => derived.notify(), settled: () => derived.settled() })
-
-    if (this.#published) {
-      recompute(this.#current as T)
-    }
-
-    return derived
   }
 
   #require(): T {

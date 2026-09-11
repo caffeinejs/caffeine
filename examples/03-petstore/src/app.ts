@@ -9,11 +9,11 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import { MultipartExt } from '@caffeinejs/multipart'
-import { OpenAPIExt } from '@caffeinejs/openapi'
-import { StaticExt } from '@caffeinejs/static'
+import { multipartPlugin } from '@caffeinejs/multipart'
+import { openapi } from '@caffeinejs/openapi'
+import { staticFiles } from '@caffeinejs/static'
 import { EnvConfigProvider } from '@caffeinejs/std/config'
-import { ViewExt } from '@caffeinejs/view'
+import { view } from '@caffeinejs/view'
 import FastifyCookie from '@fastify/cookie'
 import fastify, { type FastifyServerOptions } from 'fastify'
 import handlebars from 'handlebars'
@@ -46,36 +46,41 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   const builder = createWebApplication(fastifyAdapterFactory(server), {
     container,
   })
-    .extend(ViewExt(), v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
-    .extend(StaticExt(), s => s.serve(publicRoot, { prefix: '/static' }))
+    .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
+
+    .extend(view(v =>
+      v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
+    .extend(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
     // $p pickers are the source, and @APIGroup/@Operation add only what those cannot say. 3.2.0 because
     // QUERY /pets needs it: a 3.1 path item has no field for a non-standard method.
-    .extend(OpenAPIExt(), o =>
-      o
-        .version('3.2.0')
-        .info({
-          title: 'Modern Petstore',
-          version: '1.0.0',
-          description: 'A pet adoption API, modelled on the OpenAPI 3.2 Modern Petstore specification.',
-        })
-        // Relative on purpose. A consumer resolves it against wherever it fetched the document, so it is right
-        // at any host or port — an absolute URL here was stale the moment the port changed. It also keeps the
-        // documentation UI's "Try it" on this origin, which is what lets the browser attach the GitHub session
-        // cookie: a cross-origin request would send none.
-        .server('/', 'This server')
-        // The one place in this application that names an authentication scheme. Everything else runs on the
-        // default (GitHub), so only the documentation asks for something different — and because a route's
-        // named schemes are the only ones it accepts, a live GitHub session does not open the docs.
-        //
-        // The reverse also holds, and the UI cannot paper over it: GitHub sign-in is a browser round trip that
-        // ends in a cookie, so it happens at /login/github, not in the documentation's authentication panel.
-        .secure(s => s.schemes('Basic'))
-        // The fallback error handler answers 422 for a body that fails validation, not Fastify's default 400.
-        .errors({ validation: 422 })
-        .errorSchema(apiErrorSchema),
+    .extend(
+      openapi(o =>
+        o
+          .version('3.2.0')
+          .info({
+            title: 'Modern Petstore',
+            version: '1.0.0',
+            description: 'A pet adoption API, modelled on the OpenAPI 3.2 Modern Petstore specification.',
+          })
+          // Relative on purpose. A consumer resolves it against wherever it fetched the document, so it is right
+          // at any host or port — an absolute URL here was stale the moment the port changed. It also keeps the
+          // documentation UI's "Try it" on this origin, which is what lets the browser attach the GitHub session
+          // cookie: a cross-origin request would send none.
+          .server('/', 'This server')
+          // The one place in this application that names an authentication scheme. Everything else runs on the
+          // default (GitHub), so only the documentation asks for something different — and because a route's
+          // named schemes are the only ones it accepts, a live GitHub session does not open the docs.
+          //
+          // The reverse also holds, and the UI cannot paper over it: GitHub sign-in is a browser round trip that
+          // ends in a cookie, so it happens at /login/github, not in the documentation's authentication panel.
+          .secure(s => s.schemes('Basic'))
+          // The fallback error handler answers 422 for a body that fails validation, not Fastify's default 400.
+          .errors({ validation: 422 })
+          .errorSchema(apiErrorSchema),
+      ),
     )
-    .extend(MultipartExt())
+    .extend(() => multipartPlugin())
     .authentication(auth =>
       auth
         // Basic, for the API documentation only. Demo credentials, overridable from the environment.
@@ -133,8 +138,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
         .default('GitHub'),
     )
     // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
-    .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
-    .server(s => s.config(c => c.server))
+    .server((s, c) => s.withConfig(c.server))
     // Kubernetes probes: /livez, /readyz, /startupz.
     .health()
     // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the

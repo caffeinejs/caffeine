@@ -1,4 +1,4 @@
-import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 import fp from 'fastify-plugin'
 
 import { constraintVaryPlugin } from './constraints/vary_plugin.js'
@@ -33,7 +33,7 @@ const notFoundPlugin = fp(notFoundPluginFn, { name: 'caffeine-not-found' })
  * The wiring `http` contributes ahead of everything else: the form body parser, and the `Vary` header a
  * constrained route needs. Bootstrapped first, so both are in place before any other plugin registers.
  */
-export class HTTPCoreFeature implements FeatureLifecycle {
+export class HTTPCoreFeature implements Feature {
   get [kFeatureName](): string {
     return 'http-core'
   }
@@ -45,7 +45,7 @@ export class HTTPCoreFeature implements FeatureLifecycle {
 }
 
 /** The wiring `http` contributes once everything else has registered: the not-found handler. */
-export class HTTPFallbackFeature implements FeatureLifecycle {
+export class HTTPFallbackFeature implements Feature {
   get [kFeatureName](): string {
     return 'http-fallback'
   }

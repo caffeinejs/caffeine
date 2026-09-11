@@ -4,7 +4,7 @@ import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'
-import { OpenAPIExt } from '../plugin.js'
+import { openapi } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 const petSchema = $t.Object({ id: $t.String(), name: $t.String() }, { $id: 'ProgrammaticPet' })
@@ -40,7 +40,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => ({}))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(OpenAPIExt(), o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public())
+      .extend(openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public()))
       .build()
       .mount(pets) as WebApplication
 
@@ -77,7 +77,7 @@ describe('openapi from a programmatic router', () => {
       .handler(ctx => ctx.body(ctx.req.body()))
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(OpenAPIExt(), o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public())
+      .extend(openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public()))
       .build()
       .mount(pets) as WebApplication
 
@@ -105,7 +105,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => [])
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(OpenAPIExt(), o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public())
+      .extend(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
       .build()
       .mount(pets) as WebApplication
 

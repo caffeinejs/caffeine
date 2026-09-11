@@ -1,15 +1,9 @@
 import type { Container } from '@caffeinejs/di'
-import {
-  Application,
-  type ApplicationInit,
-  type ExtensionRegistrar,
-  type FeatureLifecycle,
-  type RunInfo,
-} from '@caffeinejs/std'
+import { Application, type ApplicationInit, type ExtensionRegistrar, type Feature, type RunInfo } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { HTTPCoreFeature, HTTPFallbackFeature } from './core_feature.js'
-import { controllerFeatures } from './decorators/use.js'
+import { controllerPlugins } from './decorators/use.js'
 import { ErrConfiguration } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
 import { solutions } from './error/util.js'
@@ -27,7 +21,7 @@ import {
   type Next,
   type NodeMiddleware,
 } from './middleware/index.js'
-import type { HTTPPlugin, ScopedFeatureInstall } from './plugin.js'
+import type { HTTPPlugin, HTTPPluginFactory } from './plugin.js'
 import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
@@ -105,8 +99,6 @@ export class WebApplication<
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
   readonly #plugins = new HTTPPlugins()
-  /** Feature position in {@link configurers} to what installed it, for everything a router or controller added. */
-  readonly #scopes = new Map<number, object>()
   #routeGroups: RouteGroup<R>[] = []
   #mounted: Router<any, any, any, any, any>[] = []
   #built = false
@@ -189,7 +181,7 @@ export class WebApplication<
   }
 
   protected override extensionRegistrar(order: number): ExtensionRegistrar<HTTPPlugin> {
-    return this.#plugins.registrarFor(order, this.#scopes.get(order))
+    return this.#plugins.registrarFor(order)
   }
 
   /**
@@ -199,36 +191,29 @@ export class WebApplication<
    * leads, so every route and hook the rest register is already covered by it, and the not-found handler
    * trails, because it needs whatever the others decorated the server with. Everything in between — this
    * package's own features and the user's alike — runs in the order `.extend(...)` was written.
-   *
-   * The features a mounted router or a controller declared are installed here too, after the application's
-   * own. This runs before the declare phase, which is the last moment a feature can still register a
-   * configuration slice — and it is why `mount()` has to happen before the application is ready.
    */
-  protected override configurers(): FeatureLifecycle[] {
-    const features: FeatureLifecycle[] = [new ErrorHandlingServiceConfigurer(), new HTTPCoreFeature(), ...this.services]
+  protected override configurers(): Feature[] {
+    return [new ErrorHandlingServiceConfigurer(), new HTTPCoreFeature(), ...this.services, new HTTPFallbackFeature()]
+  }
 
-    this.#scopes.clear()
+  /**
+   * Resolves the plugins a mounted router or a controller registered, each paired with what registered it.
+   *
+   * Later than the application's own, which bootstrap: routing is what needs these, and by the time it is
+   * built the configuration has resolved and the container has initialized — so a factory here sees exactly
+   * what one passed to `.extend(...)` sees.
+   */
+  async #registerScopedPlugins(): Promise<void> {
+    const register = async (scope: object, factories: readonly HTTPPluginFactory[]): Promise<void> => {
+      const registrar = this.#plugins.registrarFor(this.#plugins.size, scope)
 
-    for (const [scope, install] of this.#scopedInstalls()) {
-      for (const lifecycle of this.installFeature(install.feature, install.configure)) {
-        this.#scopes.set(features.length, scope)
-        features.push(lifecycle)
+      for (const factory of factories) {
+        registrar.register(await factory(this.configHandle, this.container))
       }
     }
 
-    features.push(new HTTPFallbackFeature())
-
-    return features
-  }
-
-  /** Every feature a mounted router or a controller declared, paired with what declared it. */
-  #scopedInstalls(): Array<[object, ScopedFeatureInstall]> {
-    const out: Array<[object, ScopedFeatureInstall]> = []
-
     for (const state of routerStates(this.#mounted)) {
-      for (const install of state.installs) {
-        out.push([state, install])
-      }
+      await register(state, state.plugins)
     }
 
     // Snapshotted by the container when it was constructed, so every controller the application can resolve
@@ -238,12 +223,8 @@ export class WebApplication<
         continue
       }
 
-      for (const install of controllerFeatures(key)) {
-        out.push([key, install])
-      }
+      await register(key, controllerPlugins(key))
     }
-
-    return out
   }
 
   /**
@@ -296,6 +277,8 @@ export class WebApplication<
     this.#routeGroups = buildRouting<R>(this.routeSources(), this.container)
     this.#built = true
 
+    await this.#registerScopedPlugins()
+
     await this.#adapter.setup({
       routeGroups: this.#routeGroups,
       middlewares: this.#middlewares,
@@ -316,9 +299,16 @@ export class WebApplication<
     return super.run() as Promise<WebRunInfo>
   }
 
-  /** Drops cached probe evaluations so the first poll after the flip reflects the drain, not the last good run. */
+  /**
+   * Drops cached probe evaluations so the first poll after the flip reflects the drain, not the last good run.
+   *
+   * Guarded on the application having come up: closing one whose `ready()` threw must report that failure,
+   * not a resolution error raised while tidying up after it — and a probe that never ran cached nothing.
+   */
   protected override beforeDrain(): void {
-    this.container.getOptional(HealthRegistry)?.invalidate()
+    if (this.started) {
+      this.container.getOptional(HealthRegistry)?.invalidate()
+    }
   }
 
   /**

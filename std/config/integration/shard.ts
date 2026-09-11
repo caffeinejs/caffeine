@@ -1,6 +1,6 @@
 import { kSelfRefresh, type SelfRefreshable } from '@caffeinejs/di'
 
-import { createLiveAccessors, featureLookup } from '../accessor.js'
+import { createLiveAccessors } from '../accessor.js'
 import type { ConfigBootstrapResult, BootstrapOptions } from '../bootstrap.js'
 import { bootstrapConfig, notifySlices } from '../bootstrap.js'
 import type {
@@ -57,7 +57,6 @@ export class ConfigShard<T> implements SelfRefreshable, ConfigurationSource<T> {
     this.handle = createLiveAccessors(
       () => this.#validated,
       () => this.#revision,
-      featureLookup(options.features, slice => slice.config),
     )
     this.#notifier = new ConfigNotifier<T>(
       () => 'the application configuration',
@@ -94,11 +93,7 @@ export class ConfigShard<T> implements SelfRefreshable, ConfigurationSource<T> {
     if (this.#snapshotStamp !== this.#revision || this.#snapshotHandle === undefined) {
       const validated = this.#validated
 
-      this.#snapshotHandle = createLiveAccessors(
-        () => validated,
-        undefined,
-        featureLookup(this.#options.features, slice => slice.snapshot()),
-      )
+      this.#snapshotHandle = createLiveAccessors(() => validated)
       this.#snapshotStamp = this.#revision
     }
 

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { cacheConfigSchema, caching, kCacheStatusHeader } from '../index.js'
 
 // The application owns the schema: it declares where the cache block lives — by importing the feature's own
-// schema — and `.extend(caching(), c => c.config(...))` points the feature at it.
+// schema — and the configure callback reads that node.
 const rootSchema = $t.Object({ cache: cacheConfigSchema })
 const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
@@ -34,11 +34,25 @@ describe('cache configuration', () => {
     expect(headerOf(app)).toBe('X-Cache')
   })
 
-  // The regression the whole mechanism exists for: a builder method is a default, not a setting.
-  it('lets the environment override a builder-set status header', async () => {
+  // The semantic the mechanism rests on: a fluent method is the last word. Configuration is not a higher
+  // band that quietly outranks it — it reaches a feature only where the callback wired it, and here the
+  // callback did not.
+  it('keeps a builder-set status header even when the environment names one', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ CACHE__STATUS_HEADER: 'X-Edge-Cache' }), ConfigPriority.ENV))
-      .extend(caching(), c => c.config(c => c.cache).statusHeader('X-From-Code'))
+      .extend(caching(cache => cache.statusHeader('X-From-Code')))
+      .build()
+
+    await app.ready()
+
+    expect(headerOf(app)).toBe('X-From-Code')
+  })
+
+  // The other half of the same rule: wire it, and the environment is what the feature runs on.
+  it('reads the status header from the environment when the callback wires it', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c => c.source(env({ CACHE__STATUS_HEADER: 'X-Edge-Cache' }), ConfigPriority.ENV))
+      .extend(caching((cache, c) => cache.withConfig(c.cache)))
       .build()
 
     await app.ready()
@@ -46,7 +60,9 @@ describe('cache configuration', () => {
     expect(headerOf(app)).toBe('X-Edge-Cache')
   })
 
-  it('re-points reads and code-set defaults together via .config()', async () => {
+  // Where the block lives is the application's choice, and the callback is what names it — so relocating it
+  // costs one selector and nothing else.
+  it('reads the status header from wherever the application put the block', async () => {
     const schema = $t.Object({
       app: $t.Object({ cache: $t.Object({ statusHeader: $t.String({ default: 'X-Cache' }) }) }),
     })
@@ -60,7 +76,7 @@ describe('cache configuration', () => {
           }),
         ),
       )
-      .extend(caching(), c => c.config(x => x.app.cache).statusHeader('X-From-Code'))
+      .extend(caching((cache, c) => cache.withConfig(c.app.cache)))
       .build()
 
     await app.ready()

@@ -17,13 +17,18 @@ interface Entry {
  * feature list rather than with the moment it got here — an `await` before the registration does not move it.
  * That position is the whole ordering model: there are no bands and nothing is sorted by what a plugin is.
  *
- * A plugin carries a scope when the feature was installed by a router or a controller rather than by the
- * application. The adapter registers the unscoped ones on the root server and each scoped one inside the
- * plugin context of the route group it belongs to.
+ * A plugin carries a scope when a router or a controller registered it rather than the application. The
+ * adapter registers the unscoped ones on the root server and each scoped one inside the plugin context of the
+ * route group it belongs to.
  */
 export class HTTPPlugins {
   readonly #entries: Entry[] = []
   #sorted = false
+
+  /** How many plugins have been contributed so far, which is the next free order. */
+  get size(): number {
+    return this.#entries.length
+  }
 
   /** The registrar for the feature at `order`, contributing into `scope`. */
   registrarFor(order: number, scope?: object): ExtensionRegistrar<HTTPPlugin> {

@@ -21,7 +21,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { OpenAPIBuilder } from '../builder.js'
 import { APIGroup, Operation } from '../decorators/index.js'
 import { ErrOpenAPIConfiguration } from '../errors.js'
-import { OpenAPIExt } from '../plugin.js'
+import { openapi } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
@@ -83,7 +83,7 @@ function buildApp(configure: FeatureConfigurer<OpenAPIBuilder> = () => {}): WebA
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder(configure?: FeatureConfigurer<OpenAPIBuilder>) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt(), configure)
+    .extend(openapi(configure))
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }
 

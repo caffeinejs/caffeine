@@ -1,200 +1,92 @@
-import { ErrConfiguration } from '@caffeinejs/http'
-import {
-  defineFeatureConfig,
-  type ConfigLocation,
-  type ConfigDefinition,
-  type ConfigHandle,
-  type ConfigSlice,
-} from '@caffeinejs/std/config'
+import { ErrConfiguration, registerPlugin } from '@caffeinejs/http'
+import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
 
-import { VIEW_CONFIG_KEYS, viewConfigSchema, type ViewConfig } from './config.js'
+import { ViewEngineBuilder } from './engine_builder.js'
 import type { ViewOptions } from './view.js'
+import { viewPlugin } from './view_plugin.js'
+
+/** Reserved: `reply.view` is the default engine's decoration, so a named engine cannot claim it. */
+const RESERVED_ENGINE_NAME = 'view'
 
 /**
- * ViewBuilder configures a single SSR (Server-Side Rendering) engine, powered by the `@fastify/view`
- * plugin. The same options used to configure the `@fastify/view` plugin can be used to configure the
- * Caffeine's SSR. In case the builder does not provide a specific option, use the `configure` method to
- * set any option supported by the `@fastify/view` plugin.
+ * Configures server-side rendering over `@fastify/view`.
  *
- * One builder assembles one engine registration. Multiple engines are declared with
- * `.extend(ViewExt(), …)` and `.extend(ViewExt('mail'), …)`; the {@link ViewOptionsProvider}
- * owns them and reads each via {@link build}.
+ * One feature holds every engine: the default one, decorating `reply.view`, plus any named ones decorating
+ * `reply.<name>`. The plugin it contributes registers `@fastify/view` once per configured engine.
  *
- * Everything `@fastify/view` takes as data — `root`, `viewExt`, `layout`, the production cache — is read
- * from the configuration tree at `view.<name>.*`, the unnamed engine at `view.default.*`. So `v.root('src')`
- * is a **default**: `VIEW__DEFAULT__ROOT=/srv/templates` overrides it. The engine itself stays code-only.
- *
- * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
- *
- * @see https://github.com/fastify/point-of-view
+ * ```ts
+ * .extend(view((v, c) => {
+ *   v.engine(e => e.engine({ handlebars }).withConfig(c.app.templates))
+ *   v.engine('mail', e => e.engine({ handlebars }).root('emails'))
+ * }))
+ * ```
  */
-export class ViewBuilder<C = unknown> {
-  readonly #name: string | undefined
-  #options: Partial<ViewOptions> = {}
-  #selector?: (c: ConfigHandle<C>) => ConfigLocation<ViewConfig>
-  #resolved: ConfigSlice<ViewOptions> | undefined
+export class ViewBuilder<C = unknown> extends FeatureBuilder<C> {
+  readonly [kFeatureName] = 'view'
 
-  /**
-   * @param name - The engine registration name (`@fastify/view`'s `propertyName`), decorating
-   *   `reply.<name>`. `undefined` is the default engine, decorating `reply.view`.
-   */
-  constructor(name?: string) {
-    this.#name = name
-  }
+  // Keyed by engine name; the `undefined` key is the default engine.
+  readonly #engines = new Map<string | undefined, ViewEngineBuilder>()
 
-  /** Engine registration name; `undefined` is the default `reply.view`. */
-  get engineName(): string | undefined {
-    return this.#name
-  }
+  /** Configures the default engine, decorating `reply.view`. */
+  engine(configure: (engine: ViewEngineBuilder) => void): this
+  /** Configures a named engine, decorating `reply.<name>`. */
+  engine(name: string, configure: (engine: ViewEngineBuilder) => void): this
+  engine(
+    nameOrConfigure: string | ((engine: ViewEngineBuilder) => void),
+    maybeConfigure?: (engine: ViewEngineBuilder) => void,
+  ): this {
+    const name = typeof nameOrConfigure === 'string' ? nameOrConfigure : undefined
+    const configure = typeof nameOrConfigure === 'string' ? maybeConfigure : nameOrConfigure
 
-  /**
-   * Configures the template engine.
-   * Accepted engines are: ejs, eta, nunjucks, pug, handlebars, mustache, twig, liquid, dot, edge, squirrelly.
-   *
-   * @param engine - The template engine.
-   * @param options - The engine-specific options.
-   */
-  engine(engine: ViewOptions['engine'], options?: object): this {
-    this.#options.engine = engine
-    this.#options.options = options
-
-    return this
-  }
-
-  /**
-   * Directory (or directories) templates are resolved against. An array searches each path in order
-   * (first match wins) — enabling feature-folder views with a shared layout root, e.g.
-   * `['src/orders/views', 'src/users/views', 'src/shared/layouts']`.
-   *
-   * Array roots are **engine-dependent**: `@fastify/view` only honors them for **Nunjucks** (it throws for
-   * Handlebars/EJS/etc). With a single-root engine, use one `root` and namespaced template names
-   * (`View('orders/list')`). `@fastify/view` accepts `string[]` at runtime though its types declare only
-   * `string`, hence the cast.
-   */
-  root(root: string | string[]): this {
-    this.#options.root = root as ViewOptions['root']
-    return this
-  }
-
-  /**
-   * Default template extension (e.g. `'hbs'`), so handlers can return `View('home')` without it.
-   */
-  extension(ext: string): this {
-    this.#options.viewExt = ext
-    return this
-  }
-
-  /**
-   * Default layout template wrapped around every rendered view.
-   */
-  layout(path: string): this {
-    this.#options.layout = path
-    return this
-  }
-
-  /**
-   * Data merged into every template's model.
-   */
-  defaultContext(context: object): this {
-    this.#options.defaultContext = context
-    return this
-  }
-
-  /**
-   * Engine-specific options forwarded to the underlying engine.
-   */
-  options(engineOptions: object): this {
-    this.#options.options = engineOptions
-    return this
-  }
-
-  /**
-   * Toggles `@fastify/view`'s production template cache.
-   */
-  production(production: boolean): this {
-    this.#options.production = production
-    return this
-  }
-
-  /**
-   * Merges a full `@fastify/view` options object over anything set so far (last write wins). The escape
-   * hatch for knobs without a fluent setter (`charset`, `maxCache`, `includeViewExtension`,
-   * `propertyName`, `templates`, ...). Interleaves with the fluent setters by call order.
-   */
-  configure(options: Partial<ViewOptions>): this {
-    Object.assign(this.#options, options)
-    return this
-  }
-
-  /**
-   * Places this engine's settings elsewhere in the configuration tree, e.g. `v.config(c => c.app.templates)`.
-   *
-   * The selector names a location, not a value: it is evaluated once, at configure time, to record the path.
-   */
-  config(selector: (c: ConfigHandle<C>) => ConfigLocation<ViewConfig>): this {
-    this.#selector = selector
-    return this
-  }
-
-  /**
-   * Framework-internal: registers this engine's slice. Called by {@link ViewOptionsProvider} at
-   * `configure()`, before the container initializes.
-   *
-   * The engine check happens here rather than in {@link build}, so a missing engine still fails at start-up:
-   * `build()` cannot run until configuration has resolved, and by then the adapter is already wiring routes.
-   */
-  register(definition: ConfigDefinition): void {
-    if (!this.#options.engine) {
-      throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
+    if (name === RESERVED_ENGINE_NAME) {
+      throw new ErrConfiguration(
+        `Cannot register a view engine named "${RESERVED_ENGINE_NAME}": it is reserved for the default engine`,
+      )
     }
 
-    const code = this.#options
+    if (this.#engines.has(name)) {
+      throw new ErrConfiguration(
+        `Cannot register view engine "${name ?? 'default'}": an engine with that name is already configured`,
+      )
+    }
 
-    const slice = defineFeatureConfig<ViewConfig>(definition, {
-      selector: this.#selector as ((c: never) => unknown) | undefined,
-      schema: viewConfigSchema,
-      values: Object.fromEntries(
-        VIEW_CONFIG_KEYS.filter(key => code[key as keyof ViewOptions] !== undefined).map(key => [
-          key,
-          code[key as keyof ViewOptions],
-        ]),
-      ),
-    })
+    const builder = new ViewEngineBuilder(name)
+    configure?.(builder)
+    this.#engines.set(name, builder)
 
-    this.#resolved = slice.derive(
-      published =>
-        ({
-          // Code first, configuration over it: a builder method is a default, like everywhere else. `engine` and
-          // the engine's own options only exist on the code side and survive untouched.
-          ...code,
-          ...published,
-          ...(this.#name === undefined ? {} : { propertyName: this.#name }),
-        }) as ViewOptions,
-    )
+    return this
   }
 
-  /**
-   * Assembles the `@fastify/view` options for this engine registration, stamping `propertyName` when the
-   * builder is named.
-   *
-   * Once {@link register} has run this reads through the slice, so what an application gets is the merged
-   * configuration — and reading it too early throws from the slice itself. A builder that was never
-   * registered has no configuration system behind it at all and simply reports what was set in code, which
-   * is what a standalone use (a unit test, a hand-assembled registration) means by `build()`.
-   */
-  build(): ViewOptions {
-    if (this.#resolved !== undefined) {
-      return this.#resolved.config
+  /** The assembled options for the default engine, or `undefined` when only named engines are configured. */
+  default(): ViewOptions | undefined {
+    return this.#engines.get(undefined)?.build()
+  }
+
+  /** Every engine's assembled options, the default (if any) first, then the named ones in insertion order. */
+  all(): ViewOptions[] {
+    const out: ViewOptions[] = []
+
+    for (const [name, builder] of this.#engines) {
+      if (name === undefined) {
+        out.push(builder.build())
+      }
+    }
+    for (const [name, builder] of this.#engines) {
+      if (name !== undefined) {
+        out.push(builder.build())
+      }
     }
 
-    if (!this.#options.engine) {
-      throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
-    }
+    return out
+  }
 
-    if (this.#name !== undefined) {
-      this.#options.propertyName = this.#name
-    }
+  protected bootstrap(kit: BootstrapKit<C>): void {
+    // Forces every engine to assemble now, so a missing engine module fails at start-up rather than from
+    // inside the plugin, by which point the adapter is already wiring routes.
+    this.all()
 
-    return this.#options as ViewOptions
+    // The builder goes to the plugin directly rather than through a container key it would only be read back
+    // out of at server setup.
+    registerPlugin(kit, viewPlugin(this))
   }
 }

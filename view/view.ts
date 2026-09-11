@@ -11,7 +11,7 @@ export type ViewOptions = Exclude<FastifyViewOptions, 'propertyName' | 'asyncPro
 /**
  * Per-render options forwarded to `reply.<engine>(name, model, options)`. `layout` overrides the global
  * layout for this one render (mirrors `@fastify/view`'s `RouteSpecificOptions`). `engine` selects which
- * registered engine renders this view — the name passed to `ViewExt('mail')`; when unset, the default
+ * registered engine renders this view — the name passed to `view('mail')`; when unset, the default
  * engine (`reply.view`) is used.
  */
 export interface ViewRenderOptions {

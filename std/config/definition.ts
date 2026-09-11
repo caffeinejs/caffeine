@@ -1,7 +1,6 @@
 import { token, type NamedToken } from '@caffeinejs/di'
 
-import type { ConfigSchema, FeatureConfigKey, ConfigValue } from './config.js'
-import { ErrConfig } from './errors.js'
+import type { ConfigSchema, ConfigValue } from './config.js'
 import { ConfigShard } from './integration/shard.js'
 import { MutableConfigProvider } from './providers/mutable_provider.js'
 import { declaredDefaults, passthroughConfigSchema } from './schema.js'
@@ -30,12 +29,6 @@ export class ConfigDefinition {
   token: NamedToken<any> | undefined
   readonly sources = new ConfigSources()
   readonly slices: ConfigSliceSpec[] = []
-  /**
-   * The slices published under a {@link FeatureConfigKey}, which is how a reader that holds no builder finds
-   * one. Keyed by identity rather than by namespace, so a feature that relocated its settings is still found.
-   */
-  readonly features = new Map<symbol, ConfigSlice<unknown>>()
-
   /** Framework defaults — the bottom of the chain. Everything overrides these. */
   readonly frameworkDefaults = new MutableConfigProvider('framework-defaults')
   /**
@@ -115,7 +108,6 @@ export class ConfigDefinition {
       profiles: this.profiles,
       failFast: this.failFast,
       secrets: this.secrets,
-      features: this.features,
       // Read through a closure, not by value: the application builder points `warn` at the host separately,
       // and may well do so after this definition was constructed.
       warn: message => this.warn?.(message),
@@ -142,32 +134,10 @@ export class ConfigDefinition {
       this.secrets.add(path)
     }
 
-    // The warning channel is read lazily: features register their slices at `declare()`, and the
-    // application builder points `warn` at the host separately. Passing it by value here would capture whatever
-    // it happened to be — usually nothing.
+    // The warning channel is read lazily: a slice is registered before the application builder has pointed
+    // `warn` at the host. Passing it by value here would capture whatever it happened to be — usually nothing.
     const slice = new ConfigSlice<T>(parts, () => this.warn)
     this.slices.push({ parts, schema, slice, local } as ConfigSliceSpec)
     return slice
-  }
-
-  /**
-   * Publishes a slice under a feature key, making it readable through the configuration handle.
-   *
-   * A key names one slice. Two registrations under the same key would leave which one a reader gets decided by
-   * the order the features happened to install in, so the second is refused instead — which is also what tells
-   * a multi-instance feature that one key cannot address all of its instances.
-   */
-  publishFeature<T>(key: FeatureConfigKey<T>, slice: ConfigSlice<T>): void {
-    if (this.features.has(key)) {
-      throw new ErrConfig(
-        `Cannot register feature config "${key.description ?? key.toString()}": a slice is already registered for that key`,
-        'ERR_CONFIG_FEATURE_CONFLICT',
-        undefined,
-        'Register the slice once, from the feature builder that owns it',
-        'Give each instance of a multi-instance feature its own key',
-      )
-    }
-
-    this.features.set(key, slice as ConfigSlice<unknown>)
   }
 }

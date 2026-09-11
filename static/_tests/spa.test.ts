@@ -5,7 +5,7 @@ import type { FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticBuilder, StaticExt } from '../index.js'
+import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticBuilder, staticFiles } from '../index.js'
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
 const empty = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
@@ -26,7 +26,7 @@ describe('SPA fallback', () => {
 
   const start = async (configure: FeatureConfigurer<StaticBuilder>) => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt(), configure)
+      .extend(staticFiles(configure))
       .build()
     await app.ready()
 
@@ -154,18 +154,20 @@ describe('SPA fallback', () => {
 
   it('refuses to start when the shell is missing', async () => {
     const failing = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt(), s => s.spa(empty))
+      .extend(staticFiles(s => s.spa(empty)))
       .build()
 
     await expect(failing.ready()).rejects.toThrow(ErrSPAIndexMissing)
     await failing.close()
   })
 
-  it('refuses a second SPA mount', () => {
-    expect(() =>
-      createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-        .extend(StaticExt(), s => s.spa(dist).spa(dist))
-        .build(),
-    ).toThrow(ErrDuplicateSPAMount)
+  // Two `.spa()` calls cannot both be right, and the answer does not depend on anything configuration might
+  // say. The configure callback runs when the application bootstraps, so it surfaces from `ready()`.
+  it('refuses a second SPA mount', async () => {
+    const rejected = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(staticFiles(s => s.spa(dist).spa(dist)))
+      .build()
+
+    await expect(rejected.ready()).rejects.toThrow(ErrDuplicateSPAMount)
   })
 })

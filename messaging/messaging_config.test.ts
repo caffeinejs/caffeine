@@ -44,12 +44,14 @@ describe('messaging configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' })
-          .out('notify', { destination: 'notify', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' })
+            .out('notify', { destination: 'notify', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -72,11 +74,13 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -96,17 +100,21 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .out('log', { destination: 'log', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .out('log', { destination: 'log', via: 'primary' }),
+        ),
       )
-      .extend(messaging('audit'), m =>
-        m
-          .config(c => c.messaging.audit)
-          .use('primary', inMemoryBinder())
-          .out('log', { destination: 'log', via: 'primary' }),
+      .extend(
+        messaging('audit', (m, c) =>
+          m
+            .withConfig(c.messaging.audit)
+            .use('primary', inMemoryBinder())
+            .out('log', { destination: 'log', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -131,11 +139,13 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary', schema }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary', schema }),
+        ),
       )
 
     const built = app.build()
@@ -167,11 +177,13 @@ describe('messaging configuration', () => {
         ),
       )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(messaging(), m =>
-        m
-          .config(c => c.app.events)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.app.events)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -192,11 +204,13 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' }),
+        ),
       )
 
     const built = app.build()

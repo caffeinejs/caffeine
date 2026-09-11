@@ -1,5 +1,6 @@
 import type { Container } from '@caffeinejs/di'
-import { FeatureBuilder, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import type { BootstrapKit } from '@caffeinejs/std'
+import type { ConfigHandle } from '@caffeinejs/std/config'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 
 import type { RouteGroup } from './route.js'
@@ -22,10 +23,10 @@ export type HTTPPluginOptions = {
  * in `fastify-plugin` and its hooks and decorations apply to the context it was registered in; leave it
  * unwrapped and they stay inside the plugin, covering only what the plugin itself registered.
  *
- * Which context that is depends on who installed the feature, and the plugin does not have to know: the
- * application registers it on the root server, and a router or a controller registers it inside that route
- * group's own context. One `fp`-wrapped plugin therefore serves both — it covers every route, or that
- * group's routes, according to where it was asked for.
+ * Which context that is depends on who registered it, and the plugin does not have to know: the application
+ * registers it on the root server, and a router or a controller registers it inside that route group's own
+ * context. One `fp`-wrapped plugin therefore serves both — it covers every route, or that group's routes,
+ * according to where it was asked for.
  *
  * ```ts
  * const plugin: HTTPPlugin = fp(async (instance, { container }) => {
@@ -39,40 +40,28 @@ export type HTTPPlugin = FastifyPluginAsync<HTTPPluginOptions>
 export type HTTPPluginContext = HTTPPluginOptions & { server: FastifyInstance }
 
 /**
+ * Produces a plugin from the resolved configuration and the container. What `.extend(...)` takes in place of a
+ * feature, and how a third-party Fastify plugin is configured from the application's own settings.
+ *
+ * Always a factory, never a bare plugin: both are functions, so accepting both would mean telling them apart
+ * by arity. A plugin needing nothing from either argument is written `.extend(() => myPlugin)`.
+ *
+ * ```ts
+ * .extend(c => corsPlugin(c.app.cors.options))
+ * .extend((c, container) => rateLimitPlugin(container.get(Redis), c.app.limits))
+ * ```
+ */
+export type HTTPPluginFactory<C = unknown> = (
+  config: ConfigHandle<C>,
+  container: Container,
+) => HTTPPlugin | Promise<HTTPPlugin>
+
+/**
  * Contributes a plugin from a feature's bootstrap hook.
  *
  * `BootstrapKit.extensions` is platform-neutral and accepts anything, so going through this is what gets the
  * contribution type-checked at the call site.
  */
-export function registerPlugin(kit: BootstrapKit, plugin: HTTPPlugin): void {
+export function registerPlugin(kit: BootstrapKit<any>, plugin: HTTPPlugin): void {
   kit.extensions.register(plugin)
-}
-
-/**
- * A {@link FeatureBuilder} whose whole bootstrap is "produce the plugin".
- *
- * Extend this when the feature binds nothing else. A feature that also has container bindings to make
- * overrides `bootstrap` itself and calls {@link registerPlugin}.
- */
-export abstract class HTTPFeatureBuilder<T, C = unknown> extends FeatureBuilder<T, C> {
-  protected abstract plugin(kit: BootstrapKit): HTTPPlugin | Promise<HTTPPlugin>
-
-  protected async bootstrap(kit: BootstrapKit): Promise<void> {
-    registerPlugin(kit, await this.plugin(kit))
-  }
-}
-
-/** The builder a {@link Feature} hands its `configure` callback. */
-export type BuilderOf<F> = F extends Feature<infer B> ? B : never
-
-/**
- * A feature a router or a controller installed, held until the application bootstraps.
- *
- * The feature is installed on the application like any other — one slice, one bootstrap — and only the
- * plugin it produces is scoped: the adapter registers it inside that route group's plugin context instead of
- * on the root server.
- */
-export interface ScopedFeatureInstall {
-  feature: Feature
-  configure?: (builder: never) => void
 }

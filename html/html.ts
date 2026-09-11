@@ -1,6 +1,6 @@
-import { Responder, type ActionResult, type Context } from '@caffeinejs/http'
+import { FastifyContext, Responder, type ActionResult, type Context } from '@caffeinejs/http'
 
-import { HTML_DEFAULTS, kHTMLConfig, type HTMLDefaults } from './config.js'
+import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
 
 /**
  * What `@kitajs/html` evaluates a JSX expression to: the markup itself, or a promise of it when any
@@ -37,8 +37,19 @@ function applyDoctype(markup: string, autoDoctype: boolean): string {
   return DOCTYPE + markup
 }
 
+/**
+ * The settings the plugin decorated onto the Fastify instance this request was served by, or
+ * {@link HTML_DEFAULTS} where the plugin was never registered.
+ *
+ * Read off `req.server` rather than the root instance, so a plugin registered inside one route group applies
+ * to that group's responses and no others.
+ */
 function defaultsOf(ctx: Context): HTMLDefaults {
-  return ctx.config(kHTMLConfig) ?? HTML_DEFAULTS
+  const server = (ctx as FastifyContext).fst?.request?.server as unknown as
+    | Record<symbol, HTMLDefaults | undefined>
+    | undefined
+
+  return server?.[kHTMLOptions] ?? HTML_DEFAULTS
 }
 
 /**
@@ -85,7 +96,7 @@ export class HTMLResult extends Responder {
  * carry one — a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call, both
  * survive undisturbed. There is no way to set Content-Type through this function; use `@Produces` or
  * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the application's
- * `.extend(HTMLExt(), …)` setting, or the framework default when the application never installed the
+ * `.extend(c => htmlPlugin(c.app.html))` setting, or the framework default when the application never installed the
  * feature; `options.doctype` overrides it for this response.
  *
  * `@kitajs/html` escapes nothing on its own: interpolated values need the `safe` attribute, and the

@@ -1,5 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 
 import { registerPlugin } from '../plugin.js'
 import { kConstraintRegistry } from './keys.js'
@@ -14,7 +14,7 @@ import type { ConstraintStrategy } from './strategy.js'
  * registered — it is Fastify's built-in semver matcher on `Accept-Version`. A strategy is a function, so it is
  * held here and installed at start-up rather than travelling through the configuration tree.
  */
-export class ConstraintsBuilder implements FeatureLifecycle {
+export class ConstraintsBuilder implements Feature {
   readonly [kFeatureName] = 'constraints'
 
   readonly #entries: RegisteredConstraint[] = []

@@ -1,6 +1,6 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type BeforeBootstrapKit, type BootstrapKit } from '@caffeinejs/std'
-import { type ConfigSchema, type ConfigSlice } from '@caffeinejs/std/config'
+import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { Context } from '../../context.js'
 import { registerPlugin } from '../../plugin.js'
@@ -10,17 +10,10 @@ import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import {
-  CREDENTIALS_CONFIG_SEGMENT,
-  REFRESH_CONFIG_SEGMENT,
   SCHEME_CONFIG,
   applyScheme,
-  authConfigSchema,
-  credentialsConfigSchema,
   refresh,
-  refreshConfigSchema,
-  authSubNamespace,
-  schemeNamespace,
-  type AuthConfigSlice,
+  type AuthConfig,
   type SchemeConfigSpec,
   type SchemeKind,
 } from './config.js'
@@ -81,10 +74,8 @@ interface SchemeRegistration {
   preset?: GithubPresetOptions
 }
 
-export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfigSlice, C> {
+export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'auth'
-
-  protected readonly schema = authConfigSchema
 
   readonly #schemes: Map<string, InjectionToken<AuthenticationHandler> | AuthenticationHandler> = new Map()
   readonly #options: Partial<AuthenticationOptions>
@@ -95,18 +86,33 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
   // Declared but not yet built, in call order — the order the schemes are registered in still decides which is
   // the implicit default when only one exists.
   readonly #registrations: SchemeRegistration[] = []
-  readonly #slices: Map<string, ConfigSlice<Record<string, unknown>>> = new Map()
 
+  #config: ConfigLocation<AuthConfig> | undefined
   #mapper: PrincipalMapper | InjectionToken<PrincipalMapper> | undefined
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
   #refresh: RefreshTokenOptions | undefined
-  #credentialsSlice: ConfigSlice<CredentialsServiceOptions> | undefined
-  #refreshSlice: ConfigSlice<Record<string, unknown>> | undefined
 
   constructor(options: Partial<AuthenticationOptions> = {}) {
     super()
     this.#options = options
+  }
+
+  /**
+   * Reads the default schemes, each scheme's own options, the credentials block and the refresh block from a
+   * node of the configuration tree, e.g. `c.app.auth`.
+   *
+   * Configuration is applied **over** what the scheme's `addX(...)` callback set, so a secret written in code
+   * is a default the environment can redirect. Each scheme is matched by the name it was registered under —
+   * see {@link AuthConfig} for how that name has to be spelled for an environment variable to reach it.
+   *
+   * ```ts
+   * .authentication((a, c) => a.withConfig(c.app.auth).addJWTBearer('jwt', j => j.issuer('local')))
+   * ```
+   */
+  withConfig(config: ConfigLocation<AuthConfig>): this {
+    this.#config = config
+    return this
   }
 
   addStrategy(name: string, handler: AuthenticationHandler): this
@@ -271,47 +277,12 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
     return this
   }
 
-  protected override configValues(): Record<string, unknown> {
-    return {
-      defaultAuthenticateScheme: this.#options.defaultAuthenticateScheme,
-      defaultChallengeScheme: this.#options.defaultChallengeScheme,
-      defaultForbidScheme: this.#options.defaultForbidScheme,
-    }
-  }
-
-  protected bootstrap(kit: BootstrapKit): void {
+  protected bootstrap(kit: BootstrapKit<C>): void {
     this.#doBootstrap(kit)
 
     // The gate lands where `.authentication(...)` was written: everything extended before it runs ahead of
     // the hook, everything after it only for a request the hook let through.
     registerPlugin(kit, authenticationPlugin())
-  }
-
-  protected override beforeBootstrap(kit: BeforeBootstrapKit): void {
-    // Read back rather than recomputed, so the schemes follow the block they belong to wherever `.config(...)`
-    // put it — and stay detached along with it when the application placed it nowhere.
-    const base = this.slice.parts
-
-    for (const registration of this.#registrations) {
-      this.#slices.set(
-        registration.name,
-        kit.config.slice(schemeNamespace(base, registration.name), SCHEME_CONFIG[registration.kind].schema),
-      )
-    }
-
-    if (this.#credentials !== undefined) {
-      this.#credentialsSlice = kit.config.slice(
-        authSubNamespace(base, CREDENTIALS_CONFIG_SEGMENT),
-        credentialsConfigSchema,
-      )
-    }
-
-    if (this.#refreshConfigure !== undefined) {
-      this.#refreshSlice = kit.config.slice(
-        authSubNamespace(base, REFRESH_CONFIG_SEGMENT),
-        refreshConfigSchema as ConfigSchema<Record<string, unknown>>,
-      )
-    }
   }
 
   /**
@@ -324,7 +295,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
    */
   #buildSchemes(): void {
     for (const registration of this.#registrations) {
-      const configured = this.#slices.get(registration.name)?.config ?? {}
+      const configured = this.#config?.schemes?.[registration.name] ?? {}
 
       switch (registration.kind) {
         case 'jwt': {
@@ -443,21 +414,27 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<AuthConfi
     if (this.#refreshConfigure !== undefined) {
       const builder = new RefreshTokenOptionsBuilder()
       this.#refreshConfigure(builder)
-      applyScheme(builder, refresh, this.#refreshSlice?.config ?? {})
+      applyScheme(builder, refresh, this.#config?.refresh ?? {})
       this.#refresh = builder.build()
     }
 
-    if (this.#credentials !== undefined && this.#credentialsSlice !== undefined) {
-      this.#credentials = { ...this.#credentials, ...stripUndefined(this.#credentialsSlice.config) }
+    if (this.#credentials !== undefined && this.#config?.credentials !== undefined) {
+      this.#credentials = { ...this.#credentials, ...stripUndefined(this.#config.credentials) }
     }
   }
 
-  #doBootstrap(kit: BootstrapKit): void {
+  #doBootstrap(kit: BootstrapKit<C>): void {
     this.#buildSchemes()
 
-    // Absent for a builder driven directly rather than by an application, which then has only what code set.
-    const configuredDefaults = this.declared ? this.slice.config : {}
-    const opts: Partial<AuthenticationOptions> = { ...this.#options, ...stripUndefined(configuredDefaults) }
+    // Configuration over code, the same order the schemes themselves are merged in.
+    const opts: Partial<AuthenticationOptions> = {
+      ...this.#options,
+      ...stripUndefined({
+        defaultAuthenticateScheme: this.#config?.defaultAuthenticateScheme,
+        defaultChallengeScheme: this.#config?.defaultChallengeScheme,
+        defaultForbidScheme: this.#config?.defaultForbidScheme,
+      }),
+    }
     const firstScheme = this.#schemes.keys().next().value as string | undefined
 
     const schemeCount = this.#schemes.size

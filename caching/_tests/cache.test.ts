@@ -2071,7 +2071,7 @@ describe('Cache builder & container-managed store', () => {
     expect(callCount).toBe(1)
   })
 
-  it('app.extend(caching(), c => c.store(...)) wires a custom store that backs caching', async () => {
+  it('app.extend(caching(c => c.store(...))) wires a custom store that backs caching', async () => {
     let callCount = 0
 
     @Controller('/cache-builder-store')
@@ -2088,7 +2088,7 @@ describe('Cache builder & container-managed store', () => {
     const store = new MapStore()
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server))
-      .extend(caching(), c => c.store(store))
+      .extend(caching(c => c.store(store)))
       .build()
     await app.ready()
 
@@ -2102,7 +2102,7 @@ describe('Cache builder & container-managed store', () => {
     expect(await res2.json()).toEqual({ count: 1 })
   })
 
-  it('app.extend(caching(), c => c.store(...).etagGenerator(...)) applies both', async () => {
+  it('app.extend(caching(c => c.store(...).etagGenerator(...))) applies both', async () => {
     @Controller('/cache-builder-both')
     class BuilderBothController {
       @Cache({ ttl: 60 })
@@ -2116,7 +2116,7 @@ describe('Cache builder & container-managed store', () => {
     const store = new MapStore()
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server))
-      .extend(caching(), c => c.store(store).etagGenerator(() => '"builder-etag"'))
+      .extend(caching(c => c.store(store).etagGenerator(() => '"builder-etag"')))
       .build()
     await app.ready()
 
@@ -2252,7 +2252,7 @@ describe('X-Cache status header', () => {
     expect(res.headers.get('x-cache')).toBe('BYPASS')
   })
 
-  it('app.extend(caching(), c => c.statusHeader(...)) renames the header', async () => {
+  it('app.extend(caching(c => c.statusHeader(...))) renames the header', async () => {
     @Controller('/xc-custom')
     class XCCustomController {
       @Cache({ ttl: 60 })
@@ -2265,7 +2265,7 @@ describe('X-Cache status header', () => {
 
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server))
-      .extend(caching(), c => c.statusHeader('X-My-Cache'))
+      .extend(caching(c => c.statusHeader('X-My-Cache')))
       .build()
     await app.ready()
 
@@ -2397,7 +2397,7 @@ describe('Age header & request max-age', () => {
 
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server))
-      .extend(caching(), c => c.store(new AgedStore()))
+      .extend(caching(c => c.store(new AgedStore())))
       .build()
     await app.ready()
 

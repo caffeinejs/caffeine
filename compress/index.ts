@@ -1,6 +1,4 @@
-export { CompressBuilder } from './builder.js'
 export { compressConfigSchema, type CompressConfig } from './config.js'
 export { Compress, compress } from './compress.js'
 export { Encoding, encoding } from './encoding.js'
 export { compressPlugin, type CompressOptions } from './compress_plugin.js'
-export { CompressExt } from './plugin.js'
