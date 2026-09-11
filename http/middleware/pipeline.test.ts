@@ -1,3 +1,4 @@
+import type { Container } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
 import type { Context } from '../context.js'
@@ -168,11 +169,11 @@ describe('compose', () => {
 })
 
 describe('MiddlewarePipeline', () => {
-  const setupContext = { server: {}, container: {}, services: {}, routeGroups: [] } as never
+  const container = {} as Container
 
-  it('returns the dispatch untouched when the handler group is empty', async () => {
+  it('returns the dispatch untouched when the handler group is empty', () => {
     const pipeline = new MiddlewarePipeline()
-    await pipeline.setupAll(setupContext)
+    pipeline.setupAll(container)
 
     const dispatch = (): string => 'result'
 
@@ -182,7 +183,7 @@ describe('MiddlewarePipeline', () => {
   it('wraps the dispatch when the handler group has a middleware', async () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(async (_c, next) => ({ data: await next() }), 'handler')
-    await pipeline.setupAll(setupContext)
+    pipeline.setupAll(container)
 
     const dispatch = (_request: unknown): string => 'result'
     const wrapped = pipeline.wrapHandler(dispatch)
@@ -191,27 +192,7 @@ describe('MiddlewarePipeline', () => {
     expect(await wrapped({ httpContext: ctx })).toEqual({ data: 'result' })
   })
 
-  it('runs setup() once on an instance, before any request', async () => {
-    const calls: string[] = []
-
-    class Recording implements Middleware {
-      setup(): void {
-        calls.push('setup')
-      }
-
-      handle(_c: Context, next: Next): ActionResult {
-        return next()
-      }
-    }
-
-    const pipeline = new MiddlewarePipeline()
-    pipeline.add(new Recording(), 'handler')
-    await pipeline.setupAll(setupContext)
-
-    expect(calls).toEqual(['setup'])
-  })
-
-  it('reports whether a middleware type is registered', async () => {
+  it('reports whether a middleware type is registered', () => {
     class Marker implements Middleware {
       handle(_c: Context, next: Next): ActionResult {
         return next()
@@ -225,20 +206,20 @@ describe('MiddlewarePipeline', () => {
     expect(pipeline.has(MiddlewarePipeline)).toBe(false)
   })
 
-  it('registers no hook for a group nobody used', async () => {
+  it('registers no hook for a group nobody used', () => {
     const added: string[] = []
     const server = { addHook: (hook: string) => void added.push(hook) } as never
 
     const pipeline = new MiddlewarePipeline()
     pipeline.add(() => undefined, 'handler')
-    await pipeline.setupAll(setupContext)
+    pipeline.setupAll(container)
     pipeline.installHooks(server)
 
     // The handler group is not a Fastify hook, and every other group is empty.
     expect(added).toEqual([])
   })
 
-  it('registers exactly one hook per non-empty group, whatever its size', async () => {
+  it('registers exactly one hook per non-empty group, whatever its size', () => {
     const added: string[] = []
     const server = { addHook: (hook: string) => void added.push(hook) } as never
 
@@ -246,15 +227,15 @@ describe('MiddlewarePipeline', () => {
     pipeline.add((_c, next) => next(), 'onRequest')
     pipeline.add((_c, next) => next(), 'onRequest')
     pipeline.add((_c, next) => next(), 'preHandler')
-    await pipeline.setupAll(setupContext)
+    pipeline.setupAll(container)
     pipeline.installHooks(server)
 
     expect(added).toEqual(['onRequest', 'preHandler'])
   })
 
-  it('refuses a registration once the pipeline is composed', async () => {
+  it('refuses a registration once the pipeline is composed', () => {
     const pipeline = new MiddlewarePipeline()
-    await pipeline.setupAll(setupContext)
+    pipeline.setupAll(container)
 
     expect(() => pipeline.add(() => undefined, 'handler')).toThrow('the application is already started')
   })

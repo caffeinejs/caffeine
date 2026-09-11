@@ -9,7 +9,6 @@ import {
   type MiddlewareFn,
   type MiddlewareHook,
   type MiddlewareRef,
-  type MiddlewareSetupContext,
   type Next,
   isMiddlewareClass,
   isMiddlewareInstance,
@@ -83,12 +82,12 @@ export class MiddlewarePipeline {
   /**
    * Resolves every entry to something callable.
    *
-   * Separate from {@link setupAll} because the adapter needs the answer earlier than it can run the setup
-   * hooks: whether a middleware resolves from request scope decides which request-context hook is
+   * Separate from {@link setupAll} because the adapter needs the answer earlier than it can seal the
+   * pipeline: whether a middleware resolves from request scope decides which request-context hook is
    * installed, and that happens before the feature configurers get to see the server. Idempotent.
    *
    * A middleware whose dependency graph reaches request scope is resolved per request instead of here, so
-   * it never has a start-up instance — and therefore never a `setup()`.
+   * it never has a start-up instance.
    */
   resolveAll(container: Container): void {
     if (this.#resolved) {
@@ -121,14 +120,9 @@ export class MiddlewarePipeline {
     }
   }
 
-  /** Runs every resolved middleware's `setup()`, in registration order, then seals the pipeline. */
-  async setupAll(ctx: MiddlewareSetupContext): Promise<void> {
-    this.resolveAll(ctx.container)
-
-    for (const entry of this.#entries) {
-      await entry.instance?.setup?.(ctx)
-    }
-
+  /** Resolves every entry if needed, then seals the pipeline so further `add()` throws. */
+  setupAll(container: Container): void {
+    this.resolveAll(container)
     this.#sealed = true
   }
 

@@ -87,8 +87,7 @@ export class FastifyAdapter<
     fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
 
     // Resolved here, ahead of everything else, because whether a middleware comes from request scope
-    // decides which of the two context hooks below is installed. Their `setup()` runs later — after the
-    // extensions, so a feature validating its own configuration reports before a middleware does.
+    // decides which of the two context hooks below is installed.
     const middlewares = input.middlewares
     middlewares.resolveAll(container)
 
@@ -139,7 +138,7 @@ export class FastifyAdapter<
     // encapsulated handler resolves to it last.
     const globalErrorHandler = container.get(GlobalErrorHandlerRef).handler
 
-    await middlewares.setupAll({ ...pluginOptions, server: fastify })
+    middlewares.setupAll(container)
 
     // Installed after the plugins so the hooks run inside a server that already has its error handler.
     middlewares.installHooks(fastify)

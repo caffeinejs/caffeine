@@ -49,9 +49,10 @@ export interface Adapter<I, R> {
   get address(): ServerAddress | undefined
 
   setup(input: AdapterIn<R>): Promise<void>
-  teardown(): Promise<void>
   run(): Promise<void>
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
+
+  teardown(): Promise<void>
 
   /**
    * Abandons whatever is still in flight so a pending {@link teardown} can finish. Called only when the graceful

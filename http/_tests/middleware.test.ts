@@ -3,14 +3,12 @@ import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
-  type ActionResult,
   Catch,
   type Context,
   Controller,
   ErrPipelineSealed,
   Get,
-  Middleware,
-  type MiddlewareSetupContext,
+  type Middleware,
   type Next,
   Responder,
   createWebApplication,
@@ -68,17 +66,15 @@ class Tag {
 }
 
 /** Wraps whatever the controller returned — the reason the `handler` group exists. */
-class Envelope extends Middleware {
+class Envelope implements Middleware {
   async handle(_ctx: Context, next: Next): Promise<unknown> {
     return { data: await next() }
   }
 }
 
 /** A middleware with an injected dependency, which is the point of the class form. */
-class Tagger extends Middleware {
-  constructor(private readonly tag: Tag) {
-    super()
-  }
+class Tagger implements Middleware {
+  constructor(private readonly tag: Tag) {}
 
   async handle(ctx: Context, next: Next): Promise<unknown> {
     ctx.header('x-tag', this.tag.value)
@@ -88,7 +84,7 @@ class Tagger extends Middleware {
 
 let counterInstances = 0
 
-class Counter extends Middleware {
+class Counter implements Middleware {
   readonly id = ++counterInstances
 
   async handle(ctx: Context, next: Next): Promise<unknown> {
@@ -295,48 +291,6 @@ describe('middleware pipeline', () => {
     expect(res.status).toBe(418)
     expect(await res.json()).toEqual({ answered: 'directly' })
     await app.close()
-  })
-
-  it('runs setup() once at start-up, with the resolved application', async () => {
-    const calls: MiddlewareSetupContext[] = []
-
-    class Setups extends Middleware {
-      setup(ctx: MiddlewareSetupContext): void {
-        calls.push(ctx)
-      }
-
-      handle(_ctx: Context, next: Next): ActionResult {
-        return next()
-      }
-    }
-
-    const app = newApp().build()
-    app.use(new Setups())
-    await app.ready()
-
-    await app.fetch('/mw/echo')
-    await app.fetch('/mw/echo')
-
-    expect(calls).toHaveLength(1)
-    expect(calls[0].routeGroups.length).toBeGreaterThan(0)
-    await app.close()
-  })
-
-  it('fails start-up when setup() throws', async () => {
-    class Refuses extends Middleware {
-      setup(): void {
-        throw new Error('this middleware cannot work here')
-      }
-
-      handle(_ctx: Context, next: Next): ActionResult {
-        return next()
-      }
-    }
-
-    const app = newApp().build()
-    app.use(new Refuses())
-
-    await expect(app.ready()).rejects.toThrow('this middleware cannot work here')
   })
 
   it('refuses a registration after the application is ready', async () => {

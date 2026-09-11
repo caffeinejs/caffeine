@@ -1,9 +1,7 @@
-import type { Container, Ctor, InjectionToken } from '@caffeinejs/di'
-import type { FastifyInstance } from 'fastify'
+import type { Ctor, InjectionToken } from '@caffeinejs/di'
 
 import type { Context } from '../context.js'
 import type { ActionResult } from '../response.js'
-import type { RouteGroup } from '../route.js'
 
 /**
  * Runs the rest of the pipeline and returns whatever it produced.
@@ -42,7 +40,7 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  * container and register it by class or key, and the container injects it.
  *
  * ```ts
- * class Envelope extends Middleware {
+ * class Envelope implements Middleware {
  *   async handle(ctx: Context, next: Next) {
  *     return { data: await next() }
  *   }
@@ -51,24 +49,8 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  * app.use(Envelope)
  * ```
  */
-export abstract class Middleware<V = Record<never, never>, C = Record<never, never>> {
-  /**
-   * Ran once at start-up, before any request. Resolve singletons here, validate the configuration here, and
-   * throw here — a middleware that cannot work is a start-up failure, not a per-request one.
-   *
-   * Skipped for a middleware whose dependency graph reaches request scope: there is no instance to call it
-   * on until a request exists.
-   */
-  setup?(ctx: MiddlewareSetupContext): void | Promise<void>
-
-  abstract handle(ctx: Context<V, C>, next: Next): ActionResult
-}
-
-/** What a middleware is given at start-up: the whole application, resolved. */
-export interface MiddlewareSetupContext {
-  server: FastifyInstance
-  container: Container
-  routeGroups: RouteGroup<any>[]
+export interface Middleware<V = Record<never, never>, C = Record<never, never>> {
+  handle(ctx: Context<V, C>, next: Next): ActionResult
 }
 
 /**
