@@ -2,12 +2,17 @@ import { type FastifyContext } from './context.js'
 import { type CatchByMap } from './route.js'
 import { type AuthzRouteService } from './security/authz/route_service.js'
 import { type Principal } from './security/identity.js'
+import { Keys } from './symbols.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
     httpContext: FastifyContext
     routeTarget: Record<string | symbol, (...args: unknown[]) => unknown> | null
     user: Principal
+  }
+
+  interface RawRequest {
+    [Keys.CONTEXT]: FastifyContext
   }
 
   interface FastifyContextConfig {

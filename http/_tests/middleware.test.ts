@@ -10,7 +10,6 @@ import {
   Get,
   type Middleware,
   type Next,
-  Responder,
   createWebApplication,
   fastifyAdapterFactory,
 } from '../index.js'
@@ -41,21 +40,6 @@ class MiddlewareController {
   echo() {
     return { ok: true }
   }
-
-  @Get('/boom')
-  boom(): never {
-    throw new Error('handler exploded')
-  }
-
-  @Get('/responder')
-  responder() {
-    return new (class extends Responder {
-      respond(ctx: Context) {
-        ctx.header('x-responder', 'yes')
-        return { rendered: true }
-      }
-    })()
-  }
 }
 void [MiddlewareController]
 
@@ -65,20 +49,12 @@ class Tag {
   constructor(readonly value: string) {}
 }
 
-/** Wraps whatever the controller returned — the reason the `handler` group exists. */
-class Envelope implements Middleware {
-  async handle(_ctx: Context, next: Next): Promise<unknown> {
-    return { data: await next() }
-  }
-}
-
-/** A middleware with an injected dependency, which is the point of the class form. */
 class Tagger implements Middleware {
   constructor(private readonly tag: Tag) {}
 
-  async handle(ctx: Context, next: Next): Promise<unknown> {
+  handle(ctx: Context, next: Next): void {
     ctx.header('x-tag', this.tag.value)
-    return next()
+    next()
   }
 }
 
@@ -87,9 +63,9 @@ let counterInstances = 0
 class Counter implements Middleware {
   readonly id = ++counterInstances
 
-  async handle(ctx: Context, next: Next): Promise<unknown> {
+  handle(ctx: Context, next: Next): void {
     ctx.header('x-instance', String(this.id))
-    return next()
+    next()
   }
 }
 
@@ -100,15 +76,13 @@ function newApp(configure: (container: CaffeineIoC) => void = () => {}) {
 }
 
 describe('middleware pipeline', () => {
-  it('runs a function middleware around the handler', async () => {
+  it('runs a function middleware before the handler', async () => {
     const seen: string[] = []
 
     const app = newApp().build()
-    app.use(async (_ctx, next) => {
-      seen.push('in')
-      const result = await next()
-      seen.push('out')
-      return result
+    app.use((_ctx, next) => {
+      seen.push('mw')
+      next()
     })
     await app.ready()
 
@@ -116,54 +90,7 @@ describe('middleware pipeline', () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-    expect(seen).toEqual(['in', 'out'])
-    await app.close()
-  })
-
-  it('rewrites the value the controller returned', async () => {
-    const app = newApp().build()
-    app.use(new Envelope())
-    await app.ready()
-
-    const res = await app.fetch('/mw/echo')
-
-    expect(await res.json()).toEqual({ data: { ok: true } })
-    await app.close()
-  })
-
-  it('sees the Responder a controller returned, and can let it render', async () => {
-    let observed: unknown
-    const app = newApp().build()
-    app.use(async (_ctx, next) => {
-      observed = await next()
-      return observed
-    })
-    await app.ready()
-
-    const res = await app.fetch('/mw/responder')
-
-    expect(observed).toBeInstanceOf(Responder)
-    expect(res.headers.get('x-responder')).toBe('yes')
-    expect(await res.json()).toEqual({ rendered: true })
-    await app.close()
-  })
-
-  it('catches an exception thrown by the controller', async () => {
-    const app = newApp().build()
-    app.use(async (ctx, next) => {
-      try {
-        return await next()
-      } catch (error) {
-        ctx.status(503)
-        return { recovered: (error as Error).message }
-      }
-    })
-    await app.ready()
-
-    const res = await app.fetch('/mw/boom')
-
-    expect(res.status).toBe(503)
-    expect(await res.json()).toEqual({ recovered: 'handler exploded' })
+    expect(seen).toEqual(['mw'])
     await app.close()
   })
 
@@ -243,11 +170,11 @@ describe('middleware pipeline', () => {
     const app = newApp().build()
     app.use((_ctx, next) => {
       order.push('handler-group')
-      return next()
+      next()
     })
     app.use((_ctx, next) => {
       order.push('onRequest')
-      return next()
+      next()
     }, 'onRequest')
     await app.ready()
 
@@ -263,11 +190,10 @@ describe('middleware pipeline', () => {
     const app = newApp().build()
     app.use((_ctx, next) => {
       reached.push('handler-group')
-      return next()
+      next()
     })
     app.use(ctx => {
-      ctx.status(401)
-      return { error: 'anonymous' }
+      ctx.status(401).body({ error: 'anonymous' })
     }, 'onRequest')
     await app.ready()
 

@@ -132,13 +132,13 @@ export class WebApplication<
    * resolved from the container, so a middleware with dependencies is written as a class and injected like
    * anything else.
    *
-   * `hook` defaults to `handler`, which wraps the controller: `next()` returns the handler's result and the
-   * middleware may replace it. The four Fastify lifecycle hooks are available for work that must happen
-   * before the body is parsed or validated — see {@link MiddlewareHook}, and note that they run in
-   * Fastify's order, not in registration order relative to another group.
+   * `hook` defaults to `handler`, which runs immediately before the controller: not calling `next()` skips
+   * the handler. The four Fastify lifecycle hooks are available for work that must happen before the body
+   * is parsed or validated — see {@link MiddlewareHook}, and note that they run in Fastify's order, not in
+   * registration order relative to another group.
    *
    * ```ts
-   * app.use(RequestLogger)                 // wraps the handler
+   * app.use(RequestLogger)
    * app.use(kRateLimiter, 'onRequest')     // resolved from the container, runs first
    * ```
    *

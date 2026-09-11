@@ -1,65 +1,57 @@
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 
 import type { Context } from '../context.js'
-import type { ActionResult } from '../response.js'
 
 /**
- * Runs the rest of the pipeline and returns whatever it produced.
+ * Continues the rest of the pipeline, or fails it.
  *
- * In the `handler` group that value is the controller's own return value, so a middleware may inspect it,
- * replace it, or wrap it. In a hook group there is no handler to reach, so it produces `undefined` once the
- * remaining middlewares of that group have run.
- *
- * `await next()` is always correct and is what most middlewares should write. The return type is not a
- * promise because a chain of synchronous middlewares does not create one — awaiting a plain value is free,
- * whereas manufacturing a promise per request is not.
+ * `next()` runs the remaining middlewares of this group, and the terminal after them — the controller in
+ * the `handler` group, Fastify's `done` in a hook group. `next(err)` skips the rest and fails. To answer
+ * the request from the middleware itself, write with `ctx.body()` and do not call `next`.
  *
  * Calling it twice in one middleware is a bug, not a fallback, and throws.
  */
-export type Next = () => ActionResult
+export type Next = (err?: Error) => void
 
 /**
- * The functional form of a middleware. Return without calling `next` to short-circuit the pipeline.
+ * The functional form of a middleware. Call `next` to continue; omit it to short-circuit.
  *
  * `V` names what the middleware reads and writes through `ctx.state`, and `C` what `ctx.config` carries:
  *
  * ```ts
  * const tenancy: MiddlewareFn<{ tenant: Tenant }> = (ctx, next) => {
  *   ctx.state.set('tenant', resolve(ctx))
- *   return next()
+ *   next()
  * }
  * ```
  */
-export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
-  ctx: Context<V, C>,
-  next: Next,
-) => ActionResult
+export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (ctx: Context<V, C>, next: Next) => void
 
 /**
  * The class form of a middleware, which is what a middleware with dependencies should be: bind it in the
  * container and register it by class or key, and the container injects it.
  *
  * ```ts
- * class Envelope implements Middleware {
- *   async handle(ctx: Context, next: Next) {
- *     return { data: await next() }
+ * class Tagger implements Middleware {
+ *   handle(ctx: Context, next: Next) {
+ *     ctx.header('x-tag', '1')
+ *     next()
  *   }
  * }
  *
- * app.use(Envelope)
+ * app.use(Tagger)
  * ```
  */
 export interface Middleware<V = Record<never, never>, C = Record<never, never>> {
-  handle(ctx: Context<V, C>, next: Next): ActionResult
+  handle(ctx: Context<V, C>, next: Next): void
 }
 
 /**
  * Where a middleware runs.
  *
- * `handler` (the default) wraps the controller dispatch, so `next()` returns the handler's result and the
- * middleware can replace it. It covers routes the application's controllers declare — not the ones the
- * framework registers for itself (health probes, the OIDC callback, static files, views), which have no
- * controller to wrap.
+ * `handler` (the default) runs immediately before the controller. Not calling `next()` skips the handler.
+ * It covers routes the application's controllers declare — not the ones the framework registers for itself
+ * (health probes, the OIDC callback, static files, views), which have no controller to wrap.
  *
  * The rest are Fastify's own request-lifecycle hooks, registered on the server. They cover *every* route,
  * they run in Fastify's order rather than registration order, and their `next()` cannot reach the handler.

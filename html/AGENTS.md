@@ -64,9 +64,9 @@ add a `contentType` option back onto `HTML(...)`, and do not reintroduce an app-
 
 ## `respond` returns, it does not send
 
-`respond` returns the markup rather than calling `ctx.body(...)`, so the same result is correct on all
-three dispatch sites: the adapter, `http/error/error_handling.ts`, and `http/middleware/pipeline.ts`. The
-adapter unwraps a `Responder` exactly once — never return another `Responder` from `respond`.
+`respond` returns the markup rather than calling `ctx.body(...)`, so the same result is correct on the
+adapter and `http/error/error_handling.ts`. The adapter unwraps a `Responder` exactly once — never return
+another `Responder` from `respond`.
 
 ## No route-level decorator
 

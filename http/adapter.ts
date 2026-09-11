@@ -29,6 +29,7 @@ import type { RouteCompilers } from './routing/dispatch.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { assertAuthenticationConfigured, type Principal } from './security/index.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerConfig, type ServerAddress } from './server/index.js'
+import { Keys } from './symbols.js'
 
 /**
  * The name `@caffeinejs/caching` registers its plugin under.
@@ -99,12 +100,22 @@ export class FastifyAdapter<
     // defaults.
     this.#serverOptions = { ...(configuration.config(kServerConfig) ?? DEFAULT_SERVER_OPTIONS) }
 
+    fastify.addHook('onRequest', (req, reply, done) => {
+      req.httpContext = new FastifyContext(req, reply, configuration)
+
+      Object.defineProperty(req.raw, Keys.CONTEXT, {
+        value: req.httpContext,
+        writable: false,
+        configurable: false,
+      })
+
+      done()
+    })
+
     if (container.hasRequestScoped) {
       const man = container.requestScopeManager
       fastify.addHook('onRequest', (req, reply, done) => {
-        const ctx = new FastifyContext(req, reply, configuration)
-        req.httpContext = ctx
-        this.#fastifyCtxAls.run(ctx, () => {
+        this.#fastifyCtxAls.run(req.httpContext, () => {
           man
             .run(
               () =>
@@ -115,11 +126,6 @@ export class FastifyAdapter<
             )
             .catch((err: unknown) => req.log.error({ err }, 'Cannot tear down the request scope'))
         })
-      })
-    } else {
-      fastify.addHook('onRequest', (req, reply, done) => {
-        req.httpContext = new FastifyContext(req, reply, configuration)
-        done()
       })
     }
 
@@ -191,8 +197,8 @@ export class FastifyAdapter<
             // resolved per request, a plain function — and hands back the function to install.
             const handle = route.dispatch(compilers) as (req: REQ, res: RES) => unknown
 
-            // The `handler` middleware group wraps the dispatch, so `next()` hands the middleware whatever
-            // the handler returned. Returns the dispatch unchanged when nothing is registered there.
+            // The `handler` middleware group runs immediately before dispatch. Returns the dispatch
+            // unchanged when nothing is registered there.
             const dispatch = middlewares.wrapHandler(handle)
 
             // Route Config

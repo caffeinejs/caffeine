@@ -2,7 +2,6 @@ import type { Container } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
 import type { Context } from '../context.js'
-import type { ActionResult } from '../response.js'
 import { ErrNextCalledTwice } from './errors.js'
 import { type Middleware, type Next } from './middleware.js'
 import { MiddlewarePipeline, compose } from './pipeline.js'
@@ -11,114 +10,106 @@ import { MiddlewarePipeline, compose } from './pipeline.js'
 // throughout.
 const ctx = { marker: 'ctx' } as unknown as Context
 
-type Handle = (ctx: Context, next: Next) => unknown
+type Handle = (ctx: Context, next: Next) => void
 
 const chainOf = (...handles: Handle[]) => compose(handles as never)
 
 describe('compose', () => {
-  it('runs the middlewares in registration order, then the terminal', async () => {
+  it('runs the middlewares in registration order, then the terminal', () => {
     const order: string[] = []
     const chain = chainOf(
-      async (_c, next) => {
-        order.push('first:in')
-        await next()
-        order.push('first:out')
+      (_c, next) => {
+        order.push('first')
+        next()
       },
-      async (_c, next) => {
-        order.push('second:in')
-        await next()
-        order.push('second:out')
+      (_c, next) => {
+        order.push('second')
+        next()
       },
     )
 
-    await chain(ctx, () => {
+    chain(ctx, () => {
       order.push('terminal')
-      return undefined
     })
 
-    expect(order).toEqual(['first:in', 'second:in', 'terminal', 'second:out', 'first:out'])
+    expect(order).toEqual(['first', 'second', 'terminal'])
   })
 
-  it('passes the same context to every middleware', async () => {
+  it('passes the same context to every middleware', () => {
     const seen: Context[] = []
     const chain = chainOf(
       (c, next) => {
         seen.push(c)
-        return next()
+        next()
       },
       (c, next) => {
         seen.push(c)
-        return next()
+        next()
       },
     )
 
-    await chain(ctx, () => undefined)
+    chain(ctx, () => undefined)
 
     expect(seen).toEqual([ctx, ctx])
   })
 
-  it('resolves next() with the terminal result, which a middleware may replace', async () => {
-    let observed: unknown
-    const chain = chainOf(async (_c, next) => {
-      observed = await next()
-      return { wrapped: observed }
-    })
-
-    const result = await chain(ctx, () => ({ id: 1 }))
-
-    expect(observed).toEqual({ id: 1 })
-    expect(result).toEqual({ wrapped: { id: 1 } })
-  })
-
-  it('short-circuits when a middleware does not call next: the terminal never runs', async () => {
+  it('short-circuits when a middleware does not call next: the terminal never runs', () => {
     let terminalRan = false
     const chain = chainOf(
-      () => 'answered',
+      () => undefined,
       () => {
         throw new Error('the downstream middleware must not run')
       },
     )
 
-    const result = await chain(ctx, () => {
+    chain(ctx, () => {
       terminalRan = true
-      return undefined
     })
 
-    expect(result).toBe('answered')
     expect(terminalRan).toBe(false)
   })
 
-  it('rejects a second next() from the same middleware', async () => {
-    const chain = chainOf(async (_c, next) => {
-      await next()
-      await next()
+  it('skips the rest of the chain when next is given an error', () => {
+    const seen: Error[] = []
+    const chain = chainOf(
+      (_c, next) => next(new Error('nope')),
+      () => {
+        throw new Error('the downstream middleware must not run')
+      },
+    )
+
+    chain(ctx, err => {
+      if (err) {
+        seen.push(err)
+      }
     })
 
-    await expect(chain(ctx, () => undefined) as Promise<unknown>).rejects.toThrow(ErrNextCalledTwice)
+    expect(seen).toHaveLength(1)
+    expect(seen[0].message).toBe('nope')
   })
 
-  it('rejects a second next() from a synchronous middleware too', () => {
+  it('rejects a second next() from the same middleware', () => {
     const chain = chainOf((_c, next) => {
       next()
-      return next()
+      next()
     })
 
     expect(() => chain(ctx, () => undefined)).toThrow(ErrNextCalledTwice)
   })
 
-  it('allows the same terminal to run once per request rather than once per composition', async () => {
+  it('allows the same terminal to run once per request rather than once per composition', () => {
     const chain = chainOf((_c, next) => next())
     const seen: number[] = []
 
-    await chain(ctx, () => void seen.push(1))
-    await chain(ctx, () => void seen.push(2))
+    chain(ctx, () => void seen.push(1))
+    chain(ctx, () => void seen.push(2))
 
     expect(seen).toEqual([1, 2])
   })
 
   // A synchronous throw stays synchronous: both call sites run the chain inside a try/catch of their own
-  // (Fastify's hook runner and its route handler), and an upstream `try { await next() }` catches it the
-  // same way. Wrapping it in a rejected promise would cost every request a promise to make one path tidier.
+  // (Fastify's hook runner and its route handler). Wrapping it in a rejected promise would cost every
+  // request a promise to make one path tidier.
   it('lets a synchronous middleware error propagate synchronously', () => {
     const chain = chainOf(() => {
       throw new Error('boom')
@@ -127,34 +118,22 @@ describe('compose', () => {
     expect(() => chain(ctx, () => undefined)).toThrow('boom')
   })
 
-  it('propagates an asynchronous middleware error as a rejection', async () => {
-    const chain = chainOf(async () => {
-      throw new Error('boom')
+  it('forwards an asynchronous middleware rejection to the terminal', async () => {
+    const err = await new Promise<Error | undefined>(resolve => {
+      chainOf(async () => {
+        throw new Error('boom')
+      })(ctx, e => resolve(e))
     })
 
-    await expect(chain(ctx, () => undefined) as Promise<unknown>).rejects.toThrow('boom')
+    expect(err?.message).toBe('boom')
   })
 
-  it('propagates a terminal error through the middlewares that awaited it', async () => {
-    let caught: unknown
-    const chain = chainOf(async (_c, next) => {
-      try {
-        await next()
-      } catch (error) {
-        caught = error
-        throw error
-      }
+  it('runs the terminal directly when there is no middleware', () => {
+    let ran = false
+    chainOf()(ctx, () => {
+      ran = true
     })
-
-    await expect(chain(ctx, () => Promise.reject(new Error('handler failed'))) as Promise<unknown>).rejects.toThrow(
-      'handler failed',
-    )
-    expect((caught as Error).message).toBe('handler failed')
-  })
-
-  it('runs the terminal directly when there is no middleware', async () => {
-    const result = await chainOf()(ctx, () => 'bare')
-    expect(result).toBe('bare')
+    expect(ran).toBe(true)
   })
 
   it('stays synchronous when every middleware is synchronous', () => {
@@ -163,8 +142,13 @@ describe('compose', () => {
       (_c, next) => next(),
     )
 
-    // Not a promise: a chain that never awaits must not manufacture one, or every request pays a microtask.
-    expect(chain(ctx, () => 'sync')).toBe('sync')
+    let ran = false
+    const result = chain(ctx, () => {
+      ran = true
+    })
+
+    expect(ran).toBe(true)
+    expect(result).toBeUndefined()
   })
 })
 
@@ -180,22 +164,22 @@ describe('MiddlewarePipeline', () => {
     expect(pipeline.wrapHandler(dispatch)).toBe(dispatch)
   })
 
-  it('wraps the dispatch when the handler group has a middleware', async () => {
+  it('runs dispatch when the handler group has a middleware that continues', () => {
     const pipeline = new MiddlewarePipeline()
-    pipeline.add(async (_c, next) => ({ data: await next() }), 'handler')
+    pipeline.add((_c, next) => next(), 'handler')
     pipeline.setupAll(container)
 
     const dispatch = (_request: unknown): string => 'result'
     const wrapped = pipeline.wrapHandler(dispatch)
 
     expect(wrapped).not.toBe(dispatch)
-    expect(await wrapped({ httpContext: ctx })).toEqual({ data: 'result' })
+    expect(wrapped({ httpContext: ctx })).toBe('result')
   })
 
   it('reports whether a middleware type is registered', () => {
     class Marker implements Middleware {
-      handle(_c: Context, next: Next): ActionResult {
-        return next()
+      handle(_c: Context, next: Next): void {
+        next()
       }
     }
 
