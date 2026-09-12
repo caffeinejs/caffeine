@@ -1,4 +1,10 @@
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  kFeatureName,
+  type Feature,
+  type FeatureConfigureKit,
+} from '@caffeinejs/std'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -47,7 +53,7 @@ class ProgrammaticService implements Feature {
     return 'programmatic'
   }
 
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
+  [kFeatureConfigure](kit: FeatureConfigureKit): Promise<void> {
     const endpoints = this.#endpoints
     kit.container.bind(endpoints, t => t.toValue(new endpoints()).labels(Keys.CONTROLLER))
 
@@ -65,6 +71,10 @@ class ProgrammaticService implements Feature {
     })
 
     return Promise.resolve()
+  }
+
+  [kFeatureBootstrap](): void {
+    // Nothing to register.
   }
 }
 

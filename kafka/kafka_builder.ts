@@ -1,9 +1,9 @@
-import type { Ctor } from '@caffeinejs/di'
+import type { Container, Ctor } from '@caffeinejs/di'
 import {
   FeatureBuilder,
   HealthIndicator,
   kFeatureName,
-  type BootstrapKit,
+  type FeatureConfigureKit,
   type FeatureConfigurer,
 } from '@caffeinejs/std'
 import type { ConfigLocation } from '@caffeinejs/std/config'
@@ -204,19 +204,18 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#resolve()
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)
-    const container = kit.container
 
     kit.container.bind(rKey, t =>
-      t.toValue<KafkaRuntime>({
+      t.toFactory((ctx): KafkaRuntime => ({
         name: this.#name,
-        container,
+        container: ctx.container as Container,
         config,
         clients: this.#clients,
-      }),
+      })),
     )
 
     // The default instance's template is bound under the KafkaTemplate class (so it can be injected by
@@ -232,20 +231,17 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     )
 
     // Registered once, covering every configured instance: starts every engine on `container.init()` and
-    // stops it on `container.dispose()`.
-    if (!kit.container.has(KafkaLifecycle)) {
-      const lifecycleContainer = kit.container
-      kit.container.bind(KafkaLifecycle, t => t.toFactory(() => new KafkaLifecycle(lifecycleContainer)))
-    }
+    // stops it on `container.dispose()`. `.fallback()` so a second named instance does not fight the first.
+    kit.container.bind(KafkaLifecycle, t => t.toFactory(ctx => new KafkaLifecycle(ctx.container)).fallback())
 
     // Registered once, covering every configured instance. Inert unless the application exposes the
     // probes, and then it is what makes readiness mean "serving HTTP *and* consuming".
-    if (!kit.container.has(KafkaHealthIndicator)) {
-      const indicatorContainer = kit.container
-      kit.container.bind(KafkaHealthIndicator, t =>
-        t.toFactory(() => new KafkaHealthIndicator(indicatorContainer)).extends(HealthIndicator),
-      )
-    }
+    kit.container.bind(KafkaHealthIndicator, t =>
+      t
+        .toFactory(ctx => new KafkaHealthIndicator(ctx.container as Container))
+        .extends(HealthIndicator)
+        .fallback(),
+    )
   }
 
   /**

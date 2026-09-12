@@ -1,4 +1,4 @@
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 import fastify from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
@@ -43,7 +43,10 @@ class NeverAuthenticates extends BaseAuthenticationHandler<object> {
 function stamping(name: string, ran: string[]): Feature {
   return {
     [kFeatureName]: name,
-    [kBootstrap](kit: BootstrapKit): void {
+    [kFeatureConfigure](): void {
+      // Nothing to bind.
+    },
+    [kFeatureBootstrap](kit: BootstrapKit): void {
       const plugin: HTTPPlugin = async instance => {
         instance.addHook('onRequest', (_request, reply, done) => {
           ran.push(name)

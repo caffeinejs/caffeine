@@ -1,5 +1,12 @@
 import { Scopes } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  kFeatureName,
+  type BootstrapKit,
+  type Feature,
+  type FeatureConfigureKit,
+} from '@caffeinejs/std'
 
 import { registerPlugin } from '../plugin.js'
 import { kConstraintRegistry } from './keys.js'
@@ -18,6 +25,7 @@ export class ConstraintsBuilder implements Feature {
   readonly [kFeatureName] = 'constraints'
 
   readonly #entries: RegisteredConstraint[] = []
+  #registry: ConstraintRegistry | undefined
 
   /**
    * Registers `strategy` under `strategy.name`, so a route selects on it with `@Constraint(strategy.name, value)`
@@ -31,12 +39,16 @@ export class ConstraintsBuilder implements Feature {
     return this
   }
 
-  [kBootstrap](kit: BootstrapKit): void {
+  [kFeatureConfigure](kit: FeatureConfigureKit): void {
     const registry = new ConstraintRegistry(this.#entries)
+    this.#registry = registry
 
     kit.container.bind(kConstraintRegistry, t => t.toValue(registry).lifetime(Scopes.SINGLETON).internal())
+  }
 
-    if (registry.strategies().length > 0) {
+  [kFeatureBootstrap](kit: BootstrapKit): void {
+    const registry = this.#registry
+    if (registry !== undefined && registry.strategies().length > 0) {
       registerPlugin(kit, constraintsPlugin(registry))
     }
   }

@@ -136,10 +136,10 @@ Do not re-export a symbol (type or value) from another module or package just to
 
 ```ts
 // wrong
-export { kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+export { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 
 // correct
-import { kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 import type { ThingConfig } from './config.js'
 ```
 
@@ -153,8 +153,8 @@ Where a value goes depends on who reads it, not on what is convenient:
 | ----------------------------------------------------- | -------------------------------------- | --------------------------------------- |
 | a setting a user tunes from the environment or a file | the application's configuration tree   | the configure callback's `c`            |
 | a value the feature runs on                           | an ordinary field on the builder       | the builder reads its own field         |
-| a setting code outside the feature must read          | a container binding, in `bootstrap`    | `container.getOptional(key)`            |
-| something user code injects                           | a container binding, in `bootstrap`    | `container.get` / constructor injection |
+| a setting code outside the feature must read          | a container binding, in `configure`    | `container.getOptional(key)`            |
+| something user code injects                           | a container binding, in `configure`    | `container.get` / constructor injection |
 | one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
 | start-up wiring the platform runs                     | `registerPlugin(kit, plugin)`          | the platform registers it               |
 | a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
@@ -218,24 +218,26 @@ included, sits between them in `.extend(...)` / `.plugin(...)` order — the aut
 
 ## Writing a feature
 
-A feature is one interface with two members, both symbol-keyed so none of it shows on a fluent surface:
+A feature is one interface with three members, all symbol-keyed so none of it shows on a fluent surface:
 
 ```ts
 export interface Feature<C = unknown> {
   get [kFeatureName](): string
-  [kBootstrap](kit: BootstrapKit<C>): void | Promise<void>
+  [kFeatureConfigure](kit: FeatureConfigureKit<C>): void | Promise<void>
+  [kFeatureBootstrap](kit: BootstrapKit<C>): void | Promise<void>
 }
 ```
 
 `[kFeatureName]` is the identity `.extend` deduplicates on, so a feature accepting an instance name folds it
-in (`kafka` vs `kafka:orders`) and one image cannot install the same instance twice. `[kBootstrap]` runs after
-configuration has resolved and before the container initializes, so the kit's `config` is readable and binding
-is still open. There is no declare phase and no second hook.
+in (`kafka` vs `kafka:orders`) and one image cannot install the same instance twice. `[kFeatureConfigure]`
+runs after configuration has resolved and before the container initializes, so the kit's `config` is readable
+and binding is still open. `[kFeatureBootstrap]` runs after `container.init()`; look up bindings and register
+extensions there.
 
 Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which adds exactly one thing: it runs the
 application's configure callbacks against the builder, with the resolved configuration, immediately before
-`bootstrap`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in
-`bootstrap`:
+`configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, binds in
+`configure`, and registers plugins in `bootstrap`:
 
 ```ts
 export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
@@ -252,6 +254,10 @@ export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
   size(size: number): this {
     this.#size = size
     return this
+  }
+
+  protected configure(kit: FeatureConfigureKit<C>): void {
+    kit.container.bind(kThingOptions, t => t.toValue(this.#size ?? this.#config?.size ?? DEFAULT_SIZE).internal())
   }
 
   protected bootstrap(kit: BootstrapKit<C>): void {

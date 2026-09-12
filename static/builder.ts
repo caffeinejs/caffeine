@@ -1,5 +1,5 @@
 import { NotFoundFallback, registerPlugin } from '@caffeinejs/http'
-import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
 import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import type { StaticConfig } from './config.js'
@@ -33,6 +33,7 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
   #mounts: StaticMount[] = []
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
+  #resolved: ResolvedStatic | undefined
 
   /**
    * Reads the mounts and the SPA settings from a node of the configuration tree, e.g. `c.app.static`.
@@ -86,19 +87,24 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     const resolved = this.#resolve()
-
-    // The mounts and the SPA settings are handed to the plugin directly: the builder is holding them right
-    // here, and routing them through a container key only to read them back at server setup adds a lookup
-    // and a key without a decision.
-    registerPlugin(kit, staticPlugin(resolved.mounts, resolved.spa))
+    this.#resolved = resolved
 
     kit.container.bind(kStaticOptions, t => t.toValue(resolved).internal())
 
     if (resolved.spa !== undefined) {
       kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(resolved.spa!)).extends(NotFoundFallback))
     }
+  }
+
+  protected bootstrap(kit: BootstrapKit<C>): void {
+    const resolved = this.#resolved!
+
+    // The mounts and the SPA settings are handed to the plugin directly: the builder is holding them right
+    // here, and routing them through a container key only to read them back at server setup adds a lookup
+    // and a key without a decision.
+    registerPlugin(kit, staticPlugin(resolved.mounts, resolved.spa))
   }
 
   /**

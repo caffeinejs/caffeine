@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
-import { ErrFeatureAlreadyInstalled, kBootstrap, kFeatureName, type BootstrapKit, type Feature } from './feature.js'
+import { ErrFeatureAlreadyInstalled, kFeatureName, type Feature, type FeatureConfigureKit } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 
 const kSentinel = token<Record<string, unknown>>(Symbol('extend-sentinel'))
@@ -28,7 +28,7 @@ class TrackerBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): Promise<void> {
+  protected configure(kit: FeatureConfigureKit<C>): Promise<void> {
     const value = this.#value
     kit.container.bind(kSentinel, t => t.toValue({ value }))
     return Promise.resolve()

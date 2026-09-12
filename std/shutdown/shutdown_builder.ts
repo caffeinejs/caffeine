@@ -1,6 +1,6 @@
 import { liveFold, type ConfigLocation } from '../config/index.js'
 import type { Duration } from '../duration/index.js'
-import { type BootstrapKit, kFeatureName } from '../feature.js'
+import { type FeatureConfigureKit, kFeatureName } from '../feature.js'
 import { FeatureBuilder } from '../feature_builder.js'
 import {
   type ShutdownConfig,
@@ -84,7 +84,7 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     const policy = liveFold(
       () => this.#inputs(),
       raw => finalizeShutdownOptions(mergeShutdownConfig(raw, { dispatcher: this.#dispatcher })),

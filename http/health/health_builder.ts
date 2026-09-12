@@ -1,9 +1,11 @@
+import type { Container } from '@caffeinejs/di'
 import {
   ApplicationAvailability,
   FeatureBuilder,
   kFeatureName,
   type BootstrapKit,
   type Duration,
+  type FeatureConfigureKit,
 } from '@caffeinejs/std'
 import { liveFold, type ConfigLocation } from '@caffeinejs/std/config'
 
@@ -11,7 +13,7 @@ import { registerPlugin } from '../plugin.js'
 import { ServerOwnedPaths } from '../server_owned_paths.js'
 import { kHealthOptions } from './keys.js'
 import { loadHealthIndicators } from './load.js'
-import { mergeHealthConfig, type HealthConfig, type HealthPaths } from './options.js'
+import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPaths } from './options.js'
 import { ProbeEndpoint } from './probes.js'
 import { healthProbesPlugin } from './probes_plugin.js'
 import { HealthRegistry } from './registry.js'
@@ -57,6 +59,7 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
   #explicit = false
   #config: ConfigLocation<HealthConfig> | undefined
   readonly #values: HealthConfig = {}
+  #options: HealthOptions | undefined
 
   /**
    * Records that the application asked for health, which is what makes the probes on by default.
@@ -122,7 +125,7 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
     const enabledDefault = this.#explicit ? true : undefined
 
@@ -131,24 +134,20 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
       () => this.#inputs(),
       raw => mergeHealthConfig(raw, { enabledDefault }),
     )
-
-    if (!kit.container.has(ApplicationAvailability)) {
-      // The application's own instance, not a container-constructed one: the lifecycle writes to that object,
-      // and a second instance would report a state nothing ever updates.
-      kit.container.bind(ApplicationAvailability, t => t.toValue(kit.availability).internal())
-    }
+    this.#options = options
 
     // Both lazy: `loadHealthIndicators` resolves beans, which is only legal once the container has
     // initialized. The probes extension forces them during server setup, so an indicator with the wrong
     // lifetime is still a start-up failure.
     kit.container.bind(HealthRegistry, t =>
-      t.toFactory(() => new HealthRegistry(loadHealthIndicators(kit.container), options)).internal(),
+      t.toFactory(ctx => new HealthRegistry(loadHealthIndicators(ctx.container as Container), options)).internal(),
     )
     kit.container.bind(ProbeEndpoint, t =>
       t
         .toFunction(
-          (registry: HealthRegistry) => new ProbeEndpoint(kit.availability, registry, options),
-          [HealthRegistry],
+          (registry: HealthRegistry, availability: ApplicationAvailability) =>
+            new ProbeEndpoint(availability, registry, options),
+          [HealthRegistry, ApplicationAvailability],
         )
         .internal(),
     )
@@ -160,8 +159,10 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
     )
 
     kit.container.bind(kHealthOptions, t => t.toValue(options).internal())
+  }
 
-    registerPlugin(kit, healthProbesPlugin(options))
+  protected bootstrap(kit: BootstrapKit<C>): void {
+    registerPlugin(kit, healthProbesPlugin(this.#options!))
   }
 
   /** What a fluent method set, else what the configuration node carries. */

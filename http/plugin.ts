@@ -76,7 +76,7 @@ export interface HTTPPluginProvider<C = unknown> {
 
 /**
  * Turns a `.plugin(...)` argument into the factory {@link HTTPPluginFeature} and scoped registration already
- * run. A token is not resolved here: bootstrap is too early, so the returned factory `get()`s at setup.
+ * run. A token is not resolved here: configure is too early, so the returned factory `get()`s at setup.
  *
  * Not part of the public API.
  */

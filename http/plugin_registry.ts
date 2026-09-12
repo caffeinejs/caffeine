@@ -19,8 +19,8 @@ interface DeferredEntry {
 
 /**
  * What {@link HTTPPluginFeature} registers with instead of {@link ExtensionRegistrar.register}: an app-level
- * `.plugin(...)` factory cannot run from bootstrap, since the container has not initialized there yet. Handing
- * the factory itself over lets {@link HTTPPlugins.resolveDeferred} call it later, once it has.
+ * `.plugin(...)` factory is handed over at bootstrap and invoked from {@link HTTPPlugins.resolveDeferred} in
+ * `setup()`, the same path scoped `.plugin()` uses.
  */
 export interface HTTPExtensionRegistrar<C = unknown> extends ExtensionRegistrar<HTTPPlugin> {
   registerDeferred(factory: HTTPPluginFactory<C>): void
@@ -71,10 +71,9 @@ export class HTTPPlugins {
   /**
    * Calls every deferred app-level factory and files its plugin at the order it was registered under.
    *
-   * Called from `WebApplication.setup()`, after `container.init()` — the whole reason a factory is deferred
-   * rather than called from bootstrap. Resolved together, so one factory awaiting does not delay another's
-   * order from being filed; the order itself, stamped at `registrarFor`, is what keeps each one in its written
-   * position regardless of resolution order.
+   * Called from `WebApplication.setup()`, after feature bootstrap queued the factory. Resolved together, so
+   * one factory awaiting does not delay another's order from being filed; the order itself, stamped at
+   * `registrarFor`, is what keeps each one in its written position regardless of resolution order.
    */
   async resolveDeferred(config: ConfigHandle<unknown>, container: Container): Promise<void> {
     const pending = this.#deferred.splice(0)

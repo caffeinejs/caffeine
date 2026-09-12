@@ -289,16 +289,17 @@ sequenceDiagram
   participant Def as ConfigDefinition
   participant Shard as ConfigShard
   App->>Def: .config(schema, key, c => c.source(...))
-  App->>Def: bootstrap()  (before any feature bootstraps)
+  App->>Def: bootstrap() (before any feature configures)
   Def->>Shard: ConfigShard.bootstrap(options)
-  Shard->>Shard: resolve → materialize → validate root
+  Shard->>Shard: resolve then materialize then validate root
   Shard-->>Def: handle bound
-  App->>Feat: [kBootstrap] — run the configure callback, then bind what the feature produces
+  App->>Feat: kFeatureConfigure - run the configure callback, then bind
   App->>App: container.init()
+  App->>Feat: kFeatureBootstrap - look up bindings and register extensions
 ```
 
 `ConfigDefinition` is the mutable description the application builder owns. It is resolved once, before
-any feature bootstraps and while binding is still open — which is what lets a feature be configured from a
+any feature configures and while binding is still open — which is what lets a feature be configured from a
 setting it then consumes at binding time. A tree that cannot validate fails start-up here, which is more
 legible than failing at whatever moment something first read it. `ConfigModule` binds what the resolved
 shard holds.

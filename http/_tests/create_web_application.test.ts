@@ -1,5 +1,11 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type Feature, type BootstrapKit } from '@caffeinejs/std'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  kFeatureName,
+  type Feature,
+  type FeatureConfigureKit,
+} from '@caffeinejs/std'
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Get, createWebApplication } from '../index.js'
@@ -57,9 +63,12 @@ describe('createWebApplication default Fastify form', () => {
 
     const probe: Feature = {
       [kFeatureName]: 'probe',
-      [kBootstrap](kit: BootstrapKit) {
+      [kFeatureConfigure](kit: FeatureConfigureKit) {
         state.value = 'hello'
         kit.container.bind(kProbe, t => t.toValue({ value: state.value }))
+        return Promise.resolve()
+      },
+      [kFeatureBootstrap]() {
         return Promise.resolve()
       },
     }

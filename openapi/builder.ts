@@ -1,10 +1,16 @@
 import { registerPlugin, type Route, type RouteGroup } from '@caffeinejs/http'
-import { FeatureBuilder, kFeatureName, type AnySchema, type BootstrapKit } from '@caffeinejs/std'
+import {
+  FeatureBuilder,
+  kFeatureName,
+  type AnySchema,
+  type BootstrapKit,
+  type FeatureConfigureKit,
+} from '@caffeinejs/std'
 import { type ConfigLocation } from '@caffeinejs/std/config'
 
 import { type OpenAPIConfigSlice } from './config.js'
 import { OpenAPIDocumentStore } from './document_store.js'
-import { registerEndpoints } from './endpoints.js'
+import { registerEndpoints, type EndpointPaths } from './endpoints.js'
 import { kOpenAPIOptions } from './keys.js'
 import { openapiPlugin } from './openapi_plugin.js'
 import {
@@ -42,6 +48,8 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly #store = new OpenAPIDocumentStore()
   readonly #named = new Set<string>()
   #config: ConfigLocation<OpenAPIConfigSlice> | undefined
+  #resolved: OpenAPIOptions | undefined
+  #paths: EndpointPaths | undefined
 
   /**
    * Reads the document-level facts from a node of the configuration tree, e.g. `c.app.openapi`.
@@ -312,8 +320,9 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     const options = this.#resolve()
+    this.#resolved = options
 
     // The store, not the document: bindings must all be registered before `container.init()`, which runs
     // long before the server phase that generates the document. Resolving the store and reading
@@ -322,11 +331,13 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
 
     // Registers the document endpoints as ordinary routes. Still here, before `buildRouting` runs — but
     // now fed the *resolved* options, because configuration resolved before this step.
-    const paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
-
-    registerPlugin(kit, openapiPlugin(this.#store, options, paths))
+    this.#paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
 
     kit.container.bind(kOpenAPIOptions, t => t.toValue(options).internal())
+  }
+
+  protected bootstrap(kit: BootstrapKit<C>): void {
+    registerPlugin(kit, openapiPlugin(this.#store, this.#resolved!, this.#paths!))
   }
 
   /**

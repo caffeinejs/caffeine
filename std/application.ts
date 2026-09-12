@@ -1,7 +1,14 @@
 import { type Container } from '@caffeinejs/di'
 
 import { activeProfiles, ConfigDefinition, hostProfiles, type ConfigHandle } from './config/index.js'
-import { kBootstrap, type BootstrapKit, type ExtensionRegistrar, type Feature } from './feature.js'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  type BootstrapKit,
+  type ExtensionRegistrar,
+  type Feature,
+  type FeatureConfigureKit,
+} from './feature.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { $t } from './schema/t.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
@@ -119,11 +126,14 @@ export class Application {
    * 1. the always-on `caffeine` slice is registered and the active profiles are decided;
    * 2. configuration **resolves**, once, already profile-aware;
    * 3. `caffeine.name` and the active profiles are applied;
-   * 4. every feature **bootstraps** — running the application's configure callback against its builder, then
-   *    binding into the container and registering its extensions;
-   * 5. the container initializes and the platform is set up.
+   * 4. the application's {@link ApplicationAvailability} is bound;
+   * 5. every feature **configures** — running the application's configure callback against its builder, then
+   *    binding into the container;
+   * 6. the container initializes;
+   * 7. every feature **bootstraps** — looking up bindings and registering its extensions;
+   * 8. the platform is set up.
    *
-   * Configuration resolves before any feature bootstraps and while binding is still open, which is what lets a
+   * Configuration resolves before any feature configures and while binding is still open, which is what lets a
    * feature be configured from a setting it then consumes at binding time. Resolving inside `container.init()`
    * would be too late for both.
    */
@@ -133,7 +143,7 @@ export class Application {
     }
 
     // The framework's own block, registered directly: the application name and profiles are read before any
-    // feature has bootstrapped, so its location is fixed rather than something a builder supplies.
+    // feature has configured, so its location is fixed rather than something a builder supplies.
     this.#config.frameworkDefaults.set(CAFFEINE_CONFIG_NAMESPACE, { ...DEFAULT_CAFFEINE_CONFIG })
     const caffeine = this.#config.slice<CaffeineConfig>(CAFFEINE_CONFIG_NAMESPACE, caffeineConfigSchema)
 
@@ -161,16 +171,34 @@ export class Application {
     this.#name = caffeine.config.name
     this.#profiles = profiles
 
+    // The application's own instance, bound before any feature configures so health (and anything else) can
+    // inject it rather than closing over a kit field. The lifecycle writes to this object.
+    this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
+
+    // Called in order and awaited together: every feature's configure callback — which the builder runs at the
+    // top of its hook — has therefore run before the first feature does asynchronous work.
+    const configurePending: Promise<void>[] = []
+
+    for (const feature of features) {
+      const result = feature[kFeatureConfigure](this.configureKit())
+      if (result) {
+        configurePending.push(result)
+      }
+    }
+
+    if (configurePending.length > 0) {
+      await Promise.all(configurePending)
+    }
+
+    await this.#container.init()
+
     // Each feature gets its own kit, carrying its position in the feature list. Extensions are registered
     // against that position rather than against the moment the hook reached the call, so what a feature awaits
     // before registering cannot move it past a feature installed after it.
-    //
-    // Called in order and awaited together: every feature's configure callback — which the builder runs at the
-    // top of its hook — has therefore run before the first feature does asynchronous work.
     const bootstrapPending: Promise<void>[] = []
 
     features.forEach((feature, index) => {
-      const result = feature[kBootstrap](this.serviceKit(index))
+      const result = feature[kFeatureBootstrap](this.serviceKit(index))
       if (result) {
         bootstrapPending.push(result)
       }
@@ -179,8 +207,6 @@ export class Application {
     if (bootstrapPending.length > 0) {
       await Promise.all(bootstrapPending)
     }
-
-    await this.#container.init()
 
     // The drain policy comes from whatever feature owns it, so it is read here rather than named by the
     // application: a shutdown starting before the platform finished setting up still uses the real budget.
@@ -265,7 +291,7 @@ export class Application {
   /**
    * The drain policy: what the shutdown feature published under {@link kShutdownPolicy}, else
    * {@link defaultShutdownOptions} — the latter only when a shutdown starts before the container has
-   * initialized, since the feature is registered unconditionally and binds the key at bootstrap.
+   * initialized, since the feature is registered unconditionally and binds the key at configure.
    *
    * `.shutdown(s => s.drainDelay('10s'))` is how an application states its drain; the feature folds that with
    * the configuration tree and publishes the resolved policy here.
@@ -307,8 +333,19 @@ export class Application {
   }
 
   /**
-   * The kit passed to the {@link Feature} at `order`. Subclasses may widen it (e.g. add platform
-   * handles).
+   * The kit passed to {@link kFeatureConfigure}. Binding is still open.
+   */
+  protected configureKit(): FeatureConfigureKit {
+    return {
+      container: this.#container,
+      // Non-null by construction: the only caller runs after `config.bootstrap()` resolved.
+      config: this.#handle!,
+    }
+  }
+
+  /**
+   * The kit passed to {@link kFeatureBootstrap} for the feature at `order`. Subclasses may widen it (e.g. add
+   * platform handles). Binding is closed; the container exposes lookup only.
    *
    * @param order - The feature's position in {@link configurers}, which is the order what it registers with
    *   {@link BootstrapKit.extensions} runs in.
@@ -316,14 +353,13 @@ export class Application {
   protected serviceKit(order: number): BootstrapKit {
     return {
       container: this.#container,
-      availability: this.#availability,
       // Non-null by construction: the only caller runs after `config.bootstrap()` resolved.
       config: this.#handle!,
       extensions: this.extensionRegistrar(order),
     }
   }
 
-  /** The features bootstrapped before `container.init()`. Subclasses may prepend framework ones. */
+  /** The features configured then bootstrapped. Subclasses may prepend framework ones. */
   protected configurers(): Feature[] {
     return [...this.#services]
   }

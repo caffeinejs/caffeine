@@ -3,7 +3,15 @@ import { describe, expect, it } from 'vitest'
 
 import { Application } from './application.js'
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
-import { kBootstrap, kFeatureName, type BootstrapKit, type ExtensionRegistrar, type Feature } from './feature.js'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  kFeatureName,
+  type BootstrapKit,
+  type ExtensionRegistrar,
+  type Feature,
+  type FeatureConfigureKit,
+} from './feature.js'
 import { createApplication } from './index.js'
 import { $t } from './schema/t.js'
 
@@ -19,9 +27,13 @@ class WidgetFeature implements Feature<AppConfig> {
     return 'widget'
   }
 
-  [kBootstrap](kit: BootstrapKit<AppConfig>): Promise<void> {
+  [kFeatureConfigure](kit: FeatureConfigureKit<AppConfig>): Promise<void> {
     this.bound = kit.config.widget.size
     kit.container.bind(token<number | undefined>('widget.size'), t => t.toValue(this.bound))
+    return Promise.resolve()
+  }
+
+  [kFeatureBootstrap](): Promise<void> {
     return Promise.resolve()
   }
 }
@@ -35,9 +47,9 @@ function appWith(feature: Feature<never>, size: number) {
 
 describe('feature lifecycle', () => {
   // The one ordering guarantee the mechanism rests on: configuration resolves before any feature
-  // bootstraps, and binding is still open when it does. Resolving inside `container.init()` would be too
+  // configures, and binding is still open when it does. Resolving inside `container.init()` would be too
   // late for both.
-  it('resolves configuration before a feature bootstraps, while it can still bind', async () => {
+  it('resolves configuration before a feature configures, while it can still bind', async () => {
     const feature = new WidgetFeature()
     const app = appWith(feature as Feature<never>, 42)
 
@@ -48,15 +60,18 @@ describe('feature lifecycle', () => {
   })
 
   it('runs a feature that reads no configuration at all', async () => {
-    let bootstrapped = false
+    let configured = false
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
       .addFeature({
         get [kFeatureName](): string {
           return 'noop'
         },
-        [kBootstrap](): Promise<void> {
-          bootstrapped = true
+        [kFeatureConfigure](): Promise<void> {
+          configured = true
+          return Promise.resolve()
+        },
+        [kFeatureBootstrap](): Promise<void> {
           return Promise.resolve()
         },
       })
@@ -64,21 +79,24 @@ describe('feature lifecycle', () => {
 
     await app.ready()
 
-    expect(bootstrapped).toBe(true)
+    expect(configured).toBe(true)
   })
 
   // A tree that cannot validate is a broken application, and saying so at `ready()` is earlier and more
   // legible than failing at whatever moment a feature first read it.
   it('fails start-up when the configuration cannot be validated, before anything binds', async () => {
-    let bootstrapped = false
+    let configured = false
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
       .addFeature({
         get [kFeatureName](): string {
           return 'strict'
         },
-        [kBootstrap](): Promise<void> {
-          bootstrapped = true
+        [kFeatureConfigure](): Promise<void> {
+          configured = true
+          return Promise.resolve()
+        },
+        [kFeatureBootstrap](): Promise<void> {
           return Promise.resolve()
         },
       })
@@ -87,7 +105,33 @@ describe('feature lifecycle', () => {
       .build()
 
     await expect(app.ready()).rejects.toThrow()
-    expect(bootstrapped).toBe(false)
+    expect(configured).toBe(false)
+  })
+
+  it('configures before the container initializes, and bootstraps after', async () => {
+    const order: string[] = []
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .addFeature({
+        [kFeatureName]: 'order',
+        [kFeatureConfigure](): void {
+          order.push('configure')
+        },
+        [kFeatureBootstrap](): void {
+          order.push('bootstrap')
+        },
+      })
+      .build()
+
+    const init = app.container.init.bind(app.container)
+    app.container.init = async () => {
+      order.push('init')
+      await init()
+    }
+
+    await app.ready()
+
+    expect(order).toEqual(['configure', 'init', 'bootstrap'])
   })
 })
 
@@ -102,7 +146,10 @@ describe('extension registration', () => {
 
     const registering = (name: string, awaits: number): Feature => ({
       [kFeatureName]: name,
-      async [kBootstrap](kit: BootstrapKit): Promise<void> {
+      [kFeatureConfigure](): void {
+        // Nothing to bind.
+      },
+      async [kFeatureBootstrap](kit: BootstrapKit): Promise<void> {
         for (let i = 0; i < awaits; i++) {
           await Promise.resolve()
         }

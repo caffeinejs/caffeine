@@ -1,4 +1,4 @@
-import type { Container } from '@caffeinejs/di'
+import type { ContainerBindingOps } from '@caffeinejs/di'
 import { Keys, RouteBuilder, type RouteAuthzOptions } from '@caffeinejs/http'
 import { registerRouteGroup } from '@caffeinejs/http/decorators/registrar'
 
@@ -29,10 +29,10 @@ export interface EndpointPaths {
  * negotiation and every user-registered server extension applies to them exactly as they do to any other
  * route — none of it reimplemented here.
  *
- * Must run before `buildRouting`, which `configure()` guarantees.
+ * Must run before `buildRouting`, which configure guarantees.
  */
 export function registerEndpoints(
-  container: Container,
+  container: ContainerBindingOps,
   store: OpenAPIDocumentStore,
   options: OpenAPIOptions,
   authz: RouteAuthzOptions | undefined,

@@ -1,4 +1,4 @@
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 import fp from 'fastify-plugin'
 
 import { constraintVaryPlugin } from './constraints/vary_plugin.js'
@@ -38,7 +38,11 @@ export class HTTPCoreFeature implements Feature {
     return 'http-core'
   }
 
-  [kBootstrap](kit: BootstrapKit): void {
+  [kFeatureConfigure](): void {
+    // Nothing to bind.
+  }
+
+  [kFeatureBootstrap](kit: BootstrapKit): void {
     registerPlugin(kit, formBodyPlugin)
     registerPlugin(kit, constraintVaryPlugin)
   }
@@ -50,7 +54,11 @@ export class HTTPFallbackFeature implements Feature {
     return 'http-fallback'
   }
 
-  [kBootstrap](kit: BootstrapKit): void {
+  [kFeatureConfigure](): void {
+    // Nothing to bind.
+  }
+
+  [kFeatureBootstrap](kit: BootstrapKit): void {
     registerPlugin(kit, notFoundPlugin)
   }
 }

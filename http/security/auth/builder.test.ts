@@ -1,28 +1,25 @@
-import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
-import { ApplicationAvailability, kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
 import { describe, it, expect, vi } from 'vitest'
 
 import { AuthenticationBuilder } from './builder.js'
 
-function makeKit(): BootstrapKit {
+function makeKit(): FeatureConfigureKit {
   const internal = vi.fn()
   const toValue = vi.fn().mockReturnValue({ internal })
   const bind = vi.fn().mockReturnValue({ toValue })
   const wrap = vi.fn().mockReturnValue({ get: vi.fn() })
   return {
-    container: { bind, wrap } as unknown as Container,
-    availability: new ApplicationAvailability(),
+    container: { bind, wrap },
     config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
-    extensions: { register: () => undefined },
-  }
+  } as unknown as FeatureConfigureKit
 }
 
-describe('AuthenticationBuilder[kConfigure]()', () => {
+describe('AuthenticationBuilder[kFeatureConfigure]()', () => {
   it('throws when no strategies are registered and no default scheme is set', () => {
     const builder = new AuthenticationBuilder()
-    expect(() => builder[kBootstrap](null as unknown as BootstrapKit)).toThrow(
+    expect(() => builder[kFeatureConfigure](null as unknown as FeatureConfigureKit)).toThrow(
       'Cannot configure authentication: no strategies are registered',
     )
   })
@@ -34,7 +31,7 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
       .addBasic(o => o.validate(validate))
       .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
 
-    expect(() => builder[kBootstrap](null as unknown as BootstrapKit)).toThrow(
+    expect(() => builder[kFeatureConfigure](null as unknown as FeatureConfigureKit)).toThrow(
       'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
     )
   })
@@ -43,14 +40,14 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
     const builder = new AuthenticationBuilder()
     builder.addBasic(o => o.validate(vi.fn()))
 
-    expect(builder[kBootstrap](makeKit())).toBeUndefined()
+    expect(builder[kFeatureConfigure](makeKit())).toBeUndefined()
   })
 
   it('does not throw when an explicit default is set with one strategy', () => {
     const builder = new AuthenticationBuilder()
     builder.addBasic(o => o.validate(vi.fn())).default('Basic')
 
-    expect(builder[kBootstrap](makeKit())).toBeUndefined()
+    expect(builder[kFeatureConfigure](makeKit())).toBeUndefined()
   })
 
   it('does not throw when an explicit default is set with multiple strategies', () => {
@@ -60,6 +57,6 @@ describe('AuthenticationBuilder[kConfigure]()', () => {
       .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
       .default('Basic')
 
-    expect(builder[kBootstrap](makeKit())).toBeUndefined()
+    expect(builder[kFeatureConfigure](makeKit())).toBeUndefined()
   })
 })

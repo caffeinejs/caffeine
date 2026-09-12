@@ -3,8 +3,8 @@ import {
   $t,
   FeatureBuilder,
   kFeatureName,
-  type BootstrapKit,
   type Feature,
+  type FeatureConfigureKit,
   type FeatureConfigurer,
   type InferSchema,
 } from '@caffeinejs/std'
@@ -28,7 +28,7 @@ class ProbeBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): Promise<void> {
+  protected configure(kit: FeatureConfigureKit<C>): Promise<void> {
     const broker = this.#broker
     kit.container.bind(kProbe, t => t.toValue({ broker }))
     return Promise.resolve()

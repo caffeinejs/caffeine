@@ -274,9 +274,9 @@ export class WebApplication<
   }
 
   protected override async setup(): Promise<void> {
-    // App-level plugin factories are resolved here, not from bootstrap: the container has initialized by now,
-    // so a factory that reaches into it (`container.get(...)`) works instead of throwing. The order each one
-    // files at was stamped when its feature bootstrapped, so resolving them now cannot reorder them.
+    // App-level plugin factories are resolved here rather than from bootstrap: setup is also where scoped
+    // `.plugin()` factories run, so both share one path. The order each one files at was stamped when its
+    // feature bootstrapped, so resolving them now cannot reorder them.
     await this.#plugins.resolveDeferred(this.configHandle, this.container)
 
     this.#routeGroups = buildRouting<R>(this.routeSources(), this.container)

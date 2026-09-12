@@ -1,5 +1,5 @@
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 import fastify from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -70,7 +70,10 @@ describe('plugin registration', () => {
 
     const feature = (name: string): Feature => ({
       [kFeatureName]: name,
-      [kBootstrap](kit: BootstrapKit): void {
+      [kFeatureConfigure](): void {
+        // Nothing to bind.
+      },
+      [kFeatureBootstrap](kit: BootstrapKit): void {
         registerPlugin(
           kit,
           fp(
@@ -96,7 +99,7 @@ describe('plugin registration', () => {
   })
 
   // An app-level factory is called from `WebApplication.setup()`, after `container.init()` — not from its
-  // feature's bootstrap, where the container has not initialized yet and this would throw
+  // feature's configure, where the container has not initialized yet and this would throw
   // `ErrInvalidContainerState`. Resolving here, inside the factory itself rather than inside the plugin body,
   // is exactly the case that used to be broken.
   it('resolves from the container inside an app-level factory', async () => {

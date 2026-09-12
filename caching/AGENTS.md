@@ -38,4 +38,5 @@ at bootstrap and snapshotted for the life of the process. `.statusHeader(...)` w
 method. `store` and `etagGenerator` cannot be configuration — one is an instance, the other a function — so
 they are builder-only. `cacheConfigSchema` is exported for an application to splice into its own schema.
 
-`CacheBuilder.bootstrap` binds a default `MemoryCacheStore` only when nothing else bound `CacheStore`.
+`CacheBuilder.configure` binds a default `MemoryCacheStore` only when `getBindings(CacheStore)` is empty,
+including a store bound polymorphically with `.extends(CacheStore)`.

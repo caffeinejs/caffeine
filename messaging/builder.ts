@@ -1,9 +1,9 @@
-import type { Ctor } from '@caffeinejs/di'
+import type { Container, Ctor } from '@caffeinejs/di'
 import {
   FeatureBuilder,
   kFeatureName,
   type AnySchema,
-  type BootstrapKit,
+  type FeatureConfigureKit,
   type FeatureConfigurer,
 } from '@caffeinejs/std'
 import type { ConfigLocation } from '@caffeinejs/std/config'
@@ -123,7 +123,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)
@@ -133,18 +133,17 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
     const outbound = bindingsOf(this.#outbound, this.#config?.out) as Map<string, ProducerBinding>
     const rKey = runtimeKey(this.#name)
     const bKey = busKey(this.#name)
-    const container = kit.container
 
     kit.container.bind(rKey, t =>
-      t.toValue<MessagingRuntime>({
-        container,
+      t.toFactory((ctx): MessagingRuntime => ({
+        container: ctx.container as Container,
         binders,
         inbound,
         outbound,
         ...(this.#onInvalidMessage !== undefined ? { onInvalidMessage: this.#onInvalidMessage } : {}),
         ...(this.#onError !== undefined ? { onError: this.#onError } : {}),
         ...(this.#recoverer !== undefined ? { recoverer: this.#recoverer } : {}),
-      }),
+      })),
     )
 
     if (this.#name === DEFAULT_BINDER) {
@@ -158,11 +157,8 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
     )
 
     // Registered once, covering every configured instance: starts every engine on `container.init()` and
-    // stops it on `container.dispose()`.
-    if (!kit.container.has(MessagingLifecycle)) {
-      const lifecycleContainer = kit.container
-      kit.container.bind(MessagingLifecycle, t => t.toFactory(() => new MessagingLifecycle(lifecycleContainer)))
-    }
+    // stops it on `container.dispose()`. `.fallback()` so a second named instance does not fight the first.
+    kit.container.bind(MessagingLifecycle, t => t.toFactory(ctx => new MessagingLifecycle(ctx.container)).fallback())
   }
 }
 

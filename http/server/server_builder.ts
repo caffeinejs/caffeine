@@ -1,4 +1,4 @@
-import { $t, FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { $t, FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import { liveFold, type ConfigLocation } from '@caffeinejs/std/config'
 
 import { kServerOptions } from './keys.js'
@@ -80,7 +80,7 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     const options = liveFold(
       () => ({ port: this.#port ?? this.#config?.port, host: this.#host ?? this.#config?.host }),
       raw => ({ port: raw.port ?? DEFAULT_SERVER_OPTIONS.port, host: raw.host ?? DEFAULT_SERVER_OPTIONS.host }),

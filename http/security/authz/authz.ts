@@ -1,5 +1,11 @@
 import { Scopes } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  kFeatureName,
+  type Feature,
+  type FeatureConfigureKit,
+} from '@caffeinejs/std'
 
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
@@ -94,7 +100,7 @@ export class AuthorizationBuilder implements Feature {
     return this.fallbackPolicy(p => p.requireAuthenticated())
   }
 
-  [kBootstrap](kit: BootstrapKit): void {
+  [kFeatureConfigure](kit: FeatureConfigureKit): void {
     kit.container.bind(AuthenticatedUserHandler, t =>
       t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler).internal(),
     )
@@ -145,5 +151,9 @@ export class AuthorizationBuilder implements Feature {
         .lifetime(Scopes.SINGLETON)
         .internal(),
     )
+  }
+
+  [kFeatureBootstrap](): void {
+    // Nothing to register.
   }
 }

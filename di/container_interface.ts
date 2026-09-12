@@ -219,10 +219,25 @@ export type ContainerOps = Pick<
 >
 
 /**
- * {@link Container} binding operations that available to components that
- * run before the container is initialized.
+ * {@link Container} binding operations available to components that run before
+ * the container is initialized. Includes bind-time metadata (`wrap`, `getBinding*`)
+ * so a feature can scan and wrap bindings without resolving instances.
  */
 export type ContainerBindingOps = Pick<
   Container,
-  'hooks' | 'postProcessors' | 'bind' | 'bindValuesProvider' | 'rebind' | 'aspect' | 'entries'
+  | 'hooks'
+  | 'postProcessors'
+  | 'bind'
+  | 'bindValuesProvider'
+  | 'rebind'
+  | 'aspect'
+  | 'entries'
+  | 'wrap'
+  | 'wrapMany'
+  | 'wrapBinding'
+  | 'wrapBindings'
+  | 'getBinding'
+  | 'getBindings'
+  | 'getBindingsBy'
+  | 'getBindingsByLabel'
 >

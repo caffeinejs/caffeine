@@ -1,4 +1,4 @@
-import { kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+import { kFeatureBootstrap, kFeatureConfigure, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
@@ -42,8 +42,8 @@ function makeCtx(cookies: Record<string, string> = {}) {
   } as unknown as Context
 }
 
-/** Minimal service kit double — bootstrap only touches the container and the plugin registry. */
-function makeKit(): { kit: BootstrapKit; registered: HTTPPlugin[] } {
+/** Minimal kit double — configure touches bind/wrap; bootstrap touches the plugin registry. */
+function makeKit(): { kit: FeatureConfigureKit & BootstrapKit; registered: HTTPPlugin[] } {
   const registered: HTTPPlugin[] = []
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
@@ -58,7 +58,7 @@ function makeKit(): { kit: BootstrapKit; registered: HTTPPlugin[] } {
         registered.push(plugin)
       },
     },
-  } as unknown as BootstrapKit
+  } as unknown as FeatureConfigureKit & BootstrapKit
 
   return { kit, registered }
 }
@@ -66,7 +66,7 @@ function makeKit(): { kit: BootstrapKit; registered: HTTPPlugin[] } {
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  await builder[kBootstrap](makeKit().kit)
+  await builder[kFeatureConfigure](makeKit().kit)
 }
 
 /**
@@ -79,7 +79,8 @@ async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => 
   const builder = new AuthenticationBuilder()
   build(builder)
   const { kit, registered } = makeKit()
-  await builder[kBootstrap](kit)
+  await builder[kFeatureConfigure](kit)
+  await builder[kFeatureBootstrap](kit)
 
   const warnings: string[] = []
   const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(warning => {
@@ -392,7 +393,7 @@ describe('Forward wiring through configure', () => {
     builder.addStrategy('Target', target as never)
     builder.addStrategy('auth', forward)
     builder.default('auth')
-    await builder[kBootstrap](makeKit().kit)
+    await builder[kFeatureConfigure](makeKit().kit)
 
     // Before the fix this threw reading `defaultAuthenticateScheme` of undefined.
     await expect(forward.authenticate(makeCtx())).resolves.toMatchObject({ succeeded: true })

@@ -1,6 +1,5 @@
-import type { Container } from '@caffeinejs/di'
 import { token } from '@caffeinejs/di'
-import { ApplicationAvailability, kBootstrap, type BootstrapKit } from '@caffeinejs/std'
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 import { ConfigDefinition } from '@caffeinejs/std/config'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -171,16 +170,14 @@ describe('OpaqueTokenAuthenticationHandler', () => {
   })
 
   describe('DI store resolution via configure()', () => {
-    function makeKit(wrap: ReturnType<typeof vi.fn>): BootstrapKit {
+    function makeKit(wrap: ReturnType<typeof vi.fn>): FeatureConfigureKit {
       const internal = vi.fn()
       const toValue = vi.fn().mockReturnValue({ internal })
       const bind = vi.fn().mockReturnValue({ toValue })
       return {
-        container: { bind, wrap } as unknown as Container,
-        availability: new ApplicationAvailability(),
+        container: { bind, wrap },
         config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
-        extensions: { register: () => undefined },
-      }
+      } as unknown as FeatureConfigureKit
     }
 
     it('wraps the default OpaqueTokenStore token and injects the resolved store', async () => {
@@ -190,7 +187,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
 
       const builder = new AuthenticationBuilder()
       builder.addStrategy('OpaqueToken', handler)
-      await builder[kBootstrap](makeKit(wrap))
+      await builder[kFeatureConfigure](makeKit(wrap))
 
       expect(wrap).toHaveBeenCalledWith(OpaqueTokenStore)
 
@@ -206,7 +203,7 @@ describe('OpaqueTokenAuthenticationHandler', () => {
 
       const builder = new AuthenticationBuilder()
       builder.addStrategy('OpaqueToken', handler)
-      await builder[kBootstrap](makeKit(wrap))
+      await builder[kFeatureConfigure](makeKit(wrap))
 
       expect(wrap).not.toHaveBeenCalled()
 

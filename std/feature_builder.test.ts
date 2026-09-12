@@ -161,6 +161,30 @@ describe('FeatureBuilder', () => {
     expect(order).toEqual(['configure', 'bootstrap'])
   })
 
+  it('runs the callback before the feature configures', async () => {
+    const order: string[] = []
+
+    class Ordered extends FeatureBuilder {
+      readonly [kFeatureName] = 'ordered-configure'
+
+      mark(): this {
+        order.push('callback')
+        return this
+      }
+
+      protected configure(): void {
+        order.push('configure')
+      }
+    }
+
+    await headless()
+      .extend(new Ordered(b => (b as Ordered).mark()))
+      .build()
+      .ready()
+
+    expect(order).toEqual(['callback', 'configure'])
+  })
+
   // Liveness is the author's choice, not something the framework manufactures: a node read through follows a
   // refresh, while a scalar copied out of it at bootstrap does not.
   it('hands over a live node, so a refresh is visible through it', async () => {

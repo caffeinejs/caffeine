@@ -1,5 +1,12 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  kFeatureName,
+  type BootstrapKit,
+  type Feature,
+  type FeatureConfigureKit,
+} from '@caffeinejs/std'
 
 import { Context } from '../context.js'
 import { registerPlugin } from '../plugin.js'
@@ -81,7 +88,9 @@ export class ErrorHandlingServiceConfigurer implements Feature {
     return 'error-handling'
   }
 
-  [kBootstrap](kit: BootstrapKit): void {
+  #ref: GlobalErrorHandlerRef | undefined;
+
+  [kFeatureConfigure](kit: FeatureConfigureKit): void {
     const handlerBinding = kit.container.getBindings(ErrorHandler)
     const handlers = new Map<Ctor<Error>, Provider<ErrorHandler<Error>>>()
 
@@ -125,7 +134,11 @@ export class ErrorHandlingServiceConfigurer implements Feature {
     )
 
     const ref = new GlobalErrorHandlerRef()
+    this.#ref = ref
     kit.container.bind(GlobalErrorHandlerRef, t => t.toValue(ref).lifetime(Scopes.SINGLETON).internal())
-    registerPlugin(kit, globalErrorHandlerPlugin(ref))
+  }
+
+  [kFeatureBootstrap](kit: BootstrapKit): void {
+    registerPlugin(kit, globalErrorHandlerPlugin(this.#ref!))
   }
 }

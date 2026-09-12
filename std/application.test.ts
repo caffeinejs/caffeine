@@ -9,9 +9,10 @@ import { afterEach, describe, it, expect, vi } from 'vitest'
 import { InlineConfigProvider, JSONConfigProvider, type ConfigHandle } from './config/index.js'
 import {
   $t,
-  type BootstrapKit,
+  type FeatureConfigureKit,
   type InferSchema,
-  kBootstrap,
+  kFeatureBootstrap,
+  kFeatureConfigure,
   kFeatureName,
   type Feature,
   createApplication,
@@ -100,9 +101,12 @@ describe('Application lifecycle', () => {
 
     const probe: Feature = {
       [kFeatureName]: 'probe',
-      [kBootstrap](kit: BootstrapKit) {
+      [kFeatureConfigure](kit: FeatureConfigureKit) {
         state.value = 'hello'
         kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
+        return Promise.resolve()
+      },
+      [kFeatureBootstrap]() {
         return Promise.resolve()
       },
     }

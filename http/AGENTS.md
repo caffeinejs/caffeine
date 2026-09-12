@@ -149,7 +149,7 @@ router — named apart from `.config()`, which writes the adapter's per-route co
 the application's configuration whether or not a router declared the type.
 
 `ctx.config` is **not** callable. A package that needs its own settings on a request cannot read them off the
-context — it knows neither `C` nor where the application put the block. It either binds them in `bootstrap`
+context — it knows neither `C` nor where the application put the block. It either binds them in `configure`
 and resolves them from the container, or decorates the Fastify instance and reads the decoration back off
 `ctx.fst.request.server`, which is what `@caffeinejs/html` does and what keeps a plugin registered on one
 route group from parameterizing the rest.

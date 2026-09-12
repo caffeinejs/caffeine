@@ -1,6 +1,6 @@
 import { Scopes } from '@caffeinejs/di'
 import { registerPlugin } from '@caffeinejs/http'
-import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
 import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { ETagGenerator } from './cache.js'
@@ -13,7 +13,7 @@ import { CacheStore, MemoryCacheStore } from './store.js'
  * Configures the cache feature: the {@link CacheStore} that backs cached responses and the
  * {@link ETagGenerator} used to hash payloads. Bound via `.extend(caching(c => c.store(...).etagGenerator(...)))`.
  *
- * Installing the feature is the activating act: the bootstrap binds the store and contributes the cache
+ * Installing the feature is the activating act: configure binds the store and bootstrap contributes the cache
  * plugin, which attaches the hooks from an `onRoute` hook as each route registers. Configuration
  * parameterizes the feature but never switches it on.
  *
@@ -59,12 +59,14 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
+  protected configure(kit: FeatureConfigureKit<C>): void {
     const store = this.#store
     if (store !== undefined) {
       kit.container.bind(CacheStore, t => t.toValue(store).internal())
-    } else if (!kit.container.has(CacheStore)) {
-      // The default store, bound only when the feature is installed and nothing else bound one.
+    } else if (kit.container.getBindings(CacheStore).length === 0) {
+      // The default store, bound only when the feature is installed and nothing else bound one — including
+      // a concrete class that `.extends(CacheStore)`. `.fallback()` would miss that, because it only looks
+      // at a direct claim on the key.
       kit.container.bind(CacheStore, t => t.toClass(MemoryCacheStore).lifetime(Scopes.SINGLETON).internal())
     }
 
@@ -75,12 +77,14 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<C> {
 
     kit.container.bind(kCacheStatusHeader, t =>
       t
-        // Snapshotted at bootstrap: `resolveCacheDeps` reads this once at plugin setup into a string the
+        // Snapshotted at configure: `resolveCacheDeps` reads this once at plugin setup into a string the
         // hooks close over, so a later refresh cannot rename the header a running cache already emits.
         .toValue(this.#statusHeader ?? this.#config?.statusHeader ?? DEFAULT_CACHE_CONFIG.statusHeader)
         .internal(),
     )
+  }
 
+  protected bootstrap(kit: BootstrapKit<C>): void {
     registerPlugin(kit, cachePlugin())
   }
 }

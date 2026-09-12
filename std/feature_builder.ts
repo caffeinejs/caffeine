@@ -1,5 +1,12 @@
 import type { ConfigHandle } from './config/index.js'
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from './feature.js'
+import {
+  kFeatureBootstrap,
+  kFeatureConfigure,
+  kFeatureName,
+  type BootstrapKit,
+  type Feature,
+  type FeatureConfigureKit,
+} from './feature.js'
 
 /**
  * The callback an application writes to configure a feature, handed the builder and the resolved
@@ -29,9 +36,9 @@ export const kAddConfigurer = Symbol('caffeine.feature.addConfigurer')
  * The shape every feature builder takes: a fluent authoring surface that is also the {@link Feature}.
  *
  * A subclass names itself with {@link kFeatureName}, holds whatever its fluent methods set in ordinary
- * fields, and does its binding in {@link bootstrap}. The base owns one thing: running the application's
- * configure callbacks against the builder, with the resolved configuration, immediately before
- * {@link bootstrap}.
+ * fields, binds in {@link configure}, and registers extensions in {@link bootstrap}. The base owns one
+ * thing: running the application's configure callbacks against the builder, with the resolved configuration,
+ * immediately before {@link configure}.
  *
  * A value set by a fluent method is **final**. Configuration reaches a feature because the callback wired it
  * — `s.port(c.app.server.port)` — and not through any path the builder opens on its own.
@@ -55,18 +62,31 @@ export abstract class FeatureBuilder<C = unknown> implements Feature<C> {
   }
 
   /**
-   * Binds what this feature produces and registers its extensions. Runs after configuration has resolved and
-   * before the container initializes, so binding is still open.
+   * Binds what this feature produces. Runs after configuration has resolved and before the container
+   * initializes, so binding is still open.
    */
-  protected abstract bootstrap(kit: BootstrapKit<C>): void | Promise<void>
+  protected configure(_kit: FeatureConfigureKit<C>): void | Promise<void> {
+    // Nothing to bind.
+  }
 
-  [kBootstrap](kit: BootstrapKit<C>): void | Promise<void> {
-    // Synchronous, and ahead of `bootstrap`: the application calls every feature's hook in order before
+  /**
+   * Looks up bindings and registers extensions. Runs after the container initializes.
+   */
+  protected bootstrap(_kit: BootstrapKit<C>): void | Promise<void> {
+    // Nothing to register.
+  }
+
+  [kFeatureConfigure](kit: FeatureConfigureKit<C>): void | Promise<void> {
+    // Synchronous, and ahead of `configure`: the application calls every feature's hook in order before
     // awaiting any of them, so each builder is fully authored before the first one does asynchronous work.
     for (const configure of this.#configurers) {
       configure(this as never, kit.config)
     }
 
+    return this.configure(kit)
+  }
+
+  [kFeatureBootstrap](kit: BootstrapKit<C>): void | Promise<void> {
     return this.bootstrap(kit)
   }
 }

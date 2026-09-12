@@ -1,4 +1,4 @@
-import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 
 import type { HTTPPluginFactory } from './plugin.js'
 import type { HTTPExtensionRegistrar } from './plugin_registry.js'
@@ -27,13 +27,16 @@ export class HTTPPluginFeature<C = unknown> implements Feature<C> {
     return this.#name
   }
 
+  [kFeatureConfigure](): void {
+    // Nothing to bind.
+  }
+
   /**
-   * Hands the factory over rather than calling it: bootstrap runs before `container.init()`, so a factory
-   * that resolves from the container (`container.get(...)`) would throw here. `WebApplication.setup()` calls
-   * it later, through {@link HTTPPlugins.resolveDeferred}, once the container is up — the position this
-   * feature bootstrapped at is what keeps its plugin in the order it was written, not when that call happens.
+   * Hands the factory over rather than calling it: `WebApplication.setup()` resolves it through
+   * {@link HTTPPlugins.resolveDeferred}, the same path scoped `.plugin()` uses. The position this feature
+   * bootstrapped at is what keeps its plugin in the order it was written, not when that call happens.
    */
-  [kBootstrap](kit: BootstrapKit<C>): void {
+  [kFeatureBootstrap](kit: BootstrapKit<C>): void {
     ;(kit.extensions as HTTPExtensionRegistrar<C>).registerDeferred(this.#factory)
   }
 }

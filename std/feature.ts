@@ -1,8 +1,7 @@
-import type { Container } from '@caffeinejs/di'
+import type { ContainerBindingOps, ContainerOps } from '@caffeinejs/di'
 
 import type { ConfigHandle } from './config/index.js'
 import { ErrCaffeine } from './error.js'
-import type { ApplicationAvailability } from './health/availability.js'
 
 /**
  * Where a feature hands the platform a unit of start-up wiring.
@@ -27,14 +26,24 @@ export interface ExtensionRegistrar<E = unknown> {
 }
 
 /**
- * What a feature is handed when the application bootstraps it, after configuration has resolved and before
- * the container is initialized. Concrete applications may widen it with platform-specific handles.
+ * What a feature is handed when the application configures it: after configuration has resolved and before
+ * the container is initialized, so binding is still open.
+ */
+export interface FeatureConfigureKit<C = unknown> {
+  container: ContainerBindingOps
+  config: ConfigHandle<C>
+}
+
+/**
+ * What a feature is handed when the application bootstraps it, after the container is initialized.
+ * Binding is closed; the container exposes lookup only. Concrete applications may widen it with
+ * platform-specific handles.
  */
 export interface BootstrapKit<C = unknown> {
   /**
-   * IoC container exposing all its operations.
+   * IoC container exposing lookup operations. Binding is closed by this point.
    */
-  container: Container
+  container: ContainerOps
 
   /**
    * The resolved application configuration. Live: its nodes read through the current tree, so a value taken
@@ -45,12 +54,6 @@ export interface BootstrapKit<C = unknown> {
    */
   config: ConfigHandle<C>
 
-  /**
-   * The application's availability. Bind this instance rather than letting the container construct one — the
-   * lifecycle writes to the application's, and a second instance would report a state nothing ever updates.
-   */
-  availability: ApplicationAvailability
-
   /** Where a feature contributes start-up wiring the platform runs. */
   extensions: ExtensionRegistrar
 }
@@ -60,14 +63,16 @@ export interface BootstrapKit<C = unknown> {
  * `.extend(staticFiles(s => …))` sees the fluent surface and nothing else.
  */
 export const kFeatureName = Symbol('caffeine.feature.name')
-export const kBootstrap = Symbol('caffeine.feature.bootstrap')
+export const kFeatureConfigure = Symbol('caffeine.feature.configure')
+export const kFeatureBootstrap = Symbol('caffeine.feature.bootstrap')
 
 /**
- * The unit the application orchestrator drives: bootstrapped once, never seen by user code. A feature's
- * fluent builder implements this directly — the authoring methods and the lifecycle live on one object, kept
- * apart by the symbol keys.
+ * The unit the application orchestrator drives: configured then bootstrapped once, never seen by user code.
+ * A feature's fluent builder implements this directly — the authoring methods and the lifecycle live on one
+ * object, kept apart by the symbol keys.
  *
- * `C` is the application configuration type, which reaches a feature through {@link BootstrapKit.config}.
+ * `C` is the application configuration type, which reaches a feature through {@link FeatureConfigureKit.config}
+ * and {@link BootstrapKit.config}.
  */
 export interface Feature<C = unknown> {
   /**
@@ -78,10 +83,14 @@ export interface Feature<C = unknown> {
   get [kFeatureName](): string
 
   /**
-   * Runs after configuration resolves and before the container initializes. Bind runtime artifacts and
-   * register extensions here.
+   * Runs after configuration resolves and before the container initializes. Bind runtime artifacts here.
    */
-  [kBootstrap](kit: BootstrapKit<C>): void | Promise<void>
+  [kFeatureConfigure](kit: FeatureConfigureKit<C>): void | Promise<void>
+
+  /**
+   * Runs after the container initializes. Look up bindings and register extensions here.
+   */
+  [kFeatureBootstrap](kit: BootstrapKit<C>): void | Promise<void>
 }
 
 /** Thrown when `.extend` installs a feature whose {@link kFeatureName} is already installed. */

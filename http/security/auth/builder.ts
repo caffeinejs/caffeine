@@ -1,5 +1,5 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
 import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { Context } from '../../context.js'
@@ -92,6 +92,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
   #refresh: RefreshTokenOptions | undefined
+  #oidcMeta: OIDCMeta | undefined
 
   constructor(options: Partial<AuthenticationOptions> = {}) {
     super()
@@ -277,12 +278,18 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
-    this.#doBootstrap(kit)
+  protected configure(kit: FeatureConfigureKit<C>): void {
+    this.#doConfigure(kit)
+  }
 
+  protected bootstrap(kit: BootstrapKit<C>): void {
     // The gate lands where `.authentication(...)` was written: everything extended before it runs ahead of
     // the hook, everything after it only for a request the hook let through.
     registerPlugin(kit, authenticationPlugin())
+
+    if (this.#oidcMeta !== undefined) {
+      registerPlugin(kit, oidcRoutesPlugin(this.#oidcMeta))
+    }
   }
 
   /**
@@ -423,7 +430,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     }
   }
 
-  #doBootstrap(kit: BootstrapKit<C>): void {
+  #doConfigure(kit: FeatureConfigureKit<C>): void {
     this.#buildSchemes()
 
     // Configuration over code, the same order the schemes themselves are merged in.
@@ -565,7 +572,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
 
       // Registered only here, so "no OIDC strategy was configured" is expressed as the extension not
       // existing rather than as a flag it would have to read back and check.
-      registerPlugin(kit, oidcRoutesPlugin(meta))
+      this.#oidcMeta = meta
       kit.container.bind(OIDCOwnedPaths, t =>
         t
           .toValue(new OIDCOwnedPaths(meta.handlers.map(h => h.callbackPath)))
