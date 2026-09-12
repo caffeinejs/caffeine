@@ -98,7 +98,7 @@ describe('plugin registration', () => {
     expect(log).toEqual(['plugin-a', 'feature-b', 'plugin-c', 'feature-d'])
   })
 
-  // An app-level factory is called from `WebApplication.setup()`, after `container.init()` — not from its
+  // An app-level factory is called from feature bootstrap, after `container.init()` — not from its
   // feature's configure, where the container has not initialized yet and this would throw
   // `ErrInvalidContainerState`. Resolving here, inside the factory itself rather than inside the plugin body,
   // is exactly the case that used to be broken.
@@ -135,29 +135,29 @@ describe('plugin registration', () => {
   it('keeps an awaiting app-level factory at its written position', async () => {
     const log: string[] = []
 
-    const deferred: HTTPPluginFactory = async () => {
+    const awaiting: HTTPPluginFactory = async () => {
       await new Promise(resolve => setTimeout(resolve, 10))
 
       const plugin: HTTPPlugin = async instance => {
-        log.push('deferred')
+        log.push('awaiting')
         instance.addHook('onRequest', (_request, reply, done) => {
-          reply.header('x-deferred', 'yes')
+          reply.header('x-awaiting', 'yes')
           done()
         })
       }
 
-      return fp(plugin, { name: 'deferred' })
+      return fp(plugin, { name: 'awaiting' })
     }
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .plugin(stamping('before', 'x-before', log))
-      .plugin(deferred)
+      .plugin(awaiting)
       .plugin(stamping('after', 'x-after', log))
       .build()
 
     await app.ready()
 
-    expect(log).toEqual(['before', 'deferred', 'after'])
+    expect(log).toEqual(['before', 'awaiting', 'after'])
   })
 
   // The head slot: error handling is bootstrapped ahead of everything the application installed, so a route

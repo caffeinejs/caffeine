@@ -1,29 +1,13 @@
-import type { Container } from '@caffeinejs/di'
 import type { ExtensionRegistrar } from '@caffeinejs/std'
-import type { ConfigHandle } from '@caffeinejs/std/config'
 
 import { ErrCaffeineWebApplication } from './error/common.js'
 import { solutions } from './error/util.js'
-import type { HTTPPlugin, HTTPPluginFactory } from './plugin.js'
+import type { HTTPPlugin } from './plugin.js'
 
 interface Entry {
   order: number
   scope: object | undefined
   plugin: HTTPPlugin
-}
-
-interface DeferredEntry {
-  order: number
-  factory: HTTPPluginFactory<any>
-}
-
-/**
- * What {@link HTTPPluginFeature} registers with instead of {@link ExtensionRegistrar.register}: an app-level
- * `.plugin(...)` factory is handed over at bootstrap and invoked from {@link HTTPPlugins.resolveDeferred} in
- * `setup()`, the same path scoped `.plugin()` uses.
- */
-export interface HTTPExtensionRegistrar<C = unknown> extends ExtensionRegistrar<HTTPPlugin> {
-  registerDeferred(factory: HTTPPluginFactory<C>): void
 }
 
 /**
@@ -39,16 +23,15 @@ export interface HTTPExtensionRegistrar<C = unknown> extends ExtensionRegistrar<
  */
 export class HTTPPlugins {
   readonly #entries: Entry[] = []
-  readonly #deferred: DeferredEntry[] = []
   #sorted = false
 
-  /** How many plugins have been contributed so far, including deferred factories not yet resolved. */
+  /** How many plugins have been contributed so far. */
   get size(): number {
-    return this.#entries.length + this.#deferred.length
+    return this.#entries.length
   }
 
   /** The registrar for the feature at `order`, contributing into `scope`. */
-  registrarFor<C = unknown>(order: number, scope?: object): HTTPExtensionRegistrar<C> {
+  registrarFor(order: number, scope?: object): ExtensionRegistrar<HTTPPlugin> {
     return {
       register: plugin => {
         if (typeof plugin !== 'function') {
@@ -62,29 +45,7 @@ export class HTTPPlugins {
         this.#entries.push({ order, scope, plugin })
         this.#sorted = false
       },
-      registerDeferred: factory => {
-        this.#deferred.push({ order, factory })
-      },
     }
-  }
-
-  /**
-   * Calls every deferred app-level factory and files its plugin at the order it was registered under.
-   *
-   * Called from `WebApplication.setup()`, after feature bootstrap queued the factory. Resolved together, so
-   * one factory awaiting does not delay another's order from being filed; the order itself, stamped at
-   * `registrarFor`, is what keeps each one in its written position regardless of resolution order.
-   */
-  async resolveDeferred(config: ConfigHandle<unknown>, container: Container): Promise<void> {
-    const pending = this.#deferred.splice(0)
-
-    await Promise.all(
-      pending.map(async ({ order, factory }) => {
-        const plugin = await factory(config, container)
-        this.#entries.push({ order, scope: undefined, plugin })
-        this.#sorted = false
-      }),
-    )
   }
 
   /** What the application installed, for the root server. */

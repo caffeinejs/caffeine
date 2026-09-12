@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import { Application, type ApplicationInit, type Feature, type RunInfo } from '@caffeinejs/std'
+import { Application, type ApplicationInit, type ExtensionRegistrar, type Feature, type RunInfo } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { HTTPCoreFeature, HTTPFallbackFeature } from './core_feature.js'
@@ -21,8 +21,8 @@ import {
   type Next,
   type NodeMiddleware,
 } from './middleware/index.js'
-import type { HTTPPluginFactory } from './plugin.js'
-import { HTTPPlugins, type HTTPExtensionRegistrar } from './plugin_registry.js'
+import type { HTTPPlugin, HTTPPluginFactory } from './plugin.js'
+import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
@@ -180,7 +180,7 @@ export class WebApplication<
     return this
   }
 
-  protected override extensionRegistrar(order: number): HTTPExtensionRegistrar<C> {
+  protected override extensionRegistrar(order: number): ExtensionRegistrar<HTTPPlugin> {
     return this.#plugins.registrarFor(order)
   }
 
@@ -199,7 +199,7 @@ export class WebApplication<
   /**
    * Resolves the plugins a mounted router or a controller registered, each paired with what registered it.
    *
-   * Later than the application's own, which `setup()` already resolved: routing is what needs these, and by
+   * Later than the application's own, which already ran from bootstrap: routing is what needs these, and by
    * the time it is built the configuration has resolved and the container has initialized — so a factory here
    * sees exactly what one passed to `.plugin(...)` sees.
    */
@@ -274,11 +274,6 @@ export class WebApplication<
   }
 
   protected override async setup(): Promise<void> {
-    // App-level plugin factories are resolved here rather than from bootstrap: setup is also where scoped
-    // `.plugin()` factories run, so both share one path. The order each one files at was stamped when its
-    // feature bootstrapped, so resolving them now cannot reorder them.
-    await this.#plugins.resolveDeferred(this.configHandle, this.container)
-
     this.#routeGroups = buildRouting<R>(this.routeSources(), this.container)
     this.#built = true
 

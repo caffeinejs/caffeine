@@ -49,7 +49,7 @@ export type HTTPPluginContext = HTTPPluginOptions & { server: FastifyInstance }
  * by arity. A plugin needing nothing from either argument is written `.plugin(() => myPlugin)`. Write the
  * factory as an arrow: a `function` declaration is constructable and would be taken as a class token.
  *
- * App-level factories run from `WebApplication.setup()`, after `container.init()`, so `container.get(...)`
+ * App-level factories run from feature bootstrap, after `container.init()`, so `container.get(...)`
  * is legal here. The install slot is stamped when the feature bootstraps, so an `await` inside the factory
  * cannot reorder it relative to `.authentication(...)`.
  *
@@ -76,7 +76,7 @@ export interface HTTPPluginProvider<C = unknown> {
 
 /**
  * Turns a `.plugin(...)` argument into the factory {@link HTTPPluginFeature} and scoped registration already
- * run. A token is not resolved here: configure is too early, so the returned factory `get()`s at setup.
+ * run. A token is not resolved here: configure is too early, so the returned factory `get()`s at bootstrap.
  *
  * Not part of the public API.
  */
