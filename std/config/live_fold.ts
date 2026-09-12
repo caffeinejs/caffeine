@@ -10,7 +10,7 @@ import { configEquals } from './notifier.js'
  *
  * This does both: `inputs` is re-read on each access and compared with {@link configEquals}, and `fold` runs
  * only when the answer actually changed. What comes back can therefore be bound by value and still follow a
- * refresh.
+ * refresh. Assigning to a folded field throws: `getOwnPropertyDescriptor` reports `writable: false`.
  *
  * ```ts
  * const policy = liveFold(

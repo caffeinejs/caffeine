@@ -115,8 +115,14 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
       return { mounts, spa: undefined }
     }
 
-    // Code last: a key `.spa(...)` named stands, and the configured block fills in the rest.
-    const { root, ...rest } = { ...this.#config?.spa, ...this.#spa } as SPAOptions & { root: string }
+    // Code last for SPA keys a fluent method named, except `root`: a configured root is the documented way
+    // a deployment repoints the directory `.spa(...)` switched on.
+    const configuredSpa = this.#config?.spa
+    const merged = { ...configuredSpa, ...this.#spa } as SPAOptions & { root: string }
+    if (configuredSpa?.root !== undefined) {
+      merged.root = configuredSpa.root
+    }
+    const { root, ...rest } = merged
     const options = rest as SPAOptions
     const settings = resolveSPASettings(root, options)
 

@@ -35,6 +35,9 @@ const NOOP_REGISTRAR: ExtensionRegistrar = {
   register() {
     return undefined
   },
+  registerDeferred() {
+    return undefined
+  },
 }
 
 /**

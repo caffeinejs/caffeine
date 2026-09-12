@@ -23,7 +23,7 @@ import { openapi } from '../plugin.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
 
 // The application owns the schema, so it declares where the OpenAPI block lives and points the feature there
-// with `o.config(c => c.openapi)`. Declared field by field rather than by importing `openapiConfigSchema`:
+// with `o.withConfig(c.openapi)`. Declared field by field rather than by importing `openapiConfigSchema`:
 // every field of `OpenAPIConfigSlice` is optional, so a block naming only what these tests configure
 // satisfies the feature, and that schema is small enough for TypeScript to infer a config type from.
 const rootSchema = $t.Object({
@@ -38,6 +38,8 @@ const rootSchema = $t.Object({
           forbidden: $t.Optional($t.Number()),
         }),
       ),
+      deriveSecuritySchemes: $t.Optional($t.Boolean()),
+      exposeSelf: $t.Optional($t.Boolean()),
       routes: $t.Optional(
         $t.Object({
           json: $t.Optional($t.String()),
@@ -216,6 +218,46 @@ describe('openapi configuration', () => {
     await app.ready()
 
     expect((await documentOf(app)).info.title).toBe('Renamed')
+  })
+
+  // Equality to the default is not "unset": `.exposeSelf(false)` named the key, so configuration cannot turn it on.
+  it('keeps an explicit exposeSelf(false) against a configured true', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c =>
+        c.source(
+          new InlineConfigProvider({
+            openapi: { exposeSelf: true },
+          }),
+        ),
+      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).exposeSelf(false).public()))
+      .build()
+
+    await app.ready()
+
+    expect(app.container.get(kOpenAPIOptions).exposeSelf).toBe(false)
+  })
+
+  it('keeps an explicit deriveSecuritySchemes(true) against a configured false', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c =>
+        c.source(
+          new InlineConfigProvider({
+            openapi: { deriveSecuritySchemes: false },
+          }),
+        ),
+      )
+      .extend(openapi((o, c) => o.withConfig(c.openapi).deriveSecuritySchemes(true).public()))
+      .build()
+
+    await app.ready()
+
+    expect(app.container.get(kOpenAPIOptions).deriveSecuritySchemes).toBe(true)
+  })
+
+  it('exports the config schema from the package barrel', async () => {
+    const { openapiConfigSchema } = await import('../index.js')
+    expect(openapiConfigSchema).toBeDefined()
   })
 })
 

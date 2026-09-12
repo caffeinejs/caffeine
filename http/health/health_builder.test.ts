@@ -67,6 +67,19 @@ describe('HealthBuilder', () => {
     expect(healthConfig(app).enabled).toBe(false)
   })
 
+  // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.
+  it('leaves the probes on their defaults when nothing pointed them at the block', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify()))
+      .config(rootSchema, kRootConfig, c =>
+        c.source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'true' } }), ConfigPriority.ENV),
+      )
+      .build()
+
+    await app.ready()
+
+    expect(healthConfig(app).enabled).toBe(false)
+  })
+
   it('normalizes every duration to milliseconds', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .health(h => h.indicatorTimeout('500ms').probeDeadline(1_500).cacheTTL('1s'))

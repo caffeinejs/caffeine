@@ -34,7 +34,7 @@ order.
 ## Where values go
 
 `statusHeader` can come from the configuration, which is what `.withConfig(c.app.cache)` is for — read
-through, so a refresh reaches the header name. `.statusHeader(...)` wins over it, like every other fluent
+at bootstrap and snapshotted for the life of the process. `.statusHeader(...)` wins over it, like every other fluent
 method. `store` and `etagGenerator` cannot be configuration — one is an instance, the other a function — so
 they are builder-only. `cacheConfigSchema` is exported for an application to splice into its own schema.
 

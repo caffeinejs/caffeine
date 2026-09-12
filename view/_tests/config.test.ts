@@ -64,7 +64,7 @@ describe('view configuration', () => {
   })
 
   // Wire it, and the environment is what the engine runs on — per key, so a setting the environment does not
-  // name keeps the value the code gave it.
+  // name keeps the value the code gave it. Named exception: view is config-wins once `withConfig` is wired.
   it('reads a root from the environment when the callback wires the block', async () => {
     const engines = capture()
 
@@ -171,5 +171,13 @@ describe('view configuration', () => {
     await app.ready()
 
     expect(engines.options()[0].viewExt).toBe('moved')
+  })
+
+  it('refuses a view feature with no engine configured', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(view())
+      .build()
+
+    await expect(app.ready()).rejects.toThrow(/Cannot install the view feature: no engine was configured/)
   })
 })

@@ -46,6 +46,10 @@ export type HTTPPluginContext = HTTPPluginOptions & { server: FastifyInstance }
  * Always a factory, never a bare plugin: both are functions, so accepting both would mean telling them apart
  * by arity. A plugin needing nothing from either argument is written `.extend(() => myPlugin)`.
  *
+ * App-level factories run from `WebApplication.setup()`, after `container.init()`, so `container.get(...)`
+ * is legal here. The install slot is stamped when the feature bootstraps, so an `await` inside the factory
+ * cannot reorder it relative to `.authentication(...)`.
+ *
  * ```ts
  * .extend(c => corsPlugin(c.app.cors.options))
  * .extend((c, container) => rateLimitPlugin(container.get(Redis), c.app.limits))
@@ -64,4 +68,11 @@ export type HTTPPluginFactory<C = unknown> = (
  */
 export function registerPlugin(kit: BootstrapKit<any>, plugin: HTTPPlugin): void {
   kit.extensions.register(plugin)
+}
+
+const kPluginMeta = Symbol.for('plugin-meta')
+
+/** The name `fastify-plugin` stamped on `plugin`, or `undefined` for one that was never wrapped with it. */
+export function pluginName(plugin: HTTPPlugin): string | undefined {
+  return (plugin as unknown as Record<symbol, { name?: string } | undefined>)[kPluginMeta]?.name
 }

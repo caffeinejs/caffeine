@@ -8,7 +8,7 @@ import { secretPaths } from './secrets.js'
 import { ConfigSlice, type ConfigSliceSpec } from './slice.js'
 import { ConfigPriority, ConfigSources } from './sources.js'
 
-/** DI key for the {@link ConfigDefinition} the application builder owns. Features resolve it to register a slice. */
+/** DI key for the {@link ConfigDefinition} the application builder owns. The framework caffeine block registers a slice; features do not. */
 export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs/std:config.definition'))
 
 /**
@@ -16,9 +16,9 @@ export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs
  * profiles are read from, and the feature slices carved out of the resulting tree.
  *
  * Live is the whole point. The previous design snapshotted the provider list when `.config()` was called, which
- * meant nothing registered afterwards could ever be seen — and feature builders necessarily run afterwards, at
- * `declare()`. Holding one mutable definition that {@link bootstrap} reads once every feature has declared lets
- * the application builder and every feature contribute to the same tree, in whatever order they happen to run.
+ * meant nothing registered afterwards could ever be seen. Holding one mutable definition that {@link bootstrap}
+ * reads once lets the application builder contribute sources, schema and the framework caffeine slice to the
+ * same tree, in whatever order they happen to run.
  */
 export class ConfigDefinition {
   /**
@@ -40,7 +40,7 @@ export class ConfigDefinition {
    * same merge.
    */
   readonly schemaDefaults = new MutableConfigProvider('schema-defaults')
-  /** Values set through feature builder methods. Defaults too: file, env and args all win over them. */
+  /** Values set through the CODE band. Feature builders no longer write here. */
   readonly codeValues = new MutableConfigProvider('code')
 
   /**

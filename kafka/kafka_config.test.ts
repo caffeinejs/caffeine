@@ -63,6 +63,7 @@ describe('kafka configuration', () => {
   })
 
   // The regression the whole mechanism exists for: a builder method is a default, not a setting.
+  // Named exception: kafka is config-wins once `withConfig` is wired.
   it('lets the environment override a builder-set broker list', async () => {
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
@@ -199,6 +200,50 @@ describe('kafka configuration', () => {
         ),
       )
       .extend(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b:9092')))
+
+    const built = app.build()
+    await built.ready()
+
+    expect(configOf(built.container, 'default').deadLetter).toBe(false)
+
+    await built.close()
+  })
+
+  // `.deadLetter(false)` is an explicit disable, not an unset scalar that configuration may turn back on.
+  it('keeps an explicit deadLetter(false) against a configured true', async () => {
+    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+    const app = createApplication({})
+      .config(rootSchema, kRootConfig, c =>
+        c.source(
+          new InlineConfigProvider({
+            kafka: { default: { brokers: ['b:9092'], deadLetter: true } },
+          }),
+        ),
+      )
+      .extend(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
+
+    const built = app.build()
+    await built.ready()
+
+    expect(configOf(built.container, 'default').deadLetter).toBe(false)
+
+    await built.close()
+  })
+
+  // `.deadLetter(false)` is an explicit disable, not an unset scalar that configuration may turn back on.
+  it('keeps an explicit deadLetter(false) against a configured true', async () => {
+    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+    const app = createApplication({})
+      .config(rootSchema, kRootConfig, c =>
+        c.source(
+          new InlineConfigProvider({
+            kafka: { default: { brokers: ['b:9092'], deadLetter: true } },
+          }),
+        ),
+      )
+      .extend(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
 
     const built = app.build()
     await built.ready()

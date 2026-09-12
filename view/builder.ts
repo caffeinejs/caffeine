@@ -81,6 +81,12 @@ export class ViewBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected bootstrap(kit: BootstrapKit<C>): void {
+    if (this.#engines.size === 0) {
+      throw new ErrConfiguration(
+        'Cannot install the view feature: no engine was configured. Call .engine(...) on the builder',
+      )
+    }
+
     // Forces every engine to assemble now, so a missing engine module fails at start-up rather than from
     // inside the plugin, by which point the adapter is already wiring routes.
     this.all()

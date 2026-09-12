@@ -45,8 +45,8 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Reads the settings from a node of the configuration tree, e.g. `c.app.cache`.
    *
-   * The node is read, never copied, so a refresh reaches the status header. {@link statusHeader} wins over
-   * what the node carries.
+   * The node is read at bootstrap and the header name is snapshotted then: a refresh does not rename the
+   * header a running cache already emits. {@link statusHeader} wins over what the node carries.
    */
   withConfig(config: ConfigLocation<CacheConfig>): this {
     this.#config = config
@@ -75,9 +75,9 @@ export class CacheBuilder<C = unknown> extends FeatureBuilder<C> {
 
     kit.container.bind(kCacheStatusHeader, t =>
       t
-        // Read through rather than captured: `resolveCacheDeps` reads this once at start-up, but a header name
-        // that follows a refresh is the behaviour every other configured value has.
-        .toFactory(() => this.#statusHeader ?? this.#config?.statusHeader ?? DEFAULT_CACHE_CONFIG.statusHeader)
+        // Snapshotted at bootstrap: `resolveCacheDeps` reads this once at plugin setup into a string the
+        // hooks close over, so a later refresh cannot rename the header a running cache already emits.
+        .toValue(this.#statusHeader ?? this.#config?.statusHeader ?? DEFAULT_CACHE_CONFIG.statusHeader)
         .internal(),
     )
 

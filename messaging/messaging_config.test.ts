@@ -38,7 +38,8 @@ function runtimeOf(container: Container, instance = 'default'): MessagingRuntime
 
 describe('messaging configuration', () => {
   // The regression the whole mechanism exists for: a destination is a topic name, and it differs per
-  // environment exactly the way a broker list does.
+  // environment exactly the way a broker list does. Named exception: messaging is config-wins once
+  // `withConfig` is wired.
   it('lets the environment override a builder-set destination', async () => {
     const app = createApplication({})
       .config(rootSchema, kRootConfig, c =>
@@ -220,5 +221,10 @@ describe('messaging configuration', () => {
     expect(runtimeOf(built.container).inbound.has('orders')).toBe(true)
 
     await built.close()
+  })
+
+  it('exports the config schema from the package barrel', async () => {
+    const { messagingConfigSchema: fromBarrel } = await import('./index.js')
+    expect(fromBarrel).toBeDefined()
   })
 })

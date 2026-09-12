@@ -1,6 +1,7 @@
 import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 
-import { registerPlugin, type HTTPPluginFactory } from './plugin.js'
+import type { HTTPPluginFactory } from './plugin.js'
+import type { HTTPExtensionRegistrar } from './plugin_registry.js'
 
 let counter = 0
 
@@ -10,8 +11,9 @@ let counter = 0
  * A plugin goes in the same list as a feature so that the two interleave in the order they were written, which
  * is the order they register on Fastify. Nothing else about it is special.
  *
- * Its name is generated rather than chosen, so a plugin is never deduplicated: registering the same factory
- * twice registers the plugin twice, which is what a caller asking for two of something means.
+ * Its name is generated rather than chosen, so two `.extend` of the same factory install two features. An
+ * unnamed plugin therefore registers twice; a `fastify-plugin` name already on that Fastify instance is
+ * refused at register time.
  */
 export class HTTPPluginFeature<C = unknown> implements Feature<C> {
   readonly #factory: HTTPPluginFactory<C>
@@ -25,7 +27,13 @@ export class HTTPPluginFeature<C = unknown> implements Feature<C> {
     return this.#name
   }
 
-  async [kBootstrap](kit: BootstrapKit<C>): Promise<void> {
-    registerPlugin(kit, await this.#factory(kit.config, kit.container))
+  /**
+   * Hands the factory over rather than calling it: bootstrap runs before `container.init()`, so a factory
+   * that resolves from the container (`container.get(...)`) would throw here. `WebApplication.setup()` calls
+   * it later, through {@link HTTPPlugins.resolveDeferred}, once the container is up — the position this
+   * feature bootstrapped at is what keeps its plugin in the order it was written, not when that call happens.
+   */
+  [kBootstrap](kit: BootstrapKit<C>): void {
+    ;(kit.extensions as HTTPExtensionRegistrar<C>).registerDeferred(this.#factory)
   }
 }

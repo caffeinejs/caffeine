@@ -51,8 +51,9 @@ export interface OutBindingOptions {
  * `ready()` its bootstrap builds the runtime and binds the engine + `MessageBus` into the container.
  * A second integration is `.extend(messaging('audit', m => ...))`.
  *
- * What a fluent method sets is final. To let a deployment repoint a destination, read the bindings from a
- * node of the configuration tree with {@link withConfig}.
+ * Configuration overlays what `.in(...)` / `.out(...)` set for everything a binding's config slice
+ * declares: a destination written in code is a default a deployment can redirect once {@link withConfig}
+ * is wired.
  */
 export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
   get [kFeatureName](): string {

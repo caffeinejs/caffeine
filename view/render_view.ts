@@ -16,7 +16,7 @@ export type ViewCapableReply = {
 /**
  * Renders a {@link ViewResult} through the selected engine's `@fastify/view` reply decorator, forwarding
  * the per-render `layout` override. The engine is chosen by `view.options.engine` (the name passed to
- * `view('mail')`); when unset the default `reply.view` is used. Shared by the route-handler path
+ * `v.engine('mail', …)`); when unset the default `reply.view` is used. Shared by the route-handler path
  * and the error-handler path. When the selected engine was never configured the decorator is absent —
  * guarded here rather than crashing with a cryptic "not a function".
  */

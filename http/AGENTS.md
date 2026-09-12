@@ -18,8 +18,9 @@ plugin does not pick that context — the application registers it on the root s
 object carrying `[kFeatureName]`, a factory is a function `(config, container) => HTTPPlugin`. Both land in
 one list, so they register in the order the calls were written. Always a factory, never a bare plugin — both
 are functions, so accepting both would mean sniffing arity. A plugin needing no configuration is written
-`.extend(() => myPlugin)`. A feature is installed once per name; a plugin has no name a caller chose and is
-never deduplicated, so two calls register two plugins.
+`.extend(() => myPlugin)`. A feature is installed once per name. An unnamed plugin is never deduplicated,
+so two calls register two plugins; a `fastify-plugin` name already registered on that Fastify instance is
+refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than hanging inside a re-declared decorator.
 
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
 holds the only two framework slots — `ErrorHandlingServiceConfigurer` and `HTTPCoreFeature` lead,

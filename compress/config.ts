@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/std'
 
-/** The compression feature's slice of the configuration tree. */
+/** The compression plugin's settings in an application schema. */
 export interface CompressConfig {
   /** The `@fastify/compress` options bag: `threshold`, `encodings`, `global`, … */
   options: Record<string, unknown>
@@ -14,7 +14,8 @@ export interface CompressConfig {
  * of unknowns is validated as "an object" and handed on with every key intact.
  *
  * Import it into an application schema — `$t.Object({ app: $t.Object({ compress: compressConfigSchema }) })` —
- * rather than restating it, then point the feature at that location with `c.config(x => x.app.compress)`.
+ * rather than restating it, then read that node in the plugin factory:
+ * `.extend(c => compressPlugin(c.app.compress.options))`.
  */
 export const compressConfigSchema = $t.Object({
   options: $t.Record($t.String(), $t.Unknown(), { default: {} }),

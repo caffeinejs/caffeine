@@ -18,6 +18,12 @@ export interface ExtensionRegistrar<E = unknown> {
    * concurrently, so an `await` before this does not move it.
    */
   register(extension: E): void
+
+  /**
+   * Contributes a factory the platform must not invoke until after `container.init()`. A headless
+   * application no-ops this the same way it no-ops {@link register}.
+   */
+  registerDeferred?(factory: unknown): void
 }
 
 /**

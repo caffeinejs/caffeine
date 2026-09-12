@@ -47,8 +47,6 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 
 Workspace membership is the root [`package.json`](package.json) `workspaces` list. Cross-package imports use the package name (`@caffeinejs/di`), not a relative path into another package.
 
-Adding a workspace package that tests consume: [docs/internal/ci-build-artifacts.md](docs/internal/ci-build-artifacts.md).
-
 ## After every edit
 
 Run checks in this order and fix failures before considering the task complete. First match wins.
@@ -170,6 +168,17 @@ no slice, publishes no key, and adds no field to the resolved configuration obje
 higher band quietly outranks. Configuration reaches a feature because the application's configure callback
 wired it — `.extend(server((s, c) => s.withConfig(c.app.server)))` — and by no other path. Where the more
 specific of the two is named, the more specific wins: a setter beats the block `withConfig` handed over.
+
+Exceptions, where `withConfig` overlays what the fluent methods set:
+
+- authentication scheme options, so a secret in the tree redirects one written in code
+- kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice)
+- view template `root` (and the other keys `ViewConfig` declares)
+- messaging binding destinations (and the other keys a binding's config slice declares)
+
+Static `mounts` is an array exception: a configured list **replaces** `.serve()`, it does not merge
+element-wise. A configured `spa.root` repoints the SPA directory `.spa(...)` switched on; other SPA keys
+still follow fluent-wins.
 
 The application declares the whole schema, importing the feature's exported schema (`serverConfigSchema`,
 `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults

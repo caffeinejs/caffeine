@@ -6,8 +6,8 @@ import type { StaticMount } from './static.js'
 /**
  * What an application may configure for static serving.
  *
- * `mounts` mirrors the `.serve(...)` calls and `spa` the `.spa(...)` one, so a deployment can repoint a root
- * or a prefix without a rebuild.
+ * `mounts` mirrors the `.serve(...)` calls and `spa` the `.spa(...)` one. A configured `spa.root` repoints
+ * the directory `.spa(...)` switched on; other SPA keys still follow fluent-wins.
  *
  * **`mounts` replaces the list rather than patching it** — the array rule the merge engine applies everywhere.
  * `.serve()` is additive in code, but `STATIC__MOUNTS__0__ROOT` is not: it declares the entire list. That is

@@ -167,8 +167,9 @@ export class ApplicationBuilder<TConfig = unknown>
   /** Phantom — names the application config type for {@link ConfigTypeOf}. Never assigned, never read. */
   declare readonly __config?: TConfig
 
-  // Registered unconditionally: the drain policy applies to every application, so `SHUTDOWN__DRAIN_DELAY` has
-  // to work on one that never calls `.shutdown()`. Held so `.shutdown()` can configure it in place.
+  // Registered unconditionally: the drain policy applies to every application, probes or not. Configuration
+  // reaches it only through `.shutdown((s, c) => s.withConfig(...))`. Held so `.shutdown()` can configure it
+  // in place.
   readonly #shutdownBuilder: ShutdownBuilder<unknown>
 
   constructor(options: ApplicationBuilderOptions = {}) {
@@ -183,8 +184,9 @@ export class ApplicationBuilder<TConfig = unknown>
 
   /**
    * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
-   * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults —
-   * `s.drainDelay('5s')` is a **default** that `SHUTDOWN__DRAIN_DELAY` or the config tree can still redirect.
+   * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults.
+   * A fluent method is the last word; `SHUTDOWN__DRAIN_DELAY` reaches the feature only through
+   * `.shutdown((s, c) => s.withConfig(c.shutdown))`.
    */
   shutdown(configure: FeatureConfigurer<ShutdownBuilder<TConfig>, TConfig>): this {
     this.#shutdownBuilder[kAddConfigurer](configure as never)
@@ -199,9 +201,8 @@ export class ApplicationBuilder<TConfig = unknown>
    * The key is the application's, so the binding is typed: `container.get(key)` needs no type argument. The
    * schema comes first, which is what lets the compiler ask for the exact token type it implies.
    *
-   * Re-typed so a feature's `.config(c => c.app.thing)` selector reads the config type off the builder it
-   * was reached through, and a headless application configures kafka and messaging exactly the way an HTTP
-   * one does.
+   * Re-typed so a feature's `.withConfig(c.app.thing)` reads the config type off the builder it was reached
+   * through, and a headless application configures kafka and messaging exactly the way an HTTP one does.
    *
    * The key may name a **wider** type than the schema describes, which is what lets one key type serve an
    * application whose schema is assembled in pieces. It buys nothing where a field is concerned: the resolved
@@ -229,8 +230,8 @@ export class ApplicationBuilder<TConfig = unknown>
 /**
  * Creates a headless {@link Application} builder. Mirrors the HTTP `createWebApplication`.
  *
- * Install features with `.extend(feature, configure)` — unlike a factory argument it can be called at any
- * point in the chain.
+ * Install features with `.extend(feature)` or `.extend(feature(configure))` — unlike a factory argument it
+ * can be called at any point in the chain.
  */
 export function createApplication(options?: ApplicationBuilderOptions): ApplicationBuilder {
   return new ApplicationBuilder(options)

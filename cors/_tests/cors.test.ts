@@ -229,4 +229,16 @@ describe('CORS', () => {
       expect(resDefault.headers.get('access-control-allow-origin')).toBe('https://global.com')
     })
   })
+
+  // A first-party plugin wraps a fixed `fastify-plugin` name. Two `.extend(() => corsPlugin())` used to hang
+  // for ~10s inside avvio after `@fastify/cors` re-declared a decorator. Refused immediately instead.
+  it('refuses a second corsPlugin on the same application', { timeout: 3_000 }, async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(() => corsPlugin())
+      .extend(() => corsPlugin())
+      .build()
+
+    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "cors": it is already registered/)
+    await app.close()
+  })
 })

@@ -38,14 +38,11 @@ import { KafkaTemplate } from './template.js'
  * time its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
  * the container under per-instance keys. A second integration is `.extend(kafka('orders', k => ...))`.
  *
- * There is one read path for everything a configuration tree can carry. A builder method does not hold its
- * value — it writes into the tree in the `CODE` band, and the instance reads the merged result. So
- * `k.brokers('localhost:9092')` is a **default**: `KAFKA__DEFAULT__BROKERS=broker.prod:9092` overrides it, and
- * one image ships to every environment. The members that cannot be configuration — serializers, the
- * classifier, the recoverer, the error hooks — stay on the builder and are merged in afterwards.
- *
- * What a fluent method sets is final. To let a deployment repoint the brokers, read them from a node of the
- * configuration tree with {@link withConfig}.
+ * There is one read path for everything a configuration tree can carry. Configuration overlays fluent
+ * methods for `brokers`, `clientId`, `groupId`, and the rest of the configurable slice:
+ * `k.brokers('localhost:9092')` is a default a deployment can redirect once {@link withConfig} is wired.
+ * The members that cannot be configuration — serializers, the classifier, the recoverer, the error hooks —
+ * stay on the builder and are merged in afterwards.
  */
 export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
   get [kFeatureName](): string {
@@ -66,6 +63,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
   #topicProvisioning?: TopicProvisioning
   #deadLetterManager?: DeadLetterManager
   #deadLetter?: DeadLetterOptions | boolean
+  #deadLetterSet = false
   #notRetryable?: Ctor<Error>[]
   #retryable?: Ctor<Error>[]
   #classifier?: ErrorClassifier
@@ -166,6 +164,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
   /** Enables dead-letter recovery (default `${topic}.DLT`) once retries are exhausted. */
   deadLetter(options: DeadLetterOptions | boolean = true): this {
     this.#deadLetter = options
+    this.#deadLetterSet = true
     return this
   }
 
@@ -278,10 +277,9 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
         deserializers: this.#deserializers,
         retryStrategy: this.#retryStrategy,
         deadLetterManager: this.#deadLetterManager,
-        // Only the boolean form can travel through a tree; the object form is two callbacks. A `false` from
-        // configuration must still be honoured, so the object form wins and the rest falls through.
-        deadLetter:
-          typeof this.#deadLetter === 'object' ? this.#deadLetter : (this.#config?.deadLetter ?? this.#deadLetter),
+        // Named in code — including an explicit `false` — stands. Configuration fills it in only when
+        // `.deadLetter(...)` was never called. The object form cannot travel through a tree either way.
+        deadLetter: this.#deadLetterSet ? this.#deadLetter : (this.#config?.deadLetter ?? this.#deadLetter),
         notRetryable: this.#notRetryable,
         retryable: this.#retryable,
         classifier: this.#classifier,

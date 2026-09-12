@@ -17,11 +17,12 @@ import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import { FastifyContext } from './context.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
-import { ErrConfiguration } from './error/common.js'
+import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef, installRouteGroupErrorHandler } from './error/error_handling.js'
+import { solutions } from './error/util.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
-import type { HTTPPluginOptions } from './plugin.js'
+import { pluginName, type HTTPPlugin, type HTTPPluginOptions } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import { type AdapterRouteOptions } from './route_hooks.js'
@@ -137,6 +138,7 @@ export class FastifyAdapter<
     // plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every route; an
     // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
     for (const plugin of plugins.root()) {
+      assertPluginNotRegistered(fastify, plugin)
       await fastify.register(plugin, pluginOptions)
     }
 
@@ -182,6 +184,7 @@ export class FastifyAdapter<
           // server — so a `fastify-plugin`-wrapped plugin covers this group's routes and no others.
           for (const scope of router.scopes ?? []) {
             for (const plugin of plugins.of(scope)) {
+              assertPluginNotRegistered(server, plugin)
               await server.register(plugin, pluginOptions)
             }
           }
@@ -477,6 +480,26 @@ export class FastifyAdapter<
         },
       )
     })
+  }
+}
+
+/**
+ * Refuses a second `fastify-plugin`-wrapped plugin of the same name before Fastify ever sees it.
+ *
+ * Fastify has no such check itself: a plugin factory is never deduplicated (two calls means two plugins, by
+ * design), but a first-party plugin (`cors`, `html`, `caffeine-caching`, …) wraps a fixed name, and a second
+ * one on the same server would otherwise fail deep inside whatever it decorates — `@fastify/cors` re-declaring
+ * a request decorator, tens of seconds later, once avvio's own boot timeout gives up waiting on it.
+ */
+function assertPluginNotRegistered(instance: FastifyInstance, plugin: HTTPPlugin): void {
+  const name = pluginName(plugin)
+
+  if (name !== undefined && instance.hasPlugin(name)) {
+    throw new ErrCaffeineWebApplication(
+      `Cannot register plugin "${name}": it is already registered` +
+        solutions(`Extend "${name}" once, or give the factory that produces it a different name`),
+      'ERR_HTTP_DUPLICATE_PLUGIN',
+    )
   }
 }
 

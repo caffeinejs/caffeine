@@ -1,6 +1,6 @@
 import { registerPlugin, type Route, type RouteGroup } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type AnySchema, type BootstrapKit } from '@caffeinejs/std'
-import { configEquals, type ConfigLocation } from '@caffeinejs/std/config'
+import { type ConfigLocation } from '@caffeinejs/std/config'
 
 import { type OpenAPIConfigSlice } from './config.js'
 import { OpenAPIDocumentStore } from './document_store.js'
@@ -40,12 +40,14 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
 
   readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
   readonly #store = new OpenAPIDocumentStore()
+  readonly #named = new Set<string>()
   #config: ConfigLocation<OpenAPIConfigSlice> | undefined
 
   /**
    * Reads the document-level facts from a node of the configuration tree, e.g. `c.app.openapi`.
    *
-   * Applied **over** what the builder set, so a title written in code is a default a deployment can redirect.
+   * Fills keys a fluent method did not name. A setter is the last word even when its value equals the
+   * default — `.exposeSelf(false)` is a decision, not an omission.
    * Nested blocks merge rather than replace: configuring only `errors.validation` keeps the other two.
    */
   withConfig(config: ConfigLocation<OpenAPIConfigSlice>): this {
@@ -53,15 +55,24 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /** Records that a fluent method named this key, so {@link #resolve} will not let configuration overwrite it. */
+  #touch(...keys: string[]): void {
+    for (const key of keys) {
+      this.#named.add(key)
+    }
+  }
+
   /** The OpenAPI version to emit. Defaults to `3.1.1`; `3.2.0` unlocks the QUERY method and 3.2-only fields. */
   version(version: OpenAPIVersion): this {
     this.#options.version = version
+    this.#touch('version')
     return this
   }
 
   /** The document's `info` block. Title and version are required by the specification. */
   info(info: InfoObject): this {
     this.#options.info = info
+    this.#touch('info')
     return this
   }
 
@@ -70,11 +81,13 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
     this.#options.servers.push(
       typeof url === 'string' ? { url, ...(description === undefined ? {} : { description }) } : url,
     )
+    this.#touch('servers')
     return this
   }
 
   externalDocs(externalDocs: ExternalDocumentationObject): this {
     this.#options.externalDocs = externalDocs
+    this.#touch('externalDocs')
     return this
   }
 
@@ -84,12 +97,14 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   security(...requirements: SecurityRequirementObject[]): this {
     this.#options.security = requirements
+    this.#touch('security')
     return this
   }
 
   /** Declares a tag up front, so its description exists even before a controller uses it. */
   tag(tag: TagObject): this {
     this.#options.tags.push(tag)
+    this.#touch('tags')
     return this
   }
 
@@ -99,36 +114,42 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   securityScheme(name: string, scheme: SecuritySchemeObject): this {
     this.#options.securitySchemes[name] = scheme
+    this.#touch(`securitySchemes.${name}`)
     return this
   }
 
   /** Whether to derive `securitySchemes` from the application's registered schemes. On by default. */
   deriveSecuritySchemes(derive = true): this {
     this.#options.deriveSecuritySchemes = derive
+    this.#touch('deriveSecuritySchemes')
     return this
   }
 
   /** Mounts every document endpoint under a common prefix. */
   base(path: string): this {
     this.#options.routes.base = path
+    this.#touch('routes.base')
     return this
   }
 
   /** Where the JSON document is served. */
   json(path: string): this {
     this.#options.routes.json = path
+    this.#touch('routes.json')
     return this
   }
 
   /** Where the YAML document is served; `false` disables it. */
   yaml(path: string | false): this {
     this.#options.routes.yaml = path === false ? undefined : path
+    this.#touch('routes.yaml')
     return this
   }
 
   /** Where the documentation UI is served; `false` disables it and drops the Scalar dependency entirely. */
   docs(path: string | false): this {
     this.#options.routes.docs = path === false ? undefined : path
+    this.#touch('routes.docs')
     return this
   }
 
@@ -144,6 +165,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   ui(configuration: Record<string, unknown>): this {
     this.#options.ui = { ...this.#options.ui, ...configuration }
+    this.#touch('ui')
     return this
   }
 
@@ -162,6 +184,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
 
     this.#options.secure = builder.build()
     this.#options.secureExplicit = true
+    this.#touch('secure', 'secureExplicit')
 
     return this
   }
@@ -173,48 +196,56 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
   public(): this {
     this.#options.secure = undefined
     this.#options.secureExplicit = true
+    this.#touch('secure', 'secureExplicit')
     return this
   }
 
   /** Which responses to add that no schema declared. Both are on by default. */
   infer(infer: Partial<InferenceOptions>): this {
     Object.assign(this.#options.infer, infer)
+    this.#touch(...Object.keys(infer).map(key => `infer.${key}`))
     return this
   }
 
   /** The status codes used for inferred responses — set `validation` to match your error handler. */
   errors(errors: Partial<ErrorStatusOptions>): this {
     Object.assign(this.#options.errors, errors)
+    this.#touch(...Object.keys(errors).map(key => `errors.${key}`))
     return this
   }
 
   /** The body schema of an inferred error response. */
   errorSchema(schema: AnySchema): this {
     this.#options.errorSchema = schema
+    this.#touch('errorSchema')
     return this
   }
 
   /** Whether the document describes the routes that serve the document. Off by default. */
   exposeSelf(expose = true): this {
     this.#options.exposeSelf = expose
+    this.#touch('exposeSelf')
     return this
   }
 
   /** Names repeated anonymous object schemas into `components.schemas`. Off by default; names are generated. */
   dedupeComponents(dedupe = true): this {
     this.#options.dedupeComponents = dedupe
+    this.#touch('dedupeComponents')
     return this
   }
 
   /** Overrides the derived `operationId`. */
   operationId(fn: (router: RouteGroup<unknown>, route: Route<unknown>) => string): this {
     this.#options.operationId = fn
+    this.#touch('operationId')
     return this
   }
 
   /** Overrides the derived tag for a controller. */
   tagFor(fn: (router: RouteGroup<unknown>) => string): this {
     this.#options.tagFor = fn
+    this.#touch('tagFor')
     return this
   }
 
@@ -227,12 +258,14 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   schemaName(fn: (schema: SchemaObject) => string | undefined): this {
     this.#options.schemaName = fn
+    this.#touch('schemaName')
     return this
   }
 
   /** Merges raw components into the generated ones — responses, parameters, examples, and the rest. */
   components(components: ComponentsObject): this {
     this.#options.components = { ...this.#options.components, ...components }
+    this.#touch('components')
     return this
   }
 
@@ -242,6 +275,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   document(document: OpenAPIDocument): this {
     this.#options.source = { kind: 'document', document }
+    this.#touch('source')
     return this
   }
 
@@ -251,6 +285,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   specification(specification: { path: string }): this {
     this.#options.source = { kind: 'file', path: specification.path }
+    this.#touch('source')
     return this
   }
 
@@ -263,6 +298,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   transformDocument(fn: (document: OpenAPIDocument) => OpenAPIDocument | void): this {
     this.#options.transformDocument = fn
+    this.#touch('transformDocument')
     return this
   }
 
@@ -272,6 +308,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   validate(validate = true): this {
     this.#options.validate = validate
+    this.#touch('validate')
     return this
   }
 
@@ -295,10 +332,9 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * The builder's options with the configured ones folded in.
    *
-   * A fluent method is the last word, as everywhere else: a key the builder actually set keeps its value, and
-   * configuration fills in the rest. "Actually set" is measured against {@link defaultOpenAPIOptions}, because
-   * `#options` starts from the defaults so the setters can write into `routes` and `infer` without guarding
-   * every one — a key still holding its default was never named in code.
+   * A fluent method is the last word, as everywhere else: a key {@link #touch} recorded keeps its value, and
+   * configuration fills in the rest. Measured by the setter having run, not by the value differing from
+   * {@link defaultOpenAPIOptions} — `.exposeSelf(false)` is a decision even though false is the default.
    *
    * Copied, not referenced. The validated tree is deep-frozen and read through live accessors, and the
    * document these values become is handed to `transformDocument` to edit in place — a frozen `info` would
@@ -310,7 +346,7 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
     const folded = foldConfigured(
       this.#options as unknown as Record<string, unknown>,
       configured as Record<string, unknown>,
-      defaultOpenAPIOptions() as unknown as Record<string, unknown>,
+      this.#named,
     ) as unknown as OpenAPIOptions
 
     // `false` on an endpoint means "do not serve it", which the rest of the package spells `undefined`.
@@ -326,15 +362,17 @@ function withoutDisabled(routes: OpenAPIOptions['routes']): OpenAPIOptions['rout
 }
 
 /**
- * Folds `configured` into `code`, key by key, letting whatever the builder actually set win.
+ * Folds `configured` into `code`, key by key, letting whatever a fluent method named win.
  *
- * `defaults` is what "actually set" is measured against. Nested blocks recurse rather than replace, so an
- * application configuring only `errors.validation` keeps the defaults for the other two.
+ * `named` is dotted paths (`exposeSelf`, `routes.json`, `infer.auth`). Nested blocks recurse rather than
+ * replace, so an application configuring only `errors.validation` keeps the defaults for the other two —
+ * unless the whole parent object was named (`info`).
  */
 function foldConfigured(
   code: Record<string, unknown>,
   configured: Record<string, unknown>,
-  defaults: Record<string, unknown>,
+  named: ReadonlySet<string>,
+  path = '',
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...code }
 
@@ -343,18 +381,23 @@ function foldConfigured(
       continue
     }
 
+    const keyPath = path === '' ? key : `${path}.${key}`
     const inCode = code[key]
-    const fallback = defaults[key]
 
     if (isPlainRecord(inCode) && isPlainRecord(value)) {
-      out[key] = foldConfigured(inCode, value, isPlainRecord(fallback) ? fallback : {})
+      if (named.has(keyPath)) {
+        continue
+      }
+
+      out[key] = foldConfigured(inCode, value, named, keyPath)
       continue
     }
 
-    // Named in code, so it stands. Otherwise the configured value fills it in.
-    if (configEquals(inCode, fallback)) {
-      out[key] = value
+    if (named.has(keyPath)) {
+      continue
     }
+
+    out[key] = value
   }
 
   return out

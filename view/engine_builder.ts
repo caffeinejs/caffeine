@@ -13,9 +13,9 @@ import type { ViewOptions } from './view.js'
  * One builder assembles one engine registration. {@link ViewBuilder} owns them — `v.engine(…)` for the
  * default engine, `v.engine('mail', …)` for a named one — and reads each via {@link build}.
  *
- * What a fluent method sets is final. To let a deployment repoint a template root, read the settings from a
- * node of the configuration tree with {@link withConfig}. The engine module itself is code-only: it is an
- * object full of functions, and a function cannot travel through a configuration tree.
+ * Configuration overlays fluent methods for everything {@link ViewConfig} declares: `v.root('src')` is a
+ * default a deployment can redirect once {@link withConfig} is wired. The engine module itself is code-only:
+ * it is an object full of functions, and a function cannot travel through a configuration tree.
  *
  * @see https://github.com/fastify/point-of-view
  */

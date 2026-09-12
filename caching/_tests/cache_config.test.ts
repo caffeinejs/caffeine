@@ -1,7 +1,14 @@
 import { token } from '@caffeinejs/di'
 import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import { $t, type InferSchema } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import {
+  CONFIG_REFRESH_LABEL,
+  ConfigPriority,
+  EnvConfigProvider,
+  InlineConfigProvider,
+  type ConfigHandle,
+  type ConfigProvider,
+} from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -82,6 +89,43 @@ describe('cache configuration', () => {
     await app.ready()
 
     expect(headerOf(app)).toBe('X-Moved')
+  })
+
+  // Caching is fluent-wins: naming the header in code beats a wired environment value.
+  it('keeps a builder-set status header over a wired environment value', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c => c.source(env({ CACHE__STATUS_HEADER: 'X-Edge-Cache' }), ConfigPriority.ENV))
+      .extend(caching((cache, c) => cache.statusHeader('X-From-Code').withConfig(c.cache)))
+      .build()
+
+    await app.ready()
+
+    expect(headerOf(app)).toBe('X-From-Code')
+  })
+
+  // The header name is snapshotted at `ready()`. A refresh updates the tree; the binding and the hooks do not
+  // follow it — that is intentional, not a missed liveFold.
+  it('snapshots the status header at ready, so a refresh does not rename it', async () => {
+    let data: InferSchema<typeof rootSchema> = { cache: { statusHeader: 'X-Before' } }
+    const reloadable: ConfigProvider = {
+      id: 'test',
+      reloadable: true,
+      load: ctx => new InlineConfigProvider(data).load(ctx),
+    }
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c => c.source(reloadable))
+      .extend(caching((cache, c) => cache.withConfig(c.cache)))
+      .build()
+
+    await app.ready()
+
+    expect(headerOf(app)).toBe('X-Before')
+
+    data = { cache: { statusHeader: 'X-After' } }
+    await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
+
+    expect(headerOf(app)).toBe('X-Before')
   })
 
   // Activation is installing the feature, never the tree.

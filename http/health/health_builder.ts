@@ -47,8 +47,9 @@ export class HealthOwnedPaths extends ServerOwnedPaths {
  *
  * The resolved {@link HealthOptions} are bound under {@link kHealthOptions}, with a stable identity and folded
  * on read: the probe budgets and the response-shaping flags are read per request, so a node handed to
- * {@link withConfig} carries a refresh through to them. The probe routes, consumed once at boot, simply stop
- * mattering afterwards — nothing re-registers a route because a value moved underneath it.
+ * {@link withConfig} carries a refresh through to them. `enabled` and the probe paths are consumed once at
+ * boot — `healthProbesPlugin` and {@link HealthOwnedPaths} read them at registration — so a refresh cannot
+ * mount or unmount probes. The probe routes simply stop mattering afterwards.
  */
 export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'health'

@@ -83,4 +83,15 @@ describe('liveFold', () => {
 
     expect(folded.dispatcher).toBe(dispatcher)
   })
+
+  it('throws on assignment rather than writing onto the empty proxy target', () => {
+    const folded = liveFold(
+      () => ({ seconds: 5 }),
+      raw => ({ ms: raw.seconds * 1000 }),
+    )
+
+    expect(() => {
+      ;(folded as { ms: number }).ms = 1
+    }).toThrow(/Cannot redefine property/)
+  })
 })

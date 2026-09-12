@@ -34,6 +34,19 @@ describe('ShutdownBuilder', () => {
     expect(policy.terminationGracePeriodMs).toBe(30_000)
   })
 
+  // Declaring `shutdown` in the schema is not on its own an instruction to configure the drain from it.
+  it('leaves the drain on its defaults when nothing pointed it at the block', async () => {
+    const app = headless()
+      .config(appSchema, kAppConfig, c =>
+        c.source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV),
+      )
+      .build()
+    await app.ready()
+
+    expect(policyOf(app).drainDelayMs).toBe(0)
+    await app.close()
+  })
+
   // A fluent method is the last word: the callback wired the block, but `drainDelay` was also set in code,
   // so the code value is what the drain runs on.
   it('takes a fluent value over the configured one', async () => {

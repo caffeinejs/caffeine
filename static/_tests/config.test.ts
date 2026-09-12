@@ -16,7 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { kStaticOptions, staticFiles } from '../index.js'
 import type { StaticMount } from '../static.js'
 
-// The application owns the schema: it declares where the static block lives and `s.config(c => c.static)`
+// The application owns the schema: it declares where the static block lives and `s.withConfig(c.static)`
 // points the feature at it. Declared field by field rather than by importing `staticConfigSchema`: every
 // field of `StaticConfigSlice` is optional, so a block naming only what these tests configure satisfies the
 // feature, and that schema is small enough for TypeScript to infer a config type from.
@@ -121,6 +121,34 @@ describe('static configuration', () => {
     expect(settings.navigationOnly).toBe(false)
   })
 
+  // `spa.root` is the documented exception: configuration repoints the directory `.spa()` switched on.
+  it('lets configuration repoint the SPA root the application switched on', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c =>
+        c.source(
+          new InlineConfigProvider({
+            static: { spa: { root: fixtures } },
+          }),
+        ),
+      )
+      .extend(staticFiles((s, c) => s.withConfig(c.static).spa(dist, { onMissingIndex: 'skip' })))
+      .build()
+
+    await app.ready()
+
+    expect(resolved(app).spa!.root).toBe(fixtures)
+  })
+
+  it('keeps the code SPA root when nothing wired the block', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(staticFiles(s => s.spa(dist)))
+      .build()
+
+    await app.ready()
+
+    expect(resolved(app).spa!.root).toBe(dist)
+  })
+
   // Activation is the builder call, never the tree.
   it('does not switch a SPA on from configuration alone', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
@@ -158,5 +186,10 @@ describe('static configuration', () => {
     await app.ready()
 
     expect(mountsOf(app)).toEqual([{ root: fixtures, prefix: '/moved/' }])
+  })
+
+  it('exports the config schema from the package barrel', async () => {
+    const { staticConfigSchema } = await import('../index.js')
+    expect(staticConfigSchema).toBeDefined()
   })
 })
