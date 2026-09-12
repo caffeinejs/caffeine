@@ -1,5 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
@@ -17,7 +17,7 @@ export interface AuthorizationOptions {
   fallbackPolicy?: AuthzPolicy
 }
 
-export class AuthorizationBuilder implements FeatureLifecycle {
+export class AuthorizationBuilder implements Feature {
   readonly [kFeatureName] = 'authz'
 
   readonly #policies: Map<string, AuthzPolicy> = new Map()

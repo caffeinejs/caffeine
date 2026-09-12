@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { createLiveAccessors } from '../accessor.js'
 import type { ConfigHandle, ConfigLocation } from '../config.js'
-import { featureConfigKey } from '../feature_key.js'
 
 interface AppConfig {
   http: { host: string; port: number }
@@ -152,68 +151,6 @@ describe('ConfigAccessors array typing', () => {
       // @ts-expect-error and elements are read-only, not just the list holding them
       config.servers[0].host = 'other'
     }).toBeDefined()
-  })
-})
-
-/**
- * A handle given a feature lookup is a *function* at run time, so it can be called with a feature key. That is
- * a change of the proxy's target, and these tests pin the things a change of target could quietly break: the
- * tree must still enumerate, spread, serialize and refuse writes exactly as the plain projection does.
- */
-describe('createLiveAccessors with a feature lookup', () => {
-  const kWidget = featureConfigKey<{ size: number }>('widget')
-  const data = { http: { host: 'h', port: 80 }, origin: 'o' }
-
-  const callable = (): ConfigHandle<typeof data> =>
-    createLiveAccessors(
-      () => data,
-      undefined,
-      key => (key === kWidget ? { size: 7 } : undefined),
-    )
-
-  it('answers a feature key when called', () => {
-    expect(callable()(kWidget)).toEqual({ size: 7 })
-  })
-
-  it('answers undefined for a key the lookup does not know', () => {
-    expect(callable()(featureConfigKey<{ size: number }>('other'))).toBeUndefined()
-  })
-
-  it('enumerates only the configuration, never the function it is carried on', () => {
-    // `length` and `name` are the function's own properties. They must not leak into the tree.
-    expect(Object.keys(callable()).sort()).toEqual(['http', 'origin'])
-    expect('length' in callable()).toBe(false)
-    // The rule is right about functions in general, and that is the point: spreading has to keep working even
-    // though the handle is one.
-    // oxlint-disable-next-line typescript/no-misused-spread
-    expect({ ...callable() }).toEqual(data)
-  })
-
-  // `JSON.stringify` drops functions, so a callable root would serialize to nothing without a `toJSON`.
-  it('serializes as the tree', () => {
-    expect(JSON.stringify(callable())).toBe(JSON.stringify(data))
-  })
-
-  it('lets the configuration declare toJSON itself', () => {
-    const own = { toJSON: 'not-a-function' }
-    const config = createLiveAccessors(
-      () => own,
-      undefined,
-      () => undefined,
-    )
-
-    expect(config.toJSON).toBe('not-a-function')
-  })
-
-  it('still refuses a write', () => {
-    expect(() => {
-      ;(callable() as unknown as Record<string, unknown>).origin = 'other'
-    }).toThrow(expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_READ_ONLY' }))
-  })
-
-  // Only the root takes a lookup, so a nested node is the same plain projection it always was.
-  it('leaves nested nodes uncallable', () => {
-    expect(typeof callable().http).toBe('object')
   })
 })
 

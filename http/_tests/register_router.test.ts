@@ -1,4 +1,4 @@
-import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -28,7 +28,7 @@ function signToken(payload: Record<string, unknown>): Promise<string> {
  * Stands in for what a package outside http does: bind its own controller and register its routes during
  * `configure()`, before `buildRouting` runs.
  */
-class ProgrammaticService implements FeatureLifecycle {
+class ProgrammaticService implements Feature {
   readonly #authz: RouteAuthzOptions | undefined
   // A fresh class per service, not a module-level one. `registerRouteGroup` is get-or-create and `routes()` appends,
   // so a shared constructor identity would accumulate a duplicate route for every application built in the

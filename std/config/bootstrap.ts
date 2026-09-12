@@ -1,5 +1,5 @@
 import type { AnySchema } from '../schema/schema.js'
-import { createLiveAccessors, featureLookup } from './accessor.js'
+import { createLiveAccessors } from './accessor.js'
 import type {
   ConfigDiagnostics,
   ConfigHandle,
@@ -14,7 +14,7 @@ import { freezeDeep, materialize, readByParts } from './materializer.js'
 import { activeProfiles } from './profiles.js'
 import { validateConfig } from './schema.js'
 import { secretPaths } from './secrets.js'
-import type { ConfigSlice, ConfigSliceSpec } from './slice.js'
+import type { ConfigSliceSpec } from './slice.js'
 import { sliceLabel } from './slice.js'
 import type { ConfigSources } from './sources.js'
 
@@ -37,11 +37,9 @@ export interface BootstrapOptions<T> {
   failFast?: boolean
   /**
    * Paths the diagnostics must redact, on top of whatever the root schema marks with `$t.Secret`. The config
-   * module passes the set the feature slices contributed as they registered.
+   * module passes the set the registered slices contributed.
    */
   secrets?: ReadonlySet<string>
-  /** The slices published under a feature key, which the resulting handle answers a key with. */
-  features?: ReadonlyMap<symbol, ConfigSlice<unknown>>
   /**
    * Reports a refresh that failed for one feature while the rest succeeded. Such a failure is deliberately not
    * thrown — the application keeps running on the last good values — so without this it would be silent unless
@@ -89,13 +87,9 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
   //
   // Exactly what the application declared, and nothing else: a feature contributes no field here. Its settings
   // are in the root tree when the application put them there — declared in the schema and named by the
-  // feature's `.config(...)` selector — and nowhere at all otherwise.
+  // feature's `.withConfig(...)` selector — and nowhere at all otherwise.
   const validated = freezeDeep(validateConfig(options.schema, materialized))
-  const config = createLiveAccessors(
-    () => validated,
-    undefined,
-    featureLookup(options.features, slice => slice.config),
-  )
+  const config = createLiveAccessors(() => validated)
   // The root schema is walked here rather than by the caller: an application that declared its own secrets in
   // `.config(schema, ...)` gets them redacted whether or not any feature registered a slice.
   const secrets = new Set([...(options.secrets ?? []), ...secretPaths(options.schema)])

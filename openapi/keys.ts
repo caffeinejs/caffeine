@@ -1,4 +1,4 @@
-import { featureConfigKey } from '@caffeinejs/std/config'
+import { token } from '@caffeinejs/di'
 
 import type { OpenAPIOptions } from './options.js'
 
@@ -9,9 +9,8 @@ import type { OpenAPIOptions } from './options.js'
 export const kOpenAPISelf = Symbol.for('@caffeinejs/openapi:self')
 
 /**
- * Where the resolved OpenAPI options are published: the builder's values folded with the configuration tree.
+ * The resolved OpenAPI options: the builder's values with the configured ones folded over them.
  *
- * Read with `container.get(Configuration).config(kOpenAPIConfig)`. `undefined` when the feature is not
- * installed.
+ * Read with `container.getOptional(kOpenAPIOptions)`. Absent when the feature is not installed.
  */
-export const kOpenAPIConfig = featureConfigKey<OpenAPIOptions>('openapi')
+export const kOpenAPIOptions = token<OpenAPIOptions>(Symbol('caffeine.openapi.options'))

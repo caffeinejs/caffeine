@@ -9,12 +9,15 @@ import type { OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import type { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
 import type { RefreshTokenOptionsBuilder } from './refresh/refresh_options.js'
 
+/** The scheme kinds an `addX(...)` call can register. Each has one entry in {@link SCHEME_CONFIG}. */
+export type SchemeKind = 'jwt' | 'basic' | 'cookie' | 'opaque' | 'oidc' | 'oauth' | 'github'
+
 /**
- * Where one scheme's settings live, relative to wherever the application placed the authentication block:
- * `<base>.schemes.<name>.*`, under the scheme's own registered name.
+ * What an application may configure for authentication, handed to the builder with
+ * `AuthenticationBuilder.withConfig`.
  *
- * `undefined` in, `undefined` out — an application that never placed authentication in its configuration has
- * nowhere for a scheme to sit either, and the scheme resolves detached from its builder alone.
+ * `schemes` is keyed by the name the `addX(...)` call gave the scheme, and each entry carries that kind's
+ * configurable keys — {@link SCHEME_CONFIG} holds one schema per kind.
  *
  * **A scheme addressed by environment variable needs a lowercase name.** `EnvConfigProvider` lowercases each
  * path segment before folding underscores into camelCase, so `AUTH__SCHEMES__BEARER__SECRET` resolves to
@@ -23,55 +26,48 @@ import type { RefreshTokenOptionsBuilder } from './refresh/refresh_options.js'
  * `addJWTBearer('jwt', ...)` — wherever an environment variable has to reach it. A file or an inline source
  * addresses a capitalized name as written.
  */
-export function schemeNamespace(base: readonly string[] | undefined, name: string): readonly string[] | undefined {
-  return authSubNamespace(base, 'schemes', name)
-}
-
-/** The location of one block nested inside the authentication settings, or `undefined` when there is none. */
-export function authSubNamespace(
-  base: readonly string[] | undefined,
-  ...segments: string[]
-): readonly string[] | undefined {
-  return base === undefined ? undefined : [...base, ...segments]
-}
-
-/** The kinds of scheme that carry configurable options. `addStrategy` and `forward` take none. */
-export type SchemeKind = 'jwt' | 'basic' | 'cookie' | 'opaque' | 'oidc' | 'oauth' | 'github'
-
-/**
- * The scheme-independent half: which scheme answers when a route names none.
- *
- * Scheme *names* are configurable, but which schemes exist is not — a scheme is registered by an `addX` call,
- * so naming one here that no call created is rejected at start-up rather than silently ignored.
- */
-export interface AuthConfigSlice {
+export interface AuthConfig {
   defaultAuthenticateScheme?: string
   defaultChallengeScheme?: string
   defaultForbidScheme?: string
+  schemes?: Record<string, Record<string, unknown>>
+  credentials?: Record<string, unknown>
+  refresh?: Record<string, unknown>
 }
 
-export const authConfigSchema = $t.Object({
-  defaultAuthenticateScheme: $t.Optional($t.String()),
-  defaultChallengeScheme: $t.Optional($t.String()),
-  defaultForbidScheme: $t.Optional($t.String()),
-})
-
-/** `auth.credentials.*` — the identity stamped on a principal built from a username and password. */
-export const CREDENTIALS_CONFIG_SEGMENT = 'credentials'
+/** `credentials.*` — the identity stamped on a principal built from a username and password. */
 
 export const credentialsConfigSchema = $t.Object({
   scheme: $t.Optional($t.String()),
   roleClaimType: $t.Optional($t.String()),
 })
 
-/** `auth.refresh.*` — the two token lifetimes. The resolver and the claim mapper are functions. */
-export const REFRESH_CONFIG_SEGMENT = 'refresh'
-
+/** `refresh.*` — the two token lifetimes. The resolver and the claim mapper are functions. */
 const ttl = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
 
 export const refreshConfigSchema = $t.Object({
   accessTTL: $t.Optional(ttl()),
   refreshTTL: $t.Optional(ttl()),
+})
+
+/**
+ * The shape of the authentication block, with `schemes` left open.
+ *
+ * Open because the keys one scheme accepts depend on its kind, which only the `addX(...)` call knows. An
+ * application wanting a scheme's secret validated — or redacted from the diagnostics, which `$t.Secret` on the
+ * kind's own schema is what drives — declares that scheme precisely instead:
+ *
+ * ```ts
+ * $t.Object({ schemes: $t.Object({ Bearer: SCHEME_SCHEMAS.jwt }) })
+ * ```
+ */
+export const authConfigSchema = $t.Object({
+  defaultAuthenticateScheme: $t.Optional($t.String()),
+  defaultChallengeScheme: $t.Optional($t.String()),
+  defaultForbidScheme: $t.Optional($t.String()),
+  schemes: $t.Optional($t.Record($t.String(), $t.Record($t.String(), $t.Unknown()))),
+  credentials: $t.Optional(credentialsConfigSchema),
+  refresh: $t.Optional(refreshConfigSchema),
 })
 
 /**
@@ -112,18 +108,20 @@ const secretString = (): ReturnType<typeof $t.Secret> => $t.Secret($t.String())
 
 const challengeMode = (): ReturnType<typeof $t.UnionEnum> => $t.UnionEnum(['auto', 'redirect', 'status'])
 
+const jwtSchemeSchema = $t.Object({
+  // Only the string form is configurable. A `KeyLike` or a `Uint8Array` cannot travel through a tree, so a
+  // scheme built on one keeps supplying it in code.
+  secret: $t.Optional(secretString()),
+  issuer: $t.Optional($t.String()),
+  audience: $t.Optional($t.Union([$t.String(), $t.Array($t.String())])),
+  algorithm: $t.Optional($t.String()),
+  expiresIn: $t.Optional(ttl()),
+  roleClaimType: $t.Optional($t.String()),
+  includeErrorDetails: $t.Optional($t.Boolean()),
+})
+
 const jwt: SchemeConfigSpec<JWTAuthenticationOptionsBuilder> = {
-  schema: $t.Object({
-    // Only the string form is configurable. A `KeyLike` or a `Uint8Array` cannot travel through a tree, so a
-    // scheme built on one keeps supplying it in code.
-    secret: $t.Optional(secretString()),
-    issuer: $t.Optional($t.String()),
-    audience: $t.Optional($t.Union([$t.String(), $t.Array($t.String())])),
-    algorithm: $t.Optional($t.String()),
-    expiresIn: $t.Optional(ttl()),
-    roleClaimType: $t.Optional($t.String()),
-    includeErrorDetails: $t.Optional($t.Boolean()),
-  }),
+  schema: jwtSchemeSchema,
   appliers: {
     secret: (b, v: string) => b.secret(v),
     issuer: (b, v: string) => b.issuer(v),
@@ -135,40 +133,46 @@ const jwt: SchemeConfigSpec<JWTAuthenticationOptionsBuilder> = {
   },
 }
 
+const basicSchemeSchema = $t.Object({ realm: $t.Optional($t.String()) })
+
 const basic: SchemeConfigSpec<BasicAuthenticationOptionsBuilder> = {
-  schema: $t.Object({ realm: $t.Optional($t.String()) }),
+  schema: basicSchemeSchema,
   appliers: { realm: (b, v: string) => b.realm(v) },
 }
 
+const opaqueSchemeSchema = $t.Object({
+  scheme: $t.Optional($t.String()),
+  realm: $t.Optional($t.String()),
+})
+
 const opaque: SchemeConfigSpec<OpaqueTokenAuthenticationOptionsBuilder> = {
-  schema: $t.Object({
-    scheme: $t.Optional($t.String()),
-    realm: $t.Optional($t.String()),
-  }),
+  schema: opaqueSchemeSchema,
   appliers: {
     scheme: (b, v: string) => b.scheme(v),
     realm: (b, v: string) => b.realm(v),
   },
 }
 
+const cookieSchemeSchema = $t.Object({
+  sessionSecret: $t.Optional(secretString()),
+  cookieName: $t.Optional($t.String()),
+  rememberMe: $t.Optional($t.Boolean()),
+  rememberMeCookieName: $t.Optional($t.String()),
+  rememberMeRotationGraceSeconds: $t.Optional($t.Number()),
+  challengeMode: $t.Optional(challengeMode()),
+  loginPath: $t.Optional($t.String()),
+  accessDeniedPath: $t.Optional($t.String()),
+  returnURLParameter: $t.Optional($t.String()),
+  maxAge: $t.Optional($t.Number()),
+  rememberMeMaxAge: $t.Optional($t.Number()),
+  secure: $t.Optional($t.Boolean()),
+  sameSite: $t.Optional($t.UnionEnum(['strict', 'lax', 'none'])),
+  path: $t.Optional($t.String()),
+  roleClaimType: $t.Optional($t.String()),
+})
+
 const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
-  schema: $t.Object({
-    sessionSecret: $t.Optional(secretString()),
-    cookieName: $t.Optional($t.String()),
-    rememberMe: $t.Optional($t.Boolean()),
-    rememberMeCookieName: $t.Optional($t.String()),
-    rememberMeRotationGraceSeconds: $t.Optional($t.Number()),
-    challengeMode: $t.Optional(challengeMode()),
-    loginPath: $t.Optional($t.String()),
-    accessDeniedPath: $t.Optional($t.String()),
-    returnURLParameter: $t.Optional($t.String()),
-    maxAge: $t.Optional($t.Number()),
-    rememberMeMaxAge: $t.Optional($t.Number()),
-    secure: $t.Optional($t.Boolean()),
-    sameSite: $t.Optional($t.UnionEnum(['strict', 'lax', 'none'])),
-    path: $t.Optional($t.String()),
-    roleClaimType: $t.Optional($t.String()),
-  }),
+  schema: cookieSchemeSchema,
   appliers: {
     sessionSecret: (b, v: string) => b.sessionSecret(v),
     cookieName: (b, v: string) => b.cookieName(v),
@@ -188,42 +192,44 @@ const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
   },
 }
 
+const oidcSchemeSchema = $t.Object({
+  clientID: $t.Optional($t.String()),
+  clientSecret: $t.Optional(secretString()),
+  sessionSecret: $t.Optional(secretString()),
+  discoveryURL: $t.Optional($t.String()),
+  issuer: $t.Optional($t.String()),
+  authorizationEndpoint: $t.Optional($t.String()),
+  tokenEndpoint: $t.Optional($t.String()),
+  userInfoEndpoint: $t.Optional($t.String()),
+  jwksURI: $t.Optional($t.String()),
+  callbackURL: $t.Optional($t.String()),
+  defaultRedirectPath: $t.Optional($t.String()),
+  scopes: $t.Optional($t.Array($t.String())),
+  sessionCookieName: $t.Optional($t.String()),
+  sessionCookieTtlSeconds: $t.Optional($t.Number()),
+  stateCookieName: $t.Optional($t.String()),
+  secureCookie: $t.Optional($t.Boolean()),
+  roleClaimType: $t.Optional($t.String()),
+  allowPlainPKCE: $t.Optional($t.Boolean()),
+  clockToleranceSeconds: $t.Optional($t.Number()),
+  httpTimeoutMs: $t.Optional($t.Number()),
+  discoveryCacheTtlSeconds: $t.Optional($t.Number()),
+  tokenEndpointAuthMethod: $t.Optional($t.UnionEnum(['auto', 'client_secret_basic', 'client_secret_post'])),
+  showPii: $t.Optional($t.Boolean()),
+  challengeMode: $t.Optional(challengeMode()),
+  getClaimsFromUserInfoEndpoint: $t.Optional($t.Boolean()),
+  saveTokens: $t.Optional($t.Boolean()),
+  postLogoutRedirectURI: $t.Optional($t.String()),
+  endSessionEndpoint: $t.Optional($t.String()),
+  prompt: $t.Optional($t.UnionEnum(['none', 'login', 'consent', 'select_account'])),
+  loginHint: $t.Optional($t.String()),
+  acrValues: $t.Optional($t.Array($t.String())),
+  maxAgeSeconds: $t.Optional($t.Number()),
+  extraAuthorizationParams: $t.Optional($t.Record($t.String(), $t.String())),
+})
+
 const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
-  schema: $t.Object({
-    clientID: $t.Optional($t.String()),
-    clientSecret: $t.Optional(secretString()),
-    sessionSecret: $t.Optional(secretString()),
-    discoveryURL: $t.Optional($t.String()),
-    issuer: $t.Optional($t.String()),
-    authorizationEndpoint: $t.Optional($t.String()),
-    tokenEndpoint: $t.Optional($t.String()),
-    userInfoEndpoint: $t.Optional($t.String()),
-    jwksURI: $t.Optional($t.String()),
-    callbackURL: $t.Optional($t.String()),
-    defaultRedirectPath: $t.Optional($t.String()),
-    scopes: $t.Optional($t.Array($t.String())),
-    sessionCookieName: $t.Optional($t.String()),
-    sessionCookieTtlSeconds: $t.Optional($t.Number()),
-    stateCookieName: $t.Optional($t.String()),
-    secureCookie: $t.Optional($t.Boolean()),
-    roleClaimType: $t.Optional($t.String()),
-    allowPlainPKCE: $t.Optional($t.Boolean()),
-    clockToleranceSeconds: $t.Optional($t.Number()),
-    httpTimeoutMs: $t.Optional($t.Number()),
-    discoveryCacheTtlSeconds: $t.Optional($t.Number()),
-    tokenEndpointAuthMethod: $t.Optional($t.UnionEnum(['auto', 'client_secret_basic', 'client_secret_post'])),
-    showPii: $t.Optional($t.Boolean()),
-    challengeMode: $t.Optional(challengeMode()),
-    getClaimsFromUserInfoEndpoint: $t.Optional($t.Boolean()),
-    saveTokens: $t.Optional($t.Boolean()),
-    postLogoutRedirectURI: $t.Optional($t.String()),
-    endSessionEndpoint: $t.Optional($t.String()),
-    prompt: $t.Optional($t.UnionEnum(['none', 'login', 'consent', 'select_account'])),
-    loginHint: $t.Optional($t.String()),
-    acrValues: $t.Optional($t.Array($t.String())),
-    maxAgeSeconds: $t.Optional($t.Number()),
-    extraAuthorizationParams: $t.Optional($t.Record($t.String(), $t.String())),
-  }),
+  schema: oidcSchemeSchema,
   appliers: {
     clientID: (b, v: string) => b.clientID(v),
     clientSecret: (b, v: string) => b.clientSecret(v),
@@ -262,31 +268,33 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
   },
 }
 
+const oauthSchemeSchema = $t.Object({
+  clientID: $t.Optional($t.String()),
+  clientSecret: $t.Optional(secretString()),
+  sessionSecret: $t.Optional(secretString()),
+  authorizationEndpoint: $t.Optional($t.String()),
+  tokenEndpoint: $t.Optional($t.String()),
+  userInfoEndpoint: $t.Optional($t.String()),
+  callbackURL: $t.Optional($t.String()),
+  defaultRedirectPath: $t.Optional($t.String()),
+  scopes: $t.Optional($t.Array($t.String())),
+  sessionCookieName: $t.Optional($t.String()),
+  sessionCookieTtlSeconds: $t.Optional($t.Number()),
+  stateCookieName: $t.Optional($t.String()),
+  secureCookie: $t.Optional($t.Boolean()),
+  roleClaimType: $t.Optional($t.String()),
+  httpTimeoutMs: $t.Optional($t.Number()),
+  showPii: $t.Optional($t.Boolean()),
+  challengeMode: $t.Optional(challengeMode()),
+  usePKCE: $t.Optional($t.Boolean()),
+  subjectClaim: $t.Optional($t.String()),
+  tokenRequestHeaders: $t.Optional($t.Record($t.String(), $t.String())),
+  userInfoHeaders: $t.Optional($t.Record($t.String(), $t.String())),
+  mapClaims: $t.Optional($t.Record($t.String(), $t.String())),
+})
+
 const oauth: SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder> = {
-  schema: $t.Object({
-    clientID: $t.Optional($t.String()),
-    clientSecret: $t.Optional(secretString()),
-    sessionSecret: $t.Optional(secretString()),
-    authorizationEndpoint: $t.Optional($t.String()),
-    tokenEndpoint: $t.Optional($t.String()),
-    userInfoEndpoint: $t.Optional($t.String()),
-    callbackURL: $t.Optional($t.String()),
-    defaultRedirectPath: $t.Optional($t.String()),
-    scopes: $t.Optional($t.Array($t.String())),
-    sessionCookieName: $t.Optional($t.String()),
-    sessionCookieTtlSeconds: $t.Optional($t.Number()),
-    stateCookieName: $t.Optional($t.String()),
-    secureCookie: $t.Optional($t.Boolean()),
-    roleClaimType: $t.Optional($t.String()),
-    httpTimeoutMs: $t.Optional($t.Number()),
-    showPii: $t.Optional($t.Boolean()),
-    challengeMode: $t.Optional(challengeMode()),
-    usePKCE: $t.Optional($t.Boolean()),
-    subjectClaim: $t.Optional($t.String()),
-    tokenRequestHeaders: $t.Optional($t.Record($t.String(), $t.String())),
-    userInfoHeaders: $t.Optional($t.Record($t.String(), $t.String())),
-    mapClaims: $t.Optional($t.Record($t.String(), $t.String())),
-  }),
+  schema: oauthSchemeSchema,
   appliers: {
     clientID: (b, v: string) => b.clientID(v),
     clientSecret: (b, v: string) => b.clientSecret(v),
@@ -319,6 +327,23 @@ const oauth: SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder> = {
  * `github` shares OAuth 2.0's surface — the preset only supplies endpoint and scope defaults, and it is
  * applied to the same builder.
  */
+/**
+ * Each scheme kind's configurable shape, for an application that declares its schemes precisely.
+ *
+ * Splice one in where the block lives — `$t.Object({ Bearer: SCHEME_SCHEMAS.jwt })` — to have a scheme's
+ * options validated, and to have its secrets redacted from the diagnostics: `$t.Secret` in the schema is what
+ * the redaction follows, so an open record prints them.
+ */
+export const SCHEME_SCHEMAS = {
+  jwt: jwtSchemeSchema,
+  basic: basicSchemeSchema,
+  cookie: cookieSchemeSchema,
+  opaque: opaqueSchemeSchema,
+  oidc: oidcSchemeSchema,
+  oauth: oauthSchemeSchema,
+  github: oauthSchemeSchema,
+} as const
+
 export const SCHEME_CONFIG: { readonly [K in SchemeKind]: SchemeConfigSpec<never> } = {
   jwt: jwt as SchemeConfigSpec<never>,
   basic: basic as SchemeConfigSpec<never>,

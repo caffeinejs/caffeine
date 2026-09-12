@@ -5,6 +5,7 @@ import { $t } from '../../schema/t.js'
 import { createLiveAccessors } from '../accessor.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
+import { liveFold } from '../live_fold.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
 
@@ -71,10 +72,13 @@ describe('config read cost', () => {
     await containerFor(definition)
 
     const dispatcher = { warn: () => undefined }
-    const derived = slice.derive(config => ({ port: config.port, dispatcher }))
+    const folded = liveFold(
+      () => ({ port: slice.config.port }),
+      raw => ({ port: raw.port, dispatcher }),
+    )
 
     // Not everything in a feature's options came from the config tree; what did not must survive unwrapped.
-    expect(derived.config.dispatcher).toBe(dispatcher)
+    expect(folded.dispatcher).toBe(dispatcher)
   })
 
   it('detaches a snapshot from later refreshes', async () => {

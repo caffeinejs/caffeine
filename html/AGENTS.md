@@ -42,19 +42,21 @@ service, `@kitajs/ts-html-plugin` does not run; unescaped `{userInput}` is not r
 Use the plugin's `xss-scan` CLI for that check, or keep the TypeScript 6 language service in the editor
 until a TypeScript 7.1 API exists that the plugin can use.
 
-## `autoDoctype` reaches a response through the config slice; Content-Type does not
+## `autoDoctype` reaches a response through a Fastify decoration; Content-Type does not
 
-`Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLBuilder` registers its
-slice under the `kHTMLConfig` feature key, and `respond` reads it with `ctx.config(kHTMLConfig)`. The key is
-what makes that possible — where the settings live is the application's choice (`h.config(c => c.app.html)`,
-or nowhere at all), and `HTML(...)` is called from application code that knows neither that location nor the
-application's config type, so neither a path nor `C` is available to it.
+`Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `htmlPlugin(defaults)`
+decorates the Fastify instance it registers into under `kHTMLOptions`, and `respond` reads it back off
+`ctx.fst.request.server`. Reading it off the request's own server rather than the root instance is what makes
+a plugin registered inside one route group parameterize that group's responses and no others.
 
-When the application never installed `HTMLExt` no slice is registered, the key reads `undefined`, and
-`HTML_DEFAULTS` applies — which is what keeps `HTML(...)` working with no setup.
+The plugin is optional: with none registered nothing decorated the instance, `HTML_DEFAULTS` applies, and
+`HTML(...)` works with no setup at all.
 
-There is no `HTMLExtension` and no Fastify decoration. Do not reintroduce either; the package registers no
-Fastify plugin and does not appear in `printPlugins()`.
+The settings the plugin is handed are usually a node of the configuration tree —
+`.extend(c => htmlPlugin(c.app.html))` — so the decoration reads through rather than copying, and a refresh
+reaches a response rendered after it. `htmlConfigSchema` is exported for an application to splice into its own
+schema rather than restate the fields. There is no config slice, no feature and no builder: the package
+registers one plugin and nothing else.
 
 Content-Type has no app-level default and no per-call override — `HTMLOptions` carries no `contentType`
 field. `respond` sets the hardcoded `text/html; charset=utf-8` only when the reply carries no Content-Type

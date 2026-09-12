@@ -4,7 +4,7 @@ import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { multipart, MultipartExt } from './index.js'
+import { multipart, multipartPlugin } from './index.js'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
 const BOUNDARY = '----TestBoundary123'
@@ -12,7 +12,7 @@ const BOUNDARY = '----TestBoundary123'
 type ME = { name: string; value: string } | { name: string; filename: string; content: string; mime?: string }
 
 function multipartApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(MultipartExt())
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(() => multipartPlugin())
 }
 
 function multipartBody(entries: Array<ME>): Uint8Array {

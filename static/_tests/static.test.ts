@@ -4,7 +4,7 @@ import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@ca
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { StaticExt } from '../index.js'
+import { staticFiles } from '../index.js'
 
 const fixtures = fileURLToPath(new URL('./_testdata/fixtures', import.meta.url))
 const fixtures2 = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
@@ -21,7 +21,7 @@ describe('static feature', () => {
 
   it('serves a file under the configured prefix', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(StaticExt(), s => s.serve(fixtures, { prefix: '/static' }))
+      .extend(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
       .build()
     await app.ready()
 
@@ -34,7 +34,7 @@ describe('static feature', () => {
 
   it('sets the css content-type from the extension', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(StaticExt(), s => s.serve(fixtures, { prefix: '/assets' }))
+      .extend(staticFiles(s => s.serve(fixtures, { prefix: '/assets' })))
       .build()
     await app.ready()
 
@@ -46,7 +46,7 @@ describe('static feature', () => {
 
   it('404s for a missing file', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(StaticExt(), s => s.serve(fixtures, { prefix: '/static' }))
+      .extend(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
       .build()
     await app.ready()
 
@@ -57,7 +57,7 @@ describe('static feature', () => {
 
   it('serves from multiple mounts (only the first decorates reply)', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(StaticExt(), s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' }))
+      .extend(staticFiles(s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' })))
       .build()
     await app.ready()
 

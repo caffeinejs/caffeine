@@ -34,14 +34,29 @@ describe('ShutdownBuilder', () => {
     expect(policy.terminationGracePeriodMs).toBe(30_000)
   })
 
-  it('takes a fluent value as a default the configuration tree can still override', async () => {
+  // Declaring `shutdown` in the schema is not on its own an instruction to configure the drain from it.
+  it('leaves the drain on its defaults when nothing pointed it at the block', async () => {
     const app = headless()
-      .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ shutdown: { drainDelay: '90ms' } })))
-      .shutdown(s => s.drainDelay('10s').config(c => c.shutdown))
+      .config(appSchema, kAppConfig, c =>
+        c.source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV),
+      )
       .build()
     await app.ready()
 
-    expect(policyOf(app).drainDelayMs).toBe(90)
+    expect(policyOf(app).drainDelayMs).toBe(0)
+    await app.close()
+  })
+
+  // A fluent method is the last word: the callback wired the block, but `drainDelay` was also set in code,
+  // so the code value is what the drain runs on.
+  it('takes a fluent value over the configured one', async () => {
+    const app = headless()
+      .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ shutdown: { drainDelay: '90ms' } })))
+      .shutdown((s, c) => s.drainDelay('10s').withConfig(c.shutdown))
+      .build()
+    await app.ready()
+
+    expect(policyOf(app).drainDelayMs).toBe(10_000)
   })
 
   it('reads durations and the signal list from the environment', async () => {
@@ -54,7 +69,7 @@ describe('ShutdownBuilder', () => {
           ConfigPriority.ENV,
         ),
       )
-      .shutdown(s => s.config(c => c.shutdown).signals(['SIGTERM']))
+      .shutdown((s, c) => s.withConfig(c.shutdown))
       .build()
     await app.ready()
 
@@ -67,7 +82,7 @@ describe('ShutdownBuilder', () => {
   it('keeps the dispatcher on the builder — a function cannot travel the config tree', async () => {
     const app = headless()
       .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ shutdown: { drainDelay: '30ms' } })))
-      .shutdown(s => s.dispatcher(noopSignalDispatcher).config(c => c.shutdown))
+      .shutdown((s, c) => s.dispatcher(noopSignalDispatcher).withConfig(c.shutdown))
       .build()
     await app.ready()
 
@@ -82,7 +97,7 @@ describe('ShutdownBuilder', () => {
 
     const app = headless()
       .config(appSchema, kAppConfig, c => c.source(mutable, ConfigPriority.ENV))
-      .shutdown(s => s.config(c => c.shutdown))
+      .shutdown((s, c) => s.withConfig(c.shutdown))
       .build()
     await app.ready()
 

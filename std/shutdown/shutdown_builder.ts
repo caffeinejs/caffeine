@@ -1,14 +1,12 @@
-import type { ConfigSlice } from '../config/index.js'
+import { liveFold, type ConfigLocation } from '../config/index.js'
 import type { Duration } from '../duration/index.js'
 import { type BootstrapKit, kFeatureName } from '../feature.js'
 import { FeatureBuilder } from '../feature_builder.js'
 import {
   type ShutdownConfig,
-  type ShutdownOptions,
   finalizeShutdownOptions,
   kShutdownPolicy,
   mergeShutdownConfig,
-  shutdownConfigSchema,
 } from './shutdown_options.js'
 import type { ShutdownSignal, SignalDispatcher } from './signals.js'
 
@@ -16,26 +14,34 @@ import type { ShutdownSignal, SignalDispatcher } from './signals.js'
  * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
  * dispatcher that delivers them.
  *
- * Registered by every application, so the drain sequence exists whether or not `.shutdown()` was called. There
- * is one read path: a fluent method does not hold its value, it writes into the configuration tree in the
- * `CODE` band, and the feature reads the merged result. So `s.drainDelay('5s')` is a **default** —
- * `SHUTDOWN__DRAIN_DELAY=30s` or `--shutdown.drainDelay=30s` overrides it.
+ * Registered by every application, so the drain sequence exists whether or not `.shutdown()` was called. What a
+ * fluent method sets is final; to let the environment redirect it, read the setting from the configuration:
  *
- * The exception is {@link dispatcher}: a function cannot live in a configuration tree, so it stays on the
- * builder and is merged in afterwards.
+ * ```ts
+ * .shutdown((s, c) => s.withConfig(c.app.shutdown).dispatcher(myDispatcher))
+ * ```
  *
- * The resolved {@link ShutdownOptions} are published under {@link kShutdownPolicy}; the application reads them
- * once the container has initialized.
- *
- * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
+ * The resolved {@link ShutdownOptions} are bound under {@link kShutdownPolicy}; the application reads them once
+ * the container has initialized. What is bound keeps a stable identity and folds on read, so a node handed to
+ * {@link withConfig} carries a refresh through to the drain and teardown budgets.
  */
-export class ShutdownBuilder<C = unknown> extends FeatureBuilder<ShutdownConfig, C> {
+export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'shutdown'
 
-  protected readonly schema = shutdownConfigSchema
-
+  #config: ConfigLocation<ShutdownConfig> | undefined
+  #values: ShutdownConfig = {}
   #dispatcher: SignalDispatcher | undefined
-  #options: ConfigSlice<ShutdownOptions> | undefined
+
+  /**
+   * Reads every setting from a node of the configuration tree, e.g. `c.app.shutdown`.
+   *
+   * The node is read, never copied, so a refresh reaches the policy. A fluent method called alongside this one
+   * wins over what the node carries.
+   */
+  withConfig(config: ConfigLocation<ShutdownConfig>): this {
+    this.#config = config
+    return this
+  }
 
   /**
    * How long to keep serving after availability starts refusing, before anything is torn down. Covers the
@@ -43,12 +49,14 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<ShutdownConfig,
    * normally.
    */
   drainDelay(delay: Duration): this {
-    return this.set('drainDelay', delay)
+    this.#values.drainDelay = delay
+    return this
   }
 
   /** The budget for in-flight work to finish once teardown starts. */
   shutdownTimeout(timeout: Duration): this {
-    return this.set('shutdownTimeout', timeout)
+    this.#values.shutdownTimeout = timeout
+    return this
   }
 
   /**
@@ -56,33 +64,46 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<ShutdownConfig,
    * here (or injected through the downward API) for the boot-time budget check to mean anything.
    */
   terminationGracePeriod(period: Duration): this {
-    return this.set('terminationGracePeriod', period)
+    this.#values.terminationGracePeriod = period
+    return this
   }
 
   /** The signals that trigger a graceful shutdown, or `false` to install no handlers. */
   signals(signals: readonly ShutdownSignal[] | false): this {
-    return this.set('signals', signals === false ? false : [...signals])
+    this.#values.signals = signals === false ? false : [...signals]
+    return this
   }
 
   /**
    * Replaces the {@link SignalDispatcher} that delivers signals and diagnostics. The host runtime's is detected
    * automatically and covers Node, Bun and Deno; supply one to bridge a runtime with native signal handling of
    * its own, or to observe the shutdown in a test.
-   *
-   * Not configuration — a function cannot live in a configuration tree — so this one is code-only.
    */
   dispatcher(dispatcher: SignalDispatcher): this {
     this.#dispatcher = dispatcher
     return this
   }
 
-  protected override beforeBootstrap(): void {
-    const dispatcher = this.#dispatcher
-    this.#options = this.derive(config => finalizeShutdownOptions(mergeShutdownConfig(config, { dispatcher })))
+  protected bootstrap(kit: BootstrapKit<C>): void {
+    const policy = liveFold(
+      () => this.#inputs(),
+      raw => finalizeShutdownOptions(mergeShutdownConfig(raw, { dispatcher: this.#dispatcher })),
+    )
+
+    // Touched once here so a budget that cannot fit the grace period fails at `ready()`, while the logs are
+    // still being watched, rather than during the shutdown it would ruin.
+    void policy.drainDelayMs
+
+    kit.container.bind(kShutdownPolicy, t => t.toValue(policy).internal())
   }
 
-  protected bootstrap(kit: BootstrapKit): void {
-    // The derived slice's own object: it is live, so a refresh reaches the drain and teardown budgets.
-    kit.container.bind(kShutdownPolicy, t => t.toValue(this.#options!.config).internal())
+  /** What a fluent method set, else what the configuration node carries. */
+  #inputs(): ShutdownConfig {
+    return {
+      drainDelay: this.#values.drainDelay ?? this.#config?.drainDelay,
+      shutdownTimeout: this.#values.shutdownTimeout ?? this.#config?.shutdownTimeout,
+      terminationGracePeriod: this.#values.terminationGracePeriod ?? this.#config?.terminationGracePeriod,
+      signals: this.#values.signals ?? this.#config?.signals,
+    }
   }
 }

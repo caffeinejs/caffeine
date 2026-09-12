@@ -13,10 +13,10 @@ import {
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { kStaticConfig, StaticExt } from '../index.js'
+import { kStaticOptions, staticFiles } from '../index.js'
 import type { StaticMount } from '../static.js'
 
-// The application owns the schema: it declares where the static block lives and `s.config(c => c.static)`
+// The application owns the schema: it declares where the static block lives and `s.withConfig(c.static)`
 // points the feature at it. Declared field by field rather than by importing `staticConfigSchema`: every
 // field of `StaticConfigSlice` is optional, so a block naming only what these tests configure satisfies the
 // feature, and that schema is small enough for TypeScript to infer a config type from.
@@ -24,7 +24,15 @@ const rootSchema = $t.Object({
   static: $t.Object(
     {
       mounts: $t.Optional($t.Array($t.Object({ root: $t.String(), prefix: $t.Optional($t.String()) }))),
-      spa: $t.Optional($t.Object({ root: $t.String(), index: $t.Optional($t.String()) })),
+      // `root` is optional here because `.spa(root)` supplies it: configuration retunes a SPA the
+      // application switched on, it never creates one.
+      spa: $t.Optional(
+        $t.Object({
+          root: $t.Optional($t.String()),
+          index: $t.Optional($t.String()),
+          navigationOnly: $t.Optional($t.Boolean()),
+        }),
+      ),
     },
     { default: {} },
   ),
@@ -44,9 +52,9 @@ describe('static configuration', () => {
     app = undefined
   })
 
-  // What the feature actually serves, read the way any code outside the builder reads it: off the resolved
-  // configuration the feature published under its own key.
-  const resolved = (built: WebApplication) => built.container.get(Configuration).config(kStaticConfig)!
+  // What the feature actually serves, read the way any code outside the builder reads it: off the binding the
+  // feature made for it.
+  const resolved = (built: WebApplication) => built.container.get(kStaticOptions)
   const mountsOf = (built: WebApplication): readonly StaticMount[] => resolved(built).mounts
 
   it('reads mounts from the configuration tree with no serve() call at all', async () => {
@@ -58,7 +66,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt(), s => s.config(c => c.static))
+      .extend(staticFiles((s, c) => s.withConfig(c.static)))
       .build()
 
     await app.ready()
@@ -70,7 +78,7 @@ describe('static configuration', () => {
   it('lets the environment override a builder-set mount root', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(rootSchema, kRootConfig, c => c.source(env({ STATIC__MOUNTS__0__ROOT: fixtures }), ConfigPriority.ENV))
-      .extend(StaticExt(), s => s.config(c => c.static).serve(dist, { prefix: '/assets/' }))
+      .extend(staticFiles((s, c) => s.withConfig(c.static).serve(dist, { prefix: '/assets/' })))
       .build()
 
     await app.ready()
@@ -84,7 +92,7 @@ describe('static configuration', () => {
     const setHeaders = (): void => undefined
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .extend(StaticExt(), s => s.serve(fixtures, { prefix: '/assets/', setHeaders }))
+      .extend(staticFiles(s => s.serve(fixtures, { prefix: '/assets/', setHeaders })))
       .build()
 
     await app.ready()
@@ -103,7 +111,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt(), s => s.config(c => c.static).spa(dist))
+      .extend(staticFiles((s, c) => s.withConfig(c.static).spa(dist)))
       .build()
 
     await app.ready()
@@ -111,6 +119,34 @@ describe('static configuration', () => {
     const settings = resolved(app).spa!
     expect(settings.root).toBe(dist)
     expect(settings.navigationOnly).toBe(false)
+  })
+
+  // `spa.root` is the documented exception: configuration repoints the directory `.spa()` switched on.
+  it('lets configuration repoint the SPA root the application switched on', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .config(rootSchema, kRootConfig, c =>
+        c.source(
+          new InlineConfigProvider({
+            static: { spa: { root: fixtures } },
+          }),
+        ),
+      )
+      .extend(staticFiles((s, c) => s.withConfig(c.static).spa(dist, { onMissingIndex: 'skip' })))
+      .build()
+
+    await app.ready()
+
+    expect(resolved(app).spa!.root).toBe(fixtures)
+  })
+
+  it('keeps the code SPA root when nothing wired the block', async () => {
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
+      .extend(staticFiles(s => s.spa(dist)))
+      .build()
+
+    await app.ready()
+
+    expect(resolved(app).spa!.root).toBe(dist)
   })
 
   // Activation is the builder call, never the tree.
@@ -123,7 +159,7 @@ describe('static configuration', () => {
           }),
         ),
       )
-      .extend(StaticExt(), s => s.config(c => c.static).serve(fixtures))
+      .extend(staticFiles((s, c) => s.withConfig(c.static).serve(fixtures)))
       .build()
 
     await app.ready()
@@ -131,22 +167,29 @@ describe('static configuration', () => {
     expect(resolved(app).spa).toBeUndefined()
   })
 
-  it('re-points reads and code-set defaults together via .config()', async () => {
+  it('reads the mounts from wherever the application put the block', async () => {
     const schema = $t.Object({
-      app: $t.Object({
-        assets: $t.Object({ mounts: $t.Optional($t.Array($t.Record($t.String(), $t.Unknown()))) }),
-      }),
+      app: $t.Object(
+        {
+          assets: $t.Object({ mounts: $t.Optional($t.Array($t.Record($t.String(), $t.Unknown()))) }, { default: {} }),
+        },
+        { default: {} },
+      ),
     })
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ app: { assets: {} } })))
-      // No annotation on the selector: the config type is recovered from the builder.
-      .extend(StaticExt(), s => s.config(c => c.app.assets).serve(fixtures, { prefix: '/moved/' }))
+      .extend(staticFiles((s, c) => s.withConfig(c.app.assets).serve(fixtures, { prefix: '/moved/' })))
       .build()
 
     await app.ready()
 
     expect(mountsOf(app)).toEqual([{ root: fixtures, prefix: '/moved/' }])
+  })
+
+  it('exports the config schema from the package barrel', async () => {
+    const { staticConfigSchema } = await import('../index.js')
+    expect(staticConfigSchema).toBeDefined()
   })
 })

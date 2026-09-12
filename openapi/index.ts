@@ -1,4 +1,5 @@
 export * from './builder.js'
+export * from './config.js'
 export * from './decorators/index.js'
 export * from './document_store.js'
 export * from './endpoints.js'

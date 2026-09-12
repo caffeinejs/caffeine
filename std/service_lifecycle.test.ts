@@ -2,108 +2,53 @@ import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { Application } from './application.js'
-import { InlineConfigProvider, type ConfigHandle, type ConfigSlice } from './config/index.js'
-import {
-  kBeforeBootstrap,
-  kBootstrap,
-  kFeatureName,
-  type BeforeBootstrapKit,
-  type BootstrapKit,
-  type ExtensionRegistrar,
-  type FeatureLifecycle,
-} from './feature.js'
+import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
+import { kBootstrap, kFeatureName, type BootstrapKit, type ExtensionRegistrar, type Feature } from './feature.js'
 import { createApplication } from './index.js'
 import { $t } from './schema/t.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
-const kConfig = token<ConfigHandle<{ widget: { size: number } }>>(Symbol('app.config'))
-const widgetSchema = $t.Object({ size: $t.Optional($t.Number()) })
+type AppConfig = { widget: { size: number } }
+const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
 
-interface WidgetConfig {
-  size?: number
-}
-
-/** A minimal feature: declares a slice, then binds what it resolved to. */
-class WidgetService implements FeatureLifecycle {
-  readonly steps: string[] = []
-  slice: ConfigSlice<WidgetConfig> | undefined
+/** A minimal feature: reads the resolved configuration, then binds what it found. */
+class WidgetFeature implements Feature<AppConfig> {
   bound: number | undefined
 
   get [kFeatureName](): string {
     return 'widget'
   }
 
-  [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-    this.steps.push('declare')
-    this.slice = kit.config.slice(['widget'], widgetSchema)
-  }
-
-  [kBootstrap](kit: BootstrapKit): Promise<void> {
-    this.steps.push('configure')
-    this.bound = this.slice!.config.size
+  [kBootstrap](kit: BootstrapKit<AppConfig>): Promise<void> {
+    this.bound = kit.config.widget.size
     kit.container.bind(token<number | undefined>('widget.size'), t => t.toValue(this.bound))
     return Promise.resolve()
   }
 }
 
-function appWith(service: FeatureLifecycle, size: number) {
+function appWith(feature: Feature<never>, size: number) {
   return createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    .addFeature(service)
+    .addFeature(feature)
     .config(schema, kConfig, c => c.source(new InlineConfigProvider({ widget: { size } })))
     .build()
 }
 
-describe('service lifecycle', () => {
-  it('declares every service, resolves configuration, then configures', async () => {
-    const service = new WidgetService()
-
-    await appWith(service, 42).ready()
-
-    expect(service.steps).toEqual(['declare', 'configure'])
-  })
-
-  // The whole point of the split: a feature binds a value it could not have known while declaring.
-  it('lets a service read its resolved slice while it is still able to bind', async () => {
-    const service = new WidgetService()
-    const app = appWith(service, 42)
+describe('feature lifecycle', () => {
+  // The one ordering guarantee the mechanism rests on: configuration resolves before any feature
+  // bootstraps, and binding is still open when it does. Resolving inside `container.init()` would be too
+  // late for both.
+  it('resolves configuration before a feature bootstraps, while it can still bind', async () => {
+    const feature = new WidgetFeature()
+    const app = appWith(feature as Feature<never>, 42)
 
     await app.ready()
 
-    expect(service.bound).toBe(42)
+    expect(feature.bound).toBe(42)
     expect(app.container.get(token<number | undefined>('widget.size'))).toBe(42)
   })
 
-  it('refuses a slice read from the declare step, where nothing has resolved yet', async () => {
-    class TooEarly implements FeatureLifecycle {
-      error: unknown
-
-      get [kFeatureName](): string {
-        return 'too-early'
-      }
-
-      [kBeforeBootstrap](kit: BeforeBootstrapKit): void {
-        const slice = kit.config.slice(['widget'], widgetSchema)
-        try {
-          void slice.config
-        } catch (error) {
-          this.error = error
-        }
-      }
-
-      [kBootstrap](): Promise<void> {
-        return Promise.resolve()
-      }
-    }
-
-    const service = new TooEarly()
-    await appWith(service, 1).ready()
-
-    expect(service.error).toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_NOT_RESOLVED' })
-  })
-
-  // `declare` is optional: a service that only binds does not have to implement it.
-  it('runs a service that declares nothing', async () => {
-    let configured = false
+  it('runs a feature that reads no configuration at all', async () => {
+    let bootstrapped = false
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
       .addFeature({
@@ -111,7 +56,7 @@ describe('service lifecycle', () => {
           return 'noop'
         },
         [kBootstrap](): Promise<void> {
-          configured = true
+          bootstrapped = true
           return Promise.resolve()
         },
       })
@@ -119,32 +64,30 @@ describe('service lifecycle', () => {
 
     await app.ready()
 
-    expect(configured).toBe(true)
+    expect(bootstrapped).toBe(true)
   })
 
-  it('fails start-up when a slice cannot be resolved, before anything binds', async () => {
-    class Strict implements FeatureLifecycle {
-      configured: boolean = false
+  // A tree that cannot validate is a broken application, and saying so at `ready()` is earlier and more
+  // legible than failing at whatever moment a feature first read it.
+  it('fails start-up when the configuration cannot be validated, before anything binds', async () => {
+    let bootstrapped = false
 
-      get [kFeatureName](): string {
-        return 'strict'
-      }
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .addFeature({
+        get [kFeatureName](): string {
+          return 'strict'
+        },
+        [kBootstrap](): Promise<void> {
+          bootstrapped = true
+          return Promise.resolve()
+        },
+      })
+      // The tree carries a string where the schema declares a number.
+      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ widget: { size: 'not-a-number' } })))
+      .build()
 
-      [kBeforeBootstrap](kit: BeforeBootstrapKit) {
-        // The tree carries a number here, so a string schema cannot validate.
-        kit.config.slice(['widget', 'size'], $t.Object({ nested: $t.String() }))
-      }
-
-      [kBootstrap](kit: BootstrapKit): Promise<void> {
-        this.configured = true
-        return Promise.resolve()
-      }
-    }
-
-    const service = new Strict()
-
-    await expect(appWith(service, 42).ready()).rejects.toMatchObject({ code: 'ERR_CONFIG_SLICES' })
-    expect(service.configured).toBe(false)
+    await expect(app.ready()).rejects.toThrow()
+    expect(bootstrapped).toBe(false)
   })
 })
 
@@ -157,7 +100,7 @@ describe('extension registration', () => {
     const asked: number[] = []
     const registered: Array<[number, string]> = []
 
-    const registering = (name: string, awaits: number): FeatureLifecycle => ({
+    const registering = (name: string, awaits: number): Feature => ({
       [kFeatureName]: name,
       async [kBootstrap](kit: BootstrapKit): Promise<void> {
         for (let i = 0; i < awaits; i++) {

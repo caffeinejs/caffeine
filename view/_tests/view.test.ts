@@ -6,14 +6,14 @@ import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { View, ViewBuilder, ViewOptionsProvider, ViewExt } from '../index.js'
+import { View, ViewBuilder, ViewEngineBuilder, view } from '../index.js'
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
 
 function viewApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(ViewExt(), v =>
-    v.engine({ handlebars }).root(templatesRoot).extension('hbs'),
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(
+    view(v => v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
   )
 }
 
@@ -80,8 +80,12 @@ describe('view feature', () => {
     void [ContextController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt(), v =>
-        v.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }),
+      .extend(
+        view(v =>
+          v.engine(e =>
+            e.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }),
+          ),
+        ),
       )
       .build()
     await app.ready()
@@ -103,7 +107,7 @@ describe('view feature', () => {
     void [NamespacedController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt(), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+      .extend(view(v => v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
       .build()
     await app.ready()
 
@@ -233,8 +237,12 @@ describe('view feature', () => {
     void [MultiController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt(), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .extend(ViewExt('ejs'), v => v.engine({ ejs }).root(ejsRoot).extension('ejs'))
+      .extend(
+        view(v => {
+          v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+          v.engine('ejs', e => e.engine({ ejs }).root(ejsRoot).extension('ejs'))
+        }),
+      )
       .build()
     await app.ready()
 
@@ -267,8 +275,12 @@ describe('view feature', () => {
     void [SameEngineController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .extend(ViewExt(), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-      .extend(ViewExt('alt'), v => v.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
+      .extend(
+        view(v => {
+          v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+          v.engine('alt', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
+        }),
+      )
       .build()
     await app.ready()
 
@@ -305,18 +317,20 @@ describe('view feature', () => {
     expect(res.status).toBe(500)
   })
 
-  it('rejects registering an engine named "view" (reserved for the default engine)', () => {
-    expect(() =>
-      createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(ViewExt('view'), v =>
-        v.engine({ handlebars }).root(templatesRoot).extension('hbs'),
-      ),
-    ).toThrow(/reserved for the default engine/)
+  // The configure callback runs when the application bootstraps, so an authoring mistake inside it surfaces
+  // from `ready()` rather than from the `.extend(...)` call that wrote it.
+  it('rejects registering an engine named "view" (reserved for the default engine)', async () => {
+    const rejected = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .extend(view(v => v.engine('view', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
+      .build()
+
+    await expect(rejected.ready()).rejects.toThrow(/reserved for the default engine/)
   })
 })
 
-describe('ViewBuilder', () => {
+describe('ViewEngineBuilder', () => {
   it('build() assembles the configured options', () => {
-    const options = new ViewBuilder().engine({ handlebars }).root(templatesRoot).extension('hbs').build() as {
+    const options = new ViewEngineBuilder().engine({ handlebars }).root(templatesRoot).extension('hbs').build() as {
       root: string
       viewExt: string
       engine: unknown
@@ -331,7 +345,11 @@ describe('ViewBuilder', () => {
   })
 
   it('build() stamps propertyName for a named engine', () => {
-    const options = new ViewBuilder('mobile').engine({ handlebars }).root(templatesRoot).extension('hbs').build() as {
+    const options = new ViewEngineBuilder('mobile')
+      .engine({ handlebars })
+      .root(templatesRoot)
+      .extension('hbs')
+      .build() as {
       propertyName?: string
     }
 
@@ -339,19 +357,21 @@ describe('ViewBuilder', () => {
   })
 
   it('build() throws when no engine was configured', () => {
-    expect(() => new ViewBuilder().root(templatesRoot).build()).toThrow(/Engine is required/)
+    expect(() => new ViewEngineBuilder().root(templatesRoot).build()).toThrow(/Engine is required/)
   })
 
   it('build() accepts an array root (for engines that support multiple roots, e.g. Nunjucks)', () => {
     const roots = [templatesRoot, `${templatesRoot}/nested`]
-    const options = new ViewBuilder().engine({ handlebars }).root(roots).build() as unknown as { root: string[] }
+    const options = new ViewEngineBuilder().engine({ handlebars }).root(roots).build() as unknown as {
+      root: string[]
+    }
 
     expect(options.root).toEqual(roots)
   })
 
   it('configure() merges a full options object over prior settings (last write wins)', () => {
     // configure overrides the earlier viewExt; a later fluent setter overrides configure.
-    const options = new ViewBuilder()
+    const options = new ViewEngineBuilder()
       .engine({ handlebars })
       .extension('hbs')
       .configure({ charset: 'ascii', viewExt: 'html' })
@@ -363,13 +383,13 @@ describe('ViewBuilder', () => {
   })
 })
 
-describe('ViewOptionsProvider', () => {
+describe('ViewBuilder', () => {
   it('groups the default and named engines, default first, stamping propertyName', () => {
-    const provider = new ViewOptionsProvider()
-    provider.add(new ViewBuilder().engine({ handlebars }).root(templatesRoot).extension('hbs'))
-    provider.add(new ViewBuilder('ejs').engine({ ejs }).root(ejsRoot).extension('ejs'))
+    const builder = new ViewBuilder()
+    builder.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+    builder.engine('ejs', e => e.engine({ ejs }).root(ejsRoot).extension('ejs'))
 
-    const all = provider.all() as Array<{ propertyName?: string }>
+    const all = builder.all() as Array<{ propertyName?: string }>
 
     expect(all).toHaveLength(2)
     expect(all[0].propertyName).toBeUndefined()
@@ -377,11 +397,17 @@ describe('ViewOptionsProvider', () => {
   })
 
   it('rejects a second engine with the same name', () => {
-    const provider = new ViewOptionsProvider()
-    provider.add(new ViewBuilder('mobile').engine({ handlebars }).root(templatesRoot).extension('hbs'))
+    const builder = new ViewBuilder()
+    builder.engine('mobile', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
 
-    expect(() =>
-      provider.add(new ViewBuilder('mobile').engine({ handlebars }).root(templatesRoot).extension('hbs')),
-    ).toThrow(/already configured/)
+    expect(() => builder.engine('mobile', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))).toThrow(
+      /already configured/,
+    )
+  })
+
+  it('rejects the reserved engine name', () => {
+    expect(() => new ViewBuilder().engine('view', e => e.engine({ handlebars }))).toThrow(
+      /reserved for the default engine/,
+    )
   })
 })

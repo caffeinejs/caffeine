@@ -11,7 +11,6 @@ export type {
   ConfigSliceFailure,
   ConfigSnapshot,
   ConfigValue,
-  FeatureConfigKey,
   InferConfig,
   PropertySource,
   ResolutionContext,
@@ -19,12 +18,9 @@ export type {
 export { Configuration } from './configuration.js'
 export { ConfigDefinition, kConfigDefinition } from './definition.js'
 export { ErrConfig, ErrConfigSlices, ErrConfigValidation } from './errors.js'
-export { defineFeatureConfig } from './feature.js'
-export { featureConfigKey } from './feature_key.js'
 export { CONFIG_REFRESH_LABEL, ConfigModule } from './integration/module.js'
+export { liveFold } from './live_fold.js'
 export { configEquals } from './notifier.js'
-export type { SplitOptionBag } from './option_bag.js'
-export { splitOptionBag } from './option_bag.js'
 export { activeProfiles, hostProfiles, PROFILES_KEY } from './profiles.js'
 export type { ArgsConfigProviderOptions } from './providers/args_provider.js'
 export { ArgsConfigProvider } from './providers/args_provider.js'

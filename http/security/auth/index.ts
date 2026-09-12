@@ -1,7 +1,7 @@
 export { AuthenticationState, SchemeAuthentication } from './authentication_state.js'
 export { BasicAuthenticationHandler, type BasicAuthenticationOptions } from './basic/index.js'
 export { AuthenticationBuilder } from './builder.js'
-export { authConfigSchema, type AuthConfigSlice } from './config.js'
+export { authConfigSchema, SCHEME_SCHEMAS, type AuthConfig } from './config.js'
 export {
   CookieAuthenticationHandler,
   type CookieAuthenticationOptions,

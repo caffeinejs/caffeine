@@ -13,12 +13,12 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import { $t, type FeatureConfigurer } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { OpenAPIBuilder } from '../builder.js'
-import { OpenAPIExt } from '../plugin.js'
+import { openapi } from '../plugin.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 @Controller('/widgets')
@@ -44,12 +44,14 @@ const HAND_WRITTEN: OpenAPIDocument = {
   },
 }
 
-function build(configure: FeatureConfigurer<OpenAPIBuilder>): WebApplication {
+function build(configure: (o: OpenAPIBuilder) => void): WebApplication {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(OpenAPIExt(), o => {
-      o.docs(false).public()
-      configure(o)
-    })
+    .extend(
+      openapi(o => {
+        o.docs(false).public()
+        configure(o)
+      }),
+    )
     .build() as WebApplication
 }
 

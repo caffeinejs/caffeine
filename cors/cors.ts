@@ -5,7 +5,7 @@ import type { CorsOptions } from './cors_plugin.js'
 /**
  * Sets per-route CORS options, or turns CORS off for the route with `false`.
  *
- * Needs `@fastify/cors` registered on the server (via `.extend(CORSExt())`); this is the per-route half of it.
+ * Needs `@fastify/cors` registered on the server (via `.extend(() => corsPlugin())`); this is the per-route half of it.
  * `@fastify/cors` reads `req.routeOptions.config.cors` and merges it with the global options.
  */
 export function cors(options: CorsOptions | boolean): AnyRouteExtension {

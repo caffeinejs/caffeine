@@ -26,8 +26,8 @@ Plugins and builders, not Nest modules:
 
 ```ts
 createWebApplication(fastifyAdapterFactory(server), { container })
-  .extend(StaticExt(), s => s.serve(dir, { prefix: '/static' }))
-  .extend(kafka(), k => k.brokers('localhost:9092').groupId('svc'))
+  .extend(staticFiles(s => s.serve(dir, { prefix: '/static' })))
+  .extend(kafka(k => k.brokers('localhost:9092').groupId('svc')))
 ```
 
 `createApplication()` is headless. HTTP is `createWebApplication`. Side-effect-import controller / `@KafkaHandler` modules so they register.

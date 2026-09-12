@@ -1,5 +1,4 @@
 import { $t } from '@caffeinejs/std'
-import { featureConfigKey } from '@caffeinejs/std/config'
 
 /**
  * Response settings every `HTMLResult` starts from.
@@ -10,23 +9,24 @@ export interface HTMLDefaults {
 }
 
 /**
- * What an application that never installed `HTMLExt` renders with, so `HTML(...)` works on its own.
+ * What an application that never registered the HTML plugin renders with, so `HTML(...)` works on its own.
  */
 export const HTML_DEFAULTS: HTMLDefaults = {
   autoDoctype: true,
 }
 
 /**
- * Where a rendering `HTMLResult` finds the application's settings: `ctx.config(kHTMLConfig)`.
+ * Where the plugin leaves the settings: a decoration on the Fastify instance it registered into.
  *
- * A key rather than a path, because `HTML(...)` is called from application code that knows neither the
- * application's config type nor where in the tree the feature was placed — if it was placed anywhere at all.
+ * A decoration rather than a container binding, because `HTML(...)` is called from application code holding
+ * only a context — and because the instance a request was served by is the one whose settings apply, so a
+ * plugin registered inside a route group parameterizes that group alone.
  */
-export const kHTMLConfig = featureConfigKey<HTMLDefaults>('html')
+export const kHTMLOptions = Symbol.for('@caffeinejs/html:options')
 
 /**
- * The shape the HTML feature expects wherever the application decides to keep its settings. Import it into an
- * application schema and point the builder at it with `h.config(c => c.app.html)`.
+ * The shape the HTML plugin expects wherever the application decides to keep its settings. Import it into an
+ * application schema rather than restating it, then read that node: `.extend(c => htmlPlugin(c.app.html))`.
  */
 export const htmlConfigSchema = $t.Object({
   autoDoctype: $t.Boolean({ default: HTML_DEFAULTS.autoDoctype }),

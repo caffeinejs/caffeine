@@ -1,5 +1,5 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
-import { kBootstrap, kFeatureName, type BootstrapKit, type FeatureLifecycle } from '@caffeinejs/std'
+import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 
 import { Context } from '../context.js'
 import { registerPlugin } from '../plugin.js'
@@ -76,7 +76,7 @@ export class ErrorHandlerProvider {
   }
 }
 
-export class ErrorHandlingServiceConfigurer implements FeatureLifecycle {
+export class ErrorHandlingServiceConfigurer implements Feature {
   get [kFeatureName](): string {
     return 'error-handling'
   }

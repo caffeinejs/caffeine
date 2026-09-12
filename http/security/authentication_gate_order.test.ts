@@ -42,22 +42,17 @@ class NeverAuthenticates extends BaseAuthenticationHandler<object> {
 /** Stands in for `@caffeinejs/cors`: stamps a header from an `onRequest` hook, and records that it ran. */
 function stamping(name: string, ran: string[]): Feature {
   return {
-    name,
-    install(ctx) {
-      ctx.addFeature({
-        [kFeatureName]: name,
-        [kBootstrap](kit: BootstrapKit): void {
-          const plugin: HTTPPlugin = async instance => {
-            instance.addHook('onRequest', (_request, reply, done) => {
-              ran.push(name)
-              reply.header(`x-${name}`, 'yes')
-              done()
-            })
-          }
+    [kFeatureName]: name,
+    [kBootstrap](kit: BootstrapKit): void {
+      const plugin: HTTPPlugin = async instance => {
+        instance.addHook('onRequest', (_request, reply, done) => {
+          ran.push(name)
+          reply.header(`x-${name}`, 'yes')
+          done()
+        })
+      }
 
-          registerPlugin(kit, fp(plugin, { name }))
-        },
-      })
+      registerPlugin(kit, fp(plugin, { name }))
     },
   }
 }

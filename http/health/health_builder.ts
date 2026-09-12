@@ -5,19 +5,13 @@ import {
   type BootstrapKit,
   type Duration,
 } from '@caffeinejs/std'
-import { type ConfigSlice } from '@caffeinejs/std/config'
+import { liveFold, type ConfigLocation } from '@caffeinejs/std/config'
 
 import { registerPlugin } from '../plugin.js'
 import { ServerOwnedPaths } from '../server_owned_paths.js'
-import { kHealthConfig } from './keys.js'
+import { kHealthOptions } from './keys.js'
 import { loadHealthIndicators } from './load.js'
-import {
-  healthConfigSchema,
-  mergeHealthConfig,
-  type HealthConfig,
-  type HealthOptions,
-  type HealthPaths,
-} from './options.js'
+import { mergeHealthConfig, type HealthConfig, type HealthPaths } from './options.js'
 import { ProbeEndpoint } from './probes.js'
 import { healthProbesPlugin } from './probes_plugin.js'
 import { HealthRegistry } from './registry.js'
@@ -38,30 +32,31 @@ export class HealthOwnedPaths extends ServerOwnedPaths {
  *
  * Registered by every HTTP application, so the probes exist whether or not `app.health()` was called. Calling
  * it **enables** the probes regardless of environment; leaving it uncalled enables them only when
- * `KUBERNETES_SERVICE_HOST` is present. An explicit `enabled` in the configuration always wins over both, so
- * `HEALTH__ENABLED=false` switches them off without a code change.
+ * `KUBERNETES_SERVICE_HOST` is present. An explicit `enabled` — set here or read from the configuration —
+ * always wins over both.
  *
- * There is one read path. A builder method does not hold its value here — it writes into the configuration
- * tree in the `CODE` band, and the feature reads the merged result. So `h.cacheTTL('10s')` is a **default**:
- * `HEALTH__CACHE_TTL=30s` or `--health.cacheTTL=30s` overrides it.
+ * What a fluent method sets is final. To let the environment redirect a budget, read it from the
+ * configuration; {@link healthConfigSchema} is exported so an application can splice it into its own schema:
+ *
+ * ```ts
+ * .health((h, c) => h.withConfig(c.app.health))
+ * ```
  *
  * Health indicators are not configured here — they are container-managed beans discovered through
  * `HealthIndicator`.
  *
- * The resolved {@link HealthOptions} are published under {@link kHealthConfig}, and they are live like every
- * other configuration in the framework — the probe budgets and the response-shaping flags are read per
- * request, so a refresh reaches them. The probe routes, consumed once at boot, simply stop mattering
- * afterwards: nothing re-registers a route because a value moved underneath it.
- *
- * `C` is the application config type, so the selector argument is a `ConfigHandle<C>`.
+ * The resolved {@link HealthOptions} are bound under {@link kHealthOptions}, with a stable identity and folded
+ * on read: the probe budgets and the response-shaping flags are read per request, so a node handed to
+ * {@link withConfig} carries a refresh through to them. `enabled` and the probe paths are consumed once at
+ * boot — `healthProbesPlugin` and {@link HealthOwnedPaths} read them at registration — so a refresh cannot
+ * mount or unmount probes. The probe routes simply stop mattering afterwards.
  */
-export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> {
+export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'health'
 
-  protected readonly schema = healthConfigSchema
-
   #explicit = false
-  #options: ConfigSlice<HealthOptions> | undefined
+  #config: ConfigLocation<HealthConfig> | undefined
+  readonly #values: HealthConfig = {}
 
   /**
    * Records that the application asked for health, which is what makes the probes on by default.
@@ -74,52 +69,68 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
     return this
   }
 
+  /**
+   * Reads every setting from a node of the configuration tree, e.g. `c.app.health`.
+   *
+   * The node is read, never copied, so a refresh reaches the budgets and the response-shaping flags. A fluent
+   * method called alongside this one wins over what the node carries.
+   */
+  withConfig(config: ConfigLocation<HealthConfig>): this {
+    this.#config = config
+    return this
+  }
+
   /** Forces the probes on or off, overriding the Kubernetes auto-detection. */
   enabled(enabled: boolean = true): this {
-    return this.set('enabled', enabled)
+    this.#values.enabled = enabled
+    return this
   }
 
   /** Overrides one or more probe paths. Defaults: `/livez`, `/readyz`, `/startupz`. */
   paths(paths: Partial<HealthPaths>): this {
-    return this.set('paths', { ...this.get('paths'), ...paths } as HealthPaths)
+    this.#values.paths = { ...this.#values.paths, ...paths }
+    return this
   }
 
   /** Per-indicator budget. An indicator exceeding it is aborted and reported down. */
   indicatorTimeout(timeout: Duration): this {
-    return this.set('indicatorTimeout', timeout)
+    this.#values.indicatorTimeout = timeout
+    return this
   }
 
   /** Whole-probe budget, regardless of indicator count. */
   probeDeadline(deadline: Duration): this {
-    return this.set('probeDeadline', deadline)
+    this.#values.probeDeadline = deadline
+    return this
   }
 
   /** How long an evaluation is reused. Bounds the load the probes place on the dependencies they check. */
   cacheTTL(ttl: Duration): this {
-    return this.set('cacheTTL', ttl)
+    this.#values.cacheTTL = ttl
+    return this
   }
 
   /** Allows `?verbose` to expand the response body. Off by default: the body names your dependencies. */
   verbose(verbose: boolean = true): this {
-    return this.set('verbose', verbose)
+    this.#values.verbose = verbose
+    return this
   }
 
   /** Allows `?exclude=<name>` to skip an indicator. Off by default: it lets a caller make readiness lie. */
   exclude(exclude: boolean = true): this {
-    return this.set('exclude', exclude)
+    this.#values.exclude = exclude
+    return this
   }
 
-  protected override beforeBootstrap(): void {
+  protected bootstrap(kit: BootstrapKit<C>): void {
     // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
     const enabledDefault = this.#explicit ? true : undefined
 
-    this.#options = this.derive(config => mergeHealthConfig(config, { enabledDefault }), kHealthConfig)
-  }
-
-  protected bootstrap(kit: BootstrapKit): void {
-    // The derived slice's own object: it is live, so the probe budgets and the response-shaping flags — which
-    // are read per request — follow a refresh.
-    const options = this.#options!.config
+    // Live: the probe budgets and the response-shaping flags are read per request, so they follow a refresh.
+    const options = liveFold(
+      () => this.#inputs(),
+      raw => mergeHealthConfig(raw, { enabledDefault }),
+    )
 
     if (!kit.container.has(ApplicationAvailability)) {
       // The application's own instance, not a container-constructed one: the lifecycle writes to that object,
@@ -148,6 +159,21 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<HealthConfig, C> 
       t.toValue(new HealthOwnedPaths(options.paths)).extends(ServerOwnedPaths).internal(),
     )
 
+    kit.container.bind(kHealthOptions, t => t.toValue(options).internal())
+
     registerPlugin(kit, healthProbesPlugin(options))
+  }
+
+  /** What a fluent method set, else what the configuration node carries. */
+  #inputs(): HealthConfig {
+    return {
+      enabled: this.#values.enabled ?? this.#config?.enabled,
+      paths: { ...this.#config?.paths, ...this.#values.paths },
+      indicatorTimeout: this.#values.indicatorTimeout ?? this.#config?.indicatorTimeout,
+      probeDeadline: this.#values.probeDeadline ?? this.#config?.probeDeadline,
+      cacheTTL: this.#values.cacheTTL ?? this.#config?.cacheTTL,
+      verbose: this.#values.verbose ?? this.#config?.verbose,
+      exclude: this.#values.exclude ?? this.#config?.exclude,
+    }
   }
 }

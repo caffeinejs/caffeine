@@ -5,10 +5,10 @@ import { Controller, Post, RouteBuilder, createWebApplication, fastifyAdapterFac
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Encoding, encoding, CompressExt } from '../index.js'
+import { Encoding, encoding, compressPlugin } from '../index.js'
 
 function encodingApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(CompressExt())
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(() => compressPlugin())
 }
 
 async function gzip(data: string): Promise<Buffer> {

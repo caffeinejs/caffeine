@@ -12,12 +12,12 @@ import {
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
-import { $t, type FeatureConfigurer, type InferSchema } from '@caffeinejs/std'
-import { Configuration, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import { $t, type InferSchema } from '@caffeinejs/std'
+import { InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { HTML, HTMLBuilder, HTMLExt, kHTMLConfig } from '../index.js'
+import { HTML, htmlPlugin, type HTMLDefaults } from '../index.js'
 
 const schema = $t.Object({ html: $t.Object({ autoDoctype: $t.Boolean() }) })
 
@@ -117,8 +117,10 @@ class HTMLErrorController {
 
 void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
-function htmlApp(configure?: FeatureConfigurer<HTMLBuilder>) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(HTMLExt(), configure).build()
+function htmlApp(defaults?: Partial<HTMLDefaults>) {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .extend(() => htmlPlugin(defaults))
+    .build()
 }
 
 describe('HTML', () => {
@@ -134,9 +136,9 @@ describe('HTML', () => {
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
   })
 
-  // Rendering must not require any application wiring: with no slice registered the feature key reads
-  // undefined and HTML_DEFAULTS applies. An application that only ever renders installs nothing.
-  it('renders in an application that never installed HTMLExt', async () => {
+  // Rendering must not require any application wiring: with no plugin registered nothing decorated the
+  // instance and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
+  it('renders in an application that never registered the HTML plugin', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).build()
     await app.ready()
 
@@ -185,11 +187,11 @@ describe('HTML', () => {
     })
   })
 
-  // The builder's autoDoctype setting only matters if it survives the trip through the config slice and
-  // back out through ctx.config(kHTMLConfig) in respond() — the only route a Responder has to app state.
-  // Content-Type has no app-level default any more, so it stays the hardcoded one here.
+  // The plugin's autoDoctype setting only matters if it survives onto the instance decoration and back out
+  // in respond() — the only route a Responder has to application state. Content-Type has no app-level
+  // default, so it stays the hardcoded one here.
   it('applies the application defaults', async () => {
-    const app = htmlApp(h => h.autoDoctype(false))
+    const app = htmlApp({ autoDoctype: false })
     await app.ready()
 
     const res = await app.fetch('/html/document')
@@ -198,35 +200,24 @@ describe('HTML', () => {
     expect(await res.text()).toBe('<html><body><h1>hello</h1></body></html>')
   })
 
-  // What routing the setting through the tree buys, and the reason the Fastify decoration was not enough:
-  // `.autoDoctype(true)` is a *default* in the CODE band, so a deployment can turn it off without a rebuild.
-  it('lets a configuration source override what the builder set', async () => {
+  // What reading the node buys: the plugin is handed a live slice of the tree, so a deployment turns the
+  // doctype off without a rebuild.
+  it('reads the doctype default from the configuration the callback handed it', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
-      .extend(HTMLExt(), h => h.config(c => c.html).autoDoctype(true))
+      .extend(c => htmlPlugin(c.html))
       .build()
 
     await app.ready()
 
     expect(await (await app.fetch('/html/document')).text()).toBe('<html><body><h1>hello</h1></body></html>')
-  })
-
-  // The key is the contract, not a path: `HTML(...)` is called from code that cannot know where the
-  // application put the settings — or whether it placed them anywhere at all, as here.
-  it('reads the slice through the key rather than a path', async () => {
-    const app = htmlApp(h => h.autoDoctype(false))
-    await app.ready()
-
-    const config = app.container.get(Configuration)
-
-    expect(config.snapshotHandle(kHTMLConfig)).toEqual({ autoDoctype: false })
 
     await app.close()
   })
 
   // One route answering differently must not require reconfiguring the application.
   it('lets a per-call doctype option override the application default', async () => {
-    const app = htmlApp(h => h.autoDoctype(true))
+    const app = htmlApp({ autoDoctype: true })
     await app.ready()
 
     const res = await app.fetch('/html/overridden')

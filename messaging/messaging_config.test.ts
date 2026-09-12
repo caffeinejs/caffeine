@@ -38,18 +38,21 @@ function runtimeOf(container: Container, instance = 'default'): MessagingRuntime
 
 describe('messaging configuration', () => {
   // The regression the whole mechanism exists for: a destination is a topic name, and it differs per
-  // environment exactly the way a broker list does.
+  // environment exactly the way a broker list does. Named exception: messaging is config-wins once
+  // `withConfig` is wired.
   it('lets the environment override a builder-set destination', async () => {
     const app = createApplication({})
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' })
-          .out('notify', { destination: 'notify', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' })
+            .out('notify', { destination: 'notify', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -72,11 +75,13 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -96,17 +101,21 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .out('log', { destination: 'log', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .out('log', { destination: 'log', via: 'primary' }),
+        ),
       )
-      .extend(messaging('audit'), m =>
-        m
-          .config(c => c.messaging.audit)
-          .use('primary', inMemoryBinder())
-          .out('log', { destination: 'log', via: 'primary' }),
+      .extend(
+        messaging('audit', (m, c) =>
+          m
+            .withConfig(c.messaging.audit)
+            .use('primary', inMemoryBinder())
+            .out('log', { destination: 'log', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -131,11 +140,13 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary', schema }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary', schema }),
+        ),
       )
 
     const built = app.build()
@@ -167,11 +178,13 @@ describe('messaging configuration', () => {
         ),
       )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(messaging(), m =>
-        m
-          .config(c => c.app.events)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.app.events)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -192,11 +205,13 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(messaging(), m =>
-        m
-          .config(c => c.messaging.default)
-          .use('primary', inMemoryBinder())
-          .in('orders', { destination: 'orders', via: 'primary' }),
+      .extend(
+        messaging((m, c) =>
+          m
+            .withConfig(c.messaging.default)
+            .use('primary', inMemoryBinder())
+            .in('orders', { destination: 'orders', via: 'primary' }),
+        ),
       )
 
     const built = app.build()
@@ -206,5 +221,10 @@ describe('messaging configuration', () => {
     expect(runtimeOf(built.container).inbound.has('orders')).toBe(true)
 
     await built.close()
+  })
+
+  it('exports the config schema from the package barrel', async () => {
+    const { messagingConfigSchema: fromBarrel } = await import('./index.js')
+    expect(fromBarrel).toBeDefined()
   })
 })

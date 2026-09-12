@@ -139,8 +139,8 @@ describe('messaging', () => {
   it('delivers a published message to its @Consume handler', async () => {
     received = deferred()
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m.use('primary', inMemoryBinder(broker)).in('orders1', { destination: 'orders', via: 'primary' }),
+    const app = createApplication({}).extend(
+      messaging(m => m.use('primary', inMemoryBinder(broker)).in('orders1', { destination: 'orders', via: 'primary' })),
     )
     const built = app.build()
     await built.run()
@@ -155,13 +155,15 @@ describe('messaging', () => {
     bridged = deferred()
     const brokerA = new InMemoryBroker()
     const brokerB = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m
-        .use('a', inMemoryBinder(brokerA))
-        .use('b', inMemoryBinder(brokerB))
-        .in('orders2', { destination: 'orders', via: 'a' })
-        .in('notify2in', { destination: 'notify', via: 'b' })
-        .out('notify2', { destination: 'notify', via: 'b' }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m
+          .use('a', inMemoryBinder(brokerA))
+          .use('b', inMemoryBinder(brokerB))
+          .in('orders2', { destination: 'orders', via: 'a' })
+          .in('notify2in', { destination: 'notify', via: 'b' })
+          .out('notify2', { destination: 'notify', via: 'b' }),
+      ),
     )
     const built = app.build()
     await built.run()
@@ -175,12 +177,14 @@ describe('messaging', () => {
   it('retries a failing handler with the binding blocking-retry policy', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m.use('primary', inMemoryBinder(broker)).in('orders3', {
-        destination: 'orders',
-        via: 'primary',
-        retry: { attempts: 3, backoff: { type: 'fixed', delay: 1 } },
-      }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m.use('primary', inMemoryBinder(broker)).in('orders3', {
+          destination: 'orders',
+          via: 'primary',
+          retry: { attempts: 3, backoff: { type: 'fixed', delay: 1 } },
+        }),
+      ),
     )
     const built = app.build()
     await built.run()
@@ -192,8 +196,8 @@ describe('messaging', () => {
   })
 
   it('fails fast at run when a binding names an unregistered binder', async () => {
-    const app = createApplication({}).extend(messaging(), m =>
-      m.use('primary', inMemoryBinder()).in('orders4', { destination: 'orders', via: 'ghost' }),
+    const app = createApplication({}).extend(
+      messaging(m => m.use('primary', inMemoryBinder()).in('orders4', { destination: 'orders', via: 'ghost' })),
     )
     const built = app.build()
 
@@ -203,8 +207,8 @@ describe('messaging', () => {
 
   it('publishes through the MessageBus to an outbound binding', async () => {
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m.use('primary', inMemoryBinder(broker)).out('emit', { destination: 'emitted', via: 'primary' }),
+    const app = createApplication({}).extend(
+      messaging(m => m.use('primary', inMemoryBinder(broker)).out('emit', { destination: 'emitted', via: 'primary' })),
     )
     const built = app.build()
     await built.run()
@@ -221,8 +225,8 @@ describe('messaging', () => {
   it('extracts handler arguments via @MessageParams pickers', async () => {
     picked = deferred()
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m.use('primary', inMemoryBinder(broker)).in('orders5', { destination: 'orders', via: 'primary' }),
+    const app = createApplication({}).extend(
+      messaging(m => m.use('primary', inMemoryBinder(broker)).in('orders5', { destination: 'orders', via: 'primary' })),
     )
     const built = app.build()
     await built.run()
@@ -236,12 +240,14 @@ describe('messaging', () => {
   it('validates + coerces an inbound payload against the binding schema', async () => {
     schemaGot = deferred()
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m.use('primary', inMemoryBinder(broker)).in('orders6', {
-        destination: 'orders',
-        via: 'primary',
-        schema: $t.Object({ id: $t.Integer(), tag: $t.String({ default: 'new' }) }),
-      }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m.use('primary', inMemoryBinder(broker)).in('orders6', {
+          destination: 'orders',
+          via: 'primary',
+          schema: $t.Object({ id: $t.Integer(), tag: $t.String({ default: 'new' }) }),
+        }),
+      ),
     )
     const built = app.build()
     await built.run()
@@ -256,11 +262,13 @@ describe('messaging', () => {
   it('skips the handler and fires onInvalidMessage for a bad inbound payload', async () => {
     const invalid = deferred<SchemaIssue[]>()
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m
-        .use('primary', inMemoryBinder(broker))
-        .onInvalidMessage(issues => invalid.resolve(issues))
-        .in('orders7', { destination: 'orders', via: 'primary', schema: $t.Object({ id: $t.Integer() }) }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m
+          .use('primary', inMemoryBinder(broker))
+          .onInvalidMessage(issues => invalid.resolve(issues))
+          .in('orders7', { destination: 'orders', via: 'primary', schema: $t.Object({ id: $t.Integer() }) }),
+      ),
     )
     const built = app.build()
     await built.run()
@@ -273,10 +281,12 @@ describe('messaging', () => {
 
   it('throws ErrMessageValidation for an invalid outbound payload', async () => {
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m
-        .use('primary', inMemoryBinder(broker))
-        .out('emit2', { destination: 'emitted', via: 'primary', schema: $t.Object({ id: $t.Integer() }) }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m
+          .use('primary', inMemoryBinder(broker))
+          .out('emit2', { destination: 'emitted', via: 'primary', schema: $t.Object({ id: $t.Integer() }) }),
+      ),
     )
     const built = app.build()
     await built.run()
@@ -291,18 +301,20 @@ describe('messaging', () => {
     const recovered = deferred<{ binder: string; attempt: number; payload: unknown }>()
     const observed = deferred<unknown>()
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m
-        .use('primary', inMemoryBinder(broker))
-        .onError(error => observed.resolve(error))
-        .recoverer((_error, msg, ctx) => {
-          recovered.resolve({ binder: ctx.binder, attempt: ctx.attempt, payload: msg.payload })
-        })
-        .in('orders8', {
-          destination: 'orders',
-          via: 'primary',
-          retry: { attempts: 2, backoff: { type: 'fixed', delay: 1 } },
-        }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m
+          .use('primary', inMemoryBinder(broker))
+          .onError(error => observed.resolve(error))
+          .recoverer((_error, msg, ctx) => {
+            recovered.resolve({ binder: ctx.binder, attempt: ctx.attempt, payload: msg.payload })
+          })
+          .in('orders8', {
+            destination: 'orders',
+            via: 'primary',
+            retry: { attempts: 2, backoff: { type: 'fixed', delay: 1 } },
+          }),
+      ),
     )
     const built = app.build()
     await built.run()
@@ -318,15 +330,17 @@ describe('messaging', () => {
     dead = deferred()
     const ref: { bus?: MessageBus } = {}
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m
-        .use('primary', inMemoryBinder(broker))
-        .recoverer(async (_error, msg) => {
-          await ref.bus?.send('dlt-out', { failed: msg.payload })
-        })
-        .in('orders9', { destination: 'orders', via: 'primary' })
-        .in('dlt-in', { destination: 'dlt', via: 'primary' })
-        .out('dlt-out', { destination: 'dlt', via: 'primary' }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m
+          .use('primary', inMemoryBinder(broker))
+          .recoverer(async (_error, msg) => {
+            await ref.bus?.send('dlt-out', { failed: msg.payload })
+          })
+          .in('orders9', { destination: 'orders', via: 'primary' })
+          .in('dlt-in', { destination: 'dlt', via: 'primary' })
+          .out('dlt-out', { destination: 'dlt', via: 'primary' }),
+      ),
     )
     const built = app.build()
     await built.run()
@@ -340,8 +354,10 @@ describe('messaging', () => {
 
   it('fails fast at run when an inbound binding has no handler', async () => {
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m.use('primary', inMemoryBinder(broker)).in('orphan-binding', { destination: 'orphan', via: 'primary' }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m.use('primary', inMemoryBinder(broker)).in('orphan-binding', { destination: 'orphan', via: 'primary' }),
+      ),
     )
     const built = app.build()
 
@@ -352,16 +368,18 @@ describe('messaging', () => {
   it('does not retry a non-retryable error', async () => {
     nrState = { attempts: 0, recovered: deferred() }
     const broker = new InMemoryBroker()
-    const app = createApplication({}).extend(messaging(), m =>
-      m
-        .use('primary', inMemoryBinder(broker))
-        .recoverer(() => nrState.recovered.resolve(nrState.attempts))
-        .in('orders10', {
-          destination: 'orders',
-          via: 'primary',
-          notRetryable: [ErrNonRetryable],
-          retry: { attempts: 5, backoff: { type: 'fixed', delay: 1 } },
-        }),
+    const app = createApplication({}).extend(
+      messaging(m =>
+        m
+          .use('primary', inMemoryBinder(broker))
+          .recoverer(() => nrState.recovered.resolve(nrState.attempts))
+          .in('orders10', {
+            destination: 'orders',
+            via: 'primary',
+            notRetryable: [ErrNonRetryable],
+            retry: { attempts: 5, backoff: { type: 'fixed', delay: 1 } },
+          }),
+      ),
     )
     const built = app.build()
     await built.run()

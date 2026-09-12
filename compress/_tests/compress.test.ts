@@ -7,21 +7,17 @@ import {
   createWebApplication,
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import type { FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Compress, CompressBuilder, compress, CompressExt } from '../index.js'
+import { Compress, compress, compressPlugin, type CompressOptions } from '../index.js'
 
-function compressApp(configure?: FeatureConfigurer<CompressBuilder>) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(
-    CompressExt(),
-    configure ?? (() => undefined),
-  )
+function compressApp(options?: CompressOptions) {
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(() => compressPlugin(options))
 }
 
 describe('Compress', () => {
-  describe('global CompressExt registration', () => {
+  describe('global compress plugin registration', () => {
     it('compresses responses when compression is activated', async () => {
       @Controller('/compress-global')
       class GlobalCompressController {
@@ -42,7 +38,7 @@ describe('Compress', () => {
       expect(res.headers.get('content-encoding')).toMatch(/br|gzip|deflate/)
     })
 
-    it('does not compress responses when CompressExt is not activated', async () => {
+    it('does not compress responses when the compress plugin is not registered', async () => {
       @Controller('/no-compress')
       class NoCompressController {
         @Get('/data')
@@ -117,7 +113,7 @@ describe('Compress', () => {
       void [ThresholdController]
 
       // Default threshold is 1024 bytes — small payload won't be compressed globally
-      const app = compressApp(c => c.options({ threshold: 1024 })).build()
+      const app = compressApp({ threshold: 1024 }).build()
       await app.ready()
 
       const resLow = await app.fetch('/compress-threshold/low-threshold', { headers: { 'accept-encoding': 'gzip' } })

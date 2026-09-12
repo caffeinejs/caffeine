@@ -6,7 +6,6 @@ import { $t } from '../../schema/t.js'
 import { bootstrapConfig } from '../bootstrap.js'
 import type { ResolutionContext } from '../config.js'
 import { ConfigDefinition } from '../definition.js'
-import { defineFeatureConfig } from '../feature.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { REDACTED, isSecretPath, redact, secretPaths } from '../secrets.js'
 import { ConfigSources } from '../sources.js'
@@ -113,10 +112,7 @@ describe('diagnostics redaction', () => {
 
   async function bootstrapWithSlice() {
     const definition = new ConfigDefinition(token<Record<string, unknown>>(Symbol('app')))
-    const slice = defineFeatureConfig<{ issuer: string; secret: string }>(definition, {
-      selector: (c: never) => (c as { auth: { jwt: unknown } }).auth.jwt,
-      schema: jwtSchema,
-    })
+    const slice = definition.slice<{ issuer: string; secret: string }>(['auth', 'jwt'], jwtSchema)
 
     definition.sources.add(
       new InlineConfigProvider({

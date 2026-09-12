@@ -1,6 +1,6 @@
 import { $t } from '@caffeinejs/std'
 
-/** The multipart feature's slice of the configuration tree. */
+/** The multipart plugin's settings in an application schema. */
 export interface MultipartConfig {
   /** The `@fastify/multipart` options bag: `limits`, `attachFieldsToBody`, … */
   options: Record<string, unknown>
@@ -14,7 +14,8 @@ export interface MultipartConfig {
  * `Record` of unknowns is validated as "an object" and handed on with every key intact.
  *
  * Import it into an application schema — `$t.Object({ app: $t.Object({ uploads: multipartConfigSchema }) })` —
- * rather than restating it, then point the feature at that location with `m.config(x => x.app.uploads)`.
+ * rather than restating it, then read that node in the plugin factory:
+ * `.extend(c => multipartPlugin(c.app.uploads.options))`.
  */
 export const multipartConfigSchema = $t.Object({
   options: $t.Record($t.String(), $t.Unknown(), { default: {} }),

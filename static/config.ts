@@ -4,18 +4,18 @@ import type { SPAOptions } from './spa.js'
 import type { StaticMount } from './static.js'
 
 /**
- * The static feature's slice of the configuration tree.
+ * What an application may configure for static serving.
  *
- * `mounts` mirrors the `.serve(...)` calls and `spa` the `.spa(...)` one, so a deployment can repoint a root
- * or a prefix without a rebuild.
+ * `mounts` mirrors the `.serve(...)` calls and `spa` the `.spa(...)` one. A configured `spa.root` repoints
+ * the directory `.spa(...)` switched on; other SPA keys still follow fluent-wins.
  *
- * **A higher-priority source replaces `mounts` whole rather than patching an element** — the array rule the
- * merge engine applies everywhere. `.serve()` is additive in code, but `STATIC__MOUNTS__0__ROOT` is not: it
- * declares the entire list. That is what makes it possible to *remove* a mount from a config file at all.
+ * **`mounts` replaces the list rather than patching it** — the array rule the merge engine applies everywhere.
+ * `.serve()` is additive in code, but `STATIC__MOUNTS__0__ROOT` is not: it declares the entire list. That is
+ * what makes it possible to *remove* a mount from a config file at all.
  */
-export interface StaticConfigSlice {
+export interface StaticConfig {
   mounts?: StaticMount[]
-  spa?: SPAOptions & { root: string }
+  spa?: Partial<SPAOptions & { root: string }>
 }
 
 /**
@@ -48,7 +48,9 @@ export const staticConfigSchema = $t.Object({
   mounts: $t.Optional($t.Array(optionBag())),
   spa: $t.Optional(
     $t.Object({
-      root: $t.String(),
+      // Optional: `.spa(root)` is the activating act and supplies the root. Configuration retunes a SPA the
+      // application switched on; it never creates one, so a block without a root is not an error.
+      root: $t.Optional($t.String()),
       index: $t.Optional($t.String()),
       prefix: $t.Optional($t.String()),
       exclude: $t.Optional($t.List($t.String())),

@@ -2,6 +2,7 @@ export type { Binder, BoundConsumer, BoundProducer, DeliveryControl, Dispatch } 
 export type { BindingDirection, ConsumerBinding, ProducerBinding } from './binding.js'
 export type { BinderFactory, InBindingOptions, MessagingBuilder, OutBindingOptions } from './builder.js'
 export { MessageBus } from './bus.js'
+export * from './config.js'
 export { type ContextSignals, kSignals, type MessageContext, MessageContextImpl } from './context.js'
 export { Consume } from './decorators/consume.js'
 export { MessageHandler, type MessageHandlerOptions } from './decorators/message_handler.js'

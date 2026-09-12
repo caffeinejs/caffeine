@@ -1,3 +1,4 @@
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { kBootstrap, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 import fastify from 'fastify'
 import fp from 'fastify-plugin'
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { createWebApplication, fastifyAdapterFactory, type WebApplication } from '../index.js'
-import { registerPlugin, type HTTPPlugin } from '../plugin.js'
+import { registerPlugin, type HTTPPlugin, type HTTPPluginFactory } from '../plugin.js'
 import { Router } from '../routing/programmatic/router.js'
 
 /**
@@ -19,30 +20,22 @@ import { Router } from '../routing/programmatic/router.js'
  */
 
 /**
- * A feature contributing one `fastify-plugin`-wrapped plugin that stamps a response header.
+ * One `fastify-plugin`-wrapped plugin that stamps a response header.
  *
  * Wrapped, so the hook lands on whatever context the plugin was registered in — the root server when the
- * application installed the feature, one route group when a router or a controller did.
+ * application registered it, one route group when a router or a controller did.
  */
-function stamping(name: string, header: string, log?: string[]): Feature {
-  return {
-    name,
-    install(ctx) {
-      ctx.addFeature({
-        [kFeatureName]: name,
-        [kBootstrap](kit: BootstrapKit): void {
-          const plugin: HTTPPlugin = async instance => {
-            log?.push(name)
-            instance.addHook('onRequest', (_request, reply, done) => {
-              reply.header(header, 'yes')
-              done()
-            })
-          }
-
-          registerPlugin(kit, fp(plugin, { name }))
-        },
+function stamping(name: string, header: string, log?: string[]): HTTPPluginFactory {
+  return () => {
+    const plugin: HTTPPlugin = async instance => {
+      log?.push(name)
+      instance.addHook('onRequest', (_request, reply, done) => {
+        reply.header(header, 'yes')
+        done()
       })
-    },
+    }
+
+    return fp(plugin, { name })
   }
 }
 
@@ -68,6 +61,100 @@ describe('plugin registration', () => {
     await app.ready()
 
     expect(log).toEqual(['third', 'first', 'second'])
+  })
+
+  // `.extend` takes a feature or a plugin factory and tells them apart by `typeof`. Both land in one list, so
+  // what matters is that neither kind jumps the other: the order is the order the calls were written.
+  it('interleaves features and plugins in the order .extend() was written', async () => {
+    const log: string[] = []
+
+    const feature = (name: string): Feature => ({
+      [kFeatureName]: name,
+      [kBootstrap](kit: BootstrapKit): void {
+        registerPlugin(
+          kit,
+          fp(
+            async () => {
+              log.push(name)
+            },
+            { name },
+          ),
+        )
+      },
+    })
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .extend(stamping('plugin-a', 'x-a', log))
+      .extend(feature('feature-b'))
+      .extend(stamping('plugin-c', 'x-c', log))
+      .extend(feature('feature-d'))
+      .build()
+
+    await app.ready()
+
+    expect(log).toEqual(['plugin-a', 'feature-b', 'plugin-c', 'feature-d'])
+  })
+
+  // An app-level factory is called from `WebApplication.setup()`, after `container.init()` — not from its
+  // feature's bootstrap, where the container has not initialized yet and this would throw
+  // `ErrInvalidContainerState`. Resolving here, inside the factory itself rather than inside the plugin body,
+  // is exactly the case that used to be broken.
+  it('resolves from the container inside an app-level factory', async () => {
+    const kGreeting = token<string>(Symbol('greeting'))
+    const container = new CaffeineIoC()
+    container.bind(kGreeting, t => t.toValue('hello'))
+
+    const factory: HTTPPluginFactory = (_config, container) => {
+      const greeting = container.get(kGreeting)
+
+      const plugin: HTTPPlugin = async instance => {
+        instance.addHook('onRequest', (_request, reply, done) => {
+          reply.header('x-greeting', greeting)
+          done()
+        })
+      }
+
+      return fp(plugin, { name: 'greeting' })
+    }
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
+      .extend(factory)
+      .build()
+
+    await expect(app.ready()).resolves.not.toThrow()
+
+    expect((await app.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
+  })
+
+  // The order a plugin ends up in is the order its `.extend(...)` was written, stamped when its feature
+  // bootstrapped — not the order its factory happens to finish resolving. An awaiting factory must not jump
+  // ahead of, or fall behind, a synchronous one written before or after it.
+  it('keeps an awaiting app-level factory at its written position', async () => {
+    const log: string[] = []
+
+    const deferred: HTTPPluginFactory = async () => {
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      const plugin: HTTPPlugin = async instance => {
+        log.push('deferred')
+        instance.addHook('onRequest', (_request, reply, done) => {
+          reply.header('x-deferred', 'yes')
+          done()
+        })
+      }
+
+      return fp(plugin, { name: 'deferred' })
+    }
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .extend(stamping('before', 'x-before', log))
+      .extend(deferred)
+      .extend(stamping('after', 'x-after', log))
+      .build()
+
+    await app.ready()
+
+    expect(log).toEqual(['before', 'deferred', 'after'])
   })
 
   // The head slot: error handling is bootstrapped ahead of everything the application installed, so a route
@@ -181,24 +268,46 @@ describe('scoped plugin registration', () => {
     expect((await app.fetch('/scoped-public')).headers.get('x-admin')).toBeNull()
   })
 
-  // A feature is installed once however many places want its plugin, so the same name twice is the mistake it
-  // looks like — and the way to give two groups different settings is two instances of the feature.
-  it('refuses the same feature name from the application and a router', async () => {
-    const pets = new Router('/dup-pets').extend(stamping('dup', 'x-dup')).get('/', () => ({ ok: true }))
+  // A plugin has no name a caller chose, so registering the same factory twice registers the plugin twice —
+  // nothing dedupes on the factory's identity the way a feature dedupes on `kFeatureName`. Deliberately not
+  // `fastify-plugin`-wrapped: with no name, there is nothing for the guard below to collide on.
+  it('registers an unnamed plugin once per call, even for the same factory', async () => {
+    const log: string[] = []
+    const twice: HTTPPluginFactory = () => {
+      const plugin: HTTPPlugin = async () => {
+        log.push('twice')
+      }
+      return plugin
+    }
 
-    // Never assigned to `app`: it does not come up, so there is nothing for the teardown to close.
-    const duplicated = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .extend(stamping('dup', 'x-dup'))
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .extend(twice)
+      .extend(twice)
       .build()
-      .mount(pets)
 
-    await expect(duplicated.ready()).rejects.toMatchObject({ code: 'ERR_FEATURE_ALREADY_INSTALLED' })
+    await app.ready()
+
+    expect(log).toEqual(['twice', 'twice'])
   })
 
-  it('accepts two instances of a feature, one per router', async () => {
+  // A first-party plugin wraps a fixed `fastify-plugin` name, so two `.extend()` calls that each produce one
+  // would otherwise fail deep inside whatever it decorates — tens of seconds later, once avvio's own boot
+  // timeout gives up waiting on it. Refused immediately instead, with a Caffeine error naming the plugin.
+  it('refuses a second plugin registered under the same fastify-plugin name', async () => {
+    const twice = stamping('twice', 'x-twice')
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .extend(twice)
+      .extend(twice)
+      .build()
+
+    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)
+  })
+
+  it('keeps the plugins of two routers apart, one per group', async () => {
     const pets = new Router('/inst-pets').extend(stamping('inst', 'x-inst')).get('/', () => ({ ok: true }))
     const orders = new Router('/inst-orders')
-      .extend(stamping('inst:orders', 'x-inst-orders'))
+      .extend(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))

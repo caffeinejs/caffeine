@@ -1,16 +1,7 @@
 import { type Container } from '@caffeinejs/di'
 
-import { activeProfiles, ConfigDefinition, hostProfiles } from './config/index.js'
-import {
-  ErrFeatureAlreadyInstalled,
-  kBeforeBootstrap,
-  kBootstrap,
-  type BootstrapKit,
-  type ExtensionRegistrar,
-  type Feature,
-  type FeatureLifecycle,
-  type PluginContext,
-} from './feature.js'
+import { activeProfiles, ConfigDefinition, hostProfiles, type ConfigHandle } from './config/index.js'
+import { kBootstrap, type BootstrapKit, type ExtensionRegistrar, type Feature } from './feature.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { $t } from './schema/t.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
@@ -19,19 +10,9 @@ import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from '.
 /** Construction input for an {@link Application}, produced by a {@link BaseApplicationBuilder}. */
 export interface ApplicationInit {
   container: Container
-  services: FeatureLifecycle[]
+  services: Feature[]
   /** The live configuration definition, handed to every service so it can contribute to the tree. */
   config?: ConfigDefinition
-
-  /**
-   * The names `.extend` has already installed. Shared with the builder rather than copied: an application that
-   * installs features of its own — the HTTP one does, for what a router or a controller declared — has to
-   * deduplicate against what the builder installed, and be deduplicated against in turn.
-   */
-  installed?: Set<string>
-
-  /** The builder's per-install feature state, shared for the same reason as {@link installed}. */
-  featureState?: Map<string, unknown>
 }
 
 /**
@@ -52,6 +33,9 @@ export const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
 /** An application with no platform runs no extensions, so what a feature contributes is dropped. */
 const NOOP_REGISTRAR: ExtensionRegistrar = {
   register() {
+    return undefined
+  },
+  registerDeferred() {
     return undefined
   },
 }
@@ -80,12 +64,11 @@ export const caffeineConfigSchema = $t.Object({
  */
 export class Application {
   readonly #container: Container
-  readonly #services: FeatureLifecycle[]
+  readonly #services: Feature[]
   readonly #availability = new ApplicationAvailability()
   readonly #config: ConfigDefinition
-  readonly #installed: Set<string>
-  readonly #featureState: Map<string, unknown>
 
+  #handle: ConfigHandle<unknown> | undefined
   #name = ''
   #profiles: string[] = []
   #shutdownPolicy?: ShutdownOptions
@@ -96,8 +79,6 @@ export class Application {
   constructor(init: ApplicationInit) {
     this.#container = init.container
     this.#services = init.services
-    this.#installed = init.installed ?? new Set()
-    this.#featureState = init.featureState ?? new Map()
     // An application constructed without a builder still gets one, so services can register unconditionally.
     // Nothing bootstraps it in that case, which is what a missing config module means.
     this.#config = init.config ?? new ConfigDefinition()
@@ -125,34 +106,6 @@ export class Application {
   }
 
   /**
-   * Installs a feature the application itself found rather than the builder — what a mounted router or a
-   * controller declared — and hands back the lifecycles it added.
-   *
-   * Only callable from {@link configurers}, which runs before the declare phase: later than that and the
-   * feature has missed its chance to register a configuration slice.
-   *
-   * @throws ErrFeatureAlreadyInstalled when the builder, or another router, already installed this name.
-   */
-  protected installFeature(feature: Feature, configure?: (builder: never) => void): FeatureLifecycle[] {
-    if (this.#installed.has(feature.name)) {
-      throw new ErrFeatureAlreadyInstalled(feature.name)
-    }
-    this.#installed.add(feature.name)
-
-    const added: FeatureLifecycle[] = []
-    const ctx: PluginContext = {
-      addFeature: lifecycle => {
-        added.push(lifecycle)
-      },
-      container: this.#container,
-      state: this.#featureState,
-    }
-    feature.install(ctx, configure as ((builder: unknown) => void) | undefined)
-
-    return added
-  }
-
-  /**
    * Where the feature at `order` contributes start-up wiring. A headless application runs none, so what a
    * feature registers here goes nowhere; a platform overrides this with a registrar of its own.
    */
@@ -163,27 +116,24 @@ export class Application {
   /**
    * Brings the application up to the point where it can serve.
    *
-   * 1. the always-on `caffeine` slice is registered, the active profiles are decided, then every service
-   *    **declares**;
-   * 2. configuration **resolves**, once, already profile-aware, and every slice publishes;
+   * 1. the always-on `caffeine` slice is registered and the active profiles are decided;
+   * 2. configuration **resolves**, once, already profile-aware;
    * 3. `caffeine.name` and the active profiles are applied;
-   * 4. every service **configures** — binding into the container and registering its extensions, now able to
-   *    read its own settings;
+   * 4. every feature **bootstraps** — running the application's configure callback against its builder, then
+   *    binding into the container and registering its extensions;
    * 5. the container initializes and the platform is set up.
    *
-   * Declare and resolve are separate so a feature can read its resolved configuration while it is still able
-   * to bind. Resolving inside `container.init()` — after every service had configured — is what used to make
-   * a setting consumed at binding time impossible to configure at all.
+   * Configuration resolves before any feature bootstraps and while binding is still open, which is what lets a
+   * feature be configured from a setting it then consumes at binding time. Resolving inside `container.init()`
+   * would be too late for both.
    */
   async ready(): Promise<void> {
     if (this.#ready) {
       return
     }
 
-    // Registered directly rather than through `defineFeatureConfig`, which places a *feature* — and a feature
-    // only lives where the application pointed it. This block is the framework's own: the application name and
-    // profiles are read before any service has configured, so its location cannot be something a builder
-    // supplies.
+    // The framework's own block, registered directly: the application name and profiles are read before any
+    // feature has bootstrapped, so its location is fixed rather than something a builder supplies.
     this.#config.frameworkDefaults.set(CAFFEINE_CONFIG_NAMESPACE, { ...DEFAULT_CAFFEINE_CONFIG })
     const caffeine = this.#config.slice<CaffeineConfig>(CAFFEINE_CONFIG_NAMESPACE, caffeineConfigSchema)
 
@@ -195,21 +145,11 @@ export class Application {
     const named = activeProfiles([...this.#container.profiles, ...hostProfiles()])
     this.#config.profiles = named
 
-    // Captured once: a subclass assembles this list per call, and both steps must reach the same services.
-    const services = this.configurers()
+    // Captured once: a subclass assembles this list per call, and it must be the same list throughout.
+    const features = this.configurers()
 
-    const beforeBootstrapKit = { config: this.#config, container: this.#container }
-    const beforeBootstrapPending: Promise<void>[] = []
-    for (const service of services) {
-      const result = service[kBeforeBootstrap]?.(beforeBootstrapKit)
-      if (result) {
-        beforeBootstrapPending.push(result)
-      }
-    }
-    if (beforeBootstrapPending.length > 0) {
-      await Promise.all(beforeBootstrapPending)
-    }
-    await this.#config.bootstrap()
+    const shard = await this.#config.bootstrap()
+    this.#handle = shard.handle
 
     // What was named up front wins. Nothing was, so the base config file decided — and its value reached the
     // tree on the same resolve.
@@ -224,13 +164,18 @@ export class Application {
     // Each feature gets its own kit, carrying its position in the feature list. Extensions are registered
     // against that position rather than against the moment the hook reached the call, so what a feature awaits
     // before registering cannot move it past a feature installed after it.
+    //
+    // Called in order and awaited together: every feature's configure callback — which the builder runs at the
+    // top of its hook — has therefore run before the first feature does asynchronous work.
     const bootstrapPending: Promise<void>[] = []
-    services.forEach((service, index) => {
-      const result = service[kBootstrap](this.serviceKit(index))
+
+    features.forEach((feature, index) => {
+      const result = feature[kBootstrap](this.serviceKit(index))
       if (result) {
         bootstrapPending.push(result)
       }
     })
+
     if (bootstrapPending.length > 0) {
       await Promise.all(bootstrapPending)
     }
@@ -339,18 +284,30 @@ export class Application {
     return { name: this.name, profiles: this.profiles }
   }
 
+  /**
+   * The resolved application configuration. Readable from {@link setup} onward; before configuration has
+   * resolved there is nothing to hand back.
+   */
+  protected get configHandle(): ConfigHandle<unknown> {
+    if (this.#handle === undefined) {
+      throw new Error('Configuration has not been resolved yet')
+    }
+
+    return this.#handle
+  }
+
   /** Whether `ready()` has completed. */
   protected get started(): boolean {
     return this.#ready
   }
 
   /** The features registered on the builder (before any framework-prepended ones). */
-  protected get services(): readonly FeatureLifecycle[] {
+  protected get services(): readonly Feature[] {
     return this.#services
   }
 
   /**
-   * The kit passed to the {@link FeatureLifecycle} at `order`. Subclasses may widen it (e.g. add platform
+   * The kit passed to the {@link Feature} at `order`. Subclasses may widen it (e.g. add platform
    * handles).
    *
    * @param order - The feature's position in {@link configurers}, which is the order what it registers with
@@ -360,13 +317,14 @@ export class Application {
     return {
       container: this.#container,
       availability: this.#availability,
-      config: this.#config,
+      // Non-null by construction: the only caller runs after `config.bootstrap()` resolved.
+      config: this.#handle!,
       extensions: this.extensionRegistrar(order),
     }
   }
 
   /** The features bootstrapped before `container.init()`. Subclasses may prepend framework ones. */
-  protected configurers(): FeatureLifecycle[] {
+  protected configurers(): Feature[] {
     return [...this.#services]
   }
 

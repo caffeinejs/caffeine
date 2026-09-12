@@ -15,7 +15,7 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import { ViewExt } from '@caffeinejs/view'
+import { view } from '@caffeinejs/view'
 import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { describe, it, expect } from 'vitest'
@@ -86,7 +86,7 @@ const viewsRoot = fileURLToPath(new URL('../../views', import.meta.url))
 
 async function buildApp() {
   const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .extend(ViewExt(), v => v.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))
+    .extend(view(v => v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
     .build()
   await app.ready()
   return app

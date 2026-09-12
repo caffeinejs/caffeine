@@ -1,6 +1,5 @@
-import type { ConfigHandle, FeatureConfigLookup } from './config.js'
+import type { ConfigHandle } from './config.js'
 import { ErrConfig } from './errors.js'
-import type { ConfigSlice } from './slice.js'
 
 /**
  * A live view of a validated config tree.
@@ -13,19 +12,12 @@ import type { ConfigSlice } from './slice.js'
  * `revision` is what makes the memo sound: it changes only when a refresh actually re-resolved, so a refresh
  * that found nothing to reload does not even invalidate the cache. Omitted, the memo is disabled and every
  * read goes back to `source` — which is what a caller swapping the backing object by hand needs.
- *
- * `features` answers a {@link FeatureConfigKey} passed to the handle itself. Only the root node takes one, so
- * only the root is callable.
  */
-export function createLiveAccessors<T>(
-  source: () => T,
-  revision?: () => number,
-  features?: FeatureConfigLookup,
-): ConfigHandle<T> {
-  return buildNode(source, revision, features) as ConfigHandle<T>
+export function createLiveAccessors<T>(source: () => T, revision?: () => number): ConfigHandle<T> {
+  return buildNode(source, revision) as ConfigHandle<T>
 }
 
-function buildNode<T>(source: () => T, revision: (() => number) | undefined, features?: FeatureConfigLookup): unknown {
+function buildNode<T>(source: () => T, revision: (() => number) | undefined): unknown {
   const children = new Map<string, unknown>()
   let stamp: number | undefined
   let target: unknown
@@ -69,72 +61,36 @@ function buildNode<T>(source: () => T, revision: (() => number) | undefined, fea
     return node !== null && typeof node === 'object' ? Object.keys(node) : []
   }
 
-  // An arrow function where the node has to answer a feature key, so the handle can be called. It must be an
-  // arrow: a function *declaration* carries a non-configurable own `prototype`, which `ownKeys` would then be
-  // obliged to report, and the tree's own keys are the only ones that may appear there. `length` and `name`
-  // are configurable, so leaving them out is allowed.
-  const carrier: object = features === undefined ? {} : () => undefined
+  return new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        if (typeof prop !== 'string') {
+          return undefined
+        }
 
-  return new Proxy(carrier, {
-    apply(_t, _this, args: unknown[]) {
-      return features?.(args[0] as symbol)
+        return read(prop)
+      },
+      set(_t, prop) {
+        throw new ErrConfig(
+          `Cannot assign to read-only config property "${String(prop)}"`,
+          'ERR_CONFIG_READ_ONLY',
+          undefined,
+          'Change the value at its source and refresh the configuration, rather than writing to the handle',
+        )
+      },
+      ownKeys() {
+        return keys()
+      },
+      getOwnPropertyDescriptor(_t, prop) {
+        if (typeof prop !== 'string' || !keys().includes(prop)) {
+          return undefined
+        }
+        return { configurable: true, enumerable: true, writable: false, value: read(prop) }
+      },
+      has(_t, prop) {
+        return typeof prop === 'string' && keys().includes(prop)
+      },
     },
-    get(_t, prop) {
-      if (typeof prop !== 'string') {
-        return undefined
-      }
-
-      // A callable target is a function to `JSON.stringify`, which skips it — so the root would serialize to
-      // nothing without this. Only when the configuration does not declare `toJSON` itself.
-      if (features !== undefined && prop === 'toJSON' && !keys().includes(prop)) {
-        return () => resolve()
-      }
-
-      return read(prop)
-    },
-    set(_t, prop) {
-      throw new ErrConfig(
-        `Cannot assign to read-only config property "${String(prop)}"`,
-        'ERR_CONFIG_READ_ONLY',
-        undefined,
-        'Change the value at its source and refresh the configuration, rather than writing to the handle',
-      )
-    },
-    ownKeys() {
-      return keys()
-    },
-    getOwnPropertyDescriptor(_t, prop) {
-      if (typeof prop !== 'string' || !keys().includes(prop)) {
-        return undefined
-      }
-      return { configurable: true, enumerable: true, writable: false, value: read(prop) }
-    },
-    has(_t, prop) {
-      return typeof prop === 'string' && keys().includes(prop)
-    },
-  })
-}
-
-/**
- * Turns the feature registry into what a config handle answers a {@link FeatureConfigKey} with.
- *
- * `read` is what makes the same registry serve both handles: the live one hands back {@link ConfigSlice.config},
- * the per-request snapshot {@link ConfigSlice.snapshot}, so a feature's configuration follows the same rule as
- * the tree it was read through.
- *
- * A key nothing registered reads `undefined` — a feature the application never installed is absent, not an
- * error. A slice that failed to resolve still throws, because that is a broken feature rather than a missing one.
- */
-export function featureLookup(
-  features: ReadonlyMap<symbol, ConfigSlice<unknown>> | undefined,
-  read: (slice: ConfigSlice<unknown>) => unknown,
-): FeatureConfigLookup | undefined {
-  if (features === undefined) {
-    return undefined
-  }
-
-  return key => {
-    const slice = features.get(key)
-    return slice === undefined ? undefined : read(slice)
-  }
+  )
 }

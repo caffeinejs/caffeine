@@ -1,4 +1,4 @@
-import { featureConfigKey } from '@caffeinejs/std/config'
+import { token } from '@caffeinejs/di'
 
 import type { HealthOptions } from './options.js'
 
@@ -7,7 +7,7 @@ import type { HealthOptions } from './options.js'
  * answers — an application that configured nothing resolves to a disabled configuration rather than an absent
  * one.
  */
-export const kHealthConfig = featureConfigKey<HealthOptions>('http:health')
+export const kHealthOptions = token<HealthOptions>(Symbol('caffeine.http.health.options'))
 
 /**
  * Fastify route-config marker set on the probe routes. The adapter's server-level `onRequest` hook reads it to

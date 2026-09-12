@@ -1,12 +1,13 @@
 # `@caffeinejs/std/config`
 
 The configuration subsystem behind a Caffeine application: a layered, schema-validated,
-live-refreshable configuration tree that a feature reads its own slice of without ever seeing the
-whole.
+live-refreshable configuration tree that the application schema describes and a feature reads from
+only where the configure callback wired it.
 
-One rule runs through all of it — **the binary carries defaults, the deployment overrides them.** A
-value set in code is a default; a file, an environment variable or a command-line argument wins over
-it. That is what lets one image ship with sensible values and still be redirected on deploy.
+One rule runs through all of it — **a fluent method is the last word.** Configuration reaches a
+feature because the application's callback wired it (`withConfig`). A value set in code is not a
+default that file, env or args quietly outrank. Kafka, view, messaging, and authentication scheme
+secrets are the named exceptions (see CONVENTIONS.md).
 
 ```ts
 import type { ConfigHandle, ConfigProvider } from '@caffeinejs/std/config'
@@ -21,14 +22,13 @@ alongside the runtime pieces from [`index.ts`](./index.ts).
 ## The mental model
 
 Every provider produces flat dotted keys (`server.port`). The engine merges them, the result is
-materialized into a tree, and that tree is validated twice: once against the application's own schema
-for the root handle, and once per feature against the feature's own schema for its slice.
+materialized into a tree, and that tree is validated against the application's own schema.
 
 ```mermaid
 flowchart TB
   subgraph reg["ConfigSources — a live, ordered registry"]
     direction LR
-    fw["framework + feature defaults"]
+    fw["framework defaults"]
     sd["app schema defaults"]
     cd["code band"]
     us["EnvConfigProvider · FileConfigProvider · ..."]
@@ -37,18 +37,15 @@ flowchart TB
   eng --> snap["ConfigSnapshot\nflat key → entry, with provenance"]
   snap --> mat["materialize()\nnested tree · numeric keys → arrays"]
   mat --> root["validateConfig(appSchema)\ndrops undeclared keys · runs codecs"]
-  mat --> pub["publishSlices()\neach feature validates its own subtree"]
   root --> handle["ConfigHandle — live, deep-frozen\nread on request paths"]
-  pub --> slice["ConfigSlice.config — one per feature"]
 ```
 
 The merge is **first-wins**: the highest-priority source that names a path owns that path and
 everything beneath it. No lower source contributes part of something a higher source already spoke
 about — which is why an array is _replaced_, never element-merged.
 
-Feature slices read from the **materialized** tree, not the root-validated one: root validation drops
-keys the application's schema does not declare, and a feature namespace the application never
-described would be stripped before the feature ever saw it.
+Keys the application's schema does not declare are dropped at root validation. A feature reads only
+what the configure callback handed it from that tree.
 
 ---
 
@@ -60,9 +57,9 @@ flowchart TB
   env["ENV · 300"]
   fil["FILE · 200"]
   usr["USER · 100 — .source() default band"]
-  cod["CODE · 50 — feature builder calls, e.g. s.port(3000)"]
+  cod["CODE · 50 — leftover band; feature builders do not write here"]
   sch["SCHEMA · 25 — defaults in the app's own $t schema"]
-  frm["FRAMEWORK · 0 — framework + feature defaults"]
+  frm["FRAMEWORK · 0 — framework defaults"]
   arg --> env --> fil --> usr --> cod --> sch --> frm
 ```
 
@@ -98,7 +95,7 @@ export const kAppConfig = token<ConfigHandle<AppConfig>>(Symbol('petstore.config
 // app.ts
 createWebApplication()
   .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
-  .server(s => s.config(c => c.server)) // splice the server feature into c.server
+  .server((s, c) => s.withConfig(c.server))
 ```
 
 The schema is either the **`$t` dialect** (TypeBox — the first-class choice, introspected for
@@ -106,38 +103,46 @@ defaults and `$t.Secret` marks) or any [Standard Schema](https://standardschema.
 valibot, arktype. A foreign schema is validated by its own library, transforms and all, but exposes
 nothing to walk: its defaults reach only the root tree, and a secret declared in one is not marked.
 
-An application that declares nothing still resolves — the root validates against a pass-through schema
-and every feature still reads its slice.
+An application that declares nothing still resolves — the root validates against a pass-through schema.
 
 ---
 
 ## How a feature gets its configuration
 
-A `FeatureBuilder` subclass is a fluent surface over exactly one slice. It names its shape with
-`schema`, writes into the `CODE` band from its methods with `set`, and binds in `bootstrap`.
-Everything between — resolving where the settings live, writing the bands, registering the slice — is
-handled by the base class.
+A feature registers nothing here. The application reads the tree and hands the feature what it wants,
+in the configure callback `.extend(...)` takes:
+
+```ts
+.extend(server((s, c) => s.withConfig(c.app.server)))
+.extend(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+```
 
 ```mermaid
 flowchart TB
-  b["FeatureBuilder — schema + fluent methods"]
-  b -->|".config(c => c.app.thing) was called"| att["attached"]
-  b -->|"no selector"| det["detached"]
-  att --> aw["defaults → FRAMEWORK band at app.thing.*\ncode values → CODE band at app.thing.*\nslice reads app.thing from the merged tree —\nfiles, env and args layer over it"]
-  det --> dw["defaults + code values merged locally\nslice validates that · no external source reaches it\nadds no field to the application's config object"]
+  cb["configure callback — (builder, config)"]
+  cb -->|"reads a node: b.withConfig(c.app.thing)"| live["the builder holds a live accessor
+reads go through the current tree, so a refresh reaches them"]
+  cb -->|"reads a value: b.port(c.app.thing.port)"| snap["the builder holds a number
+fixed at the moment it was read"]
+  cb -->|"reads nothing"| own["the feature runs on its own defaults
+and whatever its fluent methods set"]
 ```
 
-Where the settings live is the **application's** choice, named with the `.config(selector)` the
-application passes — `s.config(c => c.server)`. A feature is never placed somewhere the application
-did not ask for. Without a selector the slice resolves detached: it works, it just has no external
-overrides.
+Three things follow from that:
 
-Two helpers cover what `set` cannot express:
+- **A fluent method is the last word.** `s.port(3000)` is not a default the environment outranks. Where
+  both are named, the more specific wins: a setter beats the block `withConfig` handed over.
+- **Liveness is the author's choice.** A node read through follows a refresh; a scalar copied out of one
+  does not. A feature whose readers need a _folded_ shape to stay live builds it with `liveFold(...)` —
+  a stable identity whose fields refold only when the settings behind them actually changed.
+- **The application's schema is the only schema.** A feature seeds nothing, so a block declared with
+  required, undefaulted fields and no source to fill them fails validation. Splice the feature's exported
+  schema (`serverConfigSchema`, `healthConfigSchema`, …) rather than restating the fields — importing it is
+  what carries the feature's defaults into the tree.
 
-- **`derive(compute, key?)`** — fold the raw settings into the shape the feature runs on (and merge
-  back a dispatcher or handler that cannot travel through a tree). Recomputed on every refresh.
-- **`splitOptionBag(options)`** — split a third-party option bag into the data half that goes in the
-  slice and the callbacks that stay on the builder.
+The callback runs once, when the application bootstraps: after configuration has resolved, and before the
+feature binds anything. An authoring mistake inside it therefore surfaces from `ready()`, not from the
+`.extend(...)` call that wrote it.
 
 ---
 
@@ -146,15 +151,14 @@ Two helpers cover what `set` cannot express:
 | From                      | How                                                                 | Notes                                                        |
 | ------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
 | The application's own key | `container.get(kAppConfig)`                                         | Typed `ConfigHandle<AppConfig>`, live                        |
-| Any feature's settings    | `container.get(Configuration).config(kServerConfig)`                | By `FeatureConfigKey`, `undefined` if not installed          |
+| Any feature's settings    | `container.getOptional(kServerOptions)`                             | A binding the feature made, absent if not installed          |
 | Value injection           | `$i.value(c => c.database.host)`                                    | The handle is bound under the values key; follows refresh    |
-| Inside a feature          | `this.slice.config`                                                 | Stable identity, fields follow every refresh                 |
+| Inside a feature          | whatever the configure callback handed it                           | A node stays live; a value copied out of one does not        |
 | Resolve metadata          | `container.get(Configuration)`                                      | `.snapshot()`, `.revision`, `.diagnostics`, `.onChange(...)` |
 | Escape hatch              | `configuration.env('DATABASE_URL')` / `.either(c => c.x, fallback)` | Straight from `process.env`, or a safe deep read             |
 
-A `FeatureConfigKey` is minted with `featureConfigKey<T>('name')` and published either by a builder's
-`configKey` field or by `derive(fn, key)`. It is addressed by identity, so a feature that relocated
-its settings is still found.
+There is no feature-key registry and no callable config handle: a feature that wants its resolved options
+readable from outside binds them, exactly as `ShutdownBuilder` binds `kShutdownPolicy`.
 
 `Configuration.snapshotHandle` is a handle fixed to one revision — what a request-scoped read latches
 onto, so a refresh landing mid-request cannot change the answers a request already started with.
@@ -264,7 +268,7 @@ The shard is bound under `Scopes.REFRESH` with the `CONFIG_REFRESH_LABEL` label.
 
 Mark a field `$t.Secret(...)` and the diagnostics redact it — `valueAt`, and the whole `snapshot`,
 which is the one thing here built to be dumped to a log. A feature's own read path does **not** go
-through redaction: it reads the real value through its slice.
+through redaction: it reads the real value the callback handed it.
 
 ```ts
 container.get(Configuration).diagnostics.originOf('database.host') // → 'env:DATABASE_HOST'
@@ -281,23 +285,23 @@ describe a slice that holds credentials.
 ```mermaid
 sequenceDiagram
   participant App as ApplicationBuilder
-  participant Feat as each FeatureBuilder
+  participant Feat as each Feature
   participant Def as ConfigDefinition
   participant Shard as ConfigShard
   App->>Def: .config(schema, key, c => c.source(...))
-  Feat->>Def: [kBeforeBootstrap] — defineFeatureConfig: register slice, write bands
-  App->>Def: bootstrap()  (between the two service steps)
+  App->>Def: bootstrap()  (before any feature bootstraps)
   Def->>Shard: ConfigShard.bootstrap(options)
-  Shard->>Shard: resolve → materialize → validate root + slices
-  Shard-->>Def: handle bound, every slice published
-  App->>Feat: [kBootstrap] — read slice.config, bind what the feature produces
+  Shard->>Shard: resolve → materialize → validate root
+  Shard-->>Def: handle bound
+  App->>Feat: [kBootstrap] — run the configure callback, then bind what the feature produces
   App->>App: container.init()
 ```
 
-`ConfigDefinition` is the mutable description the application builder owns and every feature
-contributes to. It is resolved once, after every feature has declared and before any reads its
-settings — a slice that cannot resolve fails start-up here, which is more legible than failing at
-whatever moment the feature was first used. `ConfigModule` binds what the resolved shard holds.
+`ConfigDefinition` is the mutable description the application builder owns. It is resolved once, before
+any feature bootstraps and while binding is still open — which is what lets a feature be configured from a
+setting it then consumes at binding time. A tree that cannot validate fails start-up here, which is more
+legible than failing at whatever moment something first read it. `ConfigModule` binds what the resolved
+shard holds.
 
 ---
 
@@ -305,32 +309,31 @@ whatever moment the feature was first used. `ConfigModule` binds what the resolv
 
 All in [`config.ts`](./config.ts):
 
-| Type                                                                      | Role                                                                                 |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `ConfigValue`, `ConfigPrimitive`, `ConfigEntry`                           | The value shapes flowing through a resolve                                           |
-| `ConfigProvider`, `PropertySource`, `ResolutionContext`, `ConfigSnapshot` | The provider contract and what it produces                                           |
-| `ConfigSchema`, `InferConfig`                                             | A schema: `$t` or any Standard Schema                                                |
-| `ConfigHandle`, `ConfigAccessors`, `ConfigLocation`                       | The read-only projections — root handle, nested node, `.config(...)` selector target |
-| `FeatureConfigKey`                                                        | A symbol branded with the configuration it addresses                                 |
-| `ConfigChangeListener`                                                    | An `onChange` listener                                                               |
-| `ConfigDiagnostics`, `ConfigSliceFailure`                                 | Provenance, redaction, per-feature resolve failures                                  |
+| Type                                                                      | Role                                                 |
+| ------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `ConfigValue`, `ConfigPrimitive`, `ConfigEntry`                           | The value shapes flowing through a resolve           |
+| `ConfigProvider`, `PropertySource`, `ResolutionContext`, `ConfigSnapshot` | The provider contract and what it produces           |
+| `ConfigSchema`, `InferConfig`                                             | A schema: `$t` or any Standard Schema                |
+| `ConfigHandle`, `ConfigAccessors`, `ConfigLocation`                       | The read-only projections — root handle, nested node |
+| `ConfigChangeListener`                                                    | An `onChange` listener                               |
+| `ConfigDiagnostics`, `ConfigSliceFailure`                                 | Provenance, redaction, per-feature resolve failures  |
 
 Runtime pieces exported from [`index.ts`](./index.ts): `ConfigSlice`, `ConfigSources`,
-`ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`, `featureConfigKey`,
-`defineFeatureConfig`, `configEquals`, `splitOptionBag`, `activeProfiles`, `hostProfiles`, the seven providers, and
+`ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`, `liveFold`,
+`configEquals`, `activeProfiles`, `hostProfiles`, the seven providers, and
 the `ErrConfig*` classes.
 
 ---
 
 ## Package layout
 
-| Area                | Files                                                                      |
-| ------------------- | -------------------------------------------------------------------------- |
-| Vocabulary          | `config.ts`                                                                |
-| Merge engine        | `engine.ts`, `sources.ts`, `flatten.ts`, `materializer.ts`, `path.ts`      |
-| Schema + validation | `schema.ts`, `secrets.ts`, `errors.ts`                                     |
-| Feature slices      | `slice.ts`, `feature.ts`, `feature_key.ts`, `definition.ts`, `accessor.ts` |
-| Resolve + refresh   | `bootstrap.ts`, `notifier.ts`, `diagnostics.ts`, `profiles.ts`             |
-| DI integration      | `integration/shard.ts`, `integration/module.ts`, `configuration.ts`        |
-| Providers           | `providers/`                                                               |
-| Authoring helpers   | `option_bag.ts`, `selector_path.ts`                                        |
+| Area                | Files                                                                 |
+| ------------------- | --------------------------------------------------------------------- |
+| Vocabulary          | `config.ts`                                                           |
+| Merge engine        | `engine.ts`, `sources.ts`, `flatten.ts`, `materializer.ts`, `path.ts` |
+| Schema + validation | `schema.ts`, `secrets.ts`, `errors.ts`                                |
+| Definition          | `definition.ts`, `accessor.ts`, `slice.ts`                            |
+| Resolve + refresh   | `bootstrap.ts`, `notifier.ts`, `diagnostics.ts`, `profiles.ts`        |
+| DI integration      | `integration/shard.ts`, `integration/module.ts`, `configuration.ts`   |
+| Providers           | `providers/`                                                          |
+| Authoring helpers   | `selector_path.ts`                                                    |

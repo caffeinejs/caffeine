@@ -4,50 +4,49 @@ import { z } from 'zod'
 
 import { createApplication } from './application_builder.js'
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
-import {
-  ErrFeatureAlreadyInstalled,
-  feature,
-  kBootstrap,
-  kFeatureName,
-  type BootstrapKit,
-  type Feature,
-} from './feature.js'
+import { ErrFeatureAlreadyInstalled, kBootstrap, kFeatureName, type BootstrapKit, type Feature } from './feature.js'
+import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 
 const kSentinel = token<Record<string, unknown>>(Symbol('extend-sentinel'))
 
-function tracker(name = 'track') {
-  return feature(name, () => {
-    const state: { value: string | undefined } = { value: undefined }
-    return {
-      [kFeatureName]: 'track',
-      capture(value: string) {
-        state.value = value
-      },
-      [kBootstrap](kit: BootstrapKit) {
-        kit.container.bind(kSentinel, t => t.toValue({ value: state.value }))
-        return Promise.resolve()
-      },
-    }
-  })
-}
+class TrackerBuilder<C = unknown> extends FeatureBuilder<C> {
+  readonly #name: string
 
-function keyed(instance = 'default'): Feature<unknown> {
-  return {
-    name: instance === 'default' ? 'keyed' : `keyed:${instance}`,
-    install(ctx) {
-      ctx.addFeature({
-        [kFeatureName]: 'keyed',
-        [kBootstrap]() {
-          return Promise.resolve()
-        },
-      })
-    },
+  #value: string | undefined
+
+  constructor(name: string, configure?: FeatureConfigurer<never, C>) {
+    super(configure)
+    this.#name = name
+  }
+
+  get [kFeatureName](): string {
+    return this.#name
+  }
+
+  capture(value: string): this {
+    this.#value = value
+    return this
+  }
+
+  protected bootstrap(kit: BootstrapKit<C>): Promise<void> {
+    const value = this.#value
+    kit.container.bind(kSentinel, t => t.toValue({ value }))
+    return Promise.resolve()
   }
 }
 
+function tracker<C = unknown>(configure?: FeatureConfigurer<TrackerBuilder<C>, C>): Feature<C> {
+  return new TrackerBuilder<C>('track', configure as never)
+}
+
+/** An instanced feature: the instance folds into the name `.extend` deduplicates on. */
+function keyed(instance = 'default'): Feature {
+  return new TrackerBuilder(instance === 'default' ? 'keyed' : `keyed:${instance}`)
+}
+
 describe('BaseApplicationBuilder.extend', () => {
-  it('installs the feature and registers its service', async () => {
-    const builder = createApplication().extend(tracker(), t => t.capture('recorded'))
+  it('installs the feature and bootstraps it', async () => {
+    const builder = createApplication().extend(tracker(t => t.capture('recorded')))
 
     const app = builder.build()
     await app.ready()
@@ -87,9 +86,7 @@ describe('BaseApplicationBuilder.extend', () => {
   })
 
   it('throws when a feature is installed twice', () => {
-    const feature = tracker()
-
-    expect(() => createApplication().extend(feature).extend(feature)).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().extend(tracker()).extend(tracker())).toThrow(ErrFeatureAlreadyInstalled)
   })
 
   it('throws when a keyed instance is installed twice', () => {
