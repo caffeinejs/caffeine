@@ -48,8 +48,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   })
     .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
 
-    .extend(view(v =>
-      v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
+    .extend(view(v => v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
     .extend(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
     // $p pickers are the source, and @APIGroup/@Operation add only what those cannot say. 3.2.0 because
