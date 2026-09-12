@@ -87,7 +87,7 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
   //
   // Exactly what the application declared, and nothing else: a feature contributes no field here. Its settings
   // are in the root tree when the application put them there — declared in the schema and named by the
-  // feature's `.config(...)` selector — and nowhere at all otherwise.
+  // feature's `.withConfig(...)` selector — and nowhere at all otherwise.
   const validated = freezeDeep(validateConfig(options.schema, materialized))
   const config = createLiveAccessors(() => validated)
   // The root schema is walked here rather than by the caller: an application that declared its own secrets in
