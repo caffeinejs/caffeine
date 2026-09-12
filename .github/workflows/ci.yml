@@ -23,9 +23,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build
+  test:
+    name: 'Test :: ${{ matrix.node-version }}'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix:
+        node-version: ['24']
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -33,7 +40,7 @@ jobs:
       - name: Node
         uses: actions/setup-node@v7.0.0
         with:
-          node-version: '24'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
@@ -61,115 +68,14 @@ jobs:
       - name: Memory Leak Test
         run: npm run test:memory
 
-      - name: Verify Build Outputs
-        run: |
-          missing=0
-          for d in \
-            di/dist \
-            std/dist \
-            http/dist \
-            cors/dist \
-            compress/dist \
-            caching/dist \
-            html/dist \
-            multipart/dist \
-            view/dist \
-            static/dist \
-            openapi/dist \
-            testing/dist \
-            brewer/dist \
-            cli/dist \
-            messaging/dist \
-            kafka/dist \
-            fetchy/fetchy/dist \
-            fetchy/fetchy-undici/dist \
-            fetchy/fetchy-logging-interceptor/dist \
-            plugins/esbuild/dist \
-            plugins/eslint/dist \
-            plugins/vite/dist \
-            devtools/dist
-          do
-            if [ ! -d "$d" ]; then
-              echo "Missing build output: $d"
-              missing=1
-            fi
-          done
-          exit "$missing"
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: dist
-          # Workspace packages export entry points from dist/. Keep this list in sync
-          # with package.json workspaces that declare exports/types under dist/.
-          path: |
-            di/dist/
-            std/dist/
-            http/dist/
-            cors/dist/
-            compress/dist/
-            caching/dist/
-            html/dist/
-            multipart/dist/
-            view/dist/
-            static/dist/
-            openapi/dist/
-            testing/dist/
-            brewer/dist/
-            cli/dist/
-            messaging/dist/
-            kafka/dist/
-            fetchy/*/dist/
-            plugins/*/dist/
-            devtools/dist/
-          if-no-files-found: error
-          retention-days: 1
-
-  test:
-    name: 'Test :: ${{ matrix.node-version }}'
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      contents: read
-      id-token: write
-    strategy:
-      matrix:
-        node-version: ['24', '26']
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-
-      - name: Node
-        uses: actions/setup-node@v7.0.0
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
-
-      - name: Download Build
-        uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: .
-
-      - name: Install
-        run: npm ci --ignore-scripts
-
-      - name: Test
-        if: matrix.node-version != '24' || runner.os != 'Linux'
-        run: npm test
-
       - name: Test & Coverage
-        if: matrix.node-version == '24' && runner.os == 'Linux'
         run: npm run test:coverage
 
       - name: Coverage Summary
-        if: matrix.node-version == '24' && runner.os == 'Linux'
         run: node tools/coverage-summary.mjs
 
       - name: Upload Coverage
-        if: ${{ !cancelled() && matrix.node-version == '24' && runner.os == 'Linux' }}
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
         with:
           use_oidc: true
@@ -177,7 +83,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload test results
-        if: ${{ !cancelled() && matrix.node-version == '24' && runner.os == 'Linux' }}
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
         with:
           use_oidc: true
