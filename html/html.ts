@@ -96,7 +96,7 @@ export class HTMLResult extends Responder {
  * carry one — a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call, both
  * survive undisturbed. There is no way to set Content-Type through this function; use `@Produces` or
  * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the application's
- * `.extend(c => htmlPlugin(c.app.html))` setting, or the framework default when the application never installed the
+ * `.plugin(c => htmlPlugin(c.app.html))` setting, or the framework default when the application never installed the
  * feature; `options.doctype` overrides it for this response.
  *
  * `@kitajs/html` escapes nothing on its own: interpolated values need the `safe` attribute, and the

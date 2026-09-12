@@ -13,7 +13,7 @@ import { describe, it, expect } from 'vitest'
 import { Compress, compress, compressPlugin, type CompressOptions } from '../index.js'
 
 function compressApp(options?: CompressOptions) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(() => compressPlugin(options))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => compressPlugin(options))
 }
 
 describe('Compress', () => {

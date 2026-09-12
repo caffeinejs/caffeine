@@ -85,8 +85,8 @@ app.mount(pets) // before app.ready()
 - `.with(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
   `bodyAsBuffer()`, `bodyAsStream()` and `fst(options)`; compress ships `compress(opts)` and `encoding(tokens)`;
   openapi ships `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
-- `.extend(factory)` registers a Fastify plugin in front of that router's routes and the groups nested under
-  it — `pets.extend(() => corsPlugin({ origin: 'https://pets.example' }))`. The same on a controller is
+- `.plugin(factory)` registers a Fastify plugin in front of that router's routes and the groups nested under
+  it — `pets.plugin(() => corsPlugin({ origin: 'https://pets.example' }))`. The same on a controller is
   `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
   deduplicated: two groups wanting different settings pass two factories. The factory's config argument sees
   `ConfigHandle<unknown>` — a router does not know which application it will be mounted into.

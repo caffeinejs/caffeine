@@ -179,7 +179,7 @@ export class FastifyAdapter<
         async server => {
           installRouteGroupErrorHandler(server, router, globalErrorHandler)
 
-          // What a mounted router or a controller installed with `.extend(...)` / `@Use(...)`. The same
+          // What a mounted router or a controller installed with `.plugin(...)` / `@Use(...)`. The same
           // plugin as an application-level one, registered in this group's context instead of on the root
           // server — so a `fastify-plugin`-wrapped plugin covers this group's routes and no others.
           for (const scope of router.scopes ?? []) {

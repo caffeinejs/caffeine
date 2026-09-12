@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest'
 import { Encoding, encoding, compressPlugin } from '../index.js'
 
 function encodingApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).extend(() => compressPlugin())
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => compressPlugin())
 }
 
 async function gzip(data: string): Promise<Buffer> {

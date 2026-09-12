@@ -14,7 +14,7 @@ export interface CORSConfig {
  * unknowns is validated as "an object" and handed on with every key intact.
  *
  * Import it into an application schema — `$t.Object({ app: $t.Object({ cors: corsConfigSchema }) })` —
- * rather than restating it, then read that node in the plugin factory: `.extend(c => corsPlugin(c.app.cors.options))`.
+ * rather than restating it, then read that node in the plugin factory: `.plugin(c => corsPlugin(c.app.cors.options))`.
  */
 export const corsConfigSchema = $t.Object({
   options: $t.Record($t.String(), $t.Unknown(), { default: {} }),

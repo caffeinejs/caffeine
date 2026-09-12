@@ -1,4 +1,4 @@
-import type { NamedToken } from '@caffeinejs/di'
+import type { InjectionToken, NamedToken } from '@caffeinejs/di'
 import {
   AppConfigBuilder,
   BaseApplicationBuilder,
@@ -6,7 +6,6 @@ import {
   kAddConfigurer,
   type ApplicationBuilderOptions,
   type ApplicationConfigMarker,
-  type Feature,
   type FeatureConfigurer,
   type Reconfigured,
 } from '@caffeinejs/std'
@@ -19,7 +18,7 @@ import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { ConstraintsBuilder } from './constraints/builder.js'
 import { GuardsBuilder } from './guards/builder.js'
 import { HealthBuilder } from './health/health_builder.js'
-import type { HTTPPluginFactory } from './plugin.js'
+import { asPluginFactory, type HTTPPluginFactory, type HTTPPluginProvider } from './plugin.js'
 import { HTTPPluginFeature } from './plugin_feature.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
@@ -77,34 +76,35 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   /**
-   * Installs a feature, or registers a Fastify plugin.
+   * Registers a Fastify plugin, or resolves an {@link HTTPPluginProvider} from the container and registers
+   * what it creates.
    *
-   * A feature is an object; a plugin factory is a function, which is the whole discrimination. Both take their
-   * position in one list, so they register in the order these calls are written:
+   * A factory is a function; a token is a class, a `token(...)`, or a `DeferredCtor`. Both take their
+   * position in the same list as `.extend(feature)` and `.authentication(...)`, so they register in the
+   * order these calls are written:
    *
    * ```ts
    * createWebApplication()
-   *   .extend(c => corsPlugin(c.app.cors.options))
+   *   .plugin(c => corsPlugin(c.app.cors.options))
    *   .extend(caching(cache => cache.ttl('5m')))
    * ```
    *
-   * A feature is installed once per `kFeatureName`. An unnamed plugin is never deduplicated — two calls
-   * register two plugins. A `fastify-plugin` name already on that instance is refused at register time.
+   * Write the factory as an arrow: a `function` declaration is constructable and would be taken as a class
+   * token. An unnamed plugin is never deduplicated — two calls register two plugins. A `fastify-plugin` name
+   * already on that instance is refused at register time.
    */
-  override extend(feature: Feature<TConfig>): this
-  override extend(plugin: HTTPPluginFactory<TConfig>): this
-  override extend(target: Feature<TConfig> | HTTPPluginFactory<TConfig>): this {
-    return typeof target === 'function'
-      ? this.addFeature(new HTTPPluginFeature(target))
-      : super.extend(target as Feature<never>)
+  plugin(factory: HTTPPluginFactory<TConfig>): this
+  plugin(key: InjectionToken<HTTPPluginProvider<TConfig>>): this
+  plugin(target: HTTPPluginFactory<TConfig> | InjectionToken<HTTPPluginProvider<TConfig>>): this {
+    return this.addFeature(new HTTPPluginFeature(asPluginFactory(target)))
   }
 
   /**
    * Configures authentication, and puts the gate where this call is written.
    *
    * The `onRequest` hook that authenticates and authorizes registers at this position among the plugins, so a
-   * feature extended before this call runs ahead of it — `cors()`, whose headers a rejected cross-origin
-   * request still needs — and one extended after it never runs for a request the gate rejected.
+   * feature or plugin registered before this call runs ahead of it — `cors()`, whose headers a rejected cross-origin
+   * request still needs — and one registered after it never runs for a request the gate rejected.
    */
   authentication(configure: FeatureConfigurer<AuthenticationBuilder<TConfig>, TConfig>): this {
     if (this.#authBuilder == null) {
@@ -235,7 +235,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
  *
  * Install features with `.extend(feature)` or `.extend(feature(configure))` rather than here: it can be
  * called at any point in the chain, including after `.config()`. A plugin factory is
- * `.extend(c => corsPlugin(c.app.cors.options))`.
+ * `.plugin(c => corsPlugin(c.app.cors.options))`.
  *
  * ```ts
  * createWebApplication()

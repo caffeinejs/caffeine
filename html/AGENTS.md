@@ -53,7 +53,7 @@ The plugin is optional: with none registered nothing decorated the instance, `HT
 `HTML(...)` works with no setup at all.
 
 The settings the plugin is handed are usually a node of the configuration tree —
-`.extend(c => htmlPlugin(c.app.html))` — so the decoration reads through rather than copying, and a refresh
+`.plugin(c => htmlPlugin(c.app.html))` — so the decoration reads through rather than copying, and a refresh
 reaches a response rendered after it. `htmlConfigSchema` is exported for an application to splice into its own
 schema rather than restate the fields. There is no config slice, no feature and no builder: the package
 registers one plugin and nothing else.

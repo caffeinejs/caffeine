@@ -79,7 +79,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
           .errorSchema(apiErrorSchema),
       ),
     )
-    .extend(() => multipartPlugin())
+    .plugin(() => multipartPlugin())
     .authentication(auth =>
       auth
         // Basic, for the API documentation only. Demo credentials, overridable from the environment.

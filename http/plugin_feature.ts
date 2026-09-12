@@ -6,12 +6,12 @@ import type { HTTPExtensionRegistrar } from './plugin_registry.js'
 let counter = 0
 
 /**
- * The {@link Feature} a plugin registered with `.extend(c => …)` is carried as.
+ * The {@link Feature} a plugin registered with `.plugin(c => …)` is carried as.
  *
  * A plugin goes in the same list as a feature so that the two interleave in the order they were written, which
  * is the order they register on Fastify. Nothing else about it is special.
  *
- * Its name is generated rather than chosen, so two `.extend` of the same factory install two features. An
+ * Its name is generated rather than chosen, so two `.plugin` of the same factory install two features. An
  * unnamed plugin therefore registers twice; a `fastify-plugin` name already on that Fastify instance is
  * refused at register time.
  */

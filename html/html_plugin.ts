@@ -11,7 +11,7 @@ import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
  * parameterizes that group's responses alone.
  *
  * ```ts
- * .extend(c => htmlPlugin(c.app.html))
+ * .plugin(c => htmlPlugin(c.app.html))
  * ```
  */
 export function htmlPlugin(defaults: Partial<HTMLDefaults> = {}): HTTPPlugin {

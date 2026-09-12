@@ -19,7 +19,7 @@ interface DeferredEntry {
 
 /**
  * What {@link HTTPPluginFeature} registers with instead of {@link ExtensionRegistrar.register}: an app-level
- * `.extend(...)` factory cannot run from bootstrap, since the container has not initialized there yet. Handing
+ * `.plugin(...)` factory cannot run from bootstrap, since the container has not initialized there yet. Handing
  * the factory itself over lets {@link HTTPPlugins.resolveDeferred} call it later, once it has.
  */
 export interface HTTPExtensionRegistrar<C = unknown> extends ExtensionRegistrar<HTTPPlugin> {

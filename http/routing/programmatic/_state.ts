@@ -27,7 +27,7 @@ export interface RouterState {
   injection?: ObjectInjectionSpec
   readonly routes: RouteState[]
   readonly children: RouterState[]
-  /** The plugins `.extend(...)` registered on this router, in the order they were written. */
+  /** The plugins `.plugin(...)` registered on this router, in the order they were written. */
   readonly plugins: HTTPPluginFactory[]
 }
 

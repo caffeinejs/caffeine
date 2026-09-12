@@ -15,7 +15,7 @@ export interface MultipartConfig {
  *
  * Import it into an application schema — `$t.Object({ app: $t.Object({ uploads: multipartConfigSchema }) })` —
  * rather than restating it, then read that node in the plugin factory:
- * `.extend(c => multipartPlugin(c.app.uploads.options))`.
+ * `.plugin(c => multipartPlugin(c.app.uploads.options))`.
  */
 export const multipartConfigSchema = $t.Object({
   options: $t.Record($t.String(), $t.Unknown(), { default: {} }),

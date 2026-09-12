@@ -26,7 +26,7 @@ export const kHTMLOptions = Symbol.for('@caffeinejs/html:options')
 
 /**
  * The shape the HTML plugin expects wherever the application decides to keep its settings. Import it into an
- * application schema rather than restating it, then read that node: `.extend(c => htmlPlugin(c.app.html))`.
+ * application schema rather than restating it, then read that node: `.plugin(c => htmlPlugin(c.app.html))`.
  */
 export const htmlConfigSchema = $t.Object({
   autoDoctype: $t.Boolean({ default: HTML_DEFAULTS.autoDoctype }),

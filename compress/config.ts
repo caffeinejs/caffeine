@@ -15,7 +15,7 @@ export interface CompressConfig {
  *
  * Import it into an application schema — `$t.Object({ app: $t.Object({ compress: compressConfigSchema }) })` —
  * rather than restating it, then read that node in the plugin factory:
- * `.extend(c => compressPlugin(c.app.compress.options))`.
+ * `.plugin(c => compressPlugin(c.app.compress.options))`.
  */
 export const compressConfigSchema = $t.Object({
   options: $t.Record($t.String(), $t.Unknown(), { default: {} }),
