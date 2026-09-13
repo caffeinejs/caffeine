@@ -9,7 +9,7 @@ import {
 import fastify, { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
-import { Cache, CacheInvalidate, caching } from '../index.js'
+import { Cache, CacheInvalidate, HTTPCaching } from '../index.js'
 
 /**
  * What the caching hooks cost when a route uses them, and what they cost a route that does not.
@@ -56,7 +56,7 @@ beforeAll(async () => {
     registered.set(`${route.method} ${route.url}`, route as RouteOptions)
   })
 
-  app = createWebApplication(fastifyAdapterFactory(server)).extend(caching()).build()
+  app = createWebApplication(fastifyAdapterFactory(server)).plugin(HTTPCaching()).build()
   await app.ready()
 })
 

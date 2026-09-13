@@ -1,4 +1,3 @@
-import type { Container } from '@caffeinejs/di'
 import {
   FastifyContextRequest,
   addRouteHook,
@@ -11,12 +10,10 @@ import { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
-import { kCacheStatusHeader, kETagGenerator } from './keys.js'
-import { CacheStore } from './store.js'
+import type { CacheStore } from './store.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
-const DEFAULT_STATUS_HEADER = 'X-Cache'
 
 // Cache-status values reported via the status header (default `X-Cache`).
 const CACHE_HIT = 'HIT'
@@ -55,20 +52,11 @@ export interface CacheOptions {
   etagGenerator?: ETagGenerator
 }
 
-/** What the cache hooks need from the container, resolved once at start-up. */
+/** What the cache hooks need, resolved once at start-up by `HTTPCaching`. */
 export interface CacheDeps {
   store: CacheStore
   etagGenerator: ETagGenerator | undefined
   statusHeader: string
-}
-
-/** Resolves the cache's dependencies. Called once during setup, never per route and never per request. */
-export function resolveCacheDeps(container: Container): CacheDeps {
-  return {
-    store: container.get(CacheStore),
-    etagGenerator: container.getOptional<ETagGenerator>(kETagGenerator),
-    statusHeader: container.getOptional<string>(kCacheStatusHeader) ?? DEFAULT_STATUS_HEADER,
-  }
 }
 
 /**

@@ -82,7 +82,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    * ```ts
    * createWebApplication()
    *   .plugin(c => corsPlugin(c.app.cors.options))
-   *   .extend(caching(cache => cache.ttl('5m')))
+   *   .plugin(HTTPCaching(cache => cache.statusHeader('X-Edge')))
    * ```
    *
    * An unnamed plugin is never deduplicated — two calls register two plugins. A `fastify-plugin` name already

@@ -53,6 +53,16 @@ export function registerPlugin(kit: BootstrapKit<any>, plugin: AnyFastifyPlugin)
   kit.extensions.register(plugin)
 }
 
+/**
+ * Decoration name `@caffeinejs/caching` stamps on a context once one of its plugin instances has registered
+ * there, read back by the adapter's `@Cache`-without-caching-installed start-up refusal.
+ *
+ * A plain decoration rather than a `fastify-plugin` name: `@caffeinejs/caching` is meant to be installed more
+ * than once (a different store per route group, say), so its plugin is deliberately unnamed and never
+ * deduplicated by `assertPluginNotRegistered` — this is the replacement signal for "is it installed at all".
+ */
+export const CACHING_INSTALLED = '$cachingInstalled'
+
 const kPluginMeta = Symbol.for('plugin-meta')
 
 /** The name `fastify-plugin` stamped on `plugin`, or `undefined` for one that was never wrapped with it. */

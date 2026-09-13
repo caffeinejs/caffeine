@@ -2,7 +2,7 @@ import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '@c
 import fastify, { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Cache, caching } from '../index.js'
+import { Cache, HTTPCaching } from '../index.js'
 
 /**
  * The caching feature reaches routes through Fastify's own `onRoute` hook, not through the adapter. These
@@ -40,7 +40,7 @@ describe('cache plugin wiring', () => {
       registered.set(`${route.method} ${route.url}`, route as RouteOptions)
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(server)).extend(caching()).build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).plugin(HTTPCaching()).build()
     close = () => app.close()
     await app.ready()
 
@@ -50,5 +50,34 @@ describe('cache plugin wiring', () => {
     // The onRoute hook only touched the decorated route.
     expect(registered.get('GET /contrib/plain')!.onSend).toBeUndefined()
     expect(typeof registered.get('GET /contrib/cached')!.onSend).toBe('function')
+  })
+
+  // The whole point of dropping the fixed `fastify-plugin` name: unlike a named first-party plugin,
+  // HTTPCaching is never refused a second registration by `assertPluginNotRegistered`.
+  it('registers more than once, each with its own settings, without ERR_HTTP_DUPLICATE_PLUGIN', async () => {
+    @Controller('/contrib-multi')
+    class MultiController {
+      @Cache({ ttl: 60 })
+      @Get('/data')
+      data() {
+        return { ok: true }
+      }
+    }
+    void [MultiController]
+
+    const server = fastify()
+    const app = createWebApplication(fastifyAdapterFactory(server))
+      .plugin(HTTPCaching(b => b.statusHeader('X-First')))
+      .plugin(HTTPCaching(b => b.statusHeader('X-Second')))
+      .build()
+    close = () => app.close()
+
+    await expect(app.ready()).resolves.toBeUndefined()
+
+    const res = await app.fetch('/contrib-multi/data')
+    // Both plugins' onRoute hooks attached to the same route independently — two hooks in each slot, each
+    // writing its own status header.
+    expect(res.headers.get('x-first')).toBe('MISS')
+    expect(res.headers.get('x-second')).toBe('MISS')
   })
 })
