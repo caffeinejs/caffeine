@@ -1,4 +1,4 @@
-import type { InjectionToken, NamedToken } from '@caffeinejs/di'
+import type { NamedToken } from '@caffeinejs/di'
 import {
   AppConfigBuilder,
   BaseApplicationBuilder,
@@ -18,7 +18,7 @@ import { AdapterFactory, WebApplication, type Adapter } from './application.js'
 import { ConstraintsBuilder } from './constraints/builder.js'
 import { GuardsBuilder } from './guards/builder.js'
 import { HealthBuilder } from './health/health_builder.js'
-import { asPluginFactory, type HTTPPluginFactory, type HTTPPluginProvider } from './plugin.js'
+import type { HTTPPluginFactory } from './plugin.js'
 import { HTTPPluginFeature } from './plugin_feature.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
@@ -76,12 +76,8 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   /**
-   * Registers a Fastify plugin, or resolves an {@link HTTPPluginProvider} from the container and registers
-   * what it creates.
-   *
-   * A factory is a function; a token is a class, a `token(...)`, or a `DeferredCtor`. Both take their
-   * position in the same list as `.extend(feature)` and `.authentication(...)`, so they register in the
-   * order these calls are written:
+   * Registers a Fastify plugin from a factory. It takes its position in the same list as `.extend(feature)`
+   * and `.authentication(...)`, so plugins and features register in the order these calls are written:
    *
    * ```ts
    * createWebApplication()
@@ -89,14 +85,11 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    *   .extend(caching(cache => cache.ttl('5m')))
    * ```
    *
-   * Write the factory as an arrow: a `function` declaration is constructable and would be taken as a class
-   * token. An unnamed plugin is never deduplicated — two calls register two plugins. A `fastify-plugin` name
-   * already on that instance is refused at register time.
+   * An unnamed plugin is never deduplicated — two calls register two plugins. A `fastify-plugin` name already
+   * on that instance is refused at register time.
    */
-  plugin(factory: HTTPPluginFactory<TConfig>): this
-  plugin(key: InjectionToken<HTTPPluginProvider<TConfig>>): this
-  plugin(target: HTTPPluginFactory<TConfig> | InjectionToken<HTTPPluginProvider<TConfig>>): this {
-    return this.addFeature(new HTTPPluginFeature(asPluginFactory(target)))
+  plugin(factory: HTTPPluginFactory<TConfig>): this {
+    return this.addFeature(new HTTPPluginFeature(factory))
   }
 
   /**

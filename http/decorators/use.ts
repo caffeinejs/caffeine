@@ -1,6 +1,4 @@
-import type { InjectionToken } from '@caffeinejs/di'
-
-import { asPluginFactory, type HTTPPluginFactory, type HTTPPluginProvider } from '../plugin.js'
+import type { HTTPPluginFactory } from '../plugin.js'
 
 const PluginRegistry = new WeakMap<Function, HTTPPluginFactory[]>()
 
@@ -8,13 +6,12 @@ const PluginRegistry = new WeakMap<Function, HTTPPluginFactory[]>()
  * Registers a Fastify plugin inside this controller's own Fastify context.
  *
  * The controller counterpart of `router.plugin(...)`: the plugin runs in front of this controller's routes and
- * nowhere else. A factory or a provider token is resolved once, during start-up, with the resolved
- * configuration and the container — the same arguments the application's `.plugin(c => …)` gets.
+ * nowhere else. The factory is resolved once, during start-up, with the resolved configuration and the
+ * container — the same arguments the application's `.plugin(c => …)` gets.
  *
  * A controller is declared without knowing which application it will be resolved into, so the configuration
  * here is typed `unknown`. Reach for a container binding when a controller-scoped plugin needs settings of its
- * own. Write a factory as an arrow: a `function` declaration is constructable and would be taken as a class
- * token.
+ * own.
  *
  * ```ts
  * @Use(() => corsPlugin({ origin: 'https://admin.example' }))
@@ -22,12 +19,7 @@ const PluginRegistry = new WeakMap<Function, HTTPPluginFactory[]>()
  * class AdminController {}
  * ```
  */
-export function Use(plugin: HTTPPluginFactory): (target: Function, context: ClassDecoratorContext) => void
-export function Use(key: InjectionToken<HTTPPluginProvider>): (target: Function, context: ClassDecoratorContext) => void
-export function Use(
-  plugin: HTTPPluginFactory | InjectionToken<HTTPPluginProvider>,
-): (target: Function, context: ClassDecoratorContext) => void {
-  const factory = asPluginFactory(plugin)
+export function Use(factory: HTTPPluginFactory): (target: Function, context: ClassDecoratorContext) => void {
   return function (target: Function): void {
     let plugins = PluginRegistry.get(target)
     if (plugins === undefined) {

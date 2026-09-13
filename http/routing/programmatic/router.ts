@@ -9,7 +9,7 @@ import {
 import { VERSION_CONSTRAINT } from '../../constraints/registry.js'
 import type { ErrorHandlerRef } from '../../error/error.js'
 import type { Guard } from '../../guards/guard.js'
-import { asPluginFactory, type HTTPPluginFactory, type HTTPPluginProvider } from '../../plugin.js'
+import type { HTTPPluginFactory } from '../../plugin.js'
 import type { RouteValidationSchema } from '../../route.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteAuthzOptions } from '../spec.js'
@@ -414,22 +414,19 @@ export class Router<
    * Registers a Fastify plugin inside this group's Fastify context.
    *
    * The same call the application takes, scoped: `router.plugin(c => corsPlugin(…))` puts the plugin in front
-   * of this group's routes and the groups nested under it, and nowhere else. A factory or a provider token
-   * runs once during start-up, with the resolved configuration and the container.
+   * of this group's routes and the groups nested under it, and nowhere else. The factory runs once during
+   * start-up, with the resolved configuration and the container.
    *
    * A router is written without knowing which application it will be mounted into, so the configuration here
    * is typed `unknown`. Routing is built during start-up, so this has to be called before the application is
-   * ready. Write a factory as an arrow: a `function` declaration is constructable and would be taken as a
-   * class token.
+   * ready.
    *
    * ```ts
    * const pets = new Router('/pets').plugin(() => corsPlugin({ origin: 'https://pets.example' }))
    * ```
    */
-  plugin(factory: HTTPPluginFactory): this
-  plugin(key: InjectionToken<HTTPPluginProvider>): this
-  plugin(target: HTTPPluginFactory | InjectionToken<HTTPPluginProvider>): this {
-    this.#state.plugins.push(asPluginFactory(target))
+  plugin(factory: HTTPPluginFactory): this {
+    this.#state.plugins.push(factory)
     return this
   }
 

@@ -1,4 +1,4 @@
-import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
 import fastify, { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { createWebApplication, fastifyAdapterFactory, type WebApplication } from '../index.js'
-import { registerPlugin, type HTTPPluginFactory, type HTTPPluginProvider } from '../plugin.js'
+import { registerPlugin, type HTTPPluginFactory } from '../plugin.js'
 import { Router } from '../routing/programmatic/router.js'
 
 /**
@@ -326,161 +326,5 @@ describe('scoped plugin registration', () => {
     expect(petsRes.headers.get('x-inst-orders')).toBeNull()
     expect(ordersRes.headers.get('x-inst-orders')).toBe('yes')
     expect(ordersRes.headers.get('x-inst')).toBeNull()
-  })
-})
-
-function tokenStamp(name: string, header: string): FastifyPluginAsync {
-  const plugin: FastifyPluginAsync = async instance => {
-    instance.addHook('onRequest', (_request, reply, done) => {
-      reply.header(header, 'yes')
-      done()
-    })
-  }
-
-  return fp(plugin, { name })
-}
-
-describe('plugin provider tokens', () => {
-  let app: WebApplication<any, any, any, any, any> | undefined
-
-  afterEach(async () => {
-    await app?.close()
-    app = undefined
-  })
-
-  it('registers a plugin from a class token', async () => {
-    class ClassStamp implements HTTPPluginProvider {
-      create() {
-        return tokenStamp('class-stamp', 'x-class')
-      }
-    }
-
-    const container = new CaffeineIoC()
-    container.bind(ClassStamp, t => t.toSelf())
-
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .plugin(ClassStamp)
-      .build()
-
-    await app.ready()
-
-    expect((await app.fetch('/nothing-here')).headers.get('x-class')).toBe('yes')
-  })
-
-  it('registers a plugin from a named token bound to a provider class', async () => {
-    class NamedStamp implements HTTPPluginProvider {
-      create() {
-        return tokenStamp('named-stamp', 'x-named')
-      }
-    }
-
-    const kStamp = token<HTTPPluginProvider>(Symbol('named-stamp'))
-    const container = new CaffeineIoC()
-    container.bind(kStamp, t => t.toClass(NamedStamp))
-
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .plugin(kStamp)
-      .build()
-
-    await app.ready()
-
-    expect((await app.fetch('/nothing-here')).headers.get('x-named')).toBe('yes')
-  })
-
-  it('throws at ready() when the token is not bound', async () => {
-    const kMissing = token<HTTPPluginProvider>(Symbol('missing-plugin'))
-
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(kMissing)
-      .build()
-
-    await expect(app.ready()).rejects.toThrow(/Cannot resolve key/)
-  })
-
-  it('throws when the resolved value has no create method', async () => {
-    const kBad = token<HTTPPluginProvider>(Symbol('not-a-provider'))
-    const container = new CaffeineIoC()
-    container.bind(kBad, t => t.toValue({ ok: true } as never))
-
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .plugin(kBad)
-      .build()
-
-    await expect(app.ready()).rejects.toThrow(/has no "create" method/)
-  })
-
-  it('refuses a request-scoped provider', async () => {
-    class RequestStamp implements HTTPPluginProvider {
-      create() {
-        return tokenStamp('request-stamp', 'x-request')
-      }
-    }
-
-    const container = new CaffeineIoC()
-    container.bind(RequestStamp, t => t.toSelf().lifetime(Scopes.REQUEST))
-
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .plugin(RequestStamp)
-      .build()
-
-    await expect(app.ready()).rejects.toThrow(/request scope/)
-  })
-
-  it('keeps a router-installed provider token inside that router', async () => {
-    class PetsStamp implements HTTPPluginProvider {
-      create() {
-        return tokenStamp('router-token-stamp', 'x-router-token')
-      }
-    }
-
-    const container = new CaffeineIoC()
-    container.bind(PetsStamp, t => t.toSelf())
-
-    const pets = new Router('/token-pets').plugin(PetsStamp).get('/', () => ({ ok: true }))
-    const orders = new Router('/token-orders').get('/', () => ({ ok: true }))
-
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .build()
-      .mount(pets, orders)
-
-    await app.ready()
-
-    expect((await app.fetch('/token-pets')).headers.get('x-router-token')).toBe('yes')
-    expect((await app.fetch('/token-orders')).headers.get('x-router-token')).toBeNull()
-  })
-
-  it('keeps a controller-installed provider token inside that controller', async () => {
-    class AdminStamp implements HTTPPluginProvider {
-      create() {
-        return tokenStamp('use-token-stamp', 'x-use-token')
-      }
-    }
-
-    @Use(AdminStamp)
-    @Controller('/token-admin')
-    class AdminController {
-      @Get('/')
-      list() {
-        return { ok: true }
-      }
-    }
-
-    @Controller('/token-public')
-    class PublicController {
-      @Get('/')
-      list() {
-        return { ok: true }
-      }
-    }
-    void [AdminController, PublicController]
-
-    const builder = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-    builder.container.bind(AdminStamp, t => t.toSelf())
-    app = builder.build()
-
-    await app.ready()
-
-    expect((await app.fetch('/token-admin')).headers.get('x-use-token')).toBe('yes')
-    expect((await app.fetch('/token-public')).headers.get('x-use-token')).toBeNull()
   })
 })

@@ -6,22 +6,20 @@ Adapter is Fastify. Controllers are `@Controller` + `@Get` / `@Post` / … + `@A
 
 There is no `Services` record, no `Contributions`, and no `ServerExtension`. Everything this package wires at
 start-up — the error handler, the form body parser, the health probes, the OIDC callback routes, the
-authentication gate, the not-found handler — is an ordinary Fastify plugin (`HTTPPlugin`) its own feature
-hands over with `registerPlugin(kit, plugin)`, and `adapter.setup()` has one registration loop.
+authentication gate, the not-found handler — is an ordinary Fastify plugin its own feature hands over with
+`registerPlugin(kit, plugin)`, and `adapter.setup()` has one registration loop.
 
 Wrap a plugin in `fastify-plugin` and its hooks and decorations apply to the context it was registered in;
 leave it unwrapped and they stay inside the plugin, covering only what the plugin itself registered. The
 plugin does not pick that context — the application registers it on the root server, and `router.plugin(...)`
 / `@Use(...)` register it inside one route group's context. Every first-party plugin here is wrapped.
 
-`.extend(...)` takes a feature. `.plugin(...)` takes a factory `(config, container) => HTTPPlugin` or an
-`InjectionToken<HTTPPluginProvider>`. A class token is constructable; a factory must be an arrow — a
-`function` declaration would be taken as a class. Both land in one list, so they register in the order the
-calls were written. Always a factory, never a bare plugin — both are functions, so accepting both would mean
-sniffing arity. A plugin needing no configuration is written `.plugin(() => myPlugin)`. A feature is installed
-once per name. An unnamed plugin is never deduplicated, so two calls register two plugins; a `fastify-plugin`
-name already registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than
-hanging inside a re-declared decorator.
+`.extend(...)` takes a feature. `.plugin(...)` takes a factory `(config, container) => <plugin>` — a factory,
+never a bare plugin, so `.plugin(() => myPlugin)` is how a plugin needing no configuration is written. Both
+land in the same list, so they register in the order the calls were written. A feature is installed once per
+name. An unnamed plugin is never deduplicated, so two calls register two plugins; a `fastify-plugin` name
+already registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than hanging
+inside a re-declared decorator.
 
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
 holds the only two framework slots — `ErrorHandlingServiceConfigurer` and `HTTPCoreFeature` lead,
@@ -83,7 +81,7 @@ A feature that must attach a real Fastify hook to the routes it applies to — r
 
 ## Installing a plugin on one group
 
-`router.plugin(factory)` / `router.plugin(key)` and `@Use(factory)` / `@Use(key)` register a Fastify plugin inside that route group's context instead of on the root server. A router takes **only** plugins: scoping was always about where the plugin registers, and a router installs no feature, declares no configuration and is never deduplicated — two routers wanting different settings pass two factories or two tokens.
+`router.plugin(factory)` and `@Use(factory)` register a Fastify plugin inside that route group's context instead of on the root server. A router takes **only** plugins: scoping was always about where the plugin registers, and a router installs no feature, declares no configuration and is never deduplicated — two routers wanting different settings pass two factories.
 
 The factories are resolved in `WebApplication.setup()`, where configuration has resolved and the container has initialized, so one sees exactly what a factory passed to the application's `.plugin(...)` sees. `RouteGroup.scopes` carries what registered the plugins for a group — a programmatic group lists its own router and every router it is nested under, so `.plugin(...)` inherits downward the way `.with(...)` does; a controller group lists the class.
 
