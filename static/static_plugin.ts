@@ -1,14 +1,9 @@
 import { existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
-import {
-  deriveServerOwnedPaths,
-  ServerOwnedPaths,
-  serverOwnedPaths,
-  type HTTPPlugin,
-  type HTTPPluginContext,
-} from '@caffeinejs/http'
+import { deriveServerOwnedPaths, ServerOwnedPaths, serverOwnedPaths, type HTTPPlugin } from '@caffeinejs/http'
 import fastifyStatic from '@fastify/static'
+import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { ErrSPAIndexMissing } from './errors.js'
@@ -32,9 +27,8 @@ interface HeaderCapableReply {
  * @param spa - The resolved SPA settings, or `undefined` when `.spa(...)` was never called
  */
 export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | undefined): HTTPPlugin {
-  const plugin: HTTPPlugin = async (instance, opts) => {
-    const ctx: HTTPPluginContext = { ...opts, server: instance }
-    const serveSPA = spa === undefined ? false : checkShell(ctx, spa)
+  const plugin: HTTPPlugin = async instance => {
+    const serveSPA = spa === undefined ? false : checkShell(instance, spa)
 
     for (let i = 0; i < mounts.length; i++) {
       const mount = mounts[i]
@@ -53,7 +47,7 @@ export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | 
     }
 
     if (spa !== undefined && serveSPA) {
-      configureFallback(ctx, spa, mounts)
+      configureFallback(instance, spa, mounts)
     }
   }
 
@@ -66,7 +60,7 @@ export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | 
  * `'skip'` exists so one wiring serves both cases: the same application boots with the site built and
  * without it, instead of the caller probing for `index.html` and branching its own configuration.
  */
-function checkShell(ctx: HTTPPluginContext, spa: SPASettings): boolean {
+function checkShell(instance: FastifyInstance, spa: SPASettings): boolean {
   const indexPath = join(spa.root, spa.index)
 
   if (existsSync(indexPath)) {
@@ -77,13 +71,13 @@ function checkShell(ctx: HTTPPluginContext, spa: SPASettings): boolean {
     throw new ErrSPAIndexMissing(indexPath)
   }
 
-  ctx.server.log.warn(`[static] SPA shell not found at "${indexPath}": serving the API only`)
+  instance.log.warn(`[static] SPA shell not found at "${indexPath}": serving the API only`)
 
   return false
 }
 
-function configureFallback(ctx: HTTPPluginContext, spa: SPASettings, mounts: readonly StaticMount[]): void {
-  const fallback = ctx.container.getOptional<SPAFallback>(SPAFallback)
+function configureFallback(instance: FastifyInstance, spa: SPASettings, mounts: readonly StaticMount[]): void {
+  const fallback = instance.$container.getOptional<SPAFallback>(SPAFallback)
 
   if (fallback === undefined) {
     return
@@ -95,7 +89,7 @@ function configureFallback(ctx: HTTPPluginContext, spa: SPASettings, mounts: rea
 
   fallback.configure(otherMountPrefixes, true)
 
-  report(ctx, spa, otherMountPrefixes)
+  report(instance, spa, otherMountPrefixes)
 }
 
 /**
@@ -105,29 +99,30 @@ function configureFallback(ctx: HTTPPluginContext, spa: SPASettings, mounts: rea
  * says so — and the decision is derived rather than written down, so it is printed where the answer is
  * otherwise invisible.
  */
-function report(ctx: HTTPPluginContext, spa: SPASettings, otherMountPrefixes: readonly string[]): void {
+function report(instance: FastifyInstance, spa: SPASettings, otherMountPrefixes: readonly string[]): void {
   const derived = spa.derive
-    ? deriveServerOwnedPaths(ctx.routeGroups, serverOwnedPaths(ctx.container.getManyOptional(ServerOwnedPaths)))
+    ? deriveServerOwnedPaths(
+        instance.$routeGroups,
+        serverOwnedPaths(instance.$container.getManyOptional(ServerOwnedPaths)),
+      )
     : []
   const neverShell = [...new Set([...derived, ...spa.exclude, ...otherMountPrefixes.filter(p => p !== '')])]
     .filter(prefix => !spa.include.some(included => underPrefix(prefix, included)))
     .sort()
 
-  ctx.server.log.info(`[static] SPA shell ${spa.prefix || '/'} -> ${join(spa.root, spa.index)}`)
-  ctx.server.log.info(
+  instance.log.info(`[static] SPA shell ${spa.prefix || '/'} -> ${join(spa.root, spa.index)}`)
+  instance.log.info(
     `[static]   never shell: ${neverShell.join(', ') || '(none)'} ` +
       `(derived: ${derived.length}, explicit: ${spa.exclude.length})`,
   )
 
   if (spa.cache !== false) {
-    ctx.server.log.info(`[static]   immutable: ${spa.cache.immutable.join(', ') || '(none)'}`)
+    instance.log.info(`[static]   immutable: ${spa.cache.immutable.join(', ') || '(none)'}`)
   }
 
   for (const excluded of spa.exclude) {
     if (!derived.some(prefix => underPrefix(prefix, excluded) || underPrefix(excluded, prefix))) {
-      ctx.server.log.warn(
-        `[static] SPA exclude "${excluded}" matches no registered route: it may be stale or misspelled`,
-      )
+      instance.log.warn(`[static] SPA exclude "${excluded}" matches no registered route: it may be stale or misspelled`)
     }
   }
 }

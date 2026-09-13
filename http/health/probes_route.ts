@@ -1,8 +1,7 @@
-import type { FastifyContextConfig, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { solutions } from '../error/util.js'
 import { joinPaths } from '../internal/paths/paths.js'
-import type { HTTPPluginContext } from '../plugin.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { kHealthRoute } from './keys.js'
 import type { HealthOptions } from './options.js'
@@ -21,17 +20,17 @@ interface ProbeRequestQuery {
  * no authentication middleware can reach a probe, no "allow anonymous" annotation is needed, and no
  * misconfigured guard can make the kubelet see a 401.
  */
-export function installHealthProbes(ctx: HTTPPluginContext, options: HealthOptions, probes: ProbeEndpoint): void {
+export function installHealthProbes(server: FastifyInstance, options: HealthOptions, probes: ProbeEndpoint): void {
   const paths = options.paths
-  assertNoCollision(ctx, [paths.live, paths.ready, paths.startup])
+  assertNoCollision(server, [paths.live, paths.ready, paths.startup])
 
-  mount(ctx, paths.live, query => probes.live(query))
-  mount(ctx, paths.ready, query => probes.ready(query))
-  mount(ctx, paths.startup, query => probes.startup(query))
+  mount(server, paths.live, query => probes.live(query))
+  mount(server, paths.ready, query => probes.ready(query))
+  mount(server, paths.startup, query => probes.startup(query))
 }
 
-function mount(ctx: HTTPPluginContext, path: string, handle: (query: ProbeQuery) => Promise<ProbeResponse>): void {
-  ctx.server.route({
+function mount(server: FastifyInstance, path: string, handle: (query: ProbeQuery) => Promise<ProbeResponse>): void {
+  server.route({
     method: ['GET', 'HEAD'],
     url: path,
     // Fastify types the route config as a string-keyed bag; the marker is a symbol so it cannot collide with a
@@ -66,10 +65,10 @@ function probeQuery(query: ProbeRequestQuery): ProbeQuery {
   }
 }
 
-function assertNoCollision(ctx: HTTPPluginContext, probePaths: readonly string[]): void {
+function assertNoCollision(server: FastifyInstance, probePaths: readonly string[]): void {
   const taken = new Set(probePaths)
 
-  for (const router of ctx.routeGroups) {
+  for (const router of server.$routeGroups) {
     for (const route of router.routes) {
       const path = `${router.prefix ?? ''}${joinPaths(router.path, route.path)}`
 

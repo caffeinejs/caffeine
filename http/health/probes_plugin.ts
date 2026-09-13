@@ -13,16 +13,16 @@ import { installHealthProbes } from './probes_route.js'
  * fallback that happened to register a catch-all first.
  */
 export function healthProbesPlugin(options: HealthOptions): HTTPPlugin {
-  const plugin: HTTPPlugin = async (instance, opts) => {
+  const plugin: HTTPPlugin = async instance => {
     // Resolved even when the probes are off, because resolving is what checks that every health indicator
     // is a singleton — a lifetime mistake belongs to start-up, not to the first request that reads a probe.
-    const probes = opts.container.get(ProbeEndpoint)
+    const probes = instance.$container.get(ProbeEndpoint)
 
     if (!options.enabled) {
       return
     }
 
-    installHealthProbes({ ...opts, server: instance }, options, probes)
+    installHealthProbes(instance, options, probes)
   }
 
   return fp(plugin, { name: 'caffeine-health-probes' })

@@ -15,9 +15,9 @@ import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_
  * cache hit as well as on a miss.
  */
 export function cachePlugin(): HTTPPlugin {
-  const plugin: HTTPPlugin = async (instance, { container }) => {
+  const plugin: HTTPPlugin = async instance => {
     // Resolved once, never per route and never per request.
-    const deps = resolveCacheDeps(container)
+    const deps = resolveCacheDeps(instance.$container)
     instance.decorateRequest('responseCached', false)
 
     instance.addHook('onRoute', routeOptions => {

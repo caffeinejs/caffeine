@@ -10,7 +10,8 @@ import type { HTTPPlugin } from '../plugin.js'
  * client the other's representation. Fastify documents this; the header list is framework-owned rather than
  * left to each route. No constrained route means no hook and no cost.
  */
-const constraintVaryPluginFn: HTTPPlugin = async (instance, { routeGroups }) => {
+const constraintVaryPluginFn: HTTPPlugin = async instance => {
+  const routeGroups = instance.$routeGroups
   const headers = new Set<string>()
   for (const group of routeGroups) {
     for (const route of group.routes) {

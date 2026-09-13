@@ -1,10 +1,17 @@
+import { type Container } from '@caffeinejs/di'
+
 import { type FastifyContext } from './context.js'
-import { type CatchByMap } from './route.js'
+import { type CatchByMap, type RouteGroup } from './route.js'
 import { type AuthzRouteService } from './security/authz/route_service.js'
 import { type Principal } from './security/identity.js'
 import { Keys } from './symbols.js'
 
 declare module 'fastify' {
+  interface FastifyInstance {
+    get $container(): Container
+    get $routeGroups(): RouteGroup<FastifyRequest>[]
+  }
+
   interface FastifyRequest {
     httpContext: FastifyContext
     routeTarget: Record<string | symbol, (...args: unknown[]) => unknown> | null

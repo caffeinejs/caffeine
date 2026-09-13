@@ -6,11 +6,11 @@ import {
   AuthenticationSchemeProvider,
   AuthenticationService,
   type HTTPPlugin,
-  type HTTPPluginContext,
   type RouteGroup,
   kAuthSchemeDescriptors,
   solutions,
 } from '@caffeinejs/http'
+import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
@@ -36,18 +36,16 @@ import { readScalarBundle, scalarPage } from './ui/scalar.js'
  * already refuses to start on an unconvertible route schema, and this matches it.
  */
 export function openapiPlugin(store: OpenAPIDocumentStore, options: OpenAPIOptions, paths: EndpointPaths): HTTPPlugin {
-  const plugin: HTTPPlugin = async (instance, opts) => {
-    const ctx: HTTPPluginContext = { ...opts, server: instance }
-
-    const descriptors = ctx.container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
-    assertSchemesExist(ctx, options)
-    warnIfUnprotected(ctx, options)
+  const plugin: HTTPPlugin = async instance => {
+    const descriptors = instance.$container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
+    assertSchemesExist(instance, options)
+    warnIfUnprotected(instance, options)
 
     const warnings: string[] = []
     const generated =
       options.source === undefined
         ? generateDocument({
-            routeGroups: ctx.routeGroups as Array<RouteGroup<unknown>>,
+            routeGroups: instance.$routeGroups as Array<RouteGroup<unknown>>,
             options,
             schemes: descriptors,
             onWarning: message => warnings.push(message),
@@ -106,13 +104,13 @@ function ui(options: OpenAPIOptions, paths: EndpointPaths): { docsPage?: string;
  * Without this the name matches nothing and the endpoints are protected by the authenticated-user
  * requirement alone — quieter than intended, and invisible until someone tests it.
  */
-function assertSchemesExist(ctx: HTTPPluginContext, options: OpenAPIOptions): void {
+function assertSchemesExist(instance: FastifyInstance, options: OpenAPIOptions): void {
   const wanted = options.secure?.schemes ?? []
   if (wanted.length === 0) {
     return
   }
 
-  const provider = ctx.container.getOptional(AuthenticationSchemeProvider)
+  const provider = instance.$container.getOptional(AuthenticationSchemeProvider)
   const known = provider?.schemeNames ?? []
 
   for (const name of wanted) {
@@ -136,14 +134,14 @@ function assertSchemesExist(ctx: HTTPPluginContext, options: OpenAPIOptions): vo
  * is exactly that. But an unlisted description of every endpoint and every auth scheme is worth one line of
  * output when nobody stated it was intended, and `.public()` silences it.
  */
-function warnIfUnprotected(ctx: HTTPPluginContext, options: OpenAPIOptions): void {
+function warnIfUnprotected(instance: FastifyInstance, options: OpenAPIOptions): void {
   if (options.secureExplicit || options.secure !== undefined) {
     return
   }
 
   // Configuring authentication binds the coordinator, and nothing else does, so its presence is the feature
   // being on.
-  if (!ctx.container.has(AuthenticationService)) {
+  if (!instance.$container.has(AuthenticationService)) {
     return
   }
 

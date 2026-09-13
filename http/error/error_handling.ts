@@ -43,8 +43,8 @@ export class GlobalErrorHandlerRef {
  * is already covered by it — including the ones a package outside `http` contributes.
  */
 export function globalErrorHandlerPlugin(ref: GlobalErrorHandlerRef): HTTPPlugin {
-  const plugin: HTTPPlugin = async (instance, { container }) => {
-    ref.handler = installGlobalErrorHandler(instance, container.get(ErrorHandlerProvider))
+  const plugin: HTTPPlugin = async instance => {
+    ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider))
   }
 
   return fp(plugin, { name: 'caffeine-error-handling' })

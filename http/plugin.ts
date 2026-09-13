@@ -1,22 +1,10 @@
 import { DeferredCtor, Scopes, type Container, type InjectionToken } from '@caffeinejs/di'
 import type { BootstrapKit } from '@caffeinejs/std'
 import type { ConfigHandle } from '@caffeinejs/std/config'
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 
 import { ErrConfiguration } from './error/common.js'
 import { solutions } from './error/util.js'
-import type { RouteGroup } from './route.js'
-
-/**
- * What every Caffeine plugin is registered with.
- *
- * `routeGroups` is here rather than closed over because routing is built after the feature bootstrapped, and
- * `container` because a plugin registered into a route group's context has no other way to reach it.
- */
-export type HTTPPluginOptions = {
-  container: Container
-  routeGroups: RouteGroup<any>[]
-}
 
 /**
  * A unit of start-up wiring: an ordinary Fastify plugin.
@@ -30,16 +18,17 @@ export type HTTPPluginOptions = {
  * context. One `fp`-wrapped plugin therefore serves both — it covers every route, or that group's routes,
  * according to where it was asked for.
  *
+ * The container and the compiled routing are reached off the instance itself — `instance.$container` and
+ * `instance.$routeGroups` — decorated before any plugin registers, and inherited into every route group's
+ * own context the same way `instance.decorate(...)` always is.
+ *
  * ```ts
- * const plugin: HTTPPlugin = fp(async (instance, { container }) => {
- *   instance.addHook('onRequest', container.get(RateLimiter).hook)
+ * const plugin: HTTPPlugin = fp(async instance => {
+ *   instance.addHook('onRequest', instance.$container.get(RateLimiter).hook)
  * }, { name: 'rate-limit' })
  * ```
  */
-export type HTTPPlugin = FastifyPluginAsync<HTTPPluginOptions>
-
-/** The plugin's arguments as one object, for the install functions that take the whole server and its input. */
-export type HTTPPluginContext = HTTPPluginOptions & { server: FastifyInstance }
+export type HTTPPlugin = FastifyPluginAsync
 
 /**
  * Produces a plugin from the resolved configuration and the container. What `.plugin(...)` takes, and how a

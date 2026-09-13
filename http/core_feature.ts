@@ -20,11 +20,8 @@ const formBodyPlugin = fp(formBodyPluginFn, { name: 'caffeine-form-body' })
  * and one deriving the paths the server owns needs every route and every `ServerOwnedPaths` provider already
  * in place — so the feature that contributes this is the last one the application bootstraps.
  */
-const notFoundPluginFn: HTTPPlugin = async (instance, opts) => {
-  installNotFoundHandler(
-    { ...opts, server: instance },
-    opts.container.getManyOptional<NotFoundFallback>(NotFoundFallback),
-  )
+const notFoundPluginFn: HTTPPlugin = async instance => {
+  installNotFoundHandler(instance, instance.$container.getManyOptional<NotFoundFallback>(NotFoundFallback))
 }
 
 const notFoundPlugin = fp(notFoundPluginFn, { name: 'caffeine-not-found' })

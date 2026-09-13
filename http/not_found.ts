@@ -1,11 +1,10 @@
-import type { FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import type { Context } from './context.js'
 import { ErrCaffeineWebApplication } from './error/common.js'
 import { ErrHTTPNotFound } from './error/http.js'
 import { solutions } from './error/util.js'
 import { joinPaths } from './internal/paths/paths.js'
-import type { HTTPPluginContext } from './plugin.js'
 import type { RouteGroup } from './route.js'
 import { ServerOwnedPaths, serverOwnedPaths } from './server_owned_paths.js'
 
@@ -112,10 +111,10 @@ export function isServerOwned(owned: readonly string[], path: string): boolean {
  * Throwing rather than replying is what puts an unmatched URL through the application's error handling, so a
  * global `@Catch(ErrHTTPNotFound)` sees it and the body matches a 404 a handler threw.
  */
-export function installNotFoundHandler(ctx: HTTPPluginContext, fallbacks: readonly NotFoundFallback[]): void {
+export function installNotFoundHandler(server: FastifyInstance, fallbacks: readonly NotFoundFallback[]): void {
   const owned = deriveServerOwnedPaths(
-    ctx.routeGroups,
-    serverOwnedPaths(ctx.container.getManyOptional(ServerOwnedPaths)),
+    server.$routeGroups,
+    serverOwnedPaths(server.$container.getManyOptional(ServerOwnedPaths)),
   )
 
   const handler = async (req: FastifyRequest, reply: FastifyReply): Promise<never | FastifyReply> => {
@@ -143,7 +142,7 @@ export function installNotFoundHandler(ctx: HTTPPluginContext, fallbacks: readon
   // then never runs, and a single-page application that silently stops serving its shell is worse than a
   // start-up failure, so that combination is refused instead.
   try {
-    ctx.server.setNotFoundHandler(handler)
+    server.setNotFoundHandler(handler)
   } catch (error) {
     if (!isAlreadySetError(error)) {
       throw error
@@ -153,7 +152,7 @@ export function installNotFoundHandler(ctx: HTTPPluginContext, fallbacks: readon
       throw new ErrNotFoundHandlerAlreadySet(fallbacks.map(fallback => fallback.name))
     }
 
-    ctx.server.log.warn(
+    server.log.warn(
       'A not-found handler was already set on the Fastify instance, so Caffeine did not install its own: ' +
         'unmatched routes bypass the error pipeline and will not be seen by @Catch',
     )

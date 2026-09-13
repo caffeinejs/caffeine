@@ -42,7 +42,10 @@ export function assertAuthenticationConfigured(container: Container, routeGroups
  * a request the gate rejected.
  */
 export function authenticationPlugin(): HTTPPlugin {
-  const plugin: HTTPPlugin = async (instance, { container, routeGroups }) => {
+  const plugin: HTTPPlugin = async instance => {
+    const container = instance.$container
+    const routeGroups = instance.$routeGroups
+
     // Configuring authentication binds the coordinator and the scheme provider, and nothing else does — so
     // their presence *is* the feature being on, with no separate flag to be written and then read out of
     // sync with it.

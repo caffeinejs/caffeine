@@ -87,11 +87,16 @@ async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => 
     warnings.push(String(warning))
   })
 
-  const server = { get: vi.fn(), addHook: vi.fn() }
+  const server = {
+    get: vi.fn(),
+    addHook: vi.fn(),
+    $container: { getOptional: () => undefined },
+    $routeGroups: [],
+  }
 
   try {
     for (const plugin of registered) {
-      await plugin(server as never, { container: { getOptional: () => undefined } as never, routeGroups: [] })
+      await plugin(server as never, {})
     }
   } finally {
     emitWarning.mockRestore()

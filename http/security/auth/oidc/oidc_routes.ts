@@ -1,7 +1,8 @@
+import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { joinPaths } from '../../../internal/paths/index.js'
-import type { HTTPPlugin, HTTPPluginContext } from '../../../plugin.js'
+import type { HTTPPlugin } from '../../../plugin.js'
 import { isOIDCError, type OIDCMeta } from './index.js'
 
 /**
@@ -11,8 +12,8 @@ import { isOIDCError, type OIDCMeta } from './index.js'
  * on" question to answer here — the absence of this plugin is the answer.
  */
 export function oidcRoutesPlugin(meta: OIDCMeta): HTTPPlugin {
-  const plugin: HTTPPlugin = async (instance, opts) => {
-    installOIDCRoutes({ ...opts, server: instance }, meta)
+  const plugin: HTTPPlugin = async instance => {
+    installOIDCRoutes(instance, meta)
   }
 
   return fp(plugin, { name: 'caffeine-oidc-routes' })
@@ -26,9 +27,8 @@ export function oidcRoutesPlugin(meta: OIDCMeta): HTTPPlugin {
  * purpose: Fastify's assertion names the missing decorator (`cookies`), while this one names the package
  * the user has to install and register.
  */
-export function installOIDCRoutes(ctx: HTTPPluginContext, oidc: OIDCMeta): void {
-  const server = ctx.server
-  const compiledPaths = new Set(ctx.routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))))
+export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void {
+  const compiledPaths = new Set(server.$routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))))
 
   for (const { callbackPath } of oidc.handlers) {
     if (compiledPaths.has(callbackPath)) {
@@ -46,7 +46,7 @@ export function installOIDCRoutes(ctx: HTTPPluginContext, oidc: OIDCMeta): void 
   // `/login/google` and `/login/github`, each naming its own scheme. Only the resolved routing carries
   // those names, which is why the decision lands here rather than in the builder.
   const namedByRoutes = new Set(
-    ctx.routeGroups.flatMap(r => r.routes.flatMap(rt => rt.authorization.options?.schemes ?? [])),
+    server.$routeGroups.flatMap(r => r.routes.flatMap(rt => rt.authorization.options?.schemes ?? [])),
   )
   const unreachable = oidc.unreachableCandidates.filter(name => !namedByRoutes.has(name))
   if (unreachable.length > 0) {

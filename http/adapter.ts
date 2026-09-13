@@ -22,7 +22,7 @@ import { GlobalErrorHandlerRef, installRouteGroupErrorHandler } from './error/er
 import { solutions } from './error/util.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
-import { pluginName, type HTTPPlugin, type HTTPPluginOptions } from './plugin.js'
+import { pluginName, type HTTPPlugin } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import { type AdapterRouteOptions } from './route_hooks.js'
@@ -83,6 +83,10 @@ export class FastifyAdapter<
     const routeGroups = input.routeGroups as RouteGroup<REQ>[]
     const fastify = this.#fastify
 
+    // Decorating the server
+    fastify.decorate('$container', container)
+    fastify.decorate('$routeGroups', routeGroups as unknown as RouteGroup<FastifyRequest>[])
+
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
     fastify.decorateRequest('routeTarget', null)
@@ -130,7 +134,6 @@ export class FastifyAdapter<
       })
     }
 
-    const pluginOptions: HTTPPluginOptions = { container, routeGroups }
     const plugins = input.plugins
 
     // Every plugin the features contributed, in the order their features were installed — this package's own
@@ -139,7 +142,7 @@ export class FastifyAdapter<
     // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
     for (const plugin of plugins.root()) {
       assertPluginNotRegistered(fastify, plugin)
-      await fastify.register(plugin, pluginOptions)
+      await fastify.register(plugin)
     }
 
     // Installed by the error-handling plugin above; read back here because each route group's own
@@ -185,7 +188,7 @@ export class FastifyAdapter<
           for (const scope of router.scopes ?? []) {
             for (const plugin of plugins.of(scope)) {
               assertPluginNotRegistered(server, plugin)
-              await server.register(plugin, pluginOptions)
+              await server.register(plugin)
             }
           }
 
