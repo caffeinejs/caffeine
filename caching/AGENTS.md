@@ -7,8 +7,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md). The rules below are specific to thi
 Installing the plugin is the activating act. `.plugin(HTTPCaching())` attaches the cache hooks, and only then
 do `@Cache` / `@CacheInvalidate` (and the `cache()` / `cacheInvalidate()` route extensions) do anything. An
 application that decorates routes with them but never installs the plugin fails at `app.ready()` with
-`ErrConfiguration` — the adapter checks a decoration (`CACHING_INSTALLED`, from `@caffeinejs/http`) the plugin
-stamps on the instance it registers to, since a silent no-op would look like a caching bug.
+`ErrConfiguration` — a start-up check on the `http/` side, unrelated to anything this package exports.
 
 There is no `enabled` flag. A configuration value that could switch the feature on would let a config file
 start a feature nobody asked for.
@@ -22,9 +21,9 @@ internal default (`MemoryCacheStore`, a SHA-1 hash in `_util.ts`'s `generateETag
 exists only to build that options object fluently (`HTTPCaching(b => b.store(...).etagGenerator(...))`) —
 nothing about it is a `FeatureBuilder`.
 
-Because it is a plain plugin and never claims a `fastify-plugin` name, it installs like any other reusable
-Fastify plugin: more than once, each with its own store/etagGenerator/header, at the root or scoped to one
-route group with `router.plugin(...)` / `@Use(...)`.
+Named and `fastify-plugin`-wrapped like any other first-party plugin, it installs once per context — the root,
+or one route group with `router.plugin(...)` / `@Use(...)` — each with its own store/etagGenerator/header. Two
+registrations on the identical context collide the same way two `.plugin(cors)` calls would.
 
 ## Per-route hooks, not a server hook
 

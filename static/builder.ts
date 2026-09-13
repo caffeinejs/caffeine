@@ -1,10 +1,7 @@
 import { NotFoundFallback, registerPlugin } from '@caffeinejs/http'
 import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
-import type { ConfigLocation } from '@caffeinejs/std/config'
 
-import type { StaticConfig } from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
-import { kStaticOptions } from './keys.js'
 import { resolveSPASettings, type SPAOptions, type SPASettings } from './spa.js'
 import { SPAFallback } from './spa_fallback.js'
 import type { ResolvedStatic, StaticMount } from './static.js'
@@ -18,35 +15,16 @@ import { staticPlugin } from './static_plugin.js'
  * parameterizes the mount but never switches it on, so a config file cannot start serving a shell the
  * application never asked for.
  *
- * What a fluent method sets is final. To let a deployment repoint a root or a prefix, read the mounts from a
- * node of the configuration tree — {@link staticConfigSchema} is exported so an application can splice it into
- * its own schema:
- *
- * ```ts
- * .extend(staticFiles((s, c) => s.withConfig(c.app.static)))
- * ```
+ * What a fluent method sets is final — there is no `.withConfig(...)` to read a mount or a SPA setting from
+ * the configuration tree.
  */
 export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'static'
 
-  #config: ConfigLocation<StaticConfig> | undefined
   #mounts: StaticMount[] = []
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
   #resolved: ResolvedStatic | undefined
-
-  /**
-   * Reads the mounts and the SPA settings from a node of the configuration tree, e.g. `c.app.static`.
-   *
-   * `mounts` **replaces** what `.serve(...)` added rather than adding to it, which is the array rule the merge
-   * engine applies everywhere and what makes it possible to remove a mount from a config file at all. The SPA
-   * options are merged over `.spa(...)`, but only where `.spa(...)` was called: configuration parameterizes the
-   * mount, it does not create one.
-   */
-  withConfig(config: ConfigLocation<StaticConfig>): this {
-    this.#config = config
-    return this
-  }
 
   /**
    * Serves `root` as static files. `options` is the full `@fastify/static` options object minus `root`
@@ -91,8 +69,6 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
     const resolved = this.#resolve()
     this.#resolved = resolved
 
-    kit.container.bind(kStaticOptions, t => t.toValue(resolved).internal())
-
     if (resolved.spa !== undefined) {
       kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(resolved.spa!)).extends(NotFoundFallback))
     }
@@ -110,26 +86,17 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Folds the mounts and the SPA options into what the plugin and the fallback actually run with.
    *
-   * The SPA's own mount is derived here rather than pushed by `.spa(...)`, so a prefix or an index changed in
-   * configuration reaches the `@fastify/static` registration too — appended after the plain mounts, which is
-   * the order `.spa()` used to produce.
+   * The SPA's own mount is derived here rather than pushed by `.spa(...)`, so it lands after the plain
+   * mounts, the order `.spa()` used to produce.
    */
   #resolve(): ResolvedStatic {
-    const mounts = [...((this.#config?.mounts as StaticMount[] | undefined) ?? this.#mounts)]
+    const mounts = [...this.#mounts]
 
     if (this.#spa === undefined) {
       return { mounts, spa: undefined }
     }
 
-    // Code last for SPA keys a fluent method named, except `root`: a configured root is the documented way
-    // a deployment repoints the directory `.spa(...)` switched on.
-    const configuredSpa = this.#config?.spa
-    const merged = { ...configuredSpa, ...this.#spa } as SPAOptions & { root: string }
-    if (configuredSpa?.root !== undefined) {
-      merged.root = configuredSpa.root
-    }
-    const { root, ...rest } = merged
-    const options = rest as SPAOptions
+    const { root, ...options } = this.#spa
     const settings = resolveSPASettings(root, options)
 
     // `wildcard: false` is load-bearing, not a tuning knob. `@fastify/static`'s default installs a catch-all

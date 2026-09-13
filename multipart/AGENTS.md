@@ -19,12 +19,11 @@ readers. An application registers it with the plugin factory `.plugin(...)` take
 of the configuration on the way:
 
 ```ts
-.plugin(c => multipartPlugin(c.app.multipart.options))
+.plugin(() => multipartPlugin({ limits: { fileSize: 10_000_000 } }))
 ```
 
-`multipartConfigSchema` is exported so an application can splice it into its own schema rather than restate the
-fields. The bag is a `Record` there, not a declared mirror of `@fastify/multipart`'s options: the validator strips every
-property a schema does not name, so a partial mirror would silently drop the rest.
+`MultipartOptions` (`multipart_plugin.ts`) is `@fastify/multipart`'s own options type, derived structurally
+from its plugin signature rather than restated — there is no config schema to splice into an application's own.
 
 A callback option needs no special handling — the bag never travels through a configuration tree, so it is
 written where the plugin is registered and handed over as-is.

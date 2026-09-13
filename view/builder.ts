@@ -1,9 +1,8 @@
-import { ErrConfiguration, registerPlugin } from '@caffeinejs/http'
-import { FeatureBuilder, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { ErrConfiguration } from '@caffeinejs/http'
 
 import { ViewEngineBuilder } from './engine_builder.js'
+import { kBuild } from './keys.js'
 import type { ViewOptions } from './view.js'
-import { viewPlugin } from './view_plugin.js'
 
 /** Reserved: `reply.view` is the default engine's decoration, so a named engine cannot claim it. */
 const RESERVED_ENGINE_NAME = 'view'
@@ -11,19 +10,17 @@ const RESERVED_ENGINE_NAME = 'view'
 /**
  * Configures server-side rendering over `@fastify/view`.
  *
- * One feature holds every engine: the default one, decorating `reply.view`, plus any named ones decorating
- * `reply.<name>`. The plugin it contributes registers `@fastify/view` once per configured engine.
+ * One builder holds every engine: the default one, decorating `reply.view`, plus any named ones decorating
+ * `reply.<name>`. The plugin it materializes registers `@fastify/view` once per configured engine.
  *
  * ```ts
- * .extend(view((v, c) => {
- *   v.engine(e => e.engine({ handlebars }).withConfig(c.app.templates))
+ * .plugin(view(v => {
+ *   v.engine(e => e.engine({ handlebars }).root('templates'))
  *   v.engine('mail', e => e.engine({ handlebars }).root('emails'))
  * }))
  * ```
  */
-export class ViewBuilder<C = unknown> extends FeatureBuilder<C> {
-  readonly [kFeatureName] = 'view'
-
+export class ViewBuilder {
   // Keyed by engine name; the `undefined` key is the default engine.
   readonly #engines = new Map<string | undefined, ViewEngineBuilder>()
 
@@ -59,40 +56,24 @@ export class ViewBuilder<C = unknown> extends FeatureBuilder<C> {
 
   /** The assembled options for the default engine, or `undefined` when only named engines are configured. */
   default(): ViewOptions | undefined {
-    return this.#engines.get(undefined)?.build()
+    return this.#engines.get(undefined)?.[kBuild]()
   }
 
   /** Every engine's assembled options, the default (if any) first, then the named ones in insertion order. */
-  all(): ViewOptions[] {
+  [kBuild](): ViewOptions[] {
     const out: ViewOptions[] = []
 
     for (const [name, builder] of this.#engines) {
       if (name === undefined) {
-        out.push(builder.build())
+        out.push(builder[kBuild]())
       }
     }
     for (const [name, builder] of this.#engines) {
       if (name !== undefined) {
-        out.push(builder.build())
+        out.push(builder[kBuild]())
       }
     }
 
     return out
-  }
-
-  protected bootstrap(kit: BootstrapKit<C>): void {
-    if (this.#engines.size === 0) {
-      throw new ErrConfiguration(
-        'Cannot install the view feature: no engine was configured. Call .engine(...) on the builder',
-      )
-    }
-
-    // Forces every engine to assemble now, so a missing engine module fails at start-up rather than from
-    // inside the plugin, by which point the adapter is already wiring routes.
-    this.all()
-
-    // The builder goes to the plugin directly rather than through a container key it would only be read back
-    // out of at server setup.
-    registerPlugin(kit, viewPlugin(this))
   }
 }

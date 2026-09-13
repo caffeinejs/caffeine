@@ -2,6 +2,7 @@ import fastifyView from '@fastify/view'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
+import { kBuild } from './keys.js'
 import type { ViewOptions } from './view.js'
 
 /**
@@ -11,10 +12,10 @@ import type { ViewOptions } from './view.js'
  * group contexts where routes are declared. Each registration carries a distinct `propertyName` (the default
  * engine has none, decorating `reply.view`).
  */
-export function viewPlugin(engines: { all(): ViewOptions[] }): FastifyPluginAsync {
+export function viewPlugin(engines: { [kBuild](): ViewOptions[] }): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    await Promise.all(engines.all().map(options => instance.register(fastifyView, options)))
+    await Promise.all(engines[kBuild]().map(options => instance.register(fastifyView, options)))
   }
 
-  return fp(plugin, { name: 'view' })
+  return fp(plugin, { name: '@caffeinejs/view' })
 }

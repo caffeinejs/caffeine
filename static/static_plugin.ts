@@ -51,7 +51,7 @@ export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | 
     }
   }
 
-  return fp(plugin, { name: 'static' })
+  return fp(plugin, { name: '@caffeinejs/static' })
 }
 
 /**

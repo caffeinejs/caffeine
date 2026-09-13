@@ -4,7 +4,7 @@ import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@ca
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { staticFiles } from '../index.js'
+import { staticConfigSchema, staticFiles } from '../index.js'
 
 const fixtures = fileURLToPath(new URL('./_testdata/fixtures', import.meta.url))
 const fixtures2 = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
@@ -68,5 +68,9 @@ describe('static feature', () => {
     expect(await one.text()).toContain('hello static world')
     expect(two.status).toBe(200)
     expect(await two.text()).toContain('second mount file')
+  })
+
+  it('exports the config schema from the package barrel', () => {
+    expect(staticConfigSchema).toBeDefined()
   })
 })

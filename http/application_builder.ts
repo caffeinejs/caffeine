@@ -232,7 +232,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
  *
  * ```ts
  * createWebApplication()
- *   .extend(view(v => v.engine(e => e.engine({ handlebars }))))
+ *   .extend(staticFiles(s => s.serve('public')))
  * ```
  */
 // Default Fastify — no adapter factory or Fastify instance required.

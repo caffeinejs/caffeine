@@ -1,5 +1,4 @@
 export * from './builder.js'
-export * from './config.js'
 export * from './engine_builder.js'
 export * from './plugin.js'
 export * from './render_view.js'

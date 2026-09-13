@@ -11,10 +11,10 @@ import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
  * parameterizes that group's responses alone.
  *
  * ```ts
- * .plugin(c => htmlPlugin(c.app.html))
+ * .plugin(c => HTMLPlugin(c.app.html))
  * ```
  */
-export function htmlPlugin(defaults: Partial<HTMLDefaults> = {}): FastifyPluginAsync {
+export function HTMLPlugin(defaults: Partial<HTMLDefaults> = {}): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     // Read through, not copied: the argument is usually a node of the configuration tree, and a refresh has to
     // reach a response rendered after it.
@@ -25,5 +25,5 @@ export function htmlPlugin(defaults: Partial<HTMLDefaults> = {}): FastifyPluginA
     })
   }
 
-  return fp(plugin, { name: 'html' })
+  return fp(plugin, { name: '@caffeinejs/html' })
 }

@@ -52,19 +52,9 @@ describe('cache plugin wiring', () => {
     expect(typeof registered.get('GET /contrib/cached')!.onSend).toBe('function')
   })
 
-  // The whole point of dropping the fixed `fastify-plugin` name: unlike a named first-party plugin,
-  // HTTPCaching is never refused a second registration by `assertPluginNotRegistered`.
-  it('registers more than once, each with its own settings, without ERR_HTTP_DUPLICATE_PLUGIN', async () => {
-    @Controller('/contrib-multi')
-    class MultiController {
-      @Cache({ ttl: 60 })
-      @Get('/data')
-      data() {
-        return { ok: true }
-      }
-    }
-    void [MultiController]
-
+  // Named and fastify-plugin-wrapped like any other first-party plugin: a second registration on the exact
+  // same context is refused before Fastify ever sees it, same as two `.plugin(cors)` calls would be.
+  it('refuses a second registration on the same context', async () => {
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server))
       .plugin(HTTPCaching(b => b.statusHeader('X-First')))
@@ -72,12 +62,6 @@ describe('cache plugin wiring', () => {
       .build()
     close = () => app.close()
 
-    await expect(app.ready()).resolves.toBeUndefined()
-
-    const res = await app.fetch('/contrib-multi/data')
-    // Both plugins' onRoute hooks attached to the same route independently — two hooks in each slot, each
-    // writing its own status header.
-    expect(res.headers.get('x-first')).toBe('MISS')
-    expect(res.headers.get('x-second')).toBe('MISS')
+    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
   })
 })

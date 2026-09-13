@@ -171,7 +171,6 @@ Exceptions, where `withConfig` overlays what the fluent methods set:
 
 - authentication scheme options, so a secret in the tree redirects one written in code
 - kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice)
-- view template `root` (and the other keys `ViewConfig` declares)
 - messaging binding destinations (and the other keys a binding's config slice declares)
 
 Static `mounts` is an array exception: a configured list **replaces** `.serve()`, it does not merge

@@ -1,7 +1,6 @@
 import { ErrConfiguration } from '@caffeinejs/http'
-import type { ConfigLocation } from '@caffeinejs/std/config'
 
-import type { ViewConfig } from './config.js'
+import { kBuild } from './keys.js'
 import type { ViewOptions } from './view.js'
 
 /**
@@ -11,18 +10,13 @@ import type { ViewOptions } from './view.js'
  * set any option supported by the `@fastify/view` plugin.
  *
  * One builder assembles one engine registration. {@link ViewBuilder} owns them — `v.engine(…)` for the
- * default engine, `v.engine('mail', …)` for a named one — and reads each via {@link build}.
- *
- * Configuration overlays fluent methods for everything {@link ViewConfig} declares: `v.root('src')` is a
- * default a deployment can redirect once {@link withConfig} is wired. The engine module itself is code-only:
- * it is an object full of functions, and a function cannot travel through a configuration tree.
+ * default engine, `v.engine('mail', …)` for a named one — and reads each's assembled options back out.
  *
  * @see https://github.com/fastify/point-of-view
  */
 export class ViewEngineBuilder {
   readonly #name: string | undefined
   #options: Partial<ViewOptions> = {}
-  #config: ConfigLocation<ViewConfig> | undefined
 
   /**
    * @param name - The engine registration name (`@fastify/view`'s `propertyName`), decorating
@@ -117,47 +111,19 @@ export class ViewEngineBuilder {
   }
 
   /**
-   * Reads this engine's settings from a node of the configuration tree, e.g. `c.app.templates`.
-   *
-   * Applied **over** what the fluent methods set, so `v.root('src')` is a default a deployment can redirect.
-   * Only the keys {@link ViewConfig} declares travel this way — the engine module and its own options carry
-   * functions and stay code-only.
-   */
-  withConfig(config: ConfigLocation<ViewConfig>): this {
-    this.#config = config
-    return this
-  }
-
-  /**
    * Assembles the `@fastify/view` options for this engine registration, stamping `propertyName` when the
    * builder is named.
    *
    * @throws ErrConfiguration when no engine was configured.
    */
-  build(): ViewOptions {
+  [kBuild](): ViewOptions {
     if (!this.#options.engine) {
       throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
     }
 
     return {
-      // Code first, configuration over it: a fluent method is a default. `engine` and the engine's own options
-      // only exist on the code side and survive untouched.
       ...this.#options,
-      ...stripUndefined(this.#config ?? {}),
       ...(this.#name === undefined ? {} : { propertyName: this.#name }),
     } as ViewOptions
   }
-}
-
-/** A configuration node reads back every declared key, absent ones as `undefined`; those must not win. */
-function stripUndefined(config: ConfigLocation<ViewConfig>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-
-  for (const [key, value] of Object.entries(config)) {
-    if (value !== undefined) {
-      out[key] = value
-    }
-  }
-
-  return out
 }

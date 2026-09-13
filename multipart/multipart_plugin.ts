@@ -14,5 +14,5 @@ export function multipartPlugin(options: MultipartOptions = {}): FastifyPluginAs
     await instance.register(fastifyMultipart, options)
   }
 
-  return fp(plugin, { name: 'multipart' })
+  return fp(plugin, { name: '@caffeinejs/multipart' })
 }

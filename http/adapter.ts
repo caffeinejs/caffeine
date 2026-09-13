@@ -24,7 +24,7 @@ import { GlobalErrorHandlerRef, installRouteGroupErrorHandler } from './error/er
 import { solutions } from './error/util.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
-import { CACHING_INSTALLED, pluginName } from './plugin.js'
+import { pluginName } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import { type AdapterRouteOptions } from './route_hooks.js'
@@ -33,6 +33,14 @@ import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { assertAuthenticationConfigured, type Principal } from './security/index.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions, type ServerAddress } from './server/index.js'
 import { Keys } from './symbols.js'
+
+/**
+ * The name `@caffeinejs/caching` registers its plugin under.
+ *
+ * The one place this package names another: `@Cache` and the plugin that serves it ship together, so a route
+ * carrying the config with no plugin to read it is a missing `.plugin(HTTPCaching())` and nothing else.
+ */
+const CACHING_PLUGIN = '@caffeinejs/caching'
 
 /** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
 type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error) => void) => void
@@ -153,7 +161,7 @@ export class FastifyAdapter<
     assertAuthenticationConfigured(container, routeGroups)
 
     if (
-      !fastify.hasDecorator(CACHING_INSTALLED) &&
+      !fastify.hasPlugin(CACHING_PLUGIN) &&
       routeGroups.some(group =>
         group.routes.some(
           route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
@@ -484,11 +492,9 @@ export class FastifyAdapter<
  * Refuses a second `fastify-plugin`-wrapped plugin of the same name before Fastify ever sees it.
  *
  * Fastify has no such check itself: a plugin factory is never deduplicated (two calls means two plugins, by
- * design), but a first-party plugin meant to be a singleton (`cors`, `html`, …) wraps a fixed name, and a
- * second one on the same server would otherwise fail deep inside whatever it decorates — `@fastify/cors`
- * re-declaring a request decorator, tens of seconds later, once avvio's own boot timeout gives up waiting on
- * it. `@caffeinejs/caching` deliberately wraps no name at all, precisely because it is meant to be installed
- * more than once.
+ * design), but a first-party plugin (`cors`, `html`, `caching`, …) wraps a fixed name, and a second one on the
+ * same server would otherwise fail deep inside whatever it decorates — `@fastify/cors` re-declaring a request
+ * decorator, tens of seconds later, once avvio's own boot timeout gives up waiting on it.
  */
 function assertPluginNotRegistered(
   instance: FastifyInstance,

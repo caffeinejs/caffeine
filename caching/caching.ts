@@ -1,5 +1,5 @@
 import type { Container, InjectionToken } from '@caffeinejs/di'
-import { CACHING_INSTALLED, type AdapterRouteOptions, type HTTPPluginFactory } from '@caffeinejs/http'
+import type { AdapterRouteOptions, HTTPPluginFactory } from '@caffeinejs/http'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
@@ -19,8 +19,8 @@ export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
  * Takes an options object or a builder callback. Neither binds anything into the container — `store` and
  * `etagGenerator` are resolved once as the plugin registers, from the option given or, failing that, an
  * internal default ({@link MemoryCacheStore}, a SHA-1 hash). Being a plain plugin factory rather than a
- * feature, it installs like any other: more than once, each with its own settings, at the root or scoped to
- * one route group with `router.plugin(...)` / `@Use(...)`.
+ * feature, it installs once per context — the root, or one route group with `router.plugin(...)` / `@Use(...)`
+ * — each with its own settings.
  *
  * Per-route behavior is the `@Cache` / `@CacheInvalidate` decorators or the `cache()` / `cacheInvalidate()`
  * route extensions. Install it after `.authentication(...)`.
@@ -82,16 +82,12 @@ function resolveETagGenerator(
  * The hooks land behind the ones the adapter already attached, `@UseGuards` included, so a guard runs on a
  * cache hit as well as on a miss.
  *
- * `deps` is resolved by the caller (`HTTPCaching`) — this plugin never touches the container, which is what
- * lets it register more than once with different deps. Deliberately unwrapped from a fixed `fastify-plugin`
- * name for the same reason: a named plugin is refused a second registration on the same server.
+ * `deps` is resolved by the caller (`HTTPCaching`) — this plugin never touches the container. Named and
+ * `fastify-plugin`-wrapped like any other first-party plugin, so it installs once per context — root, or one
+ * route group with `router.plugin(...)` / `@Use(...)` — not stacked repeatedly onto the identical context.
  */
 export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    if (!instance.hasDecorator(CACHING_INSTALLED)) {
-      instance.decorate(CACHING_INSTALLED, true)
-    }
-
     if (!instance.hasRequestDecorator('responseCached')) {
       instance.decorateRequest('responseCached', false)
     }
@@ -112,5 +108,5 @@ export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
     })
   }
 
-  return fp(plugin)
+  return fp(plugin, { name: '@caffeinejs/caching' })
 }
