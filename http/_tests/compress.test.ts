@@ -1,4 +1,11 @@
+import fastifyCompress from '@fastify/compress'
+import fastify, { type FastifyPluginAsync } from 'fastify'
+import fp from 'fastify-plugin'
+import { describe, it, expect } from 'vitest'
+
 import {
+  Compress,
+  compress,
   Controller,
   Get,
   Router,
@@ -6,14 +13,15 @@ import {
   RouteGroupBuilder,
   createWebApplication,
   fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import fastify from 'fastify'
-import { describe, it, expect } from 'vitest'
+  type CompressOptions,
+} from '../index.js'
 
-import { Compress, compress, compressPlugin, type CompressOptions } from '../index.js'
+function compressApp(options: CompressOptions = {}) {
+  const plugin: FastifyPluginAsync = async instance => {
+    await instance.register(fastifyCompress, options)
+  }
 
-function compressApp(options?: CompressOptions) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => compressPlugin(options))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => fp(plugin, { name: 'compress' }))
 }
 
 describe('Compress', () => {

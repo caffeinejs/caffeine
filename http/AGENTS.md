@@ -73,7 +73,24 @@ The inline forms are implemented by calling `RouteChain` — `chain.handler(fn)`
 
 ## Extending a route from outside http
 
-`RouteExtension` / `RouteGroupExtension` (`routing/programmatic/extension.ts`) are `(builder) => void` — the _same_ function a decorator hands to `configureRoute`. That is the point: a feature is implemented once as an extension, and the decorator calls it. `@Operation` and `openapi`'s `operation()`, `@Compress` and `@caffeinejs/compress`'s `compress()`, `@BodyAsStream` and `bodyAsStream()` are each one implementation with two spellings. When adding a route-level feature, write the extension first and make the decorator call it — never the other way round, and never two copies.
+`RouteExtension` / `RouteGroupExtension` (`routing/programmatic/extension.ts`) are `(builder) => void` — the _same_ function a decorator hands to `configureRoute`. That is the point: a feature is implemented once as an extension, and the decorator calls it. `@Operation` and `openapi`'s `operation()`, `@Compress` and `compress()`, `@BodyAsStream` and `bodyAsStream()` are each one implementation with two spellings. When adding a route-level feature, write the extension first and make the decorator call it — never the other way round, and never two copies.
+
+## CORS and compression are plugins the application owns, not packages
+
+`@CORS` / `cors()` and `@Compress` / `compress()` / `@Encoding` / `encoding()` are route-config decorators
+only — `target.config('cors', …)` / `target.options('compress'/'decompress', …)`. Neither has a runtime
+dependency on `@fastify/cors` or `@fastify/compress`, and http does not ship a plugin wrapper for either:
+register the third-party plugin yourself, exactly like any other Fastify plugin —
+
+```ts
+.plugin(c => fp(async instance => instance.register(fastifyCors, c.app.cors.options), { name: 'cors' }))
+```
+
+`CorsOptions` and `CompressOptions` are deliberately empty interfaces: this package has no dependency on
+either third-party plugin, so a decorated call (`cors({ origin: '*' })`) type-checks against any object with
+no cast. A consumer who has the real plugin installed and wants its exact options shape checked augments the
+interface themselves — `declare module '@caffeinejs/http' { interface CorsOptions extends
+import('@fastify/cors').FastifyCorsOptions {} }` — there is nothing to opt into on this package's side.
 
 Applied with `.with(ext, ...rest)` on `Router` and `RouteChain`. An extension may write anything on the builder except `path`, `method`, `parameters` and the handler — `flatten.ts` overwrites those.
 

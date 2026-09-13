@@ -1,4 +1,5 @@
-import { configureRoute, configureRouteGroup, type AnyRouteExtension } from '@caffeinejs/http'
+import type { AnyRouteExtension } from '../routing/programmatic/extension.js'
+import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 
 type EncodingToken = 'zstd' | 'br' | 'deflate' | 'gzip' | 'identity'
 

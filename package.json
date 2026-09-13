@@ -11,8 +11,6 @@
     "scan",
     "std",
     "http",
-    "cors",
-    "compress",
     "caching",
     "html",
     "multipart",

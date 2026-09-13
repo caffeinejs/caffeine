@@ -11,12 +11,6 @@
       "path": "./http/tsconfig.build.json"
     },
     {
-      "path": "./cors/tsconfig.build.json"
-    },
-    {
-      "path": "./compress/tsconfig.build.json"
-    },
-    {
       "path": "./caching/tsconfig.build.json"
     },
     {

@@ -83,10 +83,12 @@ app.mount(pets) // before app.ready()
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
 - `.with(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
-  `bodyAsBuffer()`, `bodyAsStream()` and `fst(options)`; compress ships `compress(opts)` and `encoding(tokens)`;
-  openapi ships `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
+  `bodyAsBuffer()`, `bodyAsStream()`, `fst(options)`, `compress(opts)` and `encoding(tokens)`; openapi ships
+  `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
 - `.plugin(factory)` registers a Fastify plugin in front of that router's routes and the groups nested under
-  it — `pets.plugin(() => corsPlugin({ origin: 'https://pets.example' }))`. The same on a controller is
+  it — `pets.plugin(() => fp(instance => instance.register(fastifyCors, { origin: 'https://pets.example' }), { name: 'cors' }))`.
+  There is no `corsPlugin`/`compressPlugin` wrapper — register the third-party plugin directly, the same as any
+  other Fastify plugin. The same on a controller is
   `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
   deduplicated: two groups wanting different settings pass two factories. The factory's config argument sees
   `ConfigHandle<unknown>` — a router does not know which application it will be mounted into.

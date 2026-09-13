@@ -171,7 +171,7 @@ export class RouteChain<
    * Applies extensions to the route, in the order given.
    *
    * How a package configures a route it does not own: `@caffeinejs/openapi` documenting an operation,
-   * `@caffeinejs/compress` setting compression, Fastify's own route options through `fst`. An extension is the
+   * `compress()` setting compression, Fastify's own route options through `fst`. An extension is the
    * same function a decorator passes to `configureRoute`, so a feature reads the same whichever way the route
    * was declared.
    *

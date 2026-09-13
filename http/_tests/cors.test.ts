@@ -1,4 +1,11 @@
+import fastifyCors from '@fastify/cors'
+import fastify, { type FastifyPluginAsync } from 'fastify'
+import fp from 'fastify-plugin'
+import { describe, it, expect } from 'vitest'
+
 import {
+  CORS,
+  cors,
   Controller,
   Get,
   Router,
@@ -6,14 +13,15 @@ import {
   RouteGroupBuilder,
   createWebApplication,
   fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import fastify from 'fastify'
-import { describe, it, expect } from 'vitest'
+  type CorsOptions,
+} from '../index.js'
 
-import { CORS, cors, corsPlugin, type CorsOptions } from '../index.js'
+function corsApp(options: CorsOptions = {}) {
+  const plugin: FastifyPluginAsync = async instance => {
+    await instance.register(fastifyCors, options)
+  }
 
-function corsApp(options: CorsOptions) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => corsPlugin(options))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => fp(plugin, { name: 'cors' }))
 }
 
 describe('CORS', () => {
@@ -230,12 +238,17 @@ describe('CORS', () => {
     })
   })
 
-  // A first-party plugin wraps a fixed `fastify-plugin` name. Two `.plugin(() => corsPlugin())` used to hang
-  // for ~10s inside avvio after `@fastify/cors` re-declared a decorator. Refused immediately instead.
-  it('refuses a second corsPlugin on the same application', { timeout: 3_000 }, async () => {
+  // A first-party plugin wraps a fixed `fastify-plugin` name. Two `.plugin(() => corsApp's plugin)` used to
+  // hang for ~10s inside avvio after `@fastify/cors` re-declared a decorator. Refused immediately instead.
+  it('refuses a second cors plugin on the same application', { timeout: 3_000 }, async () => {
+    const plugin: FastifyPluginAsync = async instance => {
+      await instance.register(fastifyCors)
+    }
+    const registerCors = () => fp(plugin, { name: 'cors' })
+
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .plugin(() => corsPlugin())
-      .plugin(() => corsPlugin())
+      .plugin(registerCors)
+      .plugin(registerCors)
       .build()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "cors": it is already registered/)
