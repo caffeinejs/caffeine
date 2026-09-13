@@ -6,6 +6,8 @@ import { Container, Ctor, Scopes } from '@caffeinejs/di'
 import { Configuration } from '@caffeinejs/std/config'
 import {
   type FastifyInstance,
+  type FastifyPluginAsync,
+  type FastifyPluginCallback,
   type FastifyReply,
   type FastifyRequest,
   type RawReplyDefaultExpression,
@@ -22,7 +24,7 @@ import { GlobalErrorHandlerRef, installRouteGroupErrorHandler } from './error/er
 import { solutions } from './error/util.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
-import { pluginName, type HTTPPlugin } from './plugin.js'
+import { pluginName } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import { type AdapterRouteOptions } from './route_hooks.js'
@@ -494,7 +496,10 @@ export class FastifyAdapter<
  * one on the same server would otherwise fail deep inside whatever it decorates — `@fastify/cors` re-declaring
  * a request decorator, tens of seconds later, once avvio's own boot timeout gives up waiting on it.
  */
-function assertPluginNotRegistered(instance: FastifyInstance, plugin: HTTPPlugin): void {
+function assertPluginNotRegistered(
+  instance: FastifyInstance,
+  plugin: FastifyPluginCallback | FastifyPluginAsync,
+): void {
   const name = pluginName(plugin)
 
   if (name !== undefined && instance.hasPlugin(name)) {

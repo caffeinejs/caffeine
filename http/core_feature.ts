@@ -1,13 +1,14 @@
 import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { constraintVaryPlugin } from './constraints/vary_plugin.js'
 import { installFormBodyParser } from './form/index.js'
 import { installNotFoundHandler, NotFoundFallback } from './not_found.js'
-import { registerPlugin, type HTTPPlugin } from './plugin.js'
+import { registerPlugin } from './plugin.js'
 
 /** Teaches the server to parse `application/x-www-form-urlencoded` bodies. */
-const formBodyPluginFn: HTTPPlugin = async instance => {
+const formBodyPluginFn: FastifyPluginAsync = async instance => {
   installFormBodyParser(instance)
 }
 
@@ -20,7 +21,7 @@ const formBodyPlugin = fp(formBodyPluginFn, { name: 'caffeine-form-body' })
  * and one deriving the paths the server owns needs every route and every `ServerOwnedPaths` provider already
  * in place — so the feature that contributes this is the last one the application bootstraps.
  */
-const notFoundPluginFn: HTTPPlugin = async instance => {
+const notFoundPluginFn: FastifyPluginAsync = async instance => {
   installNotFoundHandler(instance, instance.$container.getManyOptional<NotFoundFallback>(NotFoundFallback))
 }
 

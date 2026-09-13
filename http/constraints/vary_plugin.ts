@@ -1,7 +1,5 @@
-import type { FastifyReply } from 'fastify'
+import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import fp from 'fastify-plugin'
-
-import type { HTTPPlugin } from '../plugin.js'
 
 /**
  * Adds the constraint headers to `Vary` on every response, when any registered route selects on a header.
@@ -10,7 +8,7 @@ import type { HTTPPlugin } from '../plugin.js'
  * client the other's representation. Fastify documents this; the header list is framework-owned rather than
  * left to each route. No constrained route means no hook and no cost.
  */
-const constraintVaryPluginFn: HTTPPlugin = async instance => {
+const constraintVaryPluginFn: FastifyPluginAsync = async instance => {
   const routeGroups = instance.$routeGroups
   const headers = new Set<string>()
   for (const group of routeGroups) {

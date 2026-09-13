@@ -5,12 +5,11 @@ import {
   type AuthSchemeDescriptor,
   AuthenticationSchemeProvider,
   AuthenticationService,
-  type HTTPPlugin,
   type RouteGroup,
   kAuthSchemeDescriptors,
   solutions,
 } from '@caffeinejs/http'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
@@ -35,8 +34,12 @@ import { readScalarBundle, scalarPage } from './ui/scalar.js'
  * at request time, and one that silently omits routes is worse than one that never shipped; the framework
  * already refuses to start on an unconvertible route schema, and this matches it.
  */
-export function openapiPlugin(store: OpenAPIDocumentStore, options: OpenAPIOptions, paths: EndpointPaths): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function openapiPlugin(
+  store: OpenAPIDocumentStore,
+  options: OpenAPIOptions,
+  paths: EndpointPaths,
+): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     const descriptors = instance.$container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
     assertSchemesExist(instance, options)
     warnIfUnprotected(instance, options)

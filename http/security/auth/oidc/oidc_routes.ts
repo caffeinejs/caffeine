@@ -1,8 +1,7 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { joinPaths } from '../../../internal/paths/index.js'
-import type { HTTPPlugin } from '../../../plugin.js'
 import { isOIDCError, type OIDCMeta } from './index.js'
 
 /**
@@ -11,8 +10,8 @@ import { isOIDCError, type OIDCMeta } from './index.js'
  * Contributed by the authentication builder only when an OIDC strategy was configured, so there is no "is it
  * on" question to answer here — the absence of this plugin is the answer.
  */
-export function oidcRoutesPlugin(meta: OIDCMeta): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     installOIDCRoutes(instance, meta)
   }
 

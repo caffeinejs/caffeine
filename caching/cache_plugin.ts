@@ -1,4 +1,5 @@
-import type { AdapterRouteOptions, HTTPPlugin } from '@caffeinejs/http'
+import type { AdapterRouteOptions } from '@caffeinejs/http'
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import './_fastify.js'
@@ -14,8 +15,8 @@ import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_
  * The hooks land behind the ones the adapter already attached, `@UseGuards` included, so a guard runs on a
  * cache hit as well as on a miss.
  */
-export function cachePlugin(): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function cachePlugin(): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     // Resolved once, never per route and never per request.
     const deps = resolveCacheDeps(instance.$container)
     instance.decorateRequest('responseCached', false)

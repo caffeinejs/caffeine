@@ -1,9 +1,8 @@
 import type { Container } from '@caffeinejs/di'
-import type { FastifyContextConfig } from 'fastify'
+import type { FastifyContextConfig, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { Context } from '../context.js'
-import type { HTTPPlugin } from '../plugin.js'
 import type { RouteGroup } from '../route.js'
 import { ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
@@ -41,8 +40,8 @@ export function assertAuthenticationConfigured(container: Container, routeGroups
  * cross-origin request still needs on its way out — runs first, and one extended after it does not run for
  * a request the gate rejected.
  */
-export function authenticationPlugin(): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function authenticationPlugin(): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     const container = instance.$container
     const routeGroups = instance.$routeGroups
 

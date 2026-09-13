@@ -1,5 +1,5 @@
-import type { HTTPPlugin } from '@caffeinejs/http'
 import fastifyView from '@fastify/view'
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { ViewOptions } from './view.js'
@@ -11,8 +11,8 @@ import type { ViewOptions } from './view.js'
  * group contexts where routes are declared. Each registration carries a distinct `propertyName` (the default
  * engine has none, decorating `reply.view`).
  */
-export function viewPlugin(engines: { all(): ViewOptions[] }): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function viewPlugin(engines: { all(): ViewOptions[] }): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     await Promise.all(engines.all().map(options => instance.register(fastifyView, options)))
   }
 

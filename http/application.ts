@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { Application, type ApplicationInit, type ExtensionRegistrar, type Feature, type RunInfo } from '@caffeinejs/std'
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, FastifyRequest } from 'fastify'
 
 import { HTTPCoreFeature, HTTPFallbackFeature } from './core_feature.js'
 import { controllerPlugins } from './decorators/use.js'
@@ -21,7 +21,7 @@ import {
   type Next,
   type NodeMiddleware,
 } from './middleware/index.js'
-import type { HTTPPlugin, HTTPPluginFactory } from './plugin.js'
+import type { HTTPPluginFactory } from './plugin.js'
 import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
@@ -180,7 +180,7 @@ export class WebApplication<
     return this
   }
 
-  protected override extensionRegistrar(order: number): ExtensionRegistrar<HTTPPlugin> {
+  protected override extensionRegistrar(order: number): ExtensionRegistrar<FastifyPluginCallback | FastifyPluginAsync> {
     return this.#plugins.registrarFor(order)
   }
 

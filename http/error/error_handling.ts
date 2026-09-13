@@ -1,8 +1,7 @@
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { FastifyContext } from '../context.js'
-import type { HTTPPlugin } from '../plugin.js'
 import { Responder } from '../response.js'
 import { kErrorUnhandled, type RouteGroup } from '../route.js'
 import { ErrCaffeineWebApplication } from './common.js'
@@ -42,8 +41,8 @@ export class GlobalErrorHandlerRef {
  * Contributed by the feature the application bootstraps first, so every route and hook registered afterwards
  * is already covered by it — including the ones a package outside `http` contributes.
  */
-export function globalErrorHandlerPlugin(ref: GlobalErrorHandlerRef): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function globalErrorHandlerPlugin(ref: GlobalErrorHandlerRef): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     ref.handler = installGlobalErrorHandler(instance, instance.$container.get(ErrorHandlerProvider))
   }
 

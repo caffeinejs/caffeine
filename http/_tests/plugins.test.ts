@@ -1,13 +1,13 @@
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
-import fastify from 'fastify'
+import fastify, { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { createWebApplication, fastifyAdapterFactory, type WebApplication } from '../index.js'
-import { registerPlugin, type HTTPPlugin, type HTTPPluginFactory, type HTTPPluginProvider } from '../plugin.js'
+import { registerPlugin, type HTTPPluginFactory, type HTTPPluginProvider } from '../plugin.js'
 import { Router } from '../routing/programmatic/router.js'
 
 /**
@@ -27,7 +27,7 @@ import { Router } from '../routing/programmatic/router.js'
  */
 function stamping(name: string, header: string, log?: string[]): HTTPPluginFactory {
   return () => {
-    const plugin: HTTPPlugin = async instance => {
+    const plugin: FastifyPluginAsync = async instance => {
       log?.push(name)
       instance.addHook('onRequest', (_request, reply, done) => {
         reply.header(header, 'yes')
@@ -110,7 +110,7 @@ describe('plugin registration', () => {
     const factory: HTTPPluginFactory = (_config, container) => {
       const greeting = container.get(kGreeting)
 
-      const plugin: HTTPPlugin = async instance => {
+      const plugin: FastifyPluginAsync = async instance => {
         instance.addHook('onRequest', (_request, reply, done) => {
           reply.header('x-greeting', greeting)
           done()
@@ -138,7 +138,7 @@ describe('plugin registration', () => {
     const awaiting: HTTPPluginFactory = async () => {
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const plugin: HTTPPlugin = async instance => {
+      const plugin: FastifyPluginAsync = async instance => {
         log.push('awaiting')
         instance.addHook('onRequest', (_request, reply, done) => {
           reply.header('x-awaiting', 'yes')
@@ -277,7 +277,7 @@ describe('scoped plugin registration', () => {
   it('registers an unnamed plugin once per call, even for the same factory', async () => {
     const log: string[] = []
     const twice: HTTPPluginFactory = () => {
-      const plugin: HTTPPlugin = async () => {
+      const plugin: FastifyPluginAsync = async () => {
         log.push('twice')
       }
       return plugin
@@ -329,8 +329,8 @@ describe('scoped plugin registration', () => {
   })
 })
 
-function tokenStamp(name: string, header: string): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+function tokenStamp(name: string, header: string): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     instance.addHook('onRequest', (_request, reply, done) => {
       reply.header(header, 'yes')
       done()

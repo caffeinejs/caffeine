@@ -1,5 +1,5 @@
 import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
-import fastify from 'fastify'
+import fastify, { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
@@ -13,7 +13,6 @@ import {
   fastifyAdapterFactory,
   registerPlugin,
   type Context,
-  type HTTPPlugin,
 } from '../index.js'
 
 /**
@@ -47,7 +46,7 @@ function stamping(name: string, ran: string[]): Feature {
       // Nothing to bind.
     },
     [kFeatureBootstrap](kit: BootstrapKit): void {
-      const plugin: HTTPPlugin = async instance => {
+      const plugin: FastifyPluginAsync = async instance => {
         instance.addHook('onRequest', (_request, reply, done) => {
           ran.push(name)
           reply.header(`x-${name}`, 'yes')

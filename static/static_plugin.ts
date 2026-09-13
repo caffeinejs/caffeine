@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
-import { deriveServerOwnedPaths, ServerOwnedPaths, serverOwnedPaths, type HTTPPlugin } from '@caffeinejs/http'
+import { deriveServerOwnedPaths, ServerOwnedPaths, serverOwnedPaths } from '@caffeinejs/http'
 import fastifyStatic from '@fastify/static'
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { ErrSPAIndexMissing } from './errors.js'
@@ -26,8 +26,8 @@ interface HeaderCapableReply {
  * @param mounts - The resolved mounts, in registration order. The SPA's own mount, when there is one, is last
  * @param spa - The resolved SPA settings, or `undefined` when `.spa(...)` was never called
  */
-export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | undefined): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | undefined): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     const serveSPA = spa === undefined ? false : checkShell(instance, spa)
 
     for (let i = 0; i < mounts.length; i++) {

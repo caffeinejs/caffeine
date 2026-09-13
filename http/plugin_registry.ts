@@ -1,13 +1,16 @@
 import type { ExtensionRegistrar } from '@caffeinejs/std'
+import type { FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
 
 import { ErrCaffeineWebApplication } from './error/common.js'
 import { solutions } from './error/util.js'
-import type { HTTPPlugin } from './plugin.js'
+
+/** Any Fastify plugin, callback- or async-style. */
+type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
 
 interface Entry {
   order: number
   scope: object | undefined
-  plugin: HTTPPlugin
+  plugin: AnyFastifyPlugin
 }
 
 /**
@@ -31,7 +34,7 @@ export class HTTPPlugins {
   }
 
   /** The registrar for the feature at `order`, contributing into `scope`. */
-  registrarFor(order: number, scope?: object): ExtensionRegistrar<HTTPPlugin> {
+  registrarFor(order: number, scope?: object): ExtensionRegistrar<AnyFastifyPlugin> {
     return {
       register: plugin => {
         if (typeof plugin !== 'function') {
@@ -49,16 +52,16 @@ export class HTTPPlugins {
   }
 
   /** What the application installed, for the root server. */
-  root(): HTTPPlugin[] {
+  root(): AnyFastifyPlugin[] {
     return this.#select(undefined)
   }
 
   /** What `scope` — a mounted router, or a controller class — installed, for that route group's context. */
-  of(scope: object): HTTPPlugin[] {
+  of(scope: object): AnyFastifyPlugin[] {
     return this.#select(scope)
   }
 
-  #select(scope: object | undefined): HTTPPlugin[] {
+  #select(scope: object | undefined): AnyFastifyPlugin[] {
     if (!this.#sorted) {
       // Stable, so two plugins the same feature contributed keep the order it contributed them in.
       this.#entries.sort((a, b) => a.order - b.order)

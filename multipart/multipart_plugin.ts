@@ -1,5 +1,5 @@
-import type { HTTPPlugin } from '@caffeinejs/http'
 import fastifyMultipart from '@fastify/multipart'
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 export type MultipartOptions = NonNullable<Parameters<typeof fastifyMultipart>[1]>
@@ -9,8 +9,8 @@ export type MultipartOptions = NonNullable<Parameters<typeof fastifyMultipart>[1
  *
  * `fastify-plugin`-wrapped, so registering it on the application reaches every route group.
  */
-export function multipartPlugin(options: MultipartOptions = {}): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function multipartPlugin(options: MultipartOptions = {}): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     await instance.register(fastifyMultipart, options)
   }
 

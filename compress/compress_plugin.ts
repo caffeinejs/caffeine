@@ -1,5 +1,5 @@
-import type { HTTPPlugin } from '@caffeinejs/http'
 import fastifyCompress from '@fastify/compress'
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 export type CompressOptions = NonNullable<Parameters<typeof fastifyCompress>[1]>
@@ -10,8 +10,8 @@ export type CompressOptions = NonNullable<Parameters<typeof fastifyCompress>[1]>
  *
  * `fastify-plugin`-wrapped, so registering it on the application reaches every route group.
  */
-export function compressPlugin(options: CompressOptions = {}): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function compressPlugin(options: CompressOptions = {}): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     await instance.register(fastifyCompress, options)
   }
 

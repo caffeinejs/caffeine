@@ -1,4 +1,4 @@
-import type { HTTPPlugin } from '@caffeinejs/http'
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
@@ -14,8 +14,8 @@ import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
  * .plugin(c => htmlPlugin(c.app.html))
  * ```
  */
-export function htmlPlugin(defaults: Partial<HTMLDefaults> = {}): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function htmlPlugin(defaults: Partial<HTMLDefaults> = {}): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     // Read through, not copied: the argument is usually a node of the configuration tree, and a refresh has to
     // reach a response rendered after it.
     instance.decorate(kHTMLOptions, {

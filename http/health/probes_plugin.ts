@@ -1,6 +1,6 @@
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
-import type { HTTPPlugin } from '../plugin.js'
 import type { HealthOptions } from './options.js'
 import { ProbeEndpoint } from './probes.js'
 import { installHealthProbes } from './probes_route.js'
@@ -12,8 +12,8 @@ import { installHealthProbes } from './probes_route.js'
  * before anything a package contributes — an orchestrator polling `/readyz` must not be answered by a
  * fallback that happened to register a catch-all first.
  */
-export function healthProbesPlugin(options: HealthOptions): HTTPPlugin {
-  const plugin: HTTPPlugin = async instance => {
+export function healthProbesPlugin(options: HealthOptions): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
     // Resolved even when the probes are off, because resolving is what checks that every health indicator
     // is a singleton — a lifetime mistake belongs to start-up, not to the first request that reads a probe.
     const probes = instance.$container.get(ProbeEndpoint)

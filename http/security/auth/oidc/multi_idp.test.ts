@@ -1,8 +1,8 @@
 import { kFeatureBootstrap, kFeatureConfigure, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
+import type { FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
-import type { HTTPPlugin } from '../../../plugin.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -43,8 +43,11 @@ function makeCtx(cookies: Record<string, string> = {}) {
 }
 
 /** Minimal kit double — configure touches bind/wrap; bootstrap touches the plugin registry. */
-function makeKit(): { kit: FeatureConfigureKit & BootstrapKit; registered: HTTPPlugin[] } {
-  const registered: HTTPPlugin[] = []
+function makeKit(): {
+  kit: FeatureConfigureKit & BootstrapKit
+  registered: Array<FastifyPluginCallback | FastifyPluginAsync>
+} {
+  const registered: Array<FastifyPluginCallback | FastifyPluginAsync> = []
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
   })
@@ -54,7 +57,7 @@ function makeKit(): { kit: FeatureConfigureKit & BootstrapKit; registered: HTTPP
       wrap: (v: unknown) => ({ get: () => v }),
     },
     extensions: {
-      register: (plugin: HTTPPlugin) => {
+      register: (plugin: FastifyPluginCallback | FastifyPluginAsync) => {
         registered.push(plugin)
       },
     },
@@ -96,7 +99,8 @@ async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => 
 
   try {
     for (const plugin of registered) {
-      await plugin(server as never, {})
+      // Every plugin the authentication builder registers is async-style; the registry itself accepts either.
+      await (plugin as FastifyPluginAsync)(server as never, {})
     }
   } finally {
     emitWarning.mockRestore()
