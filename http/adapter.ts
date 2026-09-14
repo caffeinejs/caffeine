@@ -20,7 +20,11 @@ import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import { FastifyContext } from './context.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
-import { GlobalErrorHandlerRef, installRouteGroupErrorHandler } from './error/error_handling.js'
+import {
+  GlobalErrorHandlerRef,
+  installRouteGroupErrorHandler,
+  type GlobalErrorHandler,
+} from './error/error_handling.js'
 import { solutions } from './error/util.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
@@ -28,7 +32,9 @@ import { pluginName } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import { type AdapterRouteOptions } from './route_hooks.js'
+import { RouteGroupBuilder } from './routing/builder.js'
 import type { RouteCompilers } from './routing/dispatch.js'
+import type { RouteGroupSpec } from './routing/spec.js'
 import { compileRouteSchema } from './schema/compile_route_schema.js'
 import { assertAuthenticationConfigured, type Principal } from './security/index.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions, type ServerAddress } from './server/index.js'
@@ -137,46 +143,33 @@ export class FastifyAdapter<
     }
 
     const plugins = input.plugins
-
-    // Every plugin the features contributed, in the order their features were installed — this package's own
-    // included. Registered one at a time and awaited, so a plugin sees what the one before it decorated. A
-    // plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every route; an
-    // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
-    for (const plugin of plugins.root()) {
-      assertPluginNotRegistered(fastify, plugin)
-      await fastify.register(plugin)
-    }
-
-    // Installed by the error-handling plugin above; read back here because each route group's own
-    // encapsulated handler resolves to it last.
-    const globalErrorHandler = container.get(GlobalErrorHandlerRef).handler
-
-    middlewares.setupAll(container)
-
-    // Installed after the plugins so the hooks run inside a server that already has its error handler.
-    middlewares.installHooks(fastify, container, configuration)
-
-    // What the application declared and no installed feature can serve. Both are start-up failures rather
-    // than a route that quietly never does what its decorator says.
-    assertAuthenticationConfigured(container, routeGroups)
-
-    if (
-      !fastify.hasPlugin(CACHING_PLUGIN) &&
-      routeGroups.some(group =>
-        group.routes.some(
-          route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
-        ),
-      )
-    ) {
-      throw new ErrConfiguration(
-        'Routes are decorated with @Cache or @CacheInvalidate but the caching feature is not installed: ' +
-          'add ".with(HTTPCaching())" to the application builder',
-      )
-    }
-
     const compilers = this.#compilers
 
-    for (const router of routeGroups) {
+    // Accumulated by `$route` while plugins register (right below) and compiled once, after that loop
+    // finishes, into `allRouteGroups` — see there. A pure snapshot at push time: `.toRouteGroup()` reads the
+    // builder's fields into a plain spec, no compiling, so this costs nothing beyond the array push itself.
+    const lateRoutes: Array<{ name: string; spec: RouteGroupSpec<REQ> }> = []
+
+    // Lets a plugin registered through the `.with(...)` loop right below add one more route, protectable the
+    // same way any other route is — through the exact compiler `buildRouting()` already built
+    // (`input.compileRouteGroup`), applied a second time below, once every plugin has had its turn. Nothing
+    // is compiled here: the group only exists once `allRouteGroups` is built, after the plugin loop.
+    //
+    // Invisible to `$routeGroups` (decorated above, before any plugin runs, and never updated with what a
+    // plugin later accumulates here) and to anything that inspected the route table earlier in `.with(...)`
+    // order — `@caffeinejs/openapi` relies on exactly that to exclude its own doc-serving routes from the
+    // document it generates. Registration always targets this root instance, regardless of which context's
+    // `instance` the calling plugin was handed — a decoration is visible down the prototype chain to any
+    // child context.
+    fastify.decorate('$route', (name: string, build: (router: RouteGroupBuilder) => void) => {
+      const builder = new RouteGroupBuilder()
+      build(builder)
+      lateRoutes.push({ name, spec: builder.toRouteGroup<REQ>() })
+    })
+
+    // Turns one `RouteGroup` into real Fastify routes: schema compilation, per-route config assembly, guard
+    // attachment, the `BodyAsBuffer`/`BodyAsStream` content-type-parser swap.
+    const registerCompiledRouteGroup = (router: RouteGroup<REQ>, globalErrorHandler: GlobalErrorHandler): void => {
       const basePath = router.path
       const routes = router.routes
 
@@ -383,6 +376,60 @@ export class FastifyAdapter<
       )
     }
 
+    // Every plugin the features contributed, in the order their features were installed — this package's own
+    // included. Registered one at a time and awaited, so a plugin sees what the one before it decorated. A
+    // plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every route; an
+    // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
+    // `$route` (above) is what a plugin in this loop calls to accumulate one more route.
+    for (const plugin of plugins.root()) {
+      assertPluginNotRegistered(fastify, plugin)
+      await fastify.register(plugin)
+    }
+
+    // Installed by the error-handling plugin above; read back here because each route group's own
+    // encapsulated handler resolves to it last.
+    const globalErrorHandler = container.get(GlobalErrorHandlerRef).handler
+
+    middlewares.setupAll(container)
+
+    // Installed after the plugins so the hooks run inside a server that already has its error handler.
+    middlewares.installHooks(fastify, container, configuration)
+
+    // Every plugin has had its turn, so whatever `$route` accumulated is everything there is — compiled here,
+    // once, through the identical compiler `buildRouting()` used for every other route, and folded into the
+    // same table the checks below and the registration loop read. `$routeGroups` (decorated above) is not
+    // updated: it stays what `buildRouting()` produced, which is what lets `@caffeinejs/openapi` exclude its
+    // own doc-serving routes from the document it reads that decoration to generate.
+    const allRouteGroups: RouteGroup<REQ>[] =
+      lateRoutes.length === 0
+        ? routeGroups
+        : [
+            ...routeGroups,
+            ...lateRoutes.map(({ name, spec }) => input.compileRouteGroup(spec, { name, target: LateRouteGroup })),
+          ]
+
+    // What the application declared and no installed feature can serve. Both are start-up failures rather
+    // than a route that quietly never does what its decorator says.
+    assertAuthenticationConfigured(container, allRouteGroups)
+
+    if (
+      !fastify.hasPlugin(CACHING_PLUGIN) &&
+      allRouteGroups.some(group =>
+        group.routes.some(
+          route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
+        ),
+      )
+    ) {
+      throw new ErrConfiguration(
+        'Routes are decorated with @Cache or @CacheInvalidate but the caching feature is not installed: ' +
+          'add ".with(HTTPCaching())" to the application builder',
+      )
+    }
+
+    for (const router of allRouteGroups) {
+      registerCompiledRouteGroup(router, globalErrorHandler)
+    }
+
     await fastify.ready()
   }
 
@@ -487,6 +534,9 @@ export class FastifyAdapter<
     })
   }
 }
+
+/** The synthetic target a `$route`-registered group compiles with, so a guard failure names something readable. */
+class LateRouteGroup {}
 
 /**
  * Refuses a second `fastify-plugin`-wrapped plugin of the same name before Fastify ever sees it.

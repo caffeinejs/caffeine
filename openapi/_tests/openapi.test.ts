@@ -13,15 +13,14 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
-import { $t, type FeatureConfigurer } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { OpenAPIBuilder } from '../builder.js'
 import { APIGroup, Operation } from '../decorators/index.js'
 import { ErrOpenAPIConfiguration } from '../errors.js'
-import { openapi } from '../plugin.js'
+import { openapi, type OpenAPIConfigurer } from '../openapi.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
@@ -74,14 +73,14 @@ class PetsController {
 }
 void [PetsController]
 
-function buildApp(configure: FeatureConfigurer<OpenAPIBuilder> = () => {}): WebApplication {
+function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication {
   return newBuilder(configure).build() as WebApplication
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an
 // application declaring authorization without authentication refuses to start. It also means every test
 // exercises the securityScheme derivation rather than only the unauthenticated path.
-function newBuilder(configure?: FeatureConfigurer<OpenAPIBuilder>) {
+function newBuilder(configure?: OpenAPIConfigurer) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
     .with(openapi(configure))
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
@@ -151,6 +150,9 @@ describe('openapi endpoints', () => {
     })
   })
 
+  // The document is generated from `$routeGroups` before the package's own endpoints are registered
+  // (`instance.$route(...)`, after generation) — there is no configuration that puts them back in, because
+  // there is no point in the boot sequence where they are both registered and still visible to the generator.
   it('does not describe its own endpoints', async () => {
     app = buildApp(o => o.docs(false).public())
     await app.ready()
@@ -158,15 +160,6 @@ describe('openapi endpoints', () => {
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
 
     expect(Object.keys(document.paths ?? {})).not.toContain('/openapi.json')
-  })
-
-  it('describes its own endpoints when asked', async () => {
-    app = buildApp(o => o.docs(false).exposeSelf().public())
-    await app.ready()
-
-    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
-
-    expect(Object.keys(document.paths ?? {})).toContain('/openapi.json')
   })
 
   it('serves the document as YAML', async () => {
@@ -352,8 +345,8 @@ describe('openapi endpoint protection', () => {
 })
 
 describe('multiple applications in one process', () => {
-  // The endpoints class is minted per builder precisely so this works: a module-level class would accumulate
-  // a duplicate route per application and Fastify would reject the second registration.
+  // Each `openapi(...)` call builds its own plugin closure over its own generated document — nothing shared
+  // at module scope for a second application to collide with.
   it('both serve their own document', async () => {
     const first = buildApp(o => o.info({ title: 'First', version: '1.0.0' }).docs(false).public())
     const second = buildApp(o => o.info({ title: 'Second', version: '1.0.0' }).docs(false).public())

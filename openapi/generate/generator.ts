@@ -3,7 +3,6 @@ import { type AuthSchemeDescriptor, type Route, type RouteGroup, solutions } fro
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
 import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { ErrOpenAPIConfiguration, ErrOpenAPIOperationConflict } from '../errors.js'
-import { kOpenAPISelf } from '../keys.js'
 import type { OpenAPIOptions } from '../options.js'
 import type {
   ComponentsObject,
@@ -42,6 +41,10 @@ export interface GenerateInput {
  *
  * Pure: no Fastify, no container, no I/O. That keeps it testable against hand-built `RouteGroup[]` fixtures and
  * leaves the door open for a CLI that emits the document without starting a server.
+ *
+ * `routeGroups` never includes the package's own document-serving routes: they are compiled and registered
+ * through `instance.$route(...)` after `$routeGroups` (this function's input) is already fixed, so there is
+ * nothing here to exclude them from — no `exposeSelf` switch, because there is no state it could switch.
  */
 export function generateDocument(input: GenerateInput): OpenAPIDocument {
   const { options } = input
@@ -54,10 +57,6 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
   const operationIds = new Map<string, string>()
 
   for (const router of input.routeGroups) {
-    if (!options.exposeSelf && router.extras?.get(kOpenAPISelf) === true) {
-      continue
-    }
-
     const group = router.extras?.get(kAPIGroup) as APIGroupDetail | undefined
     if (group?.hidden === true) {
       continue

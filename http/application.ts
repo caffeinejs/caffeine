@@ -24,6 +24,7 @@ import {
 import type { HTTPPluginFactory } from './plugin.js'
 import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
+import type { RouteGroupCompiler } from './routing/compile.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
@@ -33,6 +34,8 @@ import { Keys } from './symbols.js'
 
 export interface AdapterIn<R> {
   routeGroups: RouteGroup<R>[]
+  /** The compiler {@link buildRouting} built the groups above with — reused by `$route` for a late one. */
+  compileRouteGroup: RouteGroupCompiler
   middlewares: MiddlewarePipeline
   /** What the features contributed, in the order they were installed. */
   plugins: HTTPPlugins
@@ -274,13 +277,15 @@ export class WebApplication<
   }
 
   protected override async setup(): Promise<void> {
-    this.#routeGroups = buildRouting<R>(this.routeSources(), this.container)
+    const { routeGroups, compileRouteGroup } = buildRouting<R>(this.routeSources(), this.container)
+    this.#routeGroups = routeGroups
     this.#built = true
 
     await this.#registerScopedPlugins()
 
     await this.#adapter.setup({
       routeGroups: this.#routeGroups,
+      compileRouteGroup,
       middlewares: this.#middlewares,
       plugins: this.#plugins,
     })

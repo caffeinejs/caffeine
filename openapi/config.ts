@@ -17,6 +17,9 @@ import type {
  * Absent: everything that is a function (`operationId`, `tagFor`, `schemaName`, `transformDocument`), a schema
  * (`errorSchema`), and the security policy the endpoints are compiled against (`secure`) — an `AuthzPolicy` is
  * a composition of requirement objects and predicates, so there is nothing a tree could carry.
+ *
+ * Unused today — `openapi()` takes an {@link OpenAPIOptionsBuilder} callback, not a configuration node, and
+ * nothing resolves this slice or validates against {@link openapiConfigSchema}. Kept for reference.
  */
 export interface OpenAPIConfigSlice {
   /**
@@ -41,7 +44,6 @@ export interface OpenAPIConfigSlice {
   security?: SecurityRequirementObject[]
   securitySchemes?: Record<string, SecuritySchemeObject>
   deriveSecuritySchemes?: boolean
-  exposeSelf?: boolean
   dedupeComponents?: boolean
   validate?: boolean
   ui?: Record<string, unknown>
@@ -78,7 +80,6 @@ export const openapiConfigSchema = $t.Object({
   security: $t.Optional($t.Array(specObject())),
   securitySchemes: $t.Optional(specObject()),
   deriveSecuritySchemes: $t.Optional($t.Boolean()),
-  exposeSelf: $t.Optional($t.Boolean()),
   dedupeComponents: $t.Optional($t.Boolean()),
   validate: $t.Optional($t.Boolean()),
   ui: $t.Optional(specObject()),

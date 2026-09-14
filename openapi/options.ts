@@ -91,8 +91,6 @@ export interface OpenAPIOptions {
   /** The body of an inferred error response. */
   errorSchema: AnySchema | undefined
 
-  /** Whether the document describes the routes that serve the document. */
-  exposeSelf: boolean
   /** Structurally deduplicate repeated anonymous schemas into `components.schemas`. Off by default. */
   dedupeComponents: boolean
 
@@ -152,7 +150,6 @@ export function defaultOpenAPIOptions(): OpenAPIOptions {
     infer: { validation: true, auth: true },
     errors: { validation: 400, unauthorized: 401, forbidden: 403 },
     errorSchema: undefined,
-    exposeSelf: false,
     dedupeComponents: false,
     source: undefined,
     validate: undefined,

@@ -2,43 +2,69 @@ import { readFileSync } from 'node:fs'
 import { extname, resolve } from 'node:path'
 
 import {
-  type AuthSchemeDescriptor,
   AuthenticationSchemeProvider,
   AuthenticationService,
-  type RouteGroup,
+  RouteBuilder,
   kAuthSchemeDescriptors,
   solutions,
+  type AuthSchemeDescriptor,
+  type HTTPPluginFactory,
+  type RouteAuthzOptions,
+  type RouteGroup,
 } from '@caffeinejs/http'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
-import type { OpenAPIDocumentStore } from './document_store.js'
-import type { EndpointPaths } from './endpoints.js'
-import { publicURL } from './endpoints.js'
 import { ErrOpenAPIConfiguration } from './errors.js'
 import { generateDocument, validateDocument } from './generate/generator.js'
-import type { OpenAPIOptions, OpenAPISource } from './options.js'
+import { joinPaths } from './generate/paths.js'
+import { toRouteAuthz, type OpenAPIOptions, type OpenAPISource } from './options.js'
+import { kBuild, OpenAPIOptionsBuilder } from './options_builder.js'
 import type { OpenAPIDocument } from './spec/spec.js'
 import { readScalarBundle, scalarPage } from './ui/scalar.js'
 
+/** Authors {@link OpenAPIOptions} through {@link OpenAPIOptionsBuilder} instead of the plain object. */
+export type OpenAPIConfigurer = (builder: OpenAPIOptionsBuilder) => void
+
+/** The path the Scalar bundle is served from, relative to the documentation page. */
+const ASSET_SEGMENT = '/_scalar.js'
+
+/** A year. The bundle is immutable at this URL for the process's lifetime. */
+const ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable'
+
+interface EndpointPaths {
+  json: string
+  yaml: string | undefined
+  docs: string | undefined
+  asset: string | undefined
+}
+
 /**
- * Generates the document during the server phase and fills the store the endpoints read.
+ * Generates and serves an OpenAPI document, as an ordinary Fastify plugin factory: `.with(openapi(o => ...))`.
  *
- * The plugin phase is the one moment where every route is resolved and nothing has been registered with
- * Fastify yet, so the document describes the whole application — including routes other plugins contributed.
- * It touches the server itself not at all: the endpoints that serve the document were registered from the
- * builder's bootstrap.
+ * Most of what ends up in the document is not configured here at all — it is read from the routes the
+ * application already declares. The builder covers the document-level facts nothing else can know (title,
+ * version, servers), where the document is served, and who may read it.
+ */
+export function openapi<C = unknown>(configure?: OpenAPIConfigurer): HTTPPluginFactory<C> {
+  return () => {
+    const builder = new OpenAPIOptionsBuilder()
+    configure?.(builder)
+    return openapiPlugin(builder[kBuild]())
+  }
+}
+
+/**
+ * Generates the document once the whole application's routes are known, then registers the routes that serve
+ * it through `instance.$route(...)` — real, protectable routes, added after generation so the document never
+ * describes them.
  *
  * Generation is eager and failures are fatal. A malformed document is not something a consumer recovers from
  * at request time, and one that silently omits routes is worse than one that never shipped; the framework
  * already refuses to start on an unconvertible route schema, and this matches it.
  */
-export function openapiPlugin(
-  store: OpenAPIDocumentStore,
-  options: OpenAPIOptions,
-  paths: EndpointPaths,
-): FastifyPluginAsync {
+function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     const descriptors = instance.$container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
     assertSchemesExist(instance, options)
@@ -70,15 +96,68 @@ export function openapiPlugin(
       process.emitWarning(warning, 'CaffeineOpenAPIWarning')
     }
 
-    store.fill({
-      document,
-      json: JSON.stringify(document),
-      yaml: toYAML(document),
-      ...ui(options, paths),
+    const yaml = toYAML(document)
+    const paths = resolvePaths(options)
+    const { docsPage, asset } = ui(options, paths)
+
+    const authz = options.secure === undefined ? undefined : toRouteAuthz(options.secure)
+
+    instance.$route('openapi', router => {
+      router.path(options.routes.base)
+      router.routes(
+        [
+          route('GET', paths.json, 'application/json', authz).handle(() => document),
+          paths.yaml === undefined ? undefined : route('GET', paths.yaml, 'application/yaml', authz).handle(() => yaml),
+          paths.docs === undefined ? undefined : route('GET', paths.docs, 'text/html', authz).handle(() => docsPage),
+          paths.asset === undefined
+            ? undefined
+            : route('GET', paths.asset, 'text/javascript', authz)
+                .handle(() => asset)
+                .header('cache-control', ASSET_CACHE_CONTROL),
+        ].filter((r): r is RouteBuilder => r !== undefined),
+      )
     })
   }
 
   return fp(plugin, { name: 'openapi' })
+}
+
+/**
+ * Builds one endpoint route.
+ *
+ * `authorize` is called only when protection was actually configured. Routing reads *any* defined authz —
+ * including an empty object — as protection, and an application with no authentication then refuses to start
+ * with "authorization is configured but authentication is not". Passing `{}` to mean "public" would break
+ * every unauthenticated application that turns documentation on.
+ */
+function route(method: string, path: string, contentType: string, authz: RouteAuthzOptions | undefined): RouteBuilder {
+  const builder = new RouteBuilder().method(method).path(path).produces(contentType)
+
+  if (authz !== undefined) {
+    builder.authorize(authz)
+  }
+
+  return builder
+}
+
+/**
+ * Resolves the configured paths against the base, and derives the asset path from the docs path so the bundle
+ * always sits beside the page that loads it.
+ */
+function resolvePaths(options: OpenAPIOptions): EndpointPaths {
+  const { routes } = options
+
+  return {
+    json: routes.json,
+    yaml: routes.yaml,
+    docs: routes.docs,
+    asset: routes.docs === undefined ? undefined : `${routes.docs}${ASSET_SEGMENT}`,
+  }
+}
+
+/** The URL a browser requests, which includes the router base the routes are mounted under. */
+function publicURL(base: string, path: string): string {
+  return joinPaths(base === '/' ? '' : base, path)
 }
 
 /** Builds the documentation page and its bundle, or nothing when no UI is served. */

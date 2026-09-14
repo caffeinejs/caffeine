@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest'
 import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { ErrOpenAPIOperationConflict } from '../errors.js'
 import { generateDocument } from '../generate/generator.js'
-import { kOpenAPISelf } from '../keys.js'
 import type { OperationObject } from '../spec/spec.js'
 import { fixtureOptions, fixtureRoute, fixtureRouter } from './_fixtures.js'
 
@@ -463,19 +462,5 @@ describe('version differences', () => {
 
     expect(document.openapi).toBe('3.2.0')
     expect(document.paths?.['/pets'].additionalOperations?.QUERY?.operationId).toBe('Fixture_search')
-  })
-})
-
-describe('self-exclusion', () => {
-  it("skips the package's own document endpoints by default", () => {
-    const self = fixtureRouter('/', r => {
-      r.extras(kOpenAPISelf, true)
-      r.routes([fixtureRoute('GET', '/openapi.json', 'json')])
-    })
-    const pets = fixtureRouter('/pets', r => r.routes([fixtureRoute('GET', '/', 'list')]))
-
-    const document = generateDocument({ routeGroups: [self, pets], options: fixtureOptions() })
-
-    expect(Object.keys(document.paths ?? {})).toEqual(['/pets'])
   })
 })

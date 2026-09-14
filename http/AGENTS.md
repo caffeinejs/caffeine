@@ -48,9 +48,35 @@ It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. He
 any more.
 
 The resolved options of the built-ins are **container bindings**, not configuration keys: `kServerOptions`,
-`kHealthOptions`, `kStaticOptions`, `kOpenAPIOptions`. There is no `featureConfigKey` and `ctx.config` is not
-callable — a package that needs its settings on a request either binds them and resolves them, or decorates
-the Fastify instance as `@caffeinejs/html` does.
+`kHealthOptions`, `kStaticOptions`. There is no `featureConfigKey` and `ctx.config` is not callable — a
+package that needs its settings on a request either binds them and resolves them, or decorates the Fastify
+instance as `@caffeinejs/html` does.
+
+## `$route`: adding a protectable route after routing is already built
+
+`buildRouting()` runs once, before any `.with(...)`-contributed plugin, and its output is what
+`$routeGroups` is decorated with. A plugin that needs to add its _own_ route — one going through the same
+guard/authorization/error-handling path an ordinary route does, not a bare `fastify.get(...)` — is too late
+for that pass. `instance.$route(name, build)` closes that gap: `build` receives a `RouteGroupBuilder`
+(the same builder `decorators/registrar/registrar.ts`'s `registerRouteGroup` hands a route source), and what
+it describes is accumulated, not compiled on the spot. Once every plugin in the `.with(...)` loop has
+registered, whatever was accumulated is compiled — through the identical `RouteGroupCompiler` instance
+`buildRouting()` built, threaded through `AdapterIn.compileRouteGroup`, so a guard shared with an ordinary
+route resolves through the one cache, not a second one — and folded into the same table
+`assertAuthenticationConfigured`'s startup scan and the Fastify registration loop both read.
+`@caffeinejs/openapi` is the one consumer: its doc-serving routes must be real, protectable routes, but the
+document they serve can only be generated once `$routeGroups` already holds the whole application's routes —
+so it reads `$routeGroups` first and calls `$route` after, inside the same plugin.
+
+`$routeGroups` itself is never updated with what `$route` accumulates — it stays exactly what
+`buildRouting()` produced, decorated before the `.with(...)` loop even starts. That's what lets `openapi`
+exclude its own doc-serving routes from the document it reads that decoration to generate, and it
+generalizes: a `$route`-added route is invisible to any other plugin that inspected the route table earlier
+in `.with(...)` order.
+
+One thing `$route` does **not** do, worth knowing before reaching for it: it is fire-once, not
+get-or-create — unlike `registerRouteGroup`, which accumulates onto a key, every call adds a fresh entry, so
+two calls with a colliding path fail the way any duplicate route does at registration time.
 
 The effective authentication schemes are stamped onto each compiled route (`route.authorization.schemes`)
 while routing is built, where the application's default scheme is known. A reader that documents or describes

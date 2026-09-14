@@ -17,8 +17,8 @@ import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { OpenAPIBuilder } from '../builder.js'
-import { openapi } from '../plugin.js'
+import { openapi } from '../openapi.js'
+import type { OpenAPIOptionsBuilder } from '../options_builder.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 @Controller('/widgets')
@@ -44,7 +44,7 @@ const HAND_WRITTEN: OpenAPIDocument = {
   },
 }
 
-function build(configure: (o: OpenAPIBuilder) => void): WebApplication {
+function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
     .with(
       openapi(o => {

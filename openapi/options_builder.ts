@@ -1,24 +1,11 @@
-import { registerPlugin, type Route, type RouteGroup } from '@caffeinejs/http'
-import {
-  FeatureBuilder,
-  kFeatureName,
-  type AnySchema,
-  type BootstrapKit,
-  type FeatureConfigureKit,
-} from '@caffeinejs/std'
-import { type ConfigLocation } from '@caffeinejs/std/config'
+import type { Route, RouteGroup } from '@caffeinejs/http'
+import type { AnySchema } from '@caffeinejs/std'
 
-import { type OpenAPIConfigSlice } from './config.js'
-import { OpenAPIDocumentStore } from './document_store.js'
-import { registerEndpoints, type EndpointPaths } from './endpoints.js'
-import { kOpenAPIOptions } from './keys.js'
-import { openapiPlugin } from './openapi_plugin.js'
 import {
+  defaultOpenAPIOptions,
   type ErrorStatusOptions,
   type InferenceOptions,
   type OpenAPIOptions,
-  defaultOpenAPIOptions,
-  toRouteAuthz,
 } from './options.js'
 import { OpenAPISecurityBuilder } from './security_builder.js'
 import type {
@@ -35,52 +22,32 @@ import type {
 } from './spec/spec.js'
 
 /**
- * Configures OpenAPI document generation. Reached through `.with(openapi(o => ...))`.
+ * Materializes a {@link OpenAPIOptionsBuilder} into the {@link OpenAPIOptions} it built.
+ *
+ * A symbol, not a public `.build()` method: the builder's only public surface is the fluent setters, so a
+ * plain `.build()` alongside them would read as one more chainable option rather than the terminal call it is.
+ */
+export const kBuild = Symbol('caffeine.openapi.build')
+
+/**
+ * Fluent authoring for {@link OpenAPIOptions}, e.g. `openapi(o => o.version('3.2.0').info({...}))`.
  *
  * Most of what ends up in the document is not configured here at all — it is read from the routes the
  * application already declares. This builder covers the document-level facts nothing else can know (title,
  * version, servers), where the document is served, and who may read it.
  */
-export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
-  readonly [kFeatureName] = 'openapi'
-
+export class OpenAPIOptionsBuilder {
   readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
-  readonly #store = new OpenAPIDocumentStore()
-  readonly #named = new Set<string>()
-  #config: ConfigLocation<OpenAPIConfigSlice> | undefined
-  #resolved: OpenAPIOptions | undefined
-  #paths: EndpointPaths | undefined
-
-  /**
-   * Reads the document-level facts from a node of the configuration tree, e.g. `c.app.openapi`.
-   *
-   * Fills keys a fluent method did not name. A setter is the last word even when its value equals the
-   * default — `.exposeSelf(false)` is a decision, not an omission.
-   * Nested blocks merge rather than replace: configuring only `errors.validation` keeps the other two.
-   */
-  withConfig(config: ConfigLocation<OpenAPIConfigSlice>): this {
-    this.#config = config
-    return this
-  }
-
-  /** Records that a fluent method named this key, so {@link #resolve} will not let configuration overwrite it. */
-  #touch(...keys: string[]): void {
-    for (const key of keys) {
-      this.#named.add(key)
-    }
-  }
 
   /** The OpenAPI version to emit. Defaults to `3.1.1`; `3.2.0` unlocks the QUERY method and 3.2-only fields. */
   version(version: OpenAPIVersion): this {
     this.#options.version = version
-    this.#touch('version')
     return this
   }
 
   /** The document's `info` block. Title and version are required by the specification. */
   info(info: InfoObject): this {
     this.#options.info = info
-    this.#touch('info')
     return this
   }
 
@@ -89,13 +56,11 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
     this.#options.servers.push(
       typeof url === 'string' ? { url, ...(description === undefined ? {} : { description }) } : url,
     )
-    this.#touch('servers')
     return this
   }
 
   externalDocs(externalDocs: ExternalDocumentationObject): this {
     this.#options.externalDocs = externalDocs
-    this.#touch('externalDocs')
     return this
   }
 
@@ -105,14 +70,12 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   security(...requirements: SecurityRequirementObject[]): this {
     this.#options.security = requirements
-    this.#touch('security')
     return this
   }
 
   /** Declares a tag up front, so its description exists even before a controller uses it. */
   tag(tag: TagObject): this {
     this.#options.tags.push(tag)
-    this.#touch('tags')
     return this
   }
 
@@ -122,42 +85,36 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   securityScheme(name: string, scheme: SecuritySchemeObject): this {
     this.#options.securitySchemes[name] = scheme
-    this.#touch(`securitySchemes.${name}`)
     return this
   }
 
   /** Whether to derive `securitySchemes` from the application's registered schemes. On by default. */
   deriveSecuritySchemes(derive = true): this {
     this.#options.deriveSecuritySchemes = derive
-    this.#touch('deriveSecuritySchemes')
     return this
   }
 
   /** Mounts every document endpoint under a common prefix. */
   base(path: string): this {
     this.#options.routes.base = path
-    this.#touch('routes.base')
     return this
   }
 
   /** Where the JSON document is served. */
   json(path: string): this {
     this.#options.routes.json = path
-    this.#touch('routes.json')
     return this
   }
 
   /** Where the YAML document is served; `false` disables it. */
   yaml(path: string | false): this {
     this.#options.routes.yaml = path === false ? undefined : path
-    this.#touch('routes.yaml')
     return this
   }
 
   /** Where the documentation UI is served; `false` disables it and drops the Scalar dependency entirely. */
   docs(path: string | false): this {
     this.#options.routes.docs = path === false ? undefined : path
-    this.#touch('routes.docs')
     return this
   }
 
@@ -173,7 +130,6 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   ui(configuration: Record<string, unknown>): this {
     this.#options.ui = { ...this.#options.ui, ...configuration }
-    this.#touch('ui')
     return this
   }
 
@@ -192,7 +148,6 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
 
     this.#options.secure = builder.build()
     this.#options.secureExplicit = true
-    this.#touch('secure', 'secureExplicit')
 
     return this
   }
@@ -204,56 +159,42 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
   public(): this {
     this.#options.secure = undefined
     this.#options.secureExplicit = true
-    this.#touch('secure', 'secureExplicit')
     return this
   }
 
   /** Which responses to add that no schema declared. Both are on by default. */
   infer(infer: Partial<InferenceOptions>): this {
     Object.assign(this.#options.infer, infer)
-    this.#touch(...Object.keys(infer).map(key => `infer.${key}`))
     return this
   }
 
   /** The status codes used for inferred responses — set `validation` to match your error handler. */
   errors(errors: Partial<ErrorStatusOptions>): this {
     Object.assign(this.#options.errors, errors)
-    this.#touch(...Object.keys(errors).map(key => `errors.${key}`))
     return this
   }
 
   /** The body schema of an inferred error response. */
   errorSchema(schema: AnySchema): this {
     this.#options.errorSchema = schema
-    this.#touch('errorSchema')
-    return this
-  }
-
-  /** Whether the document describes the routes that serve the document. Off by default. */
-  exposeSelf(expose = true): this {
-    this.#options.exposeSelf = expose
-    this.#touch('exposeSelf')
     return this
   }
 
   /** Names repeated anonymous object schemas into `components.schemas`. Off by default; names are generated. */
   dedupeComponents(dedupe = true): this {
     this.#options.dedupeComponents = dedupe
-    this.#touch('dedupeComponents')
     return this
   }
 
   /** Overrides the derived `operationId`. */
   operationId(fn: (router: RouteGroup<unknown>, route: Route<unknown>) => string): this {
     this.#options.operationId = fn
-    this.#touch('operationId')
     return this
   }
 
   /** Overrides the derived tag for a controller. */
   tagFor(fn: (router: RouteGroup<unknown>) => string): this {
     this.#options.tagFor = fn
-    this.#touch('tagFor')
     return this
   }
 
@@ -266,14 +207,12 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   schemaName(fn: (schema: SchemaObject) => string | undefined): this {
     this.#options.schemaName = fn
-    this.#touch('schemaName')
     return this
   }
 
   /** Merges raw components into the generated ones — responses, parameters, examples, and the rest. */
   components(components: ComponentsObject): this {
     this.#options.components = { ...this.#options.components, ...components }
-    this.#touch('components')
     return this
   }
 
@@ -283,7 +222,6 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   document(document: OpenAPIDocument): this {
     this.#options.source = { kind: 'document', document }
-    this.#touch('source')
     return this
   }
 
@@ -293,7 +231,6 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   specification(specification: { path: string }): this {
     this.#options.source = { kind: 'file', path: specification.path }
-    this.#touch('source')
     return this
   }
 
@@ -306,7 +243,6 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   transformDocument(fn: (document: OpenAPIDocument) => OpenAPIDocument | void): this {
     this.#options.transformDocument = fn
-    this.#touch('transformDocument')
     return this
   }
 
@@ -316,127 +252,10 @@ export class OpenAPIBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   validate(validate = true): this {
     this.#options.validate = validate
-    this.#touch('validate')
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
-    const options = this.#resolve()
-    this.#resolved = options
-
-    // The store, not the document: bindings must all be registered before `container.init()`, which runs
-    // long before the server phase that generates the document. Resolving the store and reading
-    // `.document` off it is the supported way to reach the document without an HTTP request.
-    kit.container.bind(OpenAPIDocumentStore, t => t.toValue(this.#store).internal())
-
-    // Registers the document endpoints as ordinary routes. Still here, before `buildRouting` runs — but
-    // now fed the *resolved* options, because configuration resolved before this step.
-    this.#paths = registerEndpoints(kit.container, this.#store, options, toRouteAuthz(options.secure))
-
-    kit.container.bind(kOpenAPIOptions, t => t.toValue(options).internal())
+  [kBuild](): OpenAPIOptions {
+    return this.#options
   }
-
-  protected bootstrap(kit: BootstrapKit<C>): void {
-    registerPlugin(kit, openapiPlugin(this.#store, this.#resolved!, this.#paths!))
-  }
-
-  /**
-   * The builder's options with the configured ones folded in.
-   *
-   * A fluent method is the last word, as everywhere else: a key {@link #touch} recorded keeps its value, and
-   * configuration fills in the rest. Measured by the setter having run, not by the value differing from
-   * {@link defaultOpenAPIOptions} — `.exposeSelf(false)` is a decision even though false is the default.
-   *
-   * Copied, not referenced. The validated tree is deep-frozen and read through live accessors, and the
-   * document these values become is handed to `transformDocument` to edit in place — a frozen `info` would
-   * make that throw.
-   */
-  #resolve(): OpenAPIOptions {
-    const configured = this.#config === undefined ? {} : plainCopy(this.#config)
-
-    const folded = foldConfigured(
-      this.#options as unknown as Record<string, unknown>,
-      configured as Record<string, unknown>,
-      this.#named,
-    ) as unknown as OpenAPIOptions
-
-    // `false` on an endpoint means "do not serve it", which the rest of the package spells `undefined`.
-    return { ...folded, routes: withoutDisabled(folded.routes) }
-  }
-}
-
-/** Turns a `false` endpoint — the configuration spelling of "off" — into the absence the endpoints expect. */
-function withoutDisabled(routes: OpenAPIOptions['routes']): OpenAPIOptions['routes'] {
-  const off = (value: string | false | undefined): string | undefined => (value === false ? undefined : value)
-
-  return { ...routes, yaml: off(routes.yaml), docs: off(routes.docs) }
-}
-
-/**
- * Folds `configured` into `code`, key by key, letting whatever a fluent method named win.
- *
- * `named` is dotted paths (`exposeSelf`, `routes.json`, `infer.auth`). Nested blocks recurse rather than
- * replace, so an application configuring only `errors.validation` keeps the defaults for the other two —
- * unless the whole parent object was named (`info`).
- */
-function foldConfigured(
-  code: Record<string, unknown>,
-  configured: Record<string, unknown>,
-  named: ReadonlySet<string>,
-  path = '',
-): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...code }
-
-  for (const [key, value] of Object.entries(configured)) {
-    if (value === undefined) {
-      continue
-    }
-
-    const keyPath = path === '' ? key : `${path}.${key}`
-    const inCode = code[key]
-
-    if (isPlainRecord(inCode) && isPlainRecord(value)) {
-      if (named.has(keyPath)) {
-        continue
-      }
-
-      out[key] = foldConfigured(inCode, value, named, keyPath)
-      continue
-    }
-
-    if (named.has(keyPath)) {
-      continue
-    }
-
-    out[key] = value
-  }
-
-  return out
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
-/**
- * A plain, mutable deep copy of a configuration node.
- *
- * `structuredClone` cannot do this: a node is a proxy over the frozen tree, and cloning one throws. Reading it
- * key by key goes through the accessors and produces ordinary data the document generator can edit.
- */
-function plainCopy<T>(value: T): T {
-  if (Array.isArray(value)) {
-    return value.map(element => plainCopy(element)) as T
-  }
-
-  if (value === null || typeof value !== 'object') {
-    return value
-  }
-
-  const out: Record<string, unknown> = {}
-  for (const key of Object.keys(value)) {
-    out[key] = plainCopy((value as Record<string, unknown>)[key])
-  }
-
-  return out as T
 }

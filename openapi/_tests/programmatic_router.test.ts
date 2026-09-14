@@ -4,7 +4,7 @@ import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'
-import { openapi } from '../plugin.js'
+import { openapi } from '../openapi.js'
 import type { OpenAPIDocument, OperationObject } from '../spec/spec.js'
 
 const petSchema = $t.Object({ id: $t.String(), name: $t.String() }, { $id: 'ProgrammaticPet' })
