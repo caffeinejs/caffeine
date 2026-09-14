@@ -157,7 +157,7 @@ describe('HealthBuilder', () => {
     expect(healthConfig(app).enabled).toBe(false)
   })
 
-  it('follows a config refresh through the object it already handed out', async () => {
+  it('does not follow a config refresh after the options are bound', async () => {
     let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: false }
     const mutable: ConfigProvider = { id: 'mutable', reloadable: true, load: ctx => source(data).load(ctx) }
 
@@ -176,10 +176,10 @@ describe('HealthBuilder', () => {
     data = { indicatorTimeout: '30ms', cacheTTL: '12s', verbose: true }
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
-    // Same object, refreshed values: nothing had to be re-resolved or re-registered.
+    // Same object, same values: the options were read once, when the feature configured.
     expect(healthConfig(app)).toBe(options)
-    expect(options.verbose).toBe(true)
-    expect(options.cacheTTLMs).toBe(12_000)
+    expect(options.verbose).toBe(false)
+    expect(options.cacheTTLMs).toBe(9_000)
     // A value nothing overrode still comes from the builder.
     expect(options.probeDeadlineMs).toBe(1_000)
   })

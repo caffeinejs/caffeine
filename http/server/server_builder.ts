@@ -1,5 +1,5 @@
 import { $t, FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
-import { liveFold, type ConfigLocation } from '@caffeinejs/std/config'
+import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { kServerOptions } from './keys.js'
 
@@ -48,9 +48,8 @@ export const serverConfigSchema = $t.Object({
  * ```
  *
  * The resolved options are bound under {@link kServerOptions}, which is how the adapter reads them without
- * knowing where the application put them. What it reads is live, but the listen address still stops moving
- * once the socket is bound: the adapter copies these options immediately before binding, and that copy is what
- * the server runs on.
+ * knowing where the application put them. They are read once, when the feature configures — a refresh
+ * afterward does not reach the bind address.
  */
 export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'server'
@@ -62,8 +61,8 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Reads the address from a node of the configuration tree, e.g. `c.app.server`.
    *
-   * The node is read, never copied, so a refresh reaches whatever has not bound yet. {@link port} and
-   * {@link host} win over what the node carries.
+   * The node is read once, when the feature configures. {@link port} and {@link host} win over what the node
+   * carries.
    */
   withConfig(config: ConfigLocation<ServerOptions>): this {
     this.#config = config
@@ -81,10 +80,8 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected configure(kit: FeatureConfigureKit<C>): void {
-    const options = liveFold(
-      () => ({ port: this.#port ?? this.#config?.port, host: this.#host ?? this.#config?.host }),
-      raw => ({ port: raw.port ?? DEFAULT_SERVER_OPTIONS.port, host: raw.host ?? DEFAULT_SERVER_OPTIONS.host }),
-    )
+    const raw = { port: this.#port ?? this.#config?.port, host: this.#host ?? this.#config?.host }
+    const options = { port: raw.port ?? DEFAULT_SERVER_OPTIONS.port, host: raw.host ?? DEFAULT_SERVER_OPTIONS.host }
 
     kit.container.bind(kServerOptions, t => t.toValue(options).internal())
   }

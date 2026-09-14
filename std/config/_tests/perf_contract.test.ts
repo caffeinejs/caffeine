@@ -5,7 +5,6 @@ import { $t } from '../../schema/t.js'
 import { createLiveAccessors } from '../accessor.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
-import { liveFold } from '../live_fold.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
 import { ConfigPriority } from '../sources.js'
 
@@ -64,21 +63,6 @@ describe('config read cost', () => {
 
     expect(slice.config).toBe(slice.config)
     expect(slice.config.paths).toBe(slice.config.paths)
-  })
-
-  it('hands back a merged-in value untouched, identity included', async () => {
-    const definition = new ConfigDefinition(APP_CONFIG)
-    const slice = definition.slice<Slice>([], schema)
-    await containerFor(definition)
-
-    const dispatcher = { warn: () => undefined }
-    const folded = liveFold(
-      () => ({ port: slice.config.port }),
-      raw => ({ port: raw.port, dispatcher }),
-    )
-
-    // Not everything in a feature's options came from the config tree; what did not must survive unwrapped.
-    expect(folded.dispatcher).toBe(dispatcher)
   })
 
   it('detaches a snapshot from later refreshes', async () => {

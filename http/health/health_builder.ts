@@ -7,7 +7,7 @@ import {
   type Duration,
   type FeatureConfigureKit,
 } from '@caffeinejs/std'
-import { liveFold, type ConfigLocation } from '@caffeinejs/std/config'
+import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { registerPlugin } from '../plugin.js'
 import { ServerOwnedPaths } from '../server_owned_paths.js'
@@ -47,11 +47,8 @@ export class HealthOwnedPaths extends ServerOwnedPaths {
  * Health indicators are not configured here — they are container-managed beans discovered through
  * `HealthIndicator`.
  *
- * The resolved {@link HealthOptions} are bound under {@link kHealthOptions}, with a stable identity and folded
- * on read: the probe budgets and the response-shaping flags are read per request, so a node handed to
- * {@link withConfig} carries a refresh through to them. `enabled` and the probe paths are consumed once at
- * boot — `healthProbesPlugin` and {@link HealthOwnedPaths} read them at registration — so a refresh cannot
- * mount or unmount probes. The probe routes simply stop mattering afterwards.
+ * The resolved {@link HealthOptions} are bound under {@link kHealthOptions}. They are read once, when the
+ * feature configures — a refresh afterward does not reach the probe budgets, `enabled`, or the probe paths.
  */
 export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'health'
@@ -75,8 +72,8 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Reads every setting from a node of the configuration tree, e.g. `c.app.health`.
    *
-   * The node is read, never copied, so a refresh reaches the budgets and the response-shaping flags. A fluent
-   * method called alongside this one wins over what the node carries.
+   * The node is read once, when the feature configures. A fluent method called alongside this one wins over
+   * what the node carries.
    */
   withConfig(config: ConfigLocation<HealthConfig>): this {
     this.#config = config
@@ -129,11 +126,7 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
     // Reaching the builder at all is an explicit opt-in, so the Kubernetes auto-detection no longer decides.
     const enabledDefault = this.#explicit ? true : undefined
 
-    // Live: the probe budgets and the response-shaping flags are read per request, so they follow a refresh.
-    const options = liveFold(
-      () => this.#inputs(),
-      raw => mergeHealthConfig(raw, { enabledDefault }),
-    )
+    const options = mergeHealthConfig(this.#inputs(), { enabledDefault })
     this.#options = options
 
     // Both lazy: `loadHealthIndicators` resolves beans, which is only legal once the container has

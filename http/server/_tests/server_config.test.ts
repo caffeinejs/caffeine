@@ -189,7 +189,7 @@ describe('server builder + config', () => {
     expect(serverConfig(app)).toEqual({ host: DEFAULT_SERVER_OPTIONS.host, port: 4444 })
   })
 
-  it('follows a config refresh, without the bound socket moving', async () => {
+  it('does not follow a config refresh once the options are bound', async () => {
     let data = { server: { host: '127.0.0.1', port: 0 }, db: { url: 'x' } }
     const mutable: ConfigProvider = {
       id: 'mutable',
@@ -210,12 +210,13 @@ describe('server builder + config', () => {
     data = { server: { host: '0.0.0.0', port: 1234 }, db: { url: 'x' } }
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
-    // The options are configuration like any other, so they report what configuration now says.
+    // The configuration tree itself keeps refreshing...
     expect(app.container.get(kConfig).server.port).toBe(1234)
-    expect(serverConfig(app)).toEqual({ host: '0.0.0.0', port: 1234 })
+    // ...but the server's own options were read once, when the feature configured, and do not follow it.
+    expect(serverConfig(app)).toEqual({ host: '127.0.0.1', port: 0 })
 
-    // The socket does not move: the address was fixed when the adapter took these values and listened. That is
-    // the server's business, not a property of the configuration layer.
+    // The socket does not move either way: the address was fixed when the adapter took these values and
+    // listened. That is the server's business, not a property of the configuration layer.
     expect((app.instance.server.address() as AddressInfo).port).toBe(bound)
   })
 

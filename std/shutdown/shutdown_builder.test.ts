@@ -91,7 +91,7 @@ describe('ShutdownBuilder', () => {
     expect(policy.drainDelayMs).toBe(30)
   })
 
-  it('follows a config refresh through the object it already handed out', async () => {
+  it('does not follow a config refresh after the policy is bound', async () => {
     const mutable = new MutableConfigProvider('shutdown-test')
     mutable.set('shutdown', { shutdownTimeout: '9s' })
 
@@ -107,8 +107,9 @@ describe('ShutdownBuilder', () => {
     mutable.set('shutdown', { shutdownTimeout: '12s' })
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
+    // The policy was read once, when the feature configured: a later refresh does not reach it.
     expect(policyOf(app)).toBe(policy)
-    expect(policy.shutdownTimeoutMs).toBe(12_000)
+    expect(policy.shutdownTimeoutMs).toBe(9_000)
   })
 
   it('clamps a shutdown timeout that would outlive the grace period', async () => {

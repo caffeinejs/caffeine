@@ -133,8 +133,8 @@ Three things follow from that:
 - **A fluent method is the last word.** `s.port(3000)` is not a default the environment outranks. Where
   both are named, the more specific wins: a setter beats the block `withConfig` handed over.
 - **Liveness is the author's choice.** A node read through follows a refresh; a scalar copied out of one
-  does not. A feature whose readers need a _folded_ shape to stay live builds it with `liveFold(...)` —
-  a stable identity whose fields refold only when the settings behind them actually changed.
+  does not. A feature's own resolved options are a plain object read once, when the feature configures — a
+  refresh afterward does not reach an already-bound value.
 - **The application's schema is the only schema.** A feature seeds nothing, so a block declared with
   required, undefaulted fields and no source to fill them fails validation. Splice the feature's exported
   schema (`serverConfigSchema`, `healthConfigSchema`, …) rather than restating the fields — importing it is
@@ -320,7 +320,7 @@ All in [`config.ts`](./config.ts):
 | `ConfigDiagnostics`, `ConfigSliceFailure`                                 | Provenance, redaction, per-feature resolve failures  |
 
 Runtime pieces exported from [`index.ts`](./index.ts): `ConfigSlice`, `ConfigSources`,
-`ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`, `liveFold`,
+`ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`,
 `configEquals`, `activeProfiles`, `hostProfiles`, the seven providers, and
 the `ErrConfig*` classes.
 

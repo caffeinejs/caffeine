@@ -1,4 +1,4 @@
-import { liveFold, type ConfigLocation } from '../config/index.js'
+import type { ConfigLocation } from '../config/index.js'
 import type { Duration } from '../duration/index.js'
 import { type FeatureConfigureKit, kFeatureName } from '../feature.js'
 import { FeatureBuilder } from '../feature_builder.js'
@@ -22,8 +22,8 @@ import type { ShutdownSignal, SignalDispatcher } from './signals.js'
  * ```
  *
  * The resolved {@link ShutdownOptions} are bound under {@link kShutdownPolicy}; the application reads them once
- * the container has initialized. What is bound keeps a stable identity and folds on read, so a node handed to
- * {@link withConfig} carries a refresh through to the drain and teardown budgets.
+ * the container has initialized. What is bound is read once, when the feature configures — a refresh afterward
+ * does not reach the drain and teardown budgets.
  */
 export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'shutdown'
@@ -35,8 +35,8 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Reads every setting from a node of the configuration tree, e.g. `c.app.shutdown`.
    *
-   * The node is read, never copied, so a refresh reaches the policy. A fluent method called alongside this one
-   * wins over what the node carries.
+   * The node is read once, when the feature configures. A fluent method called alongside this one wins over
+   * what the node carries.
    */
   withConfig(config: ConfigLocation<ShutdownConfig>): this {
     this.#config = config
@@ -85,14 +85,9 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected configure(kit: FeatureConfigureKit<C>): void {
-    const policy = liveFold(
-      () => this.#inputs(),
-      raw => finalizeShutdownOptions(mergeShutdownConfig(raw, { dispatcher: this.#dispatcher })),
-    )
-
-    // Touched once here so a budget that cannot fit the grace period fails at `ready()`, while the logs are
-    // still being watched, rather than during the shutdown it would ruin.
-    void policy.drainDelayMs
+    // Validated here, at `ready()` while the logs are still being watched, rather than during the shutdown a
+    // bad budget would ruin.
+    const policy = finalizeShutdownOptions(mergeShutdownConfig(this.#inputs(), { dispatcher: this.#dispatcher }))
 
     kit.container.bind(kShutdownPolicy, t => t.toValue(policy).internal())
   }
