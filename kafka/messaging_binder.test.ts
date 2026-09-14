@@ -82,7 +82,7 @@ describe('kafka messaging binder', () => {
   it('consumes a produced record through the messaging engine', async () => {
     got = deferred()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(
+    const app = createApplication({}).with(
       messaging(m =>
         m
           .use('kafka', kafkaBinder({ brokers: 'b', groupId: 'g', clients: broker.clients() }))
@@ -103,7 +103,7 @@ describe('kafka messaging binder', () => {
     bridged = deferred()
     const brokerA = new FakeBroker()
     const brokerB = new FakeBroker()
-    const app = createApplication({}).extend(
+    const app = createApplication({}).with(
       messaging(m =>
         m
           .use('a', kafkaBinder({ brokers: 'a', groupId: 'ga', clients: brokerA.clients() }))
@@ -126,7 +126,7 @@ describe('kafka messaging binder', () => {
   it('retries a failing handler with the binding blocking-retry policy', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(
+    const app = createApplication({}).with(
       messaging(m =>
         m
           .use('kafka', kafkaBinder({ brokers: 'b', groupId: 'g', clients: broker.clients() }))
@@ -150,7 +150,7 @@ describe('kafka messaging binder', () => {
   it('commits after success in record ack mode', async () => {
     ackDone = deferred()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(
+    const app = createApplication({}).with(
       messaging(m =>
         m
           .use('kafka', kafkaBinder({ brokers: 'b', groupId: 'g', ackMode: 'record', clients: broker.clients() }))
@@ -173,7 +173,7 @@ describe('kafka messaging binder', () => {
     secondGot = deferred()
     const pumpErr = deferred<unknown>()
     const broker = new FakeBroker()
-    const app = createApplication({}).extend(
+    const app = createApplication({}).with(
       messaging(m =>
         m
           .use(

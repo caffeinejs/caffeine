@@ -73,7 +73,7 @@ describe('createWebApplication default Fastify form', () => {
       },
     }
 
-    const app = createWebApplication().extend(probe)
+    const app = createWebApplication().with(probe)
 
     const built = app.build()
     await built.ready()

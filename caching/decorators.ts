@@ -8,7 +8,7 @@ type ConfigTarget = { config(key: string, value: unknown): unknown }
 /**
  * Caches the route's response, or turns caching off for it with `false`.
  *
- * Needs the caching plugin installed (`.plugin(HTTPCaching())`); this is the per-route half of it. The
+ * Needs the caching plugin installed (`.with(HTTPCaching())`); this is the per-route half of it. The
  * decorator form is {@link Cache}.
  */
 export function cache(options: CacheOptions | false = {}): AnyRouteExtension {

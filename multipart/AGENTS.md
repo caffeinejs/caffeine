@@ -15,11 +15,11 @@ streamed, so `request.body` is never populated.
 ## The package is a plugin, not a feature
 
 There is no builder and no `Feature` here: the package exports `multipartPlugin(options)` alongside the
-readers. An application registers it with the plugin factory `.plugin(...)` takes, reading whatever it wants out
-of the configuration on the way:
+readers. An application registers it by passing the plugin factory `.with(...)` accepts, reading whatever it
+wants out of the configuration on the way:
 
 ```ts
-.plugin(() => multipartPlugin({ limits: { fileSize: 10_000_000 } }))
+.with(() => multipartPlugin({ limits: { fileSize: 10_000_000 } }))
 ```
 
 `MultipartOptions` (`multipart_plugin.ts`) is `@fastify/multipart`'s own options type, derived structurally

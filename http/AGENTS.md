@@ -14,17 +14,17 @@ leave it unwrapped and they stay inside the plugin, covering only what the plugi
 plugin does not pick that context — the application registers it on the root server, and `router.plugin(...)`
 / `@Use(...)` register it inside one route group's context. Every first-party plugin here is wrapped.
 
-`.extend(...)` takes a feature. `.plugin(...)` takes a factory `(config, container) => <plugin>` — a factory,
-never a bare plugin, so `.plugin(() => myPlugin)` is how a plugin needing no configuration is written. Both
-land in the same list, so they register in the order the calls were written. A feature is installed once per
-name. An unnamed plugin is never deduplicated, so two calls register two plugins; a `fastify-plugin` name
-already registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than hanging
-inside a re-declared decorator.
+`.with(...)` takes either a feature or a plugin factory `(config, container) => <plugin>` — never a bare
+plugin, so `.with(() => myPlugin)` is how a plugin needing no configuration is written. Both shapes land in the
+same list, so they register in the order the calls were written. A feature is installed once per name. A
+plugin factory is never deduplicated, so two calls register two plugins; a `fastify-plugin` name already
+registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than hanging inside a
+re-declared decorator.
 
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
 holds the only two framework slots — `ErrorHandlingServiceConfigurer` and `HTTPCoreFeature` lead,
 `HTTPFallbackFeature` trails — and everything between them, this package's features and the user's alike,
-runs in `.extend(...)` / `.plugin(...)` order. Do not reintroduce a stage, and do not reintroduce a direct `install*()` call in
+runs in `.with(...)` call order. Do not reintroduce a stage, and do not reintroduce a direct `install*()` call in
 the adapter: write the plugin and put its feature in the right place.
 
 The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
@@ -83,7 +83,7 @@ dependency on `@fastify/cors` or `@fastify/compress`, and http does not ship a p
 register the third-party plugin yourself, exactly like any other Fastify plugin —
 
 ```ts
-.plugin(c => fp(async instance => instance.register(fastifyCors, c.app.cors.options), { name: 'cors' }))
+.with(c => fp(async instance => instance.register(fastifyCors, c.app.cors.options), { name: 'cors' }))
 ```
 
 `CorsOptions` and `CompressOptions` are deliberately empty interfaces: this package has no dependency on
@@ -100,9 +100,9 @@ A feature that must attach a real Fastify hook to the routes it applies to — r
 
 `router.plugin(factory)` and `@Use(factory)` register a Fastify plugin inside that route group's context instead of on the root server. A router takes **only** plugins: scoping was always about where the plugin registers, and a router installs no feature, declares no configuration and is never deduplicated — two routers wanting different settings pass two factories.
 
-The factories are resolved in `WebApplication.setup()`, where configuration has resolved and the container has initialized, so one sees exactly what a factory passed to the application's `.plugin(...)` sees. `RouteGroup.scopes` carries what registered the plugins for a group — a programmatic group lists its own router and every router it is nested under, so `.plugin(...)` inherits downward the way `.with(...)` does; a controller group lists the class.
+The factories are resolved in `WebApplication.setup()`, where configuration has resolved and the container has initialized, so one sees exactly what a factory passed to the application's `.with(...)` sees. `RouteGroup.scopes` carries what registered the plugins for a group — a programmatic group lists its own router and every router it is nested under, so `router.plugin(...)` inherits downward the way `.with(ext, ...)` does; a controller group lists the class.
 
-The factory's configuration argument is **not** re-typed against the application's the way `builder.plugin` is: a router or a controller is written without knowing which application it will end up in, so it sees `ConfigHandle<unknown>`.
+The factory's configuration argument is **not** re-typed against the application's the way `builder.with` is: a router or a controller is written without knowing which application it will end up in, so it sees `ConfigHandle<unknown>`.
 
 `fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 

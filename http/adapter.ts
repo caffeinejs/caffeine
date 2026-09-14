@@ -38,7 +38,7 @@ import { Keys } from './symbols.js'
  * The name `@caffeinejs/caching` registers its plugin under.
  *
  * The one place this package names another: `@Cache` and the plugin that serves it ship together, so a route
- * carrying the config with no plugin to read it is a missing `.plugin(HTTPCaching())` and nothing else.
+ * carrying the config with no plugin to read it is a missing `.with(HTTPCaching())` and nothing else.
  */
 const CACHING_PLUGIN = '@caffeinejs/caching'
 
@@ -170,7 +170,7 @@ export class FastifyAdapter<
     ) {
       throw new ErrConfiguration(
         'Routes are decorated with @Cache or @CacheInvalidate but the caching feature is not installed: ' +
-          'add ".plugin(HTTPCaching())" to the application builder',
+          'add ".with(HTTPCaching())" to the application builder',
       )
     }
 

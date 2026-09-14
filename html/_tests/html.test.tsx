@@ -119,7 +119,7 @@ void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .plugin(() => HTMLPlugin(defaults))
+    .with(() => HTMLPlugin(defaults))
     .build()
 }
 
@@ -205,7 +205,7 @@ describe('HTML', () => {
   it('reads the doctype default from the configuration the callback handed it', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
-      .plugin(c => HTMLPlugin(c.html))
+      .with(c => HTMLPlugin(c.html))
       .build()
 
     await app.ready()

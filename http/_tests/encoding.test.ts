@@ -21,7 +21,7 @@ function encodingApp() {
     await instance.register(fastifyCompress)
   }
 
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => fp(plugin, { name: 'compress' }))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => fp(plugin, { name: 'compress' }))
 }
 
 async function gzip(data: string): Promise<Buffer> {

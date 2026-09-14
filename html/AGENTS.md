@@ -53,7 +53,7 @@ The plugin is optional: with none registered nothing decorated the instance, `HT
 `HTML(...)` works with no setup at all.
 
 The settings the plugin is handed are usually a node of the configuration tree —
-`.plugin(c => HTMLPlugin(c.app.html))` — so the decoration reads through rather than copying, and a refresh
+`.with(c => HTMLPlugin(c.app.html))` — so the decoration reads through rather than copying, and a refresh
 reaches a response rendered after it. There is no config slice, no feature and no builder: the package
 registers one plugin and nothing else.
 

@@ -49,7 +49,7 @@ export interface OutBindingOptions {
  * Fluent configuration for one messaging integration: register binder instances with {@link use}, then declare
  * inbound ({@link in}) and outbound ({@link out}) bindings that map logical names onto binder destinations. At
  * `ready()` its bootstrap builds the runtime and binds the engine + `MessageBus` into the container.
- * A second integration is `.extend(messaging('audit', m => ...))`.
+ * A second integration is `.with(messaging('audit', m => ...))`.
  *
  * Configuration overlays what `.in(...)` / `.out(...)` set for everything a binding's config slice
  * declares: a destination written in code is a default a deployment can redirect once {@link withConfig}

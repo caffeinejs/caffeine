@@ -62,7 +62,7 @@ describe('caching is opt-in', () => {
     void [DefaultController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .plugin(HTTPCaching())
+      .with(HTTPCaching())
       .build()
     close = () => app.close()
     await app.ready()
@@ -102,7 +102,7 @@ describe('caching is opt-in', () => {
     container.bind(CacheStore, t => t.toClass(MapStore))
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .plugin(HTTPCaching(b => b.store(CacheStore)))
+      .with(HTTPCaching(b => b.store(CacheStore)))
       .build()
     close = () => app.close()
     await app.ready()
@@ -125,7 +125,7 @@ describe('caching is opt-in', () => {
     void [HeaderController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .plugin(HTTPCaching(b => b.statusHeader('X-Edge')))
+      .with(HTTPCaching(b => b.statusHeader('X-Edge')))
       .build()
     close = () => app.close()
     await app.ready()

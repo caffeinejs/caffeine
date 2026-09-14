@@ -14,7 +14,7 @@ import { CacheStore, MemoryCacheStore } from './store.js'
 export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
 
 /**
- * HTTP response caching, as an ordinary Fastify plugin factory: `.plugin(HTTPCaching())`.
+ * HTTP response caching, as an ordinary Fastify plugin factory: `.with(HTTPCaching())`.
  *
  * Takes an options object or a builder callback. Neither binds anything into the container — `store` and
  * `etagGenerator` are resolved once as the plugin registers, from the option given or, failing that, an

@@ -11,7 +11,7 @@ import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
  * parameterizes that group's responses alone.
  *
  * ```ts
- * .plugin(c => HTMLPlugin(c.app.html))
+ * .with(c => HTMLPlugin(c.app.html))
  * ```
  */
 export function HTMLPlugin(defaults: Partial<HTMLDefaults> = {}): FastifyPluginAsync {

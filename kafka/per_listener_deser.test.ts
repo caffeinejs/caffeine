@@ -38,7 +38,7 @@ describe('per-listener deserializers', () => {
         : kafka(i, configure, { clients: broker.clients() })
     const app = createApplication({})
       // Instance default = identity (so the JSON side passes through); the avro listener overrides it.
-      .extend(
+      .with(
         kfk(k =>
           k
             .brokers('b')

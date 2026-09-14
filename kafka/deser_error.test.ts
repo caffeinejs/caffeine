@@ -29,7 +29,7 @@ describe('deserialization-error path', () => {
     const received = deferred<{ error: unknown; record: DeserializationErrorRecord }>()
 
     const broker = new FakeBroker({ applyDeserializers: true })
-    const app = createApplication({}).extend(
+    const app = createApplication({}).with(
       kafka(
         k =>
           k

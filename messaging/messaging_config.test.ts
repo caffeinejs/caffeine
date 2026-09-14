@@ -45,7 +45,7 @@ describe('messaging configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV),
       )
-      .extend(
+      .with(
         messaging((m, c) =>
           m
             .withConfig(c.messaging.default)
@@ -75,7 +75,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(
+      .with(
         messaging((m, c) =>
           m
             .withConfig(c.messaging.default)
@@ -101,7 +101,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(
+      .with(
         messaging((m, c) =>
           m
             .withConfig(c.messaging.default)
@@ -109,7 +109,7 @@ describe('messaging configuration', () => {
             .out('log', { destination: 'log', via: 'primary' }),
         ),
       )
-      .extend(
+      .with(
         messaging('audit', (m, c) =>
           m
             .withConfig(c.messaging.audit)
@@ -140,7 +140,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(
+      .with(
         messaging((m, c) =>
           m
             .withConfig(c.messaging.default)
@@ -178,7 +178,7 @@ describe('messaging configuration', () => {
         ),
       )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(
+      .with(
         messaging((m, c) =>
           m
             .withConfig(c.app.events)
@@ -205,7 +205,7 @@ describe('messaging configuration', () => {
           }),
         ),
       )
-      .extend(
+      .with(
         messaging((m, c) =>
           m
             .withConfig(c.messaging.default)

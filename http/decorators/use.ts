@@ -7,7 +7,7 @@ const PluginRegistry = new WeakMap<Function, HTTPPluginFactory[]>()
  *
  * The controller counterpart of `router.plugin(...)`: the plugin runs in front of this controller's routes and
  * nowhere else. The factory is resolved once, during start-up, with the resolved configuration and the
- * container — the same arguments the application's `.plugin(c => …)` gets.
+ * container — the same arguments the application's `.with(c => …)` gets.
  *
  * A controller is declared without knowing which application it will be resolved into, so the configuration
  * here is typed `unknown`. Reach for a container binding when a controller-scoped plugin needs settings of its

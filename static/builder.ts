@@ -49,7 +49,7 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
    * being listed anywhere. `exclude`/`include` are there for what routing cannot know.
    *
    * ```ts
-   * .extend(staticFiles(s => s.spa('site/dist')))
+   * .with(staticFiles(s => s.spa('site/dist')))
    * ```
    */
   spa(root: string, options?: SPAOptions): this {

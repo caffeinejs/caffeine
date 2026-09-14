@@ -39,10 +39,10 @@ function probe<C = unknown>(configure?: FeatureConfigurer<ProbeBuilder<C>, C>): 
   return new ProbeBuilder<C>(configure as never)
 }
 
-describe('builder.extend()', () => {
+describe('builder.with()', () => {
   it('installs the feature and rides the bootstrap path into the container', async () => {
     const container = new CaffeineIoC()
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }).extend(
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }).with(
       probe(t => t.capture('localhost:9092')),
     )
 
@@ -53,26 +53,26 @@ describe('builder.extend()', () => {
   })
 
   it('does not add methods to the builder', () => {
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {}).extend(probe())
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {}).with(probe())
     // @ts-expect-error features no longer contribute methods
     const missing: unknown = app.probe
     expect(missing).toBeUndefined()
   })
 
-  it('keeps .extend available across .config(), in either order', () => {
+  it('keeps .with available across .config(), in either order', () => {
     const schema = $t.Object({ nothing: $t.String({ default: '' }) })
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
-    const extendFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
-      .extend(probe())
+    const withFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
+      .with(probe())
       .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
 
     const configFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
       .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-      .extend(probe())
+      .with(probe())
 
-    expect(typeof extendFirst.extend).toBe('function')
-    expect(typeof configFirst.extend).toBe('function')
+    expect(typeof withFirst.with).toBe('function')
+    expect(typeof configFirst.with).toBe('function')
   })
 
   it('survives .config(), which re-parameterises the builder', async () => {
@@ -82,7 +82,7 @@ describe('builder.extend()', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
       .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-      .extend(probe(t => t.capture('after-config:9092')))
+      .with(probe(t => t.capture('after-config:9092')))
 
     const built = app.build()
     await built.ready()
@@ -95,7 +95,7 @@ describe('builder.extend()', () => {
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const app = createWebApplication(fastifyAdapterFactory(Fastify()))
-      .extend(probe())
+      .with(probe())
       .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
       .server((s, c) => s.withConfig(c.app.server))
 

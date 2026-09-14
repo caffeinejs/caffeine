@@ -4,7 +4,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md). The rules below are specific to thi
 
 ## Opt-in
 
-Installing the plugin is the activating act. `.plugin(HTTPCaching())` attaches the cache hooks, and only then
+Installing the plugin is the activating act. `.with(HTTPCaching())` attaches the cache hooks, and only then
 do `@Cache` / `@CacheInvalidate` (and the `cache()` / `cacheInvalidate()` route extensions) do anything. An
 application that decorates routes with them but never installs the plugin fails at `app.ready()` with
 `ErrConfiguration` — a start-up check on the `http/` side, unrelated to anything this package exports.
@@ -14,7 +14,8 @@ start a feature nobody asked for.
 
 ## Not a feature, not DI-bound
 
-`HTTPCaching(...)` is a plain `HTTPPluginFactory` — `.plugin(HTTPCaching(...))`, not `.extend(...)`. It binds
+`HTTPCaching(...)` is a plain `HTTPPluginFactory` — `.with(HTTPCaching(...))`, a factory argument, not a
+`Feature`. It binds
 nothing into the container: `store` and `etagGenerator` are each read once, as the plugin registers, from the
 option given (an instance, or an `InjectionToken` resolved with `container.getOptional`) or, failing that, an
 internal default (`MemoryCacheStore`, a SHA-1 hash in `_util.ts`'s `generateETag`). `HTTPCachingOptionsBuilder`
@@ -23,7 +24,7 @@ nothing about it is a `FeatureBuilder`.
 
 Named and `fastify-plugin`-wrapped like any other first-party plugin, it installs once per context — the root,
 or one route group with `router.plugin(...)` / `@Use(...)` — each with its own store/etagGenerator/header. Two
-registrations on the identical context collide the same way two `.plugin(cors)` calls would.
+registrations on the identical context collide the same way two `.with(cors)` calls would.
 
 ## Per-route hooks, not a server hook
 
@@ -39,7 +40,7 @@ reads `routeDef.config` and attaches only where `cache` / `cacheInvalidate` is s
 hooks run **behind** `@UseGuards`, and a guard runs on a cache hit as well as on a miss. That is deliberate:
 a cached response that skipped authorization is a bypass, not an optimization.
 
-Install `.plugin(HTTPCaching())` after `.authentication(...)`. Authentication adds a _server-level_
+Install `.with(HTTPCaching())` after `.authentication(...)`. Authentication adds a _server-level_
 `onRequest`, which already runs before any route-level hook, so this is forward-proofing rather than the only
 thing keeping the order.
 

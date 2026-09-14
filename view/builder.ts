@@ -14,7 +14,7 @@ const RESERVED_ENGINE_NAME = 'view'
  * `reply.<name>`. The plugin it materializes registers `@fastify/view` once per configured engine.
  *
  * ```ts
- * .plugin(view(v => {
+ * .with(view(v => {
  *   v.engine(e => e.engine({ handlebars }).root('templates'))
  *   v.engine('mail', e => e.engine({ handlebars }).root('emails'))
  * }))

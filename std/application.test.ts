@@ -111,7 +111,7 @@ describe('Application lifecycle', () => {
       },
     }
 
-    const app = createApplication({}).extend(probe)
+    const app = createApplication({}).with(probe)
 
     const built = app.build()
     await built.ready()

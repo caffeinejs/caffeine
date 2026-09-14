@@ -10,10 +10,11 @@ import type { FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
 type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
 
 /**
- * Produces a plugin from the resolved configuration and the container. What `.plugin(...)` takes, and how a
- * third-party Fastify plugin is configured from the application's own settings.
+ * Produces a plugin from the resolved configuration and the container. What `.with(...)` takes when the
+ * argument is a factory, and how a third-party Fastify plugin is configured from the application's own
+ * settings.
  *
- * A plugin needing nothing from either argument is written `.plugin(() => myPlugin)` — `myPlugin` itself may
+ * A plugin needing nothing from either argument is written `.with(() => myPlugin)` — `myPlugin` itself may
  * be callback-style or async, this package's own or a third party's untouched.
  *
  * App-level factories run from feature bootstrap, after `container.init()`, so `container.get(...)`
@@ -33,9 +34,9 @@ type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
  * context the same way `instance.decorate(...)` always is.
  *
  * ```ts
- * .plugin(c => corsPlugin(c.app.cors.options))
- * .plugin((c, container) => rateLimitPlugin(container.get(Redis), c.app.limits))
- * .plugin(() => cors)
+ * .with(c => corsPlugin(c.app.cors.options))
+ * .with((c, container) => rateLimitPlugin(container.get(Redis), c.app.limits))
+ * .with(() => cors)
  * ```
  */
 export type HTTPPluginFactory<C = unknown> = (

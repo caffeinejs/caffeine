@@ -35,7 +35,7 @@ import type {
 } from './spec/spec.js'
 
 /**
- * Configures OpenAPI document generation. Reached through `.extend(openapi(o => ...))`.
+ * Configures OpenAPI document generation. Reached through `.with(openapi(o => ...))`.
  *
  * Most of what ends up in the document is not configured here at all — it is read from the routes the
  * application already declares. This builder covers the document-level facts nothing else can know (title,

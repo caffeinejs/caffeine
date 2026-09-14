@@ -48,12 +48,12 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   })
     .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
 
-    .plugin(view(v => v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
-    .extend(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
+    .with(view(v => v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
+    .with(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
     // $p pickers are the source, and @APIGroup/@Operation add only what those cannot say. 3.2.0 because
     // QUERY /pets needs it: a 3.1 path item has no field for a non-standard method.
-    .extend(
+    .with(
       openapi(o =>
         o
           .version('3.2.0')
@@ -79,7 +79,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
           .errorSchema(apiErrorSchema),
       ),
     )
-    .plugin(() => multipartPlugin())
+    .with(() => multipartPlugin())
     .authentication(auth =>
       auth
         // Basic, for the API documentation only. Demo credentials, overridable from the environment.

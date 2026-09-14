@@ -51,7 +51,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default)))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default)))
 
     const built = app.build()
     await built.ready()
@@ -71,7 +71,7 @@ describe('kafka configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }), ConfigPriority.ENV),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).brokers('localhost:9092').groupId('svc')))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).brokers('localhost:9092').groupId('svc')))
 
     const built = app.build()
     await built.ready()
@@ -92,8 +92,8 @@ describe('kafka configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b1:9092').groupId('svc')))
-      .extend(kfk((k, c) => k.withConfig(c.kafka.orders).brokers('b2:9092').groupId('orders'), 'orders'))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b1:9092').groupId('svc')))
+      .with(kfk((k, c) => k.withConfig(c.kafka.orders).brokers('b2:9092').groupId('orders'), 'orders'))
 
     const built = app.build()
     await built.ready()
@@ -128,7 +128,7 @@ describe('kafka configuration', () => {
         ),
       )
       // No annotation on the selector: the config type is recovered from the builder.
-      .extend(kfk((k, c) => k.withConfig(c.app.events).brokers('moved:9092')))
+      .with(kfk((k, c) => k.withConfig(c.app.events).brokers('moved:9092')))
 
     const built = app.build()
     await built.ready()
@@ -151,7 +151,7 @@ describe('kafka configuration', () => {
       .config(rootSchema, kRootConfig, c =>
         c.source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }), ConfigPriority.ENV),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).serializers(serializers).onError(onError)))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).serializers(serializers).onError(onError)))
 
     const built = app.build()
     await built.ready()
@@ -178,7 +178,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter({ topic })))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter({ topic })))
 
     const built = app.build()
     await built.ready()
@@ -199,7 +199,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b:9092')))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b:9092')))
 
     const built = app.build()
     await built.ready()
@@ -221,7 +221,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
 
     const built = app.build()
     await built.ready()
@@ -243,7 +243,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
 
     const built = app.build()
     await built.ready()
@@ -265,7 +265,7 @@ describe('kafka configuration', () => {
           }),
         ),
       )
-      .extend(kfk((k, c) => k.withConfig(c.kafka.default).brokers('real:9092')))
+      .with(kfk((k, c) => k.withConfig(c.kafka.default).brokers('real:9092')))
 
     const built = app.build()
     await built.ready()

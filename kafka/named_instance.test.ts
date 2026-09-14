@@ -124,8 +124,8 @@ describe('named kafka instances', () => {
         ? kafka(configure, { clients: broker.clients() })
         : kafka(i, configure, { clients: broker.clients() })
     const app = createApplication({})
-      .extend(kfk(k => k.brokers('localhost:9092').groupId('default-group')))
-      .extend(kfk(k => k.brokers('localhost:9092').groupId('orders-group'), 'orders'))
+      .with(kfk(k => k.brokers('localhost:9092').groupId('default-group')))
+      .with(kfk(k => k.brokers('localhost:9092').groupId('orders-group'), 'orders'))
 
     const built = app.build()
     await built.run()

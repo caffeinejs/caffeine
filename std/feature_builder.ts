@@ -17,7 +17,7 @@ import {
  * reads go through the current tree.
  *
  * ```ts
- * .extend(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+ * .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
  * ```
  */
 export type FeatureConfigurer<B, C = unknown> = (builder: B, config: ConfigHandle<C>) => void
@@ -25,7 +25,7 @@ export type FeatureConfigurer<B, C = unknown> = (builder: B, config: ConfigHandl
 /**
  * Adds a configure callback to a builder the framework registered itself.
  *
- * `.extend(...)` hands a feature its callback at construction, but the built-in features — the server, the
+ * `.with(...)` hands a feature its callback at construction, but the built-in features — the server, the
  * shutdown policy, the probes — are registered before the application can name one, so `.server(...)` and its
  * siblings reach the already-registered builder through this. Symbol-keyed so it stays off the fluent
  * surface. Callbacks run in the order they were added.

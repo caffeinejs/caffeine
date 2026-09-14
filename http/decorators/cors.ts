@@ -23,7 +23,7 @@ export interface CorsOptions {}
  * `req.routeOptions.config.cors` and merges it with the global options.
  *
  * ```ts
- * .plugin(c => fp(async instance => instance.register(fastifyCors, c.app.cors.options), { name: 'cors' }))
+ * .with(c => fp(async instance => instance.register(fastifyCors, c.app.cors.options), { name: 'cors' }))
  * ```
  */
 export function cors(options: CorsOptions | boolean): AnyRouteExtension {

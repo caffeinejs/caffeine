@@ -83,7 +83,7 @@ describe('FeatureBuilder', () => {
   it('runs on its own defaults when nothing configured it', async () => {
     const g = gadget()
 
-    await headless().extend(g).build().ready()
+    await headless().with(g).build().ready()
 
     expect(g.resolved).toEqual(DEFAULTS)
   })
@@ -91,7 +91,7 @@ describe('FeatureBuilder', () => {
   it('keeps a fluent value when no configuration is wired', async () => {
     const g = gadget(b => b.size(7))
 
-    await headless().extend(g).build().ready()
+    await headless().with(g).build().ready()
 
     expect(g.resolved?.size).toBe(7)
   })
@@ -104,7 +104,7 @@ describe('FeatureBuilder', () => {
 
     const app = headless()
       .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ app: { gadget: { size: 99 } } })))
-      .extend(g)
+      .with(g)
       .build()
 
     await app.ready()
@@ -118,7 +118,7 @@ describe('FeatureBuilder', () => {
 
     const app = headless()
       .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ app: { gadget: { size: 99 } } })))
-      .extend(g)
+      .with(g)
       .build()
 
     await app.ready()
@@ -130,7 +130,7 @@ describe('FeatureBuilder', () => {
   it('merges through a fluent method that builds on what it already wrote', async () => {
     const g = gadget(b => b.label('wide').suffix('-ish'))
 
-    await headless().extend(g).build().ready()
+    await headless().with(g).build().ready()
 
     expect(g.resolved?.label).toBe('wide-ish')
   })
@@ -154,7 +154,7 @@ describe('FeatureBuilder', () => {
     }
 
     await headless()
-      .extend(new Ordered(b => (b as Ordered).mark()))
+      .with(new Ordered(b => (b as Ordered).mark()))
       .build()
       .ready()
 
@@ -178,7 +178,7 @@ describe('FeatureBuilder', () => {
     }
 
     await headless()
-      .extend(new Ordered(b => (b as Ordered).mark()))
+      .with(new Ordered(b => (b as Ordered).mark()))
       .build()
       .ready()
 
@@ -194,7 +194,7 @@ describe('FeatureBuilder', () => {
     const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
     const app = headless()
       .config(appSchema, kAppConfig, c => c.source(mutable, ConfigPriority.ENV))
-      .extend(g)
+      .with(g)
       .build()
 
     await app.ready()

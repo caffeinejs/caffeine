@@ -190,7 +190,7 @@ export class WebApplication<
    * Two framework slots bracket what the application installed, and nothing sits between them: error handling
    * leads, so every route and hook the rest register is already covered by it, and the not-found handler
    * trails, because it needs whatever the others decorated the server with. Everything in between — this
-   * package's own features and the user's alike — runs in the order `.extend(...)` and `.plugin(...)` were written.
+   * package's own features and the user's alike — runs in the order `.with(...)` calls were written.
    */
   protected override configurers(): Feature[] {
     return [new ErrorHandlingServiceConfigurer(), new HTTPCoreFeature(), ...this.services, new HTTPFallbackFeature()]
@@ -201,7 +201,7 @@ export class WebApplication<
    *
    * Later than the application's own, which already ran from bootstrap: routing is what needs these, and by
    * the time it is built the configuration has resolved and the container has initialized — so a factory here
-   * sees exactly what one passed to `.plugin(...)` sees.
+   * sees exactly what one passed to the application's `.with(...)` sees.
    */
   async #registerScopedPlugins(): Promise<void> {
     const register = async (scope: object, factories: readonly HTTPPluginFactory[]): Promise<void> => {

@@ -164,7 +164,7 @@ no slice, publishes no key, and adds no field to the resolved configuration obje
 
 **A fluent method is the last word.** `s.port(3000)` is what the feature runs on; it is not a default that a
 higher band quietly outranks. Configuration reaches a feature because the application's configure callback
-wired it — `.extend(server((s, c) => s.withConfig(c.app.server)))` — and by no other path. Where the more
+wired it — `.with(server((s, c) => s.withConfig(c.app.server)))` — and by no other path. Where the more
 specific of the two is named, the more specific wins: a setter beats the block `withConfig` handed over.
 
 Exceptions, where `withConfig` overlays what the fluent methods set:
@@ -201,16 +201,15 @@ in; leave it unwrapped and they stay inside the plugin. The plugin does not choo
 application registers it on the root server, a `router.plugin(...)` or a `@Use(...)` registers it inside that
 route group — so one wrapped plugin covers every route or one group's routes, according to who asked for it.
 
-Plugins register in the order they were written, which is the order of the application's `.extend(...)` and
-`.plugin(...)` calls.
-There are no stages and nothing is sorted by what a plugin is: a feature that must precede another is extended
+Plugins register in the order they were written, which is the order of the application's `.with(...)` calls.
+There are no stages and nothing is sorted by what a plugin is: a feature that must precede another is installed
 first. The install position is a property of the registry, not of when a `bootstrap` hook reached the call, so
 a feature that awaits before registering does not move.
 
 Two framework slots bracket that list, in `WebApplication.configurers()` and nowhere else: error handling
 leads, so every route and hook the rest register is already covered by it, and the not-found handler trails,
 because it needs whatever the others decorated the server with. Everything else, this package's own features
-included, sits between them in `.extend(...)` / `.plugin(...)` order — the authentication gate included, which is why
+included, sits between them in `.with(...)` order — the authentication gate included, which is why
 `.authentication(...)` is written after the CORS plugin and before a hook that reads `req.user`.
 
 ## Writing a feature

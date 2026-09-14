@@ -54,7 +54,7 @@ export interface BootstrapKit<C = unknown> {
 
 /**
  * The keys a feature's lifecycle hangs off. Symbols so the lifecycle stays off the builder's autocomplete:
- * `.extend(staticFiles(s => …))` sees the fluent surface and nothing else.
+ * `.with(staticFiles(s => …))` sees the fluent surface and nothing else.
  */
 export const kFeatureName = Symbol('caffeine.feature.name')
 export const kFeatureConfigure = Symbol('caffeine.feature.configure')
@@ -70,7 +70,7 @@ export const kFeatureBootstrap = Symbol('caffeine.feature.bootstrap')
  */
 export interface Feature<C = unknown> {
   /**
-   * Stable identifier for this feature. It is the identity `.extend` deduplicates on, so a feature accepting
+   * Stable identifier for this feature. It is the identity `.with` deduplicates on, so a feature accepting
    * an instance name folds it in (`kafka` vs `kafka:orders`) and one image cannot install the same instance
    * twice.
    */
@@ -87,7 +87,7 @@ export interface Feature<C = unknown> {
   [kFeatureBootstrap](kit: BootstrapKit<C>): void | Promise<void>
 }
 
-/** Thrown when `.extend` installs a feature whose {@link kFeatureName} is already installed. */
+/** Thrown when `.with` installs a feature whose {@link kFeatureName} is already installed. */
 export class ErrFeatureAlreadyInstalled extends ErrCaffeine {
   constructor(feature: string) {
     super(`Cannot install feature "${feature}": it is already installed`, 'ERR_FEATURE_ALREADY_INSTALLED')

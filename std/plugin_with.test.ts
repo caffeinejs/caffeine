@@ -46,7 +46,7 @@ function keyed(instance = 'default'): Feature {
 
 describe('BaseApplicationBuilder.extend', () => {
   it('installs the feature and bootstraps it', async () => {
-    const builder = createApplication().extend(tracker(t => t.capture('recorded')))
+    const builder = createApplication().with(tracker(t => t.capture('recorded')))
 
     const app = builder.build()
     await app.ready()
@@ -58,46 +58,44 @@ describe('BaseApplicationBuilder.extend', () => {
   it('returns the same builder instance it was called on', () => {
     const builder = createApplication()
 
-    expect(builder.extend(tracker())).toBe(builder)
+    expect(builder.with(tracker())).toBe(builder)
   })
 
   it('does not add methods to the builder', () => {
-    const builder = createApplication().extend(tracker())
+    const builder = createApplication().with(tracker())
 
     // @ts-expect-error features no longer contribute methods
     const missing: unknown = builder.track
     expect(missing).toBeUndefined()
   })
 
-  it('keeps .extend available across .config(), in either order', () => {
+  it('keeps .with available across .config(), in either order', () => {
     const schema = z.object({ server: z.object({ port: z.coerce.number() }) })
     const kConfig = token<ConfigHandle<z.infer<typeof schema>>>(Symbol('app.config'))
 
     const afterConfig = createApplication()
-      .extend(tracker())
+      .with(tracker())
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
 
     const beforeConfig = createApplication()
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
-      .extend(tracker())
+      .with(tracker())
 
-    expect(typeof afterConfig.extend).toBe('function')
-    expect(typeof beforeConfig.extend).toBe('function')
+    expect(typeof afterConfig.with).toBe('function')
+    expect(typeof beforeConfig.with).toBe('function')
   })
 
   it('throws when a feature is installed twice', () => {
-    expect(() => createApplication().extend(tracker()).extend(tracker())).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().with(tracker()).with(tracker())).toThrow(ErrFeatureAlreadyInstalled)
   })
 
   it('throws when a keyed instance is installed twice', () => {
-    expect(() => createApplication().extend(keyed()).extend(keyed())).toThrow(ErrFeatureAlreadyInstalled)
-    expect(() => createApplication().extend(keyed('orders')).extend(keyed('orders'))).toThrow(
-      ErrFeatureAlreadyInstalled,
-    )
+    expect(() => createApplication().with(keyed()).with(keyed())).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().with(keyed('orders')).with(keyed('orders'))).toThrow(ErrFeatureAlreadyInstalled)
   })
 
   it('allows distinct keyed instances', () => {
-    const builder = createApplication().extend(keyed()).extend(keyed('orders'))
+    const builder = createApplication().with(keyed()).with(keyed('orders'))
     expect(builder).toBeDefined()
   })
 })

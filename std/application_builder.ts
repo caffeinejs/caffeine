@@ -102,12 +102,12 @@ export abstract class BaseApplicationBuilder<App extends Application> {
    * ```ts
    * createApplication()
    *   .config(schema, kConfig)
-   *   .extend(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+   *   .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
    * ```
    *
    * @throws ErrFeatureAlreadyInstalled when a feature with the same {@link kFeatureName} is already installed.
    */
-  extend(feature: Feature<ConfigTypeOf<this>>): this {
+  with(feature: Feature<ConfigTypeOf<this>>): this {
     const name = feature[kFeatureName]
 
     if (this.#installed.has(name)) {
@@ -230,7 +230,7 @@ export class ApplicationBuilder<TConfig = unknown>
 /**
  * Creates a headless {@link Application} builder. Mirrors the HTTP `createWebApplication`.
  *
- * Install features with `.extend(feature)` or `.extend(feature(configure))` — unlike a factory argument it
+ * Install features with `.with(feature)` or `.with(feature(configure))` — unlike a factory argument it
  * can be called at any point in the chain.
  */
 export function createApplication(options?: ApplicationBuilderOptions): ApplicationBuilder {

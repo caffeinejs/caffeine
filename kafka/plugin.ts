@@ -14,8 +14,8 @@ export interface KafkaPluginOptions {
 export type KafkaConfigure<C = unknown> = FeatureConfigurer<KafkaBuilder<C>, C>
 
 /**
- * The Kafka integration feature. `.extend(kafka(k => …))` configures the default instance;
- * `.extend(kafka('orders', k => …))` configures a named one. Each install binds that instance's
+ * The Kafka integration feature. `.with(kafka(k => …))` configures the default instance;
+ * `.with(kafka('orders', k => …))` configures a named one. Each install binds that instance's
  * `KafkaTemplate` and `KafkaListenerContainer`; a single `KafkaLifecycle` bean (bound once) starts every
  * instance's engine during `container.init()` and stops it during `container.dispose()`.
  *
@@ -23,8 +23,8 @@ export type KafkaConfigure<C = unknown> = FeatureConfigurer<KafkaBuilder<C>, C>
  *
  * ```ts
  * const app = createApplication()
- *   .extend(kafka(k => k.brokers('localhost:9092').groupId('svc')))
- *   .extend(kafka('orders', k => k.brokers('localhost:9092').groupId('orders')))
+ *   .with(kafka(k => k.brokers('localhost:9092').groupId('svc')))
+ *   .with(kafka('orders', k => k.brokers('localhost:9092').groupId('orders')))
  * await app.build().run()
  * ```
  */

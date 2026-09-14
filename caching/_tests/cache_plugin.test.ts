@@ -40,7 +40,7 @@ describe('cache plugin wiring', () => {
       registered.set(`${route.method} ${route.url}`, route as RouteOptions)
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(server)).plugin(HTTPCaching()).build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching()).build()
     close = () => app.close()
     await app.ready()
 
@@ -53,12 +53,12 @@ describe('cache plugin wiring', () => {
   })
 
   // Named and fastify-plugin-wrapped like any other first-party plugin: a second registration on the exact
-  // same context is refused before Fastify ever sees it, same as two `.plugin(cors)` calls would be.
+  // same context is refused before Fastify ever sees it, same as two `.with(cors)` calls would be.
   it('refuses a second registration on the same context', async () => {
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server))
-      .plugin(HTTPCaching(b => b.statusHeader('X-First')))
-      .plugin(HTTPCaching(b => b.statusHeader('X-Second')))
+      .with(HTTPCaching(b => b.statusHeader('X-First')))
+      .with(HTTPCaching(b => b.statusHeader('X-Second')))
       .build()
     close = () => app.close()
 

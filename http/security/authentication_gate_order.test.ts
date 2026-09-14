@@ -71,9 +71,9 @@ void [GuardedController]
 
 function guardedApp(ran: string[]) {
   return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-    .extend(stamping('before', ran))
+    .with(stamping('before', ran))
     .authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()).default('Never'))
-    .extend(stamping('after', ran))
+    .with(stamping('after', ran))
     .build()
 }
 

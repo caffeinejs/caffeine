@@ -8,7 +8,7 @@ function isStrategy(value: RetryPolicy | RetryStrategy): value is RetryStrategy 
 }
 
 /**
- * Sets a per-listener retry policy or strategy, overriding the instance default from `.extend(kafka(k => k.retry(...)))`.
+ * Sets a per-listener retry policy or strategy, overriding the instance default from `.with(kafka(k => k.retry(...)))`.
  * A {@link RetryPolicy} becomes blocking retry; pass a strategy (`retryTopics(...)`, `sharedRetryTopic(...)`, or a
  * custom one) for non-blocking retry on just this listener.
  *

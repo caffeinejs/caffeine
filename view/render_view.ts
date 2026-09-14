@@ -27,8 +27,8 @@ export function renderView(view: ViewResult, res: ViewCapableReply): ActionResul
   if (typeof render !== 'function') {
     const named =
       engine === 'view'
-        ? '.plugin(view(v => v.engine(e => e.engine(...))))'
-        : `.plugin(view(v => v.engine("${engine}", e => e.engine(...))))`
+        ? '.with(view(v => v.engine(e => e.engine(...))))'
+        : `.with(view(v => v.engine("${engine}", e => e.engine(...))))`
     throw new ErrConfiguration(`Cannot render view: engine "${engine}" is not configured. Call ${named}`)
   }
 

@@ -6,7 +6,7 @@ Read [rules.md](rules.md) first. Then the topic you are changing.
 | ------------------------------- | ---------------------------------------------- |
 | [rules.md](rules.md)            | Always, before the first edit                  |
 | [http.md](http.md)              | Controllers, routes, static files, HTTP errors |
-| [di.md](di.md)                  | Container, `@Injectable`, plugins, `.extend()` |
+| [di.md](di.md)                  | Container, `@Injectable`, plugins, `.with()`   |
 | [kafka.md](kafka.md)            | Produce/consume on Kafka                       |
 | [errors.md](errors.md)          | `@Catch` vs unmatched URL vs SPA `index.html`  |
 | [messages/](messages/README.md) | A specific `ERR_*` code                        |

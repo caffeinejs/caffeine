@@ -21,7 +21,7 @@ function compressApp(options: CompressOptions = {}) {
     await instance.register(fastifyCompress, options)
   }
 
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => fp(plugin, { name: 'compress' }))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => fp(plugin, { name: 'compress' }))
 }
 
 describe('Compress', () => {

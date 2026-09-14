@@ -56,7 +56,7 @@ beforeAll(async () => {
     registered.set(`${route.method} ${route.url}`, route as RouteOptions)
   })
 
-  app = createWebApplication(fastifyAdapterFactory(server)).plugin(HTTPCaching()).build()
+  app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching()).build()
   await app.ready()
 })
 

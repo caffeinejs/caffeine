@@ -14,7 +14,7 @@ import { Router } from '../routing/programmatic/router.js'
  * What replaced `ServerExtension`: a feature's bootstrap hands the application an ordinary Fastify plugin.
  *
  * These tests pin the three things the old mechanism did with bands and a registry, and the one it could not
- * do at all. Order is the order `.plugin(...)` was written — nothing sorts by what a plugin is. The framework
+ * do at all. Order is the order `.with(...)` was written — nothing sorts by what a plugin is. The framework
  * still brackets the list at both ends. And a plugin can now belong to one route group instead of the whole
  * server, which is what having a real Fastify plugin buys.
  */
@@ -49,13 +49,13 @@ describe('plugin registration', () => {
 
   // The whole ordering model. There is no stage to jump a band with, so what a reader sees in the chain is
   // what the server gets — which is why a feature that must precede another is simply extended first.
-  it('registers plugins in the order .plugin() was written', async () => {
+  it('registers plugins in the order .with() was written', async () => {
     const log: string[] = []
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(stamping('third', 'x-third', log))
-      .plugin(stamping('first', 'x-first', log))
-      .plugin(stamping('second', 'x-second', log))
+      .with(stamping('third', 'x-third', log))
+      .with(stamping('first', 'x-first', log))
+      .with(stamping('second', 'x-second', log))
       .build()
 
     await app.ready()
@@ -63,8 +63,8 @@ describe('plugin registration', () => {
     expect(log).toEqual(['third', 'first', 'second'])
   })
 
-  // `.plugin` takes a factory; `.extend` takes a feature. Both land in one list, so what matters is that
-  // neither kind jumps the other: the order is the order the calls were written.
+  // `.with` takes a factory or a feature. Both land in one list, so what matters is that neither kind jumps
+  // the other: the order is the order the calls were written.
   it('interleaves features and plugins in the order they were written', async () => {
     const log: string[] = []
 
@@ -87,10 +87,10 @@ describe('plugin registration', () => {
     })
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(stamping('plugin-a', 'x-a', log))
-      .extend(feature('feature-b'))
-      .plugin(stamping('plugin-c', 'x-c', log))
-      .extend(feature('feature-d'))
+      .with(stamping('plugin-a', 'x-a', log))
+      .with(feature('feature-b'))
+      .with(stamping('plugin-c', 'x-c', log))
+      .with(feature('feature-d'))
       .build()
 
     await app.ready()
@@ -121,7 +121,7 @@ describe('plugin registration', () => {
     }
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .plugin(factory)
+      .with(factory)
       .build()
 
     await expect(app.ready()).resolves.not.toThrow()
@@ -129,7 +129,7 @@ describe('plugin registration', () => {
     expect((await app.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
   })
 
-  // The order a plugin ends up in is the order its `.plugin(...)` was written, stamped when its feature
+  // The order a plugin ends up in is the order its `.with(...)` was written, stamped when its feature
   // bootstrapped — not the order its factory happens to finish resolving. An awaiting factory must not jump
   // ahead of, or fall behind, a synchronous one written before or after it.
   it('keeps an awaiting app-level factory at its written position', async () => {
@@ -150,9 +150,9 @@ describe('plugin registration', () => {
     }
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(stamping('before', 'x-before', log))
-      .plugin(awaiting)
-      .plugin(stamping('after', 'x-after', log))
+      .with(stamping('before', 'x-before', log))
+      .with(awaiting)
+      .with(stamping('after', 'x-after', log))
       .build()
 
     await app.ready()
@@ -173,7 +173,7 @@ describe('plugin registration', () => {
     void [HeadSlotController]
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(stamping('stamp', 'x-stamp'))
+      .with(stamping('stamp', 'x-stamp'))
       .build()
 
     await app.ready()
@@ -189,7 +189,7 @@ describe('plugin registration', () => {
   // server with and still answers a URL no route matched.
   it('answers an unmatched URL from the not-found handler registered after every plugin', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(stamping('stamp', 'x-stamp'))
+      .with(stamping('stamp', 'x-stamp'))
       .build()
 
     await app.ready()
@@ -284,8 +284,8 @@ describe('scoped plugin registration', () => {
     }
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(twice)
-      .plugin(twice)
+      .with(twice)
+      .with(twice)
       .build()
 
     await app.ready()
@@ -293,15 +293,15 @@ describe('scoped plugin registration', () => {
     expect(log).toEqual(['twice', 'twice'])
   })
 
-  // A first-party plugin wraps a fixed `fastify-plugin` name, so two `.plugin()` calls that each produce one
+  // A first-party plugin wraps a fixed `fastify-plugin` name, so two `.with()` calls that each produce one
   // would otherwise fail deep inside whatever it decorates — tens of seconds later, once avvio's own boot
   // timeout gives up waiting on it. Refused immediately instead, with a Caffeine error naming the plugin.
   it('refuses a second plugin registered under the same fastify-plugin name', async () => {
     const twice = stamping('twice', 'x-twice')
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .plugin(twice)
-      .plugin(twice)
+      .with(twice)
+      .with(twice)
       .build()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)

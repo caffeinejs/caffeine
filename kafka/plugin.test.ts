@@ -21,18 +21,18 @@ function noopClients(): KafkaClients {
 }
 
 describe('kafka feature', () => {
-  it('returns the same builder from .extend()', () => {
+  it('returns the same builder from .with()', () => {
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({})
-    expect(app.extend(kfk(k => k.brokers('localhost:9092')))).toBe(app)
+    expect(app.with(kfk(k => k.brokers('localhost:9092')))).toBe(app)
   })
 
   it('binds the default template and a labelled engine through configure()', async () => {
     const container = new CaffeineIoC()
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
-    const app = createApplication({ container }).extend(kfk(k => k.brokers('localhost:9092').groupId('g')))
+    const app = createApplication({ container }).with(kfk(k => k.brokers('localhost:9092').groupId('g')))
 
     const built = app.build()
     await built.ready()
@@ -49,8 +49,8 @@ describe('kafka feature', () => {
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({})
-      .extend(kfk(k => k.brokers('b1').groupId('g')))
-      .extend(kfk(k => k.brokers('b2').groupId('g'), 'orders'))
+      .with(kfk(k => k.brokers('b1').groupId('g')))
+      .with(kfk(k => k.brokers('b2').groupId('g'), 'orders'))
 
     const built = app.build()
     await built.ready()
@@ -71,7 +71,7 @@ describe('kafka feature', () => {
   it('rejects at ready() when an instance has no brokers', async () => {
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
-    const app = createApplication({}).extend(kfk(k => k.groupId('g'))) // no brokers
+    const app = createApplication({}).with(kfk(k => k.groupId('g'))) // no brokers
 
     await expect(app.build().ready()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
   })
@@ -79,8 +79,8 @@ describe('kafka feature', () => {
   it('throws when the same instance is installed twice', () => {
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
-    expect(() => createApplication({}).extend(kfk()).extend(kfk())).toThrow(ErrFeatureAlreadyInstalled)
-    expect(() => createApplication({}).extend(kfk(undefined, 'orders')).extend(kfk(undefined, 'orders'))).toThrow(
+    expect(() => createApplication({}).with(kfk()).with(kfk())).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication({}).with(kfk(undefined, 'orders')).with(kfk(undefined, 'orders'))).toThrow(
       ErrFeatureAlreadyInstalled,
     )
   })

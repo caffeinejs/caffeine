@@ -6,14 +6,14 @@ import { registerPlugin, type HTTPPluginFactory } from './plugin.js'
 let counter = 0
 
 /**
- * The {@link Feature} a plugin registered with `.plugin(c => …)` is carried as.
+ * The {@link Feature} a plugin registered with `.with(c => …)` is carried as.
  *
  * A plugin goes in the same list as a feature so that the two interleave in the order they were written, which
  * is the order they register on Fastify. Nothing else about it is special.
  *
- * Its name is generated rather than chosen, so two `.plugin` of the same factory install two features. An
- * unnamed plugin therefore registers twice; a `fastify-plugin` name already on that Fastify instance is
- * refused at register time.
+ * Its name is generated rather than chosen, so two `.with(...)` calls with the same factory install two
+ * features. An unnamed plugin therefore registers twice; a `fastify-plugin` name already on that Fastify
+ * instance is refused at register time.
  */
 export class HTTPPluginFeature<C = unknown> implements Feature<C> {
   readonly #factory: HTTPPluginFactory<C>

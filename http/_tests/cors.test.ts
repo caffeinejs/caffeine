@@ -21,7 +21,7 @@ function corsApp(options: CorsOptions = {}) {
     await instance.register(fastifyCors, options)
   }
 
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).plugin(() => fp(plugin, { name: 'cors' }))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => fp(plugin, { name: 'cors' }))
 }
 
 describe('CORS', () => {
@@ -238,7 +238,7 @@ describe('CORS', () => {
     })
   })
 
-  // A first-party plugin wraps a fixed `fastify-plugin` name. Two `.plugin(() => corsApp's plugin)` used to
+  // A first-party plugin wraps a fixed `fastify-plugin` name. Two `.with(() => corsApp's plugin)` used to
   // hang for ~10s inside avvio after `@fastify/cors` re-declared a decorator. Refused immediately instead.
   it('refuses a second cors plugin on the same application', { timeout: 3_000 }, async () => {
     const plugin: FastifyPluginAsync = async instance => {
@@ -246,10 +246,7 @@ describe('CORS', () => {
     }
     const registerCors = () => fp(plugin, { name: 'cors' })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .plugin(registerCors)
-      .plugin(registerCors)
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(registerCors).with(registerCors).build()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "cors": it is already registered/)
     await app.close()

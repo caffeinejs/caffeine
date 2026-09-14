@@ -110,11 +110,11 @@ An application that declares nothing still resolves — the root validates again
 ## How a feature gets its configuration
 
 A feature registers nothing here. The application reads the tree and hands the feature what it wants,
-in the configure callback `.extend(...)` takes:
+in the configure callback `.with(...)` takes:
 
 ```ts
-.extend(server((s, c) => s.withConfig(c.app.server)))
-.extend(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+.with(server((s, c) => s.withConfig(c.app.server)))
+.with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
 ```
 
 ```mermaid
@@ -142,7 +142,7 @@ Three things follow from that:
 
 The callback runs once, when the application bootstraps: after configuration has resolved, and before the
 feature binds anything. An authoring mistake inside it therefore surfaces from `ready()`, not from the
-`.extend(...)` call that wrote it.
+`.with(...)` call that wrote it.
 
 ---
 

@@ -6,6 +6,8 @@ import {
   kAddConfigurer,
   type ApplicationBuilderOptions,
   type ApplicationConfigMarker,
+  type ConfigTypeOf,
+  type Feature,
   type FeatureConfigurer,
   type Reconfigured,
 } from '@caffeinejs/std'
@@ -76,20 +78,30 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   /**
-   * Registers a Fastify plugin from a factory. It takes its position in the same list as `.extend(feature)`
-   * and `.authentication(...)`, so plugins and features register in the order these calls are written:
+   * Installs a feature, or registers a Fastify plugin from a factory. Both take their position in the same
+   * list as `.authentication(...)`, so features and plugins register in the order these calls are written:
    *
    * ```ts
    * createWebApplication()
-   *   .plugin(c => corsPlugin(c.app.cors.options))
-   *   .plugin(HTTPCaching(cache => cache.statusHeader('X-Edge')))
+   *   .with(staticFiles(s => s.serve('public')))
+   *   .with(c => corsPlugin(c.app.cors.options))
+   *   .with(HTTPCaching(cache => cache.statusHeader('X-Edge')))
    * ```
    *
-   * An unnamed plugin is never deduplicated — two calls register two plugins. A `fastify-plugin` name already
-   * on that instance is refused at register time.
+   * A feature is deduplicated by name — see {@link BaseApplicationBuilder.with}. A plugin factory is never
+   * deduplicated — two calls register two plugins. A `fastify-plugin` name already on that instance is
+   * refused at register time.
+   *
+   * @throws ErrFeatureAlreadyInstalled when a feature with the same name is already installed.
    */
-  plugin(factory: HTTPPluginFactory<TConfig>): this {
-    return this.addFeature(new HTTPPluginFeature(factory))
+  override with(feature: Feature<ConfigTypeOf<this>>): this
+  override with(factory: HTTPPluginFactory<TConfig>): this
+  override with(featureOrFactory: Feature<ConfigTypeOf<this>> | HTTPPluginFactory<TConfig>): this {
+    if (typeof featureOrFactory === 'function') {
+      return this.addFeature(new HTTPPluginFeature(featureOrFactory))
+    }
+
+    return super.with(featureOrFactory)
   }
 
   /**
@@ -226,13 +238,13 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
 /**
  * Creates a web application builder.
  *
- * Install features with `.extend(feature)` or `.extend(feature(configure))` rather than here: it can be
+ * Install features with `.with(feature)` or `.with(feature(configure))` rather than here: it can be
  * called at any point in the chain, including after `.config()`. A plugin factory is
- * `.plugin(c => corsPlugin(c.app.cors.options))`.
+ * `.with(c => corsPlugin(c.app.cors.options))`.
  *
  * ```ts
  * createWebApplication()
- *   .extend(staticFiles(s => s.serve('public')))
+ *   .with(staticFiles(s => s.serve('public')))
  * ```
  */
 // Default Fastify — no adapter factory or Fastify instance required.

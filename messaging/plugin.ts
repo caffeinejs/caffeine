@@ -7,15 +7,15 @@ import { DEFAULT_BINDER } from './symbols.js'
 export type MessagingConfigure<C = unknown> = FeatureConfigurer<MessagingBuilder<C>, C>
 
 /**
- * The portable messaging feature. `.extend(messaging(m => …))` registers binder instances and bindings; a
+ * The portable messaging feature. `.with(messaging(m => …))` registers binder instances and bindings; a
  * single `MessagingLifecycle` bean (bound once) starts every engine during `container.init()` and stops it
- * during `container.dispose()`. `.extend(messaging('audit', m => …))` configures a named binder set. Additive
- * — a single-binder app that only uses a binder package's own sugar (e.g. `.extend(kafka())`) does not need
+ * during `container.dispose()`. `.with(messaging('audit', m => …))` configures a named binder set. Additive
+ * — a single-binder app that only uses a binder package's own sugar (e.g. `.with(kafka())`) does not need
  * this feature.
  *
  * ```ts
  * const app = createApplication()
- *   .extend(messaging(m => m
+ *   .with(messaging(m => m
  *     .use('primary', inMemoryBinder())
  *     .in('orders', { destination: 'orders', via: 'primary' })
  *     .out('notify', { destination: 'notify', via: 'primary' })))
