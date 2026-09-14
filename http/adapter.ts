@@ -93,7 +93,6 @@ export class FastifyAdapter<
 
     // Decorating the server
     fastify.decorate('$container', container)
-    fastify.decorate('$routeGroups', routeGroups as unknown as RouteGroup<FastifyRequest>[])
 
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
@@ -155,12 +154,8 @@ export class FastifyAdapter<
     // (`input.compileRouteGroup`), applied a second time below, once every plugin has had its turn. Nothing
     // is compiled here: the group only exists once `allRouteGroups` is built, after the plugin loop.
     //
-    // Invisible to `$routeGroups` (decorated above, before any plugin runs, and never updated with what a
-    // plugin later accumulates here) and to anything that inspected the route table earlier in `.with(...)`
-    // order — `@caffeinejs/openapi` relies on exactly that to exclude its own doc-serving routes from the
-    // document it generates. Registration always targets this root instance, regardless of which context's
-    // `instance` the calling plugin was handed — a decoration is visible down the prototype chain to any
-    // child context.
+    // Registration always targets this root instance, regardless of which context's `instance` the calling
+    // plugin was handed — a decoration is visible down the prototype chain to any child context.
     fastify.decorate('$route', (name: string, build: (router: RouteGroupBuilder) => void) => {
       const builder = new RouteGroupBuilder()
       build(builder)
@@ -228,7 +223,9 @@ export class FastifyAdapter<
             }
             const hasHeader = header.length > 0
 
-            config.caffeine = {
+            config.$caffeine = {
+              route,
+              group: router,
               hasStatus,
               status,
               hasContentType,
@@ -259,7 +256,7 @@ export class FastifyAdapter<
               config,
               ...options,
               handler: function (req, res) {
-                const config = req.routeOptions.config.caffeine
+                const config = req.routeOptions.config.$caffeine
 
                 if (config.hasHeader) {
                   for (let i = 0; i < config.header.length; i++) {
@@ -397,9 +394,8 @@ export class FastifyAdapter<
 
     // Every plugin has had its turn, so whatever `$route` accumulated is everything there is — compiled here,
     // once, through the identical compiler `buildRouting()` used for every other route, and folded into the
-    // same table the checks below and the registration loop read. `$routeGroups` (decorated above) is not
-    // updated: it stays what `buildRouting()` produced, which is what lets `@caffeinejs/openapi` exclude its
-    // own doc-serving routes from the document it reads that decoration to generate.
+    // same table the checks below and the registration loop read. A plugin sees these routes the way it sees
+    // every other: through `onRoute`, as they register.
     const allRouteGroups: RouteGroup<REQ>[] =
       lateRoutes.length === 0
         ? routeGroups

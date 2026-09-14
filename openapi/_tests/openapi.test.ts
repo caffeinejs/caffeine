@@ -6,6 +6,7 @@ import {
   Args,
   Post,
   Roles,
+  RouteBuilder,
   Schema,
   Status,
   WebApplication,
@@ -14,7 +15,7 @@ import {
 } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
+import fastify, { type FastifyInstance } from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -150,9 +151,8 @@ describe('openapi endpoints', () => {
     })
   })
 
-  // The document is generated from `$routeGroups` before the package's own endpoints are registered
-  // (`instance.$route(...)`, after generation) — there is no configuration that puts them back in, because
-  // there is no point in the boot sequence where they are both registered and still visible to the generator.
+  // The package's own endpoints register like every other route and are collected with them; their group is
+  // marked hidden, which is what keeps them out of the document.
   it('does not describe its own endpoints', async () => {
     app = buildApp(o => o.docs(false).public())
     await app.ready()
@@ -160,6 +160,28 @@ describe('openapi endpoints', () => {
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
 
     expect(Object.keys(document.paths ?? {})).not.toContain('/openapi.json')
+  })
+
+  // The document is generated once every route has registered, not when the plugin does, so the order the
+  // plugins were installed in cannot drop a route from it.
+  it('describes a route a plugin installed after it adds', async () => {
+    app = newBuilder(o => o.docs(false).public())
+      .with(() => async (instance: FastifyInstance) => {
+        instance.$route('late', router => {
+          router.path('/late').routes([
+            new RouteBuilder()
+              .method('GET')
+              .path('/hello')
+              .handle(() => ({ ok: true })),
+          ])
+        })
+      })
+      .build() as WebApplication
+    await app.ready()
+
+    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+
+    expect(Object.keys(document.paths ?? {})).toContain('/late/hello')
   })
 
   it('serves the document as YAML', async () => {

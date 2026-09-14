@@ -42,9 +42,8 @@ export interface GenerateInput {
  * Pure: no Fastify, no container, no I/O. That keeps it testable against hand-built `RouteGroup[]` fixtures and
  * leaves the door open for a CLI that emits the document without starting a server.
  *
- * `routeGroups` never includes the package's own document-serving routes: they are compiled and registered
- * through `instance.$route(...)` after `$routeGroups` (this function's input) is already fixed, so there is
- * nothing here to exclude them from — no `exposeSelf` switch, because there is no state it could switch.
+ * The package's own document-serving routes reach `routeGroups` like any other registered route; their group
+ * is marked hidden, so it is skipped here the way any hidden group is.
  */
 export function generateDocument(input: GenerateInput): OpenAPIDocument {
   const { options } = input

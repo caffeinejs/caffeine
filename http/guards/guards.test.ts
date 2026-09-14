@@ -633,9 +633,9 @@ describe('authorization', () => {
     guard(input: GuardInput): boolean {
       const cfg = input.context.routeConfig as FastifyContextConfig
       const required = getMetadataOverride<Role[]>(
-        cfg.caffeine?.target as Function,
+        cfg.$caffeine?.target as Function,
         kRoles,
-        cfg.caffeine?.handler as string | symbol,
+        cfg.$caffeine?.handler as string | symbol,
       )
 
       if (required === undefined) {

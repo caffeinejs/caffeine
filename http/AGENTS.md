@@ -30,8 +30,9 @@ the adapter: write the plugin and put its feature in the right place.
 The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
 `.authentication(...)` was written: a CORS plugin registered before it still stamps its headers on a 401, and a hook
 registered after it does not run for a request the gate rejected. The start-up refusal of an application that
-protects a route and never configured authentication is not the gate's — it is a `routeGroups` scan in the
-adapter (`assertAuthenticationConfigured`), because the case being refused is the one where no gate exists.
+protects a route and never configured authentication is not the gate's — it is a scan of the compiled route
+groups in the adapter (`assertAuthenticationConfigured`), because the case being refused is the one where no
+gate exists.
 
 A feature that answers on URLs outside the compiled routing binds a `ServerOwnedPaths` provider with
 `.extends(ServerOwnedPaths)`, and a fallback reads them with `container.getManyOptional(ServerOwnedPaths)`.
@@ -52,27 +53,37 @@ The resolved options of the built-ins are **container bindings**, not configurat
 package that needs its settings on a request either binds them and resolves them, or decorates the Fastify
 instance as `@caffeinejs/html` does.
 
-## `$route`: adding a protectable route after routing is already built
+## Reading the routes from a plugin
 
-`buildRouting()` runs once, before any `.with(...)`-contributed plugin, and its output is what
-`$routeGroups` is decorated with. A plugin that needs to add its _own_ route — one going through the same
-guard/authorization/error-handling path an ordinary route does, not a bare `fastify.get(...)` — is too late
-for that pass. `instance.$route(name, build)` closes that gap: `build` receives a `RouteGroupBuilder`
+Every route the adapter registers carries what Caffeine compiled for it on `routeOptions.config.$caffeine`:
+`route` (the compiled `Route`) and `group` (the `RouteGroup` it was compiled in), next to the fields the
+handler and the authentication gate read per request. There is no server decoration holding the route table.
+Compiled routes register after every plugin, so a plugin that needs them adds an `onRoute` hook, as any
+Fastify plugin would; `$caffeine` is absent on a route registered straight on Fastify, which is how the hook
+tells the two apart. A per-route check throws from the hook (`app.ready()` rejects with it); a decision that
+needs every route waits for `onReady`. `collectRouteGroups(instance)` is that pattern packaged — it regroups
+what registered and counts a GET route's automatic HEAD twin once — and not-found, the SPA report and
+`@caffeinejs/openapi` use it.
+
+A route-wide hook whose work depends on the routes — the constraint `Vary` header — is added unconditionally
+while its plugin registers, because a route takes the hooks in place when it registers. It returns immediately
+when `onRoute` found nothing for it to do. Do not move such a scan into the adapter.
+
+## `$route`: adding a protectable route from a plugin
+
+`buildRouting()` runs once, before any `.with(...)`-contributed plugin. A plugin that needs to add its _own_
+route — one going through the same guard/authorization/error-handling path an ordinary route does, not a bare
+`fastify.get(...)` — is too late for that pass. `instance.$route(name, build)` closes that gap: `build` receives a `RouteGroupBuilder`
 (the same builder `decorators/registrar/registrar.ts`'s `registerRouteGroup` hands a route source), and what
 it describes is accumulated, not compiled on the spot. Once every plugin in the `.with(...)` loop has
 registered, whatever was accumulated is compiled — through the identical `RouteGroupCompiler` instance
 `buildRouting()` built, threaded through `AdapterIn.compileRouteGroup`, so a guard shared with an ordinary
 route resolves through the one cache, not a second one — and folded into the same table
-`assertAuthenticationConfigured`'s startup scan and the Fastify registration loop both read.
-`@caffeinejs/openapi` is the one consumer: its doc-serving routes must be real, protectable routes, but the
-document they serve can only be generated once `$routeGroups` already holds the whole application's routes —
-so it reads `$routeGroups` first and calls `$route` after, inside the same plugin.
-
-`$routeGroups` itself is never updated with what `$route` accumulates — it stays exactly what
-`buildRouting()` produced, decorated before the `.with(...)` loop even starts. That's what lets `openapi`
-exclude its own doc-serving routes from the document it reads that decoration to generate, and it
-generalizes: a `$route`-added route is invisible to any other plugin that inspected the route table earlier
-in `.with(...)` order.
+`assertAuthenticationConfigured`'s startup scan and the Fastify registration loop both read. A `$route` group
+registers with everything else, so it reaches every plugin's `onRoute` hook whichever order the plugins were
+installed in. `@caffeinejs/openapi` is the one consumer: its doc-serving routes must be real, protectable
+routes, and it marks their group hidden (`kAPIGroup`) so the document it generates in `onReady` does not
+describe them.
 
 One thing `$route` does **not** do, worth knowing before reaching for it: it is fire-once, not
 get-or-create — unlike `registerRouteGroup`, which accumulates onto a key, every call adds a fresh entry, so
@@ -130,7 +141,7 @@ The factories are resolved in `WebApplication.setup()`, where configuration has 
 
 The factory's configuration argument is **not** re-typed against the application's the way `builder.with` is: a router or a controller is written without knowing which application it will end up in, so it sees `ConfigHandle<unknown>`.
 
-`fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
+`fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.$caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 
 ## Route-selection constraints and API versions
 

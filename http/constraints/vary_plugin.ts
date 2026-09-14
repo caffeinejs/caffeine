@@ -6,30 +6,36 @@ import fp from 'fastify-plugin'
  *
  * A versioned route and its unversioned twin share a URL, so a cache keyed on the URL alone would serve one
  * client the other's representation. Fastify documents this; the header list is framework-owned rather than
- * left to each route. No constrained route means no hook and no cost.
+ * left to each route. With no constrained route the hook returns before touching the reply.
  */
 const constraintVaryPluginFn: FastifyPluginAsync = async instance => {
-  const routeGroups = instance.$routeGroups
   const headers = new Set<string>()
-  for (const group of routeGroups) {
-    for (const route of group.routes) {
-      if (!route.constraints) {
-        continue
-      }
-      for (const resolved of route.constraints.values()) {
-        if (resolved.header) {
-          headers.add(resolved.header)
-        }
+  let owned: readonly string[] = []
+
+  instance.addHook('onRoute', options => {
+    const constraints = options.config?.$caffeine?.route.constraints
+    if (constraints === undefined) {
+      return
+    }
+
+    for (const resolved of constraints.values()) {
+      if (resolved.header) {
+        headers.add(resolved.header)
       }
     }
-  }
+  })
 
-  if (headers.size === 0) {
-    return
-  }
+  instance.addHook('onReady', async () => {
+    owned = [...headers]
+  })
 
-  const owned = [...headers]
+  // Added now, not once the headers are known: a route takes the hooks in place when it registers.
   instance.addHook('onSend', (_request, reply, payload, done) => {
+    if (owned.length === 0) {
+      done(null, payload)
+      return
+    }
+
     appendVary(reply, owned)
     done(null, payload)
   })

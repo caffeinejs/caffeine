@@ -1,7 +1,6 @@
 import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { solutions } from '../error/util.js'
-import { joinPaths } from '../internal/paths/paths.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { kHealthRoute } from './keys.js'
 import type { HealthOptions } from './options.js'
@@ -65,19 +64,18 @@ function probeQuery(query: ProbeRequestQuery): ProbeQuery {
   }
 }
 
+/** Compiled routes register after the probes, so each is checked as it registers. */
 function assertNoCollision(server: FastifyInstance, probePaths: readonly string[]): void {
   const taken = new Set(probePaths)
 
-  for (const router of server.$routeGroups) {
-    for (const route of router.routes) {
-      const path = `${router.prefix ?? ''}${joinPaths(router.path, route.path)}`
-
-      if (taken.has(path)) {
-        throw new ErrHealthConfiguration(
-          `Cannot mount health probes: a route is already registered at "${path}"` +
-            solutions('Move the probe with app.health(h => h.paths({ ... }))', 'Change the conflicting route path'),
-        )
-      }
+  server.addHook('onRoute', route => {
+    if (route.config?.$caffeine === undefined || !taken.has(route.url)) {
+      return
     }
-  }
+
+    throw new ErrHealthConfiguration(
+      `Cannot mount health probes: a route is already registered at "${route.url}"` +
+        solutions('Move the probe with app.health(h => h.paths({ ... }))', 'Change the conflicting route path'),
+    )
+  })
 }

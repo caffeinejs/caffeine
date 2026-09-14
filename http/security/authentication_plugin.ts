@@ -43,7 +43,6 @@ export function assertAuthenticationConfigured(container: Container, routeGroups
 export function authenticationPlugin(): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     const container = instance.$container
-    const routeGroups = instance.$routeGroups
 
     // Configuring authentication binds the coordinator and the scheme provider, and nothing else does — so
     // their presence *is* the feature being on, with no separate flag to be written and then read out of
@@ -59,15 +58,13 @@ export function authenticationPlugin(): FastifyPluginAsync {
     // reject every caller with no indication of why. Rejecting here means a typo is a start-up error next
     // to the decorator that caused it, not a support ticket. Validated even though `authenticate()` also
     // throws on the same condition — start-up is where a fixed, known-ahead-of-time reference belongs.
-    for (const group of routeGroups) {
-      for (const route of group.routes) {
-        for (const scheme of route.authorization.options?.schemes ?? []) {
-          if (!schemeProvider.schemeNames.includes(scheme)) {
-            throw new ErrAuthSchemeNotFound(scheme, schemeProvider.schemeNames)
-          }
+    instance.addHook('onRoute', options => {
+      for (const scheme of options.config?.$caffeine?.route.authorization.options?.schemes ?? []) {
+        if (!schemeProvider.schemeNames.includes(scheme)) {
+          throw new ErrAuthSchemeNotFound(scheme, schemeProvider.schemeNames)
         }
       }
-    }
+    })
 
     const gate = new AuthenticationGate()
     const defaultScheme = schemeProvider.defaultAuthenticateScheme
@@ -105,7 +102,7 @@ class AuthenticationGate {
   async run(ctx: Context, service: AuthenticationService, defaultScheme: string): Promise<boolean> {
     // `routeConfig` carries whatever the adapter recorded about the route; this hook is added by the Fastify
     // adapter, so that is the shape it reads.
-    const route = (ctx.routeConfig as FastifyContextConfig).caffeine?.auth
+    const route = (ctx.routeConfig as FastifyContextConfig).$caffeine?.auth
     const schemes = route?.schemes
     const named = schemes !== undefined && schemes.length > 0 && route?.allowAnonymous !== true
 

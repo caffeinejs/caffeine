@@ -1,7 +1,13 @@
 import { existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
 
-import { deriveServerOwnedPaths, ServerOwnedPaths, serverOwnedPaths } from '@caffeinejs/http'
+import {
+  collectRouteGroups,
+  deriveServerOwnedPaths,
+  ServerOwnedPaths,
+  serverOwnedPaths,
+  type RouteGroup,
+} from '@caffeinejs/http'
 import fastifyStatic from '@fastify/static'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -89,22 +95,27 @@ function configureFallback(instance: FastifyInstance, spa: SPASettings, mounts: 
 
   fallback.configure(otherMountPrefixes, true)
 
-  report(instance, spa, otherMountPrefixes)
+  const routeGroups = collectRouteGroups(instance)
+  instance.addHook('onReady', async () => {
+    report(instance, spa, otherMountPrefixes, routeGroups())
+  })
 }
 
 /**
- * States, once, which paths will never receive the shell.
+ * States, once every route has registered, which paths will never receive the shell.
  *
  * The failure mode of a history fallback is silence — an API route starts answering with HTML and nothing
  * says so — and the decision is derived rather than written down, so it is printed where the answer is
  * otherwise invisible.
  */
-function report(instance: FastifyInstance, spa: SPASettings, otherMountPrefixes: readonly string[]): void {
+function report(
+  instance: FastifyInstance,
+  spa: SPASettings,
+  otherMountPrefixes: readonly string[],
+  routeGroups: readonly RouteGroup[],
+): void {
   const derived = spa.derive
-    ? deriveServerOwnedPaths(
-        instance.$routeGroups,
-        serverOwnedPaths(instance.$container.getManyOptional(ServerOwnedPaths)),
-      )
+    ? deriveServerOwnedPaths(routeGroups, serverOwnedPaths(instance.$container.getManyOptional(ServerOwnedPaths)))
     : []
   const neverShell = [...new Set([...derived, ...spa.exclude, ...otherMountPrefixes.filter(p => p !== '')])]
     .filter(prefix => !spa.include.some(included => underPrefix(prefix, included)))

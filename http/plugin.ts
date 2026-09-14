@@ -29,9 +29,10 @@ type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
  * `fp`-wrapped plugin therefore serves both — it covers every route, or that group's routes, according to
  * where it was asked for.
  *
- * The container and the compiled routing are reached off the instance itself — `instance.$container` and
- * `instance.$routeGroups` — decorated before any plugin registers, and inherited into every route group's own
- * context the same way `instance.decorate(...)` always is.
+ * The container is reached off the instance itself — `instance.$container`, decorated before any plugin
+ * registers and inherited into every route group's own context. The compiled routes register after every
+ * plugin: one that needs them adds an `onRoute` hook and reads `routeOptions.config.$caffeine`, which carries
+ * the route and the group it was compiled in, or calls {@link collectRouteGroups}.
  *
  * ```ts
  * .with(c => corsPlugin(c.app.cors.options))

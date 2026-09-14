@@ -466,7 +466,7 @@ describe('fst options', () => {
   it('rejects the keys the router owns', () => {
     // `config` is the dangerous one: it carries what the handler reads to apply status, headers and auth.
     // @ts-expect-error -- config belongs to the adapter
-    fst({ config: { caffeine: undefined } })
+    fst({ config: { $caffeine: undefined } })
     // @ts-expect-error -- the verb and the path decide these
     fst({ method: 'GET', url: '/nope' })
     // @ts-expect-error -- declared with .schema()

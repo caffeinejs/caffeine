@@ -6,6 +6,7 @@ import { ErrHTTPNotFound } from './error/http.js'
 import { solutions } from './error/util.js'
 import { joinPaths } from './internal/paths/paths.js'
 import type { RouteGroup } from './route.js'
+import { collectRouteGroups } from './route_collector.js'
 import { ServerOwnedPaths, serverOwnedPaths } from './server_owned_paths.js'
 
 /**
@@ -112,10 +113,13 @@ export function isServerOwned(owned: readonly string[], path: string): boolean {
  * global `@Catch(ErrHTTPNotFound)` sees it and the body matches a 404 a handler threw.
  */
 export function installNotFoundHandler(server: FastifyInstance, fallbacks: readonly NotFoundFallback[]): void {
-  const owned = deriveServerOwnedPaths(
-    server.$routeGroups,
-    serverOwnedPaths(server.$container.getManyOptional(ServerOwnedPaths)),
-  )
+  const routeGroups = collectRouteGroups(server)
+
+  // Derived once every route has registered, which is before any request can reach the handler.
+  let owned: readonly string[] = []
+  server.addHook('onReady', async () => {
+    owned = deriveServerOwnedPaths(routeGroups(), serverOwnedPaths(server.$container.getManyOptional(ServerOwnedPaths)))
+  })
 
   const handler = async (req: FastifyRequest, reply: FastifyReply): Promise<never | FastifyReply> => {
     const path = req.url.split('?')[0] ?? ''

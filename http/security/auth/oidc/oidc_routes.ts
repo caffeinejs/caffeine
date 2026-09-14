@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { joinPaths } from '../../../internal/paths/index.js'
 import { isOIDCError, type OIDCMeta } from './index.js'
 
 /**
@@ -27,41 +26,49 @@ export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
  * the user has to install and register.
  */
 export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void {
-  const compiledPaths = new Set(server.$routeGroups.flatMap(r => r.routes.map(rt => joinPaths(r.path, rt.path))))
+  const callbackPaths = new Set(oidc.handlers.map(({ callbackPath }) => callbackPath))
+  const namedByRoutes = new Set<string>()
 
-  for (const { callbackPath } of oidc.handlers) {
-    if (compiledPaths.has(callbackPath)) {
+  // Compiled routes register after the callback routes, so each is checked as it registers.
+  server.addHook('onRoute', route => {
+    const meta = route.config?.$caffeine
+    if (meta === undefined) {
+      return
+    }
+
+    if (callbackPaths.has(route.url)) {
       throw new Error(
-        `Cannot start application: OIDC callbackPath "${callbackPath}" conflicts with a registered controller route`,
+        `Cannot start application: OIDC callbackPath "${route.url}" conflicts with a registered controller route`,
       )
     }
-  }
 
-  // A strategy that is neither the default, nor selectable through a Forward default, nor named by any
-  // route authenticates nobody: it registers a callback route and silently never signs anyone in.
-  //
-  // A warning, not a failure. This used to be a hard error demanding a Forward default whenever two
-  // OAuth strategies were registered, which rejected the configuration that makes them reachable —
-  // `/login/google` and `/login/github`, each naming its own scheme. Only the resolved routing carries
-  // those names, which is why the decision lands here rather than in the builder.
-  const namedByRoutes = new Set(
-    server.$routeGroups.flatMap(r => r.routes.flatMap(rt => rt.authorization.options?.schemes ?? [])),
-  )
-  const unreachable = oidc.unreachableCandidates.filter(name => !namedByRoutes.has(name))
-  if (unreachable.length > 0) {
-    process.emitWarning(
-      `OAuth strategies ${unreachable.map(n => `"${n}"`).join(', ')} can never authenticate a request: ` +
-        'they are not the default authenticate scheme and no route names them',
-      {
-        type: 'CaffeineAuthenticationWarning',
-        detail:
-          'Name the scheme on a route with @Authorize({ schemes: [...] }), make it the default, ' +
-          'or use a Forward default to select per request.',
-      },
-    )
-  }
+    for (const scheme of meta.route.authorization.options?.schemes ?? []) {
+      namedByRoutes.add(scheme)
+    }
+  })
 
   server.addHook('onReady', async () => {
+    // A strategy that is neither the default, nor selectable through a Forward default, nor named by any
+    // route authenticates nobody: it registers a callback route and silently never signs anyone in.
+    //
+    // A warning, not a failure. This used to be a hard error demanding a Forward default whenever two
+    // OAuth strategies were registered, which rejected the configuration that makes them reachable —
+    // `/login/google` and `/login/github`, each naming its own scheme. Only the registered routes carry
+    // those names, which is why the decision lands here rather than in the builder.
+    const unreachable = oidc.unreachableCandidates.filter(name => !namedByRoutes.has(name))
+    if (unreachable.length > 0) {
+      process.emitWarning(
+        `OAuth strategies ${unreachable.map(n => `"${n}"`).join(', ')} can never authenticate a request: ` +
+          'they are not the default authenticate scheme and no route names them',
+        {
+          type: 'CaffeineAuthenticationWarning',
+          detail:
+            'Name the scheme on a route with @Authorize({ schemes: [...] }), make it the default, ' +
+            'or use a Forward default to select per request.',
+        },
+      )
+    }
+
     if (!server.hasRequestDecorator('cookies')) {
       throw new Error('Cannot start application: OIDC authentication requires @fastify/cookie to be registered')
     }

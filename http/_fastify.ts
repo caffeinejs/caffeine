@@ -1,7 +1,7 @@
 import { type Container } from '@caffeinejs/di'
 
 import { type FastifyContext } from './context.js'
-import { type CatchByMap, type RouteGroup } from './route.js'
+import { type CatchByMap, type Route, type RouteGroup } from './route.js'
 import { type RouteGroupBuilder } from './routing/builder.js'
 import { type AuthzRouteService } from './security/authz/route_service.js'
 import { type Principal } from './security/identity.js'
@@ -10,7 +10,6 @@ import { Keys } from './symbols.js'
 declare module 'fastify' {
   interface FastifyInstance {
     get $container(): Container
-    get $routeGroups(): RouteGroup<FastifyRequest>[]
     $route(name: string, build: (router: RouteGroupBuilder) => void): void
   }
 
@@ -25,7 +24,18 @@ declare module 'fastify' {
   }
 
   interface FastifyContextConfig {
-    caffeine?: {
+    /**
+     * What Caffeine compiled for the route. Present on every route the framework registers and absent on one
+     * registered straight on Fastify, so a plugin's `onRoute` hook tells them apart by it.
+     */
+    $caffeine?: {
+      /**
+       * The compiled route: schema, authorization, constraints, extras. A GET route's automatic HEAD twin
+       * carries the same object.
+       */
+      route: Route<FastifyRequest>
+      /** The group the route was compiled in: its path, prefix, name, target and extras. */
+      group: RouteGroup<FastifyRequest>
       hasStatus: boolean
       status: number
       hasContentType: boolean

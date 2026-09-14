@@ -50,7 +50,7 @@ describe('$route', () => {
     expect(await res.json()).toEqual({ ok: true })
   })
 
-  it('does not appear in $routeGroups', async () => {
+  it('does not appear in app.routeGroups', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .with(
         lateRoute(router => {

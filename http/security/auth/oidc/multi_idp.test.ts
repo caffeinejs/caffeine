@@ -90,17 +90,28 @@ async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => 
     warnings.push(String(warning))
   })
 
+  // The warning is decided in `onReady`, once routes have registered, so the double runs those hooks. No route
+  // registers here, which is what leaves a non-default strategy unreachable.
+  const onReady: Array<() => Promise<void>> = []
   const server = {
     get: vi.fn(),
-    addHook: vi.fn(),
+    addHook: (name: string, hook: () => Promise<void>) => {
+      if (name === 'onReady') {
+        onReady.push(hook)
+      }
+    },
+    hasRequestDecorator: () => true,
     $container: { getOptional: () => undefined },
-    $routeGroups: [],
   }
 
   try {
     for (const plugin of registered) {
       // Every plugin the authentication builder registers is async-style; the registry itself accepts either.
       await (plugin as FastifyPluginAsync)(server as never, {})
+    }
+
+    for (const hook of onReady) {
+      await hook()
     }
   } finally {
     emitWarning.mockRestore()

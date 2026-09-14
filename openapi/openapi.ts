@@ -4,6 +4,7 @@ import { extname, resolve } from 'node:path'
 import {
   AuthenticationSchemeProvider,
   AuthenticationService,
+  collectRouteGroups,
   RouteBuilder,
   kAuthSchemeDescriptors,
   solutions,
@@ -16,6 +17,8 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
+import type { APIGroupDetail } from './decorators/detail.js'
+import { kAPIGroup } from './decorators/keys.js'
 import { ErrOpenAPIConfiguration } from './errors.js'
 import { generateDocument, validateDocument } from './generate/generator.js'
 import { joinPaths } from './generate/paths.js'
@@ -56,13 +59,14 @@ export function openapi<C = unknown>(configure?: OpenAPIConfigurer): HTTPPluginF
 }
 
 /**
- * Generates the document once the whole application's routes are known, then registers the routes that serve
- * it through `instance.$route(...)` — real, protectable routes, added after generation so the document never
- * describes them.
+ * Collects the application's routes as they register and generates the document in `onReady`, once all of
+ * them have — whichever order the plugins that contributed them were installed in. The routes that serve the
+ * document are real, protectable routes registered through `instance.$route(...)`, marked hidden so the
+ * document never describes them.
  *
- * Generation is eager and failures are fatal. A malformed document is not something a consumer recovers from
- * at request time, and one that silently omits routes is worse than one that never shipped; the framework
- * already refuses to start on an unconvertible route schema, and this matches it.
+ * Failures are fatal to start-up. A malformed document is not something a consumer recovers from at request
+ * time, and one that silently omits routes is worse than one that never shipped; the framework already
+ * refuses to start on an unconvertible route schema, and this matches it.
  */
 function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
@@ -70,33 +74,42 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
     assertSchemesExist(instance, options)
     warnIfUnprotected(instance, options)
 
-    const warnings: string[] = []
-    const generated =
-      options.source === undefined
-        ? generateDocument({
-            routeGroups: instance.$routeGroups as Array<RouteGroup<unknown>>,
-            options,
-            schemes: descriptors,
-            onWarning: message => warnings.push(message),
-          })
-        : readDocument(options.source)
+    const routeGroups = collectRouteGroups(instance)
 
-    // The transform runs in both modes, so it is equally the way to patch a generated document and to adjust
-    // an imported one. Mutating in place and returning nothing is supported because it is the obvious thing
-    // to reach for.
-    const document = options.transformDocument?.(generated) ?? generated
+    // Assigned in `onReady`, which settles before any request reaches the handlers below.
+    let document!: OpenAPIDocument
+    let yaml!: string
 
-    // A generated document is validated by default; an imported one is not, because a hand-written spec may
-    // legitimately use constructs the validator rejects. `.validate(true)` opts one back in.
-    if (options.validate ?? options.source === undefined) {
-      validateDocument(document)
-    }
+    instance.addHook('onReady', async () => {
+      const warnings: string[] = []
+      const generated =
+        options.source === undefined
+          ? generateDocument({
+              routeGroups: routeGroups() as Array<RouteGroup<unknown>>,
+              options,
+              schemes: descriptors,
+              onWarning: message => warnings.push(message),
+            })
+          : readDocument(options.source)
 
-    for (const warning of warnings) {
-      process.emitWarning(warning, 'CaffeineOpenAPIWarning')
-    }
+      // The transform runs in both modes, so it is equally the way to patch a generated document and to adjust
+      // an imported one. Mutating in place and returning nothing is supported because it is the obvious thing
+      // to reach for.
+      document = options.transformDocument?.(generated) ?? generated
 
-    const yaml = toYAML(document)
+      // A generated document is validated by default; an imported one is not, because a hand-written spec may
+      // legitimately use constructs the validator rejects. `.validate(true)` opts one back in.
+      if (options.validate ?? options.source === undefined) {
+        validateDocument(document)
+      }
+
+      for (const warning of warnings) {
+        process.emitWarning(warning, 'CaffeineOpenAPIWarning')
+      }
+
+      yaml = toYAML(document)
+    })
+
     const paths = resolvePaths(options)
     const { docsPage, asset } = ui(options, paths)
 
@@ -104,6 +117,7 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
 
     instance.$route('openapi', router => {
       router.path(options.routes.base)
+      router.extras(kAPIGroup, { hidden: true } satisfies APIGroupDetail)
       router.routes(
         [
           route('GET', paths.json, 'application/json', authz).handle(() => document),
