@@ -41,11 +41,25 @@ const servers: ServerConfig[] = [
     builtPath: resolve(__dirname, '..', 'dist', 'request', 'hono', 'hono.js'),
   },
   {
-    name: 'nestjs',
+    name: 'nestjs (fastify)',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js')],
     port: 3022,
     builtPath: resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js'),
+  },
+  {
+    name: 'nestjs (express)',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs-express', 'nestjs.js')],
+    port: 3028,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'nestjs-express', 'nestjs.js'),
+  },
+  {
+    name: 'express',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'express', 'express.js')],
+    port: 3027,
+    builtPath: resolve(__dirname, '..', 'dist', 'request', 'express', 'express.js'),
   },
   {
     name: 'caffeine',

@@ -32,10 +32,24 @@ const servers: ServerConfig[] = [
     requiresBuild: true,
   },
   {
-    name: 'nestjs',
+    name: 'nestjs (fastify)',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs', 'nestjs.js')],
     port: 3022,
+    requiresBuild: true,
+  },
+  {
+    name: 'nestjs (express)',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs-express', 'nestjs.js')],
+    port: 3028,
+    requiresBuild: true,
+  },
+  {
+    name: 'express',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'express', 'express.js')],
+    port: 3027,
     requiresBuild: true,
   },
   {

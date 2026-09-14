@@ -17,6 +17,7 @@
   "include": [
     "helloworld/nestjs/nestjs.ts",
     "request/nestjs/nestjs.ts",
+    "request/nestjs-express/nestjs.ts",
     "request/shared.ts",
     "mixedscopes/nestjs/nestjs.ts",
     "authn/nestjs/nestjs.ts",
