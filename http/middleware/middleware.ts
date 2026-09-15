@@ -24,7 +24,9 @@ export const kMiddlewareHook = Symbol('@caffeinejs/http:middlewareHook')
 export type Next = (err?: Error) => void
 
 /**
- * A Node `(req, res, next)` middleware, as Middie runs it on the raw request and response.
+ * A connect-style Node `(req, res, next)` middleware, run on the raw request and response.
+ *
+ * Registered under a path, it sees `req.url` with that path stripped, as connect mounts it.
  */
 export type NodeMiddleware = (req: IncomingMessage, res: ServerResponse, next: Next) => void
 
@@ -116,13 +118,6 @@ export const MIDDLEWARE_HOOKS: readonly MiddlewareHook[] = [
   'onTimeout',
 ]
 
-export const MIDDLEWARE_HOOKS_WITH_PAYLOAD: readonly MiddlewareHook[] = [
-  'onError',
-  'onSend',
-  'preParsing',
-  'preSerialization',
-]
-
 /** Anything `use()` accepts as its middleware argument. */
 export type MiddlewareTarget<C = unknown> =
   | NodeMiddleware
@@ -132,11 +127,6 @@ export type MiddlewareTarget<C = unknown> =
   | MiddlewareConfigFactory<C>
 
 export type MiddlewareResolvable = Middleware | InjectionToken<Middleware>
-
-export type MiddlewareRef<V = Record<never, never>, C = Record<never, never>> =
-  | MiddlewareFn<V, C>
-  | Middleware<V, C>
-  | InjectionToken<Middleware<V, C>>
 
 /** Whether `value` is a `{ hook }` options object rather than a middleware. */
 export function isMiddlewareOptions(value: unknown): value is MiddlewareOptions {

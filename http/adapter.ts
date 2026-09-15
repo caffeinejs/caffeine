@@ -102,11 +102,6 @@ export class FastifyAdapter<
     fastify.decorateRequest('routeTarget', null)
     fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
 
-    // Resolved here, ahead of everything else, because whether a middleware comes from request scope
-    // decides which of the two context hooks below is installed.
-    const middlewares = input.middlewares
-    middlewares.resolveAll(container)
-
     // One resolution for the whole server: each context takes its own snapshot off it, on first read.
     const configuration = container.get(Configuration)
 
@@ -385,10 +380,8 @@ export class FastifyAdapter<
     // encapsulated handler resolves to it last.
     const globalErrorHandler = container.get(GlobalErrorHandlerRef).handler
 
-    middlewares.setupAll(container)
-
     // Installed after the plugins so the hooks run inside a server that already has its error handler.
-    middlewares.installHooks(fastify, container, configuration)
+    input.middlewares.install(fastify, container, configuration)
 
     // Every plugin has had its turn, so whatever `$route` accumulated is everything there is — compiled here,
     // once, through the identical compiler `buildRouting()` used for every other route, and folded into the

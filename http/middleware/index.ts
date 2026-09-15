@@ -1,12 +1,5 @@
 export { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
-export {
-  isMiddlewareClass,
-  isMiddlewareInstance,
-  isMiddlewareOptions,
-  kMiddlewareHook,
-  MIDDLEWARE_HOOKS,
-  MIDDLEWARE_HOOKS_WITH_PAYLOAD,
-} from './middleware.js'
+export { isMiddlewareOptions, kMiddlewareHook } from './middleware.js'
 export type {
   Middleware,
   MiddlewareConfigFactory,
@@ -14,7 +7,6 @@ export type {
   MiddlewareHook,
   MiddlewareOptions,
   MiddlewarePath,
-  MiddlewareRef,
   MiddlewareResolvable,
   MiddlewareTarget,
   Next,
