@@ -1,6 +1,4 @@
 import { $t } from '@caffeinejs/std'
-
-
 import { FastifyStaticOptions } from '@fastify/static'
 
 /**
@@ -158,7 +156,6 @@ export function normalizePrefix(prefix: string): string {
 export function underPrefix(path: string, prefix: string): boolean {
   return prefix === '' || path === prefix || path.startsWith(`${prefix}/`)
 }
-
 
 /**
  * A third-party option bag, carried through the tree untouched.

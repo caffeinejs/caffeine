@@ -1,11 +1,10 @@
 import type { AddressInfo } from 'node:net'
 
 import { token } from '@caffeinejs/di'
-import { type InferSchema, $t } from '@caffeinejs/std'
+import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   ConfigPriority,
-  Configuration,
   EnvConfigProvider,
   InlineConfigProvider,
   type ConfigHandle,
@@ -52,10 +51,10 @@ describe('server builder + config', () => {
   })
 
   it('drives the listen address from the application config slice', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c =>
-        c.source(new InlineConfigProvider({ server: { host: '127.0.0.1', port: 0 }, db: { url: 'x' } })),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ server: { host: '127.0.0.1', port: 0 }, db: { url: 'x' } }))
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.server))
       .build()
 
@@ -69,10 +68,10 @@ describe('server builder + config', () => {
   // A fluent method is the last word, even alongside a wired block: `.port(3000)` is what the socket binds
   // to, and only `host` — which the code did not set — comes from the environment.
   it('keeps a code-set port while still reading the rest from the environment', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c =>
-        c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.server).port(3000))
       .build()
 
@@ -82,10 +81,10 @@ describe('server builder + config', () => {
   })
 
   it('reads the port from the environment when the code set none', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c =>
-        c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.server))
       .build()
 
@@ -95,8 +94,10 @@ describe('server builder + config', () => {
   })
 
   it('falls back to the code-set port when the environment says nothing', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c => c.source(env({ DB__URL: 'x' }), ConfigPriority.ENV))
+    const conf = newConfiguration(schema, kConfig)
+      .source(env({ DB__URL: 'x' }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.server).port(3000).host('127.0.0.1'))
       .build()
 
@@ -116,11 +117,10 @@ describe('server builder + config', () => {
   // Declaring `server` in the schema is not on its own an instruction to configure the server from it: a
   // feature reads what the application pointed it at, and nothing pointed here.
   it('leaves the server on its defaults when nothing pointed it at the block', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c =>
-        c.source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }), ConfigPriority.ENV)
       .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).build()
 
     await app.ready()
 
@@ -130,13 +130,12 @@ describe('server builder + config', () => {
   // The bands still layer among themselves — args over env — and the winner of that is what the wired block
   // hands the feature. What no longer happens is configuration outranking the code.
   it('lets command-line arguments beat the environment in the block the feature reads', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c =>
-        c
-          .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
-          // Given exactly as `process.argv` arrives, interpreter and script path included.
-          .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] }),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
+      // Given exactly as `process.argv` arrives, interpreter and script path included.
+      .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] })
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.server))
       .build()
 
@@ -151,8 +150,10 @@ describe('server builder + config', () => {
     })
     const kNested = token<ConfigHandle<InferSchema<typeof nested>>>(Symbol('app.config'))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(nested, kNested, c => c.source(env({ APP__SERVER__HOST: '127.0.0.1' }), ConfigPriority.ENV))
+    const conf = newConfiguration(nested, kNested)
+      .source(env({ APP__SERVER__HOST: '127.0.0.1' }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.app.server).port(4567))
       .build()
 
@@ -168,8 +169,10 @@ describe('server builder + config', () => {
     })
     const kNested = token<ConfigHandle<InferSchema<typeof nested>>>(Symbol('app.config'))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(nested, kNested, c => c.source(env({ APP__SERVER__PORT: '8082' }), ConfigPriority.ENV))
+    const conf = newConfiguration(nested, kNested)
+      .source(env({ APP__SERVER__PORT: '8082' }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.app.server))
       .build()
 
@@ -180,7 +183,7 @@ describe('server builder + config', () => {
 
   it('resolves against the defaults when the application declared no schema', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
-      // No `.config(...)` declared — the block reads back empty, so the defaults and the code value stand.
+      // No `config` constructor option — the block reads back empty, so the defaults and the code value stand.
       .server((s, c) => s.withConfig((c as ConfigHandle<AppConfig>).server).port(4444))
       .build()
 
@@ -197,8 +200,8 @@ describe('server builder + config', () => {
       load: ctx => new InlineConfigProvider(data).load(ctx),
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c => c.source(mutable))
+    const conf = newConfiguration(schema, kConfig).source(mutable).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .server((s, c) => s.withConfig(c.server))
       .build()
 
@@ -221,10 +224,10 @@ describe('server builder + config', () => {
   })
 
   it('rejects a selector whose slice is not ServerOptions (compile-time)', () => {
-    void createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c =>
-        c.source(new InlineConfigProvider({ server: { host: 'h', port: 1 }, db: { url: 'u' } })),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ server: { host: 'h', port: 1 }, db: { url: 'u' } }))
+      .build()
+    void createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       // @ts-expect-error the `db` slice ({ url }) is not assignable to ServerOptions
       .server((s, c) => s.withConfig(c.db))
   })

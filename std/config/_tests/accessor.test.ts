@@ -155,7 +155,7 @@ describe('ConfigAccessors array typing', () => {
 })
 
 /**
- * A feature's `.config(...)` selector returns a {@link ConfigLocation}, not the feature's type, so an
+ * A `ConfigLocation` is what a feature's `withConfig(...)` selector reads, not the feature's own type, so an
  * application may declare only the part of the shape it wants to control and leave the rest to the feature's
  * defaults, its builder, or the environment.
  *

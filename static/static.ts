@@ -14,9 +14,9 @@ import fastifyStatic from '@fastify/static'
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { ErrSPAIndexMissing } from './errors.js'
-import { normalizePrefix, underPrefix, type SPASettings,type ResolvedStatic,type StaticMount } from './config.js'
 import { StaticBuilder, kBuild } from './builder.js'
+import { normalizePrefix, underPrefix, type SPASettings, type ResolvedStatic, type StaticMount } from './config.js'
+import { ErrSPAIndexMissing } from './errors.js'
 
 /** The slice of `reply` the per-file cache policy needs. */
 interface HeaderCapableReply {
@@ -37,7 +37,6 @@ export function staticFiles<C = unknown>(configure?: StaticConfigurer): HTTPPlug
     return staticPlugin(builder[kBuild]())
   }
 }
-
 
 function staticPlugin({ mounts, spa }: ResolvedStatic): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {

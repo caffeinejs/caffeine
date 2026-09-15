@@ -11,7 +11,7 @@ import {
 } from './config/index.js'
 import { kFeatureName } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
-import { createApplication } from './index.js'
+import { createApplication, newConfiguration } from './index.js'
 import { $t } from './schema/t.js'
 
 interface GadgetConfig {
@@ -102,8 +102,10 @@ describe('FeatureBuilder', () => {
   it('keeps a fluent value even when a source names the same setting', async () => {
     const g = gadget<AppConfig>(b => b.size(7))
 
-    const app = headless()
-      .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ app: { gadget: { size: 99 } } })))
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(new InlineConfigProvider({ app: { gadget: { size: 99 } } }))
+      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
       .with(g)
       .build()
 
@@ -116,8 +118,10 @@ describe('FeatureBuilder', () => {
   it('reads a setting from the tree when the callback wires it', async () => {
     const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
 
-    const app = headless()
-      .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ app: { gadget: { size: 99 } } })))
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(new InlineConfigProvider({ app: { gadget: { size: 99 } } }))
+      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
       .with(g)
       .build()
 
@@ -192,8 +196,8 @@ describe('FeatureBuilder', () => {
     mutable.set('app', { gadget: { size: 5 } })
 
     const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
-    const app = headless()
-      .config(appSchema, kAppConfig, c => c.source(mutable, ConfigPriority.ENV))
+    const conf = newConfiguration(appSchema, kAppConfig).source(mutable, ConfigPriority.ENV).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
       .with(g)
       .build()
 

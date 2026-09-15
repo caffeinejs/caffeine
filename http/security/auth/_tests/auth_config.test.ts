@@ -1,5 +1,5 @@
 import { token } from '@caffeinejs/di'
-import { $t, type InferSchema } from '@caffeinejs/std'
+import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
 import {
   ConfigPriority,
   EnvConfigProvider,
@@ -89,10 +89,10 @@ describe('authentication configuration', () => {
   // The scheme is named `jwt` rather than left as the default `Bearer` because `EnvConfigProvider` lowercases
   // each path segment — `AUTH__SCHEMES__BEARER__SECRET` addresses `auth.schemes.bearer`, which is not where a
   it('takes a JWT secret from the environment, over the one set in code', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV)
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
       .authentication((a, c) =>
         a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )
@@ -130,10 +130,10 @@ describe('authentication configuration', () => {
   })
 
   it('redacts a configured secret in the diagnostics while the handler still authenticates with it', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV)
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
       .authentication((a, c) =>
         a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )
@@ -156,14 +156,10 @@ describe('authentication configuration', () => {
 
   // Building last is what puts each scheme's own validation on the merged options.
   it('validates the merged options, not the code half', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } },
-          }),
-        ),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new InlineConfigProvider({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
       .authentication((a, c) =>
         a.withConfig(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
       )
@@ -173,19 +169,19 @@ describe('authentication configuration', () => {
   })
 
   it('configures a basic realm and a cookie name from the tree', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            auth: {
-              schemes: {
-                Basic: { realm: 'From Config' },
-                Cookie: { cookieName: 'configured.session' },
-              },
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(
+        new InlineConfigProvider({
+          auth: {
+            schemes: {
+              Basic: { realm: 'From Config' },
+              Cookie: { cookieName: 'configured.session' },
             },
-          }),
-        ),
+          },
+        }),
       )
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
       .authentication((a, c) =>
         a
           .withConfig(c.auth)
@@ -212,10 +208,10 @@ describe('authentication configuration', () => {
   })
 
   it('takes the default scheme from the tree', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }), ConfigPriority.ENV)
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
       .authentication((a, c) =>
         a
           .withConfig(c.auth)
@@ -235,14 +231,10 @@ describe('authentication configuration', () => {
   it('keeps a code-only callback on a configured scheme', async () => {
     let validated = 0
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            auth: { schemes: { Basic: { realm: 'Configured' } } },
-          }),
-        ),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new InlineConfigProvider({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
       .authentication((a, c) =>
         a.withConfig(c.auth).addBasic(b =>
           b.realm('Coded').validate(() => {
@@ -263,7 +255,7 @@ describe('authentication configuration', () => {
     await app.close()
   })
 
-  it('re-points every auth namespace together through .config()', async () => {
+  it('re-points every auth namespace together through the constructor-supplied config', async () => {
     const schema = $t.Object({
       app: $t.Object({
         auth: $t.Object({
@@ -274,14 +266,10 @@ describe('authentication configuration', () => {
     })
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .config(schema, kConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } },
-          }),
-        ),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
       .authentication((a, c) =>
         a.withConfig(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
       )

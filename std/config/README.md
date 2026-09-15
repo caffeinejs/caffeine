@@ -71,18 +71,20 @@ to lose to an environment variable regardless of the order they were registered 
 explicitly:
 
 ```ts
-.config(schema, kConfig, c => c
+newConfiguration(schema, kConfig)
   .source(new JSONConfigProvider('./config/app.json'), ConfigPriority.FILE)
-  .source(new EnvConfigProvider({ prefix: 'APP_' }), ConfigPriority.ENV))
+  .source(new EnvConfigProvider({ prefix: 'APP_' }), ConfigPriority.ENV)
+  .build()
 ```
 
 ---
 
 ## Declaring the application configuration
 
-`.config(schema, key, configure?)` on the application builder does three things: sets the schema the
-root tree is validated against, names the DI token the resolved [`ConfigHandle`](./config.ts) is
-bound under, and opens a builder for registering sources.
+`newConfiguration(schema, key)` does three things: sets the schema the root tree is validated
+against, names the DI token the resolved [`ConfigHandle`](./config.ts) is bound under, and opens a
+builder for registering sources. `.build()` hands the finished configuration to the application's
+constructor as `{ config }` — configuration is not declared on the application chain itself.
 
 ```ts
 // config.ts — schema and key together, so container.get(kAppConfig) needs no type argument
@@ -93,9 +95,11 @@ export type AppConfig = InferSchema<typeof appConfigSchema>
 export const kAppConfig = token<ConfigHandle<AppConfig>>(Symbol('petstore.config'))
 
 // app.ts
-createWebApplication()
-  .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
-  .server((s, c) => s.withConfig(c.server))
+const conf = newConfiguration(appConfigSchema, kAppConfig)
+  .source(new EnvConfigProvider({ prefix: 'PETSTORE_' }))
+  .build()
+
+createWebApplication({ config: conf }).server((s, c) => s.withConfig(c.server))
 ```
 
 The schema is either the **`$t` dialect** (TypeBox — the first-class choice, introspected for
@@ -284,11 +288,13 @@ describe a slice that holds credentials.
 
 ```mermaid
 sequenceDiagram
+  participant Conf as newConfiguration(...)
   participant App as ApplicationBuilder
   participant Feat as each Feature
   participant Def as ConfigDefinition
   participant Shard as ConfigShard
-  App->>Def: .config(schema, key, c => c.source(...))
+  Conf->>Def: .source(...).build() — a ConfigDefinition, built before the application exists
+  App->>App: constructor({ config: conf }) — adopts it, or builds a fresh one if omitted
   App->>Def: bootstrap() (before any feature configures)
   Def->>Shard: ConfigShard.bootstrap(options)
   Shard->>Shard: resolve then materialize then validate root
@@ -298,11 +304,11 @@ sequenceDiagram
   App->>Feat: kFeatureBootstrap - look up bindings and register extensions
 ```
 
-`ConfigDefinition` is the mutable description the application builder owns. It is resolved once, before
-any feature configures and while binding is still open — which is what lets a feature be configured from a
-setting it then consumes at binding time. A tree that cannot validate fails start-up here, which is more
-legible than failing at whatever moment something first read it. `ConfigModule` binds what the resolved
-shard holds.
+`ConfigDefinition` is the mutable description `newConfiguration(...)` builds and the application adopts at
+construction. It is resolved once, before any feature configures and while binding is still open — which is
+what lets a feature be configured from a setting it then consumes at binding time. A tree that cannot
+validate fails start-up here, which is more legible than failing at whatever moment something first read it.
+`ConfigModule` binds what the resolved shard holds.
 
 ---
 

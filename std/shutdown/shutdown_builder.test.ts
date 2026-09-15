@@ -9,14 +9,15 @@ import {
   MutableConfigProvider,
   type ConfigHandle,
 } from '../config/index.js'
-import { type InferSchema, $t, createApplication } from '../index.js'
+import { type AppConfiguration, type InferSchema, $t, createApplication, newConfiguration } from '../index.js'
 import { kShutdownPolicy, shutdownConfigSchema, type ShutdownOptions } from './shutdown_options.js'
 import { noopSignalDispatcher } from './signals.js'
 
 const appSchema = $t.Object({ shutdown: shutdownConfigSchema })
 const kAppConfig = token<ConfigHandle<InferSchema<typeof appSchema>>>(Symbol('app.config'))
 
-const headless = () => createApplication({ container: new CaffeineIoC({ decorators: false }) })
+const headless = (config?: AppConfiguration<InferSchema<typeof appSchema>>) =>
+  createApplication({ container: new CaffeineIoC({ decorators: false }), config })
 
 function policyOf(app: { container: { get(t: typeof kShutdownPolicy): ShutdownOptions } }): ShutdownOptions {
   return app.container.get(kShutdownPolicy)
@@ -36,11 +37,10 @@ describe('ShutdownBuilder', () => {
 
   // Declaring `shutdown` in the schema is not on its own an instruction to configure the drain from it.
   it('leaves the drain on its defaults when nothing pointed it at the block', async () => {
-    const app = headless()
-      .config(appSchema, kAppConfig, c =>
-        c.source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV)
       .build()
+    const app = headless(conf).build()
     await app.ready()
 
     expect(policyOf(app).drainDelayMs).toBe(0)
@@ -50,8 +50,10 @@ describe('ShutdownBuilder', () => {
   // A fluent method is the last word: the callback wired the block, but `drainDelay` was also set in code,
   // so the code value is what the drain runs on.
   it('takes a fluent value over the configured one', async () => {
-    const app = headless()
-      .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ shutdown: { drainDelay: '90ms' } })))
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(new InlineConfigProvider({ shutdown: { drainDelay: '90ms' } }))
+      .build()
+    const app = headless(conf)
       .shutdown((s, c) => s.drainDelay('10s').withConfig(c.shutdown))
       .build()
     await app.ready()
@@ -60,15 +62,15 @@ describe('ShutdownBuilder', () => {
   })
 
   it('reads durations and the signal list from the environment', async () => {
-    const app = headless()
-      .config(appSchema, kAppConfig, c =>
-        c.source(
-          new EnvConfigProvider({
-            env: { SHUTDOWN__DRAIN_DELAY: '40ms', SHUTDOWN__SIGNALS: 'SIGTERM,SIGINT' },
-          }),
-          ConfigPriority.ENV,
-        ),
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(
+        new EnvConfigProvider({
+          env: { SHUTDOWN__DRAIN_DELAY: '40ms', SHUTDOWN__SIGNALS: 'SIGTERM,SIGINT' },
+        }),
+        ConfigPriority.ENV,
       )
+      .build()
+    const app = headless(conf)
       .shutdown((s, c) => s.withConfig(c.shutdown))
       .build()
     await app.ready()
@@ -80,8 +82,10 @@ describe('ShutdownBuilder', () => {
   })
 
   it('keeps the dispatcher on the builder — a function cannot travel the config tree', async () => {
-    const app = headless()
-      .config(appSchema, kAppConfig, c => c.source(new InlineConfigProvider({ shutdown: { drainDelay: '30ms' } })))
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(new InlineConfigProvider({ shutdown: { drainDelay: '30ms' } }))
+      .build()
+    const app = headless(conf)
       .shutdown((s, c) => s.dispatcher(noopSignalDispatcher).withConfig(c.shutdown))
       .build()
     await app.ready()
@@ -95,8 +99,8 @@ describe('ShutdownBuilder', () => {
     const mutable = new MutableConfigProvider('shutdown-test')
     mutable.set('shutdown', { shutdownTimeout: '9s' })
 
-    const app = headless()
-      .config(appSchema, kAppConfig, c => c.source(mutable, ConfigPriority.ENV))
+    const conf = newConfiguration(appSchema, kAppConfig).source(mutable, ConfigPriority.ENV).build()
+    const app = headless(conf)
       .shutdown((s, c) => s.withConfig(c.shutdown))
       .build()
     await app.ready()

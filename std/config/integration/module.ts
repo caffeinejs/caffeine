@@ -27,8 +27,8 @@ export function ConfigModule<T>(definition: ConfigDefinition): Module {
 
     const shardKey = token<ConfigShard<T>>(Symbol('@caffeinejs/config:shard'))
 
-    // Read here, not when the module was created: the application builder installs this module in its own
-    // constructor and the key arrives later, with `.config(schema, key)`.
+    // Read here, not when the module was created: the application installs this module in its own constructor,
+    // and the key arrives on the `config` option — built separately with `newConfiguration(schema, key)`.
     const tokenName = definition.token as NamedToken<ConfigHandle<T>> | undefined
 
     // Only when the application named a key. An application that declared no configuration of its own still has

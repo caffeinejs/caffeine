@@ -1,5 +1,11 @@
+import {
+  resolveSPASettings,
+  type SPAOptions,
+  type SPASettings,
+  type ResolvedStatic,
+  type StaticMount,
+} from './config.js'
 import { ErrDuplicateSPAMount } from './errors.js'
-import { resolveSPASettings, type SPAOptions, type SPASettings,type ResolvedStatic,type StaticMount } from './config.js'
 
 /**
  * Materializes a {@link StaticBuilder} into the {@link ResolvedStatic} it built.

@@ -5,11 +5,13 @@ import { z } from 'zod'
 import {
   CONFIG_REFRESH_LABEL,
   Configuration,
+  ConfigDefinition,
   ConfigPriority,
   InlineConfigProvider,
   type ConfigHandle,
   type ConfigProvider,
 } from './config/index.js'
+import { newConfiguration } from './configuration.js'
 import { createApplication } from './index.js'
 
 const schema = z.object({
@@ -19,16 +21,14 @@ type AppConfig = z.infer<typeof schema>
 
 const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
 
-describe('base .config() builder', () => {
+describe('newConfiguration', () => {
   it('binds the app config under the key the application declared, higher-precedence source winning', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    const app = createApplication({ container })
-      .config(schema, kConfig, c =>
-        c
-          .source(new InlineConfigProvider({ server: { host: 'primary', port: 3000 } }))
-          .source(new InlineConfigProvider({ server: { host: 'fallback', port: 9999 } })),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ server: { host: 'primary', port: 3000 } }))
+      .source(new InlineConfigProvider({ server: { host: 'fallback', port: 9999 } }))
       .build()
+    const app = createApplication({ container, config: conf }).build()
 
     await app.ready()
 
@@ -43,7 +43,7 @@ describe('base .config() builder', () => {
     const kWrongShape = token<ConfigHandle<{ other: string }>>(Symbol('wrong.shape'))
     // The key names a config type the schema cannot produce.
     // @ts-expect-error - key and schema must agree
-    createApplication().config(schema, kWrongShape)
+    newConfiguration(schema, kWrongShape)
   })
 
   // A feature's namespace is in the resolved tree whether or not the application described it, so a key naming
@@ -51,17 +51,17 @@ describe('base .config() builder', () => {
   // redeclaring the server's shape and taking over its defaults.
   it('accepts a key naming a wider type than the schema describes', () => {
     const kWider = token<ConfigHandle<AppConfig & { caffeine: { name: string } }>>(Symbol('wider'))
-    const builder = createApplication().config(schema, kWider)
+    const conf = newConfiguration(schema, kWider).build()
 
-    expectTypeOf(builder.configDefinition.token).toEqualTypeOf<NamedToken<any> | undefined>()
+    expectTypeOf(conf.token).toEqualTypeOf<NamedToken<any> | undefined>()
   })
 
   it('requires a key', () => {
     // @ts-expect-error - a schema without a key does not declare where the config is bound
-    createApplication().config(schema)
+    newConfiguration(schema)
 
     // @ts-expect-error - sources alone are not a configuration declaration
-    createApplication().config(c => c.source(new InlineConfigProvider({ server: { host: 'x', port: 1 } })))
+    newConfiguration(c => c.source(new InlineConfigProvider({ server: { host: 'x', port: 1 } })))
   })
 
   it('reflects new values after a config refresh', async () => {
@@ -73,12 +73,8 @@ describe('base .config() builder', () => {
     }
 
     const container = new CaffeineIoC({ decorators: false })
-    const app = createApplication({ container })
-      // Block-body callback with no return — the config type still comes from `schema`.
-      .config(schema, kConfig, c => {
-        c.source(mutable)
-      })
-      .build()
+    const conf = newConfiguration(schema, kConfig).source(mutable).build()
+    const app = createApplication({ container, config: conf }).build()
 
     await app.ready()
 
@@ -101,9 +97,8 @@ describe('base .config() builder', () => {
     }
 
     const container = new CaffeineIoC({ decorators: false })
-    const app = createApplication({ container })
-      .config(schema, kConfig, c => c.source(mutable))
-      .build()
+    const conf = newConfiguration(schema, kConfig).source(mutable).build()
+    const app = createApplication({ container, config: conf }).build()
 
     await app.ready()
 
@@ -123,13 +118,14 @@ describe('base .config() builder', () => {
 
   it('configures an application that declared no configuration of its own', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    const builder = createApplication({ container })
 
-    // A slice registered straight on the definition, without the application declaring a root schema.
-    const slice = builder.configDefinition.slice(['widget'], z.object({ size: z.coerce.number() }))
-    builder.configDefinition.sources.add(new InlineConfigProvider({ widget: { size: 7 } }), ConfigPriority.USER)
+    // A raw ConfigDefinition, unlike one from `newConfiguration`: no root schema, no token — just a slice
+    // registered directly, the way a feature's own `.slice()` call works.
+    const definition = new ConfigDefinition()
+    const slice = definition.slice(['widget'], z.object({ size: z.coerce.number() }))
+    definition.sources.add(new InlineConfigProvider({ widget: { size: 7 } }), ConfigPriority.USER)
 
-    const app = builder.build()
+    const app = createApplication({ container, config: definition }).build()
     await app.ready()
 
     // Requiring a key did not make configuration opt-in: the slice resolved, and the tree is still reachable
@@ -139,19 +135,17 @@ describe('base .config() builder', () => {
     expect(app.container.has(kConfig)).toBe(false)
   })
 
-  it('picks up a source registered on the definition after .config() ran', async () => {
+  it('picks up a source added directly to the built configuration before ready()', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    const builder = createApplication({ container }).config(schema, kConfig, c =>
-      c.source(new InlineConfigProvider({ server: { host: 'first', port: 1 } })),
-    )
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ server: { host: 'first', port: 1 } }))
+      .build()
 
-    // The registry is live: this lands on the first bootstrap, not on some later refresh.
-    builder.configDefinition.sources.add(
-      new InlineConfigProvider({ server: { host: 'second', port: 2 } }),
-      ConfigPriority.ENV,
-    )
+    // `newConfiguration(...).build()` hands back the live ConfigDefinition, so a source added to it directly —
+    // rather than through `.source()` on the builder — still lands, as long as it happens before `ready()`.
+    conf.sources.add(new InlineConfigProvider({ server: { host: 'second', port: 2 } }), ConfigPriority.ENV)
 
-    const app = builder.build()
+    const app = createApplication({ container, config: conf }).build()
     await app.ready()
 
     expect(app.container.get(kConfig).server.host).toBe('second')
@@ -159,13 +153,11 @@ describe('base .config() builder', () => {
 
   it('reads command-line arguments, above every other source', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    const app = createApplication({ container })
-      .config(schema, kConfig, c =>
-        c
-          .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
-          .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] }),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
+      .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] })
       .build()
+    const app = createApplication({ container, config: conf }).build()
 
     await app.run()
 
@@ -178,11 +170,11 @@ describe('base .config() builder', () => {
 
     try {
       const container = new CaffeineIoC({ decorators: false })
-      const app = createApplication({ container })
-        .config(schema, kConfig, c =>
-          c.source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } })).args(),
-        )
+      const conf = newConfiguration(schema, kConfig)
+        .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
+        .args()
         .build()
+      const app = createApplication({ container, config: conf }).build()
 
       await app.run()
 

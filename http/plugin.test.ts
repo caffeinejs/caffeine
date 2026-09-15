@@ -3,6 +3,7 @@ import {
   $t,
   FeatureBuilder,
   kFeatureName,
+  newConfiguration,
   type Feature,
   type FeatureConfigureKit,
   type FeatureConfigurer,
@@ -59,30 +60,15 @@ describe('builder.with()', () => {
     expect(missing).toBeUndefined()
   })
 
-  it('keeps .with available across .config(), in either order', () => {
-    const schema = $t.Object({ nothing: $t.String({ default: '' }) })
-    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
-
-    const withFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
-      .with(probe())
-      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-
-    const configFirst = createWebApplication(fastifyAdapterFactory(Fastify()))
-      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-      .with(probe())
-
-    expect(typeof withFirst.with).toBe('function')
-    expect(typeof configFirst.with).toBe('function')
-  })
-
-  it('survives .config(), which re-parameterises the builder', async () => {
+  it('flows the config type to features configured after construction', async () => {
     const container = new CaffeineIoC()
     const schema = $t.Object({ nothing: $t.String({ default: '' }) })
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const conf = newConfiguration(schema, kConfig).source(new EnvConfigProvider()).build()
 
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container })
-      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-      .with(probe(t => t.capture('after-config:9092')))
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container, config: conf }).with(
+      probe(t => t.capture('after-config:9092')),
+    )
 
     const built = app.build()
     await built.ready()
@@ -90,13 +76,13 @@ describe('builder.with()', () => {
     expect(built.container.getOptional(kProbe)).toEqual({ broker: 'after-config:9092' })
   })
 
-  it('keeps the config type flowing to features configured afterwards', () => {
+  it('types a feature configured after construction against the constructor-supplied config', () => {
     const schema = $t.Object({ app: $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) }) })
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const conf = newConfiguration(schema, kConfig).source(new EnvConfigProvider()).build()
 
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { config: conf })
       .with(probe())
-      .config(schema, kConfig, c => c.source(new EnvConfigProvider()))
       .server((s, c) => s.withConfig(c.app.server))
 
     expect(typeof app.build).toBe('function')

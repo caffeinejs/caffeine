@@ -1,5 +1,5 @@
 import { token, type Container } from '@caffeinejs/di'
-import { $t, type InferSchema, createApplication } from '@caffeinejs/std'
+import { $t, newConfiguration, type InferSchema, createApplication } from '@caffeinejs/std'
 import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
@@ -41,19 +41,18 @@ describe('messaging configuration', () => {
   // environment exactly the way a broker list does. Named exception: messaging is config-wins once
   // `withConfig` is wired.
   it('lets the environment override a builder-set destination', async () => {
-    const app = createApplication({})
-      .config(rootSchema, kRootConfig, c =>
-        c.source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV),
-      )
-      .with(
-        messaging((m, c) =>
-          m
-            .withConfig(c.messaging.default)
-            .use('primary', inMemoryBinder())
-            .in('orders', { destination: 'orders', via: 'primary' })
-            .out('notify', { destination: 'notify', via: 'primary' }),
-        ),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV)
+      .build()
+    const app = createApplication({ config: conf }).with(
+      messaging((m, c) =>
+        m
+          .withConfig(c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary' })
+          .out('notify', { destination: 'notify', via: 'primary' }),
+      ),
+    )
 
     const built = app.build()
     await built.ready()
@@ -67,22 +66,17 @@ describe('messaging configuration', () => {
   })
 
   it('reads a consumer group from the configuration tree', async () => {
-    const app = createApplication({})
-      .config(rootSchema, kRootConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            messaging: { default: { in: { orders: { group: 'from-config' } } } },
-          }),
-        ),
-      )
-      .with(
-        messaging((m, c) =>
-          m
-            .withConfig(c.messaging.default)
-            .use('primary', inMemoryBinder())
-            .in('orders', { destination: 'orders', via: 'primary' }),
-        ),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new InlineConfigProvider({ messaging: { default: { in: { orders: { group: 'from-config' } } } } }))
+      .build()
+    const app = createApplication({ config: conf }).with(
+      messaging((m, c) =>
+        m
+          .withConfig(c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary' }),
+      ),
+    )
 
     const built = app.build()
     await built.ready()
@@ -93,14 +87,10 @@ describe('messaging configuration', () => {
   })
 
   it('keeps named instances apart, the unnamed one at messaging.default', async () => {
-    const app = createApplication({})
-      .config(rootSchema, kRootConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            messaging: { audit: { out: { log: { destination: 'audit.v2' } } } },
-          }),
-        ),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new InlineConfigProvider({ messaging: { audit: { out: { log: { destination: 'audit.v2' } } } } }))
+      .build()
+    const app = createApplication({ config: conf })
       .with(
         messaging((m, c) =>
           m
@@ -132,22 +122,17 @@ describe('messaging configuration', () => {
     const schema = $t.Object({ id: $t.Number() })
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
-    const app = createApplication({})
-      .config(rootSchema, kRootConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            messaging: { default: { in: { orders: { destination: 'orders.v2' } } } },
-          }),
-        ),
-      )
-      .with(
-        messaging((m, c) =>
-          m
-            .withConfig(c.messaging.default)
-            .use('primary', inMemoryBinder())
-            .in('orders', { destination: 'orders', via: 'primary', schema }),
-        ),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new InlineConfigProvider({ messaging: { default: { in: { orders: { destination: 'orders.v2' } } } } }))
+      .build()
+    const app = createApplication({ config: conf }).with(
+      messaging((m, c) =>
+        m
+          .withConfig(c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary', schema }),
+      ),
+    )
 
     const built = app.build()
     await built.ready()
@@ -159,7 +144,7 @@ describe('messaging configuration', () => {
     await built.close()
   })
 
-  it('re-points reads and code-set defaults together via .config()', async () => {
+  it('re-points reads and code-set defaults together via the constructor-supplied config', async () => {
     const schema = $t.Object({
       app: $t.Object({
         events: $t.Object({
@@ -169,14 +154,10 @@ describe('messaging configuration', () => {
     })
     const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
 
-    const app = createApplication({})
-      .config(schema, kConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            app: { events: { in: { orders: { destination: 'moved.orders' } } } },
-          }),
-        ),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ app: { events: { in: { orders: { destination: 'moved.orders' } } } } }))
+      .build()
+    const app = createApplication({ config: conf })
       // No annotation on the selector: the config type is recovered from the builder.
       .with(
         messaging((m, c) =>
@@ -197,22 +178,21 @@ describe('messaging configuration', () => {
 
   // Activation is the builder call, never the tree.
   it('creates no binding the application never declared', async () => {
-    const app = createApplication({})
-      .config(rootSchema, kRootConfig, c =>
-        c.source(
-          new InlineConfigProvider({
-            messaging: { default: { in: { ghost: { destination: 'ghost', via: 'primary' } } } },
-          }),
-        ),
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(
+        new InlineConfigProvider({
+          messaging: { default: { in: { ghost: { destination: 'ghost', via: 'primary' } } } },
+        }),
       )
-      .with(
-        messaging((m, c) =>
-          m
-            .withConfig(c.messaging.default)
-            .use('primary', inMemoryBinder())
-            .in('orders', { destination: 'orders', via: 'primary' }),
-        ),
-      )
+      .build()
+    const app = createApplication({ config: conf }).with(
+      messaging((m, c) =>
+        m
+          .withConfig(c.messaging.default)
+          .use('primary', inMemoryBinder())
+          .in('orders', { destination: 'orders', via: 'primary' }),
+      ),
+    )
 
     const built = app.build()
     await built.ready()

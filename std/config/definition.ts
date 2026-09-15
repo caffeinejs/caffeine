@@ -15,16 +15,16 @@ export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs
  * The live description of an application's configuration: its sources, its root schema, where its active
  * profiles are read from, and the feature slices carved out of the resulting tree.
  *
- * Live is the whole point. The previous design snapshotted the provider list when `.config()` was called, which
- * meant nothing registered afterwards could ever be seen. Holding one mutable definition that {@link bootstrap}
- * reads once lets the application builder contribute sources, schema and the framework caffeine slice to the
- * same tree, in whatever order they happen to run.
+ * Live is the whole point. A previous design snapshotted the provider list when the application declared its
+ * configuration, which meant nothing registered afterwards could ever be seen. Holding one mutable definition
+ * that {@link bootstrap} reads once lets `newConfiguration(...)` and the framework caffeine slice contribute
+ * sources, schema and slices to the same tree, in whatever order they happen to run.
  */
 export class ConfigDefinition {
   /**
-   * The key the resolved configuration handle is bound under, supplied by the application to `.config()`. Absent
-   * until then, and absent for good in an application that never declares a configuration of its own — a slice
-   * still resolves, and value injection still reads the tree, without anything bound at the root.
+   * The key the resolved configuration handle is bound under, supplied by `newConfiguration(schema, key)`.
+   * Absent in an application that never declares a configuration of its own — a slice still resolves, and
+   * value injection still reads the tree, without anything bound at the root.
    */
   token: NamedToken<any> | undefined
   readonly sources = new ConfigSources()
@@ -101,7 +101,7 @@ export class ConfigDefinition {
   async bootstrap(): Promise<ConfigShard<unknown>> {
     this.#shard ??= await ConfigShard.bootstrap<unknown>({
       sources: this.sources,
-      // Type-erased: the schema is whatever `.config()` declared, and the config type is recovered by the
+      // Type-erased: the schema is whatever `newConfiguration(...)` declared, and the config type is recovered by the
       // caller that named it.
       schema: this.schema,
       slices: this.slices,

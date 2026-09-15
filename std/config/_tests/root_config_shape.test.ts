@@ -11,7 +11,7 @@ import { ConfigPriority } from '../sources.js'
  * The resolved configuration object is the application's schema and nothing else.
  *
  * A feature never adds a field to it. Its settings appear there when the application put them there — declared
- * in its own schema and named by the feature's `.config(...)` selector — which is what keeps the shape of
+ * in its own schema, named via `newConfiguration(schema, key)` — which is what keeps the shape of
  * `ctx.config` and of `$i.value(c => ...)` a property of the schema rather than of which features happen to be
  * installed.
  */

@@ -16,6 +16,7 @@ import {
   kFeatureName,
   type Feature,
   createApplication,
+  newConfiguration,
 } from './index.js'
 
 // The framework's own block, declared as the application root so a source can be registered against it.
@@ -138,9 +139,10 @@ describe('application name and profiles', () => {
   })
 
   it('reads caffeine.name from a config source', async () => {
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { name: 'petstore' } })))
+    const conf = newConfiguration(caffeineSchema, kConfig)
+      .source(new InlineConfigProvider({ caffeine: { name: 'petstore' } }))
       .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).build()
     await app.ready()
 
     expect(app.name).toBe('petstore')
@@ -192,9 +194,10 @@ describe('application name and profiles', () => {
   it('run() resolves to the application name and active profiles', async () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu')
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { name: 'petstore' } })))
+    const conf = newConfiguration(caffeineSchema, kConfig)
+      .source(new InlineConfigProvider({ caffeine: { name: 'petstore' } }))
       .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).build()
 
     // The point: a caller reads post-start identity straight off run(), without keeping the app handle to
     // poll app.name / app.profiles.
@@ -218,9 +221,10 @@ describe('application name and profiles', () => {
   // the application falls back to it.
   it('ignores a source-declared profile once anything named one up front', async () => {
     const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
-    const app = createApplication({ container })
-      .config(caffeineSchema, kConfig, c => c.source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } })))
+    const conf = newConfiguration(caffeineSchema, kConfig)
+      .source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } }))
       .build()
+    const app = createApplication({ container, config: conf }).build()
     await app.ready()
 
     expect(app.profiles).toEqual(['test'])
@@ -250,9 +254,8 @@ describe('profile-segregated config files', () => {
     const base = await writeTmp('app-e2e.json', JSON.stringify({ caffeine: { name: 'base', profiles: ['eu'] } }))
     await writeTmp('app-e2e-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .config(caffeineSchema, kConfig, c => c.source(new JSONConfigProvider(base)))
-      .build()
+    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigProvider(base)).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).build()
     await app.ready()
 
     expect(app.name).toBe('eu-app')
@@ -263,9 +266,11 @@ describe('profile-segregated config files', () => {
     const base = await writeTmp('app-ctr.json', JSON.stringify({ caffeine: { name: 'base' } }))
     await writeTmp('app-ctr-test.json', JSON.stringify({ caffeine: { name: 'test-app' } }))
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false, profiles: ['test'] }) })
-      .config(caffeineSchema, kConfig, c => c.source(new JSONConfigProvider(base)))
-      .build()
+    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigProvider(base)).build()
+    const app = createApplication({
+      container: new CaffeineIoC({ decorators: false, profiles: ['test'] }),
+      config: conf,
+    }).build()
     await app.ready()
 
     expect(app.name).toBe('test-app')

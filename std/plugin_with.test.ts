@@ -1,9 +1,7 @@
 import { token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
-import { z } from 'zod'
 
 import { createApplication } from './application_builder.js'
-import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
 import { ErrFeatureAlreadyInstalled, kFeatureName, type Feature, type FeatureConfigureKit } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 
@@ -44,7 +42,7 @@ function keyed(instance = 'default'): Feature {
   return new TrackerBuilder(instance === 'default' ? 'keyed' : `keyed:${instance}`)
 }
 
-describe('BaseApplicationBuilder.extend', () => {
+describe('BaseApplicationBuilder.with', () => {
   it('installs the feature and bootstraps it', async () => {
     const builder = createApplication().with(tracker(t => t.capture('recorded')))
 
@@ -67,22 +65,6 @@ describe('BaseApplicationBuilder.extend', () => {
     // @ts-expect-error features no longer contribute methods
     const missing: unknown = builder.track
     expect(missing).toBeUndefined()
-  })
-
-  it('keeps .with available across .config(), in either order', () => {
-    const schema = z.object({ server: z.object({ port: z.coerce.number() }) })
-    const kConfig = token<ConfigHandle<z.infer<typeof schema>>>(Symbol('app.config'))
-
-    const afterConfig = createApplication()
-      .with(tracker())
-      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
-
-    const beforeConfig = createApplication()
-      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ server: { port: 1 } })))
-      .with(tracker())
-
-    expect(typeof afterConfig.with).toBe('function')
-    expect(typeof beforeConfig.with).toBe('function')
   })
 
   it('throws when a feature is installed twice', () => {

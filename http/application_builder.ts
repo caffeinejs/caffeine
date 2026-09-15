@@ -1,17 +1,11 @@
-import type { NamedToken } from '@caffeinejs/di'
 import {
-  AppConfigBuilder,
   BaseApplicationBuilder,
   ShutdownBuilder,
   kAddConfigurer,
   type ApplicationBuilderOptions,
-  type ApplicationConfigMarker,
-  type ConfigTypeOf,
   type Feature,
   type FeatureConfigurer,
-  type Reconfigured,
 } from '@caffeinejs/std'
-import type { ConfigHandle, ConfigSchema, InferConfig } from '@caffeinejs/std/config'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { FastifyAdapter } from './adapter.js'
@@ -26,15 +20,14 @@ import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { ServerBuilder } from './server/index.js'
 
-export type WebApplicationBuilderOptions = ApplicationBuilderOptions
+export type WebApplicationBuilderOptions<TConfig = unknown> = ApplicationBuilderOptions<TConfig>
 
-export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>, TConfig = unknown>
-  extends BaseApplicationBuilder<WebApplication<I, REQ, A, never, never, TConfig>>
-  implements ApplicationConfigMarker<TConfig>
-{
-  /** Phantom — names the application config type for `ConfigTypeOf`. Never assigned, never read. */
-  declare readonly __config?: TConfig
-
+export class WebApplicationBuilder<
+  I,
+  REQ,
+  A extends Adapter<I, REQ> = Adapter<I, REQ>,
+  TConfig = unknown,
+> extends BaseApplicationBuilder<WebApplication<I, REQ, A, never, never, TConfig>, TConfig> {
   readonly #adapterFactory: AdapterFactory<I, REQ, A>
 
   #authBuilder: AuthenticationBuilder | undefined
@@ -45,7 +38,7 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   readonly #guardsBuilder: GuardsBuilder
   readonly #constraintsBuilder: ConstraintsBuilder
 
-  constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions = {}) {
+  constructor(adapterFactory: AdapterFactory<I, REQ, A>, options: WebApplicationBuilderOptions<TConfig> = {}) {
     super(options)
     this.#adapterFactory = adapterFactory
 
@@ -94,9 +87,9 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
    *
    * @throws ErrFeatureAlreadyInstalled when a feature with the same name is already installed.
    */
-  override with(feature: Feature<ConfigTypeOf<this>>): this
+  override with(feature: Feature<TConfig>): this
   override with(factory: HTTPPluginFactory<TConfig>): this
-  override with(featureOrFactory: Feature<ConfigTypeOf<this>> | HTTPPluginFactory<TConfig>): this {
+  override with(featureOrFactory: Feature<TConfig> | HTTPPluginFactory<TConfig>): this {
     if (typeof featureOrFactory === 'function') {
       return this.addFeature(new HTTPPluginFeature(featureOrFactory))
     }
@@ -171,32 +164,6 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
   }
 
   /**
-   * Declares the application configuration — the schema it is validated against, and the key its resolved
-   * `ConfigHandle` is bound under — and re-types the builder to carry the config type `T` (inferred from
-   * `schema`), so features configured afterwards (e.g. `server((s, c) => s.withConfig(c.server))`) see a
-   * strongly-typed `ConfigHandle<T>`. The optional `configure` callback — any shape — adds sources and context.
-   * Declare it first. Runtime returns the same instance; only the declared type changes.
-   *
-   * The key may name a **wider** type than the schema describes. A feature's namespace is in the resolved tree
-   * whether or not the application declared it, so naming `server` in the key's type without redeclaring its
-   * shape is accurate rather than a lie.
-   *
-   * ```ts
-   * const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
-   *
-   * createWebApplication().config(schema, kConfig, c => c.source(new EnvConfigProvider()))
-   * ```
-   */
-  config<S extends ConfigSchema, T extends InferConfig<NoInfer<S>> = InferConfig<NoInfer<S>>>(
-    schema: S,
-    key: NamedToken<ConfigHandle<T>>,
-    configure?: (c: AppConfigBuilder<T>) => void,
-  ): Reconfigured<this, WebApplicationBuilder<I, REQ, A>, WebApplicationBuilder<I, REQ, A, T>> {
-    this.applyConfigDefinition<T>(schema as ConfigSchema<unknown>, key, configure)
-    return this as never
-  }
-
-  /**
    * Enables the Kubernetes probes (`/livez`, `/readyz`, `/startupz`). Calling it with no configuration is a
    * complete setup; see {@link HealthBuilder} for what the defaults are.
    *
@@ -239,8 +206,8 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
  * Creates a web application builder.
  *
  * Install features with `.with(feature)` or `.with(feature(configure))` rather than here: it can be
- * called at any point in the chain, including after `.config()`. A plugin factory is
- * `.with(c => corsPlugin(c.app.cors.options))`.
+ * called at any point in the chain. Configuration is built separately with `newConfiguration` and passed in
+ * as `{ config }`. A plugin factory is `.with(c => corsPlugin(c.app.cors.options))`.
  *
  * ```ts
  * createWebApplication()
@@ -248,15 +215,15 @@ export class WebApplicationBuilder<I, REQ, A extends Adapter<I, REQ> = Adapter<I
  * ```
  */
 // Default Fastify — no adapter factory or Fastify instance required.
-export function createWebApplication(
-  options?: WebApplicationBuilderOptions,
-): WebApplicationBuilder<FastifyInstance, FastifyRequest, FastifyAdapter<FastifyInstance, FastifyRequest>>
+export function createWebApplication<TConfig = unknown>(
+  options?: WebApplicationBuilderOptions<TConfig>,
+): WebApplicationBuilder<FastifyInstance, FastifyRequest, FastifyAdapter<FastifyInstance, FastifyRequest>, TConfig>
 // Explicit adapter factory — a customized Fastify instance (`fastifyAdapterFactory(myFastify)`) or a
 // custom adapter altogether.
-export function createWebApplication<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>>(
+export function createWebApplication<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>, TConfig = unknown>(
   adapterFactory: AdapterFactory<I, REQ, A>,
-  options?: WebApplicationBuilderOptions,
-): WebApplicationBuilder<I, REQ, A>
+  options?: WebApplicationBuilderOptions<TConfig>,
+): WebApplicationBuilder<I, REQ, A, TConfig>
 export function createWebApplication(
   first?: AdapterFactory<any, any> | WebApplicationBuilderOptions,
   second?: WebApplicationBuilderOptions,

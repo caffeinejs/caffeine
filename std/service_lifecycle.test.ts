@@ -12,7 +12,7 @@ import {
   type Feature,
   type FeatureConfigureKit,
 } from './feature.js'
-import { createApplication } from './index.js'
+import { createApplication, newConfiguration } from './index.js'
 import { $t } from './schema/t.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
@@ -39,9 +39,11 @@ class WidgetFeature implements Feature<AppConfig> {
 }
 
 function appWith(feature: Feature<never>, size: number) {
-  return createApplication({ container: new CaffeineIoC({ decorators: false }) })
+  const conf = newConfiguration(schema, kConfig)
+    .source(new InlineConfigProvider({ widget: { size } }))
+    .build()
+  return createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     .addFeature(feature)
-    .config(schema, kConfig, c => c.source(new InlineConfigProvider({ widget: { size } })))
     .build()
 }
 
@@ -87,7 +89,12 @@ describe('feature lifecycle', () => {
   it('fails start-up when the configuration cannot be validated, before anything binds', async () => {
     let configured = false
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+    // The tree carries a string where the schema declares a number.
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ widget: { size: 'not-a-number' } }))
+      .build()
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
       .addFeature({
         get [kFeatureName](): string {
           return 'strict'
@@ -100,8 +107,6 @@ describe('feature lifecycle', () => {
           return Promise.resolve()
         },
       })
-      // The tree carries a string where the schema declares a number.
-      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ widget: { size: 'not-a-number' } })))
       .build()
 
     await expect(app.ready()).rejects.toThrow()

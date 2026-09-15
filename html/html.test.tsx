@@ -12,7 +12,7 @@ import {
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
-import { $t, type InferSchema } from '@caffeinejs/std'
+import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
 import { InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
@@ -203,8 +203,10 @@ describe('HTML', () => {
   // What reading the node buys: the plugin is handed a live slice of the tree, so a deployment turns the
   // doctype off without a rebuild.
   it('reads the doctype default from the configuration the callback handed it', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigProvider({ html: { autoDoctype: false } }))
+      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .with(c => html(c.html))
       .build()
 

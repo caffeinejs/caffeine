@@ -12,6 +12,7 @@ import {
 import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
+import { newConfiguration } from '@caffeinejs/std'
 import { EnvConfigProvider } from '@caffeinejs/std/config'
 import { view } from '@caffeinejs/view'
 import FastifyCookie from '@fastify/cookie'
@@ -43,11 +44,14 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   // Required by the GitHub OAuth flow: the callback handler reads the sealed state/session cookies.
   server.register(FastifyCookie)
 
+  const conf = newConfiguration(appConfigSchema, kAppConfig)
+    .source(new EnvConfigProvider({ prefix: 'PETSTORE_' }))
+    .build()
+
   const builder = createWebApplication(fastifyAdapterFactory(server), {
     container,
+    config: conf,
   })
-    .config(appConfigSchema, kAppConfig, c => c.source(new EnvConfigProvider({ prefix: 'PETSTORE_' })))
-
     .with(view(v => v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
     .with(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and

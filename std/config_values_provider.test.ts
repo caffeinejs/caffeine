@@ -8,7 +8,7 @@ import {
   InlineConfigProvider,
   type ConfigHandle,
 } from './config/index.js'
-import { createApplication } from './index.js'
+import { createApplication, newConfiguration } from './index.js'
 import { $t } from './schema/t.js'
 
 const schema = $t.Object({
@@ -24,11 +24,11 @@ const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
 
 function appWith(...sources: Array<{ provider: InlineConfigProvider | MutableConfigProvider; priority?: number }>) {
   const container = new CaffeineIoC({ decorators: false })
-  const builder = createApplication({ container }).config(schema, kConfig, c => {
-    for (const { provider, priority } of sources) {
-      c.source(provider, priority ?? ConfigPriority.USER)
-    }
-  })
+  const configBuilder = newConfiguration(schema, kConfig)
+  for (const { provider, priority } of sources) {
+    configBuilder.source(provider, priority ?? ConfigPriority.USER)
+  }
+  const builder = createApplication({ container, config: configBuilder.build() })
 
   return { builder, container }
 }

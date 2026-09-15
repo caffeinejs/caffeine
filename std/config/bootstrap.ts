@@ -90,8 +90,8 @@ export async function bootstrapConfig<T>(options: BootstrapOptions<T>): Promise<
   // feature's `.withConfig(...)` selector — and nowhere at all otherwise.
   const validated = freezeDeep(validateConfig(options.schema, materialized))
   const config = createLiveAccessors(() => validated)
-  // The root schema is walked here rather than by the caller: an application that declared its own secrets in
-  // `.config(schema, ...)` gets them redacted whether or not any feature registered a slice.
+  // The root schema is walked here rather than by the caller: an application that declared its own secrets via
+  // `newConfiguration(schema, ...)` gets them redacted whether or not any feature registered a slice.
   const secrets = new Set([...(options.secrets ?? []), ...secretPaths(options.schema)])
   const diagnostics = createConfigDiagnostics(validated, snapshot, failures, secrets)
 

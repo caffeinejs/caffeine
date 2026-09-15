@@ -1,10 +1,9 @@
 import { token } from '@caffeinejs/di'
-import { ApplicationAvailability, type InferSchema, $t } from '@caffeinejs/std'
+import { ApplicationAvailability, newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   ConfigPriority,
   EnvConfigProvider,
-  Configuration,
   InlineConfigProvider,
   type ConfigHandle,
   type ConfigProvider,
@@ -69,11 +68,10 @@ describe('HealthBuilder', () => {
 
   // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.
   it('leaves the probes on their defaults when nothing pointed them at the block', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'true' } }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'true' } }), ConfigPriority.ENV)
       .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).build()
 
     await app.ready()
 
@@ -95,8 +93,10 @@ describe('HealthBuilder', () => {
   })
 
   it('drives the configuration from the application config slice', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c => c.source(source({ indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true })))
+    const conf = newConfiguration(schema, kConfig)
+      .source(source({ indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }))
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .health((h, c) => h.withConfig(c.health))
       .build()
 
@@ -113,10 +113,10 @@ describe('HealthBuilder', () => {
   // Per key: `cacheTTL` was named in code and stands, while everything the code left alone comes from the
   // block the callback wired.
   it('keeps a code-set duration and takes the rest from the configured block', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c =>
-        c.source(source({ indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(schema, kConfig)
+      .source(source({ indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .health((h, c) => h.cacheTTL('10ms').probeDeadline('7s').withConfig(c.health))
       .build()
 
@@ -132,10 +132,10 @@ describe('HealthBuilder', () => {
   })
 
   it('reads a duration from the environment when the code set none', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(new EnvConfigProvider({ env: { HEALTH__INDICATOR_TIMEOUT: '30ms' } }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new EnvConfigProvider({ env: { HEALTH__INDICATOR_TIMEOUT: '30ms' } }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .health((h, c) => h.withConfig(c.health))
       .build()
 
@@ -145,10 +145,10 @@ describe('HealthBuilder', () => {
   })
 
   it('lets the environment switch the probes off even though .health() opted in', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(rootSchema, kRootConfig, c =>
-        c.source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV),
-      )
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV)
+      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .health((h, c) => h.withConfig(c.health))
       .build()
 
@@ -161,8 +161,8 @@ describe('HealthBuilder', () => {
     let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: false }
     const mutable: ConfigProvider = { id: 'mutable', reloadable: true, load: ctx => source(data).load(ctx) }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .config(schema, kConfig, c => c.source(mutable, ConfigPriority.ENV))
+    const conf = newConfiguration(schema, kConfig).source(mutable, ConfigPriority.ENV).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       .health((h, c) => h.withConfig(c.health).probeDeadline('1s'))
       .build()
 

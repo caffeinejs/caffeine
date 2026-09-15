@@ -43,7 +43,6 @@ export function HTML(node: HTMLNode, options?: HTMLOptions): HTMLResult {
   return new HTMLResult(node, options)
 }
 
-
 function isThenable(value: HTMLNode): value is Promise<string> {
   return typeof value !== 'string'
 }
