@@ -2,11 +2,9 @@ import { token } from '@caffeinejs/di'
 import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
-  ConfigPriority,
   EnvConfigProvider,
   InlineConfigProvider,
   type ConfigHandle,
-  type ConfigLocation,
   type ConfigProvider,
 } from '@caffeinejs/std/config'
 import fastify from 'fastify'
@@ -42,7 +40,7 @@ describe('HealthBuilder.resolve', () => {
   })
 
   it('drives the configuration from a configured block', () => {
-    const config: ConfigLocation<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
+    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
 
     const options = new HealthBuilder().withConfig(config).resolve()
 
@@ -57,7 +55,7 @@ describe('HealthBuilder.resolve', () => {
   // Per key: `cacheTTL` was named in code and stands, while everything the code left alone comes from the
   // block the callback wired.
   it('keeps a code-set duration and takes the rest from the configured block', () => {
-    const config: ConfigLocation<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
+    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
 
     const options = new HealthBuilder().cacheTTL('10ms').probeDeadline('7s').withConfig(config).resolve()
 
@@ -120,7 +118,7 @@ describe('health()', () => {
 
   it('lets the environment switch the probes off even though installing opted in', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV)
+      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
@@ -135,7 +133,7 @@ describe('health()', () => {
   // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.
   it('ignores the configured block unless withConfig pointed at it', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }), ConfigPriority.ENV)
+      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(health())
 
@@ -148,7 +146,7 @@ describe('health()', () => {
     let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: false }
     const mutable: ConfigProvider = { id: 'mutable', reloadable: true, load: ctx => source(data).load(ctx) }
 
-    const conf = newConfiguration(schema, kConfig).source(mutable, ConfigPriority.ENV).build()
+    const conf = newConfiguration(schema, kConfig).source(mutable).build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
       health((h, c) => h.withConfig(c.health)),
     )

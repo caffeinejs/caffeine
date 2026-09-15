@@ -5,7 +5,6 @@ import { bootstrapConfig } from '../bootstrap.js'
 import type { ConfigProvider } from '../config.js'
 import { ConfigDefinition } from '../definition.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
-import { ConfigPriority } from '../sources.js'
 
 /**
  * The resolved configuration object is the application's schema and nothing else.
@@ -23,7 +22,7 @@ describe('the resolved root configuration', () => {
   const widgetSchema = $t.Object({ size: $t.Number({ default: 1 }) })
 
   async function resolve(definition: ConfigDefinition, extra: readonly ConfigProvider[] = []) {
-    definition.sources.addAll(extra, ConfigPriority.ENV)
+    definition.sources.addAll(extra)
 
     return bootstrapConfig({
       sources: definition.sources,

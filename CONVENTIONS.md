@@ -236,10 +236,10 @@ application's configure callbacks against the builder, with the resolved configu
 export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'thing'
 
-  #config: ConfigLocation<ThingConfig> | undefined
+  #config: Partial<ThingConfig> | undefined
   #size: number | undefined
 
-  withConfig(config: ConfigLocation<ThingConfig>): this {
+  withConfig(config: Partial<ThingConfig>): this {
     this.#config = config
     return this
   }

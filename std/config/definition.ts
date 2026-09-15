@@ -6,7 +6,7 @@ import { MutableConfigProvider } from './providers/mutable_provider.js'
 import { declaredDefaults, passthroughConfigSchema } from './schema.js'
 import { secretPaths } from './secrets.js'
 import { ConfigSlice, type ConfigSliceSpec } from './slice.js'
-import { ConfigPriority, ConfigSources } from './sources.js'
+import { ConfigSources } from './sources.js'
 
 /** DI key for the {@link ConfigDefinition} the application builder owns. The framework caffeine block registers a slice; features do not. */
 export const kConfigDefinition = token<ConfigDefinition>(Symbol.for('@caffeinejs/std:config.definition'))
@@ -65,9 +65,9 @@ export class ConfigDefinition {
 
   constructor(token?: NamedToken<any>) {
     this.token = token
-    this.sources.add(this.frameworkDefaults, ConfigPriority.FRAMEWORK)
-    this.sources.add(this.schemaDefaults, ConfigPriority.SCHEMA)
-    this.sources.add(this.codeValues, ConfigPriority.CODE)
+    this.sources.add(this.frameworkDefaults)
+    this.sources.add(this.schemaDefaults)
+    this.sources.add(this.codeValues)
   }
 
   /** The schema the root tree is validated against. Defaults to {@link passthroughConfigSchema}. */

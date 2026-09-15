@@ -7,7 +7,6 @@ import { Configuration } from '../configuration.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
-import { ConfigPriority } from '../sources.js'
 
 const APP_CONFIG = token<ConfigHandle<App>>(Symbol('app.config'))
 
@@ -27,7 +26,7 @@ async function setup(): Promise<{
   const definition = new ConfigDefinition(APP_CONFIG)
   const mutable = new MutableConfigProvider('test')
   mutable.set('server.port', 3000)
-  definition.sources.add(mutable, ConfigPriority.ENV)
+  definition.sources.add(mutable)
   definition.schema = schema
 
   const container = new CaffeineIoC({ decorators: false })

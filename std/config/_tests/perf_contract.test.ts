@@ -6,7 +6,6 @@ import { createLiveAccessors } from '../accessor.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
-import { ConfigPriority } from '../sources.js'
 
 const APP_CONFIG = token<Record<string, unknown>>(Symbol('app.config'))
 
@@ -39,7 +38,7 @@ describe('config read cost', () => {
     const definition = new ConfigDefinition(APP_CONFIG)
     const mutable = new MutableConfigProvider('test')
     mutable.set('port', 3000)
-    definition.sources.add(mutable, ConfigPriority.ENV)
+    definition.sources.add(mutable)
 
     const slice = definition.slice<Slice>([], schema)
     const container = await containerFor(definition)
@@ -69,7 +68,7 @@ describe('config read cost', () => {
     const definition = new ConfigDefinition(APP_CONFIG)
     const mutable = new MutableConfigProvider('test')
     mutable.set('port', 3000)
-    definition.sources.add(mutable, ConfigPriority.ENV)
+    definition.sources.add(mutable)
 
     const slice = definition.slice<Slice>([], schema)
     const container = await containerFor(definition)
@@ -157,7 +156,7 @@ describe('config read cost', () => {
     const definition = new ConfigDefinition(APP_CONFIG)
     const mutable = new MutableConfigProvider('test')
     mutable.set('app.server.port', 3000)
-    definition.sources.add(mutable, ConfigPriority.ENV)
+    definition.sources.add(mutable)
     const slice = definition.slice<Slice>(['app', 'server'], schema)
 
     const container = await containerFor(definition)

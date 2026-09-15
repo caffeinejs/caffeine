@@ -1,6 +1,6 @@
 import { token, type Container } from '@caffeinejs/di'
 import { $t, newConfiguration, type InferSchema, createApplication } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import { EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -65,7 +65,7 @@ describe('kafka configuration', () => {
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }), ConfigPriority.ENV)
+      .source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }))
       .build()
     const app = createApplication({ config: conf }).with(
       kfk((k, c) => k.withConfig(c.kafka.default).brokers('localhost:9092').groupId('svc')),
@@ -87,7 +87,7 @@ describe('kafka configuration', () => {
     // `GROUP_ID`, not `GROUPID`: the env provider folds underscores *within* a segment into camelCase, so an
     // all-uppercase run has no word boundary to find and `GROUPID` would resolve to `groupid`.
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }), ConfigPriority.ENV)
+      .source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }))
       .build()
     const app = createApplication({ config: conf })
       .with(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b1:9092').groupId('svc')))
@@ -142,7 +142,7 @@ describe('kafka configuration', () => {
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }), ConfigPriority.ENV)
+      .source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }))
       .build()
     const app = createApplication({ config: conf }).with(
       kfk((k, c) => k.withConfig(c.kafka.default).serializers(serializers).onError(onError)),

@@ -3,10 +3,8 @@ import type { NamedToken } from '@caffeinejs/di'
 import {
   ArgsConfigProvider,
   ConfigDefinition,
-  ConfigPriority,
   type ArgsConfigProviderOptions,
   type ConfigHandle,
-  type ConfigPriorityValue,
   type ConfigProvider,
   type ConfigSchema,
   type InferConfig,
@@ -36,9 +34,9 @@ export type AppConfiguration<T = unknown> = ConfigDefinition & ApplicationConfig
 /**
  * Fluent definition of an application's configuration sources, started with {@link newConfiguration}.
  *
- * Sources land in the `USER` band by default, above the framework and code-set defaults and below nothing
- * else; registration order breaks ties within a band. Pass an explicit {@link ConfigPriority} to place a
- * source elsewhere in the chain — that is also the supported way to make a source beat the environment.
+ * A source always lands above the framework and schema defaults. Beyond that, precedence is registration
+ * order alone — the most recently added source wins a conflicting key — so a source meant to override
+ * another is added after it.
  */
 export class ConfigurationBuilder<T = unknown> {
   readonly #definition: ConfigDefinition
@@ -48,26 +46,27 @@ export class ConfigurationBuilder<T = unknown> {
     this.#definition.schema = schema
   }
 
-  /** Adds a single config source. Defaults to the `USER` band; ties broken by registration order. */
-  source(provider: ConfigProvider, priority: ConfigPriorityValue = ConfigPriority.USER): this {
-    this.#definition.sources.add(provider, priority)
+  /** Adds a single config source. Overrides an earlier one on a conflicting key; call the override last. */
+  source(provider: ConfigProvider): this {
+    this.#definition.sources.add(provider)
     return this
   }
 
-  /** Adds several config sources at once, in the given order (first wins within the band). */
+  /** Adds several config sources at once, in the given order — later ones in the list win the earlier ones. */
   sources(...providers: ConfigProvider[]): this {
     this.#definition.sources.addAll(providers)
     return this
   }
 
   /**
-   * Reads configuration from the command line, above every other source.
+   * Reads configuration from the command line.
    *
    * The arguments are the host's own unless `options.argv` names others. Calling this is the opt-in: an
-   * application that never does reads no command line at all.
+   * application that never does reads no command line at all. Like any other source, it wins a conflicting
+   * key only if called after the sources it should override.
    */
   args(options: ArgsConfigProviderOptions = {}): this {
-    this.#definition.sources.add(new ArgsConfigProvider(options), ConfigPriority.ARGS)
+    this.#definition.sources.add(new ArgsConfigProvider(options))
     return this
   }
 

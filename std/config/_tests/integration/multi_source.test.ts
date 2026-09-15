@@ -13,7 +13,7 @@ import { EnvConfigProvider } from '../../providers/env_provider.js'
 import { FileConfigProvider } from '../../providers/file_provider.js'
 import { InlineConfigProvider } from '../../providers/inline_provider.js'
 import { JSONConfigProvider } from '../../providers/json_provider.js'
-import { ConfigPriority, ConfigSources } from '../../sources.js'
+import { ConfigSources } from '../../sources.js'
 
 // `server` is present in every scenario below. `db` and `app` may be absent from all sources, so they carry an
 // explicit object default — this is what the "missing everywhere" case (schema default, no source origin) tests.
@@ -55,8 +55,9 @@ describe('config multi-source precedence & provenance', () => {
     const p = await providers()
     const ctx: ResolutionContext = { profiles: ['default'] }
 
+    // Listed least to most authoritative — the last one registered wins a conflicting key.
     const { config, diagnostics } = await bootstrapConfig({
-      sources: ConfigSources.of(p.env, p.file, p.inline),
+      sources: ConfigSources.of(p.inline, p.file, p.env),
       schema,
       profiles: ctx.profiles,
     })
@@ -78,12 +79,12 @@ describe('config multi-source precedence & provenance', () => {
     expect(diagnostics.originOf('app.name')).toBeUndefined()
   })
 
-  it('reordering providers changes the winning source (first wins)', async () => {
+  it('reordering providers changes the winning source (last wins)', async () => {
     const p = await providers()
     const ctx: ResolutionContext = { profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
-      sources: ConfigSources.of(p.inline, p.file, p.env),
+      sources: ConfigSources.of(p.env, p.file, p.inline),
       schema,
       profiles: ctx.profiles,
     })
@@ -146,22 +147,22 @@ describe('config array flatten + typed handle', () => {
     expect(tags[0]).toBe('a')
   })
 
-  it('replaces a whole array from the higher-priority source rather than patching an element', async () => {
+  it('replaces a whole array from the most recently registered source rather than patching an element', async () => {
     const filePath = await writeTmp('array-override.json', JSON.stringify({ tags: ['a', 'b'], items: [] }))
     const ctx: ResolutionContext = { profiles: ['default'] }
 
     const { config, diagnostics } = await bootstrapConfig({
       sources: ConfigSources.of(
-        new EnvConfigProvider({ prefix: 'APP_', env: { APP_TAGS__0: 'override' } }),
         new JSONConfigProvider(filePath),
+        new EnvConfigProvider({ prefix: 'APP_', env: { APP_TAGS__0: 'override' } }),
       ),
       schema: arraySchema,
       profiles: ctx.profiles,
     })
 
-    // An array is replaced, never complemented: the first source that mentions the path owns the whole list.
-    // Merging element by element instead would make it impossible to *shorten* a list from a higher-priority
-    // source — the old tail would always survive whatever was meant to override it.
+    // An array is replaced, never complemented: the last-registered source that mentions the path owns the
+    // whole list. Merging element by element instead would make it impossible to *shorten* a list from a
+    // later source — the old tail would always survive whatever was meant to override it.
     expect(Array.isArray(config.tags)).toBe(true)
     expect([...config.tags]).toEqual(['override'])
     expect(diagnostics.originOf('tags.0')).toMatch(/^env:/)
@@ -182,11 +183,11 @@ describe('a list set as text', () => {
 
   const ctx: ResolutionContext = { profiles: ['default'] }
 
-  it('reaches the validated tree as a list, over a lower band', async () => {
+  it('reaches the validated tree as a list, over an earlier source', async () => {
     const { validated, config } = await bootstrapConfig({
       sources: new ConfigSources()
-        .add(new InlineConfigProvider({ tags: ['from', 'code'] }), ConfigPriority.CODE)
-        .add(envSource({ TAGS: 'a,b,c' }), ConfigPriority.ENV),
+        .add(new InlineConfigProvider({ tags: ['from', 'code'] }))
+        .add(envSource({ TAGS: 'a,b,c' })),
       schema: listSchema,
       profiles: ctx.profiles,
     })
@@ -199,8 +200,8 @@ describe('a list set as text', () => {
   it('shortens a list, which indexed keys cannot do', async () => {
     const { validated } = await bootstrapConfig({
       sources: new ConfigSources()
-        .add(new InlineConfigProvider({ tags: ['a', 'b', 'c'] }), ConfigPriority.CODE)
-        .add(envSource({ TAGS: 'only' }), ConfigPriority.ENV),
+        .add(new InlineConfigProvider({ tags: ['a', 'b', 'c'] }))
+        .add(envSource({ TAGS: 'only' })),
       schema: listSchema,
       profiles: ctx.profiles,
     })
@@ -210,9 +211,7 @@ describe('a list set as text', () => {
 
   it('clears a list, which nothing could express before', async () => {
     const { validated } = await bootstrapConfig({
-      sources: new ConfigSources()
-        .add(new InlineConfigProvider({ tags: ['a', 'b'] }), ConfigPriority.CODE)
-        .add(envSource({ TAGS: '' }), ConfigPriority.ENV),
+      sources: new ConfigSources().add(new InlineConfigProvider({ tags: ['a', 'b'] })).add(envSource({ TAGS: '' })),
       schema: listSchema,
       profiles: ctx.profiles,
     })

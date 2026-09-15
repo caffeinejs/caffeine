@@ -99,11 +99,11 @@ export interface KafkaConfig {
  * cannot survive a config file. Setting it in code still works and wins over whatever the tree says.
  */
 export interface KafkaConfigSlice {
-  brokers?: string[]
+  brokers?: readonly string[]
   clientId?: string
   groupId?: string
   ackMode?: KafkaAckMode
-  retry?: RetryPolicy
+  retry?: Partial<RetryPolicy>
   topicProvisioning?: TopicProvisioning
   deadLetter?: boolean
 }

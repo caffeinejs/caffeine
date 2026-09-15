@@ -1,14 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import {
-  CONFIG_REFRESH_LABEL,
-  ConfigPriority,
-  InlineConfigProvider,
-  MutableConfigProvider,
-  type ConfigHandle,
-  type ConfigLocation,
-} from './config/index.js'
+import { CONFIG_REFRESH_LABEL, InlineConfigProvider, MutableConfigProvider, type ConfigHandle } from './config/index.js'
 import { kFeatureName } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 import { createApplication, newConfiguration } from './index.js'
@@ -32,12 +25,12 @@ class GadgetBuilder<C = unknown> extends FeatureBuilder<C> {
   /** What the feature ran on, captured when it bootstrapped. */
   resolved: GadgetConfig | undefined
   /** The node the callback handed over, kept so a refresh can be observed through it. */
-  node: ConfigLocation<GadgetConfig> | undefined
+  node: Partial<GadgetConfig> | undefined
 
   #size: number | undefined
   #label: string | undefined
 
-  withConfig(config: ConfigLocation<GadgetConfig>): this {
+  withConfig(config: Partial<GadgetConfig>): this {
     this.node = config
     return this
   }
@@ -190,7 +183,7 @@ describe('FeatureBuilder', () => {
     mutable.set('app', { gadget: { size: 5 } })
 
     const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
-    const conf = newConfiguration(appSchema, kAppConfig).source(mutable, ConfigPriority.ENV).build()
+    const conf = newConfiguration(appSchema, kAppConfig).source(mutable).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 
     await app.ready()

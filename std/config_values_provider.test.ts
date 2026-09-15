@@ -1,13 +1,7 @@
 import { $i, CaffeineIoC, Injectable, Scopes, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import {
-  CONFIG_REFRESH_LABEL,
-  ConfigPriority,
-  MutableConfigProvider,
-  InlineConfigProvider,
-  type ConfigHandle,
-} from './config/index.js'
+import { CONFIG_REFRESH_LABEL, MutableConfigProvider, InlineConfigProvider, type ConfigHandle } from './config/index.js'
 import { createApplication, newConfiguration } from './index.js'
 import { $t } from './schema/t.js'
 
@@ -22,11 +16,11 @@ type AppConfig = { database: { host: string; port: number } }
 
 const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
 
-function appWith(...sources: Array<{ provider: InlineConfigProvider | MutableConfigProvider; priority?: number }>) {
+function appWith(...sources: Array<{ provider: InlineConfigProvider | MutableConfigProvider }>) {
   const container = new CaffeineIoC({ decorators: false })
   const configBuilder = newConfiguration(schema, kConfig)
-  for (const { provider, priority } of sources) {
-    configBuilder.source(provider, priority ?? ConfigPriority.USER)
+  for (const { provider } of sources) {
+    configBuilder.source(provider)
   }
   const builder = createApplication({ container, config: configBuilder.build() })
 
@@ -84,7 +78,7 @@ describe('configuration as the DI values provider', () => {
 
     const mutable = new MutableConfigProvider('test').set(['database'], { host: 'first', port: 5432 })
 
-    const { builder, container } = appWith({ provider: mutable, priority: ConfigPriority.ENV })
+    const { builder, container } = appWith({ provider: mutable })
     container.bind(Holder, t => t.toSelf().lifetime(Scopes.TRANSIENT))
 
     await builder.ready()

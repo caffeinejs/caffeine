@@ -6,7 +6,6 @@ import {
   type FeatureConfigureKit,
   type FeatureConfigurer,
 } from '@caffeinejs/std'
-import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
@@ -60,7 +59,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
     return this.#name === DEFAULT_BINDER ? 'messaging' : `messaging:${this.#name}`
   }
 
-  #config: ConfigLocation<MessagingConfigSlice> | undefined
+  #config: Partial<MessagingConfigSlice> | undefined
   readonly #name: string
   readonly #binders = new Map<string, Binder | BinderFactory>()
   readonly #inbound = new Map<string, InBindingOptions>()
@@ -118,7 +117,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
    * bindings the builder declared are resolved: a binding named in the tree that no `.in(...)` created has
    * nothing to attach to, and declaring one is a code act.
    */
-  withConfig(config: ConfigLocation<MessagingConfigSlice>): this {
+  withConfig(config: Partial<MessagingConfigSlice>): this {
     this.#config = config
     return this
   }
@@ -164,7 +163,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
 
 function bindingsOf(
   declared: ReadonlyMap<string, InBindingOptions | OutBindingOptions>,
-  configured: ConfigLocation<Record<string, BindingConfig>> | undefined,
+  configured: Partial<Record<string, BindingConfig>> | undefined,
 ): Map<string, ConsumerBinding | ProducerBinding> {
   const out = new Map<string, ConsumerBinding | ProducerBinding>()
 

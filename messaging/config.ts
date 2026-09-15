@@ -20,7 +20,7 @@ export interface BindingConfig {
   via?: string
   group?: string
   contentType?: string
-  retry?: RetryPolicy
+  retry?: Partial<RetryPolicy>
   options?: Record<string, unknown>
 }
 

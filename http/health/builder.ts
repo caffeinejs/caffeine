@@ -1,5 +1,4 @@
 import { isKubernetes, type Duration } from '@caffeinejs/std'
-import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPaths } from './options.js'
 
@@ -18,7 +17,7 @@ import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPa
  */
 export class HealthBuilder {
   #k8s = false
-  #config: ConfigLocation<HealthConfig> | undefined
+  #config: Partial<HealthConfig> | undefined
   readonly #values: HealthConfig = {}
 
   /**
@@ -27,7 +26,7 @@ export class HealthBuilder {
    * The node is read once, when the plugin registers. A fluent method called alongside this one wins over
    * what the node carries.
    */
-  withConfig(config: ConfigLocation<HealthConfig>): this {
+  withConfig(config: Partial<HealthConfig>): this {
     this.#config = config
     return this
   }

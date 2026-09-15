@@ -19,24 +19,23 @@ function makeSource(name: string, data: Record<string, unknown>): PropertySource
 }
 
 describe('ConfigEngine', () => {
-  it('first provider in array wins over later providers', async () => {
+  it('the first provider in resolution order wins over a later one', async () => {
+    // `ConfigSources` resolves most-recently-registered first, so `p1` is added last.
     const engine = new ConfigEngine({
-      sources: ConfigSources.of(
-        makeProvider('p1', [makeSource('first', { 'db.host': 'first-host' })]),
-        makeProvider('p2', [makeSource('second', { 'db.host': 'second-host' })]),
-      ),
+      sources: new ConfigSources()
+        .add(makeProvider('p2', [makeSource('second', { 'db.host': 'second-host' })]))
+        .add(makeProvider('p1', [makeSource('first', { 'db.host': 'first-host' })])),
     })
 
     const snapshot = await engine.resolve(ctx)
     expect(snapshot.values.get('db.host')?.value).toBe('first-host')
   })
 
-  it('first-write-wins: higher-priority key is not overwritten', async () => {
+  it('first-write-wins: a key is not overwritten by an earlier-registered source', async () => {
     const engine = new ConfigEngine({
-      sources: ConfigSources.of(
-        makeProvider('env', [makeSource('env', { 'app.port': 9000 })]),
-        makeProvider('file', [makeSource('file', { 'app.port': 3000 })]),
-      ),
+      sources: new ConfigSources()
+        .add(makeProvider('file', [makeSource('file', { 'app.port': 3000 })]))
+        .add(makeProvider('env', [makeSource('env', { 'app.port': 9000 })])),
     })
 
     const snapshot = await engine.resolve(ctx)

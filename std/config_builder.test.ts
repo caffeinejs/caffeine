@@ -6,7 +6,6 @@ import {
   CONFIG_REFRESH_LABEL,
   Configuration,
   ConfigDefinition,
-  ConfigPriority,
   InlineConfigProvider,
   type ConfigHandle,
   type ConfigProvider,
@@ -25,8 +24,8 @@ describe('newConfiguration', () => {
   it('binds the app config under the key the application declared, higher-precedence source winning', async () => {
     const container = new CaffeineIoC({ decorators: false })
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ server: { host: 'primary', port: 3000 } }))
       .source(new InlineConfigProvider({ server: { host: 'fallback', port: 9999 } }))
+      .source(new InlineConfigProvider({ server: { host: 'primary', port: 3000 } }))
       .build()
     const app = createApplication({ container, config: conf })
 
@@ -123,7 +122,7 @@ describe('newConfiguration', () => {
     // registered directly, the way a feature's own `.slice()` call works.
     const definition = new ConfigDefinition()
     const slice = definition.slice(['widget'], z.object({ size: z.coerce.number() }))
-    definition.sources.add(new InlineConfigProvider({ widget: { size: 7 } }), ConfigPriority.USER)
+    definition.sources.add(new InlineConfigProvider({ widget: { size: 7 } }))
 
     const app = createApplication({ container, config: definition })
     await app.ready()
@@ -143,7 +142,7 @@ describe('newConfiguration', () => {
 
     // `newConfiguration(...).build()` hands back the live ConfigDefinition, so a source added to it directly —
     // rather than through `.source()` on the builder — still lands, as long as it happens before `ready()`.
-    conf.sources.add(new InlineConfigProvider({ server: { host: 'second', port: 2 } }), ConfigPriority.ENV)
+    conf.sources.add(new InlineConfigProvider({ server: { host: 'second', port: 2 } }))
 
     const app = createApplication({ container, config: conf })
     await app.ready()

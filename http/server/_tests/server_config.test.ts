@@ -4,7 +4,6 @@ import { token } from '@caffeinejs/di'
 import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
-  ConfigPriority,
   EnvConfigProvider,
   InlineConfigProvider,
   type ConfigHandle,
@@ -69,7 +68,7 @@ describe('server builder + config', () => {
   // to, and only `host` — which the code did not set — comes from the environment.
   it('keeps a code-set port while still reading the rest from the environment', async () => {
     const conf = newConfiguration(schema, kConfig)
-      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
       s.withConfig(c.server).port(3000),
@@ -82,7 +81,7 @@ describe('server builder + config', () => {
 
   it('reads the port from the environment when the code set none', async () => {
     const conf = newConfiguration(schema, kConfig)
-      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
       s.withConfig(c.server),
@@ -95,7 +94,7 @@ describe('server builder + config', () => {
 
   it('falls back to the code-set port when the environment says nothing', async () => {
     const conf = newConfiguration(schema, kConfig)
-      .source(env({ DB__URL: 'x' }), ConfigPriority.ENV)
+      .source(env({ DB__URL: 'x' }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
       s.withConfig(c.server).port(3000).host('127.0.0.1'),
@@ -118,7 +117,7 @@ describe('server builder + config', () => {
   // feature reads what the application pointed it at, and nothing pointed here.
   it('leaves the server on its defaults when nothing pointed it at the block', async () => {
     const conf = newConfiguration(schema, kConfig)
-      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }), ConfigPriority.ENV)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8081', DB__URL: 'x' }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
 
@@ -131,7 +130,7 @@ describe('server builder + config', () => {
   // hands the feature. What no longer happens is configuration outranking the code.
   it('lets command-line arguments beat the environment in the block the feature reads', async () => {
     const conf = newConfiguration(schema, kConfig)
-      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }), ConfigPriority.ENV)
+      .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }))
       // Given exactly as `process.argv` arrives, interpreter and script path included.
       .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] })
       .build()
@@ -151,7 +150,7 @@ describe('server builder + config', () => {
     const kNested = token<ConfigHandle<InferSchema<typeof nested>>>(Symbol('app.config'))
 
     const conf = newConfiguration(nested, kNested)
-      .source(env({ APP__SERVER__HOST: '127.0.0.1' }), ConfigPriority.ENV)
+      .source(env({ APP__SERVER__HOST: '127.0.0.1' }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
       s.withConfig(c.app.server).port(4567),
@@ -170,7 +169,7 @@ describe('server builder + config', () => {
     const kNested = token<ConfigHandle<InferSchema<typeof nested>>>(Symbol('app.config'))
 
     const conf = newConfiguration(nested, kNested)
-      .source(env({ APP__SERVER__PORT: '8082' }), ConfigPriority.ENV)
+      .source(env({ APP__SERVER__PORT: '8082' }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
       s.withConfig(c.app.server),

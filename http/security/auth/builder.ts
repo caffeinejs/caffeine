@@ -1,6 +1,5 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
 import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
-import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { Context } from '../../context.js'
 import { registerPlugin } from '../../plugin.js'
@@ -87,7 +86,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
   // the implicit default when only one exists.
   readonly #registrations: SchemeRegistration[] = []
 
-  #config: ConfigLocation<AuthConfig> | undefined
+  #config: Partial<AuthConfig> | undefined
   #mapper: PrincipalMapper | InjectionToken<PrincipalMapper> | undefined
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
@@ -111,7 +110,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
    * .authentication((a, c) => a.withConfig(c.app.auth).addJWTBearer('jwt', j => j.issuer('local')))
    * ```
    */
-  withConfig(config: ConfigLocation<AuthConfig>): this {
+  withConfig(config: Partial<AuthConfig>): this {
     this.#config = config
     return this
   }

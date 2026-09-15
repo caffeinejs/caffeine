@@ -71,7 +71,7 @@ export class FileConfigProvider implements ConfigProvider {
     const profiles = ctx.profiles.length > 0 ? ctx.profiles : activeProfiles(readByParts(base, PROFILES_KEY))
     const sources: PropertySource[] = []
 
-    // Higher-priority sibling first: the engine merge is first-wins, so a later active profile must be read
+    // Higher-precedence sibling first: the engine merge is first-wins, so a later active profile must be read
     // before an earlier one, and every profile file before the base.
     for (let i = profiles.length - 1; i >= 0; i--) {
       const profile = profiles[i]

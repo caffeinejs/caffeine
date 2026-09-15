@@ -1,12 +1,6 @@
 import { token } from '@caffeinejs/di'
 import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import {
-  ConfigPriority,
-  EnvConfigProvider,
-  InlineConfigProvider,
-  Configuration,
-  type ConfigHandle,
-} from '@caffeinejs/std/config'
+import { EnvConfigProvider, InlineConfigProvider, Configuration, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
@@ -90,7 +84,7 @@ describe('authentication configuration', () => {
   // each path segment — `AUTH__SCHEMES__BEARER__SECRET` addresses `auth.schemes.bearer`, which is not where a
   it('takes a JWT secret from the environment, over the one set in code', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV)
+      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
@@ -131,7 +125,7 @@ describe('authentication configuration', () => {
 
   it('redacts a configured secret in the diagnostics while the handler still authenticates with it', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV)
+      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
@@ -209,7 +203,7 @@ describe('authentication configuration', () => {
 
   it('takes the default scheme from the tree', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }), ConfigPriority.ENV)
+      .source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,

@@ -7,7 +7,6 @@ import { Configuration } from '../configuration.js'
 import { ConfigDefinition } from '../definition.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../integration/module.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
-import { ConfigPriority } from '../sources.js'
 
 const APP_CONFIG = token<ConfigHandle<App>>(Symbol('app.config'))
 
@@ -48,7 +47,7 @@ async function setup(warn?: (message: string) => void): Promise<Harness> {
   const mutable = new MutableConfigProvider('test')
   mutable.set('server.port', 3000)
   mutable.set('server.host', 'localhost')
-  definition.sources.add(mutable, ConfigPriority.ENV)
+  definition.sources.add(mutable)
   definition.schema = schema
   definition.warn = warn
   const slice = definition.slice(['server'], serverSchema)
@@ -114,7 +113,7 @@ describe('ConfigSlice.onChange', () => {
     const mutable = new MutableConfigProvider('test')
     mutable.set('server.port', 3000)
     mutable.set('other.value', 'a')
-    definition.sources.add(mutable, ConfigPriority.ENV)
+    definition.sources.add(mutable)
     definition.schema = $t.Object({})
     const server = definition.slice(['server'], $t.Object({ port: $t.Number({ default: 0 }) }))
     const other = definition.slice(['other'], $t.Object({ value: $t.String({ default: '' }) }))

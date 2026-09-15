@@ -4,7 +4,6 @@ export type {
   ConfigDiagnostics,
   ConfigEntry,
   ConfigHandle,
-  ConfigLocation,
   ConfigPrimitive,
   ConfigProvider,
   ConfigSchema,
@@ -33,5 +32,4 @@ export { MutableConfigProvider } from './providers/mutable_provider.js'
 export type { SpringCloudConfigProviderOptions } from './providers/scc_provider.js'
 export { SpringCloudConfigProvider } from './providers/scc_provider.js'
 export { ConfigSlice } from './slice.js'
-export type { ConfigPriorityValue } from './sources.js'
-export { ConfigPriority, ConfigSources } from './sources.js'
+export { ConfigSources } from './sources.js'

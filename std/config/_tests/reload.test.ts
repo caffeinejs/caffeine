@@ -10,7 +10,6 @@ import { ArgsConfigProvider } from '../providers/args_provider.js'
 import { EnvConfigProvider } from '../providers/env_provider.js'
 import { InlineConfigProvider } from '../providers/inline_provider.js'
 import { MutableConfigProvider } from '../providers/mutable_provider.js'
-import { ConfigPriority } from '../sources.js'
 
 const APP_CONFIG = token<ConfigHandle<{ port: number }>>(Symbol('app.config'))
 const schema = $t.Object({ port: $t.Number({ default: 0 }) })
@@ -55,8 +54,8 @@ describe('refresh gating', () => {
     const inline = counting(new InlineConfigProvider({ port: 1 }))
 
     definition.sources.add(inline)
-    definition.sources.add(env, ConfigPriority.ENV)
-    definition.sources.add(args, ConfigPriority.ARGS)
+    definition.sources.add(env)
+    definition.sources.add(args)
     definition.schema = schema
 
     const container = await containerFor(definition)
@@ -78,7 +77,7 @@ describe('refresh gating', () => {
     const mutable = new MutableConfigProvider('test')
     mutable.set('port', 3000)
     const counted = counting(mutable)
-    definition.sources.add(counted, ConfigPriority.ENV)
+    definition.sources.add(counted)
     definition.schema = schema
 
     const container = await containerFor(definition)
@@ -94,7 +93,7 @@ describe('refresh gating', () => {
     const definition = new ConfigDefinition(APP_CONFIG)
     const mutable = new MutableConfigProvider('test')
     mutable.set('port', 3000)
-    definition.sources.add(mutable, ConfigPriority.ENV)
+    definition.sources.add(mutable)
     definition.schema = schema
 
     const container = await containerFor(definition)
@@ -116,7 +115,7 @@ describe('refresh gating', () => {
     })
 
     const definition = new ConfigDefinition(APP_CONFIG)
-    definition.sources.add(remote, ConfigPriority.ENV)
+    definition.sources.add(remote)
     definition.schema = schema
 
     const container = await containerFor(definition)
@@ -139,7 +138,7 @@ describe('refresh gating', () => {
     const configuration = container.get(Configuration) as Configuration<{ port: number }>
 
     // Neither the old source nor the new one can reload, but the registry itself changed.
-    definition.sources.add(new InlineConfigProvider({ port: 2 }), ConfigPriority.ENV)
+    definition.sources.add(new InlineConfigProvider({ port: 2 }))
     await refresh(container)
 
     expect(configuration.snapshot().port).toBe(2)

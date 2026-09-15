@@ -17,8 +17,8 @@ export interface ArgsConfigProviderOptions {
 }
 
 /**
- * Configuration from command-line arguments — the highest-priority source, above environment variables, so a
- * single run can be redirected without touching the environment it runs in.
+ * Configuration from command-line arguments — call `.args()` after the other sources so a single run can be
+ * redirected without touching the environment it runs in.
  *
  * Accepted forms:
  *

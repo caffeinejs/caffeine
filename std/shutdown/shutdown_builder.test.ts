@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CONFIG_REFRESH_LABEL,
-  ConfigPriority,
   EnvConfigProvider,
   InlineConfigProvider,
   MutableConfigProvider,
@@ -38,7 +37,7 @@ describe('ShutdownBuilder', () => {
   // Declaring `shutdown` in the schema is not on its own an instruction to configure the drain from it.
   it('leaves the drain on its defaults when nothing pointed it at the block', async () => {
     const conf = newConfiguration(appSchema, kAppConfig)
-      .source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV)
+      .source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }))
       .build()
     const app = headless(conf)
     await app.ready()
@@ -65,7 +64,6 @@ describe('ShutdownBuilder', () => {
         new EnvConfigProvider({
           env: { SHUTDOWN__DRAIN_DELAY: '40ms', SHUTDOWN__SIGNALS: 'SIGTERM,SIGINT' },
         }),
-        ConfigPriority.ENV,
       )
       .build()
     const app = headless(conf).shutdown((s, c) => s.withConfig(c.shutdown))
@@ -93,7 +91,7 @@ describe('ShutdownBuilder', () => {
     const mutable = new MutableConfigProvider('shutdown-test')
     mutable.set('shutdown', { shutdownTimeout: '9s' })
 
-    const conf = newConfiguration(appSchema, kAppConfig).source(mutable, ConfigPriority.ENV).build()
+    const conf = newConfiguration(appSchema, kAppConfig).source(mutable).build()
     const app = headless(conf).shutdown((s, c) => s.withConfig(c.shutdown))
     await app.ready()
 

@@ -40,42 +40,33 @@ flowchart TB
   root --> handle["ConfigHandle — live, deep-frozen\nread on request paths"]
 ```
 
-The merge is **first-wins**: the highest-priority source that names a path owns that path and
-everything beneath it. No lower source contributes part of something a higher source already spoke
-about — which is why an array is _replaced_, never element-merged.
+The merge is **first-wins** over a most-recently-registered-first list: the last source registered
+that names a path owns that path and everything beneath it. No earlier source contributes part of
+something a later source already spoke about — which is why an array is _replaced_, never
+element-merged.
 
 Keys the application's schema does not declare are dropped at root validation. A feature reads only
 what the configure callback handed it from that tree.
 
 ---
 
-## The priority chain
+## Resolution order
 
-```mermaid
-flowchart TB
-  arg["ARGS · 400 — .args()"]
-  env["ENV · 300"]
-  fil["FILE · 200"]
-  usr["USER · 100 — .source() default band"]
-  cod["CODE · 50 — leftover band; feature builders do not write here"]
-  sch["SCHEMA · 25 — defaults in the app's own $t schema"]
-  frm["FRAMEWORK · 0 — framework defaults"]
-  arg --> env --> fil --> usr --> cod --> sch --> frm
-```
-
-Top wins. Registration order breaks ties **within** a band.
-
-`ConfigPriority` is the exported constant. A source added with `.source(provider)` lands in `USER`.
-The `FILE` / `ENV` / `ARGS` bands are for an application that layers several sources and needs a file
-to lose to an environment variable regardless of the order they were registered — pass the band
-explicitly:
+There is no priority argument. Precedence is registration order alone: the most recently added
+source wins a conflicting key. `newConfiguration(...)` registers the framework defaults and the
+app's own schema defaults first, before any user source, so both always lose to whatever the
+application adds. Beyond that, call the override last:
 
 ```ts
 newConfiguration(schema, kConfig)
-  .source(new JSONConfigProvider('./config/app.json'), ConfigPriority.FILE)
-  .source(new EnvConfigProvider({ prefix: 'APP_' }), ConfigPriority.ENV)
+  .source(new JSONConfigProvider('./config/app.json'))
+  .source(new EnvConfigProvider({ prefix: 'APP_' }))
+  .args()
   .build()
 ```
+
+Here `EnvConfigProvider` overrides the JSON file, and `.args()` overrides both — because each was
+registered after the one it should win against.
 
 ---
 
@@ -321,12 +312,12 @@ All in [`config.ts`](./config.ts):
 | `ConfigValue`, `ConfigPrimitive`, `ConfigEntry`                           | The value shapes flowing through a resolve           |
 | `ConfigProvider`, `PropertySource`, `ResolutionContext`, `ConfigSnapshot` | The provider contract and what it produces           |
 | `ConfigSchema`, `InferConfig`                                             | A schema: `$t` or any Standard Schema                |
-| `ConfigHandle`, `ConfigAccessors`, `ConfigLocation`                       | The read-only projections — root handle, nested node |
+| `ConfigHandle`, `ConfigAccessors`                                         | The read-only projections — root handle, nested node |
 | `ConfigChangeListener`                                                    | An `onChange` listener                               |
 | `ConfigDiagnostics`, `ConfigSliceFailure`                                 | Provenance, redaction, per-feature resolve failures  |
 
 Runtime pieces exported from [`index.ts`](./index.ts): `ConfigSlice`, `ConfigSources`,
-`ConfigPriority`, `ConfigDefinition`, `ConfigModule`, `Configuration`,
+`ConfigDefinition`, `ConfigModule`, `Configuration`,
 `configEquals`, `activeProfiles`, `hostProfiles`, the seven providers, and
 the `ErrConfig*` classes.
 

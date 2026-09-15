@@ -6,7 +6,6 @@ import {
   type FeatureConfigureKit,
   type FeatureConfigurer,
 } from '@caffeinejs/std'
-import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import {
@@ -49,7 +48,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     return this.#name === DEFAULT_INSTANCE ? 'kafka' : `kafka:${this.#name}`
   }
 
-  #config: ConfigLocation<KafkaConfigSlice> | undefined
+  #config: Partial<KafkaConfigSlice> | undefined
   readonly #name: string
   readonly #clients: KafkaClients
   #brokers?: string | string[]
@@ -84,7 +83,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
    * The serializers, the retry strategy, the classifier, the recoverer and the error hooks are functions and
    * cannot travel through a tree — they stay on the builder and are merged in either way.
    */
-  withConfig(config: ConfigLocation<KafkaConfigSlice>): this {
+  withConfig(config: Partial<KafkaConfigSlice>): this {
     this.#config = config
     return this
   }

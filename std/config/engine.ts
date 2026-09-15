@@ -19,9 +19,9 @@ export class ConfigEngine {
    * Loads every registered source and merges them into a single snapshot.
    *
    * The provider list is read from the registry on **every** call rather than captured at construction, which
-   * is what makes a source registered after bootstrap take effect on the next refresh. Providers arrive already
-   * ordered by priority (registration order breaking ties within a band), and the merge is first-wins — so the
-   * highest-priority source that defines a key owns it.
+   * is what makes a source registered after bootstrap take effect on the next refresh. Providers arrive
+   * already ordered most-recently-registered first, and the merge is first-wins — so the last source
+   * registered that defines a key owns it.
    */
   async resolve(ctx: ResolutionContext): Promise<ConfigSnapshot> {
     const providers = this.#options.sources.resolved()
@@ -50,10 +50,11 @@ export class ConfigEngine {
 }
 
 /**
- * Merges the property sources, highest priority first.
+ * Merges the property sources, most recently registered first.
  *
- * One rule, applied uniformly: **the highest-priority source that mentions a path owns that path and everything
- * beneath it.** No lower source contributes a part of something a higher source already spoke about.
+ * One rule, applied uniformly: **the most recently registered source that mentions a path owns that path and
+ * everything beneath it.** No earlier source contributes a part of something a later source already spoke
+ * about.
  *
  * That is what makes arrays replaced rather than complemented. Every provider flattens `['a','b','c']` into
  * `tags.0/1/2`, so a plain per-key merge would resolve each index on its own and overriding with `['x','y']`
@@ -61,7 +62,7 @@ export class ConfigEngine {
  * way to shorten a list at all.
  *
  * The same rule covers the case a text source creates. `TAGS=a,b` is a single scalar key at `tags`, and it must
- * beat a lower band's `tags.0/1/2`: without the claim both survive the merge and the materializer lets the
+ * beat an earlier source's `tags.0/1/2`: without the claim both survive the merge and the materializer lets the
  * indexed children overwrite the scalar, so the value an operator set disappears without a word.
  */
 export function mergeSources(sources: readonly PropertySource[]): ConfigSnapshot['values'] {
@@ -137,7 +138,7 @@ function claimsOf(source: PropertySource): Set<string> {
             ' are not a complete list',
           'ERR_CONFIG_ARRAY_INDICES',
           undefined,
-          'Set the whole array rather than one element: a higher-priority source replaces a list, it does not patch it',
+          'Set the whole array rather than one element: a later-registered source replaces a list, it does not patch it',
           `Start the indices at 0 and leave no gaps, e.g. "${prefix}.0", "${prefix}.1"`,
         )
       }

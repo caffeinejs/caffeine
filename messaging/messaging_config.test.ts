@@ -1,6 +1,6 @@
 import { token, type Container } from '@caffeinejs/di'
 import { $t, newConfiguration, type InferSchema, createApplication } from '@caffeinejs/std'
-import { ConfigPriority, EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import { EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
 import { inMemoryBinder } from './binder.testkit.js'
@@ -42,7 +42,7 @@ describe('messaging configuration', () => {
   // `withConfig` is wired.
   it('lets the environment override a builder-set destination', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }), ConfigPriority.ENV)
+      .source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }))
       .build()
     const app = createApplication({ config: conf }).with(
       messaging((m, c) =>

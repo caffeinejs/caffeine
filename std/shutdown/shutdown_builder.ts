@@ -1,4 +1,3 @@
-import type { ConfigLocation } from '../config/index.js'
 import type { Duration } from '../duration/index.js'
 import { type FeatureConfigureKit, kFeatureName } from '../feature.js'
 import { FeatureBuilder } from '../feature_builder.js'
@@ -28,7 +27,7 @@ import type { ShutdownSignal, SignalDispatcher } from './signals.js'
 export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'shutdown'
 
-  #config: ConfigLocation<ShutdownConfig> | undefined
+  #config: Partial<ShutdownConfig> | undefined
   #values: ShutdownConfig = {}
   #dispatcher: SignalDispatcher | undefined
 
@@ -38,7 +37,7 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
    * The node is read once, when the feature configures. A fluent method called alongside this one wins over
    * what the node carries.
    */
-  withConfig(config: ConfigLocation<ShutdownConfig>): this {
+  withConfig(config: Partial<ShutdownConfig>): this {
     this.#config = config
     return this
   }

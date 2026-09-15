@@ -1,5 +1,4 @@
 import { $t, FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
-import type { ConfigLocation } from '@caffeinejs/std/config'
 
 import { kServerOptions } from './keys.js'
 
@@ -54,7 +53,7 @@ export const serverConfigSchema = $t.Object({
 export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'server'
 
-  #config: ConfigLocation<ServerOptions> | undefined
+  #config: Partial<ServerOptions> | undefined
   #port: number | undefined
   #host: string | undefined
 
@@ -64,7 +63,7 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
    * The node is read once, when the feature configures. {@link port} and {@link host} win over what the node
    * carries.
    */
-  withConfig(config: ConfigLocation<ServerOptions>): this {
+  withConfig(config: Partial<ServerOptions>): this {
     this.#config = config
     return this
   }
