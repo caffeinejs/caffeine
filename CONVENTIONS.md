@@ -299,7 +299,7 @@ TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write fo
 
 Write it when behavior surprises, sibling APIs look alike, callers must handle a specific `Err*` (`@throws`), a parameter’s meaning is not its name, or a generic/overload is non-obvious.
 
-Do not restate the type, narrate the implementation, or TSDoc tests and obvious getters. Private `_` modules: a short `//` if a maintainer will get hurt, not a public block.
+Do not restate the type, narrate the implementation, or TSDoc tests and obvious getters. Private `_` modules: do not document.
 
 No design history in hover (“we rejected Nest”). Do document observable why when it **is** the contract (headers stay open because Ajv `removeAdditional` would strip `host`).
 

@@ -303,6 +303,26 @@ export class Router<
     return this.#route(['OPTIONS'], path, schemaOrHandler, handler)
   }
 
+  /**
+   * OpenAPI 3.2's QUERY method: a GET-shaped read with a request body.
+   *
+   * QUERY is not in Fastify's default method set. The underlying Fastify instance needs
+   * `instance.addHttpMethod('QUERY', { hasBody: true })` before `app.ready()`, or the route never matches.
+   */
+  query<P extends string>(path: P): Chain<'QUERY', P, V, C, GD, GP, R>
+  query<P extends string, O>(
+    path: P,
+    handler: Handler<Empty, P, V, C, GD, GP, O>,
+  ): Closed<'QUERY', P, Empty, O, V, C, GD, GP, R>
+  query<P extends string, S extends RouteValidationSchema, O>(
+    path: P,
+    schema: S,
+    handler: Handler<S, P, V, C, GD, GP, O>,
+  ): Closed<'QUERY', P, S, O, V, C, GD, GP, R>
+  query(path: string, schemaOrHandler?: unknown, handler?: unknown): any {
+    return this.#route(['QUERY'], path, schemaOrHandler, handler)
+  }
+
   /** Every method the adapter routes, for a path that answers all of them. */
   all<P extends string>(path: P): Chain<AllMethod, P, V, C, GD, GP, R>
   all<P extends string, O>(
