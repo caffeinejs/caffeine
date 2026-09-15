@@ -15,17 +15,3 @@ export class ErrHealthIndicatorNotSingleton extends ErrCaffeineWebApplication {
     this.name = 'ErrHealthIndicatorNotSingleton'
   }
 }
-
-/** The graceful shutdown exceeded its budget and connections were closed by force. */
-export class ErrShutdownTimeout extends ErrCaffeineWebApplication {
-  readonly timeoutMs: number
-
-  constructor(timeoutMs: number) {
-    super(
-      `Cannot complete graceful shutdown: in-flight requests did not finish within ${timeoutMs}ms`,
-      'ERR_SHUTDOWN_TIMEOUT',
-    )
-    this.name = 'ErrShutdownTimeout'
-    this.timeoutMs = timeoutMs
-  }
-}

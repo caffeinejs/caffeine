@@ -37,28 +37,34 @@ gate exists.
 
 A feature that answers on URLs outside the compiled routing binds a `ServerOwnedPaths` provider with
 `.extends(ServerOwnedPaths)`, and a plugin serving unmatched URLs reads them with
-`container.getManyOptional(ServerOwnedPaths)`. That is how a SPA shell knows not to swallow `/livez` without
-`static` importing anything from `health`.
+`container.getManyOptional(ServerOwnedPaths)`. `health` does not participate in this: its plugin factory only
+runs post-`container.init()` (see below), where `bind()` is no longer legal, so a static SPA shell combined
+with an installed-but-disabled `health()` plugin serves the shell at `/livez` rather than 404 — a known,
+accepted gap, not an oversight.
 
 A plugin that serves unmatched URLs calls Fastify's `setNotFoundHandler` itself and throws `ErrHTTPNotFound` for
 what it does not answer, so those misses still reach `@Catch`. The adapter installs its default only when no
 handler is set yet. There is no fallback chain: one not-found handler per context, and a second fails at start-up
 with Fastify's own error.
 
-Health is one feature, registered unconditionally like the server, and it is **probes only**. `app.health(...)`
-only calls `markExplicit()`, which is what flips the `enabled` default away from the Kubernetes auto-detection —
-there is no second fallback configurer, and nothing matches on `[kFeatureName] === 'health'`.
+Health (`/livez`, `/readyz`, `/startupz`) is **not** a feature and is **not** registered by `WebApplication` —
+it is an ordinary opt-in `HTTPPluginFactory`, `.with(health(...))`, exactly like `HTTPCaching()`. Installing it
+is what enables the probes (default `enabled: true`); `.k8s()` on the builder switches that default to the old
+Kubernetes auto-detection (`KUBERNETES_SERVICE_HOST` present) instead. `WebApplication` holds no reference to
+`http/health` at all. `ProbeEndpoint` and `HealthRegistry` are plain objects built once in the plugin's closure
+from `healthComponents()` (`http/health/components.ts`, itself framework- and DI-agnostic) — neither is a
+container binding, so there is no `kHealthOptions` to read back. `WebApplication.beforeDrain()` no longer
+exists; cache staleness at shutdown is handled by the plugin's own Fastify `onClose` hook instead.
 
 Graceful shutdown — the drain delay, the teardown budget, the signals — is its own feature, `ShutdownBuilder`
 from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
 `createWebApplication()` and headless `createApplication()` and configured with `app.shutdown((s, c) => …)`.
-It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch shutdown
-any more.
+It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch shutdown.
 
-The resolved options of the built-ins are **container bindings**, not configuration keys: `kServerOptions`,
-`kHealthOptions`, `kStaticOptions`. There is no `featureConfigKey` and `ctx.config` is not callable — a
-package that needs its settings on a request either binds them and resolves them, or decorates the Fastify
-instance as `@caffeinejs/html` does.
+The resolved options of the built-ins that remain container bindings — `kServerOptions`, `kStaticOptions` — are
+container bindings, not configuration keys (health no longer has one). There is no `featureConfigKey` and
+`ctx.config` is not callable — a package that needs its settings on a request either binds them and resolves
+them, or decorates the Fastify instance as `@caffeinejs/html` does.
 
 ## Reading the routes from a plugin
 

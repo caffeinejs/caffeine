@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
+import { health } from '../health/health.js'
 import { Router, createWebApplication, version } from '../index.js'
 
 /**
@@ -87,7 +88,7 @@ describe('API versioning', () => {
     const v1 = new Router('/inventory').name('InventoryV1').with(version('1.0.0'))
     v1.get('/').handler(() => ({ v: 1 }))
 
-    const app = createWebApplication({ container: new CaffeineIoC() }).health().mount(v1)
+    const app = createWebApplication({ container: new CaffeineIoC() }).with(health()).mount(v1)
     await app.ready()
 
     expect((await app.fetch('/livez')).status).toBe(200)

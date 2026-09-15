@@ -8,6 +8,7 @@ import {
   WebApplication,
   createWebApplication,
   fastifyAdapterFactory,
+  health,
 } from '@caffeinejs/http'
 import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
@@ -143,7 +144,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
     // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
     .server((s, c) => s.withConfig(c.server))
     // Kubernetes probes: /livez, /readyz, /startupz.
-    .health()
+    .with(health())
     // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the
     // routing-table lag while requests keep being served normally, and only then does the server close. No
     // preStop sleep in the manifest. Signals are on by default.

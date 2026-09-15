@@ -4,8 +4,9 @@ import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import type { WebApplication } from '../application.js'
+import type { HealthBuilder } from '../health/builder.js'
 import { ErrHealthIndicatorNotSingleton } from '../health/errors.js'
-import type { HealthBuilder } from '../health/health_builder.js'
+import { health } from '../health/health.js'
 import { Authorize, Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
 
 class DownIndicator extends HealthIndicator {
@@ -55,10 +56,10 @@ function bindIndicators(app: WebApplication, ...indicators: Array<Ctor<HealthInd
 }
 
 async function start(
-  configure?: (health: HealthBuilder<unknown>) => void,
+  configure?: (health: HealthBuilder) => void,
   ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>
 ): Promise<WebApplication> {
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).health(configure ?? (() => {}))
+  const app = createWebApplication(fastifyAdapterFactory(fastify())).with(health(configure ?? (() => {})))
 
   bindIndicators(app, ...indicators)
   await app.run()
@@ -162,7 +163,7 @@ describe('health probes', () => {
   })
 
   it('rejects a non-singleton indicator at ready', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).health()
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).with(health())
     app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
@@ -269,7 +270,7 @@ describe('health probes', () => {
       .authentication(auth =>
         auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()),
       )
-      .health()
+      .with(health())
 
     await app.run()
 

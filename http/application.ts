@@ -13,12 +13,10 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, Fastif
 import type { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
 import { controllerPlugins } from './decorators/use.js'
-import { ErrConfiguration } from './error/common.js'
+import { ErrConfiguration, ErrShutdownTimeout } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
 import { solutions } from './error/util.js'
 import { GuardsBuilder } from './guards/builder.js'
-import { HealthBuilder } from './health/health_builder.js'
-import { ErrShutdownTimeout, HealthRegistry } from './health/index.js'
 import {
   MiddlewarePipeline,
   isMiddlewareOptions,
@@ -132,7 +130,6 @@ export class WebApplication<
   readonly #authzBuilder = new AuthorizationBuilder()
   readonly #guardsBuilder = new GuardsBuilder()
   readonly #serverBuilder = new ServerBuilder<unknown>()
-  readonly #healthBuilder = new HealthBuilder<unknown>()
 
   constructor(adapterFactory: AdapterFactory<I, R, A>, options: WebApplicationOptions<C> = {}) {
     super(options)
@@ -144,11 +141,6 @@ export class WebApplication<
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
     // through `.server((s, c) => s.withConfig(...))` — declaring `server` in the schema is not enough.
     this.addFeature(this.#serverBuilder)
-
-    // Likewise: the probes exist whether or not `.health()` is called. Calling it opts in regardless of
-    // environment; leaving it uncalled enables them only on Kubernetes. `HEALTH__ENABLED` reaches the
-    // feature only through `.health((h, c) => h.withConfig(...))`.
-    this.addFeature(this.#healthBuilder)
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
 
@@ -245,8 +237,15 @@ export class WebApplication<
    * @throws ErrFeatureAlreadyInstalled when a feature with the same name is already installed.
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
-  override with(feature: Feature<C>): this
+  // HTTPPluginFactory<C> listed before Feature<C>: TypeScript checks overloads in declaration order, and for
+  // a generic argument expression like `health((h, c) => h.withConfig(c.app.health))`, only the first
+  // structurally-compatible overload gets to contextually type it and drive C's inference. With Feature<C>
+  // listed first, a config-consuming HTTPPluginFactory<C>-returning call (health(), and any future one like
+  // it) silently inferred C as unknown instead of the application's real config type. Swapping the order
+  // fixes it; collapsing to one union-typed signature would too, but this keeps the two call shapes documented
+  // separately.
   override with(factory: HTTPPluginFactory<C>): this
+  override with(feature: Feature<C>): this
   override with(featureOrFactory: Feature<C> | HTTPPluginFactory<C>): this {
     if (typeof featureOrFactory === 'function') {
       return this.addFeature(new HTTPPluginFeature(featureOrFactory))
@@ -309,27 +308,6 @@ export class WebApplication<
   guards(configure: (guards: GuardsBuilder) => void): this {
     this.assertConfigurable()
     configure(this.#guardsBuilder)
-    return this
-  }
-
-  /**
-   * Enables the Kubernetes probes (`/livez`, `/readyz`, `/startupz`). Calling it with no configuration is a
-   * complete setup; see {@link HealthBuilder} for what the defaults are.
-   *
-   * Left uncalled, the probes are exposed only when `KUBERNETES_SERVICE_HOST` is present. Graceful shutdown —
-   * the drain sequence and the signal handlers — is a separate feature; configure it with {@link Application.shutdown}.
-   *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
-   */
-  health(configure?: FeatureConfigurer<HealthBuilder<C>, C>): this {
-    this.assertConfigurable()
-
-    // The feature is already registered; reaching this is what turns the probes on regardless of environment.
-    this.#healthBuilder.markExplicit()
-    if (configure !== undefined) {
-      this.#healthBuilder[kAddConfigurer](configure as never)
-    }
-
     return this
   }
 
@@ -458,18 +436,6 @@ export class WebApplication<
   override run(): Promise<WebRunInfo> {
     // runInfo() is overridden, so what base run() resolves to is already a WebRunInfo.
     return super.run() as Promise<WebRunInfo>
-  }
-
-  /**
-   * Drops cached probe evaluations so the first poll after the flip reflects the drain, not the last good run.
-   *
-   * Guarded on the application having come up: closing one whose `ready()` threw must report that failure,
-   * not a resolution error raised while tidying up after it — and a probe that never ran cached nothing.
-   */
-  protected override beforeDrain(): void {
-    if (this.started) {
-      this.container.getOptional(HealthRegistry)?.invalidate()
-    }
   }
 
   /**

@@ -12,7 +12,7 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** spec
 - **Multipart upload** (`$p.file()`), and the OpenAPI 3.2 **QUERY** search verb.
 - **Generated API docs** via `@caffeinejs/openapi`: an OpenAPI 3.2 document derived from the routes themselves,
   plus a Scalar UI at `/docs`.
-- **Kubernetes probes** via `.health()`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
+- **Kubernetes probes** via `.with(health())`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
 - **Graceful shutdown** via `.shutdown()`: a drain that refuses readiness before it stops listening.
 - **Dockerised**: `docker-compose` brings up Postgres + the app, runs migrations, seeds demo data.
 
