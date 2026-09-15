@@ -1,17 +1,24 @@
 import { ErrConfiguration, type HTTPPluginFactory } from '@caffeinejs/http'
+import { fastifyView } from '@fastify/view'
+import { FastifyPluginAsync } from 'fastify'
+import fp from 'fastify-plugin'
 
 import { ViewBuilder } from './builder.js'
 import { kBuild } from './keys.js'
-import { viewPlugin } from './view_plugin.js'
+import { ViewOptions } from './view.js'
 
-/** Authors the view plugin's engines through {@link ViewBuilder}. */
+/**
+ * Authors the view plugin's engines through {@link ViewBuilder}.
+ */
 export type ViewConfigurer = (builder: ViewBuilder) => void
 
 /**
- * Server-side rendering over `@fastify/view`, as an ordinary Fastify plugin factory: `.with(view(...))`.
+ * Template-based server-side rendering over `@fastify/view`.
  *
  * `.engine(...)` configures the default engine (`reply.view`); `.engine(name, ...)` adds a named one
- * (`reply.<name>`). At least one engine is required — installing with none fails at `app.ready()`.
+ * (`reply.<name>`).
+ *
+ * At least one engine is required — installing with none fails at `app.ready()`.
  */
 export function view<C = unknown>(configure?: ViewConfigurer): HTTPPluginFactory<C> {
   return () => {
@@ -24,8 +31,14 @@ export function view<C = unknown>(configure?: ViewConfigurer): HTTPPluginFactory
       )
     }
 
-    // Forces every engine to assemble now, so a missing engine module fails at start-up rather than from
-    // inside the plugin, by which point the adapter is already wiring routes.
     return viewPlugin(builder)
   }
+}
+
+function viewPlugin(engines: { [kBuild](): ViewOptions[] }): FastifyPluginAsync {
+  const plugin: FastifyPluginAsync = async instance => {
+    await Promise.all(engines[kBuild]().map(options => instance.register(fastifyView, options)))
+  }
+
+  return fp(plugin, { name: '@caffeinejs/view' })
 }
