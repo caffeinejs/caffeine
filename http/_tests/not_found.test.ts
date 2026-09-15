@@ -1,17 +1,16 @@
 import fastify from 'fastify'
+import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
 import {
   Controller,
   ErrHTTPNotFound,
   Get,
-  NotFoundFallback,
   createWebApplication,
   deriveServerOwnedPaths,
   fastifyAdapterFactory,
   isServerOwned,
 } from '../index.js'
-import type { NotFoundContext } from '../index.js'
 import type { Route, RouteGroup } from '../route.js'
 
 @Controller('/pets')
@@ -46,48 +45,66 @@ describe('unmatched routes', () => {
     await app.close()
   })
 
-  it('populates the request context inside the not-found handler', async () => {
-    let seenPath: string | undefined
+  // The default is installed after every plugin, so a plugin that took the handler is not displaced by it.
+  it('lets a plugin take the not-found handler, with the request context populated', async () => {
+    let seenURL: string | undefined
 
-    class RecordingFallback extends NotFoundFallback {
-      readonly name = 'recording'
-
-      handle(ctx: NotFoundContext): boolean {
+    const shell = fp(async instance => {
+      instance.setNotFoundHandler(async (req, reply) => {
         // Would throw if httpContext were absent.
-        seenPath = ctx.http.req.url
-        return false
-      }
-    }
+        seenURL = req.httpContext.req.url
+        return reply.code(200).type('text/html').send('<p>shell</p>')
+      })
+    })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
-    app.container.bind(RecordingFallback, t => t.toClass(RecordingFallback).extends(NotFoundFallback))
-    await app.ready()
-
-    await app.fetch('/nope?q=1')
-
-    expect(seenPath).toBe('/nope?q=1')
-
-    await app.close()
-  })
-
-  it('lets a fallback answer, and strips the query from the path it sees', async () => {
-    class ShellFallback extends NotFoundFallback {
-      readonly name = 'shell'
-
-      handle(ctx: NotFoundContext): boolean {
-        ctx.http.status(200).header('content-type', 'text/html').body(`<p>${ctx.path}</p>`)
-        return true
-      }
-    }
-
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
-    app.container.bind(ShellFallback, t => t.toClass(ShellFallback).extends(NotFoundFallback))
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .with(() => shell)
+      .build()
     await app.ready()
 
     const res = await app.fetch('/client/route?a=b')
 
     expect(res.status).toBe(200)
-    expect(await res.text()).toBe('<p>/client/route</p>')
+    expect(await res.text()).toBe('<p>shell</p>')
+    expect(seenURL).toBe('/client/route?a=b')
+
+    await app.close()
+  })
+
+  it('renders a miss thrown from a plugin handler through the error pipeline', async () => {
+    const partial = fp(async instance => {
+      instance.setNotFoundHandler(async req => {
+        throw new ErrHTTPNotFound(`Route ${req.method}:${req.url} not found`)
+      })
+    })
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .with(() => partial)
+      .build()
+    await app.ready()
+
+    const res = await app.fetch('/nope')
+
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toMatch(/^application\/json/)
+    expect(await res.json()).toMatchObject({ statusCode: 404, code: 'ERR_HTTP_NOT_FOUND' })
+
+    await app.close()
+  })
+
+  it('keeps a not-found handler set on a Fastify instance the caller brought', async () => {
+    const server = fastify({ logger: false })
+    server.setNotFoundHandler((_req, reply) => {
+      void reply.code(418).send({ mine: true })
+    })
+
+    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    await app.ready()
+
+    const res = await app.fetch('/nope')
+
+    expect(res.status).toBe(418)
+    expect(await res.json()).toEqual({ mine: true })
 
     await app.close()
   })

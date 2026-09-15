@@ -4,18 +4,18 @@ import { join, sep } from 'node:path'
 import {
   collectRouteGroups,
   deriveServerOwnedPaths,
+  ErrHTTPNotFound,
+  isServerOwned,
   ServerOwnedPaths,
   serverOwnedPaths,
-  type RouteGroup,
 } from '@caffeinejs/http'
 import fastifyStatic from '@fastify/static'
-import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { ErrSPAIndexMissing } from './errors.js'
 import { normalizePrefix, underPrefix, type SPASettings } from './spa.js'
-import { SPAFallback } from './spa_fallback.js'
-import type { StaticMount } from './static.js'
+import type { ResolvedStatic, StaticMount } from './static.js'
 
 /** The slice of `reply` the per-file cache policy needs. */
 interface HeaderCapableReply {
@@ -23,16 +23,16 @@ interface HeaderCapableReply {
 }
 
 /**
- * Registers each configured static mount with `@fastify/static`.
+ * Registers each configured static mount with `@fastify/static`, and serves the SPA shell when there is one.
  *
  * `fastify-plugin`-wrapped, so `reply.sendFile` reaches every route group. `@fastify/static` throws if a
  * second registration tries to decorate it again — so only the first mount may decorate (unless a mount opts
  * out explicitly); the rest register with `decorateReply: false`.
  *
- * @param mounts - The resolved mounts, in registration order. The SPA's own mount, when there is one, is last
- * @param spa - The resolved SPA settings, or `undefined` when `.spa(...)` was never called
+ * @param resolved - The mounts in registration order, the SPA's own mount last, and the SPA settings when
+ * `.spa(...)` was called
  */
-export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | undefined): FastifyPluginAsync {
+export function staticPlugin({ mounts, spa }: ResolvedStatic): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     const serveSPA = spa === undefined ? false : checkShell(instance, spa)
 
@@ -53,7 +53,7 @@ export function staticPlugin(mounts: readonly StaticMount[], spa: SPASettings | 
     }
 
     if (spa !== undefined && serveSPA) {
-      configureFallback(instance, spa, mounts)
+      installShell(instance, spa, mounts)
     }
   }
 
@@ -82,23 +82,130 @@ function checkShell(instance: FastifyInstance, spa: SPASettings): boolean {
   return false
 }
 
-function configureFallback(instance: FastifyInstance, spa: SPASettings, mounts: readonly StaticMount[]): void {
-  const fallback = instance.$container.getOptional<SPAFallback>(SPAFallback)
-
-  if (fallback === undefined) {
-    return
-  }
-
+/**
+ * Takes the server's not-found handler to serve the shell for a client-side route.
+ *
+ * A request the shell does not answer becomes an {@link ErrHTTPNotFound}, so it renders through the error
+ * pipeline like a 404 a handler threw.
+ */
+function installShell(instance: FastifyInstance, spa: SPASettings, mounts: readonly StaticMount[]): void {
+  // A miss under another static mount is a missing file, not a client route.
   const otherMountPrefixes = mounts
     .filter(mount => mount.root !== spa.root || mount.wildcard !== false)
     .map(mount => normalizePrefix(typeof mount.prefix === 'string' ? mount.prefix : '/'))
 
-  fallback.configure(otherMountPrefixes, true)
-
   const routeGroups = collectRouteGroups(instance)
+
+  // Derived once every route has registered, which is before any request can reach the handler.
+  let owned: readonly string[] = []
   instance.addHook('onReady', async () => {
-    report(instance, spa, otherMountPrefixes, routeGroups())
+    owned = spa.derive
+      ? deriveServerOwnedPaths(routeGroups(), serverOwnedPaths(instance.$container.getManyOptional(ServerOwnedPaths)))
+      : []
+
+    report(instance, spa, otherMountPrefixes, owned)
   })
+
+  instance.setNotFoundHandler(async (req, reply) => {
+    const path = req.url.split('?')[0] ?? ''
+
+    if (!shouldServeShell(req, path, spa, owned, otherMountPrefixes)) {
+      throw new ErrHTTPNotFound(`Route ${req.method}:${req.url} not found`)
+    }
+
+    // Through `sendFile`, not a raw stream, so the shell gets the same ETag, range and cache-header handling
+    // as every other file the mount serves.
+    return reply.sendFile(spa.index, spa.root)
+  })
+}
+
+/**
+ * Whether a request that matched no route gets the shell.
+ *
+ * The order of the checks is the design. A history fallback that answers every 404 with `index.html` poisons
+ * everything it touches: a missing hashed asset comes back as HTML served under a JavaScript content type,
+ * and an API typo comes back as a document. So the shell is the *last* thing tried, and only for a request
+ * that looks like a browser navigating to a path the server does not own and that names no file.
+ */
+function shouldServeShell(
+  req: FastifyRequest,
+  path: string,
+  spa: SPASettings,
+  owned: readonly string[],
+  otherMountPrefixes: readonly string[],
+): boolean {
+  // A navigation is a GET. A POST to a client route is a mistake, and answering it with a document hides it.
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return false
+  }
+
+  if (!underPrefix(path, spa.prefix)) {
+    return false
+  }
+
+  // `include` is the deliberate override, so it is checked before anything that could exclude the path.
+  if (spa.include.some(prefix => underPrefix(path, prefix))) {
+    return looksLikeDocument(req, path, spa)
+  }
+
+  if (isServerOwned(owned, path)) {
+    return false
+  }
+
+  if (spa.exclude.some(prefix => underPrefix(path, prefix))) {
+    return false
+  }
+
+  if (otherMountPrefixes.some(prefix => prefix !== '' && underPrefix(path, prefix))) {
+    return false
+  }
+
+  return looksLikeDocument(req, path, spa)
+}
+
+function looksLikeDocument(req: FastifyRequest, path: string, spa: SPASettings): boolean {
+  return !namesAFile(path) && (!spa.navigationOnly || isNavigation(req))
+}
+
+/**
+ * Whether the last segment carries a file extension.
+ *
+ * This is what keeps a missing `/assets/app-eZr2sdaR.js` a real 404: the browser asked for a script, and
+ * handing it the shell would fail later and further away, as a syntax error inside a file that is not
+ * JavaScript. `.html` is allowed through, since `/about.html` is a plausible client route.
+ */
+function namesAFile(path: string): boolean {
+  const lastSegment = path.slice(path.lastIndexOf('/') + 1)
+  const dot = lastSegment.lastIndexOf('.')
+
+  if (dot <= 0) {
+    return false
+  }
+
+  return lastSegment.slice(dot + 1).toLowerCase() !== 'html'
+}
+
+/**
+ * Whether the request is a document navigation rather than a programmatic fetch.
+ *
+ * `Sec-Fetch-Dest` is the reliable signal and every current browser sends it: `document` for a navigation,
+ * `empty` for `fetch()`/XHR. `Accept` is the fallback for older clients, and a request carrying neither is
+ * something like curl or a test, which is allowed through rather than second-guessed.
+ */
+function isNavigation(req: FastifyRequest): boolean {
+  const dest = req.headers['sec-fetch-dest']
+
+  if (dest != null) {
+    return dest === 'document'
+  }
+
+  const accept = req.headers.accept
+
+  if (accept != null) {
+    return accept.includes('text/html') || accept.includes('*/*')
+  }
+
+  return true
 }
 
 /**
@@ -112,11 +219,8 @@ function report(
   instance: FastifyInstance,
   spa: SPASettings,
   otherMountPrefixes: readonly string[],
-  routeGroups: readonly RouteGroup[],
+  derived: readonly string[],
 ): void {
-  const derived = spa.derive
-    ? deriveServerOwnedPaths(routeGroups, serverOwnedPaths(instance.$container.getManyOptional(ServerOwnedPaths)))
-    : []
   const neverShell = [...new Set([...derived, ...spa.exclude, ...otherMountPrefixes.filter(p => p !== '')])]
     .filter(prefix => !spa.include.some(included => underPrefix(prefix, included)))
     .sort()

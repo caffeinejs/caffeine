@@ -22,10 +22,11 @@ registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` 
 re-declared decorator.
 
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
-holds the only two framework slots — `ErrorHandlingServiceConfigurer` and `HTTPCoreFeature` lead,
-`HTTPFallbackFeature` trails — and everything between them, this package's features and the user's alike,
-runs in `.with(...)` call order. Do not reintroduce a stage, and do not reintroduce a direct `install*()` call in
-the adapter: write the plugin and put its feature in the right place.
+holds the only framework slot — `ErrorHandlingServiceConfigurer` leads — and everything after it, this package's
+features and the user's alike, runs in `.with(...)` call order. The adapter installs three things around that
+loop: the form body parser and `constraintVaryPlugin` before it, and the default not-found handler after it. Do not
+reintroduce a stage, and do not add another direct `install*()` call in the adapter: write the plugin and put its
+feature in the right place.
 
 The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
 `.authentication(...)` was written: a CORS plugin registered before it still stamps its headers on a 401, and a hook
@@ -35,8 +36,14 @@ groups in the adapter (`assertAuthenticationConfigured`), because the case being
 gate exists.
 
 A feature that answers on URLs outside the compiled routing binds a `ServerOwnedPaths` provider with
-`.extends(ServerOwnedPaths)`, and a fallback reads them with `container.getManyOptional(ServerOwnedPaths)`.
-That is how a SPA shell knows not to swallow `/livez` without `static` importing anything from `health`.
+`.extends(ServerOwnedPaths)`, and a plugin serving unmatched URLs reads them with
+`container.getManyOptional(ServerOwnedPaths)`. That is how a SPA shell knows not to swallow `/livez` without
+`static` importing anything from `health`.
+
+A plugin that serves unmatched URLs calls Fastify's `setNotFoundHandler` itself and throws `ErrHTTPNotFound` for
+what it does not answer, so those misses still reach `@Catch`. The adapter installs its default only when no
+handler is set yet. There is no fallback chain: one not-found handler per context, and a second fails at start-up
+with Fastify's own error.
 
 Health is one feature, registered unconditionally like the server, and it is **probes only**. `app.health(...)`
 only calls `markExplicit()`, which is what flips the `enabled` default away from the Kubernetes auto-detection —
@@ -151,7 +158,7 @@ Version is a **routing key**, not a runtime `switch`: two handlers for the same 
 - `@Version(v)` / `.version(v)` — sugar for the `version` constraint. `version` is always registered: Fastify's built-in semver matcher on `Accept-Version`. It is **not** a path — `@Prefix('/v1')` is URI versioning and stays a separate concern.
 - `app.constraints(c => c.register(strategy, { header }))` — registers a custom find-my-way constraint strategy (synchronous only). Held on the builder, installed by `constraintsPlugin` with `addConstraintStrategy` before any route registers.
 
-Group constraints inherit to routes that do not set the same key (route wins, via `compile.ts` — same as `config`/`options`). `fst({ constraints: { … } })` still works for `host` and anything the framework has no opinion about; a `constraints` key set **both** through `fst` and first-class fails at compile rather than disagreeing silently. `constraintVaryPlugin` (contributed by `HTTPCoreFeature`, always) adds every constraint header to `Vary` when any route is constrained. A constraint miss is Fastify's 404 — it does not reach `@Catch`, and no default version is invented. `ServerOwnedPaths` (probes, OIDC callbacks) never carry a constraint.
+Group constraints inherit to routes that do not set the same key (route wins, via `compile.ts` — same as `config`/`options`). `fst({ constraints: { … } })` still works for `host` and anything the framework has no opinion about; a `constraints` key set **both** through `fst` and first-class fails at compile rather than disagreeing silently. `constraintVaryPlugin` (installed by the adapter, always) adds every constraint header to `Vary` when any route is constrained. A constraint miss is Fastify's 404 — it does not reach `@Catch`, and no default version is invented. `ServerOwnedPaths` (probes, OIDC callbacks) never carry a constraint.
 
 Do not add a version argument to the inline verb form, an app-level `enableVersioning()` switch, a `VERSION_NEUTRAL` catch-all, or a global default version.
 

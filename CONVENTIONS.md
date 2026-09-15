@@ -173,10 +173,6 @@ Exceptions, where `withConfig` overlays what the fluent methods set:
 - kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice)
 - messaging binding destinations (and the other keys a binding's config slice declares)
 
-Static `mounts` is an array exception: a configured list **replaces** `.serve()`, it does not merge
-element-wise. A configured `spa.root` repoints the SPA directory `.spa(...)` switched on; other SPA keys
-still follow fluent-wins.
-
 The application declares the whole schema, importing the feature's exported schema (`serverConfigSchema`,
 `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
 into the tree, since the feature no longer seeds anything there — a block declared with required, undefaulted
@@ -207,11 +203,11 @@ There are no stages and nothing is sorted by what a plugin is: a feature that mu
 first. The install position is a property of the registry, not of when a `bootstrap` hook reached the call, so
 a feature that awaits before registering does not move.
 
-Two framework slots bracket that list, in `WebApplication.configurers()` and nowhere else: error handling
-leads, so every route and hook the rest register is already covered by it, and the not-found handler trails,
-because it needs whatever the others decorated the server with. Everything else, this package's own features
-included, sits between them in `.with(...)` order — the authentication gate included, which is why
-`.authentication(...)` is written after the CORS plugin and before a hook that reads `req.user`.
+One framework slot leads that list, in `WebApplication.configurers()` and nowhere else: error handling, so
+every route and hook the rest register is already covered by it. Everything else, this package's own features
+included, follows in `.with(...)` order — the authentication gate included, which is why `.authentication(...)`
+is written after the CORS plugin and before a hook that reads `req.user`. The default not-found handler is not a
+feature: the adapter installs it after every plugin, and a plugin that set its own keeps it.
 
 ## Writing a feature
 

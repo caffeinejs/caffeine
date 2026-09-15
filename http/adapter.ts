@@ -17,6 +17,7 @@ import {
 
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
+import { constraintVaryPlugin } from './constraints/vary_plugin.js'
 import { FastifyContext } from './context.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
@@ -26,8 +27,10 @@ import {
   type GlobalErrorHandler,
 } from './error/error_handling.js'
 import { solutions } from './error/util.js'
+import { installFormBodyParser } from './form/index.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
+import { installNotFoundHandler } from './not_found.js'
 import { pluginName } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
@@ -377,11 +380,18 @@ export class FastifyAdapter<
     // included. Registered one at a time and awaited, so a plugin sees what the one before it decorated. A
     // plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every route; an
     // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
-    // `$route` (above) is what a plugin in this loop calls to accumulate one more route.
+    // `$route` (above) is what a plugin in this loop calls to accumulate one more route. The form body parser
+    // and the constraint `Vary` header go first, so every plugin registers onto a server that has them.
+    installFormBodyParser(fastify)
+    await fastify.register(constraintVaryPlugin)
+
     for (const plugin of plugins.root()) {
       assertPluginNotRegistered(fastify, plugin)
       await fastify.register(plugin)
     }
+
+    // After every plugin, so one that took the not-found handler keeps it.
+    installNotFoundHandler(fastify)
 
     // Installed by the error-handling plugin above; read back here because each route group's own
     // encapsulated handler resolves to it last.

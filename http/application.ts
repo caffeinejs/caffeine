@@ -2,7 +2,6 @@ import type { Container } from '@caffeinejs/di'
 import { Application, type ApplicationInit, type ExtensionRegistrar, type Feature, type RunInfo } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, FastifyRequest } from 'fastify'
 
-import { HTTPCoreFeature, HTTPFallbackFeature } from './core_feature.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrConfiguration } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
@@ -190,13 +189,12 @@ export class WebApplication<
   /**
    * The bootstrap order, which is the order the plugins register in.
    *
-   * Two framework slots bracket what the application installed, and nothing sits between them: error handling
-   * leads, so every route and hook the rest register is already covered by it, and the not-found handler
-   * trails, because it needs whatever the others decorated the server with. Everything in between — this
-   * package's own features and the user's alike — runs in the order `.with(...)` calls were written.
+   * Error handling leads, so every route and hook the rest register is already covered by it. Everything
+   * after it — this package's own features and the user's alike — runs in the order `.with(...)` calls were
+   * written.
    */
   protected override configurers(): Feature[] {
-    return [new ErrorHandlingServiceConfigurer(), new HTTPCoreFeature(), ...this.services, new HTTPFallbackFeature()]
+    return [new ErrorHandlingServiceConfigurer(), ...this.services]
   }
 
   /**

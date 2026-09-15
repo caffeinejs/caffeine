@@ -1,14 +1,17 @@
-import { NotFoundFallback, registerPlugin } from '@caffeinejs/http'
-import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
-
 import { ErrDuplicateSPAMount } from './errors.js'
 import { resolveSPASettings, type SPAOptions, type SPASettings } from './spa.js'
-import { SPAFallback } from './spa_fallback.js'
 import type { ResolvedStatic, StaticMount } from './static.js'
-import { staticPlugin } from './static_plugin.js'
 
 /**
- * Configures static file serving over `@fastify/static`.
+ * Materializes a {@link StaticBuilder} into the {@link ResolvedStatic} it built.
+ *
+ * A symbol, not a public `.build()` method: the builder's only public surface is the fluent setters, so a
+ * plain `.build()` alongside them would read as one more chainable option rather than the terminal call it is.
+ */
+export const kBuild = Symbol('caffeine.static.build')
+
+/**
+ * Configures static file serving over `@fastify/static`, e.g. `staticFiles(s => s.serve('public'))`.
  *
  * Each `.serve(...)` call adds one mount; multiple mounts serve multiple directories (the plugin handles
  * `@fastify/static`'s single-decorate constraint). Reaching `.spa(...)` is the activating act — configuration
@@ -18,13 +21,10 @@ import { staticPlugin } from './static_plugin.js'
  * What a fluent method sets is final — there is no `.withConfig(...)` to read a mount or a SPA setting from
  * the configuration tree.
  */
-export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
-  readonly [kFeatureName] = 'static'
-
+export class StaticBuilder {
   #mounts: StaticMount[] = []
   #spa: (SPAOptions & { root: string }) | undefined
   #spaRoots: string[] = []
-  #resolved: ResolvedStatic | undefined
 
   /**
    * Serves `root` as static files. `options` is the full `@fastify/static` options object minus `root`
@@ -48,6 +48,9 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
    * Which paths the server owns is derived from the resolved routing, so a new controller is excluded without
    * being listed anywhere. `exclude`/`include` are there for what routing cannot know.
    *
+   * The shell is served from the server's not-found handler, so a Fastify instance that already has one refuses
+   * to start.
+   *
    * ```ts
    * .with(staticFiles(s => s.spa('site/dist')))
    * ```
@@ -65,31 +68,13 @@ export class StaticBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
-    const resolved = this.#resolve()
-    this.#resolved = resolved
-
-    if (resolved.spa !== undefined) {
-      kit.container.bind(SPAFallback, t => t.toValue(new SPAFallback(resolved.spa!)).extends(NotFoundFallback))
-    }
-  }
-
-  protected bootstrap(kit: BootstrapKit<C>): void {
-    const resolved = this.#resolved!
-
-    // The mounts and the SPA settings are handed to the plugin directly: the builder is holding them right
-    // here, and routing them through a container key only to read them back at server setup adds a lookup
-    // and a key without a decision.
-    registerPlugin(kit, staticPlugin(resolved.mounts, resolved.spa))
-  }
-
   /**
-   * Folds the mounts and the SPA options into what the plugin and the fallback actually run with.
+   * Folds the mounts and the SPA options into what the plugin actually runs with.
    *
    * The SPA's own mount is derived here rather than pushed by `.spa(...)`, so it lands after the plain
    * mounts, the order `.spa()` used to produce.
    */
-  #resolve(): ResolvedStatic {
+  [kBuild](): ResolvedStatic {
     const mounts = [...this.#mounts]
 
     if (this.#spa === undefined) {

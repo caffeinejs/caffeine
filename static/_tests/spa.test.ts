@@ -1,11 +1,10 @@
 import { fileURLToPath } from 'node:url'
 
 import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import type { FeatureConfigurer } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticBuilder, staticFiles } from '../index.js'
+import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticConfigurer, staticFiles } from '../index.js'
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
 const empty = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
@@ -24,7 +23,7 @@ void [APIController]
 describe('SPA fallback', () => {
   let app: WebApplication | undefined
 
-  const start = async (configure: FeatureConfigurer<StaticBuilder>) => {
+  const start = async (configure: StaticConfigurer) => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
       .with(staticFiles(configure))
       .build()
@@ -169,5 +168,21 @@ describe('SPA fallback', () => {
       .build()
 
     await expect(rejected.ready()).rejects.toThrow(ErrDuplicateSPAMount)
+  })
+
+  // The shell is served from the not-found handler, and Fastify allows one per context: a handler the caller
+  // already set would silently stop the shell, so start-up fails instead.
+  it('refuses to start when the Fastify instance already has a not-found handler', async () => {
+    const server = fastify({ logger: false })
+    server.setNotFoundHandler((_req, reply) => {
+      void reply.code(404).send()
+    })
+
+    const rejected = createWebApplication(fastifyAdapterFactory(server), {})
+      .with(staticFiles(s => s.spa(dist)))
+      .build()
+
+    await expect(rejected.ready()).rejects.toThrow(/Not found handler already set/)
+    await rejected.close()
   })
 })
