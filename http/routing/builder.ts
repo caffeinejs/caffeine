@@ -20,7 +20,6 @@ export class RouteGroupBuilder {
   #authorize?: RouteAuthzOptions
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
-  #constraints?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
@@ -119,20 +118,6 @@ export class RouteGroupBuilder {
     return this
   }
 
-  constraint<K extends string>(key: K, value: unknown): this
-  constraint<K extends string>(constraints: Map<K, unknown>): this
-  constraint<K extends string>(keyOrConstraints: K | Map<K, unknown>, value?: unknown): this {
-    this.#constraints ??= new Map()
-    if (typeof keyOrConstraints === 'string') {
-      this.#constraints.set(keyOrConstraints, value)
-    } else {
-      for (const [key, value] of keyOrConstraints) {
-        this.#constraints.set(key, value)
-      }
-    }
-    return this
-  }
-
   extras<K extends symbol>(key: K, value: unknown): this
   extras<K extends symbol>(extras: Map<K, unknown>): this
   extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
@@ -160,7 +145,6 @@ export class RouteGroupBuilder {
       authz: this.#authorize,
       config: this.#config,
       options: this.#options,
-      constraints: this.#constraints,
       extras: this.#extras,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
@@ -185,7 +169,6 @@ export class RouteBuilder {
   #authorize?: RouteAuthzOptions
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
-  #constraints?: Map<string, unknown>
   #extras?: Map<symbol, unknown>
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
@@ -299,20 +282,6 @@ export class RouteBuilder {
     return this
   }
 
-  constraint<K extends string>(key: K, value: unknown): this
-  constraint<K extends string>(constraints: Map<K, unknown>): this
-  constraint<K extends string>(keyOrConstraints: K | Map<K, unknown>, value?: unknown): this {
-    this.#constraints ??= new Map()
-    if (typeof keyOrConstraints === 'string') {
-      this.#constraints.set(keyOrConstraints, value)
-    } else {
-      for (const [key, value] of keyOrConstraints) {
-        this.#constraints.set(key, value)
-      }
-    }
-    return this
-  }
-
   extras<K extends symbol>(key: K, value: unknown): this
   extras<K extends symbol>(extras: Map<K, unknown>): this
   extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
@@ -344,7 +313,6 @@ export class RouteBuilder {
       authz: this.#authorize,
       config: this.#config,
       options: this.#options,
-      constraints: this.#constraints,
       extras: this.#extras,
       catchBy: this.#catchBy,
       guards: this.#guards,

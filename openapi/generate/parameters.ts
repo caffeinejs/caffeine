@@ -1,4 +1,4 @@
-import type { Route } from '@caffeinejs/http'
+import { kRouteConstraints, type ResolvedRouteConstraint, type Route } from '@caffeinejs/http'
 import type { AnySchema } from '@caffeinejs/std'
 
 import type { ParameterLocation, ParameterObject, SchemaObject } from '../spec/spec.js'
@@ -164,12 +164,13 @@ function fromPickers(route: Route<unknown>): ParameterObject[] {
  * versioned route. The value the route requires is not the request's, so the schema stays an open string.
  */
 function fromConstraints(route: Route<unknown>): ParameterObject[] {
-  if (route.constraints === undefined) {
+  const constraints = route.config?.get(kRouteConstraints) as Map<string, ResolvedRouteConstraint> | undefined
+  if (constraints === undefined) {
     return []
   }
 
   const parameters: ParameterObject[] = []
-  for (const resolved of route.constraints.values()) {
+  for (const resolved of constraints.values()) {
     if (resolved.header === undefined || CREDENTIAL_HEADERS.has(resolved.header.toLowerCase())) {
       continue
     }

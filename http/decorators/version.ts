@@ -1,13 +1,13 @@
-import { VERSION_CONSTRAINT } from '../constraints/registry.js'
+import { kVersionHeader, VERSION_CONSTRAINT } from '../constraints/plugin.js'
 import type { AnyRouteExtension } from '../routing/programmatic/extension.js'
 import { Constraint, constraint } from './constraint.js'
 
 /**
- * Route/group extension binding routes to an API version. One implementation behind {@link Version} and
- * `Router.version()` / `RouteChain.version()`.
+ * Route/group extension binding routes to an API version. One implementation behind {@link Version}, applied
+ * with `.with(version(v))`.
  */
 export function version(version: string): AnyRouteExtension {
-  return constraint(VERSION_CONSTRAINT, version)
+  return constraint(VERSION_CONSTRAINT, version, { header: kVersionHeader })
 }
 
 /**
@@ -21,5 +21,5 @@ export function version(version: string): AnyRouteExtension {
  * Sugar for `@Constraint('version', v)`. URI versioning is a separate concern — use `@Prefix('/v1')`.
  */
 export function Version(v: string) {
-  return Constraint(VERSION_CONSTRAINT, v)
+  return Constraint(VERSION_CONSTRAINT, v, { header: kVersionHeader })
 }

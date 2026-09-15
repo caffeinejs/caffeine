@@ -1,7 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { Router, createWebApplication } from '../index.js'
+import { Router, createWebApplication, version } from '../index.js'
 
 /**
  * Version is a routing key: the request must select one of two same-URL handlers *before* a handler runs.
@@ -12,9 +12,9 @@ import { Router, createWebApplication } from '../index.js'
  */
 describe('API versioning', () => {
   const petsV1AndV2 = () => {
-    const v1 = new Router('/pets').name('PetsV1').version('1.0.0')
+    const v1 = new Router('/pets').name('PetsV1').with(version('1.0.0'))
     v1.get('/').handler(() => ({ v: 1 }))
-    const v2 = new Router('/pets').name('PetsV2').version('2.0.0')
+    const v2 = new Router('/pets').name('PetsV2').with(version('2.0.0'))
     v2.get('/').handler(() => ({ v: 2 }))
     return createWebApplication({ container: new CaffeineIoC() }).mount(v1, v2)
   }
@@ -57,7 +57,7 @@ describe('API versioning', () => {
   it('prefers the versioned twin when the header is present, the unversioned one when it is absent', async () => {
     const plain = new Router('/shop').name('ShopPlain')
     plain.get('/').handler(() => ({ kind: 'plain' }))
-    const versioned = new Router('/shop').name('ShopVersioned').version('1.0.0')
+    const versioned = new Router('/shop').name('ShopVersioned').with(version('1.0.0'))
     versioned.get('/').handler(() => ({ kind: 'versioned' }))
 
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(plain, versioned)
@@ -72,9 +72,9 @@ describe('API versioning', () => {
   })
 
   it('fails at ready() when two routes share method, path and version', async () => {
-    const a = new Router('/dup').name('DupA').version('1.0.0')
+    const a = new Router('/dup').name('DupA').with(version('1.0.0'))
     a.get('/').handler(() => ({}))
-    const b = new Router('/dup').name('DupB').version('1.0.0')
+    const b = new Router('/dup').name('DupB').with(version('1.0.0'))
     b.get('/').handler(() => ({}))
 
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(a, b)
@@ -84,7 +84,7 @@ describe('API versioning', () => {
   })
 
   it('leaves a server-owned path reachable without Accept-Version when routes are versioned', async () => {
-    const v1 = new Router('/inventory').name('InventoryV1').version('1.0.0')
+    const v1 = new Router('/inventory').name('InventoryV1').with(version('1.0.0'))
     v1.get('/').handler(() => ({ v: 1 }))
 
     const app = createWebApplication({ container: new CaffeineIoC() }).health().mount(v1)

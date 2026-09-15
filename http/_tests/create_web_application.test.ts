@@ -84,7 +84,7 @@ describe('createWebApplication default Fastify form', () => {
 describe('configuring a started web application', () => {
   // The HTTP-only methods are refused the same way the shared ones are: once `ready()` has read the feature
   // list, a server port or an authentication scheme written afterwards would never take effect.
-  it('refuses server, authentication, guards, constraints, health and plugin configuration once ready() has run', async () => {
+  it('refuses server, authentication, guards, health and plugin configuration once ready() has run', async () => {
     const app = createWebApplication()
     await app.ready()
 
@@ -92,7 +92,6 @@ describe('configuring a started web application', () => {
     expect(() => app.authentication(a => a.default('Bearer'))).toThrow(ErrApplicationStarted)
     expect(() => app.authorization(a => a.requireAuthenticatedByDefault())).toThrow(ErrApplicationStarted)
     expect(() => app.guards(() => undefined)).toThrow(ErrApplicationStarted)
-    expect(() => app.constraints(() => undefined)).toThrow(ErrApplicationStarted)
     expect(() => app.health()).toThrow(ErrApplicationStarted)
     expect(() => app.with(() => async () => undefined)).toThrow(ErrApplicationStarted)
   })

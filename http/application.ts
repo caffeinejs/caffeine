@@ -12,7 +12,6 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, Fastif
 
 import type { FastifyAdapter } from './adapter.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
-import { ConstraintsBuilder } from './constraints/builder.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrConfiguration } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
@@ -132,7 +131,6 @@ export class WebApplication<
   #authBuilder: AuthenticationBuilder | undefined
   readonly #authzBuilder = new AuthorizationBuilder()
   readonly #guardsBuilder = new GuardsBuilder()
-  readonly #constraintsBuilder = new ConstraintsBuilder()
   readonly #serverBuilder = new ServerBuilder<unknown>()
   readonly #healthBuilder = new HealthBuilder<unknown>()
 
@@ -142,10 +140,6 @@ export class WebApplication<
     this.addFeature(this.#authzBuilder)
 
     this.addFeature(this.#guardsBuilder)
-
-    // Registered unconditionally: `version` route selection and the `Vary` header work without a `.constraints()`
-    // call, and the compiler always resolves route constraints against the bound registry.
-    this.addFeature(this.#constraintsBuilder)
 
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
     // through `.server((s, c) => s.withConfig(...))` — declaring `server` in the schema is not enough.
@@ -315,28 +309,6 @@ export class WebApplication<
   guards(configure: (guards: GuardsBuilder) => void): this {
     this.assertConfigurable()
     configure(this.#guardsBuilder)
-    return this
-  }
-
-  /**
-   * Registers custom route-selection constraint strategies, so a route selects on them with
-   * `@Constraint(name, value)` or `.constraint(name, value)`.
-   *
-   * Runs immediately: strategies have nothing to read from the configuration tree, so there is no `(c, config)`
-   * callback and nothing is queued for bootstrap — unlike `.server((s, c) => …)`.
-   *
-   * `version` is available without this — it is Fastify's built-in semver matcher on `Accept-Version`.
-   *
-   * ```ts
-   * createWebApplication()
-   *   .constraints(c => c.register(tenantConstraint, { header: 'X-Tenant' }))
-   * ```
-   *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
-   */
-  constraints(configure: (constraints: ConstraintsBuilder) => void): this {
-    this.assertConfigurable()
-    configure(this.#constraintsBuilder)
     return this
   }
 

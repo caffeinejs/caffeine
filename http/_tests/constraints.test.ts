@@ -2,8 +2,16 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { constraint } from '../decorators/constraint.js'
-import { Router, createWebApplication, fastifyAdapterFactory, fst } from '../index.js'
+import {
+  constraint,
+  constraintsPlugin,
+  createWebApplication,
+  fastifyAdapterFactory,
+  fst,
+  kRouteConstraints,
+  Router,
+  version,
+} from '../index.js'
 import type { ConstraintStrategy } from '../index.js'
 import { RouteBuilder } from '../routing/builder.js'
 
@@ -29,16 +37,16 @@ describe('route constraints', () => {
     dish
       .get('/')
       .name('spicy')
-      .constraint('flavor', 'spicy')
+      .with(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
       .handler(() => ({ flavor: 'spicy' }))
     dish
       .get('/')
       .name('mild')
-      .constraint('flavor', 'mild')
+      .with(constraint('flavor', 'mild', { header: 'X-Flavor' }))
       .handler(() => ({ flavor: 'mild' }))
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .constraints(c => c.register(flavorStrategy(), { header: 'X-Flavor' }))
+      .with(() => constraintsPlugin([flavorStrategy()]))
       .mount(dish)
     await app.ready()
 
@@ -54,18 +62,19 @@ describe('route constraints', () => {
   it('fails at ready() when a route names a constraint no strategy is registered under', async () => {
     const r = new Router('/x')
     r.get('/')
-      .constraint('nope', 1)
+      .with(constraint('nope', 1))
       .handler(() => ({}))
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
 
-    await expect(app.ready()).rejects.toThrow(/unknown route constraint "nope"/)
+    // find-my-way's own error, surfaced when the route registers — there is no more central registry to
+    // check the name against ahead of time.
+    await expect(app.ready()).rejects.toThrow(/no strategy registered for constraint key nope/i)
   })
 
-  it('fails at ready() when fst and .version() both set the version constraint on one route', async () => {
+  it('fails at ready() when fst and version() both set the version constraint on one route', async () => {
     const r = new Router('/c')
     r.get('/')
-      .version('2.0.0')
-      .with(fst({ constraints: { version: '1.0.0' } }))
+      .with(version('2.0.0'), fst({ constraints: { version: '1.0.0' } }))
       .handler(() => ({}))
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
 
@@ -76,8 +85,7 @@ describe('route constraints', () => {
     const r = new Router('/c')
     r.get('/')
       .name('coexist')
-      .version('1.0.0')
-      .with(fst({ constraints: { host: 'api.example' } }))
+      .with(version('1.0.0'), fst({ constraints: { host: 'api.example' } }))
       .handler(() => ({ ok: true }))
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
     await app.ready()
@@ -88,17 +96,12 @@ describe('route constraints', () => {
     await app.close()
   })
 
-  it('the constraint() extension and the builder method are one implementation, not two', () => {
-    // `@Constraint` / `@Version` route through `constraint()`; `Router.constraint()` / `.version()` route
-    // through `RouteBuilder.constraint()`. A drift between them would let a decorated and a programmatic route
-    // compile to different Fastify constraints for the same declaration.
-    const viaExtension = new RouteBuilder().method('GET').path('/').name('x')
-    constraint('version', '1.0.0')(viaExtension)
+  it('constraint() writes the declared value and header into route.config', () => {
+    const built = new RouteBuilder().method('GET').path('/').name('x')
+    constraint('flavor', 'spicy', { header: 'X-Flavor' })(built)
 
-    const viaMethod = new RouteBuilder().method('GET').path('/').name('x')
-    viaMethod.constraint('version', '1.0.0')
-
-    expect(viaExtension.toRoute().constraints).toEqual(viaMethod.toRoute().constraints)
-    expect(viaExtension.toRoute().constraints).toEqual(new Map([['version', '1.0.0']]))
+    expect(built.toRoute().config?.get(kRouteConstraints)).toEqual(
+      new Map([['flavor', { value: 'spicy', header: 'X-Flavor' }]]),
+    )
   })
 })

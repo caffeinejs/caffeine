@@ -1,18 +1,19 @@
 import type { IncomingMessage } from 'node:http'
 
 /**
- * A route-selection constraint strategy, as an application registers one with `app.constraints(c => c.register(...))`.
+ * A route-selection constraint strategy, as an application registers one with
+ * `.with(() => constraintsPlugin([myStrategy]))`.
  *
  * Mirrors find-my-way's constraint strategy, which is what Fastify's router runs. The router calls
  * {@link deriveConstraint} once per request to read the constraint value off the request, then matches it
- * against what each route declared with `@Constraint` / `.constraint()`. Synchronous only: an async derivation
+ * against what each route declared with `@Constraint` / `constraint()`. Synchronous only: an async derivation
  * would stall every request the router handles.
  *
  * The framework ships one strategy, `version`, backed by Fastify's built-in semver matcher and reading
  * `Accept-Version`. Registering another named `version` replaces it.
  */
 export interface ConstraintStrategy<T = string> {
-  /** The name a route declares the constraint under: `@Constraint(name, value)` / `.constraint(name, value)`. */
+  /** The name a route declares the constraint under: `@Constraint(name, value)` / `constraint(name, value)`. */
   readonly name: string
 
   /**

@@ -1,7 +1,14 @@
 import fastify, { type FastifyInstance } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { Router, createWebApplication, fastifyAdapterFactory, type ConstraintStrategy } from '../index.js'
+import {
+  constraint,
+  constraintsPlugin,
+  createWebApplication,
+  fastifyAdapterFactory,
+  Router,
+  type ConstraintStrategy,
+} from '../index.js'
 import { RouteBuilder } from '../routing/builder.js'
 
 /** Exact-match strategy reading `x-flavor`, so a route can be selected on a header. */
@@ -25,18 +32,17 @@ describe('constraint Vary header', () => {
   // later plugin adds counts as much as a mounted one — a shared cache would otherwise mix the representations.
   it('covers a constrained route a plugin added with $route', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .constraints(c => c.register(flavorStrategy(), { header: 'X-Flavor' }))
+      .with(() => constraintsPlugin([flavorStrategy()]))
       .with(() => async (instance: FastifyInstance) => {
         instance.$route('late', router => {
-          router
-            .path('/late')
-            .constraint('flavor', 'spicy')
-            .routes([
-              new RouteBuilder()
-                .method('GET')
-                .path('/')
-                .handle(() => ({ ok: true })),
-            ])
+          router.path('/late')
+          constraint('flavor', 'spicy', { header: 'X-Flavor' })(router)
+          router.routes([
+            new RouteBuilder()
+              .method('GET')
+              .path('/')
+              .handle(() => ({ ok: true })),
+          ])
         })
       })
     await app.ready()

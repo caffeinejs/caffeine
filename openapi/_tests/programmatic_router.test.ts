@@ -1,4 +1,4 @@
-import { Router, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { Router, WebApplication, createWebApplication, fastifyAdapterFactory, version } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -96,7 +96,7 @@ describe('openapi from a programmatic router', () => {
   })
 
   it('lists the Accept-Version header parameter for a versioned route, from the compiled constraint', async () => {
-    const pets = new Router('/versioned-pets').name('VersionedPets').version('1.0.0')
+    const pets = new Router('/versioned-pets').name('VersionedPets').with(version('1.0.0'))
     pets
       .get('/')
       .name('list')

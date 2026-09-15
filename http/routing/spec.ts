@@ -23,7 +23,6 @@ export interface RouteGroupSpec<R> {
   authz?: RouteAuthzOptions
   config?: Map<string, unknown>
   options?: Map<string, unknown>
-  constraints?: Map<string, unknown>
   extras?: Map<symbol, unknown>
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
@@ -51,7 +50,6 @@ export interface RouteSpec<R> {
   authz?: RouteAuthzOptions
   config?: Map<string, unknown>
   options?: Map<string, unknown>
-  constraints?: Map<string, unknown>
   extras?: Map<symbol, unknown>
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]

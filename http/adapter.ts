@@ -306,18 +306,6 @@ export class FastifyAdapter<
               },
             }
 
-            // First-class route-selection constraints, merged over any `constraints` object `fst` set (the
-            // compiler already rejected a key set both ways). `version` reaches Fastify's built-in matcher here.
-            if (route.constraints !== undefined && route.constraints.size > 0) {
-              const constraints: Record<string, unknown> = {
-                ...(routeDef.constraints as Record<string, unknown> | undefined),
-              }
-              for (const [name, resolved] of route.constraints) {
-                constraints[name] = resolved.value
-              }
-              routeDef.constraints = constraints
-            }
-
             const routeFn = (s: typeof server, def: AdapterRouteOptions) =>
               (
                 s as FastifyInstance<
