@@ -1,7 +1,4 @@
 export * from './builder.js'
 export * from './config.js'
 export * from './errors.js'
-export * from './static_plugin.js'
-export * from './plugin.js'
-export * from './spa.js'
-export type * from './static.js'
+export * from './static.js'
