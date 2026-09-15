@@ -30,7 +30,7 @@ void [UnknownRefController]
 
 describe('@CatchWith with an unregistered handler', () => {
   it('rejects when the referenced handler has no binding', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

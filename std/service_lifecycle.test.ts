@@ -42,9 +42,7 @@ function appWith(feature: Feature<never>, size: number) {
   const conf = newConfiguration(schema, kConfig)
     .source(new InlineConfigProvider({ widget: { size } }))
     .build()
-  return createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
-    .addFeature(feature)
-    .build()
+  return createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).addFeature(feature)
 }
 
 describe('feature lifecycle', () => {
@@ -64,20 +62,18 @@ describe('feature lifecycle', () => {
   it('runs a feature that reads no configuration at all', async () => {
     let configured = false
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .addFeature({
-        get [kFeatureName](): string {
-          return 'noop'
-        },
-        [kFeatureConfigure](): Promise<void> {
-          configured = true
-          return Promise.resolve()
-        },
-        [kFeatureBootstrap](): Promise<void> {
-          return Promise.resolve()
-        },
-      })
-      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).addFeature({
+      get [kFeatureName](): string {
+        return 'noop'
+      },
+      [kFeatureConfigure](): Promise<void> {
+        configured = true
+        return Promise.resolve()
+      },
+      [kFeatureBootstrap](): Promise<void> {
+        return Promise.resolve()
+      },
+    })
 
     await app.ready()
 
@@ -94,20 +90,18 @@ describe('feature lifecycle', () => {
       .source(new InlineConfigProvider({ widget: { size: 'not-a-number' } }))
       .build()
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
-      .addFeature({
-        get [kFeatureName](): string {
-          return 'strict'
-        },
-        [kFeatureConfigure](): Promise<void> {
-          configured = true
-          return Promise.resolve()
-        },
-        [kFeatureBootstrap](): Promise<void> {
-          return Promise.resolve()
-        },
-      })
-      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).addFeature({
+      get [kFeatureName](): string {
+        return 'strict'
+      },
+      [kFeatureConfigure](): Promise<void> {
+        configured = true
+        return Promise.resolve()
+      },
+      [kFeatureBootstrap](): Promise<void> {
+        return Promise.resolve()
+      },
+    })
 
     await expect(app.ready()).rejects.toThrow()
     expect(configured).toBe(false)
@@ -116,17 +110,15 @@ describe('feature lifecycle', () => {
   it('configures before the container initializes, and bootstraps after', async () => {
     const order: string[] = []
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .addFeature({
-        [kFeatureName]: 'order',
-        [kFeatureConfigure](): void {
-          order.push('configure')
-        },
-        [kFeatureBootstrap](): void {
-          order.push('bootstrap')
-        },
-      })
-      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).addFeature({
+      [kFeatureName]: 'order',
+      [kFeatureConfigure](): void {
+        order.push('configure')
+      },
+      [kFeatureBootstrap](): void {
+        order.push('bootstrap')
+      },
+    })
 
     const init = app.container.init.bind(app.container)
     app.container.init = async () => {
@@ -175,17 +167,17 @@ describe('extension registration', () => {
     }
 
     // "slow" bootstraps second but awaits longer, so it registers last in wall-clock order.
-    const app = new Recording({
-      container: new CaffeineIoC({ decorators: false }),
-      services: [registering('slow', 3), registering('quick', 0)],
-    })
+    const app = new Recording({ container: new CaffeineIoC({ decorators: false }) })
+      .with(registering('slow', 3))
+      .with(registering('quick', 0))
 
     await app.ready()
 
-    expect(asked).toEqual([0, 1])
+    // Position 0 is the built-in shutdown feature, which registers nothing.
+    expect(asked).toEqual([0, 1, 2])
     expect(registered).toEqual([
-      [1, 'quick'],
-      [0, 'slow'],
+      [2, 'quick'],
+      [1, 'slow'],
     ])
   })
 })

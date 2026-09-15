@@ -120,7 +120,7 @@ describe('testClient()', () => {
 
   describe('given an application', () => {
     it('should ready it, so a test does not have to', async () => {
-      const app = createWebApplication().build().mount(newPets())
+      const app = createWebApplication().mount(newPets())
 
       // Deliberately not readied: an un-readied application has registered no routes and answers 404.
       await using client = testClient(app)
@@ -129,7 +129,7 @@ describe('testClient()', () => {
     })
 
     it('should expose the application and its container', async () => {
-      const app = createWebApplication().build().mount(newPets())
+      const app = createWebApplication().mount(newPets())
       await using client = testClient(app)
 
       expect(client.$app).toBe(app)
@@ -190,7 +190,7 @@ describe('testClient()', () => {
     })
 
     it('should replace a dependency of an application that has not been readied', async () => {
-      const app = createWebApplication().build().mount(newGreet())
+      const app = createWebApplication().mount(newGreet())
 
       await using client = testClient(app, {
         inject: { greeter: { greet: (name: string) => `MOCK ${name}` } },
@@ -203,7 +203,7 @@ describe('testClient()', () => {
       const container = new CaffeineIoC({ decorators: false })
       container.bind(Greeter, t => t.toSelf())
 
-      const app = createWebApplication({ container }).build().mount(newGreet())
+      const app = createWebApplication({ container }).mount(newGreet())
       await app.ready()
 
       try {
@@ -345,7 +345,7 @@ describe('testClient()', () => {
     })
 
     it('should close an application it was given', async () => {
-      const app = createWebApplication().build().mount(newPets())
+      const app = createWebApplication().mount(newPets())
       const client = testClient(app)
       await client.pets.get()
 

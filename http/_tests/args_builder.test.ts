@@ -24,7 +24,7 @@ void [ParamsBuilderController]
 
 describe('@Args builder signature', () => {
   it('resolves the same arguments from the function form as the array form', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     try {

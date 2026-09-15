@@ -127,7 +127,7 @@ describe('named kafka instances', () => {
       .with(kfk(k => k.brokers('localhost:9092').groupId('default-group')))
       .with(kfk(k => k.brokers('localhost:9092').groupId('orders-group'), 'orders'))
 
-    const built = app.build()
+    const built = app
     await built.run()
 
     const def = built.container.get<KafkaTemplate>(KafkaTemplate)

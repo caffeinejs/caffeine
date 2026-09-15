@@ -34,7 +34,7 @@ describe('kafka feature', () => {
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({ container }).with(kfk(k => k.brokers('localhost:9092').groupId('g')))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(built.container.getOptional(KafkaTemplate)).toBeInstanceOf(KafkaTemplate)
@@ -52,7 +52,7 @@ describe('kafka feature', () => {
       .with(kfk(k => k.brokers('b1').groupId('g')))
       .with(kfk(k => k.brokers('b2').groupId('g'), 'orders'))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     const def = built.container.getOptional(KafkaTemplate)
@@ -73,7 +73,7 @@ describe('kafka feature', () => {
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({}).with(kfk(k => k.groupId('g'))) // no brokers
 
-    await expect(app.build().ready()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
+    await expect(app.ready()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 
   it('throws when the same instance is installed twice', () => {

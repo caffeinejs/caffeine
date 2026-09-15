@@ -29,7 +29,7 @@ void [PetsController]
 
 describe('unmatched routes', () => {
   it('renders the same envelope as a 404 a handler threw', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
     await app.ready()
 
     const thrown = (await (await app.fetch('/pets/42')).json()) as Record<string, unknown>
@@ -57,9 +57,7 @@ describe('unmatched routes', () => {
       })
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .with(() => shell)
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(() => shell)
     await app.ready()
 
     const res = await app.fetch('/client/route?a=b')
@@ -78,9 +76,7 @@ describe('unmatched routes', () => {
       })
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .with(() => partial)
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(() => partial)
     await app.ready()
 
     const res = await app.fetch('/nope')
@@ -98,7 +94,7 @@ describe('unmatched routes', () => {
       void reply.code(418).send({ mine: true })
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = createWebApplication(fastifyAdapterFactory(server))
     await app.ready()
 
     const res = await app.fetch('/nope')

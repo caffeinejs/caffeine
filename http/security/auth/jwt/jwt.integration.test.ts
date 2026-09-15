@@ -57,7 +57,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'user-1' })
@@ -80,7 +80,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/jwt-no-header')
@@ -101,7 +101,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/jwt-bad-token', {
@@ -123,7 +123,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signExpiredToken({ sub: 'user-expired' })
@@ -153,7 +153,7 @@ describe('JWTBearerHandler', () => {
           .allowAnyAudience(),
       ),
     )
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'user-1' }, { issuer: 'https://other.example.com' })
@@ -183,7 +183,7 @@ describe('JWTBearerHandler', () => {
           .allowAnyIssuer(),
       ),
     )
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'user-1' }, { audience: 'other-api' })
@@ -207,7 +207,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'alice-123' })
@@ -232,7 +232,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'user-1', roles: 'admin' })
@@ -255,7 +255,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'user-1', roles: ['admin', 'editor'] })
@@ -290,7 +290,7 @@ describe('JWTBearerHandler', () => {
           }),
       ),
     )
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'user-hook' })
@@ -328,7 +328,7 @@ describe('JWTBearerHandler', () => {
           }),
       ),
     )
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/jwt-on-fail', {
@@ -354,7 +354,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const token = await signToken({ sub: 'user-1', roles: 'viewer' })
@@ -384,7 +384,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/jwt-status-guard', { method: 'POST' })
@@ -411,7 +411,7 @@ describe('JWTBearerHandler', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const [protectedRes, publicRes] = await Promise.all([

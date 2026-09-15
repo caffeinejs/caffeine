@@ -49,7 +49,7 @@ describe('non-blocking retry topics (end to end)', () => {
     flowState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
     const app = createApplication({}).with(kafka(k => k.brokers('b').groupId(GROUP), { clients: broker.clients() }))
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('flow', { x: 1 })
@@ -69,7 +69,7 @@ describe('non-blocking retry topics (end to end)', () => {
     const app = createApplication({}).with(
       kafka(k => k.brokers('b').groupId(GROUP).deadLetter(), { clients: broker.clients() }),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('poison', { x: 1 })

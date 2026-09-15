@@ -89,7 +89,6 @@ describe('route metadata on config.$caffeine', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .with(observer(seen))
       .with(lateAndRaw)
-      .build()
       .mount(routerWithOneRoute()) as WebApplication
     await app.ready()
 
@@ -108,7 +107,6 @@ describe('route metadata on config.$caffeine', () => {
     const seen: Seen[] = []
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       .with(observer(seen))
-      .build()
       .mount(routerWithOneRoute()) as WebApplication
     await app.ready()
 
@@ -134,7 +132,6 @@ describe('route metadata on config.$caffeine', () => {
         ),
       )
       .with(lateAndRaw)
-      .build()
       .mount(routerWithOneRoute()) as WebApplication
     await app.ready()
 

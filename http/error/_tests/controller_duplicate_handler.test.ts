@@ -31,7 +31,7 @@ void [DupController]
 
 describe('duplicate controller error handler', () => {
   it('rejects when two methods handle the same error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

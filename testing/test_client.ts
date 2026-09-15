@@ -2,7 +2,7 @@ import { brewer, type BrewClient, type BrewOptions } from '@caffeinejs/brewer'
 import type { Container } from '@caffeinejs/di'
 import { Router, type DepsOf } from '@caffeinejs/http'
 
-import { Harness, type AnyRouter, type TestApplication, type TestApplicationBuilder } from './_test_app.js'
+import { Harness, type AnyRouter, type TestApplication } from './_test_app.js'
 import { ErrTestClientTarget } from './error.js'
 
 /** How the client shapes the requests it sends. */
@@ -43,8 +43,8 @@ export interface TestClientOptions<D> extends AppTestClientOptions<D> {
   /** The container the routers resolve against — a `newTestContainer()` build, or any other. */
   container?: Container
 
-  /** The application builder, before it is built: authentication, authorization, guards, cache, features. */
-  configure?: (builder: TestApplicationBuilder) => void
+  /** The application, before it is readied: authentication, authorization, guards, cache, features. */
+  configure?: (app: TestApplication) => void
 }
 
 /** What the client offers besides the routes: the application it drives, and its lifecycle. */
@@ -102,7 +102,7 @@ interface Fetchable {
  * ```ts
  * const client = testClient([pets, orders], {
  *   inject: { repository: fake },
- *   configure: builder => builder.authentication(auth => auth.scheme(bearer)),
+ *   configure: app => app.authentication(auth => auth.scheme(bearer)),
  * })
  * ```
  *

@@ -36,7 +36,7 @@ describe('CORS', () => {
       }
       void [GlobalCorsController]
 
-      const app = corsApp({ origin: '*' }).build()
+      const app = corsApp({ origin: '*' })
       await app.ready()
 
       const res = await app.fetch('/cors-global/resource', { headers: { origin: 'https://example.com' } })
@@ -55,7 +55,7 @@ describe('CORS', () => {
       }
       void [PreflightController]
 
-      const app = corsApp({ origin: 'https://allowed.com', methods: ['GET', 'POST'] }).build()
+      const app = corsApp({ origin: 'https://allowed.com', methods: ['GET', 'POST'] })
       await app.ready()
 
       const res = await app.fetch('/cors-preflight/endpoint', {
@@ -81,7 +81,7 @@ describe('CORS', () => {
       }
       void [NoCorsController]
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       await app.ready()
 
       const res = await app.fetch('/no-cors/resource', { headers: { origin: 'https://example.com' } })
@@ -116,7 +116,7 @@ describe('CORS', () => {
 
       void [SpecificCorsController, DefaultCorsController]
 
-      const app = corsApp({ origin: 'https://global.com' }).build()
+      const app = corsApp({ origin: 'https://global.com' })
       await app.ready()
 
       const resSpecific = await app.fetch('/cors-specific/data', { headers: { origin: 'https://trusted.com' } })
@@ -149,7 +149,7 @@ describe('CORS', () => {
 
       void [CorsDisabledController, CorsEnabledController]
 
-      const app = corsApp({ origin: '*' }).build()
+      const app = corsApp({ origin: '*' })
       await app.ready()
 
       const resDisabled = await app.fetch('/cors-disabled/resource', { headers: { origin: 'https://example.com' } })
@@ -183,7 +183,7 @@ describe('CORS', () => {
 
       void [CorsOffActualController, CorsOnActualController]
 
-      const app = corsApp({ origin: '*' }).build()
+      const app = corsApp({ origin: '*' })
       await app.ready()
 
       const resOff = await app.fetch('/cors-off-actual/endpoint', { headers: { origin: 'https://example.com' } })
@@ -223,7 +223,7 @@ describe('CORS', () => {
       const fallback = new Router('/cors-fluent-default')
       fallback.get('/data').handler(() => ({}))
 
-      const app = corsApp({ origin: 'https://global.com' }).build().mount(specific, fallback)
+      const app = corsApp({ origin: 'https://global.com' }).mount(specific, fallback)
       await app.ready()
 
       const resSpecific = await app.fetch('/cors-fluent-specific/data', {
@@ -246,7 +246,7 @@ describe('CORS', () => {
     }
     const registerCors = () => fp(plugin, { name: 'cors' })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(registerCors).with(registerCors).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(registerCors).with(registerCors)
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "cors": it is already registered/)
     await app.close()

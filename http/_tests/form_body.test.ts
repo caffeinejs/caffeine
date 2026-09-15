@@ -8,7 +8,7 @@ const FORM = 'application/x-www-form-urlencoded'
 
 async function appWith(controller: unknown) {
   void [controller]
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+  const app = createWebApplication(fastifyAdapterFactory(fastify()))
   await app.ready()
   return app
 }

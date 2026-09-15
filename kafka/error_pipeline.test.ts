@@ -109,7 +109,7 @@ describe('error pipeline', () => {
         { clients: broker.clients() },
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('ep-retry', { x: 1 })
@@ -135,7 +135,7 @@ describe('error pipeline', () => {
         { clients: broker.clients() },
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('ep-poison', { x: 1 })
@@ -165,7 +165,7 @@ describe('error pipeline', () => {
         { clients: broker.clients() },
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('ep-notretry', { x: 1 })
@@ -190,7 +190,7 @@ describe('error pipeline', () => {
         { clients: broker.clients() },
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('ep-retry', { x: 1 })
@@ -210,7 +210,7 @@ describe('error pipeline', () => {
     const app = createApplication({}).with(
       kafka(k => k.brokers('b').groupId(GROUP).ackMode('manual'), { clients: broker.clients() }),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('ep-manual', { x: 1 })
@@ -235,7 +235,7 @@ describe('error pipeline', () => {
         { clients: broker.clients() },
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('ep-nack', { x: 1 })

@@ -83,7 +83,7 @@ function newApp() {
     auth.addStrategy('Default', byDefault).addStrategy('First', first).addStrategy('Second', second).default('Default'),
   )
 
-  return { app: builder.build(), byDefault, first, second }
+  return { app: builder, byDefault, first, second }
 }
 
 describe('authentication extension — start-up', () => {
@@ -100,7 +100,7 @@ describe('authentication extension — start-up', () => {
 
     // No `.authentication(...)`: the extension is still registered unconditionally, and it is what refuses
     // the application rather than serve the guarded route to anonymous callers.
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
   })

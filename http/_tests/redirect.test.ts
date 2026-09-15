@@ -32,7 +32,7 @@ describe('Redirect', () => {
 
     void [RedirectController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     beforeAll(async () => {
       await app.ready()

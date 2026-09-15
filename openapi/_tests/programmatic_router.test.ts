@@ -41,7 +41,6 @@ describe('openapi from a programmatic router', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .with(openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public()))
-      .build()
       .mount(pets) as WebApplication
 
     await app.ready()
@@ -78,7 +77,6 @@ describe('openapi from a programmatic router', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .with(openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public()))
-      .build()
       .mount(pets) as WebApplication
 
     await app.ready()
@@ -106,7 +104,6 @@ describe('openapi from a programmatic router', () => {
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
-      .build()
       .mount(pets) as WebApplication
 
     await app.ready()

@@ -50,7 +50,7 @@ describe('kafka configuration', () => {
       .build()
     const app = createApplication({ config: conf }).with(kfk((k, c) => k.withConfig(c.kafka.default)))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['from-config:9092'])
@@ -71,7 +71,7 @@ describe('kafka configuration', () => {
       kfk((k, c) => k.withConfig(c.kafka.default).brokers('localhost:9092').groupId('svc')),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['prod-1:9092', 'prod-2:9092'])
@@ -93,7 +93,7 @@ describe('kafka configuration', () => {
       .with(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b1:9092').groupId('svc')))
       .with(kfk((k, c) => k.withConfig(c.kafka.orders).brokers('b2:9092').groupId('orders'), 'orders'))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['b1:9092'])
@@ -124,7 +124,7 @@ describe('kafka configuration', () => {
       // No annotation on the selector: the config type is recovered from the builder.
       .with(kfk((k, c) => k.withConfig(c.app.events).brokers('moved:9092')))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['moved:9092'])
@@ -148,7 +148,7 @@ describe('kafka configuration', () => {
       kfk((k, c) => k.withConfig(c.kafka.default).serializers(serializers).onError(onError)),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     const config = configOf(built.container, 'default')
@@ -172,7 +172,7 @@ describe('kafka configuration', () => {
       kfk((k, c) => k.withConfig(c.kafka.default).deadLetter({ topic })),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').deadLetter).toEqual({ topic })
@@ -188,7 +188,7 @@ describe('kafka configuration', () => {
       .build()
     const app = createApplication({ config: conf }).with(kfk((k, c) => k.withConfig(c.kafka.default).brokers('b:9092')))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').deadLetter).toBe(false)
@@ -205,7 +205,7 @@ describe('kafka configuration', () => {
       .build()
     const app = createApplication({ config: conf }).with(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').deadLetter).toBe(false)
@@ -222,7 +222,7 @@ describe('kafka configuration', () => {
       .build()
     const app = createApplication({ config: conf }).with(kfk((k, c) => k.withConfig(c.kafka.default).deadLetter(false)))
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(configOf(built.container, 'default').deadLetter).toBe(false)
@@ -241,7 +241,7 @@ describe('kafka configuration', () => {
       kfk((k, c) => k.withConfig(c.kafka.default).brokers('real:9092')),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(built.container.getOptional(runtimeKey('ghost'))).toBeUndefined()

@@ -32,7 +32,7 @@ const pets = new Router('/pets')
 
 const files = new Router('/files').get('/*').handler(ctx => ({ rest: ctx.req.param()['*'] }))
 
-const app = createWebApplication().build().mount(pets, files)
+const app = createWebApplication().mount(pets, files)
 
 let origin: string
 

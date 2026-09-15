@@ -45,14 +45,12 @@ const HAND_WRITTEN: OpenAPIDocument = {
 }
 
 function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .with(
-      openapi(o => {
-        o.docs(false).public()
-        configure(o)
-      }),
-    )
-    .build() as WebApplication
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+    openapi(o => {
+      o.docs(false).public()
+      configure(o)
+    }),
+  ) as WebApplication
 }
 
 async function documentOf(app: WebApplication): Promise<OpenAPIDocument> {

@@ -16,7 +16,7 @@ describe('Prefix', () => {
 
     void [UsersController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const hit = await app.fetch('/v1/users/list')
@@ -47,7 +47,7 @@ describe('Prefix', () => {
 
     void [ItemsController, ItemsV2Controller]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const v1 = await app.fetch('/v1/items/all')

@@ -28,7 +28,7 @@ describe('newConfiguration', () => {
       .source(new InlineConfigProvider({ server: { host: 'primary', port: 3000 } }))
       .source(new InlineConfigProvider({ server: { host: 'fallback', port: 9999 } }))
       .build()
-    const app = createApplication({ container, config: conf }).build()
+    const app = createApplication({ container, config: conf })
 
     await app.ready()
 
@@ -74,7 +74,7 @@ describe('newConfiguration', () => {
 
     const container = new CaffeineIoC({ decorators: false })
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
-    const app = createApplication({ container, config: conf }).build()
+    const app = createApplication({ container, config: conf })
 
     await app.ready()
 
@@ -98,7 +98,7 @@ describe('newConfiguration', () => {
 
     const container = new CaffeineIoC({ decorators: false })
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
-    const app = createApplication({ container, config: conf }).build()
+    const app = createApplication({ container, config: conf })
 
     await app.ready()
 
@@ -125,7 +125,7 @@ describe('newConfiguration', () => {
     const slice = definition.slice(['widget'], z.object({ size: z.coerce.number() }))
     definition.sources.add(new InlineConfigProvider({ widget: { size: 7 } }), ConfigPriority.USER)
 
-    const app = createApplication({ container, config: definition }).build()
+    const app = createApplication({ container, config: definition })
     await app.ready()
 
     // Requiring a key did not make configuration opt-in: the slice resolved, and the tree is still reachable
@@ -145,7 +145,7 @@ describe('newConfiguration', () => {
     // rather than through `.source()` on the builder — still lands, as long as it happens before `ready()`.
     conf.sources.add(new InlineConfigProvider({ server: { host: 'second', port: 2 } }), ConfigPriority.ENV)
 
-    const app = createApplication({ container, config: conf }).build()
+    const app = createApplication({ container, config: conf })
     await app.ready()
 
     expect(app.container.get(kConfig).server.host).toBe('second')
@@ -157,7 +157,7 @@ describe('newConfiguration', () => {
       .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
       .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] })
       .build()
-    const app = createApplication({ container, config: conf }).build()
+    const app = createApplication({ container, config: conf })
 
     await app.run()
 
@@ -174,7 +174,7 @@ describe('newConfiguration', () => {
         .source(new InlineConfigProvider({ server: { host: 'from-code', port: 1 } }))
         .args()
         .build()
-      const app = createApplication({ container, config: conf }).build()
+      const app = createApplication({ container, config: conf })
 
       await app.run()
 

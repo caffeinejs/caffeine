@@ -62,7 +62,7 @@ describe('middleware pipeline', () => {
   it('runs a function middleware before the handler', async () => {
     const seen: string[] = []
 
-    const app = newApp().build()
+    const app = newApp()
     app.use((_ctx, next) => {
       seen.push('mw')
       next()
@@ -81,7 +81,7 @@ describe('middleware pipeline', () => {
     const app = newApp(container => {
       container.bind(Tag, t => t.toValue(new Tag('injected')))
       container.bind(Tagger, t => t.toClass(Tagger, [Tag]))
-    }).build()
+    })
     app.use(Tagger)
     await app.ready()
 
@@ -95,7 +95,7 @@ describe('middleware pipeline', () => {
     const app = newApp(container => {
       container.bind(Tag, t => t.toValue(new Tag('by-key')))
       container.bind(kTagger, t => t.toClass(Tagger, [Tag]))
-    }).build()
+    })
     app.use(kTagger)
     await app.ready()
 
@@ -110,7 +110,7 @@ describe('middleware pipeline', () => {
 
     const scoped = newApp(container => {
       container.bind(Counter, t => t.toClass(Counter).lifetime(Scopes.REQUEST))
-    }).build()
+    })
     scoped.use(Counter)
     await scoped.ready()
 
@@ -121,7 +121,7 @@ describe('middleware pipeline', () => {
 
     const singleton = newApp(container => {
       container.bind(Counter, t => t.toClass(Counter))
-    }).build()
+    })
     singleton.use(Counter)
     await singleton.ready()
 
@@ -134,7 +134,7 @@ describe('middleware pipeline', () => {
   it('runs an onRequest middleware before a preHandler one', async () => {
     const order: string[] = []
 
-    const app = newApp().build()
+    const app = newApp()
     app.use((_ctx, next) => {
       order.push('onRequest')
       next()
@@ -157,7 +157,7 @@ describe('middleware pipeline', () => {
   it('short-circuits from onRequest, skipping later middleware and the handler', async () => {
     const reached: string[] = []
 
-    const app = newApp().build()
+    const app = newApp()
     app.use(
       (_ctx, next) => {
         reached.push('preHandler')
@@ -179,7 +179,7 @@ describe('middleware pipeline', () => {
   })
 
   it('leaves a reply a middleware answered itself alone', async () => {
-    const app = newApp().build()
+    const app = newApp()
     app.use((ctx, _next) => {
       ctx.status(418).body({ answered: 'directly' })
     })
@@ -193,7 +193,7 @@ describe('middleware pipeline', () => {
   })
 
   it('answers with CORS headers from Node cors() and still runs the handler', async () => {
-    const app = newApp().build()
+    const app = newApp()
     app.use(cors({ origin: 'http://example.com' }))
     await app.ready()
 
@@ -206,7 +206,7 @@ describe('middleware pipeline', () => {
   })
 
   it('restricts Node cors() to a path prefix', async () => {
-    const app = newApp().build()
+    const app = newApp()
     app.mount(new Router('/api').get('/echo', () => ({ ok: true })))
     app.use('/api', cors({ origin: 'http://example.com' }))
     await app.ready()
@@ -222,7 +222,7 @@ describe('middleware pipeline', () => {
   })
 
   it('refuses a registration after the application is ready', async () => {
-    const app = newApp().build()
+    const app = newApp()
     await app.ready()
 
     expect(() => app.use((_ctx, next) => next())).toThrow(ErrPipelineSealed)
@@ -245,7 +245,7 @@ describe('middleware pipeline', () => {
 
     const app = newApp(container => {
       container.bind(Hinted, t => t.toClass(Hinted))
-    }).build()
+    })
     app.use((_ctx, next) => {
       order.push('onRequest')
       next()
@@ -275,7 +275,7 @@ describe('middleware pipeline', () => {
 
     const app = newApp(container => {
       container.bind(Hinted, t => t.toClass(Hinted))
-    }).build()
+    })
     app.use(Hinted, { hook: 'onRequest' })
     app.use((_ctx, next) => {
       order.push('second')

@@ -31,7 +31,7 @@ const pets = new Router('/pets')
   })
   .handler(ctx => ctx.body())
 
-const app = createWebApplication().build().mount(pets)
+const app = createWebApplication().mount(pets)
 
 type App = typeof app
 type Pet = { id: number; name: string }

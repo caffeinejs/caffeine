@@ -39,7 +39,6 @@ describe('route constraints', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
       .constraints(c => c.register(flavorStrategy(), { header: 'X-Flavor' }))
-      .build()
       .mount(dish)
     await app.ready()
 
@@ -57,7 +56,7 @@ describe('route constraints', () => {
     r.get('/')
       .constraint('nope', 1)
       .handler(() => ({}))
-    const app = createWebApplication({ container: new CaffeineIoC() }).build().mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
 
     await expect(app.ready()).rejects.toThrow(/unknown route constraint "nope"/)
   })
@@ -68,7 +67,7 @@ describe('route constraints', () => {
       .version('2.0.0')
       .with(fst({ constraints: { version: '1.0.0' } }))
       .handler(() => ({}))
-    const app = createWebApplication({ container: new CaffeineIoC() }).build().mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
 
     await expect(app.ready()).rejects.toThrow(/constraint "version" is set by both/)
   })
@@ -80,7 +79,7 @@ describe('route constraints', () => {
       .version('1.0.0')
       .with(fst({ constraints: { host: 'api.example' } }))
       .handler(() => ({ ok: true }))
-    const app = createWebApplication({ container: new CaffeineIoC() }).build().mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
     await app.ready()
 
     const res = await app.fetch('/c', { headers: { 'accept-version': '1.x', host: 'api.example' } })

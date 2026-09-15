@@ -10,7 +10,7 @@ import './order/order.controller.js'
 import './payment/payment.controller.js'
 
 const started = performance.now()
-const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
 await app.ready()
 await app.instance.listen({ port: 3013, host: '127.0.0.1' })
 process.stdout.write(`start: ${(performance.now() - started).toFixed(3)}ms\n`)

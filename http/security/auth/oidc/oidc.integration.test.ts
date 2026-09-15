@@ -75,7 +75,7 @@ describe('OIDC integration', () => {
 
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOIDCApp(f).build()
+    const app = makeOIDCApp(f)
     await app.ready()
 
     // A navigation, so the challenge redirects. Without the header this is a 401 carrying the same URL —
@@ -142,7 +142,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie(nonce)
       const f = fastify()
       f.register(FastifyCookie)
-      const app = makeOIDCApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
@@ -158,7 +158,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie('n', 'correct-state')
       const f = fastify()
       f.register(FastifyCookie)
-      const app = makeOIDCApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
       // Planted under the name the *query* state derives, so the lookup succeeds and the sealed-vs-parameter
@@ -175,7 +175,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie('correct-nonce')
       const f = fastify()
       f.register(FastifyCookie)
-      const app = makeOIDCApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
@@ -190,7 +190,7 @@ describe('OIDC integration', () => {
       const stateCookie = await makeStateCookie('correct-nonce')
       const f = fastify({ logger: false })
       f.register(FastifyCookie)
-      const app = makeOIDCApp(f, jwksResolver).build()
+      const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
@@ -224,7 +224,7 @@ describe('OIDC integration', () => {
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'oidc-int-user', ISSUER)])
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOIDCApp(f).build()
+    const app = makeOIDCApp(f)
     await app.ready()
 
     const res = await app.fetch('/oidc-int-session', {
@@ -255,7 +255,7 @@ describe('OIDC integration', () => {
 
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOIDCApp(f).build()
+    const app = makeOIDCApp(f)
     await app.ready()
 
     const [pub, prot] = await Promise.all([app.fetch('/oidc-int-anon/public'), app.fetch('/oidc-int-anon/protected')])
@@ -285,7 +285,7 @@ describe('OIDC integration', () => {
 
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOIDCApp(f).build()
+    const app = makeOIDCApp(f)
     await app.ready()
 
     const res = await app.fetch('/oidc-int-xhr', { headers: { accept: 'application/json' } })
@@ -311,7 +311,7 @@ describe('OIDC integration', () => {
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'admin', ISSUER), new Claim('roles', 'admin', ISSUER)])
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOIDCApp(f).build()
+    const app = makeOIDCApp(f)
     await app.ready()
 
     const res = await app.fetch('/oidc-int-role-ok', {
@@ -337,7 +337,7 @@ describe('OIDC integration', () => {
     ])
     const f = fastify()
     f.register(FastifyCookie)
-    const app = makeOIDCApp(f).build()
+    const app = makeOIDCApp(f)
     await app.ready()
 
     const res = await app.fetch('/oidc-int-role-403', {
@@ -348,7 +348,7 @@ describe('OIDC integration', () => {
 
   it('throws at startup if @fastify/cookie is not registered', async () => {
     const builder = makeOIDCApp(fastify())
-    await expect(builder.build().ready()).rejects.toThrow('@fastify/cookie')
+    await expect(builder.ready()).rejects.toThrow('@fastify/cookie')
   })
 
   it('throws at startup if controller route conflicts with callbackPath', async () => {
@@ -364,6 +364,6 @@ describe('OIDC integration', () => {
     const f = fastify()
     f.register(FastifyCookie)
     const builder = makeOIDCApp(f)
-    await expect(builder.build().ready()).rejects.toThrow('conflicts with a registered controller route')
+    await expect(builder.ready()).rejects.toThrow('conflicts with a registered controller route')
   })
 })

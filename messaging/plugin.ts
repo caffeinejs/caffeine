@@ -19,7 +19,7 @@ export type MessagingConfigure<C = unknown> = FeatureConfigurer<MessagingBuilder
  *     .use('primary', inMemoryBinder())
  *     .in('orders', { destination: 'orders', via: 'primary' })
  *     .out('notify', { destination: 'notify', via: 'primary' })))
- * await app.build().run()
+ * await app.run()
  * ```
  */
 export function messaging<C = unknown>(configure?: MessagingConfigure<C>): Feature<C>

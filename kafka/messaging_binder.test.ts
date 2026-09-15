@@ -90,7 +90,7 @@ describe('kafka messaging binder', () => {
           .out('kb-inject', { destination: 'orders', via: 'kafka' }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<MessageBus>(MessageBus).send('kb-inject', { id: 5 })
@@ -114,7 +114,7 @@ describe('kafka messaging binder', () => {
           .out('kb-notify', { destination: 'notify', via: 'b' }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<MessageBus>(MessageBus).send('kb-inject2', { id: 7 })
@@ -138,7 +138,7 @@ describe('kafka messaging binder', () => {
           .out('kb-inject3', { destination: 'orders', via: 'kafka' }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<MessageBus>(MessageBus).send('kb-inject3', { id: 1 })
@@ -158,7 +158,7 @@ describe('kafka messaging binder', () => {
           .out('kb-inject4', { destination: 'orders', via: 'kafka' }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<MessageBus>(MessageBus).send('kb-inject4', { id: 1 })
@@ -187,7 +187,7 @@ describe('kafka messaging binder', () => {
           .out('kb-pump-in', { destination: 'pump', via: 'kafka' }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
     const bus = built.container.get<MessageBus>(MessageBus)
 

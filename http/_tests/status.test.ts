@@ -16,7 +16,7 @@ describe('Status', () => {
 
     void [StatusController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/status/created', { method: 'POST' })
@@ -35,7 +35,7 @@ describe('Status', () => {
 
     void [StatusDefaultController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/status-default/ok')
@@ -53,7 +53,7 @@ describe('Status', () => {
 
     void [StatusEmptyController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/status-empty/ok')

@@ -24,7 +24,7 @@ describe('Timeout', () => {
 
     void [TimedClassController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const slowRes = await app.fetch('/timed-class/slow')
@@ -48,7 +48,7 @@ describe('Timeout', () => {
 
     void [TimedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/timed/slow')

@@ -17,7 +17,7 @@ describe('health probe path collisions', () => {
 
     void [CollidingController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).health().build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).health()
 
     await expect(app.ready()).rejects.toThrow(/already registered at "\/readyz"/)
   })

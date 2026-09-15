@@ -38,9 +38,10 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigProvider({ catalog: { pageSize: 25 } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .build()
-      .mount(routes)
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+      container: new CaffeineIoC(),
+      config: conf,
+    }).mount(routes)
 
     await app.ready()
 
@@ -70,9 +71,10 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(reloadable(() => current))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .build()
-      .mount(routes)
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+      container: new CaffeineIoC(),
+      config: conf,
+    }).mount(routes)
 
     app.use(churn, { hook: 'onRequest' })
 
@@ -92,9 +94,7 @@ describe('ctx.config', () => {
   it('serves an application that declared no configuration at all', async () => {
     const routes = new Router('/plain').get('/', ctx => ({ keys: Object.keys(ctx.config) }))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
-      .build()
-      .mount(routes)
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() }).mount(routes)
 
     await app.ready()
 
@@ -120,9 +120,10 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigProvider({ catalog: { pageSize: 25 } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .build()
-      .mount(routes)
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+      container: new CaffeineIoC(),
+      config: conf,
+    }).mount(routes)
 
     await app.ready()
 
@@ -206,7 +207,6 @@ describe('ctx.config with an application schema', () => {
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
       .server((s, c) => s.withConfig(c.server))
-      .build()
       .mount(routes)
 
     await app.ready()
@@ -228,7 +228,6 @@ describe('ctx.config with an application schema', () => {
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
       .server((s, c) => s.withConfig(c.server))
-      .build()
       .mount(routes)
 
     await app.ready()
@@ -246,9 +245,10 @@ describe('ctx.config with an application schema', () => {
     const conf = newConfiguration($t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) }), kFull)
       .source(new InlineConfigProvider({ catalog: { pageSize: 25 }, server: { host: '127.0.0.1' } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .build()
-      .mount(routes)
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+      container: new CaffeineIoC(),
+      config: conf,
+    }).mount(routes)
 
     await app.ready()
 
@@ -269,9 +269,10 @@ describe('ctx.config with an application schema', () => {
     const kServer = token<ConfigHandle<InferSchema<typeof withServer>>>(Symbol('app.server'))
 
     const conf = newConfiguration(withServer, kServer).build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .server((s, c) => s.withConfig(c.server))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+      container: new CaffeineIoC(),
+      config: conf,
+    }).server((s, c) => s.withConfig(c.server))
 
     await app.ready()
 

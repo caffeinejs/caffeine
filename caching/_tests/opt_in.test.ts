@@ -25,7 +25,7 @@ describe('caching is opt-in', () => {
     }
     void [PlainController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
     close = () => app.close()
     await app.ready()
 
@@ -44,7 +44,7 @@ describe('caching is opt-in', () => {
     }
     void [MissingController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
@@ -61,9 +61,7 @@ describe('caching is opt-in', () => {
     }
     void [DefaultController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .with(HTTPCaching())
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(HTTPCaching())
     close = () => app.close()
     await app.ready()
 
@@ -101,9 +99,9 @@ describe('caching is opt-in', () => {
     const container = new CaffeineIoC()
     container.bind(CacheStore, t => t.toClass(MapStore))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .with(HTTPCaching(b => b.store(CacheStore)))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).with(
+      HTTPCaching(b => b.store(CacheStore)),
+    )
     close = () => app.close()
     await app.ready()
 
@@ -124,9 +122,9 @@ describe('caching is opt-in', () => {
     }
     void [HeaderController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .with(HTTPCaching(b => b.statusHeader('X-Edge')))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(
+      HTTPCaching(b => b.statusHeader('X-Edge')),
+    )
     close = () => app.close()
     await app.ready()
 

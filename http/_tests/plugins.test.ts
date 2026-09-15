@@ -56,7 +56,6 @@ describe('plugin registration', () => {
       .with(stamping('third', 'x-third', log))
       .with(stamping('first', 'x-first', log))
       .with(stamping('second', 'x-second', log))
-      .build()
 
     await app.ready()
 
@@ -91,7 +90,6 @@ describe('plugin registration', () => {
       .with(feature('feature-b'))
       .with(stamping('plugin-c', 'x-c', log))
       .with(feature('feature-d'))
-      .build()
 
     await app.ready()
 
@@ -120,9 +118,7 @@ describe('plugin registration', () => {
       return fp(plugin, { name: 'greeting' })
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-      .with(factory)
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).with(factory)
 
     await expect(app.ready()).resolves.not.toThrow()
 
@@ -153,7 +149,6 @@ describe('plugin registration', () => {
       .with(stamping('before', 'x-before', log))
       .with(awaiting)
       .with(stamping('after', 'x-after', log))
-      .build()
 
     await app.ready()
 
@@ -172,9 +167,7 @@ describe('plugin registration', () => {
     }
     void [HeadSlotController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .with(stamping('stamp', 'x-stamp'))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(stamping('stamp', 'x-stamp'))
 
     await app.ready()
 
@@ -188,9 +181,7 @@ describe('plugin registration', () => {
   // The tail slot: the not-found handler is contributed last, so it sees whatever the plugins decorated the
   // server with and still answers a URL no route matched.
   it('answers an unmatched URL from the not-found handler registered after every plugin', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .with(stamping('stamp', 'x-stamp'))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(stamping('stamp', 'x-stamp'))
 
     await app.ready()
 
@@ -217,9 +208,7 @@ describe('scoped plugin registration', () => {
 
     const orders = new Router('/scoped-orders').get('/', () => ({ ok: true }))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .build()
-      .mount(pets, orders)
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(pets, orders)
 
     await app.ready()
 
@@ -234,9 +223,7 @@ describe('scoped plugin registration', () => {
 
     shop.group('/items', items => items.get('/', () => ({ ok: true })))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .build()
-      .mount(shop)
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(shop)
 
     await app.ready()
 
@@ -263,7 +250,7 @@ describe('scoped plugin registration', () => {
     }
     void [AdminController, PublicController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
 
     await app.ready()
 
@@ -286,7 +273,6 @@ describe('scoped plugin registration', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .with(twice)
       .with(twice)
-      .build()
 
     await app.ready()
 
@@ -302,7 +288,6 @@ describe('scoped plugin registration', () => {
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .with(twice)
       .with(twice)
-      .build()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)
   })
@@ -313,9 +298,7 @@ describe('scoped plugin registration', () => {
       .plugin(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .build()
-      .mount(pets, orders)
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(pets, orders)
 
     await app.ready()
 

@@ -39,7 +39,6 @@ describe('constraint Vary header', () => {
             ])
         })
       })
-      .build()
     await app.ready()
 
     const res = await app.fetch('/late', { headers: { 'x-flavor': 'spicy' } })
@@ -54,7 +53,7 @@ describe('constraint Vary header', () => {
     const plain = new Router('/plain')
     plain.get('/').handler(() => ({ ok: true }))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build().mount(plain)
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(plain)
     await app.ready()
 
     const res = await app.fetch('/plain')

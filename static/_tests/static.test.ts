@@ -20,9 +20,9 @@ describe('static feature', () => {
   })
 
   it('serves a file under the configured prefix', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      staticFiles(s => s.serve(fixtures, { prefix: '/static' })),
+    )
     await app.ready()
 
     const res = await app.fetch('/static/hello.txt')
@@ -33,9 +33,9 @@ describe('static feature', () => {
   })
 
   it('sets the css content-type from the extension', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(staticFiles(s => s.serve(fixtures, { prefix: '/assets' })))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      staticFiles(s => s.serve(fixtures, { prefix: '/assets' })),
+    )
     await app.ready()
 
     const res = await app.fetch('/assets/style.css')
@@ -45,9 +45,9 @@ describe('static feature', () => {
   })
 
   it('404s for a missing file', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      staticFiles(s => s.serve(fixtures, { prefix: '/static' })),
+    )
     await app.ready()
 
     const res = await app.fetch('/static/nope.txt')
@@ -56,9 +56,9 @@ describe('static feature', () => {
   })
 
   it('serves from multiple mounts (only the first decorates reply)', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(staticFiles(s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' })))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      staticFiles(s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' })),
+    )
     await app.ready()
 
     const one = await app.fetch('/one/hello.txt')

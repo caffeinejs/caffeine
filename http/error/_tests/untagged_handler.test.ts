@@ -20,7 +20,7 @@ void [UntaggedHandler]
 
 describe('untagged error handler', () => {
   it('rejects a handler that does not declare an error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

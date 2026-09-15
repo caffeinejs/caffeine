@@ -289,7 +289,7 @@ describe a slice that holds credentials.
 ```mermaid
 sequenceDiagram
   participant Conf as newConfiguration(...)
-  participant App as ApplicationBuilder
+  participant App as Application
   participant Feat as each Feature
   participant Def as ConfigDefinition
   participant Shard as ConfigShard

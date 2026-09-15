@@ -1,7 +1,7 @@
 import { token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import { createApplication } from './application_builder.js'
+import { createApplication } from './application.js'
 import { ErrFeatureAlreadyInstalled, kFeatureName, type Feature, type FeatureConfigureKit } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 
@@ -42,11 +42,11 @@ function keyed(instance = 'default'): Feature {
   return new TrackerBuilder(instance === 'default' ? 'keyed' : `keyed:${instance}`)
 }
 
-describe('BaseApplicationBuilder.with', () => {
+describe('Application.with', () => {
   it('installs the feature and bootstraps it', async () => {
     const builder = createApplication().with(tracker(t => t.capture('recorded')))
 
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     expect(app.container.getOptional(kSentinel)).toEqual({ value: 'recorded' })

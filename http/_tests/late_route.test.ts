@@ -31,18 +31,16 @@ describe('$route', () => {
   })
 
   it('registers a route that responds, through a plugin registered with .with(...)', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .with(
-        lateRoute(router => {
-          router.path('/late').routes([
-            new RouteBuilder()
-              .method('GET')
-              .path('/hello')
-              .handle(() => ({ ok: true })),
-          ])
-        }),
-      )
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify())).with(
+      lateRoute(router => {
+        router.path('/late').routes([
+          new RouteBuilder()
+            .method('GET')
+            .path('/hello')
+            .handle(() => ({ ok: true })),
+        ])
+      }),
+    )
     await app.ready()
 
     const res = await app.fetch('/late/hello')
@@ -51,18 +49,16 @@ describe('$route', () => {
   })
 
   it('does not appear in app.routeGroups', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .with(
-        lateRoute(router => {
-          router.path('/late').routes([
-            new RouteBuilder()
-              .method('GET')
-              .path('/hidden')
-              .handle(() => ({})),
-          ])
-        }),
-      )
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify())).with(
+      lateRoute(router => {
+        router.path('/late').routes([
+          new RouteBuilder()
+            .method('GET')
+            .path('/hidden')
+            .handle(() => ({})),
+        ])
+      }),
+    )
     await app.ready()
 
     expect(app.routeGroups.some(g => g.path === '/late')).toBe(false)
@@ -79,21 +75,19 @@ describe('$route', () => {
     const container = new CaffeineIoC()
     container.bind(DenyGuard, t => t.toSelf())
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { container })
-      .with(
-        lateRoute(router => {
-          router
-            .path('/late')
-            .guards([DenyGuard])
-            .routes([
-              new RouteBuilder()
-                .method('GET')
-                .path('/closed')
-                .handle(() => ({ ok: true })),
-            ])
-        }),
-      )
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { container }).with(
+      lateRoute(router => {
+        router
+          .path('/late')
+          .guards([DenyGuard])
+          .routes([
+            new RouteBuilder()
+              .method('GET')
+              .path('/closed')
+              .handle(() => ({ ok: true })),
+          ])
+      }),
+    )
     await app.ready()
 
     const res = await app.fetch('/late/closed')
@@ -101,21 +95,19 @@ describe('$route', () => {
   })
 
   it('participates in the startup check for a protected route with no authentication configured', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .with(
-        lateRoute(router => {
-          router
-            .path('/late')
-            .authorize({})
-            .routes([
-              new RouteBuilder()
-                .method('GET')
-                .path('/secret')
-                .handle(() => ({ ok: true })),
-            ])
-        }),
-      )
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify())).with(
+      lateRoute(router => {
+        router
+          .path('/late')
+          .authorize({})
+          .routes([
+            new RouteBuilder()
+              .method('GET')
+              .path('/secret')
+              .handle(() => ({ ok: true })),
+          ])
+      }),
+    )
 
     await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
     app = undefined
@@ -158,7 +150,6 @@ describe('$route', () => {
             ])
         }),
       )
-      .build()
       .mount(ordinary) as WebApplication
     await app.ready()
 

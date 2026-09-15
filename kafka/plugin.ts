@@ -25,7 +25,7 @@ export type KafkaConfigure<C = unknown> = FeatureConfigurer<KafkaBuilder<C>, C>
  * const app = createApplication()
  *   .with(kafka(k => k.brokers('localhost:9092').groupId('svc')))
  *   .with(kafka('orders', k => k.brokers('localhost:9092').groupId('orders')))
- * await app.build().run()
+ * await app.run()
  * ```
  */
 export function kafka<C = unknown>(configure?: KafkaConfigure<C>, options?: KafkaPluginOptions): Feature<C>

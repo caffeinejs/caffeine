@@ -35,7 +35,7 @@ describe('retry topic provisioning', () => {
         clients: broker.clients(),
       }),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     const created = broker.createdTopics.map(spec => spec.topic)
@@ -56,7 +56,7 @@ describe('retry topic provisioning', () => {
   it('inherits the source topic partition count when none is configured', async () => {
     const broker = new FakeBroker({ partitions: { prov: 6 } })
     const app = createApplication({}).with(kafka(k => k.brokers('b').groupId('g'), { clients: broker.clients() }))
-    const built = app.build()
+    const built = app
     await built.run()
 
     // Retry tiers AND the DLT match the source's 6 partitions.
@@ -72,7 +72,7 @@ describe('retry topic provisioning', () => {
     const app = createApplication({}).with(
       kafka(k => k.brokers('b').groupId('g').topicProvisioning({ partitions: 2 }), { clients: broker.clients() }),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     expect(partitionsOf(broker, 'prov-retry-0')).toBe(2)
@@ -86,7 +86,7 @@ describe('retry topic provisioning', () => {
     const app = createApplication({}).with(
       kafka(k => k.brokers('b').groupId('g').topicProvisioning({ partitions: 2 }), { clients: broker.clients() }),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     // Strategy pinned 4; neither the source (6) nor the instance config (2) applies to its retry topics.
@@ -98,7 +98,7 @@ describe('retry topic provisioning', () => {
   it('falls back to a single partition when the source is unknown and nothing is configured', async () => {
     const broker = new FakeBroker()
     const app = createApplication({}).with(kafka(k => k.brokers('b').groupId('g'), { clients: broker.clients() }))
-    const built = app.build()
+    const built = app
     await built.run()
 
     expect(partitionsOf(broker, 'prov-retry-0')).toBe(1)
@@ -111,7 +111,7 @@ describe('retry topic provisioning', () => {
     const app = createApplication({}).with(
       kafka(k => k.brokers('b').groupId('g').topicProvisioning({ autoCreate: false }), { clients: broker.clients() }),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     expect(broker.createdTopics).toHaveLength(0)

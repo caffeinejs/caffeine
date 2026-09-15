@@ -27,7 +27,7 @@ void [HTTPErrController]
 
 describe('ErrHTTP envelope fallback', () => {
   it('renders the status and a structured envelope for an unhandled ErrHTTP', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/http-err/conflict')
@@ -43,7 +43,7 @@ describe('ErrHTTP envelope fallback', () => {
   })
 
   it('sends a falsy-but-defined body verbatim instead of the envelope', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/http-err/zero-body')

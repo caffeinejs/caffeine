@@ -42,7 +42,7 @@ describe('BasicAuthenticationHandler (application)', () => {
         ),
       ),
     )
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/basic-ok', { headers: { authorization: basicHeader('alice', 'secret') } })
@@ -63,7 +63,7 @@ describe('BasicAuthenticationHandler (application)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addBasic(b => b.realm('My App').validate(() => null)))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/basic-challenge')
@@ -84,7 +84,7 @@ describe('BasicAuthenticationHandler (application)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addBasic(b => b.validate(() => null)))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/basic-bad', { headers: { authorization: basicHeader('alice', 'wrong') } })

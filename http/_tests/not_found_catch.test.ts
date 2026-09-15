@@ -22,7 +22,7 @@ class GlobalNotFound extends ErrorHandler<ErrHTTPNotFound> {
 
 describe('@Catch and unmatched routes', () => {
   it('a global @Catch(ErrHTTPNotFound) sees a URL that matched no route', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
     app.container.bind(GlobalNotFound, t => t.toClass(GlobalNotFound).extends(ErrorHandler))
     await app.ready()
 

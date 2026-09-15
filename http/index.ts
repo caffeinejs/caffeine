@@ -1,7 +1,6 @@
 export * from './adapter.js'
 export * from './adapter_factory.js'
 export * from './application.js'
-export * from './application_builder.js'
 export * from './constraints/index.js'
 export * from './context.js'
 export * from './decorators/index.js'

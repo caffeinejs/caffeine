@@ -39,7 +39,7 @@ describe('deserialization-error path', () => {
         { clients: broker.clients() },
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('de-topic', 'not-decodable')

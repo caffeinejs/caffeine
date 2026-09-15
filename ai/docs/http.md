@@ -20,7 +20,7 @@ export class ExampleController {
   }
 }
 
-const app = createWebApplication(fastifyAdapterFactory(Fastify({ logger: true }))).build()
+const app = createWebApplication(fastifyAdapterFactory(Fastify({ logger: true })))
 ```
 
 Side-effect-import the controller file from `main.ts` so `@Controller` registers.

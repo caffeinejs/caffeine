@@ -46,7 +46,7 @@ describe('per-listener deserializers', () => {
             .deserializers({ value: ((d: unknown) => d) as never }),
         ),
       )
-    const built = app.build()
+    const built = app
     await built.run()
 
     // one consumer per (groupId, deserializers): instance-default JSON + the avro override

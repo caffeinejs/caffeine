@@ -9,7 +9,7 @@ import './cart/cart.controller.js'
 import './order/order.controller.js'
 import './payment/payment.controller.js'
 
-const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
 await app.ready()
 
 global.gc!()

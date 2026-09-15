@@ -1,25 +1,37 @@
-import { type Container } from '@caffeinejs/di'
+import { CaffeineIoC, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
 
-import { activeProfiles, ConfigDefinition, hostProfiles, type ConfigHandle } from './config/index.js'
 import {
+  activeProfiles,
+  ConfigDefinition,
+  ConfigModule,
+  hostProfiles,
+  kConfigDefinition,
+  type ConfigHandle,
+} from './config/index.js'
+import type { AppConfiguration } from './configuration.js'
+import { ErrCaffeine } from './error.js'
+import {
+  ErrFeatureAlreadyInstalled,
   kFeatureBootstrap,
   kFeatureConfigure,
+  kFeatureName,
   type BootstrapKit,
   type ExtensionRegistrar,
   type Feature,
   type FeatureConfigureKit,
 } from './feature.js'
+import { kAddConfigurer, type FeatureConfigurer } from './feature_builder.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { $t } from './schema/t.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
+import { ShutdownBuilder } from './shutdown/shutdown_builder.js'
 import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './shutdown/shutdown_options.js'
+import { detectSignalDispatcher } from './shutdown/signals.js'
 
-/** Construction input for an {@link Application}, produced by a {@link BaseApplicationBuilder}. */
-export interface ApplicationInit {
-  container: Container
-  services: Feature[]
-  /** The live configuration definition, handed to every service so it can contribute to the tree. */
-  config?: ConfigDefinition
+export interface ApplicationOptions<TConfig = unknown> {
+  container?: Container | Options
+  /** Built with {@link newConfiguration}. Omitted, the application resolves an empty, passthrough tree. */
+  config?: AppConfiguration<TConfig>
 }
 
 /**
@@ -60,32 +72,78 @@ export const caffeineConfigSchema = $t.Object({
   profiles: $t.List($t.String(), { default: DEFAULT_CAFFEINE_CONFIG.profiles }),
 })
 
+/** Thrown when an application is configured after {@link Application.ready} has started. */
+export class ErrApplicationStarted extends ErrCaffeine {
+  constructor() {
+    super('Cannot configure the application: it has already started', 'ERR_APPLICATION_STARTED')
+  }
+}
+
 /**
- * A headless application: owns the DI container, the configuration {@link Service}s, and the lifecycle
+ * A headless application: owns the DI container, the installed {@link Feature}s, and the lifecycle
  * (ready → run → close), with no serving platform. Bootstrap and destroy hooks live on the container: a class
  * binding that implements `OnBootstrap` / `OnDestroy` runs during `container.init()` / `container.dispose()`.
  * The HTTP `WebApplication` extends this and fills the protected `setup`/`start`/`stop` steps.
+ *
+ * Configures fluently, and is itself the running instance — there is no separate builder:
+ *
+ * ```ts
+ * createApplication({ config: conf })
+ *   .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+ *   .shutdown(s => s.drainDelay('5s'))
+ * ```
  */
-export class Application {
+export class Application<TConfig = unknown> {
   readonly #container: Container
-  readonly #services: Feature[]
+  readonly #services: Feature[] = []
+  readonly #installed = new Set<string>()
   readonly #availability = new ApplicationAvailability()
   readonly #config: ConfigDefinition
+
+  // Registered unconditionally: the drain policy applies to every application, probes or not. Configuration
+  // reaches it only through `.shutdown((s, c) => s.withConfig(...))`. Held so `.shutdown()` can configure it
+  // in place.
+  readonly #shutdownBuilder = new ShutdownBuilder<unknown>()
 
   #handle: ConfigHandle<unknown> | undefined
   #name = ''
   #profiles: string[] = []
   #shutdownPolicy?: ShutdownOptions
+  #booting = false
   #ready = false
   #shutdown?: GracefulShutdown
   #closing?: Promise<void>
 
-  constructor(init: ApplicationInit) {
-    this.#container = init.container
-    this.#services = init.services
-    // An application constructed without a builder still gets one, so services can register unconditionally.
-    // Nothing bootstraps it in that case, which is what a missing config module means.
-    this.#config = init.config ?? new ConfigDefinition()
+  /**
+   * Constructs the container with `decorators:false` and calls `autoWire()`; a caller-supplied, already-wired
+   * container is used as-is.
+   */
+  constructor(options: ApplicationOptions<TConfig> = {}) {
+    const c = options.container
+
+    if (c != null && typeof (c as Container).get === 'function') {
+      this.#container = c as Container
+    } else {
+      const opts = c != null ? (c as Partial<Options>) : {}
+      this.#container = new CaffeineIoC({ ...opts, decorators: false })
+      this.#container.autoWire()
+    }
+
+    // Configuration is unconditional: features read their own slices from the tree whether or not the
+    // application ever declared one, so the module is installed here regardless of `options.config`. It reads
+    // the definition at `container.init()`, by which point every feature has registered.
+    //
+    // The warning channel is wired here rather than inside `std/config`, which stays free of any host
+    // dependency: a refresh that fails for one feature is contained rather than thrown, so it needs somewhere
+    // to be heard.
+    this.#config = options.config ?? new ConfigDefinition()
+    this.#config.warn = message => detectSignalDispatcher().warn(message)
+    this.#container.bind(kConfigDefinition, t => t.toValue(this.#config))
+    this.#container.addModules(ConfigModule(this.#config))
+
+    // Pushed directly, not through `addFeature`: a subclass's private fields do not exist yet while this
+    // constructor runs, so an overridden method cannot be called from here.
+    this.#services.push(this.#shutdownBuilder)
   }
 
   get container(): Container {
@@ -107,6 +165,73 @@ export class Application {
    */
   get availability(): ApplicationAvailability {
     return this.#availability
+  }
+
+  addFeature(feature: Feature): this {
+    this.assertConfigurable()
+    this.#services.push(feature)
+    return this
+  }
+
+  addModules(module: Module | ModuleFn, ...modules: Array<Module | ModuleFn>): this {
+    this.assertConfigurable()
+    this.#container.addModules(module, ...modules)
+    return this
+  }
+
+  /**
+   * Installs a feature. Callable at any point before {@link ready}, and once per {@link kFeatureName} — an
+   * instanced feature (`kafka('orders')`) carries a distinct name, so it does not clash with the default
+   * instance.
+   *
+   * The feature's configure callback is written where the feature is constructed, and its second argument is
+   * typed against the schema the `config` constructor option declared.
+   *
+   * ```ts
+   * const conf = newConfiguration(schema, kConfig).build()
+   *
+   * createApplication({ config: conf })
+   *   .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+   * ```
+   *
+   * @throws ErrFeatureAlreadyInstalled when a feature with the same {@link kFeatureName} is already installed.
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  with(feature: Feature<TConfig>): this {
+    this.assertConfigurable()
+
+    const name = feature[kFeatureName]
+
+    if (this.#installed.has(name)) {
+      throw new ErrFeatureAlreadyInstalled(name)
+    }
+    this.#installed.add(name)
+
+    return this.addFeature(feature as Feature)
+  }
+
+  /**
+   * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
+   * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults.
+   * A fluent method is the last word; `SHUTDOWN__DRAIN_DELAY` reaches the feature only through
+   * `.shutdown((s, c) => s.withConfig(c.shutdown))`.
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  shutdown(configure: FeatureConfigurer<ShutdownBuilder<TConfig>, TConfig>): this {
+    this.assertConfigurable()
+    this.#shutdownBuilder[kAddConfigurer](configure as never)
+    return this
+  }
+
+  /**
+   * Refuses configuration once {@link ready} has started: the feature list is read once, so a later change
+   * would be dropped rather than applied.
+   */
+  protected assertConfigurable(): void {
+    if (this.#booting) {
+      throw new ErrApplicationStarted()
+    }
   }
 
   /**
@@ -138,6 +263,8 @@ export class Application {
     if (this.#ready) {
       return
     }
+
+    this.#booting = true
 
     // The framework's own block, registered directly: the application name and profiles are read before any
     // feature has configured, so its location is fixed rather than something a builder supplies.
@@ -324,7 +451,7 @@ export class Application {
     return this.#ready
   }
 
-  /** The features registered on the builder (before any framework-prepended ones). */
+  /** The features installed on the application (before any framework-prepended ones). */
   protected get services(): readonly Feature[] {
     return this.#services
   }
@@ -375,6 +502,17 @@ export class Application {
   protected stop(): Promise<void> {
     return Promise.resolve()
   }
+}
+
+/**
+ * Creates a headless {@link Application}. Mirrors the HTTP `createWebApplication`.
+ *
+ * Install features with `.with(feature)` or `.with(feature(configure))` — can be called at any point in the
+ * chain before `ready()`. Configuration is built separately with `newConfiguration` and passed in as
+ * `{ config }`.
+ */
+export function createApplication<TConfig = unknown>(options?: ApplicationOptions<TConfig>): Application<TConfig> {
+  return new Application(options)
 }
 
 function delay(ms: number): Promise<void> {

@@ -26,9 +26,7 @@ describe('server builder + run()', () => {
 
     void [ConfiguredController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .server(s => s.host('127.0.0.1'))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify())).server(s => s.host('127.0.0.1'))
 
     await app.run()
 
@@ -48,7 +46,7 @@ describe('server builder + run()', () => {
 
     void [DefaultController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await app.run()
 
@@ -70,7 +68,7 @@ describe('server builder + run()', () => {
 
     // Default build: wildcard host, port 0. The value run() hands back is the one a caller can log or open
     // straight away — no second call, no rebuilding an origin from a wildcard AddressInfo.
-    app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     const info = await app.run()
 
@@ -90,9 +88,7 @@ describe('server builder + run()', () => {
 
     void [AutoController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .server(s => s.host('127.0.0.1'))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify())).server(s => s.host('127.0.0.1'))
 
     await app.run()
 
@@ -112,9 +108,7 @@ describe('server builder + run()', () => {
 
     void [TwiceController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .server(s => s.host('127.0.0.1'))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify())).server(s => s.host('127.0.0.1'))
 
     await app.ready()
     await app.run()

@@ -9,6 +9,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest'
 import { InlineConfigProvider, JSONConfigProvider, type ConfigHandle } from './config/index.js'
 import {
   $t,
+  ErrApplicationStarted,
   type FeatureConfigureKit,
   type InferSchema,
   kFeatureBootstrap,
@@ -30,7 +31,7 @@ const kConfig = token<ConfigHandle<InferSchema<typeof caffeineSchema>>>(Symbol('
 function appWith(configure: (container: CaffeineIoC) => void) {
   const container = new CaffeineIoC({ decorators: false })
   configure(container)
-  return createApplication({ container }).build()
+  return createApplication({ container })
 }
 
 describe('Application lifecycle', () => {
@@ -88,7 +89,7 @@ describe('Application lifecycle', () => {
     container.bind(Ok, t => t.toClass(Ok))
     const dispose = vi.spyOn(container, 'dispose')
 
-    const app = createApplication({ container }).build()
+    const app = createApplication({ container })
     await app.ready()
 
     await expect(app.close()).rejects.toThrow(AggregateError)
@@ -113,11 +114,41 @@ describe('Application lifecycle', () => {
     }
 
     const app = createApplication({}).with(probe)
+    await app.ready()
 
-    const built = app.build()
-    await built.ready()
+    expect(app.container.getOptional(kSentinel)).toEqual({ value: 'hello' })
+  })
+})
 
-    expect(built.container.getOptional(kSentinel)).toEqual({ value: 'hello' })
+describe('configuring a started application', () => {
+  // `ready()` reads the feature list once. A change made after that point would be dropped without a word, so
+  // it is refused instead: a misplaced call must not look like it worked.
+  const late: Feature = {
+    [kFeatureName]: 'late',
+    [kFeatureConfigure]() {
+      // Nothing to bind.
+    },
+    [kFeatureBootstrap]() {
+      // Nothing to register.
+    },
+  }
+
+  it('refuses configuration once ready() has completed', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+    await app.ready()
+
+    expect(() => app.with(late)).toThrow(ErrApplicationStarted)
+    expect(() => app.addFeature(late)).toThrow(ErrApplicationStarted)
+    expect(() => app.shutdown(s => s.signals(false))).toThrow(ErrApplicationStarted)
+  })
+
+  it('refuses configuration while ready() is still in flight', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const ready = app.ready()
+
+    expect(() => app.with(late)).toThrow(ErrApplicationStarted)
+
+    await ready
   })
 })
 
@@ -132,7 +163,7 @@ describe('application name and profiles', () => {
   class EuOnly {}
 
   it('defaults name to empty after ready()', async () => {
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     await app.ready()
 
     expect(app.name).toBe('')
@@ -142,7 +173,7 @@ describe('application name and profiles', () => {
     const conf = newConfiguration(caffeineSchema, kConfig)
       .source(new InlineConfigProvider({ caffeine: { name: 'petstore' } }))
       .build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     await app.ready()
 
     expect(app.name).toBe('petstore')
@@ -151,7 +182,7 @@ describe('application name and profiles', () => {
   it('applies CAFFEINE__PROFILES to the container', async () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu')
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     await app.ready()
 
     expect(app.container.profiles.has('eu')).toBe(true)
@@ -163,7 +194,7 @@ describe('application name and profiles', () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu')
 
     const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
-    const app = createApplication({ container }).build()
+    const app = createApplication({ container })
     await app.ready()
 
     expect(container.profiles.has('test')).toBe(true)
@@ -174,7 +205,7 @@ describe('application name and profiles', () => {
   it('does not register a @Profile bean without matching config profiles', async () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf())
-    const app = createApplication({ container }).build()
+    const app = createApplication({ container })
     await app.ready()
 
     expect(container.has(EuOnly)).toBe(false)
@@ -185,7 +216,7 @@ describe('application name and profiles', () => {
 
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf())
-    const app = createApplication({ container }).build()
+    const app = createApplication({ container })
     await app.ready()
 
     expect(container.has(EuOnly)).toBe(true)
@@ -197,7 +228,7 @@ describe('application name and profiles', () => {
     const conf = newConfiguration(caffeineSchema, kConfig)
       .source(new InlineConfigProvider({ caffeine: { name: 'petstore' } }))
       .build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
     // The point: a caller reads post-start identity straight off run(), without keeping the app handle to
     // poll app.name / app.profiles.
@@ -210,7 +241,7 @@ describe('application name and profiles', () => {
   it('deduplicates the active profiles before applying them', async () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu,eu,dev')
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     await app.ready()
 
     expect(app.profiles).toEqual(['eu', 'dev'])
@@ -224,7 +255,7 @@ describe('application name and profiles', () => {
     const conf = newConfiguration(caffeineSchema, kConfig)
       .source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } }))
       .build()
-    const app = createApplication({ container, config: conf }).build()
+    const app = createApplication({ container, config: conf })
     await app.ready()
 
     expect(app.profiles).toEqual(['test'])
@@ -255,7 +286,7 @@ describe('profile-segregated config files', () => {
     await writeTmp('app-e2e-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
 
     const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigProvider(base)).build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     await app.ready()
 
     expect(app.name).toBe('eu-app')
@@ -270,7 +301,7 @@ describe('profile-segregated config files', () => {
     const app = createApplication({
       container: new CaffeineIoC({ decorators: false, profiles: ['test'] }),
       config: conf,
-    }).build()
+    })
     await app.ready()
 
     expect(app.name).toBe('test-app')

@@ -14,7 +14,7 @@ describe('Fastify Adapter', () => {
     const server = Fastify()
     server.get('/', () => ({ ok: true }))
 
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = createWebApplication(fastifyAdapterFactory(server))
     await app.run()
 
     try {
@@ -35,7 +35,7 @@ describe('Fastify Adapter', () => {
     const server = Fastify()
     server.get('/', () => ({ ok: true }))
 
-    const app = createWebApplication(fastifyAdapterFactory(server)).build()
+    const app = createWebApplication(fastifyAdapterFactory(server))
     await app.ready()
 
     const result = await app.fetch('/')
@@ -56,7 +56,7 @@ describe('Fastify Adapter', () => {
 
       void [TestController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
+      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const res = await app.fetch('/users/1?filter=test', { headers: { 'x-test': 'test' } })
@@ -85,7 +85,7 @@ describe('Fastify Adapter', () => {
 
       void [PickersController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
+      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const res = await app.fetch('/test/pickers?foo=bar')
@@ -112,7 +112,7 @@ describe('Fastify Adapter', () => {
 
       void [AsyncPickController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
+      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const res = await app.fetch('/async-pick/value')
@@ -135,7 +135,7 @@ describe('Fastify Adapter', () => {
 
       void [MixedPickController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
+      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const res = await app.fetch('/mixed-pick/42')
@@ -158,7 +158,7 @@ describe('Fastify Adapter', () => {
 
       void [MethodController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
+      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       for (const m of methods) {
@@ -185,7 +185,7 @@ describe('Fastify Adapter', () => {
 
       void [RequestScopedController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
+      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const r1 = await app.fetch('/req-ctrl/id')
@@ -219,7 +219,7 @@ describe('Fastify Adapter', () => {
 
       void [TransientController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify())).build()
+      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
       await app.ready()
 
       const r1 = await app.fetch('/transient-ctrl/svc-id')
@@ -247,7 +247,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/session', { headers: { Cookie: 'session=abc123' } })
@@ -269,7 +269,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
@@ -295,7 +295,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie, { secret: SECRET })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${signed}` } })
@@ -317,7 +317,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie, { secret: 'test-secret' })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
@@ -340,7 +340,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/set')
@@ -364,7 +364,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/get', { headers: { Cookie: 'token=secret' } })
@@ -390,7 +390,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie, { secret: SECRET })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${signed}` } })
@@ -413,7 +413,7 @@ describe('Fastify Adapter', () => {
       const fastify = Fastify()
       fastify.register(FastifyCookie)
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).build()
+      const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
 
       const res = await app.fetch('/ck/delete')

@@ -45,7 +45,7 @@ describe('configuration as the DI values provider', () => {
     })
     container.bind(Repository, t => t.toSelf())
 
-    await builder.build().ready()
+    await builder.ready()
 
     expect(container.get(Repository).host).toBe('db.local')
   })
@@ -67,7 +67,7 @@ describe('configuration as the DI values provider', () => {
     })
     container.bind(Repository, t => t.toSelf())
 
-    await builder.build().ready()
+    await builder.ready()
 
     const repository = container.get(Repository)
     expect(repository.port).toBe(5432)
@@ -87,7 +87,7 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({ provider: mutable, priority: ConfigPriority.ENV })
     container.bind(Holder, t => t.toSelf().lifetime(Scopes.TRANSIENT))
 
-    await builder.build().ready()
+    await builder.ready()
 
     expect(container.get(Holder).host).toBe('first')
 
@@ -110,7 +110,7 @@ describe('configuration as the DI values provider', () => {
     container.bindValuesProvider<{ own: string }>(t => t.toValue({ own: 'mine' }))
     container.bind(Holder, t => t.toSelf())
 
-    await builder.build().ready()
+    await builder.ready()
 
     expect(container.get(Holder).own).toBe('mine')
   })

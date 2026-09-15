@@ -44,7 +44,7 @@ const ticks = new Router('/ticks')
 
 const bare = new Router('/bare').get('/', () => ({ ok: true }))
 
-const app = createWebApplication().build().mount(pets, greet)
+const app = createWebApplication().mount(pets, greet)
 
 type Pet = { id: number; name: string }
 type Problem = { detail: string }

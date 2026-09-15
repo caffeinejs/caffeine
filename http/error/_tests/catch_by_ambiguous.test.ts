@@ -40,7 +40,7 @@ void [AmbiguousController]
 
 describe('ambiguous @CatchWith', () => {
   it('rejects when two referenced handlers cover the same error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

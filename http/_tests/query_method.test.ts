@@ -21,7 +21,7 @@ describe('@Query verb (OpenAPI 3.2 QUERY method)', () => {
 
     const instance = Fastify()
     instance.addHttpMethod('QUERY', { hasBody: true })
-    const app = createWebApplication(fastifyAdapterFactory(instance)).build()
+    const app = createWebApplication(fastifyAdapterFactory(instance))
     await app.ready()
 
     const res = await app.fetch('/query-test', {

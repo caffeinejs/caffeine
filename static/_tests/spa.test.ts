@@ -24,9 +24,7 @@ describe('SPA fallback', () => {
   let app: WebApplication | undefined
 
   const start = async (configure: StaticConfigurer) => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .with(staticFiles(configure))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(staticFiles(configure))
     await app.ready()
 
     return app
@@ -152,9 +150,9 @@ describe('SPA fallback', () => {
   })
 
   it('refuses to start when the shell is missing', async () => {
-    const failing = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .with(staticFiles(s => s.spa(empty)))
-      .build()
+    const failing = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(
+      staticFiles(s => s.spa(empty)),
+    )
 
     await expect(failing.ready()).rejects.toThrow(ErrSPAIndexMissing)
     await failing.close()
@@ -163,9 +161,9 @@ describe('SPA fallback', () => {
   // Two `.spa()` calls cannot both be right, and the answer does not depend on anything configuration might
   // say. The configure callback runs when the application bootstraps, so it surfaces from `ready()`.
   it('refuses a second SPA mount', async () => {
-    const rejected = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .with(staticFiles(s => s.spa(dist).spa(dist)))
-      .build()
+    const rejected = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(
+      staticFiles(s => s.spa(dist).spa(dist)),
+    )
 
     await expect(rejected.ready()).rejects.toThrow(ErrDuplicateSPAMount)
   })
@@ -178,9 +176,7 @@ describe('SPA fallback', () => {
       void reply.code(404).send()
     })
 
-    const rejected = createWebApplication(fastifyAdapterFactory(server), {})
-      .with(staticFiles(s => s.spa(dist)))
-      .build()
+    const rejected = createWebApplication(fastifyAdapterFactory(server), {}).with(staticFiles(s => s.spa(dist)))
 
     await expect(rejected.ready()).rejects.toThrow(/Not found handler already set/)
     await rejected.close()

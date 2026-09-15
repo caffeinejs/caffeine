@@ -84,7 +84,7 @@ class PetsController {
 void PetsController
 
 async function boot() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+  const app = createWebApplication(fastifyAdapterFactory(fastify()))
   await app.ready()
   return app
 }

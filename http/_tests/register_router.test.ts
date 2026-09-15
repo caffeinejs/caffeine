@@ -91,7 +91,7 @@ describe('registerRouteGroup', () => {
   it('routes a controller bound during configure()', async () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.addFeature(new ProgrammaticService())
-    app = builder.build()
+    app = builder
     await app.ready()
 
     const res = await app.fetch('/programmatic.json')
@@ -104,7 +104,7 @@ describe('registerRouteGroup', () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addFeature(new ProgrammaticService({ schemes: ['Bearer'] }))
-    app = builder.build()
+    app = builder
     await app.ready()
 
     const anonymous = await app.fetch('/programmatic.json')
@@ -122,7 +122,7 @@ describe('registerRouteGroup', () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addFeature(new ProgrammaticService({ roles: ['ops'] }))
-    app = builder.build()
+    app = builder
     await app.ready()
 
     const withoutRole = await signToken({ sub: 'user-1' })

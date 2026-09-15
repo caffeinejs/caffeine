@@ -40,17 +40,16 @@ function probe<C = unknown>(configure?: FeatureConfigurer<ProbeBuilder<C>, C>): 
   return new ProbeBuilder<C>(configure as never)
 }
 
-describe('builder.with()', () => {
+describe('WebApplication.with()', () => {
   it('installs the feature and rides the bootstrap path into the container', async () => {
     const container = new CaffeineIoC()
     const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }).with(
       probe(t => t.capture('localhost:9092')),
     )
 
-    const built = app.build()
-    await built.ready()
+    await app.ready()
 
-    expect(built.container.getOptional(kProbe)).toEqual({ broker: 'localhost:9092' })
+    expect(app.container.getOptional(kProbe)).toEqual({ broker: 'localhost:9092' })
   })
 
   it('does not add methods to the builder', () => {
@@ -70,10 +69,9 @@ describe('builder.with()', () => {
       probe(t => t.capture('after-config:9092')),
     )
 
-    const built = app.build()
-    await built.ready()
+    await app.ready()
 
-    expect(built.container.getOptional(kProbe)).toEqual({ broker: 'after-config:9092' })
+    expect(app.container.getOptional(kProbe)).toEqual({ broker: 'after-config:9092' })
   })
 
   it('types a feature configured after construction against the constructor-supplied config', () => {
@@ -85,6 +83,6 @@ describe('builder.with()', () => {
       .with(probe())
       .server((s, c) => s.withConfig(c.app.server))
 
-    expect(typeof app.build).toBe('function')
+    expect(typeof app.ready).toBe('function')
   })
 })

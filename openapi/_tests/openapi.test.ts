@@ -75,7 +75,7 @@ class PetsController {
 void [PetsController]
 
 function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication {
-  return newBuilder(configure).build() as WebApplication
+  return newBuilder(configure) as WebApplication
 }
 
 // Authentication is always configured: the fixture controller carries @Roles and @AllowAnonymous, and an
@@ -165,18 +165,16 @@ describe('openapi endpoints', () => {
   // The document is generated once every route has registered, not when the plugin does, so the order the
   // plugins were installed in cannot drop a route from it.
   it('describes a route a plugin installed after it adds', async () => {
-    app = newBuilder(o => o.docs(false).public())
-      .with(() => async (instance: FastifyInstance) => {
-        instance.$route('late', router => {
-          router.path('/late').routes([
-            new RouteBuilder()
-              .method('GET')
-              .path('/hello')
-              .handle(() => ({ ok: true })),
-          ])
-        })
+    app = newBuilder(o => o.docs(false).public()).with(() => async (instance: FastifyInstance) => {
+      instance.$route('late', router => {
+        router.path('/late').routes([
+          new RouteBuilder()
+            .method('GET')
+            .path('/hello')
+            .handle(() => ({ ok: true })),
+        ])
       })
-      .build() as WebApplication
+    }) as WebApplication
     await app.ready()
 
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument

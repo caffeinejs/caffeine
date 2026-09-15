@@ -25,7 +25,7 @@ function policyOf(app: { container: { get(t: typeof kShutdownPolicy): ShutdownOp
 
 describe('ShutdownBuilder', () => {
   it('is registered unconditionally and resolves detached off the defaults', async () => {
-    const app = headless().build()
+    const app = headless()
     await app.ready()
 
     const policy = policyOf(app)
@@ -40,7 +40,7 @@ describe('ShutdownBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }), ConfigPriority.ENV)
       .build()
-    const app = headless(conf).build()
+    const app = headless(conf)
     await app.ready()
 
     expect(policyOf(app).drainDelayMs).toBe(0)
@@ -53,9 +53,7 @@ describe('ShutdownBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigProvider({ shutdown: { drainDelay: '90ms' } }))
       .build()
-    const app = headless(conf)
-      .shutdown((s, c) => s.drainDelay('10s').withConfig(c.shutdown))
-      .build()
+    const app = headless(conf).shutdown((s, c) => s.drainDelay('10s').withConfig(c.shutdown))
     await app.ready()
 
     expect(policyOf(app).drainDelayMs).toBe(10_000)
@@ -70,9 +68,7 @@ describe('ShutdownBuilder', () => {
         ConfigPriority.ENV,
       )
       .build()
-    const app = headless(conf)
-      .shutdown((s, c) => s.withConfig(c.shutdown))
-      .build()
+    const app = headless(conf).shutdown((s, c) => s.withConfig(c.shutdown))
     await app.ready()
 
     const policy = policyOf(app)
@@ -85,9 +81,7 @@ describe('ShutdownBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigProvider({ shutdown: { drainDelay: '30ms' } }))
       .build()
-    const app = headless(conf)
-      .shutdown((s, c) => s.dispatcher(noopSignalDispatcher).withConfig(c.shutdown))
-      .build()
+    const app = headless(conf).shutdown((s, c) => s.dispatcher(noopSignalDispatcher).withConfig(c.shutdown))
     await app.ready()
 
     const policy = policyOf(app)
@@ -100,9 +94,7 @@ describe('ShutdownBuilder', () => {
     mutable.set('shutdown', { shutdownTimeout: '9s' })
 
     const conf = newConfiguration(appSchema, kAppConfig).source(mutable, ConfigPriority.ENV).build()
-    const app = headless(conf)
-      .shutdown((s, c) => s.withConfig(c.shutdown))
-      .build()
+    const app = headless(conf).shutdown((s, c) => s.withConfig(c.shutdown))
     await app.ready()
 
     const policy = policyOf(app)
@@ -117,18 +109,14 @@ describe('ShutdownBuilder', () => {
   })
 
   it('clamps a shutdown timeout that would outlive the grace period', async () => {
-    const app = headless()
-      .shutdown(s => s.drainDelay('5s').shutdownTimeout('60s').terminationGracePeriod('30s'))
-      .build()
+    const app = headless().shutdown(s => s.drainDelay('5s').shutdownTimeout('60s').terminationGracePeriod('30s'))
     await app.ready()
 
     expect(policyOf(app).shutdownTimeoutMs).toBe(23_000)
   })
 
   it('rejects at ready() when the drain delay cannot fit the grace period at all', async () => {
-    const app = headless()
-      .shutdown(s => s.drainDelay('30s').terminationGracePeriod('20s'))
-      .build()
+    const app = headless().shutdown(s => s.drainDelay('30s').terminationGracePeriod('20s'))
 
     await expect(app.ready()).rejects.toThrow('does not fit in a termination grace period')
   })
@@ -136,9 +124,7 @@ describe('ShutdownBuilder', () => {
   it('installs a real signal handler when signals are set explicitly, even under the test runner', async () => {
     const before = process.listenerCount('SIGTERM')
 
-    const app = headless()
-      .shutdown(s => s.signals(['SIGTERM']).drainDelay(0))
-      .build()
+    const app = headless().shutdown(s => s.signals(['SIGTERM']).drainDelay(0))
     await app.run()
 
     expect(process.listenerCount('SIGTERM')).toBe(before + 1)

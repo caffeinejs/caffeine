@@ -54,7 +54,7 @@ describe('messaging configuration', () => {
       ),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(runtimeOf(built.container).inbound.get('orders')?.destination).toBe('orders.v2')
@@ -78,7 +78,7 @@ describe('messaging configuration', () => {
       ),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(runtimeOf(built.container).inbound.get('orders')?.group).toBe('from-config')
@@ -108,7 +108,7 @@ describe('messaging configuration', () => {
         ),
       )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(runtimeOf(built.container).outbound.get('log')?.destination).toBe('log')
@@ -134,7 +134,7 @@ describe('messaging configuration', () => {
       ),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     const binding = runtimeOf(built.container).inbound.get('orders')
@@ -168,7 +168,7 @@ describe('messaging configuration', () => {
         ),
       )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(runtimeOf(built.container).inbound.get('orders')?.destination).toBe('moved.orders')
@@ -194,7 +194,7 @@ describe('messaging configuration', () => {
       ),
     )
 
-    const built = app.build()
+    const built = app
     await built.ready()
 
     expect(runtimeOf(built.container).inbound.has('ghost')).toBe(false)

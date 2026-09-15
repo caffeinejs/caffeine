@@ -26,7 +26,7 @@ describe('Adapter Lifecycle', () => {
 
     void [LifecycleController, Warmup]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await app.ready()
 
@@ -56,7 +56,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc3Controller, Resource]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await app.ready()
     await app.close()
@@ -75,7 +75,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc4Controller]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const beforeClose = await app.fetch('/lc4/ping')

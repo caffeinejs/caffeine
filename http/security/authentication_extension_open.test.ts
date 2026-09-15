@@ -42,7 +42,7 @@ describe('applications that are not refused at start-up', () => {
     }
     void [OpenController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify())).build() as WebApplication
+    app = createWebApplication(fastifyAdapterFactory(fastify())) as WebApplication
     await app.ready()
 
     expect((await app.fetch('/authz-open')).status).toBe(200)
@@ -61,7 +61,7 @@ describe('applications that are not refused at start-up', () => {
     }
     void [AnonOnlyController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify())).build() as WebApplication
+    app = createWebApplication(fastifyAdapterFactory(fastify())) as WebApplication
     await app.ready()
 
     expect((await app.fetch('/authz-anon-only')).status).toBe(200)

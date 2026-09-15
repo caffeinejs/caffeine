@@ -62,7 +62,7 @@ describe('request scope lifetime', () => {
         return { same: first === second, destroyed: first.destroyed }
       })
 
-    const app = newApp().build().mount(router)
+    const app = newApp().mount(router)
     await app.ready()
 
     const res = await app.fetch('/scope-await')
@@ -103,7 +103,7 @@ describe('request scope lifetime', () => {
         })
       })
 
-    const app = newApp().build().mount(router)
+    const app = newApp().mount(router)
     await app.ready()
 
     const teardown = nextTeardown()
@@ -130,7 +130,7 @@ describe('request scope lifetime', () => {
       .inject(i => ({ session: i.provide(Session) }))
       .handler((_ctx, deps) => ({ id: deps.session.get().id }))
 
-    const app = newApp().build().mount(router)
+    const app = newApp().mount(router)
     await app.ready()
 
     let teardown = nextTeardown()
@@ -158,7 +158,7 @@ describe('request scope lifetime', () => {
         throw new Error('handler failed')
       })
 
-    const app = newApp().build().mount(router)
+    const app = newApp().mount(router)
     await app.ready()
 
     const teardown = nextTeardown()

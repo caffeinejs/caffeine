@@ -118,9 +118,7 @@ class HTMLErrorController {
 void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .with(() => html(defaults))
-    .build()
+  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => html(defaults))
 }
 
 describe('HTML', () => {
@@ -139,7 +137,7 @@ describe('HTML', () => {
   // Rendering must not require any application wiring: with no plugin registered nothing decorated the
   // instance and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
   it('renders in an application that never registered the HTML plugin', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
     await app.ready()
 
     const res = await app.fetch('/html/document')
@@ -206,9 +204,7 @@ describe('HTML', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigProvider({ html: { autoDoctype: false } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
-      .with(c => html(c.html))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(c => html(c.html))
 
     await app.ready()
 

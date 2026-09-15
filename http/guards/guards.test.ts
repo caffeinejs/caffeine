@@ -33,7 +33,7 @@ import {
 import type { GuardInput } from './guard.js'
 
 function buildApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+  return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
 }
 
 describe('guard', () => {
@@ -302,9 +302,9 @@ describe('use_guards', () => {
 
   it('runs global, then controller, then method', async () => {
     order.length = 0
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .guards(g => g.global(GlobalGuard))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
+      g.global(GlobalGuard),
+    )
     await app.ready()
 
     const res = await app.fetch('/use-guards/both')
@@ -366,9 +366,9 @@ describe('builder', () => {
   void [ListedGuard, NotAGuard, BuilderOkController, BuilderUseController]
 
   it('runs a global guard listed by InjectionToken on every route', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .guards(g => g.global(ListedGuard))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
+      g.global(ListedGuard),
+    )
     await app.ready()
 
     const res = await app.fetch('/builder-ok')
@@ -389,17 +389,15 @@ describe('builder', () => {
 
   it('rejects a missing InjectionToken at start-up', async () => {
     const kMissing = token<Guard>(Symbol('missing-guard'))
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .guards(g => g.global(kMissing))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g => g.global(kMissing))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 
   it('rejects a InjectionToken that is not a Guard at start-up', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .guards(g => g.global(NotAGuard as never))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
+      g.global(NotAGuard as never),
+    )
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
@@ -663,9 +661,9 @@ describe('authorization', () => {
   void [AuthGuard, RolesGuard, CatsController]
 
   async function ready() {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .guards(g => g.global(AuthGuard, RolesGuard))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
+      g.global(AuthGuard, RolesGuard),
+    )
     await app.ready()
     return app
   }
@@ -825,7 +823,7 @@ describe('zero_cost', () => {
       registered.set(`${route.method} ${route.url}`, route as RouteOptions)
     })
 
-    app = createWebApplication(fastifyAdapterFactory(server)).build()
+    app = createWebApplication(fastifyAdapterFactory(server))
     await app.ready()
   })
 

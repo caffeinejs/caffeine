@@ -84,7 +84,7 @@ void [AppController]
 
 const server = fastify({ logger: false })
 
-const app = createWebApplication(fastifyAdapterFactory(server)).build()
+const app = createWebApplication(fastifyAdapterFactory(server))
 
 // The same two hooks the `caffeine` fixture registers directly on Fastify, expressed as middlewares. The
 // work is identical; the delta against that fixture is the pipeline's overhead and nothing else.

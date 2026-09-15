@@ -79,7 +79,7 @@ void [TaskStore, TaskLogger, TaskController]
 // --- bootstrap ---
 
 const container = new CaffeineIoC({ modules: [DevtoolsModule({ port: 9229 })] })
-const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).build()
+const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
 await app.ready()
 
 const devtools = container.get(DevtoolsServer)

@@ -50,7 +50,7 @@ void [ReturnJsonHandler, ReturnVoidHandler, ErrReturnController]
 
 describe('error handler return values', () => {
   it('serializes a returned object as JSON', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/err-return/json')
@@ -61,7 +61,7 @@ describe('error handler return values', () => {
   })
 
   it('leaves a ctx-based (void-returning) handler unchanged', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/err-return/void')

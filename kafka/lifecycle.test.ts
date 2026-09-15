@@ -21,7 +21,7 @@ describe('consumer lifecycle events + status', () => {
     const app = createApplication({}).with(
       kafka(k => k.brokers('b').groupId('lc-group'), { clients: broker.clients() }),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     const engine = built.container.get<KafkaListenerContainer>(containerKey('default'))

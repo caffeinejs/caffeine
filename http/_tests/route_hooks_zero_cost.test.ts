@@ -30,7 +30,7 @@ beforeAll(async () => {
     registered.set(`${route.method} ${route.url}`, route as RouteOptions)
   })
 
-  app = createWebApplication(fastifyAdapterFactory(server)).build()
+  app = createWebApplication(fastifyAdapterFactory(server))
   await app.ready()
 })
 

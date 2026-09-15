@@ -40,7 +40,7 @@ describe('cache plugin wiring', () => {
       registered.set(`${route.method} ${route.url}`, route as RouteOptions)
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching()).build()
+    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching())
     close = () => app.close()
     await app.ready()
 
@@ -59,7 +59,6 @@ describe('cache plugin wiring', () => {
     const app = createWebApplication(fastifyAdapterFactory(server))
       .with(HTTPCaching(b => b.statusHeader('X-First')))
       .with(HTTPCaching(b => b.statusHeader('X-Second')))
-      .build()
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)

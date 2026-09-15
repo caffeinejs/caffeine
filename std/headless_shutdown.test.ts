@@ -1,7 +1,7 @@
 import { CaffeineIoC, type OnDestroy } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
-import { createApplication } from './application_builder.js'
+import { createApplication } from './application.js'
 import type { SignalDispatcher, ShutdownSignal } from './shutdown/signals.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
@@ -44,9 +44,7 @@ describe('headless application shutdown', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(Recorder, t => t.toSelf())
 
-    const app = createApplication({ container })
-      .shutdown(s => s.drainDelay(300))
-      .build()
+    const app = createApplication({ container }).shutdown(s => s.drainDelay(300))
 
     await app.run()
 
@@ -68,7 +66,7 @@ describe('headless application shutdown', () => {
   })
 
   it('skips the wait when no drain delay is configured', async () => {
-    const app = createApplication().build()
+    const app = createApplication()
     await app.run()
 
     const startedAt = Date.now()
@@ -89,9 +87,7 @@ describe('headless application shutdown', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(Recorder, t => t.toSelf())
 
-    const app = createApplication({ container })
-      .shutdown(s => s.drainDelay(100))
-      .build()
+    const app = createApplication({ container }).shutdown(s => s.drainDelay(100))
     await app.run()
 
     await Promise.all([app.close(), app.close()])
@@ -101,9 +97,7 @@ describe('headless application shutdown', () => {
 
   it('installs the configured signals and drains when one arrives', async () => {
     const dispatcher = new FakeDispatcher()
-    const app = createApplication()
-      .shutdown(s => s.drainDelay(50).signals(['SIGTERM']).dispatcher(dispatcher))
-      .build()
+    const app = createApplication().shutdown(s => s.drainDelay(50).signals(['SIGTERM']).dispatcher(dispatcher))
 
     await app.run()
 
@@ -119,7 +113,7 @@ describe('headless application shutdown', () => {
 
   it('installs nothing under a test runner by default', async () => {
     const before = process.listenerCount('SIGTERM')
-    const app = createApplication().build()
+    const app = createApplication()
 
     await app.run()
 
@@ -138,7 +132,7 @@ describe('headless application shutdown', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(Failing, t => t.toSelf())
 
-    const app = createApplication({ container }).build()
+    const app = createApplication({ container })
     await app.run()
 
     await expect(app.close()).rejects.toThrow(AggregateError)

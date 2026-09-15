@@ -39,7 +39,7 @@ describe('view feature', () => {
 
     void [ModelController]
 
-    app = viewApp().build()
+    app = viewApp()
     await app.ready()
 
     const res = await app.fetch('/view-model/show')
@@ -60,7 +60,7 @@ describe('view feature', () => {
 
     void [PlainController]
 
-    app = viewApp().build()
+    app = viewApp()
     await app.ready()
 
     const res = await app.fetch('/view-plain/show')
@@ -80,15 +80,13 @@ describe('view feature', () => {
 
     void [ContextController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(
-        view(v =>
-          v.engine(e =>
-            e.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }),
-          ),
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      view(v =>
+        v.engine(e =>
+          e.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' }),
         ),
-      )
-      .build()
+      ),
+    )
     await app.ready()
 
     const res = await app.fetch('/view-context/show')
@@ -107,9 +105,9 @@ describe('view feature', () => {
 
     void [NamespacedController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(view(v => v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      view(v => v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
+    )
     await app.ready()
 
     const res = await app.fetch('/view-namespaced/show')
@@ -129,7 +127,7 @@ describe('view feature', () => {
 
     void [AsyncController]
 
-    app = viewApp().build()
+    app = viewApp()
     await app.ready()
 
     const res = await app.fetch('/view-async/show')
@@ -149,7 +147,7 @@ describe('view feature', () => {
 
     void [LayoutController]
 
-    app = viewApp().build()
+    app = viewApp()
     await app.ready()
 
     const res = await app.fetch('/view-layout/show')
@@ -172,7 +170,7 @@ describe('view feature', () => {
 
     void [JsonController]
 
-    app = viewApp().build()
+    app = viewApp()
     await app.ready()
 
     const res = await app.fetch('/view-json/show')
@@ -192,7 +190,7 @@ describe('view feature', () => {
 
     void [UnconfiguredController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/view-unconfigured/show')
@@ -211,7 +209,7 @@ describe('view feature', () => {
 
     void [UnconfiguredAsyncController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/view-unconfigured-async/show')
@@ -237,14 +235,12 @@ describe('view feature', () => {
 
     void [MultiController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(
-        view(v => {
-          v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-          v.engine('ejs', e => e.engine({ ejs }).root(ejsRoot).extension('ejs'))
-        }),
-      )
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      view(v => {
+        v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+        v.engine('ejs', e => e.engine({ ejs }).root(ejsRoot).extension('ejs'))
+      }),
+    )
     await app.ready()
 
     const hbs = await app.fetch('/multi/hbs')
@@ -275,14 +271,12 @@ describe('view feature', () => {
 
     void [SameEngineController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(
-        view(v => {
-          v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
-          v.engine('alt', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
-        }),
-      )
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      view(v => {
+        v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
+        v.engine('alt', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
+      }),
+    )
     await app.ready()
 
     const plain = await app.fetch('/same-engine/plain')
@@ -310,7 +304,7 @@ describe('view feature', () => {
 
     void [MissingEngineController]
 
-    app = viewApp().build()
+    app = viewApp()
     await app.ready()
 
     const res = await app.fetch('/multi-missing/show')
@@ -321,17 +315,15 @@ describe('view feature', () => {
   // The configure callback runs when the application bootstraps, so an authoring mistake inside it surfaces
   // from `ready()` rather than from the `.with(...)` call that wrote it.
   it('rejects registering an engine named "view" (reserved for the default engine)', async () => {
-    const rejected = createWebApplication(fastifyAdapterFactory(fastify()), {})
-      .with(view(v => v.engine('view', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
-      .build()
+    const rejected = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+      view(v => v.engine('view', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
+    )
 
     await expect(rejected.ready()).rejects.toThrow(/reserved for the default engine/)
   })
 
   it('refuses a view plugin with no engine configured', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {})
-      .with(view())
-      .build()
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(view())
 
     await expect(app.ready()).rejects.toThrow(/Cannot install the view plugin: no engine was configured/)
   })

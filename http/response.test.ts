@@ -63,7 +63,7 @@ void [CustomController, CustomErrorHandler]
 
 describe('custom ResponseResult dispatch', () => {
   async function buildApp() {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
     return app
   }

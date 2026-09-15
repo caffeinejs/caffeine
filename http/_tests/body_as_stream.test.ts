@@ -24,7 +24,7 @@ describe('BodyAsStream', () => {
 
     void [StreamController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const payload = Buffer.from('hello stream world')
@@ -57,7 +57,7 @@ describe('BodyAsStream', () => {
 
     void [StreamBinaryController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
@@ -89,7 +89,7 @@ describe('BodyAsStream', () => {
 
     void [StreamJSONController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const jsonStr = JSON.stringify({ key: 'value' })
@@ -123,7 +123,7 @@ describe('BodyAsStream', () => {
 
     void [MixedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const streamRes = await app.fetch('/stream-mixed/raw', {

@@ -18,7 +18,7 @@ describe('BodyAsBuffer', () => {
 
     void [RawController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const payload = Buffer.from('hello raw world')
@@ -46,7 +46,7 @@ describe('BodyAsBuffer', () => {
 
     void [RawBinaryController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
@@ -74,7 +74,7 @@ describe('BodyAsBuffer', () => {
 
     void [RawJSONController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const jsonStr = JSON.stringify({ key: 'value' })
@@ -108,7 +108,7 @@ describe('BodyAsBuffer', () => {
 
     void [MixedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const rawRes = await app.fetch('/raw-mixed/raw', {

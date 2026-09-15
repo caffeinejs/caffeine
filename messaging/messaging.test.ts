@@ -142,7 +142,7 @@ describe('messaging', () => {
     const app = createApplication({}).with(
       messaging(m => m.use('primary', inMemoryBinder(broker)).in('orders1', { destination: 'orders', via: 'primary' })),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     broker.publish('orders', message({ id: 42 }))
@@ -165,7 +165,7 @@ describe('messaging', () => {
           .out('notify2', { destination: 'notify', via: 'b' }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     brokerA.publish('orders', message({ id: 7 }))
@@ -186,7 +186,7 @@ describe('messaging', () => {
         }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     broker.publish('orders', message({ id: 1 }))
@@ -199,7 +199,7 @@ describe('messaging', () => {
     const app = createApplication({}).with(
       messaging(m => m.use('primary', inMemoryBinder()).in('orders4', { destination: 'orders', via: 'ghost' })),
     )
-    const built = app.build()
+    const built = app
 
     await expect(built.run()).rejects.toBeInstanceOf(ErrUnknownBinder)
     await built.close()
@@ -210,7 +210,7 @@ describe('messaging', () => {
     const app = createApplication({}).with(
       messaging(m => m.use('primary', inMemoryBinder(broker)).out('emit', { destination: 'emitted', via: 'primary' })),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<MessageBus>(MessageBus).send('emit', { hello: 'world' })
@@ -228,7 +228,7 @@ describe('messaging', () => {
     const app = createApplication({}).with(
       messaging(m => m.use('primary', inMemoryBinder(broker)).in('orders5', { destination: 'orders', via: 'primary' })),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     broker.publish('orders', message({ id: 99 }, { headers: { trace: 'abc' } }))
@@ -249,7 +249,7 @@ describe('messaging', () => {
         }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     // string id coerced to int, missing tag defaulted, undeclared "extra" cleaned away
@@ -270,7 +270,7 @@ describe('messaging', () => {
           .in('orders7', { destination: 'orders', via: 'primary', schema: $t.Object({ id: $t.Integer() }) }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     broker.publish('orders', message({ id: 'not-a-number' }))
@@ -288,7 +288,7 @@ describe('messaging', () => {
           .out('emit2', { destination: 'emitted', via: 'primary', schema: $t.Object({ id: $t.Integer() }) }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     await expect(built.container.get<MessageBus>(MessageBus).send('emit2', { id: 'bad' })).rejects.toBeInstanceOf(
@@ -316,7 +316,7 @@ describe('messaging', () => {
           }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     broker.publish('orders', message({ id: 1 }))
@@ -342,7 +342,7 @@ describe('messaging', () => {
           .out('dlt-out', { destination: 'dlt', via: 'primary' }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
     ref.bus = built.container.get<MessageBus>(MessageBus)
 
@@ -359,7 +359,7 @@ describe('messaging', () => {
         m.use('primary', inMemoryBinder(broker)).in('orphan-binding', { destination: 'orphan', via: 'primary' }),
       ),
     )
-    const built = app.build()
+    const built = app
 
     await expect(built.run()).rejects.toBeInstanceOf(ErrNoConsumer)
     await built.close()
@@ -381,7 +381,7 @@ describe('messaging', () => {
           }),
       ),
     )
-    const built = app.build()
+    const built = app
     await built.run()
 
     broker.publish('orders', message({ id: 1 }))

@@ -58,9 +58,7 @@ async function start(
   configure?: (health: HealthBuilder<unknown>) => void,
   ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>
 ): Promise<WebApplication> {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()))
-    .health(configure ?? (() => {}))
-    .build()
+  const app = createWebApplication(fastifyAdapterFactory(fastify())).health(configure ?? (() => {}))
 
   bindIndicators(app, ...indicators)
   await app.run()
@@ -94,7 +92,7 @@ describe('health probes', () => {
   })
 
   it('does not mount them when health was never configured and Kubernetes is absent', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.run()
 
     try {
@@ -164,7 +162,7 @@ describe('health probes', () => {
   })
 
   it('rejects a non-singleton indicator at ready', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).health().build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).health()
     app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
@@ -272,7 +270,6 @@ describe('health probes', () => {
         auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()),
       )
       .health()
-      .build()
 
     await app.run()
 

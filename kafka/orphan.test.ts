@@ -31,6 +31,6 @@ describe('orphan handler detection', () => {
       kafka(k => k.brokers('localhost:9092').groupId('g'), { clients: noopClients() }),
     ) // only the default instance
 
-    await expect(app.build().run()).rejects.toBeInstanceOf(ErrKafkaUnknownInstance)
+    await expect(app.run()).rejects.toBeInstanceOf(ErrKafkaUnknownInstance)
   })
 })

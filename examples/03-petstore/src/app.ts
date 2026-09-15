@@ -158,7 +158,5 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
       }
     })
 
-  const app = builder.build()
-
-  return app
+  return builder
 }

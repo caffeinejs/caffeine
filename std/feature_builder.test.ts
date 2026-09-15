@@ -83,7 +83,7 @@ describe('FeatureBuilder', () => {
   it('runs on its own defaults when nothing configured it', async () => {
     const g = gadget()
 
-    await headless().with(g).build().ready()
+    await headless().with(g).ready()
 
     expect(g.resolved).toEqual(DEFAULTS)
   })
@@ -91,7 +91,7 @@ describe('FeatureBuilder', () => {
   it('keeps a fluent value when no configuration is wired', async () => {
     const g = gadget(b => b.size(7))
 
-    await headless().with(g).build().ready()
+    await headless().with(g).ready()
 
     expect(g.resolved?.size).toBe(7)
   })
@@ -105,9 +105,7 @@ describe('FeatureBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigProvider({ app: { gadget: { size: 99 } } }))
       .build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
-      .with(g)
-      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 
     await app.ready()
 
@@ -121,9 +119,7 @@ describe('FeatureBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigProvider({ app: { gadget: { size: 99 } } }))
       .build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
-      .with(g)
-      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 
     await app.ready()
 
@@ -134,7 +130,7 @@ describe('FeatureBuilder', () => {
   it('merges through a fluent method that builds on what it already wrote', async () => {
     const g = gadget(b => b.label('wide').suffix('-ish'))
 
-    await headless().with(g).build().ready()
+    await headless().with(g).ready()
 
     expect(g.resolved?.label).toBe('wide-ish')
   })
@@ -159,7 +155,6 @@ describe('FeatureBuilder', () => {
 
     await headless()
       .with(new Ordered(b => (b as Ordered).mark()))
-      .build()
       .ready()
 
     expect(order).toEqual(['configure', 'bootstrap'])
@@ -183,7 +178,6 @@ describe('FeatureBuilder', () => {
 
     await headless()
       .with(new Ordered(b => (b as Ordered).mark()))
-      .build()
       .ready()
 
     expect(order).toEqual(['callback', 'configure'])
@@ -197,9 +191,7 @@ describe('FeatureBuilder', () => {
 
     const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
     const conf = newConfiguration(appSchema, kAppConfig).source(mutable, ConfigPriority.ENV).build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
-      .with(g)
-      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 
     await app.ready()
 

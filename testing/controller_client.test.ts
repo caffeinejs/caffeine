@@ -81,7 +81,7 @@ describe('controllerClient()', () => {
   let baseURL: string
 
   beforeAll(async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
     await app.ready()
     baseURL = await app.instance.listen({ port: 0, host: '127.0.0.1' })
   })

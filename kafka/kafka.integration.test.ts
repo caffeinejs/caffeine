@@ -129,7 +129,7 @@ describe.skipIf(!up)('kafka integration (real broker)', () => {
         .groupId(`caffeine-kafka-it-${Date.now()}`),
     ),
   )
-  const built = app.build()
+  const built = app
 
   beforeAll(async () => {
     // Ensure the topic exists — the producer does not rely on broker-side auto-creation.

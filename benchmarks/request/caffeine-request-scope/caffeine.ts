@@ -97,7 +97,7 @@ server.addHook('preHandler', (req, reply, done) => {
   done()
 })
 
-const app = createWebApplication(fastifyAdapterFactory(server)).build()
+const app = createWebApplication(fastifyAdapterFactory(server))
 
 await app.ready()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

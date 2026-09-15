@@ -1,5 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import {
+  ErrApplicationStarted,
   kFeatureBootstrap,
   kFeatureConfigure,
   kFeatureName,
@@ -21,7 +22,7 @@ describe('createWebApplication default Fastify form', () => {
     }
     void [DefaultAppController]
 
-    const app = createWebApplication().build()
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/default-app/data')
@@ -30,7 +31,7 @@ describe('createWebApplication default Fastify form', () => {
   })
 
   it('exposes a Fastify instance', async () => {
-    const app = createWebApplication().build()
+    const app = createWebApplication()
     await app.ready()
 
     expect(typeof (app.instance as { inject?: unknown }).inject).toBe('function')
@@ -47,7 +48,7 @@ describe('createWebApplication default Fastify form', () => {
     void [DefaultContainerController]
 
     const container = new CaffeineIoC()
-    const app = createWebApplication({ container }).build()
+    const app = createWebApplication({ container })
     await app.ready()
 
     expect(app.container).toBe(container)
@@ -74,10 +75,25 @@ describe('createWebApplication default Fastify form', () => {
     }
 
     const app = createWebApplication().with(probe)
+    await app.ready()
 
-    const built = app.build()
-    await built.ready()
+    expect(app.container.getOptional(kProbe)).toEqual({ value: 'hello' })
+  })
+})
 
-    expect(built.container.getOptional(kProbe)).toEqual({ value: 'hello' })
+describe('configuring a started web application', () => {
+  // The HTTP-only methods are refused the same way the shared ones are: once `ready()` has read the feature
+  // list, a server port or an authentication scheme written afterwards would never take effect.
+  it('refuses server, authentication, guards, constraints, health and plugin configuration once ready() has run', async () => {
+    const app = createWebApplication()
+    await app.ready()
+
+    expect(() => app.server(s => s.port(0))).toThrow(ErrApplicationStarted)
+    expect(() => app.authentication(a => a.default('Bearer'))).toThrow(ErrApplicationStarted)
+    expect(() => app.authorization(a => a.requireAuthenticatedByDefault())).toThrow(ErrApplicationStarted)
+    expect(() => app.guards(() => undefined)).toThrow(ErrApplicationStarted)
+    expect(() => app.constraints(() => undefined)).toThrow(ErrApplicationStarted)
+    expect(() => app.health()).toThrow(ErrApplicationStarted)
+    expect(() => app.with(() => async () => undefined)).toThrow(ErrApplicationStarted)
   })
 })

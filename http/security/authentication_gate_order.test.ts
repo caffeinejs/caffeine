@@ -74,7 +74,6 @@ function guardedApp(ran: string[]) {
     .with(stamping('before', ran))
     .authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()).default('Never'))
     .with(stamping('after', ran))
-    .build()
 }
 
 describe('the authentication gate registers where it was written', () => {
@@ -114,7 +113,7 @@ describe('the authentication gate registers where it was written', () => {
   // The assertion the gate used to carry. It is checked whether or not `.authentication(...)` was ever
   // called — which is the case it exists for, and the reason it does not live in the gate any more.
   it('refuses to start when a route is protected and nothing configured authentication', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
 
     await expect(app.ready()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
   })

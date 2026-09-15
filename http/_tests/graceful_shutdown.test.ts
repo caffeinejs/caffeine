@@ -44,7 +44,7 @@ void [DrainController]
 
 async function start(configure: (shutdown: ShutdownBuilder<unknown>) => void): Promise<WebApplication> {
   // `.health()` mounts the probes the readiness/liveness assertions poll; `.shutdown()` owns the drain.
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).health().shutdown(configure).build()
+  const app = createWebApplication(fastifyAdapterFactory(fastify())).health().shutdown(configure)
 
   await app.run()
 

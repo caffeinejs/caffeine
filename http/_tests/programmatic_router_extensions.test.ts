@@ -52,7 +52,7 @@ describe('route extensions', () => {
       }
       void [DecoratedStreamController]
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).build().mount(router)
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
       await app.ready()
 
       const payload = Buffer.from('hello stream world')
@@ -76,7 +76,7 @@ describe('route extensions', () => {
           return { isBuffer: Buffer.isBuffer(body), text: body.toString() }
         })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).build().mount(router)
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
       await app.ready()
 
       const res = await app.fetch('/ext-buffer/upload', {
@@ -145,7 +145,7 @@ describe('fst', () => {
           return { ok: true }
         })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).build().mount(router)
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
       await app.ready()
 
       expect((await app.fetch('/fst/hooked')).status).toBe(200)
@@ -167,7 +167,7 @@ describe('fst', () => {
           return { invalid: validationError !== undefined }
         })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).build().mount(router)
+      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
       await app.ready()
 
       // attachValidation turns a validation failure into a flag on the request instead of a 400.

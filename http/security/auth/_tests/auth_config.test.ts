@@ -92,11 +92,11 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV)
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
-      .authentication((a, c) =>
-        a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-      )
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      config: conf,
+    }).authentication((a, c) =>
+      a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+    )
 
     await app.ready()
 
@@ -115,9 +115,9 @@ describe('authentication configuration', () => {
   })
 
   it('leaves the code-set secret in place when configuration carries none', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .authentication(a => a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()))
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).authentication(a =>
+      a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+    )
 
     await app.ready()
 
@@ -133,11 +133,11 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }), ConfigPriority.ENV)
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
-      .authentication((a, c) =>
-        a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-      )
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      config: conf,
+    }).authentication((a, c) =>
+      a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+    )
 
     await app.ready()
 
@@ -159,11 +159,11 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigProvider({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
-      .authentication((a, c) =>
-        a.withConfig(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
-      )
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      config: conf,
+    }).authentication((a, c) =>
+      a.withConfig(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
+    )
 
     await expect(app.ready()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
   })
@@ -181,15 +181,15 @@ describe('authentication configuration', () => {
         }),
       )
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
-      .authentication((a, c) =>
-        a
-          .withConfig(c.auth)
-          .addBasic(b => b.realm('From Code').validate(() => null))
-          .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
-          .default('Basic'),
-      )
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      config: conf,
+    }).authentication((a, c) =>
+      a
+        .withConfig(c.auth)
+        .addBasic(b => b.realm('From Code').validate(() => null))
+        .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
+        .default('Basic'),
+    )
 
     await app.ready()
 
@@ -211,14 +211,14 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }), ConfigPriority.ENV)
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
-      .authentication((a, c) =>
-        a
-          .withConfig(c.auth)
-          .addBasic(b => b.validate(() => null))
-          .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-      )
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      config: conf,
+    }).authentication((a, c) =>
+      a
+        .withConfig(c.auth)
+        .addBasic(b => b.validate(() => null))
+        .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+    )
 
     await app.ready()
 
@@ -234,16 +234,16 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigProvider({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
-      .authentication((a, c) =>
-        a.withConfig(c.auth).addBasic(b =>
-          b.realm('Coded').validate(() => {
-            validated++
-            return null
-          }),
-        ),
-      )
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      config: conf,
+    }).authentication((a, c) =>
+      a.withConfig(c.auth).addBasic(b =>
+        b.realm('Coded').validate(() => {
+          validated++
+          return null
+        }),
+      ),
+    )
 
     await app.ready()
 
@@ -269,11 +269,11 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigProvider({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf })
-      .authentication((a, c) =>
-        a.withConfig(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-      )
-      .build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      config: conf,
+    }).authentication((a, c) =>
+      a.withConfig(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+    )
 
     await app.ready()
 

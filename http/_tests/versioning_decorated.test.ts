@@ -32,7 +32,7 @@ describe('API versioning — decorated controllers', () => {
     const container = new CaffeineIoC()
     container.bind(PetsV1, t => t.toSelf())
     container.bind(PetsV2, t => t.toSelf())
-    const app = createWebApplication({ container }).build()
+    const app = createWebApplication({ container })
     await app.ready()
 
     expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
@@ -60,7 +60,7 @@ describe('API versioning — decorated controllers', () => {
 
     const container = new CaffeineIoC()
     container.bind(Catalog, t => t.toSelf())
-    const app = createWebApplication({ container }).build()
+    const app = createWebApplication({ container })
     await app.ready()
 
     expect(await (await app.fetch('/catalog/item', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ at: 1 })
@@ -81,7 +81,7 @@ describe('API versioning — decorated controllers', () => {
 
     const container = new CaffeineIoC()
     container.bind(V1Pets, t => t.toSelf())
-    const app = createWebApplication({ container }).build()
+    const app = createWebApplication({ container })
     await app.ready()
 
     expect(await (await app.fetch('/v1/pets')).json()).toEqual({ prefixed: true })

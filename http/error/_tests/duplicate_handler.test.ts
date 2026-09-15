@@ -26,7 +26,7 @@ void [FirstHandler, SecondHandler]
 
 describe('ambiguous error handler', () => {
   it('rejects when two handlers target the same error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

@@ -61,7 +61,7 @@ describe('auth configurer (fake handler)', () => {
     }
     void [OpenController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const res = await app.fetch('/auth-open')
@@ -84,7 +84,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-class-401')
@@ -107,7 +107,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-class-200')
@@ -130,7 +130,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-class-fail')
@@ -159,7 +159,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const [protectedRes, publicRes] = await Promise.all([
@@ -187,7 +187,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-anon-class')
@@ -215,7 +215,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const [openRes, securedRes] = await Promise.all([
@@ -243,7 +243,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-role-ok')
@@ -266,7 +266,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-role-403')
@@ -289,7 +289,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/roles-ok')
@@ -312,7 +312,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/roles-403')
@@ -346,7 +346,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', new CustomChallengeHandler()).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-custom-challenge')
@@ -381,7 +381,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', new CustomForbidHandler()).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-custom-forbid')
@@ -406,7 +406,7 @@ describe('auth configurer (fake handler)', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/auth-ctx-user')
@@ -440,7 +440,7 @@ describe('authorization policies', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/authz-schemes-only')
@@ -463,7 +463,7 @@ describe('authorization policies', () => {
 
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/authz-schemes-only-ok')
@@ -487,7 +487,7 @@ describe('authorization policies', () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     builder.authorization(authz => authz.addPolicy('AdminOnly', b => b.role('admin')))
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/authz-named-policy')
@@ -514,7 +514,7 @@ describe('authorization policies', () => {
       authz.addPolicy('AdminOnly', b => b.role('admin'))
       authz.addPolicy('AdminOnly2', b => b.role('admin'))
     })
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/authz-named-policy-deny')
@@ -542,7 +542,7 @@ describe('authorization policies', () => {
       authz.addPolicy('AdminOnly2', b => b.role('admin'))
       authz.authorizeDecoratorDefaultPolicy(b => b.requireAuthenticated())
     })
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/authz-require-auth')
@@ -570,7 +570,7 @@ describe('authorization policies', () => {
       authz.addPolicy('AdminOnly2', b => b.role('admin'))
       authz.addPolicy('CanReadOrders', b => b.claim('permission', 'orders:read'))
     })
-    const app = builder.build()
+    const app = builder
     await app.ready()
 
     const res = await app.fetch('/authz-claim-ok')

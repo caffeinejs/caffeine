@@ -16,7 +16,7 @@ describe('BodyLimit', () => {
 
     void [LimitedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const over = await app.fetch('/limited/data', {
@@ -46,7 +46,7 @@ describe('BodyLimit', () => {
 
     void [MixedLimitController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
     await app.ready()
 
     const body = 'x'.repeat(50)

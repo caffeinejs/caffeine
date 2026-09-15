@@ -21,7 +21,6 @@ const app = createWebApplication(fastifyAdapterFactory(fastify()), { container }
   .server(s => s.port(0).host('127.0.0.1'))
   .health()
   .shutdown(s => s.drainDelay(drainDelay).signals(['SIGTERM', 'SIGINT']))
-  .build()
 
 await app.run()
 

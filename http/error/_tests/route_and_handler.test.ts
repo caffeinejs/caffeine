@@ -25,7 +25,7 @@ void [BothController]
 
 describe('route method used as an error handler', () => {
   it('rejects a method that is both a route and a @Catch handler', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).build()
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

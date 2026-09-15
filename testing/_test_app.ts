@@ -7,13 +7,7 @@ import {
   type ObjectInjection,
   type ObjectInjections,
 } from '@caffeinejs/di'
-import {
-  createWebApplication,
-  type FastifyAdapter,
-  type Router,
-  type WebApplication,
-  type WebApplicationBuilder,
-} from '@caffeinejs/http'
+import { createWebApplication, type FastifyAdapter, type Router, type WebApplication } from '@caffeinejs/http'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { ErrTestClientAlreadyReady } from './error.js'
@@ -28,18 +22,11 @@ export type TestApplication = WebApplication<
   FastifyAdapter<FastifyInstance, FastifyRequest>
 >
 
-/** The builder `createWebApplication()` hands back, named so `configure` can be typed against it. */
-export type TestApplicationBuilder = WebApplicationBuilder<
-  FastifyInstance,
-  FastifyRequest,
-  FastifyAdapter<FastifyInstance, FastifyRequest>
->
-
 export interface HarnessInit {
   inject?: Record<string, unknown>
   bind?: (container: Container) => void
   container?: Container
-  configure?: (builder: TestApplicationBuilder) => void
+  configure?: (app: TestApplication) => void
 }
 
 /**
@@ -62,19 +49,18 @@ export class Harness {
 
   /** Builds an application around routers the caller has not mounted anywhere. */
   static own(routers: readonly AnyRouter[], init: HarnessInit): Harness {
-    // A container of our own, and a live one: handed a live container the builder skips `autoWire()`, which is
+    // A container of our own, and a live one: handed a live container the application skips `autoWire()`, which is
     // what reads the process-wide registry every `@Controller` and `@Injectable` writes itself into at class
     // definition. Left to build its own, the application would route every controller the test file happened to
     // import. Passing `container` opts back in — `new CaffeineIoC()` wires the registry as an application does.
     const container = init.container ?? new CaffeineIoC({ decorators: false })
-    const builder: TestApplicationBuilder = createWebApplication({ container })
+    const app: TestApplication = createWebApplication({ container })
 
-    init.configure?.(builder)
+    init.configure?.(app)
 
     // Mounted for effect, and the result dropped: `mount` re-types the application with the routes and
     // dependencies it just took on, which is exactly what a list of `Router<any, …>` cannot say anything useful
     // about. The client's own type argument carries that instead, and at run time `mount` returns this app.
-    const app: TestApplication = builder.build()
     app.mount(...routers)
 
     const harness = new Harness(app, { ...init.inject })

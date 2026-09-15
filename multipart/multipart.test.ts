@@ -85,7 +85,7 @@ describe('Multipart file upload', () => {
 
     void [Up1Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/up1/upload', {
@@ -120,7 +120,7 @@ describe('Multipart file upload', () => {
 
     void [Up2Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/up2/upload', {
@@ -153,7 +153,7 @@ describe('Multipart file upload', () => {
 
     void [Up3Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/up3/upload', {
@@ -184,7 +184,7 @@ describe('Multipart file upload', () => {
 
     void [Up4Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/up4/upload', {
@@ -216,7 +216,7 @@ describe('Multipart file upload', () => {
 
     void [Up5Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/up5/upload?userID=user-42', {
@@ -246,7 +246,7 @@ describe('Multipart file upload', () => {
 
     void [Up6Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/up6/upload', {
@@ -280,7 +280,7 @@ describe('Multipart file upload', () => {
 
     void [Up7Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/up7/upload', {
@@ -316,7 +316,7 @@ describe('Multipart file upload', () => {
 
     void [Wf1Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/wf1/upload', {
@@ -348,7 +348,7 @@ describe('Multipart file upload', () => {
 
     void [Wf1bController]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/wf1b/upload', {
@@ -379,7 +379,7 @@ describe('Multipart file upload', () => {
 
     void [Wf2Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/wf2/upload', {
@@ -413,7 +413,7 @@ describe('Multipart file upload', () => {
 
     void [Wf3Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/wf3/upload', {
@@ -442,7 +442,7 @@ describe('Multipart file upload', () => {
 
     void [Wf4Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/wf4/upload', {
@@ -477,7 +477,7 @@ describe('Multipart file upload', () => {
 
     void [Wf5Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/wf5/upload', {
@@ -516,7 +516,7 @@ describe('Multipart file upload', () => {
 
     void [Nf1Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/nf1/upload', {
@@ -551,7 +551,7 @@ describe('Multipart file upload', () => {
 
     void [Nf2Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/nf2/upload', {
@@ -590,7 +590,7 @@ describe('Multipart file upload', () => {
 
     void [Nf3Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/nf3/upload', {
@@ -632,7 +632,7 @@ describe('Multipart file upload', () => {
 
     void [Nf4Controller]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/nf4/upload', {

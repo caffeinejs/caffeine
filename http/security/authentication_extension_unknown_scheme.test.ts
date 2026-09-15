@@ -46,6 +46,6 @@ describe('authentication extension — unknown scheme', () => {
     const builder = createWebApplication(fastifyAdapterFactory(fastify()))
     builder.authentication(auth => auth.addStrategy('Header', new NeverAuthenticates()).default('Header'))
 
-    await expect(builder.build().ready()).rejects.toThrow('Cannot resolve authentication scheme "Typo"')
+    await expect(builder.ready()).rejects.toThrow('Cannot resolve authentication scheme "Typo"')
   })
 })

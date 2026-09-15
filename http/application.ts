@@ -1,11 +1,24 @@
 import type { Container } from '@caffeinejs/di'
-import { Application, type ApplicationInit, type ExtensionRegistrar, type Feature, type RunInfo } from '@caffeinejs/std'
+import {
+  Application,
+  kAddConfigurer,
+  type ApplicationOptions,
+  type ExtensionRegistrar,
+  type Feature,
+  type FeatureConfigurer,
+  type RunInfo,
+} from '@caffeinejs/std'
 import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, FastifyRequest } from 'fastify'
 
+import type { FastifyAdapter } from './adapter.js'
+import { fastifyAdapterFactory } from './adapter_factory.js'
+import { ConstraintsBuilder } from './constraints/builder.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrConfiguration } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
 import { solutions } from './error/util.js'
+import { GuardsBuilder } from './guards/builder.js'
+import { HealthBuilder } from './health/health_builder.js'
 import { ErrShutdownTimeout, HealthRegistry } from './health/index.js'
 import {
   MiddlewarePipeline,
@@ -21,6 +34,7 @@ import {
   type NodeMiddleware,
 } from './middleware/index.js'
 import type { HTTPPluginFactory } from './plugin.js'
+import { HTTPPluginFeature } from './plugin_feature.js'
 import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
 import type { RouteGroupCompiler } from './routing/compile.js'
@@ -28,7 +42,9 @@ import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
-import { type ServerAddress } from './server/index.js'
+import { AuthenticationBuilder } from './security/auth/builder.js'
+import { AuthorizationBuilder } from './security/authz/index.js'
+import { ServerBuilder, type ServerAddress } from './server/index.js'
 import { Keys } from './symbols.js'
 
 export interface AdapterIn<R> {
@@ -76,10 +92,21 @@ export interface AdapterFactoryIn {
 
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> = (input: AdapterFactoryIn) => A
 
+export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfig>
+
 /**
  * The HTTP application: an {@link Application} whose lifecycle steps drive a Fastify {@link Adapter}.
  * `setup()` builds routing and sets the adapter up; `start()` runs it;
  * `stop()` tears it down. `Application` handles the container, services, and lifecycle hooks.
+ *
+ * Configures fluently, and is itself the running instance — there is no separate builder:
+ *
+ * ```ts
+ * createWebApplication()
+ *   .with(staticFiles(s => s.serve('public')))
+ *   .authentication(auth => auth.addJWTBearer(b => b.secret(SECRET)))
+ *   .server(s => s.port(3000))
+ * ```
  */
 export class WebApplication<
   I = FastifyInstance,
@@ -88,15 +115,12 @@ export class WebApplication<
   ROUTES = never,
   DEPS = never,
   C = unknown,
-> extends Application {
+> extends Application<C> {
   /** Phantom — names the routes mounted on this application, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: ROUTES
 
   /** Phantom — names what the mounted routers injected, for `DepsOf`. Never assigned, never read. */
   declare readonly __deps?: DEPS
-
-  /** Phantom — names the application config type for `use(c => …)` factories. Never assigned, never read. */
-  declare readonly __config?: C
 
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
@@ -105,9 +129,36 @@ export class WebApplication<
   #mounted: Router<any, any, any, any, any>[] = []
   #built = false
 
-  constructor(init: ApplicationInit, adapter: A) {
-    super(init)
-    this.#adapter = adapter
+  #authBuilder: AuthenticationBuilder | undefined
+  readonly #authzBuilder = new AuthorizationBuilder()
+  readonly #guardsBuilder = new GuardsBuilder()
+  readonly #constraintsBuilder = new ConstraintsBuilder()
+  readonly #serverBuilder = new ServerBuilder<unknown>()
+  readonly #healthBuilder = new HealthBuilder<unknown>()
+
+  constructor(adapterFactory: AdapterFactory<I, R, A>, options: WebApplicationOptions<C> = {}) {
+    super(options)
+
+    this.addFeature(this.#authzBuilder)
+
+    this.addFeature(this.#guardsBuilder)
+
+    // Registered unconditionally: `version` route selection and the `Vary` header work without a `.constraints()`
+    // call, and the compiler always resolves route constraints against the bound registry.
+    this.addFeature(this.#constraintsBuilder)
+
+    // Registered unconditionally: every application has a listen address. Configuration reaches it only
+    // through `.server((s, c) => s.withConfig(...))` — declaring `server` in the schema is not enough.
+    this.addFeature(this.#serverBuilder)
+
+    // Likewise: the probes exist whether or not `.health()` is called. Calling it opts in regardless of
+    // environment; leaving it uncalled enables them only on Kubernetes. `HEALTH__ENABLED` reaches the
+    // feature only through `.health((h, c) => h.withConfig(...))`.
+    this.addFeature(this.#healthBuilder)
+
+    // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
+
+    this.#adapter = adapterFactory({ container: this.container })
   }
 
   get instance(): I {
@@ -179,6 +230,141 @@ export class WebApplication<
   ): this {
     const parsed = parseUse<C>(pathOrTarget, targetOrOptions, options, arguments.length)
     this.#middlewares.add(parsed.path, parsed.target, parsed.hook)
+    return this
+  }
+
+  /**
+   * Installs a feature, or registers a Fastify plugin from a factory. Both take their position in the same
+   * list as `.authentication(...)`, so features and plugins register in the order these calls are written:
+   *
+   * ```ts
+   * createWebApplication()
+   *   .with(staticFiles(s => s.serve('public')))
+   *   .with(c => corsPlugin(c.app.cors.options))
+   *   .with(HTTPCaching(cache => cache.statusHeader('X-Edge')))
+   * ```
+   *
+   * A feature is deduplicated by name — see {@link Application.with}. A plugin factory is never
+   * deduplicated — two calls register two plugins. A `fastify-plugin` name already on that instance is
+   * refused at register time.
+   *
+   * @throws ErrFeatureAlreadyInstalled when a feature with the same name is already installed.
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  override with(feature: Feature<C>): this
+  override with(factory: HTTPPluginFactory<C>): this
+  override with(featureOrFactory: Feature<C> | HTTPPluginFactory<C>): this {
+    if (typeof featureOrFactory === 'function') {
+      return this.addFeature(new HTTPPluginFeature(featureOrFactory))
+    }
+
+    return super.with(featureOrFactory)
+  }
+
+  /**
+   * Configures authentication, and puts the gate where this call is written.
+   *
+   * The `onRequest` hook that authenticates and authorizes registers at this position among the plugins, so a
+   * feature or plugin registered before this call runs ahead of it — `cors()`, whose headers a rejected cross-origin
+   * request still needs — and one registered after it never runs for a request the gate rejected.
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  authentication(configure: FeatureConfigurer<AuthenticationBuilder<C>, C>): this {
+    this.assertConfigurable()
+
+    if (this.#authBuilder == null) {
+      this.#authBuilder = new AuthenticationBuilder()
+      this.addFeature(this.#authBuilder)
+    }
+
+    this.#authBuilder[kAddConfigurer](configure as never)
+
+    return this
+  }
+
+  /**
+   * Configures authorization. Runs immediately: there is nothing to read from the configuration tree, so
+   * there is no `(a, c)` callback and nothing is queued for bootstrap — unlike `.server((s, c) => …)`.
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  authorization(configure: (authz: AuthorizationBuilder) => void): this {
+    this.assertConfigurable()
+    configure(this.#authzBuilder)
+    return this
+  }
+
+  /**
+   * Lists the container Keys of guards that run on every route, in registration order, before
+   * controller- and method-level `@UseGuards`.
+   *
+   * Runs immediately: guards have nothing to read from the configuration tree, so there is no `(g, c)`
+   * callback and nothing is queued for bootstrap — unlike `.server((s, c) => …)`.
+   *
+   * Does not bind the classes. Each Key must already be a container-managed Guard.
+   * Calling this is not required for `@UseGuards` on controllers.
+   *
+   * ```ts
+   * createWebApplication()
+   *   .guards(g => g.global(RolesGuard, kNamedAuthGuard))
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  guards(configure: (guards: GuardsBuilder) => void): this {
+    this.assertConfigurable()
+    configure(this.#guardsBuilder)
+    return this
+  }
+
+  /**
+   * Registers custom route-selection constraint strategies, so a route selects on them with
+   * `@Constraint(name, value)` or `.constraint(name, value)`.
+   *
+   * Runs immediately: strategies have nothing to read from the configuration tree, so there is no `(c, config)`
+   * callback and nothing is queued for bootstrap — unlike `.server((s, c) => …)`.
+   *
+   * `version` is available without this — it is Fastify's built-in semver matcher on `Accept-Version`.
+   *
+   * ```ts
+   * createWebApplication()
+   *   .constraints(c => c.register(tenantConstraint, { header: 'X-Tenant' }))
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  constraints(configure: (constraints: ConstraintsBuilder) => void): this {
+    this.assertConfigurable()
+    configure(this.#constraintsBuilder)
+    return this
+  }
+
+  /**
+   * Enables the Kubernetes probes (`/livez`, `/readyz`, `/startupz`). Calling it with no configuration is a
+   * complete setup; see {@link HealthBuilder} for what the defaults are.
+   *
+   * Left uncalled, the probes are exposed only when `KUBERNETES_SERVICE_HOST` is present. Graceful shutdown —
+   * the drain sequence and the signal handlers — is a separate feature; configure it with {@link Application.shutdown}.
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  health(configure?: FeatureConfigurer<HealthBuilder<C>, C>): this {
+    this.assertConfigurable()
+
+    // The feature is already registered; reaching this is what turns the probes on regardless of environment.
+    this.#healthBuilder.markExplicit()
+    if (configure !== undefined) {
+      this.#healthBuilder[kAddConfigurer](configure as never)
+    }
+
+    return this
+  }
+
+  /** @throws ErrApplicationStarted when {@link ready} has already started. */
+  server(configure: FeatureConfigurer<ServerBuilder<C>, C>): this {
+    this.assertConfigurable()
+    this.#serverBuilder[kAddConfigurer](configure as never)
     return this
   }
 
@@ -349,6 +535,45 @@ export class WebApplication<
       clearTimeout(timer)
     }
   }
+}
+
+/**
+ * Creates a web application.
+ *
+ * Install features with `.with(feature)` or `.with(feature(configure))` rather than here: it can be
+ * called at any point in the chain before `ready()`. Configuration is built separately with
+ * `newConfiguration` and passed in as `{ config }`. A plugin factory is
+ * `.with(c => corsPlugin(c.app.cors.options))`.
+ *
+ * ```ts
+ * createWebApplication()
+ *   .with(staticFiles(s => s.serve('public')))
+ * ```
+ */
+// Default Fastify — no adapter factory or Fastify instance required.
+export function createWebApplication<TConfig = unknown>(
+  options?: WebApplicationOptions<TConfig>,
+): WebApplication<
+  FastifyInstance,
+  FastifyRequest,
+  FastifyAdapter<FastifyInstance, FastifyRequest>,
+  never,
+  never,
+  TConfig
+>
+// Explicit adapter factory — a customized Fastify instance (`fastifyAdapterFactory(myFastify)`) or a
+// custom adapter altogether.
+export function createWebApplication<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>, TConfig = unknown>(
+  adapterFactory: AdapterFactory<I, REQ, A>,
+  options?: WebApplicationOptions<TConfig>,
+): WebApplication<I, REQ, A, never, never, TConfig>
+export function createWebApplication(
+  first?: AdapterFactory<any, any> | WebApplicationOptions,
+  second?: WebApplicationOptions,
+): WebApplication<any, any> {
+  return typeof first === 'function'
+    ? new WebApplication(first, second ?? {})
+    : new WebApplication(fastifyAdapterFactory(), first ?? {})
 }
 
 function parseUse<C>(

@@ -70,7 +70,7 @@ async function readFileBytes(stream: ReadableStream<Uint8Array>): Promise<Buffer
 
 /** Posts `entries` to `path` on an application serving `router`. */
 async function upload(router: Router, path: string, entries: Array<ME>) {
-  const app = multipartApp().build().mount(router)
+  const app = multipartApp().mount(router)
   await app.ready()
 
   try {
@@ -389,7 +389,7 @@ describe('multipart(ctx) on a decorated route', () => {
 
     void [DecoratedUploadController]
 
-    const app = multipartApp().build()
+    const app = multipartApp()
     await app.ready()
 
     const res = await app.fetch('/hfd1/upload', {

@@ -9,7 +9,5 @@ export function createContainer() {
 }
 
 export function createApp(container: Container) {
-  return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
-    .build()
-    .mount(hello)
+  return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).mount(hello)
 }

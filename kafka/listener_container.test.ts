@@ -166,7 +166,7 @@ describe('KafkaListenerContainer', () => {
       kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('kt-orders', { id: 7 })
@@ -184,7 +184,7 @@ describe('KafkaListenerContainer', () => {
       kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('kt-req', 'hello')
@@ -208,7 +208,7 @@ describe('KafkaListenerContainer', () => {
       ),
     )
 
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('kt-err', 'x')
@@ -226,7 +226,7 @@ describe('KafkaListenerContainer', () => {
       kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
-    const built = app.build()
+    const built = app
     await built.run()
 
     await built.container.get<KafkaTemplate>(KafkaTemplate).send('kt-params', { n: 1 }, { key: 'kk' })

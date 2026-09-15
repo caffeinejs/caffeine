@@ -49,7 +49,7 @@ import { createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import Fastify from 'fastify'
 import './presentation/example.controller.js'
 
-const app = createWebApplication(fastifyAdapterFactory(Fastify({ logger: true }))).build()
+const app = createWebApplication(fastifyAdapterFactory(Fastify({ logger: true })))
 ```
 
 ## Verify
