@@ -8,6 +8,7 @@ import {
   type FeatureConfigurer,
   type RunInfo,
 } from '@caffeinejs/std'
+import type { ConfigHandle } from '@caffeinejs/std/config'
 import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, FastifyRequest } from 'fastify'
 
 import type { FastifyAdapter } from './adapter.js'
@@ -31,7 +32,6 @@ import {
   type NodeMiddleware,
 } from './middleware/index.js'
 import type { HTTPPluginFactory } from './plugin.js'
-import { HTTPPluginFeature } from './plugin_feature.js'
 import { HTTPPlugins } from './plugin_registry.js'
 import type { RouteGroup } from './route.js'
 import type { RouteGroupCompiler } from './routing/compile.js'
@@ -122,6 +122,9 @@ export class WebApplication<
   readonly #adapter: A
   readonly #middlewares = new MiddlewarePipeline()
   readonly #plugins = new HTTPPlugins()
+  readonly #pluginFactories: { order: number; factory: HTTPPluginFactory<C> }[] = []
+  readonly #featureOrder = new Map<Feature, number>()
+  #nextOrder = 0
   #routeGroups: RouteGroup<R>[] = []
   #mounted: Router<any, any, any, any, any>[] = []
   #built = false
@@ -134,17 +137,27 @@ export class WebApplication<
   constructor(adapterFactory: AdapterFactory<I, R, A>, options: WebApplicationOptions<C> = {}) {
     super(options)
 
-    this.addFeature(this.#authzBuilder)
+    this.#installFeature(this.#authzBuilder)
 
-    this.addFeature(this.#guardsBuilder)
+    this.#installFeature(this.#guardsBuilder)
 
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
     // through `.server((s, c) => s.withConfig(...))` — declaring `server` in the schema is not enough.
-    this.addFeature(this.#serverBuilder)
+    this.#installFeature(this.#serverBuilder)
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
 
     this.#adapter = adapterFactory({ container: this.container })
+  }
+
+  /**
+   * Installs a feature and records the call-order sequence number it registers Fastify plugins under —
+   * the same sequence `.with(factory)` draws from, so a feature and a plugin factory interleave in the
+   * order they were written regardless of which registry each lives in. See {@link extensionRegistrar}.
+   */
+  #installFeature(feature: Feature<C>): void {
+    this.#featureOrder.set(feature, this.#nextOrder++)
+    this.addFeature(feature)
   }
 
   get instance(): I {
@@ -248,9 +261,12 @@ export class WebApplication<
   override with(feature: Feature<C>): this
   override with(featureOrFactory: Feature<C> | HTTPPluginFactory<C>): this {
     if (typeof featureOrFactory === 'function') {
-      return this.addFeature(new HTTPPluginFeature(featureOrFactory))
+      this.assertConfigurable()
+      this.#pluginFactories.push({ order: this.#nextOrder++, factory: featureOrFactory })
+      return this
     }
 
+    this.#featureOrder.set(featureOrFactory, this.#nextOrder++)
     return super.with(featureOrFactory)
   }
 
@@ -268,7 +284,7 @@ export class WebApplication<
 
     if (this.#authBuilder == null) {
       this.#authBuilder = new AuthenticationBuilder()
-      this.addFeature(this.#authBuilder)
+      this.#installFeature(this.#authBuilder)
     }
 
     this.#authBuilder[kAddConfigurer](configure as never)
@@ -318,8 +334,16 @@ export class WebApplication<
     return this
   }
 
+  /**
+   * `order` is the feature's positional index in {@link configurers}, not its true install-order sequence
+   * number — index `0` is always the framework-prepended `ErrorHandlingServiceConfigurer`, which always
+   * leads. Every other index is translated back to the sequence number recorded when the feature was
+   * installed, so a feature's plugin sorts against `.with(factory)` plugins in the order both were actually
+   * written.
+   */
   protected override extensionRegistrar(order: number): ExtensionRegistrar<FastifyPluginCallback | FastifyPluginAsync> {
-    return this.#plugins.registrarFor(order)
+    const trueOrder = order === 0 ? -1 : this.#featureOrder.get(this.configurers()[order]!)!
+    return this.#plugins.registrarFor(trueOrder)
   }
 
   /**
@@ -331,6 +355,20 @@ export class WebApplication<
    */
   protected override configurers(): Feature[] {
     return [new ErrorHandlingServiceConfigurer(), ...this.services]
+  }
+
+  /**
+   * Resolves the root-level plugin factories `.with(factory)` collected, in the order they were written —
+   * see {@link extensionRegistrar}. Registers straight into {@link HTTPPlugins}, the same sink a feature's
+   * own bootstrap writes to; nothing here goes through the `Feature`/`BootstrapKit` machinery.
+   */
+  async #registerPlugins(): Promise<void> {
+    for (const { order, factory } of this.#pluginFactories) {
+      // configHandle is deliberately ConfigHandle<unknown> on the base class (see std's Application); it is
+      // this application's own handle for its own C, so this narrows exactly what `kit.config` gave the
+      // factory when it ran through `HTTPPluginFeature`'s BootstrapKit<C>.
+      this.#plugins.registrarFor(order).register(await factory(this.configHandle as ConfigHandle<C>, this.container))
+    }
   }
 
   /**
@@ -415,6 +453,7 @@ export class WebApplication<
     this.#routeGroups = routeGroups
     this.#built = true
 
+    await this.#registerPlugins()
     await this.#registerScopedPlugins()
 
     await this.#adapter.setup({
