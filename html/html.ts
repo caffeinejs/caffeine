@@ -19,6 +19,31 @@ export interface HTMLOptions {
 const DEFAULT_CONTENT_TYPE = 'text/html; charset=utf-8'
 const DOCTYPE = '<!doctype html>'
 
+/**
+ * Answers with a JSX document.
+ *
+ * ```tsx
+ * @Get('/')
+ * index() {
+ *   return HTML(<Home name="world" />)
+ * }
+ * ```
+ *
+ * Content-Type defaults to `text/html; charset=utf-8`, applied only when the response does not already
+ * carry one — a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call, both
+ * survive undisturbed. There is no way to set Content-Type through this function; use `@Produces` or
+ * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the application's
+ * `.with(c => HTMLPlugin(c.app.html))` setting, or the framework default when the application never installed the
+ * feature; `options.doctype` overrides it for this response.
+ *
+ * `@kitajs/html` escapes nothing on its own: interpolated values need the `safe` attribute, and the
+ * `@kitajs/ts-html-plugin` language-service plugin is what reports the ones that do not have it.
+ */
+export function HTML(node: HTMLNode, options?: HTMLOptions): HTMLResult {
+  return new HTMLResult(node, options)
+}
+
+
 function isThenable(value: HTMLNode): value is Promise<string> {
   return typeof value !== 'string'
 }
@@ -58,7 +83,7 @@ function defaultsOf(ctx: Context): HTMLDefaults {
  *
  * Not constructed directly — use {@link HTML}.
  */
-export class HTMLResult extends Responder {
+class HTMLResult extends Responder {
   constructor(
     readonly node: HTMLNode,
     readonly options?: HTMLOptions,
@@ -80,28 +105,4 @@ export class HTMLResult extends Responder {
       ? this.node.then(markup => applyDoctype(markup, autoDoctype))
       : applyDoctype(this.node, autoDoctype)
   }
-}
-
-/**
- * Answers with a JSX document.
- *
- * ```tsx
- * @Get('/')
- * index() {
- *   return HTML(<Home name="world" />)
- * }
- * ```
- *
- * Content-Type defaults to `text/html; charset=utf-8`, applied only when the response does not already
- * carry one — a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call, both
- * survive undisturbed. There is no way to set Content-Type through this function; use `@Produces` or
- * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the application's
- * `.with(c => HTMLPlugin(c.app.html))` setting, or the framework default when the application never installed the
- * feature; `options.doctype` overrides it for this response.
- *
- * `@kitajs/html` escapes nothing on its own: interpolated values need the `safe` attribute, and the
- * `@kitajs/ts-html-plugin` language-service plugin is what reports the ones that do not have it.
- */
-export function HTML(node: HTMLNode, options?: HTMLOptions): HTMLResult {
-  return new HTMLResult(node, options)
 }

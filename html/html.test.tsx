@@ -17,7 +17,7 @@ import { InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { HTML, HTMLPlugin, type HTMLDefaults } from '../index.js'
+import { HTML, html, type HTMLDefaults } from './index.js'
 
 const schema = $t.Object({ html: $t.Object({ autoDoctype: $t.Boolean() }) })
 
@@ -119,7 +119,7 @@ void [HTMLController, RenderHTMLHandler, HTMLErrorController]
 
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
   return createWebApplication(fastifyAdapterFactory(fastify()), {})
-    .with(() => HTMLPlugin(defaults))
+    .with(() => html(defaults))
     .build()
 }
 
@@ -205,7 +205,7 @@ describe('HTML', () => {
   it('reads the doctype default from the configuration the callback handed it', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
       .config(schema, kConfig, c => c.source(new InlineConfigProvider({ html: { autoDoctype: false } })))
-      .with(c => HTMLPlugin(c.html))
+      .with(c => html(c.html))
       .build()
 
     await app.ready()

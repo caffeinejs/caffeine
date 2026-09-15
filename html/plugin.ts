@@ -11,16 +11,14 @@ import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
  * parameterizes that group's responses alone.
  *
  * ```ts
- * .with(c => HTMLPlugin(c.app.html))
+ * .with(c => html(c.app.html))
  * ```
  */
-export function HTMLPlugin(defaults: Partial<HTMLDefaults> = {}): FastifyPluginAsync {
+export function html(options: Partial<HTMLDefaults> = {}): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    // Read through, not copied: the argument is usually a node of the configuration tree, and a refresh has to
-    // reach a response rendered after it.
     instance.decorate(kHTMLOptions, {
       get autoDoctype(): boolean {
-        return defaults.autoDoctype ?? HTML_DEFAULTS.autoDoctype
+        return options.autoDoctype ?? HTML_DEFAULTS.autoDoctype
       },
     })
   }
