@@ -1,4 +1,11 @@
-import { Router, WebApplication, createWebApplication, fastifyAdapterFactory, version } from '@caffeinejs/http'
+import {
+  Router,
+  WebApplication,
+  constraints,
+  createWebApplication,
+  fastifyAdapterFactory,
+  version,
+} from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -103,6 +110,7 @@ describe('openapi from a programmatic router', () => {
       .handler(() => [])
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .with(() => constraints())
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 

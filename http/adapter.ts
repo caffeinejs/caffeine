@@ -17,7 +17,7 @@ import {
 
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
-import { constraintVaryPlugin } from './constraints/vary_plugin.js'
+import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
 import { FastifyContext } from './context.js'
 import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
@@ -364,9 +364,8 @@ export class FastifyAdapter<
     // plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every route; an
     // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
     // `$route` (above) is what a plugin in this loop calls to accumulate one more route. The form body parser
-    // and the constraint `Vary` header go first, so every plugin registers onto a server that has them.
+    // goes first, so every plugin registers onto a server that has it.
     installFormBodyParser(fastify)
-    await fastify.register(constraintVaryPlugin)
 
     for (const plugin of plugins.root()) {
       assertPluginNotRegistered(fastify, plugin)
@@ -410,6 +409,16 @@ export class FastifyAdapter<
       throw new ErrConfiguration(
         'Routes are decorated with @Cache or @CacheInvalidate but the caching feature is not installed: ' +
           'add ".with(HTTPCaching())" to the application builder',
+      )
+    }
+
+    if (
+      !fastify.hasPlugin(CONSTRAINTS_PLUGIN) &&
+      allRouteGroups.some(group => group.routes.some(route => route.config?.has(kRouteConstraints) === true))
+    ) {
+      throw new ErrConfiguration(
+        'Cannot register constrained routes: the constraints plugin is not installed' +
+          solutions('Add ".with(() => constraints())" to the application builder'),
       )
     }
 

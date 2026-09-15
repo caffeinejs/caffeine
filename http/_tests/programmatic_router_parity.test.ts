@@ -15,6 +15,7 @@ import {
   Identity,
   Principal,
   Router,
+  constraints,
   createWebApplication,
   fastifyAdapterFactory,
   version,
@@ -237,7 +238,9 @@ describe('programmatic router parity with the decorator feature set', () => {
       const v2 = new Router('/pets').name('ParityPetsV2').with(version('2.0.0'))
       v2.get('/').handler(() => ({ v: 2 }))
 
-      const app = createWebApplication().mount(v1, v2)
+      const app = createWebApplication()
+        .with(() => constraints())
+        .mount(v1, v2)
       await app.ready()
 
       expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })

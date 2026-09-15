@@ -1,10 +1,10 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import fastify from 'fastify'
+import fastify, { type FastifyInstance } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import {
   constraint,
-  constraintsPlugin,
+  constraints,
   createWebApplication,
   fastifyAdapterFactory,
   fst,
@@ -46,7 +46,7 @@ describe('route constraints', () => {
       .handler(() => ({ flavor: 'mild' }))
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .with(() => constraintsPlugin([flavorStrategy()]))
+      .with(() => constraints([flavorStrategy()]))
       .mount(dish)
     await app.ready()
 
@@ -59,12 +59,26 @@ describe('route constraints', () => {
     await app.close()
   })
 
+  // Without the plugin nothing turns the declaration into a Fastify constraint, so a lone versioned route would
+  // answer every request regardless of Accept-Version. Start-up must refuse that instead.
+  it('fails at ready() when a route is constrained and the constraints plugin is not installed', async () => {
+    const r = new Router('/v')
+    r.get('/')
+      .with(version('1.0.0'))
+      .handler(() => ({}))
+    const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
+
+    await expect(app.ready()).rejects.toThrow(/the constraints plugin is not installed/)
+  })
+
   it('fails at ready() when a route names a constraint no strategy is registered under', async () => {
     const r = new Router('/x')
     r.get('/')
       .with(constraint('nope', 1))
       .handler(() => ({}))
-    const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() })
+      .with(() => constraints())
+      .mount(r)
 
     // find-my-way's own error, surfaced when the route registers — there is no more central registry to
     // check the name against ahead of time.
@@ -76,7 +90,9 @@ describe('route constraints', () => {
     r.get('/')
       .with(version('2.0.0'), fst({ constraints: { version: '1.0.0' } }))
       .handler(() => ({}))
-    const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() })
+      .with(() => constraints())
+      .mount(r)
 
     await expect(app.ready()).rejects.toThrow(/constraint "version" is set by both/)
   })
@@ -87,7 +103,9 @@ describe('route constraints', () => {
       .name('coexist')
       .with(version('1.0.0'), fst({ constraints: { host: 'api.example' } }))
       .handler(() => ({ ok: true }))
-    const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
+    const app = createWebApplication({ container: new CaffeineIoC() })
+      .with(() => constraints())
+      .mount(r)
     await app.ready()
 
     const res = await app.fetch('/c', { headers: { 'accept-version': '1.x', host: 'api.example' } })
@@ -103,5 +121,52 @@ describe('route constraints', () => {
     expect(built.toRoute().config?.get(kRouteConstraints)).toEqual(
       new Map([['flavor', { value: 'spicy', header: 'X-Flavor' }]]),
     )
+  })
+})
+
+describe('constraint Vary header', () => {
+  // The plugin learns the constrained headers from `onRoute`, so a route a later plugin adds counts as much as a
+  // mounted one — a shared cache would otherwise mix the representations.
+  it('covers a constrained route a plugin added with $route', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+      .with(() => constraints([flavorStrategy()]))
+      .with(() => async (instance: FastifyInstance) => {
+        instance.$route('late', router => {
+          router.path('/late')
+          constraint('flavor', 'spicy', { header: 'X-Flavor' })(router)
+          router.routes([
+            new RouteBuilder()
+              .method('GET')
+              .path('/')
+              .handle(() => ({ ok: true })),
+          ])
+        })
+      })
+    await app.ready()
+
+    const res = await app.fetch('/late', { headers: { 'x-flavor': 'spicy' } })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('vary')).toContain('X-Flavor')
+
+    await app.close()
+  })
+
+  // Installing the plugin must not cost an application that constrains nothing a header on every response.
+  it('leaves Vary alone when the plugin is installed but no route is constrained', async () => {
+    const plain = new Router('/plain')
+    plain.get('/').handler(() => ({ ok: true }))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+      .with(() => constraints())
+      .mount(plain)
+    await app.ready()
+
+    const res = await app.fetch('/plain')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('vary')).toBeNull()
+
+    await app.close()
   })
 })

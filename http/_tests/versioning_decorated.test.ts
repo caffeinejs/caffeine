@@ -1,7 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, Prefix, Version, createWebApplication } from '../index.js'
+import { Controller, Get, Prefix, Version, constraints, createWebApplication } from '../index.js'
 
 /**
  * `@Version` on a decorated controller must compile to the same Fastify `version` constraint a programmatic
@@ -32,7 +32,7 @@ describe('API versioning — decorated controllers', () => {
     const container = new CaffeineIoC()
     container.bind(PetsV1, t => t.toSelf())
     container.bind(PetsV2, t => t.toSelf())
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ container }).with(() => constraints())
     await app.ready()
 
     expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
@@ -60,7 +60,7 @@ describe('API versioning — decorated controllers', () => {
 
     const container = new CaffeineIoC()
     container.bind(Catalog, t => t.toSelf())
-    const app = createWebApplication({ container })
+    const app = createWebApplication({ container }).with(() => constraints())
     await app.ready()
 
     expect(await (await app.fetch('/catalog/item', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ at: 1 })
