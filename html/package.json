@@ -24,10 +24,10 @@
   },
   "dependencies": {
     "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*"
+    "@caffeinejs/std": "*",
+    "@kitajs/html": "^4.2.13"
   },
   "peerDependencies": {
-    "@kitajs/html": "^4.2.13",
     "@kitajs/ts-html-plugin": "^4.1.4",
     "fastify": "^5.0.0"
   },
@@ -37,7 +37,6 @@
     }
   },
   "devDependencies": {
-    "@kitajs/html": "^4.2.13",
     "fastify": "^5.12.1"
   }
 }
