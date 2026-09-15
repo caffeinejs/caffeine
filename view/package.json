@@ -23,12 +23,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
     "@fastify/view": "^12.0.0"
   },
   "peerDependencies": {
+    "@caffeinejs/di": "*",
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
     "fastify": "^5.0.0",
     "fastify-plugin": "^6.0.0"
   },

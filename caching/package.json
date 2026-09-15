@@ -23,12 +23,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
     "lru-cache": "^11.5.2"
   },
   "peerDependencies": {
+    "@caffeinejs/di": "*",
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
     "fastify": "^5.0.0"
   },
   "devDependencies": {
