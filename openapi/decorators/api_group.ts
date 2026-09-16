@@ -2,7 +2,6 @@ import type { RouteGroupExtension } from '@caffeinejs/http'
 import { configureRouteGroup } from '@caffeinejs/http/decorators/registrar'
 
 import type { APIGroupDetail } from './detail.js'
-import { kAPIGroup } from './keys.js'
 
 /**
  * Tags a `Router`'s routes and carries what applies to all of them. The programmatic form of {@link APIGroup}, and
@@ -15,7 +14,7 @@ import { kAPIGroup } from './keys.js'
 export function apiGroup(detail: APIGroupDetail | string): RouteGroupExtension {
   const resolved: APIGroupDetail = typeof detail === 'string' ? { name: detail } : detail
 
-  return group => group.extras(kAPIGroup, resolved)
+  return group => group.detail('openapi', resolved)
 }
 
 /**

@@ -118,9 +118,12 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         header,
         hasHeader,
         statusCode: route.statusCode,
+        bodyAs: route.bodyAs,
         config: config,
         options: options,
-        extras: route.extras,
+        // Copied, not shared: a plugin enriching the compiled route's detail from an `onRoute` hook must not
+        // write back into the spec the route was authored from.
+        detail: route.detail === undefined ? undefined : { ...route.detail },
         catchBy: buildCatchByMap(container, route.catchBy, owner),
         guards: compileRouteGuardChain(container, compiledGuards, globalGuards, spec.guards, route.guards, owner),
         authorization: (() => {
@@ -152,9 +155,9 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
       onRequest: meta.onRequest,
       handleError: meta.handleError,
       catchBy: buildCatchByMap(container, spec.catchBy, meta.name),
-      // Kept on the router rather than merged down: group-level metadata describes the group, and
-      // `mergeValue`'s array-concat/Map-union semantics would mangle arbitrary symbol payloads on the way.
-      extras: spec.extras,
+      // Kept on the router rather than merged down: group-level metadata describes the group, and a reader
+      // that wants both levels reads them separately rather than receiving one flattened bag.
+      detail: spec.detail,
       routes: spec.routes.map(compileRoute),
     }
   }

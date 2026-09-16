@@ -1,6 +1,7 @@
 export * from './builder.js'
 export * from './compile.js'
 export * from './decorated/source.js'
+export type * from './detail.js'
 export type * from './dispatch.js'
 export * from './inherit.js'
 export * from './programmatic/index.js'

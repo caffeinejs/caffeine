@@ -17,8 +17,6 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
 
-import type { APIGroupDetail } from './decorators/detail.js'
-import { kAPIGroup } from './decorators/keys.js'
 import { ErrOpenAPIConfiguration } from './errors.js'
 import { generateDocument, validateDocument } from './generate/generator.js'
 import { joinPaths } from './generate/paths.js'
@@ -117,7 +115,7 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
 
     instance.$route('openapi', router => {
       router.path(options.routes.base)
-      router.extras(kAPIGroup, { hidden: true } satisfies APIGroupDetail)
+      router.detail('openapi', { hidden: true })
       router.routes(
         [
           route('GET', paths.json, 'application/json', authz).handle(() => document),

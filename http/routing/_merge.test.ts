@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest'
 
 import { RouteGroupBuilder, RouteBuilder } from './builder.js'
 
-const kSym = Symbol('test')
+// The seam a package annotates a route through. Augmented here so the merge semantics below are pinned
+// against a real namespace rather than a cast.
+declare module './detail.js' {
+  interface RouteDetail {
+    testMerge?: unknown
+  }
+}
 
 describe('RouteGroupBuilder cumulative merge', () => {
   it('merges objects on the same config key', () => {
@@ -49,16 +55,16 @@ describe('RouteBuilder cumulative merge', () => {
     expect(route.config?.get('cors')).toEqual({ origin: 'http://a.com', methods: ['GET'] })
   })
 
-  it('concats arrays on the same extras key', () => {
-    const route = new RouteBuilder().extras(kSym, [1, 2]).extras(kSym, [3]).toRoute()
+  it('concats arrays on the same detail namespace', () => {
+    const route = new RouteBuilder().detail('testMerge', [1, 2]).detail('testMerge', [3]).toRoute()
 
-    expect(route.extras?.get(kSym)).toEqual([1, 2, 3])
+    expect(route.detail?.testMerge).toEqual([1, 2, 3])
   })
 
-  it('overwrites on primitive extras key', () => {
-    const route = new RouteBuilder().extras(kSym, true).extras(kSym, false).toRoute()
+  it('overwrites on primitive detail namespace', () => {
+    const route = new RouteBuilder().detail('testMerge', true).detail('testMerge', false).toRoute()
 
-    expect(route.extras?.get(kSym)).toBe(false)
+    expect(route.detail?.testMerge).toBe(false)
   })
 
   it('overwrites on primitive config key', () => {

@@ -2,7 +2,6 @@ import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { kBodyBuffer } from '../decorators/keys/keys.js'
 import {
   Args,
   BodyAsStream,
@@ -19,7 +18,13 @@ import {
 import { $p } from '../route_picker.js'
 import { RouteBuilder } from '../routing/builder.js'
 
-const kMark = Symbol('test.mark')
+// A third party annotating a route it does not own: the namespace is declared here, exactly as
+// `@caffeinejs/openapi` declares its own.
+declare module '../routing/detail.js' {
+  interface RouteDetail {
+    testMark?: string
+  }
+}
 
 describe('route extensions', () => {
   describe('given a body-reading extension', () => {
@@ -98,7 +103,7 @@ describe('route extensions', () => {
         (tag: string): RouteExtension =>
         route => {
           seen.push(tag)
-          route.extras(kMark, tag)
+          route.detail('testMark', tag)
         }
 
       const router = new Router('/order')
@@ -117,9 +122,9 @@ describe('route extensions', () => {
       bodyAsBuffer()(viaExtension)
 
       const viaDecoratorEquivalent = new RouteBuilder()
-      viaDecoratorEquivalent.extras(kBodyBuffer, true)
+      viaDecoratorEquivalent.bodyAs('buffer')
 
-      expect(viaExtension.toRoute().extras).toEqual(viaDecoratorEquivalent.toRoute().extras)
+      expect(viaExtension.toRoute().bodyAs).toEqual(viaDecoratorEquivalent.toRoute().bodyAs)
     })
   })
 })

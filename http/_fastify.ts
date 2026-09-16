@@ -30,11 +30,11 @@ declare module 'fastify' {
      */
     $caffeine?: {
       /**
-       * The compiled route: schema, authorization, constraints, extras. A GET route's automatic HEAD twin
-       * carries the same object.
+       * The compiled route: schema, authorization, constraints, detail. A GET route's automatic HEAD twin
+       * carries the same object, so an enrichment written to `detail` is observed by both spellings.
        */
       route: Route<FastifyRequest>
-      /** The group the route was compiled in: its path, prefix, name, target and extras. */
+      /** The group the route was compiled in: its path, prefix, name, target and detail. */
       group: RouteGroup<FastifyRequest>
       hasStatus: boolean
       status: number

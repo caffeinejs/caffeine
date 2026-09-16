@@ -11,6 +11,7 @@ import type { Guard } from '../../guards/guard.js'
 import type { HTTPPluginFactory } from '../../plugin.js'
 import type { RouteValidationSchema } from '../../route.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
+import type { RouteGroupDetail } from '../detail.js'
 import type { RouteAuthzOptions } from '../spec.js'
 import { attachState, stateOf, type RouterState } from './_state.js'
 import type { RouteGroupExtension } from './extension.js'
@@ -403,11 +404,9 @@ export class Router<
     return this
   }
 
-  /** Where a package attaches its own per-group metadata, keyed by a symbol it owns. */
-  extras<K extends symbol>(key: K, value: unknown): this
-  extras<K extends symbol>(extras: Map<K, unknown>): this
-  extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
-    this.#state.builder.extras(keyOrExtras as K, value)
+  /** Where a package attaches its own per-group metadata, under the namespace it owns. */
+  detail<K extends keyof RouteGroupDetail>(key: K, value: RouteGroupDetail[K]): this {
+    this.#state.builder.detail(key, value)
     return this
   }
 

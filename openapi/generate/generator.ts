@@ -1,7 +1,6 @@
 import { type AuthSchemeDescriptor, type Route, type RouteGroup, solutions } from '@caffeinejs/http'
 
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
-import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { ErrOpenAPIConfiguration, ErrOpenAPIOperationConflict } from '../errors.js'
 import type { OpenAPIOptions } from '../options.js'
 import type {
@@ -56,7 +55,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
   const operationIds = new Map<string, string>()
 
   for (const router of input.routeGroups) {
-    const group = router.extras?.get(kAPIGroup) as APIGroupDetail | undefined
+    const group = router.detail?.openapi
     if (group?.hidden === true) {
       continue
     }
@@ -67,7 +66,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
     }
 
     for (const route of router.routes) {
-      const detail = route.extras?.get(kOperation) as OperationDetail | undefined
+      const detail = route.detail?.openapi
       if (detail?.hidden === true) {
         continue
       }

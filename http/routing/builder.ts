@@ -5,8 +5,9 @@ import type { ErrorHandlerRef } from '../error/error.js'
 import type { Guard } from '../guards/guard.js'
 import type { RouteValidationSchema } from '../route.js'
 import { mergeValue } from './_merge.js'
+import type { RouteDetail, RouteGroupDetail } from './detail.js'
 import type { RouteInvoker } from './dispatch.js'
-import type { RouteAuthzOptions, RouteSpec, RouteGroupSpec } from './spec.js'
+import type { BodyMode, RouteAuthzOptions, RouteSpec, RouteGroupSpec } from './spec.js'
 
 export class RouteGroupBuilder {
   #path?: string
@@ -20,7 +21,7 @@ export class RouteGroupBuilder {
   #authorize?: RouteAuthzOptions
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
-  #extras?: Map<symbol, unknown>
+  #detail?: RouteGroupDetail
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
@@ -118,17 +119,10 @@ export class RouteGroupBuilder {
     return this
   }
 
-  extras<K extends symbol>(key: K, value: unknown): this
-  extras<K extends symbol>(extras: Map<K, unknown>): this
-  extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
-    this.#extras ??= new Map()
-    if (typeof keyOrExtras === 'symbol') {
-      this.#extras.set(keyOrExtras, mergeValue(this.#extras.get(keyOrExtras), value))
-    } else {
-      for (const [key, value] of keyOrExtras) {
-        this.#extras.set(key, mergeValue(this.#extras.get(key), value))
-      }
-    }
+  /** Where a package attaches its own per-group metadata, under the namespace it owns. */
+  detail<K extends keyof RouteGroupDetail>(key: K, value: RouteGroupDetail[K]): this {
+    this.#detail ??= {}
+    this.#detail[key] = mergeValue(this.#detail[key], value) as RouteGroupDetail[K]
     return this
   }
 
@@ -145,7 +139,7 @@ export class RouteGroupBuilder {
       authz: this.#authorize,
       config: this.#config,
       options: this.#options,
-      extras: this.#extras,
+      detail: this.#detail,
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
       guards: this.#guards,
@@ -166,10 +160,11 @@ export class RouteBuilder {
   #bodyLimit?: number
   #timeout?: number
   #statusCode?: number
+  #bodyAs?: BodyMode
   #authorize?: RouteAuthzOptions
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
-  #extras?: Map<symbol, unknown>
+  #detail?: RouteDetail
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
 
@@ -237,6 +232,12 @@ export class RouteBuilder {
     return this
   }
 
+  /** Delivers the raw body as a `Buffer` or as an unparsed stream. See {@link BodyMode}. */
+  bodyAs(mode: BodyMode): this {
+    this.#bodyAs = mode
+    return this
+  }
+
   authorize(opts: RouteAuthzOptions): this {
     this.#authorize = opts
     return this
@@ -282,17 +283,10 @@ export class RouteBuilder {
     return this
   }
 
-  extras<K extends symbol>(key: K, value: unknown): this
-  extras<K extends symbol>(extras: Map<K, unknown>): this
-  extras<K extends symbol>(keyOrExtras: K | Map<K, unknown>, value?: unknown): this {
-    this.#extras ??= new Map()
-    if (typeof keyOrExtras === 'symbol') {
-      this.#extras.set(keyOrExtras, mergeValue(this.#extras.get(keyOrExtras), value))
-    } else {
-      for (const [key, value] of keyOrExtras) {
-        this.#extras.set(key, mergeValue(this.#extras.get(key), value))
-      }
-    }
+  /** Where a package attaches its own per-route metadata, under the namespace it owns. */
+  detail<K extends keyof RouteDetail>(key: K, value: RouteDetail[K]): this {
+    this.#detail ??= {}
+    this.#detail[key] = mergeValue(this.#detail[key], value) as RouteDetail[K]
     return this
   }
 
@@ -310,10 +304,11 @@ export class RouteBuilder {
       timeout: this.#timeout,
       header: this.#header,
       statusCode: this.#statusCode,
+      bodyAs: this.#bodyAs,
       authz: this.#authorize,
       config: this.#config,
       options: this.#options,
-      extras: this.#extras,
+      detail: this.#detail,
       catchBy: this.#catchBy,
       guards: this.#guards,
     }

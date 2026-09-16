@@ -10,6 +10,22 @@ import type {
 } from '../spec/spec.js'
 
 /**
+ * Claims this package's namespace on the route detail routing already carries.
+ *
+ * Declared here, next to the types it names, so `http` needs no knowledge of OpenAPI and a reader of a
+ * route's detail gets these types rather than an `unknown` to cast.
+ */
+declare module '@caffeinejs/http' {
+  interface RouteDetail {
+    openapi?: OperationDetail
+  }
+
+  interface RouteGroupDetail {
+    openapi?: APIGroupDetail
+  }
+}
+
+/**
  * What `@Operation` adds to a route.
  *
  * Every field here is something routing and JSON Schema genuinely cannot express. Nothing that `@Schema`,

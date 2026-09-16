@@ -3,7 +3,7 @@ import type { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 /**
  * A unit of route configuration, written by whoever owns the feature rather than by the router.
  *
- * This is the same function a decorator already passes to `configureRoute` — `spec => spec.extras(kOperation, d)`
+ * This is the same function a decorator already passes to `configureRoute` — `spec => spec.detail('openapi', d)`
  * and nothing more — so a package can back its decorator and its programmatic form with one implementation, and
  * the two cannot drift. `@caffeinejs/openapi` annotating an operation is the case it exists for.
  *
@@ -12,7 +12,7 @@ import type { RouteBuilder, RouteGroupBuilder } from '../builder.js'
  *
  * ```ts
  * export function operation(detail: OperationDetail): RouteExtension {
- *   return route => route.extras(kOperation, detail)
+ *   return route => route.detail('openapi', detail)
  * }
  * ```
  */

@@ -19,7 +19,6 @@ import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
 import { FastifyContext } from './context.js'
-import { kBodyBuffer, kBodyStream } from './decorators/keys/keys.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import {
   GlobalErrorHandlerRef,
@@ -320,7 +319,7 @@ export class FastifyAdapter<
 
             // BodyAsBuffer
             // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
-            if (route.extras?.get(kBodyBuffer)) {
+            if (route.bodyAs === 'buffer') {
               server.register(async innerServer => {
                 innerServer.removeAllContentTypeParsers()
                 innerServer.addContentTypeParser(
@@ -340,7 +339,7 @@ export class FastifyAdapter<
             }
 
             // BodyAsStream
-            if (route.extras?.get(kBodyStream)) {
+            if (route.bodyAs === 'stream') {
               server.register(async innerServer => {
                 innerServer.removeAllContentTypeParsers()
                 innerServer.addContentTypeParser('*', function (_request, payload, done) {

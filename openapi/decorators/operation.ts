@@ -2,7 +2,6 @@ import type { RouteExtension } from '@caffeinejs/http'
 import { configureRoute } from '@caffeinejs/http/decorators/registrar'
 
 import type { OperationDetail } from './detail.js'
-import { kOperation } from './keys.js'
 
 /**
  * Documents a route declared with a `Router`. The programmatic form of {@link Operation}, and what it is
@@ -17,7 +16,7 @@ import { kOperation } from './keys.js'
  * ```
  */
 export function operation(detail: OperationDetail): RouteExtension {
-  return route => route.extras(kOperation, detail)
+  return route => route.detail('openapi', detail)
 }
 
 /**

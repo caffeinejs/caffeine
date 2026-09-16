@@ -6,8 +6,9 @@ import { FastifyRequest } from 'fastify'
 import type { Context } from './context.js'
 import type { ErrorHandler } from './error/error.js'
 import type { CompiledGuard } from './guards/compile.js'
+import type { RouteDetail, RouteGroupDetail } from './routing/detail.js'
 import type { RouteDispatch, RouteGroupHook } from './routing/dispatch.js'
-import { RouteAuthzOptions } from './routing/spec.js'
+import { BodyMode, RouteAuthzOptions } from './routing/spec.js'
 import { AuthzRouteService } from './security/authz/index.js'
 
 /** Error types mapped to the handler class that renders them, as declared by `@CatchWith`. */
@@ -44,7 +45,7 @@ export interface RouteGroup<R = FastifyRequest> {
    */
   handleError?: RouteGroupErrorHandler<R>
   catchBy?: CatchByMap
-  extras?: Map<symbol, unknown>
+  detail?: RouteGroupDetail
 
   /**
    * What installed the features whose plugins register inside this group's context, outermost first.
@@ -85,9 +86,18 @@ export interface Route<R = FastifyRequest> {
   header?: Map<string, string | string[]>
   hasHeader?: boolean
   statusCode?: number
+  /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
+  bodyAs?: BodyMode
   config?: Map<string, unknown>
   options?: Map<string, unknown>
-  extras?: Map<symbol, unknown>
+  /**
+   * What packages annotated this route with.
+   *
+   * Copied from the spec while the route compiles, so a plugin enriching it from an `onRoute` hook never
+   * writes back into the authored spec. A GET route's automatic HEAD twin carries the *same* object, so an
+   * enrichment is written once and both spellings observe it.
+   */
+  detail?: RouteDetail
   catchBy?: CatchByMap
   guards?: CompiledGuard[]
   authorization: RouteAuthorization

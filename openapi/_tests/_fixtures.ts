@@ -33,7 +33,7 @@ export function fixtureRouter(
     prefix: options.prefix ?? spec.prefix,
     name: name,
     target: key,
-    extras: spec.extras,
+    detail: spec.detail,
     routes: spec.routes.map((route): Route<unknown> => {
       // Mirrors buildRouting: any authz declared at either level is protection unless something opted out.
       const hasDecoratorProtection = spec.authz !== undefined || route.authz !== undefined
@@ -59,7 +59,7 @@ export function fixtureRouter(
         dispatch: () => () => undefined,
         schema: route.schema,
         statusCode: route.statusCode,
-        extras: route.extras,
+        detail: route.detail,
         authorization: {
           hasProtection: hasDecoratorProtection && !isAnonymous,
           options: authz,

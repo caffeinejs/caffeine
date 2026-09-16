@@ -3,7 +3,6 @@ import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std'
 import { describe, expect, it } from 'vitest'
 
-import { kAPIGroup, kOperation } from '../decorators/keys.js'
 import { ErrOpenAPIOperationConflict } from '../errors.js'
 import { generateDocument } from '../generate/generator.js'
 import type { OperationObject } from '../spec/spec.js'
@@ -56,12 +55,12 @@ describe('generateDocument', () => {
   it('throws on a duplicate operationId, naming both sites', () => {
     const a = fixtureRouter(
       '/a',
-      r => r.routes([fixtureRoute('GET', '/', 'list').extras(kOperation, { operationId: 'listThings' })]),
+      r => r.routes([fixtureRoute('GET', '/', 'list').detail('openapi', { operationId: 'listThings' })]),
       { name: 'AController' },
     )
     const b = fixtureRouter(
       '/b',
-      r => r.routes([fixtureRoute('GET', '/', 'index').extras(kOperation, { operationId: 'listThings' })]),
+      r => r.routes([fixtureRoute('GET', '/', 'index').detail('openapi', { operationId: 'listThings' })]),
       { name: 'BController' },
     )
 
@@ -358,7 +357,7 @@ describe('decorator detail', () => {
   it('lets @Operation override the derived values', () => {
     const router = fixtureRouter('/pets', r =>
       r.routes([
-        fixtureRoute('GET', '/:id', 'get').extras(kOperation, {
+        fixtureRoute('GET', '/:id', 'get').detail('openapi', {
           summary: 'Get a pet',
           operationId: 'getPet',
           tags: ['Animals'],
@@ -380,7 +379,7 @@ describe('decorator detail', () => {
     const router = fixtureRouter('/pets', r =>
       r.routes([
         fixtureRoute('GET', '/', 'list'),
-        fixtureRoute('GET', '/secret', 'secret').extras(kOperation, { hidden: true }),
+        fixtureRoute('GET', '/secret', 'secret').detail('openapi', { hidden: true }),
       ]),
     )
 
@@ -391,7 +390,7 @@ describe('decorator detail', () => {
 
   it('omits a whole controller marked hidden', () => {
     const router = fixtureRouter('/internal', r => {
-      r.extras(kAPIGroup, { hidden: true })
+      r.detail('openapi', { hidden: true })
       r.routes([fixtureRoute('GET', '/', 'list')])
     })
 
@@ -402,7 +401,7 @@ describe('decorator detail', () => {
 
   it('emits a top-level tag from @APIGroup', () => {
     const router = fixtureRouter('/pets', r => {
-      r.extras(kAPIGroup, { name: 'Pets', description: 'Browse and manage pets' })
+      r.detail('openapi', { name: 'Pets', description: 'Browse and manage pets' })
       r.routes([fixtureRoute('GET', '/', 'list')])
     })
 
@@ -414,7 +413,7 @@ describe('decorator detail', () => {
 
   it('merges @APIGroup responses into every route', () => {
     const router = fixtureRouter('/pets', r => {
-      r.extras(kAPIGroup, { name: 'Pets', responses: { 500: { description: 'Something broke' } } })
+      r.detail('openapi', { name: 'Pets', responses: { 500: { description: 'Something broke' } } })
       r.routes([fixtureRoute('GET', '/', 'list')])
     })
 
@@ -428,7 +427,7 @@ describe('decorator detail', () => {
       r.routes([
         fixtureRoute('GET', '/:id', 'get')
           .schema({ params: petIdParams })
-          .extras(kOperation, { parameters: [{ name: 'id', in: 'path', description: 'The pet ID' }] }),
+          .detail('openapi', { parameters: [{ name: 'id', in: 'path', description: 'The pet ID' }] }),
       ]),
     )
 

@@ -4,6 +4,7 @@ import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { ErrorHandlerRef } from '../error/error.js'
 import type { Guard } from '../guards/guard.js'
 import type { RouteValidationSchema } from '../route.js'
+import type { RouteDetail, RouteGroupDetail } from './detail.js'
 import type { RouteInvoker } from './dispatch.js'
 
 /**
@@ -23,7 +24,7 @@ export interface RouteGroupSpec<R> {
   authz?: RouteAuthzOptions
   config?: Map<string, unknown>
   options?: Map<string, unknown>
-  extras?: Map<symbol, unknown>
+  detail?: RouteGroupDetail
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
@@ -47,13 +48,23 @@ export interface RouteSpec<R> {
   timeout?: number
   header?: Map<string, string | string[]>
   statusCode?: number
+  /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
+  bodyAs?: BodyMode
   authz?: RouteAuthzOptions
   config?: Map<string, unknown>
   options?: Map<string, unknown>
-  extras?: Map<symbol, unknown>
+  detail?: RouteDetail
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
 }
+
+/**
+ * How a route's raw body is delivered: as a `Buffer`, or as a stream left unparsed.
+ *
+ * Absent means the ordinary content-type parsers apply. This changes what the handler receives, so it is a
+ * field of its own rather than something carried in {@link RouteDetail}, which is descriptive only.
+ */
+export type BodyMode = 'buffer' | 'stream'
 
 export interface RouteAuthzOptions {
   allowAnonymous?: boolean
