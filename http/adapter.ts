@@ -18,6 +18,7 @@ import { installNotFoundHandler } from './not_found.js'
 import type { RouteGroup } from './route.js'
 import { RouteGroupBuilder } from './routing/builder.js'
 import type { RouteCompilers } from './routing/dispatch.js'
+import { assertAuthorizationConfigured } from './security/authz/index.js'
 import { assertAuthenticationConfigured, type Principal } from './security/index.js'
 import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions, type ServerAddress } from './server/index.js'
 import { Keys } from './symbols.js'
@@ -158,6 +159,7 @@ export class FastifyAdapter<
     // Every plugin has had its turn, so whatever `$route` compiled is in `routeGroups` and the two scans see
     // the same table the registration loop below reads.
     assertAuthenticationConfigured(container, routeGroups)
+    assertAuthorizationConfigured(container, routeGroups)
     assertRouteFeaturesInstalled(fastify, routeGroups)
 
     // The same for every group, so it is built once here rather than per registration.

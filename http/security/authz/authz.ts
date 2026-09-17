@@ -1,3 +1,4 @@
+import type { Container } from '@caffeinejs/di'
 import { Scopes } from '@caffeinejs/di'
 import {
   kFeatureBootstrap,
@@ -7,6 +8,8 @@ import {
   type FeatureConfigureKit,
 } from '@caffeinejs/std'
 
+import type { RouteGroup } from '../../route.js'
+import { ErrAuthorizationRequired } from './errors.js'
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
@@ -155,5 +158,24 @@ export class AuthorizationBuilder implements Feature {
 
   [kFeatureBootstrap](): void {
     // Nothing to register.
+  }
+}
+
+/**
+ * Refuses an application that protects a route and never configured authorization.
+ *
+ * Checked apart from route compilation because a route that declares protection with authorization absent
+ * compiles with no real policy — see `declaresAuthzProtection` in `routing/compile.ts` — so the cause is
+ * named here rather than surfacing as a missing handler or policy.
+ *
+ * @throws ErrAuthorizationRequired when a route declares protection and authorization was never installed.
+ */
+export function assertAuthorizationConfigured(container: Container, routeGroups: readonly RouteGroup<any>[]): void {
+  if (container.getOptional(kAuthzOpts) !== undefined) {
+    return
+  }
+
+  if (routeGroups.some(group => group.routes.some(route => route.authorization.hasProtection))) {
+    throw new ErrAuthorizationRequired()
   }
 }

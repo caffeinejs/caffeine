@@ -130,16 +130,12 @@ export class WebApplication<
   #built = false
 
   #authBuilder: AuthenticationBuilder | undefined
-  readonly #authzBuilder = new AuthorizationBuilder()
-  readonly #guardsBuilder = new GuardsBuilder()
+  #authzBuilder: AuthorizationBuilder | undefined
+  #guardsBuilder: GuardsBuilder | undefined
   readonly #serverBuilder = new ServerBuilder<unknown>()
 
   constructor(adapterFactory: AdapterFactory<I, R, A>, options: WebApplicationOptions<C> = {}) {
     super(options)
-
-    this.#installFeature(this.#authzBuilder)
-
-    this.#installFeature(this.#guardsBuilder)
 
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
     // through `.server((s, c) => s.withConfig(...))` — declaring `server` in the schema is not enough.
@@ -300,6 +296,12 @@ export class WebApplication<
    */
   authorization(configure: (authz: AuthorizationBuilder) => void): this {
     this.assertConfigurable()
+
+    if (this.#authzBuilder == null) {
+      this.#authzBuilder = new AuthorizationBuilder()
+      this.#installFeature(this.#authzBuilder)
+    }
+
     configure(this.#authzBuilder)
     return this
   }
@@ -323,8 +325,28 @@ export class WebApplication<
    */
   guards(configure: (guards: GuardsBuilder) => void): this {
     this.assertConfigurable()
+
+    if (this.#guardsBuilder == null) {
+      this.#guardsBuilder = new GuardsBuilder()
+      this.#installFeature(this.#guardsBuilder)
+    }
+
     configure(this.#guardsBuilder)
     return this
+  }
+
+  /**
+   * Auto-installs authorization when authentication was configured and `.authorization(...)` never was —
+   * so a protected route still gets a default policy — before the base class captures the feature list and
+   * starts booting. Neither call made means authorization stays off, by design.
+   */
+  override async ready(): Promise<void> {
+    if (this.#authBuilder != null && this.#authzBuilder == null) {
+      this.#authzBuilder = new AuthorizationBuilder()
+      this.#installFeature(this.#authzBuilder)
+    }
+
+    return super.ready()
   }
 
   /** @throws ErrApplicationStarted when {@link ready} has already started. */
