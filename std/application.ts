@@ -22,6 +22,7 @@ import {
 } from './feature.js'
 import { kAddConfigurer, type FeatureConfigurer } from './feature_builder.js'
 import { ApplicationAvailability } from './health/availability.js'
+import { logToken, LoggerBuilder, type Logger } from './logger/index.js'
 import { $t } from './schema/t.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
 import { ShutdownBuilder } from './shutdown/shutdown_builder.js'
@@ -32,6 +33,8 @@ export interface ApplicationOptions<TConfig = unknown> {
   container?: Container | Options
   /** Built with {@link newConfiguration}. Omitted, the application resolves an empty, passthrough tree. */
   config?: AppConfiguration<TConfig>
+  /** A plain instance to use as-is, or `false` to disable the logger entirely. */
+  logger?: Logger | false
 }
 
 /**
@@ -105,6 +108,13 @@ export class Application<TConfig = unknown> {
   // in place.
   readonly #shutdownBuilder = new ShutdownBuilder<unknown>()
 
+  // Registered unconditionally, like #shutdownBuilder: a `.logger(...)` call is deferred to this Feature's own
+  // `configure()`, during `ready()`, so it sees resolved configuration. `#logger` (not just the builder) is
+  // held too, seeded here in the constructor, so `log` answers before `ready()` without touching the
+  // container — refreshed again once this builder's `configure()` has run.
+  readonly #loggerBuilder = new LoggerBuilder<unknown>()
+  #logger: Logger
+
   #handle: ConfigHandle<unknown> | undefined
   #name = ''
   #profiles: string[] = []
@@ -144,6 +154,17 @@ export class Application<TConfig = unknown> {
     // Pushed directly, not through `addFeature`: a subclass's private fields do not exist yet while this
     // constructor runs, so an overridden method cannot be called from here.
     this.#services.push(this.#shutdownBuilder)
+    this.#services.push(this.#loggerBuilder)
+
+    // Seeds the builder from the simple, eager path; `.logger(configure)` layers on top of this during
+    // `ready()`. Bound here so `logToken()` resolves even for an application that never calls `.logger()`.
+    if (options.logger === false) {
+      this.#loggerBuilder.disable(true)
+    } else if (options.logger !== undefined) {
+      this.#loggerBuilder.use(options.logger)
+    }
+    this.#logger = this.#loggerBuilder.logger
+    this.#container.bind(logToken(), t => t.toValue(this.#logger))
   }
 
   get container(): Container {
@@ -221,6 +242,25 @@ export class Application<TConfig = unknown> {
   shutdown(configure: FeatureConfigurer<ShutdownBuilder<TConfig>, TConfig>): this {
     this.assertConfigurable()
     this.#shutdownBuilder[kAddConfigurer](configure as never)
+    return this
+  }
+
+  /** The application's logger. Always answers — a bare `ConsoleLogger` until something is configured. */
+  get log(): Logger {
+    return this.#logger
+  }
+
+  /**
+   * Configures the application's logger, with access to the resolved configuration — `.logger((b, c) =>
+   * b.disable(c.app.logEnabled))`. The feature is registered either way, so this only overrides the default.
+   * Deferred to `ready()`, like every other feature: {@link log} and `logToken()` reflect it once `ready()`
+   * has run, not as soon as this returns.
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  logger(configure: FeatureConfigurer<LoggerBuilder<TConfig>, TConfig>): this {
+    this.assertConfigurable()
+    this.#loggerBuilder[kAddConfigurer](configure as never)
     return this
   }
 
@@ -313,6 +353,11 @@ export class Application<TConfig = unknown> {
     if (configurePending.length > 0) {
       await Promise.all(configurePending)
     }
+
+    // LoggerBuilder's own `configure()` already rebound `logToken()`; `#logger` is refreshed here too so
+    // `.log` reflects a `.logger(configure)` call without going through the container, which isn't
+    // initialized yet.
+    this.#logger = this.#loggerBuilder.logger
 
     await this.#container.init()
 

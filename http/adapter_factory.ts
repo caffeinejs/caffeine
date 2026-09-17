@@ -1,4 +1,4 @@
-import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import Fastify, { FastifyInstance, FastifyRequest, FastifyReply, LogController } from 'fastify'
 
 import { FastifyAdapter } from './adapter.js'
 import { type AdapterFactory } from './application.js'
@@ -12,7 +12,19 @@ export function fastifyAdapterFactory<
 export function fastifyAdapterFactory(
   instance?: FastifyInstance,
 ): AdapterFactory<FastifyInstance, FastifyRequest, FastifyAdapter> {
-  const server = instance ?? Fastify()
+  return (kit): FastifyAdapter => {
+    // Fastify reads `loggerInstance` while it constructs and exposes no setter afterwards, so this is the only
+    // point the application's logger can reach it — hence the instance is built here rather than above, where
+    // there is no application yet. A caller who passed their own instance already chose its logger.
+    //
+    // Request logging stays off: handing the server a logger must not change what an application prints.
+    const server =
+      instance ??
+      Fastify({
+        loggerInstance: kit.logger,
+        logController: new LogController({ disableRequestLogging: true }),
+      })
 
-  return (kit): FastifyAdapter => new FastifyAdapter(kit, server)
+    return new FastifyAdapter(kit, server as FastifyInstance)
+  }
 }

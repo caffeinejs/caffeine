@@ -173,11 +173,11 @@ describe('extension registration', () => {
 
     await app.ready()
 
-    // Position 0 is the built-in shutdown feature, which registers nothing.
-    expect(asked).toEqual([0, 1, 2])
+    // Positions 0 and 1 are the built-in shutdown and logger features, neither of which registers anything.
+    expect(asked).toEqual([0, 1, 2, 3])
     expect(registered).toEqual([
-      [2, 'quick'],
-      [1, 'slow'],
+      [3, 'quick'],
+      [2, 'slow'],
     ])
   })
 })

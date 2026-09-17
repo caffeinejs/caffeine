@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 
 import { Container, Scopes } from '@caffeinejs/di'
 import { Configuration } from '@caffeinejs/std/config'
+import { logToken } from '@caffeinejs/std/logger'
 import { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
 
 import { assertPluginNotRegistered, registerCompiledRouteGroup } from './_register_route_group.js'
@@ -88,6 +89,15 @@ export class FastifyAdapter<
     // moving once the socket is bound. An application that never registered the server feature runs on the
     // defaults.
     this.#serverOptions = { ...(container.getOptional(kServerOptions) ?? DEFAULT_SERVER_OPTIONS) }
+
+    // Fastify derived its own child of the application's logger while it was constructed, and a child keeps the
+    // level it was born with. Without this, a level the logger feature resolved — from configuration, after the
+    // server existed — would govern every logger but the server's own.
+    const log = container.getOptional(logToken())
+
+    if (log !== undefined) {
+      fastify.log.level = log.level
+    }
 
     fastify.addHook('onRequest', (req, reply, done) => {
       req.httpContext = new FastifyContext(req, reply, configuration)

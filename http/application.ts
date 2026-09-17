@@ -9,6 +9,7 @@ import {
   type RunInfo,
 } from '@caffeinejs/std'
 import type { ConfigHandle } from '@caffeinejs/std/config'
+import type { Logger } from '@caffeinejs/std/logger'
 import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback, FastifyRequest } from 'fastify'
 
 import type { FastifyAdapter } from './adapter.js'
@@ -85,6 +86,12 @@ export interface Adapter<I, R> {
 
 export interface AdapterFactoryIn {
   container: Container
+
+  /**
+   * The application's logger, as it stands when the adapter is constructed — the eager one, since no feature has
+   * configured yet. An adapter whose server takes its logger at construction has no later chance to read it.
+   */
+  logger: Logger
 }
 
 export type AdapterFactory<I, REQ, A extends Adapter<I, REQ> = Adapter<I, REQ>> = (input: AdapterFactoryIn) => A
@@ -143,7 +150,7 @@ export class WebApplication<
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
 
-    this.#adapter = adapterFactory({ container: this.container })
+    this.#adapter = adapterFactory({ container: this.container, logger: this.log })
   }
 
   /**

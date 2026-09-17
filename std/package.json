@@ -19,6 +19,18 @@
       "types": "./dist/framework/index.d.ts",
       "default": "./dist/framework/index.js"
     },
+    "./logger": {
+      "types": "./dist/logger/index.d.ts",
+      "default": "./dist/logger/index.js"
+    },
+    "./logger/console": {
+      "types": "./dist/logger/console/index.d.ts",
+      "default": "./dist/logger/console/index.js"
+    },
+    "./logger/pino": {
+      "types": "./dist/logger/pino/index.d.ts",
+      "default": "./dist/logger/pino/index.js"
+    },
     "./schema": {
       "types": "./dist/schema/index.d.ts",
       "default": "./dist/schema/index.js"
@@ -39,7 +51,16 @@
     "@sinclair/typebox": "^0.34.52",
     "@standard-schema/spec": "^1.1.0"
   },
+  "peerDependencies": {
+    "pino": "^10.3.1"
+  },
+  "peerDependenciesMeta": {
+    "pino": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "pino": "^10.3.1",
     "zod": "^4.5.4"
   }
 }
