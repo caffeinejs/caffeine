@@ -1,0 +1,33 @@
+{
+  "name": "@caffeinejs/distlock",
+  "version": "0.0.0",
+  "description": "Distributed locking for CaffeineJS",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./backend/memory": {
+      "types": "./dist/backend/memory/index.d.ts",
+      "default": "./dist/backend/memory/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/di": "*",
+    "@caffeinejs/std": "*"
+  }
+}

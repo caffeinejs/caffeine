@@ -25,6 +25,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`caching/`](caching/AGENTS.md)                                                     | `@caffeinejs/caching`                    |
 | [`html/`](html/AGENTS.md)                                                           | `@caffeinejs/html`                       |
 | [`kafka/`](kafka/AGENTS.md)                                                         | `@caffeinejs/kafka`                      |
+| [`distlock/`](distlock/AGENTS.md)                                                   | `@caffeinejs/distlock`                   |
 | [`openapi/`](openapi/AGENTS.md)                                                     | `@caffeinejs/openapi`                    |
 | [`messaging/`](messaging/AGENTS.md)                                                 | `@caffeinejs/messaging`                  |
 | [`std/`](std/AGENTS.md)                                                             | `@caffeinejs/std`                        |
@@ -53,7 +54,7 @@ Run checks in this order and fix failures before considering the task complete. 
   1. `npm run lint:markdown` (or `make lint-markdown`)
 - **Single workspace package** — code in one directory from root `package.json` `workspaces` (e.g. only `http/**`):
   1. `npm run build -w <pkg>`
-  2. `npm run test:typecheck -w <pkg> --if-present` (no-op when the package has no such script; vitest typecheck in `npm test` still covers test files)
+  2. `npx tsc --build <pkg>/tsconfig.json` — the package's check project, and the only step here that type-checks `*.test.ts`
   3. `npm test -w <pkg>`
   4. `npm run lint:fix -- <pkg-path>` — zero errors (warnings are pre-existing and acceptable)
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
@@ -74,6 +75,17 @@ its tests, emits nothing, and references only `./tsconfig.build.json`. Root `tsc
 Two solution files drive them: `npm run build` is `tsc --build tsconfig.build.json`, and
 `npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental; do not edit `dist/`
 by hand.
+
+A check project is the only thing that reads a test file. `tsconfig.build.json` excludes `**/*.test.ts`, so a
+green `npm run build` says nothing about them, and Vitest type-checks only where a config turns it on —
+`brewer/` and `testing/`, through their own `tsconfig.vitest.json`. `npm test` elsewhere runs tests it never
+type-checked.
+
+Every package in the table above is referenced by `tsconfig.check.json`, so the check project is its step 2.
+`cli/` and `benchmarks/` are outside that solution and own a `test:typecheck` script the root chain calls
+separately — they are the only two workspaces where `npm run test:typecheck -w <pkg>` means anything, so
+`--if-present` against any other package silently does nothing. `devtools/ui` and `examples/**` are in neither:
+nothing type-checks them.
 
 Tests resolve `@caffeinejs/*` through package `exports` to `dist/*.d.ts` — the same resolution Vitest uses at
 run time. There is no `source` export condition and no `paths` map, so a type-check needs the dependency

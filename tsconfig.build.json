@@ -35,6 +35,9 @@
       "path": "./kafka/tsconfig.build.json"
     },
     {
+      "path": "./distlock/tsconfig.build.json"
+    },
+    {
       "path": "./fetchy/fetchy/tsconfig.build.json"
     },
     {

@@ -38,6 +38,9 @@
       "path": "./kafka"
     },
     {
+      "path": "./distlock"
+    },
+    {
       "path": "./fetchy/fetchy"
     },
     {

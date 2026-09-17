@@ -19,6 +19,7 @@
     "openapi",
     "messaging",
     "kafka",
+    "distlock",
     "fetchy/*",
     "cli",
     "devtools",
