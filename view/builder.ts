@@ -15,8 +15,8 @@ const RESERVED_ENGINE_NAME = 'view'
  *
  * ```ts
  * .with(view(v => {
- *   v.engine(e => e.engine({ handlebars }).root('templates'))
- *   v.engine('mail', e => e.engine({ handlebars }).root('emails'))
+ *   v.add(e => e.engine({ handlebars }).root('templates'))
+ *   v.add('mail', e => e.engine({ handlebars }).root('emails'))
  * }))
  * ```
  */
@@ -24,11 +24,11 @@ export class ViewBuilder {
   // Keyed by engine name; the `undefined` key is the default engine.
   readonly #engines = new Map<string | undefined, ViewEngineBuilder>()
 
-  /** Configures the default engine, decorating `reply.view`. */
-  engine(configure: (engine: ViewEngineBuilder) => void): this
-  /** Configures a named engine, decorating `reply.<name>`. */
-  engine(name: string, configure: (engine: ViewEngineBuilder) => void): this
-  engine(
+  /** Adds the default engine, decorating `reply.view`. */
+  add(configure: (engine: ViewEngineBuilder) => void): this
+  /** Adds a named engine, decorating `reply.<name>`. */
+  add(name: string, configure: (engine: ViewEngineBuilder) => void): this
+  add(
     nameOrConfigure: string | ((engine: ViewEngineBuilder) => void),
     maybeConfigure?: (engine: ViewEngineBuilder) => void,
   ): this {

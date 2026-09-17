@@ -53,7 +53,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
     container,
     config: conf,
   })
-    .with(view(v => v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
+    .with(view(v => v.add(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))))
     .with(staticFiles(s => s.serve(publicRoot, { prefix: '/static' })))
     // The document is generated from the routes themselves — the controllers' @Schema, @Status, @Authorize and
     // $p pickers are the source, and @APIGroup/@Operation add only what those cannot say. 3.2.0 because

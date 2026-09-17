@@ -86,7 +86,7 @@ const viewsRoot = fileURLToPath(new URL('../../views', import.meta.url))
 
 async function buildApp() {
   const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
-    view(v => v.engine(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))),
+    view(v => v.add(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))),
   )
   await app.ready()
   return app

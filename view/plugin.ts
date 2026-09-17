@@ -15,7 +15,7 @@ export type ViewConfigurer = (builder: ViewBuilder) => void
 /**
  * Template-based server-side rendering over `@fastify/view`.
  *
- * `.engine(...)` configures the default engine (`reply.view`); `.engine(name, ...)` adds a named one
+ * `.add(...)` configures the default engine (`reply.view`); `.add(name, ...)` adds a named one
  * (`reply.<name>`).
  *
  * At least one engine is required — installing with none fails at `app.ready()`.

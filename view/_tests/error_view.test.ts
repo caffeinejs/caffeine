@@ -44,7 +44,7 @@ void [ReturnViewHandler, ErrReturnController]
 describe('error handler returning a View()', () => {
   it('renders a returned View() as HTML', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
-      view(v => v.engine(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
+      view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
     )
     await app.ready()
 

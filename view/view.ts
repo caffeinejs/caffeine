@@ -15,7 +15,7 @@ type ViewCapableReply = {
 /**
  * Per-render options forwarded to `reply.<engine>(name, model, options)`. `layout` overrides the global
  * layout for this one render (mirrors `@fastify/view`'s `RouteSpecificOptions`). `engine` selects which
- * registered engine renders this view — the name passed to `v.engine('mail', …)`; when unset, the default
+ * registered engine renders this view — the name passed to `v.add('mail', …)`; when unset, the default
  * engine (`reply.view`) is used.
  */
 export interface ViewRenderOptions {
@@ -40,7 +40,7 @@ export function View(name: string, model?: unknown, options?: ViewRenderOptions)
 /**
  * Renders a {@link ViewResult} through the selected engine's `@fastify/view` reply decorator, forwarding
  * the per-render `layout` override. The engine is chosen by `view.options.engine` (the name passed to
- * `v.engine('mail', …)`); when unset the default `reply.view` is used. Shared by the route-handler path
+ * `v.add('mail', …)`); when unset the default `reply.view` is used. Shared by the route-handler path
  * and the error-handler path. When the selected engine was never configured the decorator is absent —
  * guarded here rather than crashing with a cryptic "not a function".
  */
@@ -51,8 +51,8 @@ function renderView(view: ViewResult, res: ViewCapableReply): ActionResult {
   if (typeof render !== 'function') {
     const named =
       engine === 'view'
-        ? '.with(view(v => v.engine(e => e.engine(...))))'
-        : `.with(view(v => v.engine("${engine}", e => e.engine(...))))`
+        ? '.with(view(v => v.add(e => e.engine(...))))'
+        : `.with(view(v => v.add("${engine}", e => e.engine(...))))`
     throw new ErrConfiguration(`Cannot render view: engine "${engine}" is not configured. Call ${named}`)
   }
 

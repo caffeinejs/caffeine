@@ -9,8 +9,8 @@ import type { ViewOptions } from './view.js'
  * Caffeine's SSR. In case the builder does not provide a specific option, use the `configure` method to
  * set any option supported by the `@fastify/view` plugin.
  *
- * One builder assembles one engine registration. {@link ViewBuilder} owns them — `v.engine(…)` for the
- * default engine, `v.engine('mail', …)` for a named one — and reads each's assembled options back out.
+ * One builder assembles one engine registration. {@link ViewBuilder} owns them — `v.add(…)` for the
+ * default engine, `v.add('mail', …)` for a named one — and reads each's assembled options back out.
  *
  * @see https://github.com/fastify/point-of-view
  */
