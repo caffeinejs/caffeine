@@ -1,6 +1,6 @@
 import type { InjectionToken } from '@caffeinejs/di'
 
-import type { CacheStore } from '../store.js'
+import type { Cache } from '../store.js'
 import type { ETagGenerator } from './cache.js'
 import type { HTTPCachingOptions } from './options.js'
 
@@ -14,12 +14,12 @@ export const kBuild = Symbol('caffeine.caching.build')
 
 /** Fluent authoring for {@link HTTPCachingOptions}, e.g. `HTTPCaching(b => b.store(myStore))`. */
 export class HTTPCachingOptionsBuilder {
-  #store: CacheStore | InjectionToken<CacheStore> | undefined
+  #store: Cache | InjectionToken<Cache> | undefined
   #etagGenerator: ETagGenerator | InjectionToken<ETagGenerator> | undefined
   #statusHeader: string | undefined
 
   /** The store backing cached responses, or a token to resolve one from the container. */
-  store(store: CacheStore | InjectionToken<CacheStore>): this {
+  store(store: Cache | InjectionToken<Cache>): this {
     this.#store = store
     return this
   }

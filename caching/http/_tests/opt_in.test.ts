@@ -3,7 +3,8 @@ import { Controller, ErrConfiguration, Get, createWebApplication, fastifyAdapter
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { CacheStore } from '../../store.js'
+import type { Cache } from '../../store.js'
+import { MemoryCache } from '../../store/memory/index.js'
 import { CacheControl, HTTPCaching } from '../index.js'
 
 describe('caching is opt-in', () => {
@@ -14,8 +15,6 @@ describe('caching is opt-in', () => {
     close = undefined
   })
 
-  // Runs before any @CacheControl controller is declared in this file — the global controller registry every
-  // container snapshots would otherwise carry one in.
   it('does nothing to an undecorated application that never installs the plugin', async () => {
     @Controller('/optin-plain')
     class PlainController {
@@ -51,7 +50,7 @@ describe('caching is opt-in', () => {
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 
-  it('caches with a default MemoryCacheStore when installed with no store option', async () => {
+  it('throws ErrConfiguration when installed with no store option', async () => {
     @Controller('/optin-default')
     class DefaultController {
       @CacheControl({ ttl: 60 })
@@ -64,16 +63,12 @@ describe('caching is opt-in', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(HTTPCaching())
     close = () => app.close()
-    await app.ready()
 
-    const res1 = await app.fetch('/optin-default/data')
-    expect(res1.headers.get('x-cache')).toBe('MISS')
-    const res2 = await app.fetch('/optin-default/data')
-    expect(res2.headers.get('x-cache')).toBe('HIT')
+    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 
-  it('resolves a container-bound store passed as a token instead of the default', async () => {
-    class MapStore extends CacheStore {
+  it('resolves a container-bound store passed as a token', async () => {
+    class MapStore implements Cache {
       readonly ops: string[] = []
       async get() {
         this.ops.push('get')
@@ -98,17 +93,17 @@ describe('caching is opt-in', () => {
     void [TokenStoreController]
 
     const container = new CaffeineIoC()
-    container.bind(CacheStore, t => t.toClass(MapStore))
+    container.bind(MapStore, t => t.toClass(MapStore))
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).with(
-      HTTPCaching(b => b.store(CacheStore)),
+      HTTPCaching(b => b.store(MapStore)),
     )
     close = () => app.close()
     await app.ready()
 
     await app.fetch('/optin-token-store/data')
 
-    const store = app.container.get(CacheStore) as MapStore
+    const store = app.container.get(MapStore) as MapStore
     expect(store.ops).toContain('set')
   })
 
@@ -124,7 +119,7 @@ describe('caching is opt-in', () => {
     void [HeaderController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(
-      HTTPCaching(b => b.statusHeader('X-Edge')),
+      HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Edge')),
     )
     close = () => app.close()
     await app.ready()

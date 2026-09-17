@@ -1,11 +1,10 @@
-import type { Container, InjectionToken } from '@caffeinejs/di'
-import type { AdapterRouteOptions, HTTPPluginFactory } from '@caffeinejs/http'
+import { DeferredCtor, type Container, type InjectionToken } from '@caffeinejs/di'
+import { ErrConfiguration, type AdapterRouteOptions, type HTTPPluginFactory } from '@caffeinejs/http'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import './_fastify.js'
-import { CacheStore } from '../store.js'
-import { MemoryCacheStore } from '../store/memory/index.js'
+import type { Cache } from '../store.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
@@ -18,10 +17,11 @@ export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
  * HTTP response caching, as an ordinary Fastify plugin factory: `.with(HTTPCaching())`.
  *
  * Takes an options object or a builder callback. Neither binds anything into the container — `store` and
- * `etagGenerator` are resolved once as the plugin registers, from the option given or, failing that, an
- * internal default ({@link MemoryCacheStore}, a SHA-1 hash). Being a plain plugin factory rather than a
- * feature, it installs once per context — the root, or one route group with `router.plugin(...)` / `@Use(...)`
- * — each with its own settings.
+ * `etagGenerator` are resolved once as the plugin registers, from the option given or, for `etagGenerator`
+ * alone, an internal default (a SHA-1 hash). `store` has no default: installing without one throws
+ * {@link ErrConfiguration}. Being a plain plugin factory rather than a feature, it installs once per
+ * context — the root, or one route group with `router.plugin(...)` / `@Use(...)` — each with its own
+ * settings.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
  * `cacheInvalidate()` route extensions. Install it after `.authentication(...)`.
@@ -31,7 +31,7 @@ export function HTTPCaching<C = unknown>(options?: HTTPCachingOptions | HTTPCach
     const resolved = typeof options === 'function' ? build(options) : (options ?? {})
 
     return cachePlugin({
-      store: resolveStore(resolved.store, container),
+      store: resolveCache(resolved.store, container),
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
     })
@@ -44,14 +44,30 @@ function build(configure: HTTPCachingConfigurer): HTTPCachingOptions {
   return builder[kBuild]()
 }
 
-// A real instance is told apart from a token by `instanceof`; anything else is read from the container.
-function resolveStore(value: CacheStore | InjectionToken<CacheStore> | undefined, container: Container): CacheStore {
-  if (value instanceof CacheStore) {
-    return value
+// A real Cache instance is always an object; an InjectionToken is a class, a DeferredCtor, or a branded
+// string/symbol — never a plain object — so the two are told apart by shape. Unlike `etagGenerator`, `store`
+// has no default: an omitted store, or a token that resolves to nothing, both throw.
+function resolveCache(value: Cache | InjectionToken<Cache> | undefined, container: Container): Cache {
+  if (value === undefined) {
+    throw new ErrConfiguration(
+      'Cannot install HTTP caching without a store: pass one explicitly, e.g. .store(new MemoryCache())',
+    )
   }
 
-  const resolved = value !== undefined ? container.getOptional(value) : undefined
-  return resolved ?? new MemoryCacheStore()
+  if (
+    typeof value === 'string' ||
+    typeof value === 'symbol' ||
+    typeof value === 'function' ||
+    value instanceof DeferredCtor
+  ) {
+    const resolved = container.getOptional(value)
+    if (resolved === undefined) {
+      throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given store token')
+    }
+    return resolved
+  }
+
+  return value
 }
 
 // `ETagGenerator` is a function type, so a token is told apart by shape instead: a `string`/`symbol` names a

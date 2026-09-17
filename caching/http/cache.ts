@@ -9,7 +9,7 @@ import { Duration } from '@caffeinejs/std'
 import { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
-import type { CacheStore } from '../store.js'
+import type { Cache } from '../store.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
@@ -45,7 +45,7 @@ export interface CacheControlOptions {
 
 /** What the cache hooks need, resolved once at start-up by `HTTPCaching`. */
 export interface CacheDeps {
-  store: CacheStore
+  store: Cache
   etagGenerator: ETagGenerator | undefined
   statusHeader: string
 }
@@ -53,7 +53,7 @@ export interface CacheDeps {
 /**
  * Attaches the read and store hooks to one route, per its `@CacheControl` options.
  *
- * Serves cacheable responses from and stores them into the container-resolved {@link CacheStore}, and emits
+ * Serves cacheable responses from and stores them into the container-resolved {@link Cache}, and emits
  * `Cache-Control`/`ETag`/`Vary` headers.
  *
  * `opts` is closed over rather than re-read from `request.routeOptions.config` per request: the hooks are
@@ -112,8 +112,7 @@ export function attachCacheHooks(
       const key = read.key
         ? read.key(new FastifyContextRequest(request as FastifyRequest))
         : defaultCacheKey(request, read.vary)
-      const segment = read.segment ?? ''
-      const cached = await store.get(key, segment)
+      const cached = await store.get(key, read.segment)
       if (!cached) {
         if (reqCC?.includes('only-if-cached')) {
           return reply.code(504).send()
@@ -256,11 +255,8 @@ export function attachCacheHooks(
         ? opts.key(new FastifyContextRequest(request as FastifyRequest))
         : defaultCacheKey(request, opts.vary)
 
-      const segment = opts.segment ?? ''
-
       await store.set(
         key,
-        segment,
         {
           payload: payload as string | Buffer,
           etag,
@@ -269,6 +265,7 @@ export function attachCacheHooks(
           headers,
         },
         opts.ttl!,
+        opts.segment,
       )
     }
 

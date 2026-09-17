@@ -2,6 +2,7 @@ import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '@c
 import fastify, { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { MemoryCache } from '../../store/memory/index.js'
 import { CacheControl, HTTPCaching } from '../index.js'
 
 /**
@@ -40,7 +41,7 @@ describe('cache plugin wiring', () => {
       registered.set(`${route.method} ${route.url}`, route as RouteOptions)
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching())
+    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
     close = () => app.close()
     await app.ready()
 
@@ -57,8 +58,8 @@ describe('cache plugin wiring', () => {
   it('refuses a second registration on the same context', async () => {
     const server = fastify()
     const app = createWebApplication(fastifyAdapterFactory(server))
-      .with(HTTPCaching(b => b.statusHeader('X-First')))
-      .with(HTTPCaching(b => b.statusHeader('X-Second')))
+      .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-First')))
+      .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Second')))
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)

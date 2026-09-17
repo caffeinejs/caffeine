@@ -1,1 +1,1 @@
-export { CacheStore, type CacheEntry } from './store.js'
+export type { Cache, CacheEntry } from './store.js'

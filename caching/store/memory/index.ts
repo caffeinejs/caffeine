@@ -1,45 +1,56 @@
 import { parseDuration, type Duration } from '@caffeinejs/std'
+import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
 import { LRUCache } from 'lru-cache'
 
-import { CacheStore, type CacheEntry } from '../../store.js'
+import type { Cache, CacheEntry } from '../../store.js'
 
-export interface MemoryCacheStoreOptions {
+export interface MemoryCacheOptions {
   /** Maximum number of entries kept in the cache. Defaults to 500. */
   max?: number
   /**
-   * Optional cap on the total bytes of cached entries. When set, the store evicts least-recently-used
+   * Optional cap on the total bytes of cached entries, written the way a Docker Compose file writes one
+   * (`'512kb'`, `'10MB'`, or a bare number of bytes). When set, the store evicts least-recently-used
    * entries once the summed size of stored payloads (plus their headers) exceeds this budget — a more
    * predictable bound on memory use than the entry count alone.
    */
-  maxBytes?: number
+  maxSize?: ByteSize
 }
 
-export class MemoryCacheStore extends CacheStore {
+export class MemoryCache implements Cache {
   #cache: LRUCache<string, CacheEntry>
 
-  constructor(options?: MemoryCacheStoreOptions) {
-    super()
+  /**
+   * Takes either {@link MemoryCacheOptions}, or a pre-built `LRUCache` instance to use as-is — for eviction
+   * settings `MemoryCacheOptions` doesn't expose (`ttlAutopurge`, a custom `dispose`, and the rest of
+   * `lru-cache`'s own options).
+   */
+  constructor(options?: MemoryCacheOptions | LRUCache<string, CacheEntry>) {
+    if (options instanceof LRUCache) {
+      this.#cache = options
+      return
+    }
+
     this.#cache =
-      options?.maxBytes !== undefined
-        ? new LRUCache({ max: options.max ?? 500, maxSize: options.maxBytes, sizeCalculation: entrySize })
+      options?.maxSize !== undefined
+        ? new LRUCache({ max: options.max ?? 500, maxSize: bytes(options.maxSize), sizeCalculation: entrySize })
         : new LRUCache({ max: options?.max ?? 500 })
   }
 
-  async get(key: string, segment: string): Promise<CacheEntry | undefined> {
-    return this.#cache.get(`${segment}:${key}`)
+  async get(key: string, segment?: string): Promise<CacheEntry | undefined> {
+    return this.#cache.get(cacheKey(key, segment))
   }
 
-  async set(key: string, segment: string, entry: CacheEntry, ttl: Duration): Promise<void> {
-    this.#cache.set(`${segment}:${key}`, entry, { ttl: parseDuration(ttl) * 1000 })
+  async set(key: string, entry: CacheEntry, ttl: Duration, segment?: string): Promise<void> {
+    this.#cache.set(cacheKey(key, segment), entry, { ttl: parseDuration(ttl) * 1000 })
   }
 
-  async delete(key: string, segment: string): Promise<void> {
-    this.#cache.delete(`${segment}:${key}`)
+  async delete(key: string, segment?: string): Promise<void> {
+    this.#cache.delete(cacheKey(key, segment))
   }
 
-  async deleteMany(keys: string[], segment: string): Promise<void> {
+  async deleteMany(keys: string[], segment?: string): Promise<void> {
     for (const key of keys) {
-      this.#cache.delete(`${segment}:${key}`)
+      this.#cache.delete(cacheKey(key, segment))
     }
   }
 
@@ -55,6 +66,10 @@ export class MemoryCacheStore extends CacheStore {
       }
     }
   }
+}
+
+function cacheKey(key: string, segment?: string): string {
+  return segment ? `${segment}:${key}` : key
 }
 
 // Rough byte size of an entry: the payload plus its stored headers (etag/last-modified included).

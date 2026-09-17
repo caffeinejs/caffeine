@@ -1,6 +1,6 @@
 import type { InjectionToken } from '@caffeinejs/di'
 
-import type { CacheStore } from '../store.js'
+import type { Cache } from '../store.js'
 import type { ETagGenerator } from './cache.js'
 
 /** The default cache-status response header name, carrying HIT/MISS/BYPASS. */
@@ -14,11 +14,12 @@ export const DEFAULT_STATUS_HEADER = 'X-Cache'
  */
 export interface HTTPCachingOptions {
   /**
-   * The store backing cached responses, or a token to resolve one from the container. A real
-   * {@link CacheStore} instance is told apart from a token by `instanceof CacheStore`. Defaults to a fresh
-   * {@link MemoryCacheStore} when omitted, or when a given token resolves to nothing.
+   * The store backing cached responses, or a token to resolve one from the container. A real {@link Cache}
+   * instance is told apart from an {@link InjectionToken} by shape: a class, a `DeferredCtor`, or a
+   * string/symbol is a token, anything else (a plain object) is the store itself. Required — installing
+   * `HTTPCaching` without one throws `ErrConfiguration`.
    */
-  store?: CacheStore | InjectionToken<CacheStore>
+  store?: Cache | InjectionToken<Cache>
   /**
    * The function hashing a payload into an `ETag`, or a token to resolve one from the container — a
    * `string`/`symbol` is a token, a `function` is the generator itself. Defaults to an internal SHA-1 hash

@@ -5,7 +5,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md). The rules below are specific to thi
 ## Opt-in
 
 Installing the plugin is the activating act. `.with(HTTPCaching())` attaches the cache hooks, and only then
-do `@Cache` / `@CacheInvalidate` (and the `cache()` / `cacheInvalidate()` route extensions) do anything. An
+do `@CacheControl` / `@CacheInvalidate` (and the `cacheControl()` / `cacheInvalidate()` route extensions) do
+anything. An
 application that decorates routes with them but never installs the plugin fails at `app.ready()` with
 `ErrConfiguration` — a start-up check on the `http/` side, unrelated to anything this package exports.
 
@@ -17,8 +18,10 @@ start a feature nobody asked for.
 `HTTPCaching(...)` is a plain `HTTPPluginFactory` — `.with(HTTPCaching(...))`, a factory argument, not a
 `Feature`. It binds
 nothing into the container: `store` and `etagGenerator` are each read once, as the plugin registers, from the
-option given (an instance, or an `InjectionToken` resolved with `container.getOptional`) or, failing that, an
-internal default (`MemoryCacheStore`, a SHA-1 hash in `_util.ts`'s `generateETag`). `HTTPCachingOptionsBuilder`
+option given (an instance, or an `InjectionToken` resolved with `container.getOptional`). `etagGenerator`
+falls back to an internal default (a SHA-1 hash in `_util.ts`'s `generateETag`) when omitted; `store` has no
+default — installing without one throws `ErrConfiguration`, and a token that resolves to nothing throws too.
+`HTTPCachingOptionsBuilder`
 exists only to build that options object fluently (`HTTPCaching(b => b.store(...).etagGenerator(...))`) —
 nothing about it is a `FeatureBuilder`.
 
@@ -47,10 +50,14 @@ thing keeping the order.
 ## `store` / `etagGenerator`: instance or token
 
 Both fields on `HTTPCachingOptions` accept either the value itself or an `InjectionToken` to resolve from the
-container — `HTTPCaching` never binds either, it only ever reads. `store` is told apart by `instanceof
-CacheStore`: a real instance vs. anything else being a token. `etagGenerator` is told apart by `typeof`: a
-`string`/`symbol` is a token, a `function` is the generator itself — a class-shaped token for a function type
-is not realistic in this DI and is not supported.
+container — `HTTPCaching` never binds either, it only ever reads. `Cache` is a plain interface (no runtime
+identity), so `store` is told apart from a token by shape: a real `Cache` implementation is always an object,
+while every valid `InjectionToken` is a class, a `DeferredCtor`, or a branded string/symbol — never a plain
+object. `etagGenerator` is told apart by `typeof`: a `string`/`symbol` is a token, a `function` is the
+generator itself — a class-shaped token for a function type is not realistic in this DI and is not supported.
+
+Unlike `etagGenerator`, `store` has no default. Omitting it, or passing a token that resolves to nothing,
+throws `ErrConfiguration` — callers must supply a `Cache` implementation explicitly, `MemoryCache` included.
 
 `kETagGenerator` (from `keys.ts`) is exported as a convenience token an application can bind its own
 `ETagGenerator` under; it is never resolved by default.

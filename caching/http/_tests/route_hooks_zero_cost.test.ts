@@ -9,6 +9,7 @@ import {
 import fastify, { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
+import { MemoryCache } from '../../store/memory/index.js'
 import { CacheControl, CacheInvalidate, HTTPCaching } from '../index.js'
 
 /**
@@ -56,7 +57,7 @@ beforeAll(async () => {
     registered.set(`${route.method} ${route.url}`, route as RouteOptions)
   })
 
-  app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching())
+  app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
   await app.ready()
 })
 

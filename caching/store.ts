@@ -12,15 +12,14 @@ export interface CacheEntry {
 /**
  * Server-side store backing the cache feature.
  *
- * Abstract class rather than an interface so it is a runtime value: it doubles as the DI token and the
- * base class. Bind a concrete store (`bind(CacheStore).toClass(RedisStore)` or
- * `bind(RedisStore).toSelf().extends(CacheStore)`). When no binding is registered, `MemoryCacheStore`
- * (`@caffeinejs/caching/store/memory`) resolves as a fallback.
+ * Implement it directly (`class RedisCache implements Cache`) and bind/pass the class as its own DI key:
+ * `container.bind(RedisCache, t => t.toSelf())`, then `.store(RedisCache)`. A store must always be given
+ * explicitly — see `HTTPCaching`'s own doc comment for what happens when one is omitted.
  */
-export abstract class CacheStore {
-  abstract get(key: string, segment: string): Promise<CacheEntry | undefined>
-  abstract set(key: string, segment: string, entry: CacheEntry, ttl: Duration): Promise<void>
-  abstract delete(key: string, segment: string): Promise<void>
-  abstract deleteMany(keys: string[], segment: string): Promise<void>
-  abstract clear(segment?: string): Promise<void>
+export interface Cache {
+  get(key: string, segment?: string): Promise<CacheEntry | undefined>
+  set(key: string, entry: CacheEntry, ttl: Duration, segment?: string): Promise<void>
+  delete(key: string, segment?: string): Promise<void>
+  deleteMany(keys: string[], segment?: string): Promise<void>
+  clear(segment?: string): Promise<void>
 }

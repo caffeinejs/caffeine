@@ -1,6 +1,6 @@
 import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http'
 
-import { CacheStore } from '../store.js'
+import type { Cache } from '../store.js'
 
 export interface CacheInvalidateOptions {
   paths?: string[]
@@ -10,20 +10,19 @@ export interface CacheInvalidateOptions {
 /**
  * Attaches the eviction hook to one route, per its `@CacheInvalidate` options.
  *
- * Evicts cached entries after a successful mutating request, targeting the {@link CacheStore} the cache
+ * Evicts cached entries after a successful mutating request, targeting the {@link Cache} the cache
  * hooks write to. Like those, `opts` is closed over rather than re-read per request.
  */
 export function attachCacheInvalidateHook(
   routeDef: AdapterRouteOptions,
   opts: CacheInvalidateOptions,
-  store: CacheStore,
+  store: Cache,
 ): void {
   async function invalidateHandler(request: AdapterRequest, reply: AdapterReply): Promise<unknown> {
     if (reply.statusCode < 200 || reply.statusCode >= 300) {
       return
     }
 
-    const segment = opts.segment ?? ''
     const paths = opts.paths ?? [request.url]
 
     const keys = new Array<string>(paths.length)
@@ -31,7 +30,7 @@ export function attachCacheInvalidateHook(
       keys[i] = encodeURIComponent(paths[i])
     }
 
-    await store.deleteMany(keys, segment)
+    await store.deleteMany(keys, opts.segment)
 
     return
   }
