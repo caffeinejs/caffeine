@@ -231,6 +231,40 @@ describe('$t.Duration', () => {
   })
 })
 
+describe('$t.Bytes', () => {
+  it('decodes byte text to a count of bytes', () => {
+    expect(Value.Decode($t.Bytes(), '1KB')).toBe(1024)
+    expect(Value.Decode($t.Bytes(), '10mb')).toBe(10_485_760)
+    expect(Value.Decode($t.Bytes(), '2g')).toBe(2_147_483_648)
+    expect(Value.Decode($t.Bytes(), '1024')).toBe(1024)
+  })
+
+  it('decodes inside an object', () => {
+    const schema = $t.Object({ bodyLimit: $t.Bytes() })
+
+    expect(Value.Decode(schema, { bodyLimit: '512kb' })).toEqual({ bodyLimit: 524_288 })
+  })
+
+  it('rejects a string that is not a byte size', () => {
+    // The pattern is what keeps `bytes` from throwing out of Decode: these fail validation as a misconfigured
+    // field rather than as a decode error.
+    expect(() => Value.Decode($t.Bytes(), '1KiB')).toThrow()
+    expect(() => Value.Decode($t.Bytes(), '1 KB')).toThrow()
+    expect(() => Value.Decode($t.Bytes(), '1.5GB')).toThrow()
+    expect(() => Value.Decode($t.Bytes(), '')).toThrow()
+  })
+
+  it('rejects a bare number, whose unit would be ambiguous', () => {
+    expect(() => Value.Decode($t.Bytes(), 1024)).toThrow()
+  })
+
+  it('types as a number, since that is what a consumer reads back', () => {
+    const schema = $t.Object({ bodyLimit: $t.Bytes() })
+
+    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ bodyLimit: number }>()
+  })
+})
+
 describe('$t.File', () => {
   it('emits the JSON Schema spelling of an upload', () => {
     expect(JSON.parse(JSON.stringify($t.File()))).toEqual({ type: 'string', format: 'binary' })

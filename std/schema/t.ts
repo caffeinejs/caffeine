@@ -12,6 +12,7 @@ import {
 } from '@sinclair/typebox'
 import { Value } from '@sinclair/typebox/value'
 
+import { BYTES_PATTERN, bytes } from '../bytes/index.js'
 import { DURATION_PATTERN, parseDuration } from '../duration/index.js'
 import { DEFAULT_LIST_SEPARATOR, textList } from './text.js'
 
@@ -238,6 +239,19 @@ const caffeineT = {
     Type.Transform(Type.String({ ...options, pattern: DURATION_PATTERN }))
       .Decode(text => Math.round(parseDuration(text) * 1000))
       .Encode(ms => `${ms}ms`) as never,
+
+  /**
+   * A size written as byte text — `'512kb'`, `'10MB'`, `'2g'`, or a bare `'1024'` — decoded to a count of bytes.
+   *
+   * Every prefix is binary, so `'1kb'` is 1024. The value is checked against {@link BYTES_PATTERN} first, which is
+   * what keeps {@link bytes} from throwing out of `Decode`: a misspelling such as `'1KiB'` fails configuration
+   * validation instead. Only the string form is accepted; a bare number is rejected, because its unit would be
+   * ambiguous.
+   */
+  Bytes: (options: SchemaOptions = {}): TTransform<TString, number> =>
+    Type.Transform(Type.String({ ...options, pattern: BYTES_PATTERN }))
+      .Decode(text => bytes(text))
+      .Encode(n => `${n}b`) as never,
 }
 
 /**
