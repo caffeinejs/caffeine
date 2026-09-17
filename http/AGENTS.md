@@ -87,14 +87,17 @@ when `onRoute` found nothing for it to do. Do not move such a scan into the adap
 `buildRouting()` runs once, before any `.with(...)`-contributed plugin. A plugin that needs to add its _own_
 route — one going through the same guard/authorization/error-handling path an ordinary route does, not a bare
 `fastify.get(...)` — is too late for that pass. `instance.$route(name, build)` closes that gap: `build` receives a `RouteGroupBuilder`
-(the same builder `decorators/registrar/registrar.ts`'s `registerRouteGroup` hands a route source), and what
-it describes is accumulated, not compiled on the spot. Once every plugin in the `.with(...)` loop has
-registered, whatever was accumulated is compiled — through the identical `RouteGroupCompiler` instance
+(the same builder `decorators/registrar/registrar.ts`'s `registerRouteGroup` hands a route source), and the
+group it describes is compiled on the spot — through the identical `RouteGroupCompiler` instance
 `buildRouting()` built, threaded through `AdapterIn.compileRouteGroup`, so a guard shared with an ordinary
-route resolves through the one cache, not a second one — and folded into the same table
-`assertAuthenticationConfigured`'s startup scan and the Fastify registration loop both read. A `$route` group
-registers with everything else, so it reaches every plugin's `onRoute` hook whichever order the plugins were
-installed in. `@caffeinejs/openapi` is the one consumer: its doc-serving routes must be real, protectable
+route resolves through the one cache, not a second one — and appended to the same table
+`assertAuthenticationConfigured`'s startup scan and the Fastify registration loop both read. Compiling is what
+happens immediately; registering is not. A `$route` group registers with everything else, after every plugin,
+so it reaches every plugin's `onRoute` hook whichever order the plugins were installed in. A compile failure —
+an unresolvable guard, an ambiguous `@CatchWith` — therefore rejects `ready()` from inside the registration of
+the plugin that called `$route`, which is where the cause is. The group is declared by no class, so it carries
+no `target`: a guard on one reads no `Symbol.metadata`, and diagnostics name it by the `name` given here.
+`@caffeinejs/openapi` is the one consumer: its doc-serving routes must be real, protectable
 routes, and it marks their group hidden (`kAPIGroup`) so the document it generates in `onReady` does not
 describe them.
 
