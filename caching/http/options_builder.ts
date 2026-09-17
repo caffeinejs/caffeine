@@ -1,8 +1,8 @@
 import type { InjectionToken } from '@caffeinejs/di'
 
+import type { CacheStore } from '../store.js'
 import type { ETagGenerator } from './cache.js'
 import type { HTTPCachingOptions } from './options.js'
-import type { CacheStore } from './store.js'
 
 /**
  * Materializes a {@link HTTPCachingOptionsBuilder} into the {@link HTTPCachingOptions} it built.

@@ -3,7 +3,8 @@ import { Controller, ErrConfiguration, Get, createWebApplication, fastifyAdapter
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Cache, CacheStore, HTTPCaching } from '../index.js'
+import { CacheStore } from '../../store.js'
+import { CacheControl, HTTPCaching } from '../index.js'
 
 describe('caching is opt-in', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -13,7 +14,7 @@ describe('caching is opt-in', () => {
     close = undefined
   })
 
-  // Runs before any @Cache controller is declared in this file — the global controller registry every
+  // Runs before any @CacheControl controller is declared in this file — the global controller registry every
   // container snapshots would otherwise carry one in.
   it('does nothing to an undecorated application that never installs the plugin', async () => {
     @Controller('/optin-plain')
@@ -36,7 +37,7 @@ describe('caching is opt-in', () => {
   it('fails at ready() when a route is decorated but the plugin is not installed', async () => {
     @Controller('/optin-missing')
     class MissingController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -53,7 +54,7 @@ describe('caching is opt-in', () => {
   it('caches with a default MemoryCacheStore when installed with no store option', async () => {
     @Controller('/optin-default')
     class DefaultController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -88,7 +89,7 @@ describe('caching is opt-in', () => {
 
     @Controller('/optin-token-store')
     class TokenStoreController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -114,7 +115,7 @@ describe('caching is opt-in', () => {
   it('honors .statusHeader(...)', async () => {
     @Controller('/optin-header')
     class HeaderController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }

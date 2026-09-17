@@ -4,11 +4,12 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import './_fastify.js'
-import { attachCacheHooks, type CacheDeps, type CacheOptions, type ETagGenerator } from './cache.js'
+import { CacheStore } from '../store.js'
+import { MemoryCacheStore } from '../store/memory/index.js'
+import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
 import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
-import { CacheStore, MemoryCacheStore } from './store.js'
 
 /** Authors {@link HTTPCachingOptions} through {@link HTTPCachingOptionsBuilder} instead of the plain object. */
 export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
@@ -22,8 +23,8 @@ export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
  * feature, it installs once per context — the root, or one route group with `router.plugin(...)` / `@Use(...)`
  * — each with its own settings.
  *
- * Per-route behavior is the `@Cache` / `@CacheInvalidate` decorators or the `cache()` / `cacheInvalidate()`
- * route extensions. Install it after `.authentication(...)`.
+ * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
+ * `cacheInvalidate()` route extensions. Install it after `.authentication(...)`.
  */
 export function HTTPCaching<C = unknown>(options?: HTTPCachingOptions | HTTPCachingConfigurer): HTTPPluginFactory<C> {
   return (_config, container) => {
@@ -74,7 +75,8 @@ function resolveETagGenerator(
 }
 
 /**
- * Attaches the cache read/store and eviction hooks to the routes that declared `@Cache` / `@CacheInvalidate`.
+ * Attaches the cache read/store and eviction hooks to the routes that declared `@CacheControl` /
+ * `@CacheInvalidate`.
  *
  * Per-route work happens in Fastify's own `onRoute` hook, which fires while each route registers and may
  * still rewrite its options. A route that declared neither keeps its hook slots undefined and pays nothing.
@@ -96,7 +98,7 @@ export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
       const routeDef = routeOptions as AdapterRouteOptions
       const config = routeDef.config as Record<string, unknown> | undefined
 
-      const cacheOpts = config?.cache as CacheOptions | false | undefined
+      const cacheOpts = config?.cache as CacheControlOptions | false | undefined
       if (cacheOpts !== undefined) {
         attachCacheHooks(routeDef, cacheOpts, deps)
       }

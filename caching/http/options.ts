@@ -1,7 +1,7 @@
 import type { InjectionToken } from '@caffeinejs/di'
 
+import type { CacheStore } from '../store.js'
 import type { ETagGenerator } from './cache.js'
-import type { CacheStore } from './store.js'
 
 /** The default cache-status response header name, carrying HIT/MISS/BYPASS. */
 export const DEFAULT_STATUS_HEADER = 'X-Cache'

@@ -11,6 +11,14 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "default": "./dist/http/index.js"
+    },
+    "./store/memory": {
+      "types": "./dist/store/memory/index.d.ts",
+      "default": "./dist/store/memory/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

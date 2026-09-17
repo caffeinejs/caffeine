@@ -2,7 +2,7 @@ import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '@c
 import fastify, { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Cache, HTTPCaching } from '../index.js'
+import { CacheControl, HTTPCaching } from '../index.js'
 
 /**
  * The caching feature reaches routes through Fastify's own `onRoute` hook, not through the adapter. These
@@ -27,7 +27,7 @@ describe('cache plugin wiring', () => {
         return { ok: true }
       }
 
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/cached')
       cached() {
         return { ok: true }

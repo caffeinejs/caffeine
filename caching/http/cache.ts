@@ -5,12 +5,12 @@ import {
   type AdapterRequest,
   type AdapterRouteOptions,
 } from '@caffeinejs/http'
-import { Duration, parseDuration } from '@caffeinejs/std'
+import { Duration } from '@caffeinejs/std'
 import { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
+import type { CacheStore } from '../store.js'
 import { buildCacheControl, generateETag, matchesETag } from './_util.js'
-import type { CacheStore } from './store.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -22,16 +22,7 @@ const CACHE_BYPASS = 'BYPASS'
 
 export type ETagGenerator = (payload: Buffer) => string | Promise<string>
 
-export interface CacheEntry {
-  payload: string | Buffer
-  etag?: string
-  lastModified?: string
-  /** Epoch milliseconds when the entry was stored; used to compute the `Age` header and honor request `max-age`. */
-  storedAt?: number
-  headers: Record<string, string>
-}
-
-export interface CacheOptions {
+export interface CacheControlOptions {
   ttl?: Duration
   sharedMaxAge?: Duration
   staleWhileRevalidate?: Duration
@@ -60,7 +51,7 @@ export interface CacheDeps {
 }
 
 /**
- * Attaches the read and store hooks to one route, per its `@Cache` options.
+ * Attaches the read and store hooks to one route, per its `@CacheControl` options.
  *
  * Serves cacheable responses from and stores them into the container-resolved {@link CacheStore}, and emits
  * `Cache-Control`/`ETag`/`Vary` headers.
@@ -68,16 +59,20 @@ export interface CacheDeps {
  * `opts` is closed over rather than re-read from `request.routeOptions.config` per request: the hooks are
  * attached only to routes that declared options, so what they would read back is already known here.
  *
- * `@Cache(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
+ * `@CacheControl(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
  */
-export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptions | false, deps: CacheDeps): void {
+export function attachCacheHooks(
+  routeDef: AdapterRouteOptions,
+  opts: CacheControlOptions | false,
+  deps: CacheDeps,
+): void {
   const { store, etagGenerator, statusHeader } = deps
 
   if (opts !== false) {
-    // A separate binding so the closure below sees `CacheOptions`, not the union: TypeScript does not
+    // A separate binding so the closure below sees `CacheControlOptions`, not the union: TypeScript does not
     // carry a parameter's narrowing into a nested function.
-    const read: CacheOptions = opts
+    const read: CacheControlOptions = opts
 
     // OnRequest phase: check if the request is cacheable and return the cached response if it is
     async function onRequest(request: AdapterRequest, reply: AdapterReply) {
@@ -184,7 +179,7 @@ export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptio
       return payload
     }
 
-    // @Cache(false): actively disable caching with the full set of no-cache headers
+    // @CacheControl(false): actively disable caching with the full set of no-cache headers
     if (opts === false) {
       reply.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
       reply.header('Expires', '0')
@@ -273,7 +268,7 @@ export function attachCacheHooks(routeDef: AdapterRouteOptions, opts: CacheOptio
           storedAt: Date.now(),
           headers,
         },
-        parseDuration(opts.ttl!),
+        opts.ttl!,
       )
     }
 

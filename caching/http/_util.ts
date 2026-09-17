@@ -1,6 +1,6 @@
 import { parseDuration } from '@caffeinejs/std'
 
-import { CacheOptions, ETagGenerator } from './cache.js'
+import { CacheControlOptions, ETagGenerator } from './cache.js'
 
 // RFC 7232 §3.2 — weak comparison: strip W/ prefix, handle comma-separated list and wildcard
 export function matchesETag(ifNoneMatch: string, storedETag: string): boolean {
@@ -33,7 +33,7 @@ export async function generateETag(payload: string | Buffer, generator?: ETagGen
   return `"${hex.slice(0, 16)}"`
 }
 
-export function buildCacheControl(opts: CacheOptions, privacyOverride?: 'private' | 'public'): string | null {
+export function buildCacheControl(opts: CacheControlOptions, privacyOverride?: 'private' | 'public'): string | null {
   if (opts.noStore) {
     return 'no-store'
   }

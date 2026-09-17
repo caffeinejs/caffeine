@@ -9,7 +9,7 @@ import {
 import fastify, { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
-import { Cache, CacheInvalidate, HTTPCaching } from '../index.js'
+import { CacheControl, CacheInvalidate, HTTPCaching } from '../index.js'
 
 /**
  * What the caching hooks cost when a route uses them, and what they cost a route that does not.
@@ -26,13 +26,13 @@ class HookController {
     return { ok: true }
   }
 
-  @Cache({ ttl: '5m' })
+  @CacheControl({ ttl: '5m' })
   @Get('/cached')
   cached() {
     return { ok: true }
   }
 
-  @Cache(false)
+  @CacheControl(false)
   @Get('/uncached')
   uncached() {
     return { ok: true }
@@ -73,14 +73,14 @@ describe('route hook slots', () => {
     expect(route.onSend).toBeUndefined()
   })
 
-  it('gives a @Cache route a function in each slot, not a one-element array', () => {
+  it('gives a @CacheControl route a function in each slot, not a one-element array', () => {
     const route = registered.get('GET /hooks/cached')!
 
     expect(typeof route.onRequest).toBe('function')
     expect(typeof route.onSend).toBe('function')
   })
 
-  it('gives a @Cache(false) route the store hook only — it has nothing to serve', () => {
+  it('gives a @CacheControl(false) route the store hook only — it has nothing to serve', () => {
     const route = registered.get('GET /hooks/uncached')!
 
     expect(route.onRequest).toBeUndefined()

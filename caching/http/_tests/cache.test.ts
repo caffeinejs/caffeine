@@ -5,22 +5,16 @@ import { Controller, Delete, Get, Post, Status, createWebApplication, fastifyAda
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import {
-  Cache,
-  CacheInvalidate,
-  MemoryCacheStore,
-  CacheStore,
-  kETagGenerator,
-  HTTPCaching,
-  type CacheEntry,
-} from '../index.js'
+import { CacheStore, type CacheEntry } from '../../store.js'
+import { MemoryCacheStore } from '../../store/memory/index.js'
+import { CacheControl, CacheInvalidate, kETagGenerator, HTTPCaching } from '../index.js'
 
 describe('Cache-Control headers', () => {
   describe('ttl', () => {
-    it('@Cache({ ttl: 60 }) → "public, max-age=60"', async () => {
+    it('@CacheControl({ ttl: 60 }) → "public, max-age=60"', async () => {
       @Controller('/cache-cc-ttl-num')
       class TtlNumController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -37,10 +31,10 @@ describe('Cache-Control headers', () => {
       expect(res.headers.get('cache-control')).toBe('public, max-age=60')
     })
 
-    it('@Cache({ ttl: "5m" }) → "public, max-age=300"', async () => {
+    it('@CacheControl({ ttl: "5m" }) → "public, max-age=300"', async () => {
       @Controller('/cache-cc-ttl-str-m')
       class TtlStrMController {
-        @Cache({ ttl: '5m' })
+        @CacheControl({ ttl: '5m' })
         @Get('/data')
         data() {
           return { ok: true }
@@ -56,10 +50,10 @@ describe('Cache-Control headers', () => {
       expect(res.headers.get('cache-control')).toBe('public, max-age=300')
     })
 
-    it('@Cache({ ttl: "1h30m" }) → "public, max-age=5400"', async () => {
+    it('@CacheControl({ ttl: "1h30m" }) → "public, max-age=5400"', async () => {
       @Controller('/cache-cc-ttl-compound')
       class TtlCompoundController {
-        @Cache({ ttl: '1h30m' })
+        @CacheControl({ ttl: '1h30m' })
         @Get('/data')
         data() {
           return { ok: true }
@@ -77,10 +71,10 @@ describe('Cache-Control headers', () => {
   })
 
   describe('sharedMaxAge', () => {
-    it('@Cache({ ttl: "5m", sharedMaxAge: "1h" }) → includes "s-maxage=3600"', async () => {
+    it('@CacheControl({ ttl: "5m", sharedMaxAge: "1h" }) → includes "s-maxage=3600"', async () => {
       @Controller('/cache-cc-smaxage')
       class SharedMaxAgeController {
-        @Cache({ ttl: '5m', sharedMaxAge: '1h' })
+        @CacheControl({ ttl: '5m', sharedMaxAge: '1h' })
         @Get('/data')
         data() {
           return { ok: true }
@@ -99,10 +93,10 @@ describe('Cache-Control headers', () => {
   })
 
   describe('stale directives', () => {
-    it('@Cache({ ttl: 60, staleWhileRevalidate: 30 }) → includes "stale-while-revalidate=30"', async () => {
+    it('@CacheControl({ ttl: 60, staleWhileRevalidate: 30 }) → includes "stale-while-revalidate=30"', async () => {
       @Controller('/cache-cc-swr')
       class StaleWhileRevalidateController {
-        @Cache({ ttl: 60, staleWhileRevalidate: 30 })
+        @CacheControl({ ttl: 60, staleWhileRevalidate: 30 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -118,10 +112,10 @@ describe('Cache-Control headers', () => {
       expect(res.headers.get('cache-control')).toContain('stale-while-revalidate=30')
     })
 
-    it('@Cache({ ttl: 60, staleIfError: "1h" }) → includes "stale-if-error=3600"', async () => {
+    it('@CacheControl({ ttl: 60, staleIfError: "1h" }) → includes "stale-if-error=3600"', async () => {
       @Controller('/cache-cc-sie')
       class StaleIfErrorController {
-        @Cache({ ttl: 60, staleIfError: '1h' })
+        @CacheControl({ ttl: 60, staleIfError: '1h' })
         @Get('/data')
         data() {
           return { ok: true }
@@ -139,10 +133,10 @@ describe('Cache-Control headers', () => {
   })
 
   describe('visibility', () => {
-    it('@Cache({ ttl: 60, privacy: "private" }) → "private, max-age=60"', async () => {
+    it('@CacheControl({ ttl: 60, privacy: "private" }) → "private, max-age=60"', async () => {
       @Controller('/cache-cc-private')
       class PrivateCacheController {
-        @Cache({ ttl: 60, privacy: 'private' })
+        @CacheControl({ ttl: 60, privacy: 'private' })
         @Get('/data')
         data() {
           return { ok: true }
@@ -158,10 +152,10 @@ describe('Cache-Control headers', () => {
       expect(res.headers.get('cache-control')).toBe('private, max-age=60')
     })
 
-    it('@Cache({ ttl: 60, privacy: "public" }) → "public, max-age=60"', async () => {
+    it('@CacheControl({ ttl: 60, privacy: "public" }) → "public, max-age=60"', async () => {
       @Controller('/cache-cc-public')
       class PublicCacheController {
-        @Cache({ ttl: 60, privacy: 'public' })
+        @CacheControl({ ttl: 60, privacy: 'public' })
         @Get('/data')
         data() {
           return { ok: true }
@@ -179,10 +173,10 @@ describe('Cache-Control headers', () => {
   })
 
   describe('special directives', () => {
-    it('@Cache({ noStore: true }) → "no-store"', async () => {
+    it('@CacheControl({ noStore: true }) → "no-store"', async () => {
       @Controller('/cache-cc-nostore')
       class NoStoreController {
-        @Cache({ noStore: true })
+        @CacheControl({ noStore: true })
         @Get('/data')
         data() {
           return { ok: true }
@@ -198,10 +192,10 @@ describe('Cache-Control headers', () => {
       expect(res.headers.get('cache-control')).toBe('no-store')
     })
 
-    it('@Cache({ noCache: true }) → "no-cache"', async () => {
+    it('@CacheControl({ noCache: true }) → "no-cache"', async () => {
       @Controller('/cache-cc-nocache')
       class NoCacheController {
-        @Cache({ noCache: true })
+        @CacheControl({ noCache: true })
         @Get('/data')
         data() {
           return { ok: true }
@@ -217,10 +211,10 @@ describe('Cache-Control headers', () => {
       expect(res.headers.get('cache-control')).toContain('no-cache')
     })
 
-    it('@Cache({ ttl: 60, mustRevalidate: true }) → includes "must-revalidate"', async () => {
+    it('@CacheControl({ ttl: 60, mustRevalidate: true }) → includes "must-revalidate"', async () => {
       @Controller('/cache-cc-mustrevalidate')
       class MustRevalidateController {
-        @Cache({ ttl: 60, mustRevalidate: true })
+        @CacheControl({ ttl: 60, mustRevalidate: true })
         @Get('/data')
         data() {
           return { ok: true }
@@ -236,10 +230,10 @@ describe('Cache-Control headers', () => {
       expect(res.headers.get('cache-control')).toContain('must-revalidate')
     })
 
-    it('@Cache({ ttl: 60, immutable: true }) → includes "immutable"', async () => {
+    it('@CacheControl({ ttl: 60, immutable: true }) → includes "immutable"', async () => {
       @Controller('/cache-cc-immutable')
       class ImmutableController {
-        @Cache({ ttl: 60, immutable: true })
+        @CacheControl({ ttl: 60, immutable: true })
         @Get('/data')
         data() {
           return { ok: true }
@@ -256,10 +250,10 @@ describe('Cache-Control headers', () => {
     })
   })
 
-  it('@Cache() with no options → no Cache-Control header', async () => {
+  it('@CacheControl() with no options → no Cache-Control header', async () => {
     @Controller('/cache-cc-empty')
     class EmptyOptionsController {
-      @Cache()
+      @CacheControl()
       @Get('/data')
       data() {
         return { ok: true }
@@ -277,10 +271,10 @@ describe('Cache-Control headers', () => {
 })
 
 describe('Vary header', () => {
-  it('@Cache({ vary: ["Accept-Language"] }) → "Vary: Accept-Language"', async () => {
+  it('@CacheControl({ vary: ["Accept-Language"] }) → "Vary: Accept-Language"', async () => {
     @Controller('/cache-vary-single')
     class VarySingleController {
-      @Cache({ vary: ['Accept-Language'] })
+      @CacheControl({ vary: ['Accept-Language'] })
       @Get('/data')
       data() {
         return { ok: true }
@@ -296,10 +290,10 @@ describe('Vary header', () => {
     expect(res.headers.get('vary')).toBe('Accept-Language')
   })
 
-  it('@Cache({ vary: ["Accept", "Accept-Encoding"] }) → "Vary: Accept, Accept-Encoding"', async () => {
+  it('@CacheControl({ vary: ["Accept", "Accept-Encoding"] }) → "Vary: Accept, Accept-Encoding"', async () => {
     @Controller('/cache-vary-multi')
     class VaryMultiController {
-      @Cache({ vary: ['Accept', 'Accept-Encoding'] })
+      @CacheControl({ vary: ['Accept', 'Accept-Encoding'] })
       @Get('/data')
       data() {
         return { ok: true }
@@ -318,7 +312,7 @@ describe('Vary header', () => {
   it('no vary option → no Vary header', async () => {
     @Controller('/cache-vary-none')
     class VaryNoneController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -336,10 +330,10 @@ describe('Vary header', () => {
 })
 
 describe('ETag', () => {
-  it('@Cache({ ttl: 60 }) → ETag header present in double-quoted format', async () => {
+  it('@CacheControl({ ttl: 60 }) → ETag header present in double-quoted format', async () => {
     @Controller('/cache-etag-present')
     class ETagPresentController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -360,7 +354,7 @@ describe('ETag', () => {
   it('same response body on two requests → same ETag', async () => {
     @Controller('/cache-etag-stable')
     class ETagStableController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { value: 'constant' }
@@ -381,13 +375,13 @@ describe('ETag', () => {
   it('different response bodies → different ETags', async () => {
     @Controller('/cache-etag-diff')
     class ETagDiffController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/a')
       a() {
         return { label: 'alpha' }
       }
 
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/b')
       b() {
         return { label: 'beta' }
@@ -407,10 +401,10 @@ describe('ETag', () => {
     expect(resA.headers.get('etag')).not.toBe(resB.headers.get('etag'))
   })
 
-  it('@Cache({ etag: false }) → no ETag header', async () => {
+  it('@CacheControl({ etag: false }) → no ETag header', async () => {
     @Controller('/cache-etag-disabled')
     class ETagDisabledController {
-      @Cache({ ttl: 60, etag: false })
+      @CacheControl({ ttl: 60, etag: false })
       @Get('/data')
       data() {
         return { ok: true }
@@ -426,10 +420,10 @@ describe('ETag', () => {
     expect(res.headers.get('etag')).toBeNull()
   })
 
-  it('@Cache({ noStore: true }) → no ETag header', async () => {
+  it('@CacheControl({ noStore: true }) → no ETag header', async () => {
     @Controller('/cache-etag-nostore')
     class ETagNoStoreController {
-      @Cache({ noStore: true })
+      @CacheControl({ noStore: true })
       @Get('/data')
       data() {
         return { ok: true }
@@ -448,7 +442,7 @@ describe('ETag', () => {
   it('stream response body → no ETag (cannot hash a stream)', async () => {
     @Controller('/cache-etag-stream')
     class ETagStreamController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return Readable.from(['hello', ' ', 'world'])
@@ -470,7 +464,7 @@ describe('304 Not Modified', () => {
   it('GET with matching If-None-Match → 304, empty body', async () => {
     @Controller('/cache-304-match')
     class Match304Controller {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { value: 'cached' }
@@ -494,7 +488,7 @@ describe('304 Not Modified', () => {
   it('GET with non-matching If-None-Match → 200, full body', async () => {
     @Controller('/cache-304-nomatch')
     class NoMatch304Controller {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { value: 'cached' }
@@ -516,7 +510,7 @@ describe('304 Not Modified', () => {
   it('GET with stale If-None-Match after cache clear → 200, new ETag', async () => {
     @Controller('/cache-304-stale')
     class Stale304Controller {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { value: 'content' }
@@ -542,7 +536,7 @@ describe('304 Not Modified', () => {
   it('HEAD with matching If-None-Match → 304', async () => {
     @Controller('/cache-304-head')
     class Head304Controller {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { value: 'head-cached' }
@@ -568,7 +562,7 @@ describe('Cache store', () => {
 
     @Controller('/cache-store-bypass')
     class StoreBupassController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -590,12 +584,12 @@ describe('Cache store', () => {
     expect(await res2.json()).toEqual({ count: 1 })
   })
 
-  it('@Cache({ noStore: true }) always calls handler', async () => {
+  it('@CacheControl({ noStore: true }) always calls handler', async () => {
     let callCount = 0
 
     @Controller('/cache-store-nostore')
     class StoreNoStoreController {
-      @Cache({ noStore: true })
+      @CacheControl({ noStore: true })
       @Get('/data')
       data() {
         callCount++
@@ -618,7 +612,7 @@ describe('Cache store', () => {
 
     @Controller('/cache-store-post-default')
     class StorePostDefaultController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Post('/data')
       data() {
         callCount++
@@ -636,12 +630,12 @@ describe('Cache store', () => {
     expect(callCount).toBe(2)
   })
 
-  it('@Cache({ methods: ["GET", "POST"] }) caches POST responses', async () => {
+  it('@CacheControl({ methods: ["GET", "POST"] }) caches POST responses', async () => {
     let callCount = 0
 
     @Controller('/cache-store-post-custom')
     class StorePostCustomController {
-      @Cache({ ttl: 60, methods: ['GET', 'POST'] })
+      @CacheControl({ ttl: 60, methods: ['GET', 'POST'] })
       @Post('/data')
       data() {
         callCount++
@@ -663,20 +657,20 @@ describe('Cache store', () => {
     expect(await res2.json()).toEqual({ count: 1 })
   })
 
-  it('@Cache({ statusCodes: [200, 201] }) caches 201 but not 400', async () => {
+  it('@CacheControl({ statusCodes: [200, 201] }) caches 201 but not 400', async () => {
     let okCount = 0
     let errCount = 0
 
     @Controller('/cache-store-status')
     class StoreStatusController {
-      @Cache({ ttl: 60, statusCodes: [200, 201] })
+      @CacheControl({ ttl: 60, statusCodes: [200, 201] })
       @Get('/ok')
       ok() {
         okCount++
         return { n: okCount }
       }
 
-      @Cache({ ttl: 60, statusCodes: [200, 201] })
+      @CacheControl({ ttl: 60, statusCodes: [200, 201] })
       @Get('/err')
       err() {
         errCount++
@@ -702,7 +696,7 @@ describe('Cache store', () => {
 
     @Controller('/cache-store-clear')
     class StoreClearController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -735,7 +729,7 @@ describe('Cache key', () => {
 
     @Controller('/cache-key-default')
     class KeyDefaultController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -759,14 +753,14 @@ describe('Cache key', () => {
 
     @Controller('/cache-key-urls')
     class KeyURLsController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/a')
       a() {
         aCount++
         return { n: aCount }
       }
 
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/b')
       b() {
         bCount++
@@ -793,7 +787,7 @@ describe('Cache key', () => {
 
     @Controller('/cache-key-custom-path')
     class KeyCustomPathController {
-      @Cache({ ttl: 60, key: req => req.url.split('?')[0] })
+      @CacheControl({ ttl: 60, key: req => req.url.split('?')[0] })
       @Get('/data')
       data() {
         callCount++
@@ -816,7 +810,7 @@ describe('Cache key', () => {
 
     @Controller('/cache-key-custom-query')
     class KeyCustomQueryController {
-      @Cache({ ttl: 60, key: req => `${req.url}?lang=${req.query('lang') ?? ''}` })
+      @CacheControl({ ttl: 60, key: req => `${req.url}?lang=${req.query('lang') ?? ''}` })
       @Get('/data')
       data() {
         callCount++
@@ -840,8 +834,8 @@ describe('Cache key', () => {
 })
 
 describe('Decorator scope', () => {
-  it('class-level @Cache applies to all routes on controller', async () => {
-    @Cache({ ttl: 60 })
+  it('class-level @CacheControl applies to all routes on controller', async () => {
+    @CacheControl({ ttl: 60 })
     @Controller('/cache-scope-class')
     class ScopeClassController {
       @Get('/a')
@@ -867,10 +861,10 @@ describe('Decorator scope', () => {
     expect(resB.headers.get('cache-control')).toBe('public, max-age=60')
   })
 
-  it('route-level @Cache applies only to the decorated method', async () => {
+  it('route-level @CacheControl applies only to the decorated method', async () => {
     @Controller('/cache-scope-method')
     class ScopeMethodController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/cached')
       cached() {
         return { ok: true }
@@ -894,11 +888,11 @@ describe('Decorator scope', () => {
     expect(resUncached.headers.get('cache-control')).toBeNull()
   })
 
-  it('route-level @Cache completely replaces router-level @Cache (no partial merge)', async () => {
-    @Cache({ ttl: 60, privacy: 'private' })
+  it('route-level @CacheControl completely replaces router-level @CacheControl (no partial merge)', async () => {
+    @CacheControl({ ttl: 60, privacy: 'private' })
     @Controller('/cache-scope-replace')
     class ScopeReplaceController {
-      @Cache({ ttl: 30 })
+      @CacheControl({ ttl: 30 })
       @Get('/route')
       route() {
         return { ok: true }
@@ -917,7 +911,7 @@ describe('Decorator scope', () => {
 })
 
 describe('Undecorated routes', () => {
-  it('route without @Cache → no Cache-Control, no ETag, no caching', async () => {
+  it('route without @CacheControl → no Cache-Control, no ETag, no caching', async () => {
     let callCount = 0
 
     @Controller('/cache-undecorated')
@@ -943,11 +937,11 @@ describe('Undecorated routes', () => {
   })
 })
 
-describe('@Cache(false)', () => {
-  it('method-level @Cache(false) → all four no-cache headers on every response', async () => {
+describe('@CacheControl(false)', () => {
+  it('method-level @CacheControl(false) → all four no-cache headers on every response', async () => {
     @Controller('/cache-false-method')
     class CacheFalseMethodController {
-      @Cache(false)
+      @CacheControl(false)
       @Get('/data')
       data() {
         return { ok: true }
@@ -967,8 +961,8 @@ describe('@Cache(false)', () => {
     expect(res.headers.get('surrogate-control')).toBe('no-store')
   })
 
-  it('class-level @Cache(false) → all routes in controller get no-cache headers', async () => {
-    @Cache(false)
+  it('class-level @CacheControl(false) → all routes in controller get no-cache headers', async () => {
+    @CacheControl(false)
     @Controller('/cache-false-class')
     class CacheFalseClassController {
       @Get('/a')
@@ -994,12 +988,12 @@ describe('@Cache(false)', () => {
     expect(resB.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
   })
 
-  it('@Cache(false) → handler called on every request (never served from cache)', async () => {
+  it('@CacheControl(false) → handler called on every request (never served from cache)', async () => {
     let callCount = 0
 
     @Controller('/cache-false-nocache')
     class CacheFalseNoCacheController {
-      @Cache(false)
+      @CacheControl(false)
       @Get('/data')
       data() {
         callCount++
@@ -1021,12 +1015,12 @@ describe('@Cache(false)', () => {
 
 describe('Bug fixes', () => {
   describe('Bug 1 — etag:false does not prevent caching', () => {
-    it('@Cache({ ttl: 60, etag: false }) → no ETag header, but second request served from cache', async () => {
+    it('@CacheControl({ ttl: 60, etag: false }) → no ETag header, but second request served from cache', async () => {
       let callCount = 0
 
       @Controller('/cache-bug1-etag-false')
       class Bug1EtagFalseController {
-        @Cache({ ttl: 60, etag: false })
+        @CacheControl({ ttl: 60, etag: false })
         @Get('/data')
         data() {
           callCount++
@@ -1050,10 +1044,10 @@ describe('Bug fixes', () => {
       expect(callCount).toBe(1)
     })
 
-    it('@Cache({ ttl: 60, etag: false }) + If-None-Match → 200 (no ETag to match against)', async () => {
+    it('@CacheControl({ ttl: 60, etag: false }) + If-None-Match → 200 (no ETag to match against)', async () => {
       @Controller('/cache-bug1-inm-ignored')
       class Bug1InmIgnoredController {
-        @Cache({ ttl: 60, etag: false })
+        @CacheControl({ ttl: 60, etag: false })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1073,12 +1067,12 @@ describe('Bug fixes', () => {
   })
 
   describe('Bug 2 — private responses not stored in server cache', () => {
-    it('@Cache({ ttl: 60, privacy: "private" }) → Cache-Control: private, handler called on every request', async () => {
+    it('@CacheControl({ ttl: 60, privacy: "private" }) → Cache-Control: private, handler called on every request', async () => {
       let callCount = 0
 
       @Controller('/cache-bug2-private')
       class Bug2PrivateController {
-        @Cache({ ttl: 60, privacy: 'private' })
+        @CacheControl({ ttl: 60, privacy: 'private' })
         @Get('/data')
         data() {
           callCount++
@@ -1107,7 +1101,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-bug3-vary-separate')
       class Bug3VarySeparateController {
-        @Cache({ ttl: 60, vary: ['Accept-Language'] })
+        @CacheControl({ ttl: 60, vary: ['Accept-Language'] })
         @Get('/data')
         data() {
           callCount++
@@ -1130,7 +1124,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-bug3-vary-hit')
       class Bug3VaryHitController {
-        @Cache({ ttl: 60, vary: ['Accept-Language'] })
+        @CacheControl({ ttl: 60, vary: ['Accept-Language'] })
         @Get('/data')
         data() {
           callCount++
@@ -1153,7 +1147,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-bug3-vary-multi')
       class Bug3VaryMultiController {
-        @Cache({ ttl: 60, vary: ['Accept-Language', 'Accept'] })
+        @CacheControl({ ttl: 60, vary: ['Accept-Language', 'Accept'] })
         @Get('/data')
         data() {
           callCount++
@@ -1187,7 +1181,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-bug4-cc-nocache')
       class Bug4CCNoCacheController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           callCount++
@@ -1218,7 +1212,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-bug4-pragma')
       class Bug4PragmaController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           callCount++
@@ -1244,7 +1238,7 @@ describe('Bug fixes', () => {
     it('GET primes cache; subsequent HEAD returns 200 with headers and no body', async () => {
       @Controller('/cache-bug5-head-nobody')
       class Bug5HeadNoBodyController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { value: 'cached' }
@@ -1269,7 +1263,7 @@ describe('Bug fixes', () => {
     it('HEAD with matching If-None-Match after GET primes cache → 304', async () => {
       @Controller('/cache-bug5-head-304')
       class Bug5Head304Controller {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { value: 'head-cached' }
@@ -1295,12 +1289,12 @@ describe('Bug fixes', () => {
   })
 
   describe('Vary: *', () => {
-    it('@Cache({ ttl: 60, vary: ["*"] }) → handler called on every request, Vary: * header set', async () => {
+    it('@CacheControl({ ttl: 60, vary: ["*"] }) → handler called on every request, Vary: * header set', async () => {
       let callCount = 0
 
       @Controller('/cache-vary-star')
       class VaryStarController {
-        @Cache({ ttl: 60, vary: ['*'] })
+        @CacheControl({ ttl: 60, vary: ['*'] })
         @Get('/data')
         data() {
           callCount++
@@ -1345,7 +1339,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-segment')
       class SegmentController {
-        @Cache({ ttl: 60, segment: 'products' })
+        @CacheControl({ ttl: 60, segment: 'products' })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1369,7 +1363,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-auth-private')
       class AuthPrivateController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           callCount++
@@ -1398,7 +1392,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-auth-public-override')
       class AuthPublicOverrideController {
-        @Cache({ ttl: 60, privacy: 'public' })
+        @CacheControl({ ttl: 60, privacy: 'public' })
         @Get('/data')
         data() {
           callCount++
@@ -1443,7 +1437,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-key-encode')
       class KeyEncodeController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1471,7 +1465,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-req-nostore')
       class ReqNoStoreController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           callCount++
@@ -1502,7 +1496,7 @@ describe('Bug fixes', () => {
     it('304 response carries ETag and Cache-Control from cached entry', async () => {
       @Controller('/cache-304-headers')
       class Headers304Controller {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { value: 'hello' }
@@ -1529,7 +1523,7 @@ describe('Bug fixes', () => {
     it('If-None-Match: * → 304 when any cached response exists', async () => {
       @Controller('/cache-inm-wildcard')
       class InmWildcardController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { v: 1 }
@@ -1550,7 +1544,7 @@ describe('Bug fixes', () => {
     it('If-None-Match comma-separated list → 304 when one entry matches', async () => {
       @Controller('/cache-inm-list')
       class InmListController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { v: 1 }
@@ -1574,7 +1568,7 @@ describe('Bug fixes', () => {
     it('If-None-Match weak ETag W/"xxx" matches strong "xxx"', async () => {
       @Controller('/cache-inm-weak')
       class InmWeakController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { v: 1 }
@@ -1602,7 +1596,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-seg-iso-a')
       class SegIsoAController {
-        @Cache({ ttl: 60, segment: 'a' })
+        @CacheControl({ ttl: 60, segment: 'a' })
         @Get('/data')
         data() {
           return { seg: 'a' }
@@ -1612,7 +1606,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-seg-iso-b')
       class SegIsoBController {
-        @Cache({ ttl: 60, segment: 'b' })
+        @CacheControl({ ttl: 60, segment: 'b' })
         @Get('/data')
         data() {
           return { seg: 'b' }
@@ -1641,10 +1635,10 @@ describe('Bug fixes', () => {
   })
 
   describe('proxyRevalidate option (RFC 7234 §5.2.2.7)', () => {
-    it('@Cache({ ttl: 60, proxyRevalidate: true }) → Cache-Control includes proxy-revalidate', async () => {
+    it('@CacheControl({ ttl: 60, proxyRevalidate: true }) → Cache-Control includes proxy-revalidate', async () => {
       @Controller('/cache-proxy-revalidate')
       class ProxyRevalidateController {
-        @Cache({ ttl: 60, proxyRevalidate: true })
+        @CacheControl({ ttl: 60, proxyRevalidate: true })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1668,7 +1662,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-invalidate-self')
       class InvalidateSelfController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/resource')
         get() {
           getCount++
@@ -1702,7 +1696,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-invalidate-paths')
       class InvalidatePathsController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/resource')
         get() {
           getCount++
@@ -1735,7 +1729,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-invalidate-4xx')
       class Invalidate4xxController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/resource')
         get() {
           getCount++
@@ -1770,7 +1764,7 @@ describe('Bug fixes', () => {
     it('cache miss + only-if-cached → 504', async () => {
       @Controller('/cache-only-if-cached-miss')
       class OnlyIfCachedMissController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1791,7 +1785,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-only-if-cached-hit')
       class OnlyIfCachedHitController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           callCount++
@@ -1814,10 +1808,10 @@ describe('Bug fixes', () => {
   })
 
   describe('no-transform directive (RFC 7234 §5.2.2.4)', () => {
-    it('@Cache({ ttl: 60, noTransform: true }) → Cache-Control includes no-transform', async () => {
+    it('@CacheControl({ ttl: 60, noTransform: true }) → Cache-Control includes no-transform', async () => {
       @Controller('/cache-no-transform')
       class NoTransformController {
-        @Cache({ ttl: 60, noTransform: true })
+        @CacheControl({ ttl: 60, noTransform: true })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1839,7 +1833,7 @@ describe('Bug fixes', () => {
     it('cached response includes a Last-Modified header', async () => {
       @Controller('/cache-last-modified')
       class LastModifiedController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1858,7 +1852,7 @@ describe('Bug fixes', () => {
     it('If-Modified-Since at or after Last-Modified → 304', async () => {
       @Controller('/cache-ims-match')
       class ImsMatchController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1882,7 +1876,7 @@ describe('Bug fixes', () => {
     it('If-Modified-Since before Last-Modified → 200 with full body', async () => {
       @Controller('/cache-ims-stale')
       class ImsStaleController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1906,7 +1900,7 @@ describe('Bug fixes', () => {
     it('If-None-Match takes precedence over If-Modified-Since when both are present', async () => {
       @Controller('/cache-inm-precedence')
       class InmPrecedenceController {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1938,7 +1932,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-req-maxage0')
       class ReqMaxAge0Controller {
-        @Cache({ ttl: 60 })
+        @CacheControl({ ttl: 60 })
         @Get('/data')
         data() {
           callCount++
@@ -1961,7 +1955,7 @@ describe('Bug fixes', () => {
   })
 })
 
-describe('Cache builder & container-managed store', () => {
+describe('CacheControl builder & container-managed store', () => {
   // Minimal Map-backed CacheStore used to prove a configured store actually backs caching and to
   // observe which store received the traffic (i.e. that the default MemoryCacheStore was overridden).
   // Deliberately extends CacheStore directly — not MemoryCacheStore — so `instanceof` assertions are
@@ -2000,7 +1994,7 @@ describe('Cache builder & container-managed store', () => {
 
     @Controller('/cache-di-custom-store')
     class CustomStoreController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -2035,7 +2029,7 @@ describe('Cache builder & container-managed store', () => {
 
     @Controller('/cache-di-default')
     class DefaultStoreController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -2059,7 +2053,7 @@ describe('Cache builder & container-managed store', () => {
   it('a CacheStore bound in the container is ignored unless passed explicitly via .store(token)', async () => {
     @Controller('/cache-di-ignored')
     class IgnoredStoreController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2085,7 +2079,7 @@ describe('Cache builder & container-managed store', () => {
 
     @Controller('/cache-builder-store')
     class BuilderStoreController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -2111,7 +2105,7 @@ describe('Cache builder & container-managed store', () => {
   it('.store(instance).etagGenerator(...) applies both', async () => {
     @Controller('/cache-builder-both')
     class BuilderBothController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2134,7 +2128,7 @@ describe('Cache builder & container-managed store', () => {
   it('.etagGenerator(kETagGenerator) resolves a container-bound generator and drives the ETag header', async () => {
     @Controller('/cache-di-etag')
     class ETagGenController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2154,10 +2148,10 @@ describe('Cache builder & container-managed store', () => {
     expect(res.headers.get('etag')).toBe('"sentinel-etag"')
   })
 
-  it('a per-route @Cache({ etagGenerator }) still wins over the container-bound generator', async () => {
+  it('a per-route @CacheControl({ etagGenerator }) still wins over the container-bound generator', async () => {
     @Controller('/cache-di-etag-override')
     class ETagOverrideController {
-      @Cache({ ttl: 60, etagGenerator: () => '"route-override"' })
+      @CacheControl({ ttl: 60, etagGenerator: () => '"route-override"' })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2182,7 +2176,7 @@ describe('X-Cache status header', () => {
   it('MISS on first request, HIT on the second', async () => {
     @Controller('/xc-basic')
     class XCBasicController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2204,7 +2198,7 @@ describe('X-Cache status header', () => {
   it('HIT on a 304 Not Modified served from cache', async () => {
     @Controller('/xc-304')
     class XC304Controller {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { v: 1 }
@@ -2227,7 +2221,7 @@ describe('X-Cache status header', () => {
   it('BYPASS when the request sends Cache-Control: no-store', async () => {
     @Controller('/xc-bypass')
     class XCBypassController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2243,10 +2237,10 @@ describe('X-Cache status header', () => {
     expect(res.headers.get('x-cache')).toBe('BYPASS')
   })
 
-  it('BYPASS on a @Cache(false) route', async () => {
+  it('BYPASS on a @CacheControl(false) route', async () => {
     @Controller('/xc-false')
     class XCFalseController {
-      @Cache(false)
+      @CacheControl(false)
       @Get('/data')
       data() {
         return { ok: true }
@@ -2265,7 +2259,7 @@ describe('X-Cache status header', () => {
   it('.statusHeader(...) renames the header', async () => {
     @Controller('/xc-custom')
     class XCCustomController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2289,7 +2283,7 @@ describe('Canonical query keys', () => {
 
     @Controller('/qk-order')
     class QueryKeyOrderController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -2314,7 +2308,7 @@ describe('Canonical query keys', () => {
 
     @Controller('/qk-values')
     class QueryKeyValuesController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++
@@ -2337,7 +2331,7 @@ describe('Age header & request max-age', () => {
   it('emits an Age header (seconds) on a cache hit', async () => {
     @Controller('/age-hit')
     class AgeHitController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2360,7 +2354,7 @@ describe('Age header & request max-age', () => {
   it('request Cache-Control: max-age larger than the entry age is served from cache', async () => {
     @Controller('/age-maxage-ok')
     class AgeMaxAgeOkController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         return { ok: true }
@@ -2394,7 +2388,7 @@ describe('Age header & request max-age', () => {
 
     @Controller('/age-maxage-stale')
     class AgeMaxAgeStaleController {
-      @Cache({ ttl: 60 })
+      @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
         callCount++

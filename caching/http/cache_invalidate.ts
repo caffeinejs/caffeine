@@ -1,6 +1,6 @@
 import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http'
 
-import { CacheStore } from './store.js'
+import { CacheStore } from '../store.js'
 
 export interface CacheInvalidateOptions {
   paths?: string[]
