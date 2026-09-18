@@ -1,12 +1,15 @@
 import { DeferredCtor, type Container, type InjectionToken } from '@caffeinejs/di'
 import { ErrConfiguration, type AdapterRouteOptions, type HTTPPluginFactory } from '@caffeinejs/http'
+import { logToken } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import './_fastify.js'
 import type { Cache } from '../store.js'
+import { guardObserver } from './_observe.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
+import type { CacheObserver } from './observer.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
 import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
 
@@ -16,10 +19,11 @@ export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
 /**
  * HTTP response caching, as an ordinary Fastify plugin factory: `.with(HTTPCaching())`.
  *
- * Takes an options object or a builder callback. Neither binds anything into the container — `store` and
- * `etagGenerator` are resolved once as the plugin registers, from the option given or, for `etagGenerator`
- * alone, an internal default (a SHA-1 hash). `store` has no default: installing without one throws
- * {@link ErrConfiguration}. Being a plain plugin factory rather than a feature, it installs once per
+ * Takes an options object or a builder callback. Neither binds anything into the container — `store`,
+ * `etagGenerator` and `observer` are resolved once as the plugin registers, from the option given or, for
+ * `etagGenerator` alone, an internal default (a SHA-1 hash). `store` has no default: installing without one throws
+ * {@link ErrConfiguration}. An `observer` that throws is caught; its first throw from each method is logged on the
+ * application logger. Being a plain plugin factory rather than a feature, it installs once per
  * context — the root, or one route group with `router.plugin(...)` / `@Use(...)` — each with its own
  * settings.
  *
@@ -30,10 +34,15 @@ export function HTTPCaching<C = unknown>(options?: HTTPCachingOptions | HTTPCach
   return (_config, container) => {
     const resolved = typeof options === 'function' ? build(options) : (options ?? {})
 
+    const store = resolveCache(resolved.store, container)
+    const observer = resolveObserver(resolved.observer, container)
+
     return cachePlugin({
-      store: resolveCache(resolved.store, container),
+      store,
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
+      // `logToken()` is bound the moment an application constructs, so `get` cannot miss.
+      observer: observer === undefined ? undefined : guardObserver(observer, container.get(logToken())),
     })
   }
 }
@@ -63,6 +72,33 @@ function resolveCache(value: Cache | InjectionToken<Cache> | undefined, containe
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
       throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given store token')
+    }
+    return resolved
+  }
+
+  return value
+}
+
+// Told apart from a token by shape, like `store`: an observer is a plain object or a class instance. Unlike
+// `etagGenerator`, a token that resolves to nothing throws — there is no default to fall back to, and silently
+// running without the observer someone asked for would only show up as an empty dashboard.
+function resolveObserver(
+  value: CacheObserver | InjectionToken<CacheObserver> | undefined,
+  container: Container,
+): CacheObserver | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (
+    typeof value === 'string' ||
+    typeof value === 'symbol' ||
+    typeof value === 'function' ||
+    value instanceof DeferredCtor
+  ) {
+    const resolved = container.getOptional(value)
+    if (resolved === undefined) {
+      throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given observer token')
     }
     return resolved
   }
@@ -121,7 +157,7 @@ export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
 
       const invalidateOpts = config?.cacheInvalidate as CacheInvalidateOptions | false | undefined
       if (invalidateOpts !== undefined && invalidateOpts !== false) {
-        attachCacheInvalidateHook(routeDef, invalidateOpts, deps.store)
+        attachCacheInvalidateHook(routeDef, invalidateOpts, deps)
       }
     })
   }

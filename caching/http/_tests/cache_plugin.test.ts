@@ -1,4 +1,4 @@
-import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { Controller, Get, Router, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
 import fastify, { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -60,6 +60,21 @@ describe('cache plugin wiring', () => {
     const app = createWebApplication(fastifyAdapterFactory(server))
       .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-First')))
       .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Second')))
+    close = () => app.close()
+
+    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
+  })
+
+  // A route group inherits the plugins its parent registered, so a group install under a root install is the
+  // same double registration — refused before any route could collect both sets of cache hooks and report every
+  // outcome twice.
+  it('refuses a group install under a root install', async () => {
+    const router = new Router('/nested-install').plugin(HTTPCaching(b => b.store(new MemoryCache())))
+    router.get('/data').handler(() => ({ ok: true }))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+      .with(HTTPCaching(b => b.store(new MemoryCache())))
+      .mount(router)
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)

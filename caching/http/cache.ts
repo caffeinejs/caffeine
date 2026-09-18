@@ -5,12 +5,14 @@ import {
   type AdapterRequest,
   type AdapterRouteOptions,
 } from '@caffeinejs/http'
-import { Duration } from '@caffeinejs/std'
+import { Duration, parseDuration } from '@caffeinejs/std'
 import { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
 import type { Cache } from '../store.js'
-import { buildCacheControl, generateETag, matchesETag } from './_util.js'
+import { cacheRouteOf } from './_observe.js'
+import { buildCacheControl, defaultCacheKey, generateETag, matchesETag } from './_util.js'
+import type { CacheBypassReason, CacheObserver } from './observer.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -48,6 +50,11 @@ export interface CacheDeps {
   store: Cache
   etagGenerator: ETagGenerator | undefined
   statusHeader: string
+  /**
+   * Called as given. `HTTPCaching` hands over one wrapped so a throw never reaches the response; a caller building
+   * these itself for `cachePlugin` or `attachCacheHooks` owns that.
+   */
+  observer?: CacheObserver
 }
 
 /**
@@ -67,7 +74,13 @@ export function attachCacheHooks(
   opts: CacheControlOptions | false,
   deps: CacheDeps,
 ): void {
-  const { store, etagGenerator, statusHeader } = deps
+  const { store, etagGenerator, statusHeader, observer } = deps
+
+  // Resolved here, once per route, and only when someone is listening. Every call site below is
+  // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
+  // route allocates no event.
+  const route = observer === undefined ? undefined : cacheRouteOf(routeDef)
+  const ttlSeconds = observer !== undefined && opts !== false && opts.ttl !== undefined ? parseDuration(opts.ttl) : 0
 
   if (opts !== false) {
     // A separate binding so the closure below sees `CacheControlOptions`, not the union: TypeScript does not
@@ -78,6 +91,9 @@ export function attachCacheHooks(
     async function onRequest(request: AdapterRequest, reply: AdapterReply) {
       const methods = read.methods ?? DEFAULT_METHODS
       if (!methods.includes(request.method)) {
+        // No status header here, but the observer still hears of it: leaving it out would drop these requests from
+        // every hit ratio computed off the events.
+        observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'method' })
         return
       }
 
@@ -86,12 +102,18 @@ export function attachCacheHooks(
       const effectivePrivacy = read.privacy ?? (hasAuth ? 'private' : undefined)
       if (effectivePrivacy === 'private') {
         reply.header(statusHeader, CACHE_BYPASS)
+        observer?.onBypass?.({
+          route: route!,
+          segment: read.segment,
+          reason: read.privacy === 'private' ? 'private' : 'authorization',
+        })
         return
       }
 
       // RFC 7234 §4.1 — Vary: * always fails to match; never serve from cache
       if (read.vary?.includes('*')) {
         reply.header(statusHeader, CACHE_BYPASS)
+        observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'vary-any' })
         return
       }
 
@@ -105,6 +127,7 @@ export function attachCacheHooks(
         request.headers['pragma'] === 'no-cache'
       ) {
         reply.header(statusHeader, CACHE_BYPASS)
+        observer?.onBypass?.({ route: route!, segment: read.segment, reason: clientBypassReason(reqCC, reqMaxAge0) })
         return
       }
 
@@ -115,9 +138,11 @@ export function attachCacheHooks(
       const cached = await store.get(key, read.segment)
       if (!cached) {
         if (reqCC?.includes('only-if-cached')) {
+          observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'only-if-cached' })
           return reply.code(504).send()
         }
         reply.header(statusHeader, CACHE_MISS)
+        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'absent' })
         return
       }
 
@@ -128,6 +153,7 @@ export function attachCacheHooks(
       const reqMaxAge = requestMaxAge(reqCC)
       if (reqMaxAge !== undefined && age > reqMaxAge) {
         reply.header(statusHeader, CACHE_MISS)
+        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'stale-for-request' })
         return
       }
 
@@ -136,6 +162,7 @@ export function attachCacheHooks(
       if (ifNoneMatch) {
         if (cached.etag && matchesETag(ifNoneMatch, cached.etag)) {
           request.responseCached = true
+          observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: true, ageSeconds: age })
           return reply
             .code(304)
             .headers(cached.headers)
@@ -148,6 +175,7 @@ export function attachCacheHooks(
         if (ifModifiedSince && cached.lastModified) {
           if (Date.parse(cached.lastModified) <= Date.parse(ifModifiedSince)) {
             request.responseCached = true
+            observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: true, ageSeconds: age })
             return reply
               .code(304)
               .headers(cached.headers)
@@ -161,6 +189,7 @@ export function attachCacheHooks(
       // RFC 7230 §3.3 — HEAD responses must not include a body
       request.responseCached = true
       reply.status(200).headers(cached.headers).header(statusHeader, CACHE_HIT).header('Age', String(age))
+      observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: false, ageSeconds: age })
       if (request.method === 'HEAD') {
         return reply.send()
       }
@@ -185,6 +214,7 @@ export function attachCacheHooks(
       reply.header('Pragma', 'no-cache')
       reply.header('Surrogate-Control', 'no-store')
       reply.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: route!, reason: 'disabled' })
       return payload
     }
 
@@ -267,45 +297,21 @@ export function attachCacheHooks(
         opts.ttl!,
         opts.segment,
       )
+
+      // After the write settles: a `set` that rejected stored nothing.
+      observer?.onStore?.({
+        route: route!,
+        segment: opts.segment,
+        key,
+        bytes: typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length,
+        ttlSeconds,
+      })
     }
 
     return payload
   }
 
   addRouteHook(routeDef, 'onSend', onSend)
-}
-
-// Canonicalizes a request URL so query parameters in a different order share one cache entry
-// (`?a=1&b=2` and `?b=2&a=1` are equivalent). Sorts the query keys; leaves query-less URLs untouched.
-function canonicalizeUrl(url: string): string {
-  const queryStart = url.indexOf('?')
-  if (queryStart === -1) {
-    return url
-  }
-
-  const path = url.slice(0, queryStart)
-  const params = new URLSearchParams(url.slice(queryStart + 1))
-  params.sort()
-
-  const query = params.toString()
-
-  return query ? `${path}?${query}` : path
-}
-
-// GET and HEAD have equivalent representations — they share the same cache entry.
-// Other methods include the method in the key to avoid cross-method collisions.
-// When vary headers are configured, their request values are appended to the key
-// so that different header combinations produce separate cache entries (RFC 7234 §4.1).
-function defaultCacheKey(request: AdapterRequest, vary?: string[]): string {
-  const url = canonicalizeUrl(request.url)
-  const base = request.method === 'GET' || request.method === 'HEAD' ? url : `${request.method}:${url}`
-  if (!vary?.length) {
-    return encodeURIComponent(base)
-  }
-
-  const parts = vary.map(h => `${h.toLowerCase()}=${request.headers[h.toLowerCase()] ?? ''}`)
-
-  return encodeURIComponent(`${base}#${parts.join('&')}`)
 }
 
 // Parses the numeric `max-age=N` from a request Cache-Control header. Returns undefined when absent.
@@ -316,4 +322,17 @@ function requestMaxAge(cacheControl: string | undefined): number | undefined {
   const match = /(?:^|,)\s*max-age\s*=\s*(\d+)/.exec(cacheControl)
 
   return match ? Number(match[1]) : undefined
+}
+
+// Which client directive bypassed the cache, tested in the order the read hook tests them.
+function clientBypassReason(cacheControl: string | undefined, maxAge0: boolean): CacheBypassReason {
+  if (cacheControl?.includes('no-cache')) {
+    return 'no-cache'
+  }
+
+  if (cacheControl?.includes('no-store')) {
+    return 'no-store'
+  }
+
+  return maxAge0 ? 'max-age-0' : 'pragma-no-cache'
 }

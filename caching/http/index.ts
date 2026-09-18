@@ -7,3 +7,16 @@ export { HTTPCachingOptionsBuilder } from './options_builder.js'
 export { CacheControl, CacheInvalidate } from './decorators/index.js'
 export { cacheControl, cacheInvalidate } from './helpers/index.js'
 export { HTTPCaching, cachePlugin, type HTTPCachingConfigurer } from './caching.js'
+export {
+  composeObservers,
+  type CacheBypassEvent,
+  type CacheBypassReason,
+  type CacheHitEvent,
+  type CacheInvalidateEvent,
+  type CacheMissEvent,
+  type CacheMissReason,
+  type CacheObserver,
+  type CacheRoute,
+  type CacheStoreEvent,
+} from './observer.js'
+export { loggingCacheObserver, type LoggingCacheObserverOptions } from './logging_observer.js'

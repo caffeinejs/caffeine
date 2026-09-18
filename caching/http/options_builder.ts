@@ -2,6 +2,7 @@ import type { InjectionToken } from '@caffeinejs/di'
 
 import type { Cache } from '../store.js'
 import type { ETagGenerator } from './cache.js'
+import type { CacheObserver } from './observer.js'
 import type { HTTPCachingOptions } from './options.js'
 
 /**
@@ -17,6 +18,7 @@ export class HTTPCachingOptionsBuilder {
   #store: Cache | InjectionToken<Cache> | undefined
   #etagGenerator: ETagGenerator | InjectionToken<ETagGenerator> | undefined
   #statusHeader: string | undefined
+  #observer: CacheObserver | InjectionToken<CacheObserver> | undefined
 
   /** The store backing cached responses, or a token to resolve one from the container. */
   store(store: Cache | InjectionToken<Cache>): this {
@@ -36,11 +38,18 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
+  /** Notified of every cache outcome, or a token to resolve one from the container. */
+  observer(observer: CacheObserver | InjectionToken<CacheObserver>): this {
+    this.#observer = observer
+    return this
+  }
+
   [kBuild](): HTTPCachingOptions {
     return {
       store: this.#store,
       etagGenerator: this.#etagGenerator,
       statusHeader: this.#statusHeader,
+      observer: this.#observer,
     }
   }
 }

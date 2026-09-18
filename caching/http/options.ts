@@ -2,6 +2,7 @@ import type { InjectionToken } from '@caffeinejs/di'
 
 import type { Cache } from '../store.js'
 import type { ETagGenerator } from './cache.js'
+import type { CacheObserver } from './observer.js'
 
 /** The default cache-status response header name, carrying HIT/MISS/BYPASS. */
 export const DEFAULT_STATUS_HEADER = 'X-Cache'
@@ -28,4 +29,10 @@ export interface HTTPCachingOptions {
   etagGenerator?: ETagGenerator | InjectionToken<ETagGenerator>
   /** The cache-status response header name. Defaults to {@link DEFAULT_STATUS_HEADER}. */
   statusHeader?: string
+  /**
+   * Notified of every cache outcome on a route that declares caching, or a token to resolve one from the
+   * container. Told apart from an {@link InjectionToken} by shape, the way {@link store} is. Omitted, the cache
+   * hooks do no observer work at all; a token that resolves to nothing throws `ErrConfiguration`.
+   */
+  observer?: CacheObserver | InjectionToken<CacheObserver>
 }

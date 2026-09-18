@@ -1,0 +1,53 @@
+import type { AdapterRouteOptions } from '@caffeinejs/http'
+import type { Logger } from '@caffeinejs/std/logger'
+
+import { routeMethods } from './_util.js'
+import { observerMethods, type CacheObserver, type CacheRoute } from './observer.js'
+
+// Read while `onRoute` runs and frozen: Fastify has prefixed `url` by then and may rewrite it afterwards for a
+// trailing-slash twin, and the same object reaches every observer on every request to the route.
+export function cacheRouteOf(routeDef: AdapterRouteOptions): CacheRoute {
+  const method = routeMethods(routeDef)
+  const url = routeDef.url
+
+  // Absent on a route registered straight on Fastify. A programmatic group or route may be unnamed.
+  const caffeine = routeDef.config?.$caffeine
+  const group = caffeine?.group.name
+  const name = caffeine?.route.name
+
+  if (group && typeof name === 'string' && name !== '') {
+    return Object.freeze({ method, url, handler: `${group}.${name}` })
+  }
+
+  return Object.freeze({ method, url })
+}
+
+// A throw from an observer never reaches the response: the first from each method is logged, the rest are
+// dropped so a broken observer cannot flood the log at request rate. Flags live in this closure — one wrapper
+// per install — so two applications in one process do not share them.
+export function guardObserver(observer: CacheObserver, log: Logger): CacheObserver {
+  const guarded: Record<string, (event: unknown) => void> = {}
+
+  for (const method of observerMethods) {
+    if (observer[method] === undefined) {
+      continue
+    }
+
+    let reported = false
+
+    guarded[method] = event => {
+      try {
+        ;(observer[method] as (this: CacheObserver, event: unknown) => void).call(observer, event)
+      } catch (err) {
+        if (reported) {
+          return
+        }
+
+        reported = true
+        log.error({ err }, `Cache observer "${method}" threw; further throws from "${method}" are suppressed`)
+      }
+    }
+  }
+
+  return guarded as CacheObserver
+}

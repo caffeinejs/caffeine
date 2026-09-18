@@ -1,7 +1,8 @@
+import type { AdapterRequest } from '@caffeinejs/http'
 import { it, fc } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 
-import { generateETag, matchesETag } from './_util.js'
+import { defaultCacheKey, generateETag, matchesETag, pathCacheKey } from './_util.js'
 
 // Arbitrary ETag token: no commas (would be parsed as list delimiter), no leading W/ (covered separately)
 // matchesETag trims ifNoneMatch entries after splitting but not the stored ETag, so a stored
@@ -81,6 +82,42 @@ describe('matchesETag (property)', () => {
     (stored, others, spaces) => {
       const list = [stored, ...others].join(`,${spaces}`)
       expect(matchesETag(list, stored)).toBe(true)
+    },
+  )
+})
+
+// Query keys are unique: a repeated key's values keep their relative order through canonicalization, so
+// `?a=1&a=2` and `?a=2&a=1` are different requests and must stay different keys.
+const pathWithQuery = fc
+  .tuple(
+    fc.array(fc.stringMatching(/^[a-z0-9-]{1,8}$/), { maxLength: 4 }).map(segments => `/${segments.join('/')}`),
+    fc.uniqueArray(fc.tuple(fc.string({ minLength: 1 }), fc.string()), { selector: ([k]) => k, maxLength: 5 }),
+  )
+  .chain(([path, params]) =>
+    fc.tuple(
+      fc.constant(path),
+      fc.constant(params),
+      fc.shuffledSubarray(params, { minLength: params.length, maxLength: params.length }),
+    ),
+  )
+
+function withQuery(path: string, params: [string, string][]): string {
+  if (params.length === 0) {
+    return path
+  }
+
+  return `${path}?${params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')}`
+}
+
+describe('pathCacheKey (property)', () => {
+  // Invalidation by path deletes `pathCacheKey(path)`; the cache stored the entry under `defaultCacheKey`. If the
+  // two ever disagree, `@CacheInvalidate({ paths })` reports success and evicts nothing.
+  it.prop([pathWithQuery, fc.constantFrom('GET', 'HEAD')])(
+    'matches the key a GET or HEAD stored, whatever order the query arrived in',
+    ([path, params, shuffled], method) => {
+      const request = { method, url: withQuery(path, shuffled), headers: {} } as unknown as AdapterRequest
+
+      expect(pathCacheKey(withQuery(path, params))).toBe(defaultCacheKey(request))
     },
   )
 })

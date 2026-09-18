@@ -61,3 +61,31 @@ throws `ErrConfiguration` — callers must supply a `Cache` implementation expli
 
 `kETagGenerator` (from `keys.ts`) is exported as a convenience token an application can bind its own
 `ETagGenerator` under; it is never resolved by default.
+
+## Invalidation targets the key the cache stored
+
+`@CacheInvalidate` has three forms, never mixed: `paths`, `key`, or `clear` with a `segment`. `paths` keys are
+built by `pathCacheKey` in `_util.ts`, next to `defaultCacheKey` — the two must agree, and
+`_util.prop.test.ts` pins that for any query order. A path cannot reach a route that varies (one entry per
+`Vary` combination); that route belongs in a segment, invalidated with `clear`. `clear` without a `segment`
+would empty the whole store, so it fails at `app.ready()` with `ErrConfiguration`, as does mixing forms.
+
+## Observer
+
+`observer` is instance-or-token like `store`, never bound. Unlike `etagGenerator`, a token that resolves to
+nothing throws `ErrConfiguration`: there is no default, and running without the observer someone named would
+only show up as an empty dashboard. There is no convenience token for it — every `CacheObserver` member is
+optional, and `token()` refuses a type `{}` satisfies.
+
+`HTTPCaching` wraps the observer with `guardObserver` (`http/_observe.ts`): a throw never reaches the response,
+and the first throw from each method is logged on the application logger (`logToken()`), never `request.log`,
+which is silent under a caller-supplied `fastify()`.
+
+Zero-cost when unobserved is a code-shape rule no test can fully prove, so keep it by construction:
+
+- every call site is `observer?.onX?.({ … })` — the optional call short-circuits before the event is built;
+- `CacheRoute` is built by `cacheRouteOf` once per attach, frozen, and only when an observer is present;
+- anything else an event needs per route (`ttlSeconds`) is resolved at attach, not per request.
+
+The observer reports outcomes the status header does not (a method the route does not cache, an
+`only-if-cached` 504) and never reads the header — the two are allowed to diverge.

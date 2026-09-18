@@ -18,6 +18,8 @@ import { CacheControl, CacheInvalidate, HTTPCaching } from '../index.js'
  * The cache attaches per route, from Fastify's own `onRoute` hook — so a decorated route holds a function
  * in its hook slot, not a one-element array, and a route in the same application that declared nothing holds
  * `undefined`. This is the guard against a later change making a cache hook unconditional.
+ *
+ * The plugin is installed with an observer, and none of that changes: observing adds no hook of its own.
  */
 
 @Controller('/hooks')
@@ -57,7 +59,9 @@ beforeAll(async () => {
     registered.set(`${route.method} ${route.url}`, route as RouteOptions)
   })
 
-  app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+  app = createWebApplication(fastifyAdapterFactory(server)).with(
+    HTTPCaching(b => b.store(new MemoryCache()).observer({ onHit() {}, onMiss() {}, onStore() {}, onInvalidate() {} })),
+  )
   await app.ready()
 })
 
