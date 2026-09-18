@@ -26,6 +26,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`html/`](html/AGENTS.md)                                                           | `@caffeinejs/html`                       |
 | [`kafka/`](kafka/AGENTS.md)                                                         | `@caffeinejs/kafka`                      |
 | [`distlock/`](distlock/AGENTS.md)                                                   | `@caffeinejs/distlock`                   |
+| [`resilience/`](resilience/AGENTS.md)                                               | `@caffeinejs/resilience`                 |
 | [`openapi/`](openapi/AGENTS.md)                                                     | `@caffeinejs/openapi`                    |
 | [`messaging/`](messaging/AGENTS.md)                                                 | `@caffeinejs/messaging`                  |
 | [`std/`](std/AGENTS.md)                                                             | `@caffeinejs/std`                        |

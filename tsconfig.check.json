@@ -41,6 +41,9 @@
       "path": "./distlock"
     },
     {
+      "path": "./resilience"
+    },
+    {
       "path": "./fetchy/fetchy"
     },
     {

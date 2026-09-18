@@ -20,6 +20,7 @@
     "messaging",
     "kafka",
     "distlock",
+    "resilience",
     "fetchy/*",
     "cli",
     "devtools",
