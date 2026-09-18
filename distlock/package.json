@@ -15,6 +15,10 @@
       "types": "./dist/backend/memory/index.d.ts",
       "default": "./dist/backend/memory/index.js"
     },
+    "./backend/redis": {
+      "types": "./dist/backend/redis/index.d.ts",
+      "default": "./dist/backend/redis/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -29,5 +33,13 @@
   "dependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*"
+  },
+  "peerDependencies": {
+    "@redis/client": "^6.2.1"
+  },
+  "peerDependenciesMeta": {
+    "@redis/client": {
+      "optional": true
+    }
   }
 }

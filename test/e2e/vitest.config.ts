@@ -4,7 +4,8 @@ import swc from 'unplugin-swc'
 import { defineConfig } from 'vitest/config'
 
 // Opt-in e2e project (not in the root vitest projects list). Runs the OIDC/OAuth2 flows against
-// the dockerized Spring Authorization Server (test/services/oauthserver). Specs skip when it is not up.
+// the dockerized Spring Authorization Server (test/services/oauthserver), and distlock against the
+// dockerized Redis and Valkey (test/services/redis). Specs skip when their service is not up.
 export default defineConfig({
   plugins: [
     swc.vite({
@@ -21,6 +22,10 @@ export default defineConfig({
     alias: {
       // Test the working-tree source, not a built dist.
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
+      '@caffeinejs/distlock/backend/redis': fileURLToPath(
+        new URL('../../distlock/backend/redis/index.ts', import.meta.url),
+      ),
+      '@caffeinejs/distlock': fileURLToPath(new URL('../../distlock/index.ts', import.meta.url)),
     },
   },
   test: {

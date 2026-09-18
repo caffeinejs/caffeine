@@ -46,6 +46,25 @@ the one passed in, token included, so a backend may rotate tokens there.
 Neither `extend` nor `release` takes an `AbortSignal`. Renewal is a background timer with no caller to speak
 for, and a caller that aborted still has to give the key back, so only `tryAcquire` takes one.
 
+## Backends live behind their own export paths
+
+`MemoryLockBackend` is at `@caffeinejs/distlock/backend/memory` and `RedisLockBackend` at
+`@caffeinejs/distlock/backend/redis`. Neither is exported from `index.ts`, and nothing reachable from it imports
+them, so an application that does not import the Redis backend never loads `@redis/client`. That is also why
+`@redis/client` is an **optional** peer dependency: a required one would be installed into every consumer's tree.
+It is `@redis/client` rather than `redis` because the client is the only part used; an application that installs
+`redis` gets `@redis/client` with it and satisfies the peer.
+
+`RedisLockBackend` takes a connected node-redis client and owns nothing about it — it never connects, closes or
+reconnects. It is single-instance: `SET NX PX` to acquire, and two Lua scripts that compare the token before
+`PEXPIRE` and `DEL`. `extend` is `PEXPIRE` precisely because it cannot recreate a missing key. There is no quorum,
+so a failover to a replica that had not yet received a key can hand it to a second holder. The client type is a
+structural two-method interface rather than `RedisClientType`, so a client created with `RESP: 3` or a
+`typeMapping` still fits. `test/e2e/distlock.e2e.ts` runs it against a real Redis and a real Valkey.
+
+Why the scripts are `EVAL` rather than `DELEX`, `DELIFEQ` or `SET … IFEQ`: see
+[`docs/distlock-redis-backend.md`](../docs/distlock-redis-backend.md).
+
 ## Bound by class, resolved by key
 
 `configure` binds `CaffeineDistLock` under **the class**, named `kDistLock`. That is not decoration: the
