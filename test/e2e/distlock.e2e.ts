@@ -13,6 +13,7 @@ import {
 } from '@caffeinejs/distlock'
 import { RedisLockBackend } from '@caffeinejs/distlock/backend/redis'
 import { createApplication } from '@caffeinejs/std'
+import { newNoopLogger } from '@caffeinejs/std/logger'
 import { createClient } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -45,7 +46,7 @@ async function connected(url: string): Promise<Client> {
 }
 
 function newLock(client: Client): CaffeineDistLock {
-  return new CaffeineDistLock(new RedisLockBackend(client), DEFAULT_DIST_LOCK_OPTIONS)
+  return new CaffeineDistLock(new RedisLockBackend(client), DEFAULT_DIST_LOCK_OPTIONS, newNoopLogger())
 }
 
 describe.each(targets)('distlock over $name', ({ name, url, up }) => {

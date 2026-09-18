@@ -19,6 +19,14 @@
       "types": "./dist/backend/redis/index.d.ts",
       "default": "./dist/backend/redis/index.js"
     },
+    "./observability": {
+      "types": "./dist/observability/index.d.ts",
+      "default": "./dist/observability/index.js"
+    },
+    "./observability/otel": {
+      "types": "./dist/observability/otel/index.d.ts",
+      "default": "./dist/observability/otel/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -35,11 +43,21 @@
     "@caffeinejs/std": "*"
   },
   "peerDependencies": {
+    "@opentelemetry/api": ">=1 <2",
     "@redis/client": "^6.2.1"
   },
   "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    },
     "@redis/client": {
       "optional": true
     }
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/context-async-hooks": "^2.11.0",
+    "@opentelemetry/sdk-metrics": "^2.11.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0"
   }
 }
