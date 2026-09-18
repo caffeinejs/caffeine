@@ -74,6 +74,13 @@ export class RequestInitBuilder {
     return this
   }
 
+  queries(queries: Record<string, string | number>): this {
+    for (const [name, value] of Object.entries(queries)) {
+      this.query(name, value)
+    }
+    return this
+  }
+
   build(): RequestInit {
     const init: RequestInit = { ...this.#init, headers: this.#headers }
     if (this.#method !== undefined) {

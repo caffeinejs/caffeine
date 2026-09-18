@@ -32,4 +32,8 @@ export class Log {
 
     return Log.#logger.child({ name: label, ...bindings }, options)
   }
+
+  private constructor() {
+    /* Class is static-only */
+  }
 }

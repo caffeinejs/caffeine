@@ -327,11 +327,11 @@ export class TestContainer {
     di.restore(snap)
 
     for (const [key, { configure }] of this.#isolations) {
-      di.rebind(key as any, configure)
+      di.rebind(key, configure)
     }
 
     for (const [key, configure] of this.#overrides) {
-      di.rebind(key as any, configure)
+      di.rebind(key, configure)
     }
 
     return di
