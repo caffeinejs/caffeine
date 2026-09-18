@@ -1,25 +1,23 @@
-import type { Container } from '@caffeinejs/di'
-import type { BootstrapKit } from '@caffeinejs/std'
-import type { ConfigHandle } from '@caffeinejs/std/config'
 import type { FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
+
+import type { AdapterExtensionFactory } from './adapter_extension.js'
 
 /**
  * Any Fastify plugin, callback- or async-style — a bare third-party one (`@fastify/cors`, `@fastify/cookie`,
- * …) as much as one this package or a feature authors.
+ * …) as much as one this package or a feature authors. What the Fastify adapter installs.
  */
-type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
+export type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
 
 /**
- * Produces a plugin from the resolved configuration and the container. What `.with(...)` takes when the
- * argument is a factory, and how a third-party Fastify plugin is configured from the application's own
- * settings.
+ * Produces a Fastify plugin from what the application resolved at start-up: its configuration, its container and
+ * its logger. What `.with(...)` takes on a Fastify application when the argument is a function, and how a
+ * third-party Fastify plugin is configured from the application's own settings.
  *
- * A plugin needing nothing from either argument is written `.with(() => myPlugin)` — `myPlugin` itself may
- * be callback-style or async, this package's own or a third party's untouched.
+ * A plugin needing nothing from the context is written `.with(() => myPlugin)` — `myPlugin` itself may be
+ * callback-style or async, this package's own or a third party's untouched.
  *
- * App-level factories run from feature bootstrap, after `container.init()`, so `container.get(...)`
- * is legal here. The install slot is stamped when the feature bootstraps, so an `await` inside the factory
- * cannot reorder it relative to `.authentication(...)`.
+ * Called once, after `container.init()`, so `container.get(...)` is legal here. Its slot is where the `.with(...)`
+ * call was written, so an `await` inside the factory cannot reorder it relative to `.authentication(...)`.
  *
  * Encapsulation is the plugin author's to decide, exactly as it is for `@fastify/cors` or any other plugin.
  * Wrap it in `fastify-plugin` and its hooks and decorations apply to the context it was registered in; leave
@@ -35,25 +33,12 @@ type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
  * the route and the group it was compiled in, or calls {@link collectRouteGroups}.
  *
  * ```ts
- * .with(c => corsPlugin(c.app.cors.options))
- * .with((c, container) => rateLimitPlugin(container.get(Redis), c.app.limits))
+ * .with(({ config }) => corsPlugin(config.app.cors.options))
+ * .with(({ config, container }) => rateLimitPlugin(container.get(Redis), config.app.limits))
  * .with(() => cors)
  * ```
  */
-export type HTTPPluginFactory<C = unknown> = (
-  config: ConfigHandle<C>,
-  container: Container,
-) => AnyFastifyPlugin | Promise<AnyFastifyPlugin>
-
-/**
- * Contributes a plugin from a feature's bootstrap hook.
- *
- * `BootstrapKit.extensions` is platform-neutral and accepts anything, so going through this is what gets the
- * contribution type-checked at the call site.
- */
-export function registerPlugin(kit: BootstrapKit<any>, plugin: AnyFastifyPlugin): void {
-  kit.extensions.register(plugin)
-}
+export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<AnyFastifyPlugin, C>
 
 const kPluginMeta = Symbol.for('plugin-meta')
 

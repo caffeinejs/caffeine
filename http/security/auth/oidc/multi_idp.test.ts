@@ -1,8 +1,9 @@
-import { kFeatureBootstrap, kFeatureConfigure, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
-import type { FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
+import { kFeatureConfigure, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
+import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
+import { kFeatureServer } from '../../../feature.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -42,12 +43,8 @@ function makeCtx(cookies: Record<string, string> = {}) {
   } as unknown as Context
 }
 
-/** Minimal kit double — configure touches bind/wrap; bootstrap touches the plugin registry. */
-function makeKit(): {
-  kit: FeatureConfigureKit & BootstrapKit
-  registered: Array<FastifyPluginCallback | FastifyPluginAsync>
-} {
-  const registered: Array<FastifyPluginCallback | FastifyPluginAsync> = []
+/** Minimal kit double — configure touches bind/wrap. */
+function makeKit(): { kit: FeatureConfigureKit & BootstrapKit } {
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
   })
@@ -56,14 +53,21 @@ function makeKit(): {
       bind: binding,
       wrap: (v: unknown) => ({ get: () => v }),
     },
-    extensions: {
-      register: (plugin: FastifyPluginCallback | FastifyPluginAsync) => {
-        registered.push(plugin)
-      },
-    },
   } as unknown as FeatureConfigureKit & BootstrapKit
 
-  return { kit, registered }
+  return { kit }
+}
+
+/** A server double for the builder's server hook: it records what the hook registers, and registers nothing. */
+function recordingServer(): { server: FastifyInstance; registered: Array<FastifyPluginCallback | FastifyPluginAsync> } {
+  const registered: Array<FastifyPluginCallback | FastifyPluginAsync> = []
+  const server = {
+    register: (plugin: FastifyPluginCallback | FastifyPluginAsync) => {
+      registered.push(plugin)
+    },
+  } as unknown as FastifyInstance
+
+  return { server, registered }
 }
 
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
@@ -81,9 +85,10 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
 async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => void): Promise<string[]> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  const { kit, registered } = makeKit()
+  const { kit } = makeKit()
+  const { server: recorder, registered } = recordingServer()
   await builder[kFeatureConfigure](kit)
-  await builder[kFeatureBootstrap](kit)
+  await builder[kFeatureServer](recorder, kit)
 
   const warnings: string[] = []
   const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(warning => {

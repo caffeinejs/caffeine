@@ -1,6 +1,5 @@
 import { DeferredCtor, type Container, type InjectionToken } from '@caffeinejs/di'
 import { ErrConfiguration, type AdapterRouteOptions, type HTTPPluginFactory } from '@caffeinejs/http'
-import { logToken } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
@@ -31,7 +30,7 @@ export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
  * `cacheInvalidate()` route extensions. Install it after `.authentication(...)`.
  */
 export function HTTPCaching<C = unknown>(options?: HTTPCachingOptions | HTTPCachingConfigurer): HTTPPluginFactory<C> {
-  return (_config, container) => {
+  return ({ container, logger }) => {
     const resolved = typeof options === 'function' ? build(options) : (options ?? {})
 
     const store = resolveCache(resolved.store, container)
@@ -41,8 +40,7 @@ export function HTTPCaching<C = unknown>(options?: HTTPCachingOptions | HTTPCach
       store,
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
-      // `logToken()` is bound the moment an application constructs, so `get` cannot miss.
-      observer: observer === undefined ? undefined : guardObserver(observer, container.get(logToken())),
+      observer: observer === undefined ? undefined : guardObserver(observer, logger),
     })
   }
 }

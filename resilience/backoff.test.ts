@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { exponential } from './backoff.js'
 import { ErrInvalidOption } from './errors.js'
@@ -26,6 +26,25 @@ describe('exponential', () => {
 
   it('allows an infinite cap', () => {
     expect(exponential({ maxDelayMs: Infinity })(12)).toBe(500 * 2 ** 11)
+  })
+
+  // Clients that all wait exactly the cap reach a recovering dependency together.
+  it('keeps spreading delays that reached the cap', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0.5)
+    try {
+      const backoff = exponential({ initialDelayMs: 100, maxDelayMs: 1_000, jitter: 0.5 })
+
+      expect([backoff(20), backoff(20)]).toEqual([500, 750])
+    } finally {
+      random.mockRestore()
+    }
+  })
+
+  // `0 · multiplier^n` is NaN once the power overflows, and NaN must not turn into the maximum delay.
+  it('keeps a zero initial delay at zero for any attempt', () => {
+    const backoff = exponential({ initialDelayMs: 0 })
+
+    expect([backoff(1), backoff(5_000)]).toEqual([0, 0])
   })
 
   it.each([

@@ -1,5 +1,5 @@
-import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
-import fastify, { type FastifyPluginAsync } from 'fastify'
+import { kFeatureConfigure, kFeatureName } from '@caffeinejs/std'
+import fastify, { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
@@ -11,8 +11,9 @@ import {
   Get,
   createWebApplication,
   fastifyAdapterFactory,
-  registerPlugin,
+  kFeatureServer,
   type Context,
+  type HTTPFeature,
 } from '../index.js'
 
 /**
@@ -39,22 +40,22 @@ class NeverAuthenticates extends BaseAuthenticationHandler<object> {
 }
 
 /** Stands in for `@caffeinejs/cors`: stamps a header from an `onRequest` hook, and records that it ran. */
-function stamping(name: string, ran: string[]): Feature {
+function stamping(name: string, ran: string[]): HTTPFeature {
   return {
     [kFeatureName]: name,
     [kFeatureConfigure](): void {
       // Nothing to bind.
     },
-    [kFeatureBootstrap](kit: BootstrapKit): void {
-      const plugin: FastifyPluginAsync = async instance => {
-        instance.addHook('onRequest', (_request, reply, done) => {
+    [kFeatureServer]: async (instance: FastifyInstance): Promise<void> => {
+      const plugin: FastifyPluginAsync = async server => {
+        server.addHook('onRequest', (_request, reply, done) => {
           ran.push(name)
           reply.header(`x-${name}`, 'yes')
           done()
         })
       }
 
-      registerPlugin(kit, fp(plugin, { name }))
+      await instance.register(fp(plugin, { name }))
     },
   }
 }

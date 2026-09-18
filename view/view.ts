@@ -1,4 +1,4 @@
-import { FastifyContext, Responder, ActionResult, type Context, ErrConfiguration } from '@caffeinejs/http'
+import { Responder, ActionResult, type Context, ErrConfiguration } from '@caffeinejs/http'
 import { type FastifyViewOptions } from '@fastify/view'
 
 /**
@@ -73,6 +73,6 @@ class ViewResult extends Responder {
   }
 
   respond(ctx: Context): ActionResult {
-    return renderView(this, (ctx as FastifyContext).fst.reply as ViewCapableReply)
+    return renderView(this, ctx.platform.reply as ViewCapableReply)
   }
 }

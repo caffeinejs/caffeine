@@ -1,8 +1,9 @@
 import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
+import { kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
+import type { FastifyInstance } from 'fastify'
 
 import { Context } from '../../context.js'
-import { registerPlugin } from '../../plugin.js'
+import { HTTPFeatureBuilder } from '../../feature.js'
 import { ServerOwnedPaths } from '../../server_owned_paths.js'
 import { authenticationPlugin } from '../authentication_plugin.js'
 import type { PrincipalMapper } from '../index.js'
@@ -73,7 +74,7 @@ interface SchemeRegistration {
   preset?: GithubPresetOptions
 }
 
-export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
+export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   readonly [kFeatureName] = 'auth'
 
   readonly #schemes: Map<string, InjectionToken<AuthenticationHandler> | AuthenticationHandler> = new Map()
@@ -281,13 +282,13 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     this.#doConfigure(kit)
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
-    // The gate lands where `.authentication(...)` was written: everything extended before it runs ahead of
+  protected async server(instance: FastifyInstance): Promise<void> {
+    // The gate lands where `.authentication(...)` was written: everything installed before it runs ahead of
     // the hook, everything after it only for a request the hook let through.
-    registerPlugin(kit, authenticationPlugin())
+    await instance.register(authenticationPlugin())
 
     if (this.#oidcMeta !== undefined) {
-      registerPlugin(kit, oidcRoutesPlugin(this.#oidcMeta))
+      await instance.register(oidcRoutesPlugin(this.#oidcMeta))
     }
   }
 

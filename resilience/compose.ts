@@ -159,11 +159,12 @@ export function runWith<T>(operation: Operation<T>, ...args: Array<Strategy | Ab
   }
 
   validate(args, count)
-  const first = count === 0 ? passThrough : (args[0] as Strategy)
-  const next = chainOf(args, 1, count)
   if (signal !== undefined && signal.aborted) {
     return Promise.reject(abortReason(signal))
   }
+
+  const first = count === 0 ? passThrough : (args[0] as Strategy)
+  const next = chainOf(args, 1, count)
 
   // Called here for the same reason as in compose(): one frame between the caller and the first strategy.
   const ctx = new Context(operation as Operation<unknown>, signal)

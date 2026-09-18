@@ -24,20 +24,20 @@ describe('Emitter', () => {
     expect(seen).toEqual(['first:1', 'second:1'])
   })
 
-  // The count lets every call site skip its per-type lookup while nothing listens; it must never drift.
-  it('counts listeners of every type through additions, removals and repeated removals', () => {
+  // The count lets every call site skip its per-type lookup while nothing listens. A count that drifted below the
+  // real number of listeners would silence the ones left.
+  it('knows whether anything listens through additions, removals and repeated removals', () => {
     const emitter = new Emitter<Events>()
     const offTick = emitter.on('tick', () => undefined)
     const offTock = emitter.on('tock', () => undefined)
-    expect(emitter.size).toBe(2)
+    expect([emitter.has('tick'), emitter.has('tock')]).toEqual([true, true])
 
     offTick()
     offTick()
-    expect(emitter.size).toBe(1)
+    expect([emitter.has('tick'), emitter.has('tock')]).toEqual([false, true])
 
     offTock()
-    expect(emitter.size).toBe(0)
-    expect(emitter.has('tock')).toBe(false)
+    expect([emitter.has('tick'), emitter.has('tock')]).toEqual([false, false])
   })
 
   // Call sites skip building the event object when nobody listens; `has` must be exact for that to be safe.

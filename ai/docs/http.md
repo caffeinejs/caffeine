@@ -86,12 +86,15 @@ app.mount(pets) // before app.ready()
   `bodyAsBuffer()`, `bodyAsStream()`, `fst(options)`, `compress(opts)` and `encoding(tokens)`; openapi ships
   `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
 - `.plugin(factory)` registers a Fastify plugin in front of that router's routes and the groups nested under
-  it — `pets.plugin(() => fp(instance => instance.register(fastifyCors, { origin: 'https://pets.example' }), { name: 'cors' }))`.
+  it. Only a router bound to Fastify takes one, so it is created with `newRouter(path)` rather than
+  `new Router(path)` —
+  `newRouter('/pets').plugin(() => fp(instance => instance.register(fastifyCors, { origin: 'https://pets.example' }), { name: 'cors' }))`.
+  A router from `new Router(path)` is bound to no adapter and mounts on any application.
   There is no `corsPlugin`/`compressPlugin` wrapper — register the third-party plugin directly, the same as any
   other Fastify plugin. The same on a controller is
   `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
-  deduplicated: two groups wanting different settings pass two factories. The factory's config argument sees
-  `ConfigHandle<unknown>` — a router does not know which application it will be mounted into.
+  deduplicated: two groups wanting different settings pass two factories. The factory's context carries
+  `config` as `ConfigHandle<unknown>` — a router does not know which application it will be mounted into.
 - `fst({ ... })` is the Fastify escape hatch: lifecycle hooks, `attachValidation`, `logLevel`, custom compilers —
   everything Fastify takes except what the router already decides (`method`, `url`, `schema`, `config`, `handler`,
   `bodyLimit`, `handlerTimeout`).

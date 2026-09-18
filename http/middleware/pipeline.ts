@@ -1,32 +1,24 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import { type InjectionToken, Scopes } from '@caffeinejs/di'
 
-import { type Container, type InjectionToken, Scopes } from '@caffeinejs/di'
-import type { Configuration } from '@caffeinejs/std/config'
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-
-import type { Context } from '../context.js'
 import { ErrConfiguration } from '../error/common.js'
-import { Keys } from '../symbols.js'
-import { type Engine, type NormalizationOptions, createEngine } from './_engine.js'
+import type { HTTPSetupContext } from '../setup_context.js'
+import { rawContext } from './_raw_context.js'
 import { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
 import {
   type Middleware,
+  type MiddlewareFactory,
   type MiddlewareFn,
-  type MiddlewareHook,
   type MiddlewarePath,
   type Next,
   type NodeMiddleware,
-  MIDDLEWARE_HOOKS,
   isMiddlewareClass,
   isMiddlewareInstance,
   kMiddlewareHook,
 } from './middleware.js'
 
-const HOOKS_WITH_PAYLOAD: ReadonlySet<MiddlewareHook> = new Set(['onError', 'onSend', 'preParsing', 'preSerialization'])
-
 interface Entry {
   readonly path: MiddlewarePath | undefined
-  readonly hook: MiddlewareHook | undefined
+  readonly hook: string | undefined
   readonly target: unknown
 }
 
@@ -35,19 +27,31 @@ interface Resolved {
   readonly hint: unknown
 }
 
+/** One middleware as the adapter installs it: resolved, adapted to the Node signature, and placed. */
+export interface ResolvedMiddleware {
+  /** Where it applies, or `undefined` for every request. */
+  readonly path: MiddlewarePath | undefined
+  /**
+   * The hook `use()` named, else the middleware's own {@link kMiddlewareHook} hint, else `undefined` for the
+   * adapter's default. The adapter validates it: nothing here knows which names exist.
+   */
+  readonly hook: string | undefined
+  readonly fn: NodeMiddleware
+}
+
 /**
- * The application's middleware pipeline: what `app.use()` registers, and what the adapter installs onto
- * Fastify, one chain per hook that has entries.
+ * The application's middleware pipeline: what `app.use()` registers, resolved once at start-up for the adapter to
+ * install.
  *
- * Entries keep their registration order within a hook. Hooks do not compete: they run at Fastify's own
- * lifecycle points.
+ * Entries keep their registration order. Which hooks exist, and how a middleware is attached to one, is the
+ * adapter's business: `H` is the names its hooks go by.
  */
-export class MiddlewarePipeline {
+export class MiddlewarePipeline<H extends string = string> {
   readonly #entries: Entry[] = []
   #sealed = false
 
-  /** Registers `target` at `hook`, optionally restricted to `path`. Throws once the pipeline has been installed. */
-  add(path: MiddlewarePath | undefined, target: unknown, hook?: MiddlewareHook): this {
+  /** Registers `target` at `hook`, optionally restricted to `path`. Throws once the pipeline has been resolved. */
+  add(path: MiddlewarePath | undefined, target: unknown, hook?: H): this {
     if (this.#sealed) {
       throw new ErrPipelineSealed()
     }
@@ -57,62 +61,24 @@ export class MiddlewarePipeline {
   }
 
   /**
-   * Resolves every entry, seals the pipeline, and adds one Fastify hook per non-empty hook group.
+   * Resolves every entry in registration order, and seals the pipeline.
    *
    * A middleware whose dependency graph reaches request scope is resolved per request; any other container
-   * middleware is resolved once, here. Config factories run here too.
-   *
-   * The hooks are registered in Fastify's callback style, not as `async` functions: an async hook returns a
-   * promise on every request, so Fastify defers to a microtask even when every middleware ran synchronously.
+   * middleware is resolved once, here. Factories run here too, handed `context`.
    */
-  install(server: FastifyInstance, container: Container, configuration: Configuration<unknown>): void {
+  resolve(context: HTTPSetupContext): ResolvedMiddleware[] {
     this.#sealed = true
 
-    const options = normalizationOptions(server)
-    const engines = new Map<MiddlewareHook, Engine>()
+    return this.#entries.map(entry => {
+      const resolved = resolve(entry.target, context)
+      const hook = entry.hook ?? (resolved.hint === undefined ? undefined : String(resolved.hint))
 
-    for (const entry of this.#entries) {
-      const resolved = resolve(entry.target, container, configuration)
-      const hook = entry.hook ?? toHook(resolved.hint)
-
-      let engine = engines.get(hook)
-      if (engine === undefined) {
-        engine = createEngine(options)
-        engines.set(hook, engine)
-      }
-      engine.use(entry.path, resolved.fn)
-    }
-
-    for (const hook of MIDDLEWARE_HOOKS) {
-      const engine = engines.get(hook)
-      if (engine === undefined) {
-        continue
-      }
-
-      const run = (request: FastifyRequest, reply: FastifyReply, done: Next): void => {
-        if (rawContext(request.raw) == null) {
-          done()
-          return
-        }
-
-        stampRaw(request, reply)
-        engine.run(request.raw, reply.raw, done)
-      }
-
-      if (HOOKS_WITH_PAYLOAD.has(hook)) {
-        server.addHook(hook as 'onSend', (request, reply, _payload, done) => {
-          run(request, reply, done)
-        })
-      } else {
-        server.addHook(hook as 'onRequest', (request, reply, done) => {
-          run(request, reply, done)
-        })
-      }
-    }
+      return { path: entry.path, hook, fn: resolved.fn }
+    })
   }
 }
 
-function resolve(target: unknown, container: Container, configuration: Configuration<unknown>): Resolved {
+function resolve(target: unknown, context: HTTPSetupContext): Resolved {
   if (isMiddlewareInstance(target)) {
     return { fn: adaptCaffeine((ctx, next) => target.handle(ctx, next)), hint: hintOn(target.constructor) }
   }
@@ -122,12 +88,13 @@ function resolve(target: unknown, container: Container, configuration: Configura
       return { fn: target as NodeMiddleware, hint: undefined }
     }
     if (target.length === 1) {
-      const produced = (target as (config: unknown) => unknown)(configuration.config)
+      const produced = (target as MiddlewareFactory)(context)
       return { fn: fromFactory(produced), hint: hintOn(target) }
     }
     return { fn: adaptCaffeine(target as MiddlewareFn), hint: hintOn(target) }
   }
 
+  const container = context.container
   const key = target as InjectionToken<Middleware>
 
   if (container.hasScopeInGraph(key, Scopes.REQUEST)) {
@@ -151,35 +118,11 @@ function fromFactory(produced: unknown): NodeMiddleware {
     return produced.length >= 3 ? (produced as NodeMiddleware) : adaptCaffeine(produced as MiddlewareFn)
   }
 
-  throw new ErrConfiguration('Cannot install a middleware: the configuration factory did not return a middleware')
+  throw new ErrConfiguration('Cannot install a middleware: the middleware factory did not return a middleware')
 }
 
 function hintOn(holder: object): unknown {
   return (holder as { [kMiddlewareHook]?: unknown })[kMiddlewareHook]
-}
-
-function toHook(hint: unknown): MiddlewareHook {
-  if (hint === undefined) {
-    return 'onRequest'
-  }
-
-  if (typeof hint === 'string' && (MIDDLEWARE_HOOKS as readonly string[]).includes(hint)) {
-    return hint as MiddlewareHook
-  }
-
-  throw new ErrConfiguration(`Cannot register a middleware: the hook hint "${String(hint)}" is not a middleware hook`)
-}
-
-function normalizationOptions(server: FastifyInstance): NormalizationOptions {
-  const config = server.initialConfig
-  // find-my-way reads `useSemicolonDelimiter` from its options, but its types do not declare it.
-  const router: NormalizationOptions = config.routerOptions ?? {}
-
-  return {
-    ignoreDuplicateSlashes: router.ignoreDuplicateSlashes ?? config.ignoreDuplicateSlashes,
-    ignoreTrailingSlash: router.ignoreTrailingSlash ?? config.ignoreTrailingSlash,
-    useSemicolonDelimiter: router.useSemicolonDelimiter ?? config.useSemicolonDelimiter,
-  }
 }
 
 function adaptCaffeine(handle: MiddlewareFn): NodeMiddleware {
@@ -215,26 +158,6 @@ function adaptCaffeine(handle: MiddlewareFn): NodeMiddleware {
         throw err
       }
     }
-  }
-}
-
-function rawContext(req: IncomingMessage): Context | undefined {
-  return (req as IncomingMessage & { [Keys.CONTEXT]?: Context })[Keys.CONTEXT]
-}
-
-function stampRaw(request: FastifyRequest, reply: FastifyReply): void {
-  const raw = request.raw as IncomingMessage & Record<string, unknown>
-  raw.originalUrl = raw.url
-  raw.id = request.id
-  raw.hostname = request.hostname
-  raw.protocol = request.protocol
-  raw.ip = request.ip
-  raw.ips = request.ips
-  raw.log = request.log
-  raw.query = request.query
-  ;(reply.raw as ServerResponse & { log?: unknown }).log = request.log
-  if (request.body !== undefined) {
-    raw.body = request.body
   }
 }
 

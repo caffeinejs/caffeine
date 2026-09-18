@@ -22,7 +22,7 @@ import type { MultipartField, WebMultipartFile } from './multipart.js'
  * decorated handler both satisfy it, so an upload is read the same way whichever way the route was declared.
  */
 export interface MultipartContext {
-  readonly fst: { readonly request: FastifyRequest }
+  readonly platform: { readonly request: FastifyRequest }
 }
 
 /** The multipart readers bound to one request. See {@link multipart}. */
@@ -82,7 +82,7 @@ export interface MultipartHelpers {
  * `.with(() => multipartPlugin())` — and the route must not also declare a body picker, which would consume the same bytes.
  */
 export function multipart(ctx: MultipartContext): MultipartHelpers {
-  const request = ctx.fst.request
+  const request = ctx.platform.request
 
   return {
     file: fieldname => readFile(request, fieldname),

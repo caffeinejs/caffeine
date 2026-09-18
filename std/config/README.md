@@ -292,7 +292,7 @@ sequenceDiagram
   Shard-->>Def: handle bound
   App->>Feat: kFeatureConfigure - run the configure callback, then bind
   App->>App: container.init()
-  App->>Feat: kFeatureBootstrap - look up bindings and register extensions
+  App->>Feat: kFeatureBootstrap - look up bindings
 ```
 
 `ConfigDefinition` is the mutable description `newConfiguration(...)` builds and the application adopts at

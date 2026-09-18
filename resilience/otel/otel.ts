@@ -7,7 +7,7 @@ import {
   type ObservableResult,
 } from '@opentelemetry/api'
 
-import type { CircuitBreaker, CircuitBreakerState } from '../circuit_breaker/circuit_breaker.js'
+import { CIRCUIT_BREAKER_STATES, type CircuitBreaker } from '../circuit_breaker/circuit_breaker.js'
 import type { Retry } from '../retry/retry.js'
 import { errorType } from './_error_type.js'
 
@@ -15,15 +15,6 @@ const SCOPE = '@caffeinejs/resilience'
 
 // The semantic-convention HTTP duration buckets, extended to the breaker's default 60 s slow-call threshold.
 const DURATION_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10, 30, 60]
-
-const STATES: readonly CircuitBreakerState[] = [
-  'closed',
-  'open',
-  'half_open',
-  'forced_open',
-  'disabled',
-  'metrics_only',
-]
 
 export interface ResilienceInstrumentationOptions {
   /** Defaults to the global provider, `metrics.getMeterProvider()`. */
@@ -94,7 +85,7 @@ export function instrumentCircuitBreaker(
   const successful = { ...name, 'resilience.circuit_breaker.kind': 'successful' }
   const failed = { ...name, 'resilience.circuit_breaker.kind': 'failed' }
   const ignored = { ...name, 'resilience.circuit_breaker.kind': 'ignored' }
-  const states = STATES.map(value => ({ ...name, 'resilience.circuit_breaker.state': value }))
+  const states = CIRCUIT_BREAKER_STATES.map(value => ({ ...name, 'resilience.circuit_breaker.state': value }))
 
   const unsubscribers = [
     breaker.on(
@@ -121,8 +112,8 @@ export function instrumentCircuitBreaker(
     const current = breaker.state
 
     result.observe(notPermitted, snapshot.notPermittedCalls, name)
-    for (let i = 0; i < STATES.length; i++) {
-      result.observe(state, STATES[i] === current ? 1 : 0, states[i])
+    for (let i = 0; i < CIRCUIT_BREAKER_STATES.length; i++) {
+      result.observe(state, CIRCUIT_BREAKER_STATES[i] === current ? 1 : 0, states[i])
     }
     result.observe(buffered, snapshot.successfulCalls, successful)
     result.observe(buffered, snapshot.failedCalls, failed)

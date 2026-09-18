@@ -177,11 +177,14 @@ describe('retry', () => {
     expect(results).toEqual([])
   })
 
-  it('hands back the last retryable result once all attempts are used, unless told to fail', async () => {
+  // A dependency that answers "busy" to every attempt is not healthy, even when the caller takes the answer.
+  it('hands back the last retryable result once all attempts are used, and counts the call as failed', async () => {
     const retries = retryOf({ retryOnResult: result => result === 'busy' })
+    const seen = listen(retries, 'success', 'failure')
 
     await expect(runWith(() => 'busy', retries)).resolves.toBe('busy')
-    expect(retries.metrics().successfulCallsWithRetry).toBe(1)
+    expect(retries.metrics()).toMatchObject({ successfulCallsWithRetry: 0, failedCallsWithRetry: 1 })
+    expect(seen).toEqual([['failure', { name: 'inventory', attempts: 3, result: 'busy' }]])
   })
 
   it('rejects with ErrMaxRetriesExceeded carrying the last result when told to fail', async () => {
@@ -236,6 +239,99 @@ describe('retry', () => {
     await expect(runWith(flaky(1).operation, retries)).rejects.toThrow(
       'Cannot schedule retry "inventory": delay must be a finite number, got Infinity',
     )
+    expect(retries.metrics().failedCallsWithoutRetry).toBe(1)
+  })
+
+  // A predicate or backoff that throws ends the call. The call still happened, so it must show in the counts.
+  it('counts the call as failed when retryOn throws, and rejects with what it threw', async () => {
+    const thrown = new Error('bad predicate')
+    const retries = retryOf({
+      retryOn: () => {
+        throw thrown
+      },
+    })
+    const seen = listen(retries, 'retry', 'ignored')
+
+    await expect(runWith(flaky(1).operation, retries)).rejects.toBe(thrown)
+    expect(retries.metrics()).toEqual({
+      successfulCallsWithoutRetry: 0,
+      successfulCallsWithRetry: 0,
+      failedCallsWithoutRetry: 1,
+      failedCallsWithRetry: 0,
+    })
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: thrown }]])
+  })
+
+  it('counts the call as failed when retryOnResult throws, and rejects with what it threw', async () => {
+    const thrown = new Error('bad predicate')
+    const retries = retryOf({
+      retryOnResult: () => {
+        throw thrown
+      },
+    })
+    const seen = listen(retries, 'retry', 'ignored')
+
+    await expect(runWith(() => 'ok', retries)).rejects.toBe(thrown)
+    expect(retries.metrics()).toEqual({
+      successfulCallsWithoutRetry: 0,
+      successfulCallsWithRetry: 0,
+      failedCallsWithoutRetry: 1,
+      failedCallsWithRetry: 0,
+    })
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: thrown }]])
+  })
+
+  it('counts the call as failed when the backoff throws, and rejects with what it threw', async () => {
+    const thrown = new Error('bad backoff')
+    const retries = retryOf({
+      backoff: () => {
+        throw thrown
+      },
+    })
+    const seen = listen(retries, 'retry', 'ignored')
+
+    await expect(runWith(flaky(1).operation, retries)).rejects.toBe(thrown)
+    expect(retries.metrics()).toEqual({
+      successfulCallsWithoutRetry: 0,
+      successfulCallsWithRetry: 0,
+      failedCallsWithoutRetry: 1,
+      failedCallsWithRetry: 0,
+    })
+    expect(seen).toEqual([['ignored', { name: 'inventory', attempts: 1, error: thrown }]])
+  })
+
+  // An attempt chained to the one before it is memory the call holds until it ends, and a tick its caller waits.
+  it('settles a call in the same number of ticks however many attempts it used', async () => {
+    const ticksToSettle = async (attempts: number): Promise<number> => {
+      const last = Promise.withResolvers<string>()
+      let calls = 0
+      let done = false
+      void runWith(
+        () => {
+          calls++
+          if (calls === attempts) {
+            return last.promise
+          }
+          throw new Error('down')
+        },
+        retryOf({ maxAttempts: attempts }),
+      ).then(() => {
+        done = true
+      })
+
+      while (calls < attempts) {
+        await Promise.resolve()
+      }
+      last.resolve('ok')
+      let ticks = 0
+      while (!done) {
+        await Promise.resolve()
+        ticks++
+      }
+      return ticks
+    }
+
+    expect(await ticksToSettle(50)).toBe(await ticksToSettle(2))
   })
 
   // setTimeout fires at once for delays it cannot represent; clamping keeps a huge backoff a long wait.

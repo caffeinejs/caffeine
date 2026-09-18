@@ -1,8 +1,7 @@
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
-import type { CookieSerializeOptions } from '@fastify/cookie'
-import type { RawRequestDefaultExpression, RawServerDefault } from 'fastify'
 
-import type { Context, Fst, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
+import type { AdapterTypes, AnyAdapterTypes } from '../../adapter_types.js'
+import type { Context, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
 import type { RouteValidationSchema } from '../../route.js'
 
 /** Flattens an intersection so editors show one object rather than a chain of `&`. */
@@ -42,23 +41,19 @@ export type ParamsOf<S extends RouteValidationSchema, P extends string> = S exte
 /**
  * The context a programmatic handler receives, typed by the route's schema and path.
  *
- * Structurally the `FastifyContext` the adapter constructs — the same object a decorated handler gets from
- * `$p.context()` — with the request slots narrowed to what this route declared.
+ * The same object a decorated handler gets from `$p.context()`, with the request slots narrowed to what this route
+ * declared. `T` is the adapter the router is bound to; a router bound to none types it as a plain `Context` would.
  */
-export interface RouteContext<S extends RouteValidationSchema, P extends string, V, C> extends Context<
+export type RouteContext<
+  S extends RouteValidationSchema,
+  P extends string,
   V,
   C,
-  RawRequestDefaultExpression<RawServerDefault>,
-  CookieSerializeOptions,
-  false,
-  ParamsOf<S, P>,
-  InferQuery<S>,
-  InferHeaders<S>,
-  InferBody<S>
-> {
-  /** The underlying Fastify request and reply. The escape hatch for platform-specific consumers. */
-  get fst(): Fst
-}
+  T extends AdapterTypes = never,
+> = Context<V, C, ContextTypesOf<T>, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>>
+
+/** The adapter types a context is typed with: the router's own, or any registered adapter's when it has none. */
+type ContextTypesOf<T extends AdapterTypes> = [T] extends [never] ? AnyAdapterTypes : T
 
 /**
  * What a route's handler is called with: the context, then the dependencies the route and its enclosing groups
@@ -68,10 +63,15 @@ export interface RouteContext<S extends RouteValidationSchema, P extends string,
  * nothing at all when the handler answered through the context. It is a type parameter so that a route can carry
  * what its handler answers with — see {@link DeclaredRoute}.
  */
-export type RouteHandler<S extends RouteValidationSchema, P extends string, V, C, D, O = unknown> = (
-  ctx: RouteContext<S, P, V, C>,
-  deps: D,
-) => O
+export type RouteHandler<
+  S extends RouteValidationSchema,
+  P extends string,
+  V,
+  C,
+  D,
+  O = unknown,
+  T extends AdapterTypes = never,
+> = (ctx: RouteContext<S, P, V, C, T>, deps: D) => O
 
 /**
  * The dependencies visible to a route: what its groups injected, with anything the route injected under the same
@@ -188,6 +188,12 @@ export type PrefixRoutePaths<R, Prefix extends string> =
  * value per statement; `blend` unions them. The variable the routes were opened from carries none of them.
  */
 export type RoutesOf<T> = T extends { readonly __routes?: infer R } ? NonNullable<R> : never
+
+/**
+ * The adapter a `Router` is bound to, read back the same way {@link RoutesOf} reads routes: `never` for a router
+ * bound to none.
+ */
+export type AdapterOf<T> = T extends { readonly __adapter?: infer A } ? Extract<NonNullable<A>, AdapterTypes> : never
 
 /**
  * What `ctx.state` carries under a `Router`, as the router declared it.

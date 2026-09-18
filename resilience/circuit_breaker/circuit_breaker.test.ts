@@ -79,6 +79,14 @@ describe('circuitBreaker options', () => {
       'slidingWindow.seconds must be an integer of at least 1, got 1.5',
     ],
     [
+      { slidingWindow: { type: 'count', size: Number.MAX_SAFE_INTEGER } },
+      'slidingWindow.size is too large to allocate',
+    ],
+    [
+      { slidingWindow: { type: 'time', seconds: Number.MAX_SAFE_INTEGER } },
+      'slidingWindow.seconds is too large to allocate',
+    ],
+    [
       { slidingWindow: { type: 'calls' } },
       "slidingWindow must be { type: 'count', size } or { type: 'time', seconds }",
     ],
@@ -87,6 +95,10 @@ describe('circuitBreaker options', () => {
     [
       { permittedNumberOfCallsInHalfOpenState: 0 },
       'permittedNumberOfCallsInHalfOpenState must be an integer of at least 1, got 0',
+    ],
+    [
+      { permittedNumberOfCallsInHalfOpenState: Number.MAX_SAFE_INTEGER },
+      'permittedNumberOfCallsInHalfOpenState is too large to allocate',
     ],
     [
       { maxWaitDurationInHalfOpenStateMs: Infinity },
@@ -258,6 +270,22 @@ describe('circuitBreaker, closed', () => {
     }
     expect(breaker.state).toBe('open')
   })
+
+  // A dashboard reading the breaker after a quiet spell must not keep showing failures that left the window.
+  it('reports an empty window once an idle gap outlasts a time window', async () => {
+    const breaker = breakerOf({
+      slidingWindow: { type: 'time', seconds: 2 },
+      minimumNumberOfCalls: 2,
+      failureRateThreshold: 100,
+    })
+    await fail(breaker)
+    await succeed(breaker)
+    await succeed(breaker)
+
+    vi.advanceTimersByTime(5_000)
+
+    expect(breaker.metrics()).toMatchObject({ bufferedCalls: 0, failureRate: undefined })
+  })
 })
 
 describe('circuitBreaker, open', () => {
@@ -414,6 +442,68 @@ describe('circuitBreaker, half open', () => {
     expect(breaker.state).toBe('open')
   })
 
+  // Time spent half open with a free trial slot says nothing about the dependency; a healthy one must get its trial.
+  it('lets the first call after an idle half-open period through as a trial', async () => {
+    const breaker = breakerOf({
+      automaticTransitionFromOpenToHalfOpen: true,
+      maxWaitDurationInHalfOpenStateMs: 500,
+      permittedNumberOfCallsInHalfOpenState: 1,
+    })
+    await trip(breaker)
+    vi.advanceTimersByTime(1_000)
+    expect(breaker.state).toBe('half_open')
+
+    vi.advanceTimersByTime(60_000)
+
+    await expect(succeed(breaker)).resolves.toBe('ok')
+    expect(breaker.state).toBe('closed')
+  })
+
+  // The automatic transition matters here: without it, the trial itself enters half open and idle time never passes.
+  it('measures the maximum half-open wait from the last trial admitted', async () => {
+    const breaker = breakerOf({
+      automaticTransitionFromOpenToHalfOpen: true,
+      maxWaitDurationInHalfOpenStateMs: 500,
+      permittedNumberOfCallsInHalfOpenState: 1,
+    })
+    await trip(breaker)
+    vi.advanceTimersByTime(11_000)
+    const hung = Promise.withResolvers<string>()
+    const trial = runWith(() => hung.promise, breaker)
+
+    vi.advanceTimersByTime(499)
+    expect(await succeed(breaker).catch((error: unknown) => error)).toMatchObject({ state: 'half_open' })
+
+    vi.advanceTimersByTime(1)
+    expect(await succeed(breaker).catch((error: unknown) => error)).toMatchObject({
+      state: 'open',
+      retryAfterMs: 1_000,
+    })
+
+    hung.resolve('late')
+    await trial
+  })
+
+  // A listener that moves the breaker is obeyed: the call is decided by the state the breaker ends up in.
+  it('runs the call when a stateChange listener resets the breaker as the half-open wait expires', async () => {
+    const breaker = breakerOf({ maxWaitDurationInHalfOpenStateMs: 500, permittedNumberOfCallsInHalfOpenState: 1 })
+    await halfOpen(breaker)
+    const hung = Promise.withResolvers<string>()
+    const trial = runWith(() => hung.promise, breaker)
+    breaker.on('stateChange', event => {
+      if (event.to === 'open') {
+        breaker.reset()
+      }
+    })
+
+    vi.advanceTimersByTime(500)
+
+    await expect(succeed(breaker)).resolves.toBe('ok')
+    expect(breaker.state).toBe('closed')
+    hung.resolve('late')
+    await trial
+  })
+
   it('gives the trial slot back when a trial call is ignored', async () => {
     const breaker = breakerOf({
       permittedNumberOfCallsInHalfOpenState: 1,
@@ -509,6 +599,29 @@ describe('circuitBreaker, manual control', () => {
     expect(breaker.metrics()).toMatchObject({ bufferedCalls: 4, failureRate: 100 })
     expect(seen).toEqual([
       ['stateChange', { name: 'inventory', from: 'closed', to: 'metrics_only' }],
+      ['failureRateExceeded', { name: 'inventory', failureRate: 100 }],
+    ])
+  })
+
+  // In metrics-only mode the rate events are the alert. A rate that fell away with an emptied window and came back
+  // is a new crossing.
+  it('reports a threshold crossed again after a time window emptied, in metrics-only mode', async () => {
+    const breaker = breakerOf({
+      slidingWindow: { type: 'time', seconds: 1 },
+      minimumNumberOfCalls: 2,
+      failureRateThreshold: 50,
+    })
+    const seen = listen(breaker, 'failureRateExceeded')
+    breaker.metricsOnly()
+
+    await fail(breaker)
+    await fail(breaker)
+    vi.advanceTimersByTime(2_100)
+    await fail(breaker)
+    await fail(breaker)
+
+    expect(seen).toEqual([
+      ['failureRateExceeded', { name: 'inventory', failureRate: 100 }],
       ['failureRateExceeded', { name: 'inventory', failureRate: 100 }],
     ])
   })
@@ -759,5 +872,29 @@ describe('circuitBreaker, run called by hand', () => {
       })
     }).not.toThrow()
     await expect(result).rejects.toThrow('hand-made next bug')
+  })
+
+  // A wait function that throws while the breaker re-opens must reach the caller as a rejection, like every failure.
+  it('hands a failing wait function back as a rejection when a hand-called run re-opens the breaker', async () => {
+    const breaker = breakerOf({
+      maxWaitDurationInHalfOpenStateMs: 500,
+      permittedNumberOfCallsInHalfOpenState: 1,
+      waitDurationInOpenStateMs: openings => {
+        if (openings > 1) {
+          throw new Error('bad wait')
+        }
+        return 1_000
+      },
+    })
+    await trip(breaker)
+    vi.advanceTimersByTime(1_000)
+    void breaker.run(ctx, () => new Promise<number>(() => undefined))
+    vi.advanceTimersByTime(500)
+    let returned: Promise<number> | undefined
+
+    expect(() => {
+      returned = breaker.run(ctx, () => Promise.resolve(1))
+    }).not.toThrow()
+    await expect(returned).rejects.toThrow('bad wait')
   })
 })

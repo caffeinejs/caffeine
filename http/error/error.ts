@@ -1,15 +1,9 @@
 import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
-import {
-  kFeatureBootstrap,
-  kFeatureConfigure,
-  kFeatureName,
-  type BootstrapKit,
-  type Feature,
-  type FeatureConfigureKit,
-} from '@caffeinejs/std'
+import { kFeatureConfigure, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
+import type { FastifyInstance } from 'fastify'
 
 import { Context } from '../context.js'
-import { registerPlugin } from '../plugin.js'
+import { kFeatureServer, type HTTPFeature } from '../feature.js'
 import { ActionResult } from '../response.js'
 import { ErrConfiguration } from './common.js'
 import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error_handling.js'
@@ -83,7 +77,7 @@ export class ErrorHandlerProvider {
   }
 }
 
-export class ErrorHandlingServiceConfigurer implements Feature {
+export class ErrorHandlingServiceConfigurer implements HTTPFeature {
   get [kFeatureName](): string {
     return 'error-handling'
   }
@@ -138,7 +132,7 @@ export class ErrorHandlingServiceConfigurer implements Feature {
     kit.container.bind(GlobalErrorHandlerRef, t => t.toValue(ref).lifetime(Scopes.SINGLETON).internal())
   }
 
-  [kFeatureBootstrap](kit: BootstrapKit): void {
-    registerPlugin(kit, globalErrorHandlerPlugin(this.#ref!))
+  readonly [kFeatureServer] = async (instance: FastifyInstance): Promise<void> => {
+    await instance.register(globalErrorHandlerPlugin(this.#ref!))
   }
 }

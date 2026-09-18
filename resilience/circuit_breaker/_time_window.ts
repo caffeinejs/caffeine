@@ -1,8 +1,8 @@
 import type { Window } from './_count_window.js'
 
 // The outcomes of the last `seconds` seconds, one bucket per second in a ring. Seconds are counted on the
-// monotonic clock the caller passes in. The window moves only when something is recorded, so a read after an
-// idle gap still reports the outcomes as they stood.
+// monotonic clock the caller passes in. The window moves when something is recorded and when the breaker reads it,
+// so a read after an idle gap no longer reports outcomes that left the window.
 export class TimeWindow implements Window {
   total = 0
   failed = 0
@@ -23,7 +23,7 @@ export class TimeWindow implements Window {
   }
 
   record(failed: boolean, slow: boolean, nowMs: number): void {
-    this.#advance(Math.floor(nowMs / 1000))
+    this.advance(nowMs)
 
     const head = this.#head
     this.#totals[head]++
@@ -55,7 +55,9 @@ export class TimeWindow implements Window {
     this.slowFailed = 0
   }
 
-  #advance(second: number): void {
+  // Moves the window to the second `nowMs` falls in. A second that already passed counts as the current one.
+  advance(nowMs: number): void {
+    const second = Math.floor(nowMs / 1000)
     if (this.#second === -1) {
       this.#second = second
       return

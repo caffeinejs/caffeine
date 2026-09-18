@@ -12,13 +12,13 @@ import {
   type RawServerBase,
 } from 'fastify'
 
+import type { AdapterExtensions } from './adapter_extension.js'
 import { ErrCaffeineWebApplication } from './error/common.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from './error/error_handling.js'
 import { solutions } from './error/util.js'
 import { attachGuardHook } from './guards/attach.js'
 import { joinPaths } from './internal/paths/index.js'
-import { pluginName } from './plugin.js'
-import type { HTTPPlugins } from './plugin_registry.js'
+import { pluginName, type AnyFastifyPlugin } from './plugin.js'
 import { Responder } from './response.js'
 import type { RouteGroup } from './route.js'
 import { type AdapterRouteOptions } from './route_hooks.js'
@@ -30,7 +30,8 @@ type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error
 
 /** What is the same for every group on one server, resolved once before any of them registers. */
 export interface RouteGroupRegistration<REQ> {
-  plugins: HTTPPlugins
+  /** What each router or controller installs in front of its own routes. */
+  extensions: Pick<AdapterExtensions<unknown, AnyFastifyPlugin>, 'of'>
   compilers: RouteCompilers<REQ>
   globalErrorHandler: GlobalErrorHandler
 }
@@ -47,7 +48,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
   router: RouteGroup<REQ>,
   registration: RouteGroupRegistration<REQ>,
 ): void {
-  const { plugins, compilers, globalErrorHandler } = registration
+  const { extensions, compilers, globalErrorHandler } = registration
   const basePath = router.path
   const routes = router.routes
 
@@ -59,7 +60,8 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
       // plugin as an application-level one, registered in this group's context instead of on the root
       // server — so a `fastify-plugin`-wrapped plugin covers this group's routes and no others.
       for (const scope of router.scopes ?? []) {
-        for (const plugin of plugins.of(scope)) {
+        for (const plugin of extensions.of(scope)) {
+          assertFastifyPlugin(plugin)
           assertPluginNotRegistered(server, plugin)
           await server.register(plugin)
         }
@@ -238,6 +240,22 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
     },
     { prefix: router.prefix },
   )
+}
+
+/**
+ * Refuses anything but a plugin function, which is all Fastify can register.
+ *
+ * What reaches here from a controller's `@Use(...)` was never checked against the application's adapter, since a
+ * decorator never meets the application's type.
+ */
+export function assertFastifyPlugin(value: unknown): asserts value is AnyFastifyPlugin {
+  if (typeof value !== 'function') {
+    throw new ErrCaffeineWebApplication(
+      `Cannot register an HTTP extension: expected a Fastify plugin, got ${typeof value}` +
+        solutions('Return the plugin function from the factory, not the object it configures'),
+      'ERR_HTTP_INVALID_PLUGIN',
+    )
+  }
 }
 
 /**

@@ -1,17 +1,18 @@
-import type { HTTPPluginFactory } from '../plugin.js'
+import type { AdapterExtensionFactory } from '../adapter_extension.js'
+import type { AnyAdapterExtension } from '../adapter_types.js'
 
-const PluginRegistry = new WeakMap<Function, HTTPPluginFactory[]>()
+const PluginRegistry = new WeakMap<Function, AdapterExtensionFactory<AnyAdapterExtension>[]>()
 
 /**
- * Registers a Fastify plugin inside this controller's own Fastify context.
+ * Installs an adapter extension — under Fastify, a plugin — in front of this controller's routes and nowhere else.
  *
- * The controller counterpart of `router.plugin(...)`: the plugin runs in front of this controller's routes and
- * nowhere else. The factory is resolved once, during start-up, with the resolved configuration and the
- * container — the same arguments the application's `.with(c => …)` gets.
+ * The controller counterpart of `router.plugin(...)`. The factory is resolved once, during start-up, with the same
+ * context the application's `.with(...)` factories get.
  *
  * A controller is declared without knowing which application it will be resolved into, so the configuration
- * here is typed `unknown`. Reach for a container binding when a controller-scoped plugin needs settings of its
- * own.
+ * there is typed `unknown`, and the factory may return what any registered adapter installs. Nothing checks
+ * that against the application's adapter before start-up; the Fastify adapter refuses anything but a plugin
+ * function there. Reach for a container binding when a controller-scoped plugin needs settings of its own.
  *
  * ```ts
  * @Use(() => corsPlugin({ origin: 'https://admin.example' }))
@@ -19,7 +20,9 @@ const PluginRegistry = new WeakMap<Function, HTTPPluginFactory[]>()
  * class AdminController {}
  * ```
  */
-export function Use(factory: HTTPPluginFactory): (target: Function, context: ClassDecoratorContext) => void {
+export function Use(
+  factory: AdapterExtensionFactory<AnyAdapterExtension>,
+): (target: Function, context: ClassDecoratorContext) => void {
   return function (target: Function): void {
     let plugins = PluginRegistry.get(target)
     if (plugins === undefined) {
@@ -34,6 +37,6 @@ export function Use(factory: HTTPPluginFactory): (target: Function, context: Cla
 }
 
 /** What `@Use` recorded on `target`, in the order the decorators were written. */
-export function controllerPlugins(target: Function): readonly HTTPPluginFactory[] {
+export function controllerPlugins(target: Function): readonly AdapterExtensionFactory<AnyAdapterExtension>[] {
   return PluginRegistry.get(target) ?? []
 }

@@ -204,7 +204,9 @@ describe('HTML', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigProvider({ html: { autoDoctype: false } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(c => html(c.html))
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(({ config }) =>
+      html(config.html),
+    )
 
     await app.ready()
 

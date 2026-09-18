@@ -1,7 +1,7 @@
 import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { FastifyContext } from '../context.js'
+import type { FastifyContext } from '../fastify_context.js'
 import { Responder } from '../response.js'
 import { kErrorUnhandled, type RouteGroup } from '../route.js'
 import { ErrCaffeineWebApplication } from './common.js'
@@ -146,7 +146,7 @@ export function installRouteGroupErrorHandler(
 }
 
 function respond(ctx: FastifyContext, result: unknown): unknown {
-  const reply = ctx.fst.reply
+  const reply = ctx.platform.reply
 
   if (reply.sent) {
     return

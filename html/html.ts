@@ -1,4 +1,4 @@
-import { FastifyContext, Responder, type ActionResult, type Context } from '@caffeinejs/http'
+import { Responder, type ActionResult, type Context } from '@caffeinejs/http'
 
 import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
 
@@ -33,8 +33,8 @@ const DOCTYPE = '<!doctype html>'
  * carry one — a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call, both
  * survive undisturbed. There is no way to set Content-Type through this function; use `@Produces` or
  * `ctx.header(...)` instead. The `<!doctype html>` prefix comes from the application's
- * `.with(c => HTMLPlugin(c.app.html))` setting, or the framework default when the application never installed the
- * feature; `options.doctype` overrides it for this response.
+ * `.with(({ config }) => HTMLPlugin(config.app.html))` setting, or the framework default when the application
+ * never installed the feature; `options.doctype` overrides it for this response.
  *
  * `@kitajs/html` escapes nothing on its own: interpolated values need the `safe` attribute, and the
  * `@kitajs/ts-html-plugin` language-service plugin is what reports the ones that do not have it.
@@ -69,11 +69,14 @@ function applyDoctype(markup: string, autoDoctype: boolean): string {
  * to that group's responses and no others.
  */
 function defaultsOf(ctx: Context): HTMLDefaults {
-  const server = (ctx as FastifyContext).fst?.request?.server as unknown as
-    | Record<symbol, HTMLDefaults | undefined>
-    | undefined
+  // The plugin decorates a Fastify instance, so a request another adapter serves renders on the defaults.
+  if (ctx.platform.name !== 'fastify') {
+    return HTML_DEFAULTS
+  }
 
-  return server?.[kHTMLOptions] ?? HTML_DEFAULTS
+  const server = ctx.platform.request.server as unknown as Record<symbol, HTMLDefaults | undefined>
+
+  return server[kHTMLOptions] ?? HTML_DEFAULTS
 }
 
 /**

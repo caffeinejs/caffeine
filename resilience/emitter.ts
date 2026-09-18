@@ -24,11 +24,6 @@ export class Emitter<Events extends object> {
   #listeners: { [K in keyof Events]?: readonly Listener<Events[K]>[] } = {}
   #size = 0
 
-  /** Listeners of every type; lets a call site with nothing listening skip the per-type lookup. */
-  get size(): number {
-    return this.#size
-  }
-
   on<K extends keyof Events>(type: K, listener: Listener<Events[K]>): () => void {
     this.#listeners[type] = [...(this.#listeners[type] ?? []), listener]
     this.#size++
@@ -58,8 +53,7 @@ export class Emitter<Events extends object> {
       return false
     }
 
-    const listeners = this.#listeners[type]
-    return listeners !== undefined && listeners.length > 0
+    return this.#listeners[type] !== undefined
   }
 
   emit<K extends keyof Events>(type: K, event: Events[K]): void {

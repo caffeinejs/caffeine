@@ -61,4 +61,14 @@ describe('TimeWindow', () => {
 
     expect(counters(window)).toEqual([1, 0, 0, 0])
   })
+
+  // A reader must see the window as it is now, even when nothing has been recorded since.
+  it('drops outcomes that left the window when it is advanced without a record', () => {
+    const window = new TimeWindow(2)
+    window.record(true, false, 0)
+
+    window.advance(5_000)
+
+    expect(counters(window)).toEqual([0, 0, 0, 0])
+  })
 })

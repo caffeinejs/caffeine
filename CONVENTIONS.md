@@ -167,7 +167,7 @@ Where a value goes depends on who reads it, not on what is convenient:
 | a setting code outside the feature must read          | a container binding, in `configure`    | `container.getOptional(key)`            |
 | something user code injects                           | a container binding, in `configure`    | `container.get` / constructor injection |
 | one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
-| start-up wiring the platform runs                     | `registerPlugin(kit, plugin)`          | the platform registers it               |
+| start-up wiring the server runs                       | the feature's `server` hook            | the adapter, in the feature's slot      |
 | a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
 
 Those are the only answers, and there is no eighth. A value the application needs once everything is up is
@@ -202,19 +202,23 @@ lazily — `configure` reads its inputs, folds in whatever the builder itself ho
 default), and binds the result. A refresh afterward does not reach an already-bound value.
 
 Do not route a plugin's own configuration through a container key it reads back at server setup: the builder
-is holding the value when it builds the plugin, so the plugin closes over it. `registerPlugin(kit, thingPlugin(options))`
-is the whole act — there is no token to bind and no registry entry to look up.
+is holding the value when it builds the plugin, so the plugin closes over it.
+`instance.register(thingPlugin(options))` in the `server` hook is the whole act — there is no token to bind and
+no registry entry to look up.
 
-An HTTP feature's start-up wiring **is** a Fastify plugin (`HTTPPlugin` in `@caffeinejs/http`), and nothing
-wraps it. Wrap it in `fastify-plugin` and its hooks and decorations apply to the context it was registered
-in; leave it unwrapped and they stay inside the plugin. The plugin does not choose that context: the
-application registers it on the root server, a `router.plugin(...)` or a `@Use(...)` registers it inside that
-route group — so one wrapped plugin covers every route or one group's routes, according to who asked for it.
+An HTTP feature's start-up wiring is its `server` hook, handed the server the application's adapter drives.
+Under the Fastify adapter the hook body **is** a plugin body: the adapter registers it as one
+`fastify-plugin`-wrapped plugin, so `instance` is the root server. Wrap a plugin the hook registers in
+`fastify-plugin` and its hooks and decorations apply to the context it was registered in; leave it unwrapped and
+they stay inside the plugin. The plugin does not choose that context: a feature or an application factory
+registers it on the root server, a `router.plugin(...)` or a `@Use(...)` registers it inside that route group —
+so one wrapped plugin covers every route or one group's routes, according to who asked for it.
 
 Plugins register in the order they were written, which is the order of the application's `.with(...)` calls.
 There are no stages and nothing is sorted by what a plugin is: a feature that must precede another is installed
-first. The install position is a property of the registry, not of when a `bootstrap` hook reached the call, so
-a feature that awaits before registering does not move.
+first. The adapter installs one slot at a time, and a slot is finished — whatever its hook awaited, and whatever
+it registered without awaiting — before the next one starts, so a feature that awaits before registering does
+not move.
 
 One framework slot leads that list, in `WebApplication.configurers()` and nowhere else: error handling, so
 every route and hook the rest register is already covered by it. Everything else, this package's own features
@@ -230,23 +234,28 @@ A feature is one interface with three members, all symbol-keyed so none of it sh
 export interface Feature<C = unknown> {
   get [kFeatureName](): string
   [kFeatureConfigure](kit: FeatureConfigureKit<C>): void | Promise<void>
-  [kFeatureBootstrap](kit: BootstrapKit<C>): void | Promise<void>
+  [kFeatureBootstrap]?(kit: BootstrapKit<C>): void | Promise<void>
 }
 ```
 
 `[kFeatureName]` is the identity `.extend` deduplicates on, so a feature accepting an instance name folds it
 in (`kafka` vs `kafka:orders`) and one image cannot install the same instance twice. `[kFeatureConfigure]`
 runs after configuration has resolved and before the container initializes, so the kit's `config` is readable
-and binding is still open. `[kFeatureBootstrap]` runs after `container.init()`; look up bindings and register
-extensions there.
+and binding is still open. `[kFeatureBootstrap]` is optional and runs after `container.init()`; look up bindings
+there. Its kit carries the logger the application configured.
+
+An HTTP feature that wires the server implements `HTTPFeature` from `@caffeinejs/http`, which adds a fourth
+member: `[kFeatureServer]`, handed the server at the feature's install position, after the container has
+initialized. It is a property rather than a method, so a feature written for one server does not compile on an
+application running another.
 
 Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which adds exactly one thing: it runs the
 application's configure callbacks against the builder, with the resolved configuration, immediately before
-`configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, binds in
-`configure`, and registers plugins in `bootstrap`:
+`configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in
+`configure`. An HTTP feature extends `HTTPFeatureBuilder<C>` instead, and wires the server in `server`:
 
 ```ts
-export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
+export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   readonly [kFeatureName] = 'thing'
 
   #config: Partial<ThingConfig> | undefined
@@ -266,17 +275,18 @@ export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
     kit.container.bind(kThingOptions, t => t.toValue(this.#size ?? this.#config?.size ?? DEFAULT_SIZE).internal())
   }
 
-  protected bootstrap(kit: BootstrapKit<C>): void {
-    registerPlugin(kit, thingPlugin(this.#size ?? this.#config?.size ?? DEFAULT_SIZE))
+  protected async server(instance: FastifyInstance): Promise<void> {
+    await instance.register(thingPlugin(this.#size ?? this.#config?.size ?? DEFAULT_SIZE))
   }
 }
 ```
 
 The package exports a **factory function**, generic over the application configuration type so the callback's
-second argument is typed against the schema the application declared:
+second argument is typed against the schema the application declared. An HTTP feature's factory returns
+`HTTPFeature<C>`, not `Feature<C>`, or the server it is written against goes unchecked:
 
 ```ts
-export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C> {
+export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C> {
   return new ThingBuilder<C>(configure as never)
 }
 ```
@@ -284,8 +294,8 @@ export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>
 A feature taking an instance name overloads on it, and folds it into `[kFeatureName]`:
 
 ```ts
-export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
-export function thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
+export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C>
+export function thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C>
 ```
 
 The framework's own pre-registered builders — the server, the probes, the shutdown policy — are constructed

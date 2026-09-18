@@ -1,6 +1,6 @@
 import { type Container } from '@caffeinejs/di'
 
-import { type FastifyContext } from './context.js'
+import { type FastifyContext } from './fastify_context.js'
 import { type CatchByMap, type Route, type RouteGroup } from './route.js'
 import { type RouteGroupBuilder } from './routing/builder.js'
 import { type AuthzRouteService } from './security/authz/route_service.js'

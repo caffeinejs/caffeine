@@ -157,7 +157,9 @@ How it moves:
 - **open**: calls are refused with `ErrCallNotPermitted` until the wait elapses; then the next call finds it
   half open.
 - **half_open**: `permittedNumberOfCallsInHalfOpenState` trial calls run, the rest are refused. Their outcome
-  closes the breaker or opens it again, for a wait computed from how many times in a row it opened.
+  closes the breaker or opens it again, for a wait computed from how many times in a row it opened. With
+  `maxWaitDurationInHalfOpenStateMs`, once every trial slot has been held that long, the next call re-opens the
+  breaker. Time with a free slot does not count.
 - **forced_open**, **disabled**, **metrics_only**: manual states entered with `forceOpen()`, `disable()` and
   `metricsOnly()`, left with `reset()`. Disabled lets everything through and records nothing; metrics-only
   records and reports but never opens.
@@ -193,8 +195,11 @@ const retries = retry({
 | `retryOnResult`        | none                                     | Whether a returned value is worth another attempt                                     |
 | `failAfterMaxAttempts` | `false`                                  | Reject with `ErrMaxRetriesExceeded` instead of returning the last retryable value     |
 
-Once every attempt is used, the caller gets the last error unchanged. Delays are clamped to what timers can hold
-(about 24.8 days); a delay that is not a finite number rejects the call with `ErrInvalidOption`.
+Once every attempt is used, the caller gets the last error unchanged. A call that used every attempt on a
+retryable result counts as failed and emits `failure`, whether or not `failAfterMaxAttempts` is set. A `retryOn`,
+`retryOnResult` or `backoff` that throws rejects the call with what it threw, and the call counts as failed. Delays
+are clamped to what timers can hold (about 24.8 days); a delay that is not a finite number rejects the call with
+`ErrInvalidOption`.
 
 `retries.metrics()` counts each call once: `successfulCallsWithoutRetry`, `successfulCallsWithRetry`,
 `failedCallsWithoutRetry`, `failedCallsWithRetry`.
@@ -202,9 +207,10 @@ Once every attempt is used, the caller gets the last error unchanged. Delays are
 ## Backoff
 
 `exponential({ initialDelayMs = 500, multiplier = 2, maxDelayMs = 30_000, jitter = 0 })` returns
-`attempt => delay`: `initialDelayMs · multiplier^(attempt−1)`, randomized to within `±jitter` of itself for
-`jitter` in `[0, 1)`, then capped at `maxDelayMs`. It fits both `retry({ backoff })` and
-`circuitBreaker({ waitDurationInOpenStateMs })`.
+`attempt => delay`: `initialDelayMs · multiplier^(attempt−1)`, capped at `maxDelayMs`, then randomized to within
+`±jitter` of itself for `jitter` in `[0, 1)` without passing the cap. A delay that reached the cap is spread over
+`[maxDelayMs·(1−jitter), maxDelayMs]`, so clients that back off for long still wait different times. It fits both
+`retry({ backoff })` and `circuitBreaker({ waitDurationInOpenStateMs })`.
 
 ## Errors
 
@@ -228,10 +234,10 @@ retries.on('retry', e => log.info({ retry: e.name, attempt: e.attempt, delayMs: 
 off()
 ```
 
-| Strategy        | Events                                                                                                                 |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| circuit breaker | `success`, `failure`, `ignored`, `notPermitted`, `stateChange`, `reset`, `failureRateExceeded`, `slowCallRateExceeded` |
-| retry           | `retry` (before each wait), `success`, `failure` (every attempt used), `ignored` (not retryable, or aborted)           |
+| Strategy        | Events                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| circuit breaker | `success`, `failure`, `ignored`, `notPermitted`, `stateChange`, `reset`, `failureRateExceeded`, `slowCallRateExceeded`                     |
+| retry           | `retry` (before each wait), `success`, `failure` (every attempt used), `ignored` (not retryable, aborted, or a predicate or backoff threw) |
 
 Every payload carries the strategy's `name`. Listeners run synchronously. A listener that throws, or returns a
 promise that rejects, never changes the outcome of the call; its error is rethrown on the next microtask, where
@@ -253,7 +259,9 @@ stopBreaker()
 stopRetry()
 ```
 
-Instruments are created under the scope `@caffeinejs/resilience`. Strategies sharing a `name` share series.
+Instruments are created under the scope `@caffeinejs/resilience`. Give every instrumented strategy its own `name`.
+Two that share one write to the same series: the duration histogram adds them up, and for every observable
+instrument the strategy instrumented last replaces the other.
 
 | Metric                                           | Instrument                 | Unit     | Attributes                                                                                                                                          |
 | ------------------------------------------------ | -------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |

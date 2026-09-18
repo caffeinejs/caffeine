@@ -1,18 +1,17 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { Application } from './application.js'
 import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
 import {
   kFeatureBootstrap,
   kFeatureConfigure,
   kFeatureName,
   type BootstrapKit,
-  type ExtensionRegistrar,
   type Feature,
   type FeatureConfigureKit,
 } from './feature.js'
 import { createApplication, newConfiguration } from './index.js'
+import { newNoopLogger, type Logger } from './logger/index.js'
 import { $t } from './schema/t.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
@@ -132,52 +131,45 @@ describe('feature lifecycle', () => {
   })
 })
 
-describe('extension registration', () => {
-  // What a platform does with what it is handed is the platform's own test. What `std` owes it is the
-  // install position: every feature is asked for a registrar under its own index, and the index is the
-  // feature's place in the list rather than the order the bootstrap hooks happened to reach the call. That
-  // is the whole ordering model now that there are no stages, so a feature that awaits first must not move.
-  it('asks for a registrar under each feature position, whatever a bootstrap awaits', async () => {
-    const asked: number[] = []
-    const registered: Array<[number, string]> = []
+describe('bootstrap', () => {
+  // Bootstrap is only for looking bindings up after `container.init()`. A feature that has nothing to look up
+  // should not have to say so, which is why the hook is optional.
+  it('readies a feature that declares no bootstrap hook', async () => {
+    let configured = false
 
-    const registering = (name: string, awaits: number): Feature => ({
-      [kFeatureName]: name,
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).addFeature({
+      [kFeatureName]: 'configure-only',
       [kFeatureConfigure](): void {
-        // Nothing to bind.
-      },
-      async [kFeatureBootstrap](kit: BootstrapKit): Promise<void> {
-        for (let i = 0; i < awaits; i++) {
-          await Promise.resolve()
-        }
-        kit.extensions.register(name)
+        configured = true
       },
     })
 
-    class Recording extends Application {
-      protected override extensionRegistrar(order: number): ExtensionRegistrar {
-        asked.push(order)
+    await app.ready()
 
-        return {
-          register: extension => {
-            registered.push([order, extension as string])
-          },
-        }
-      }
-    }
+    expect(configured).toBe(true)
+  })
 
-    // "slow" bootstraps second but awaits longer, so it registers last in wall-clock order.
-    const app = new Recording({ container: new CaffeineIoC({ decorators: false }) })
-      .with(registering('slow', 3))
-      .with(registering('quick', 0))
+  // The logger feature configures in the same phase as every other feature, so a feature cannot read the final
+  // logger while configuring. By bootstrap it is settled, and the kit must carry that one, not the eager default
+  // the application started with: otherwise `.logger(b => b.use(...))` would not reach feature code.
+  it('hands bootstrap the logger the application configured', async () => {
+    const custom: Logger = { ...newNoopLogger() }
+    let seen: Logger | undefined
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .logger(b => b.use(custom))
+      .addFeature({
+        [kFeatureName]: 'reads-logger',
+        [kFeatureConfigure](): void {
+          // Nothing to bind.
+        },
+        [kFeatureBootstrap](kit: BootstrapKit): void {
+          seen = kit.logger
+        },
+      })
 
     await app.ready()
 
-    // Positions 0 and 1 are the built-in shutdown and logger features, neither of which registers anything.
-    expect(asked).toEqual([0, 1, 2, 3])
-    expect(registered).toEqual([
-      [3, 'quick'],
-      [2, 'slow'],
-    ])
+    expect(seen).toBe(custom)
   })
 })

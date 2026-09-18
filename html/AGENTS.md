@@ -46,14 +46,14 @@ until a TypeScript 7.1 API exists that the plugin can use.
 
 `Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLPlugin(defaults)`
 decorates the Fastify instance it registers into under `kHTMLOptions`, and `respond` reads it back off
-`ctx.fst.request.server`. Reading it off the request's own server rather than the root instance is what makes
+`ctx.platform.request.server`. Reading it off the request's own server rather than the root instance is what makes
 a plugin registered inside one route group parameterize that group's responses and no others.
 
 The plugin is optional: with none registered nothing decorated the instance, `HTML_DEFAULTS` applies, and
 `HTML(...)` works with no setup at all.
 
 The settings the plugin is handed are usually a node of the configuration tree —
-`.with(c => HTMLPlugin(c.app.html))` — so the decoration reads through rather than copying, and a refresh
+`.with(({ config }) => HTMLPlugin(config.app.html))` — so the decoration reads through rather than copying, and a refresh
 reaches a response rendered after it. There is no config slice, no feature and no builder: the package
 registers one plugin and nothing else.
 

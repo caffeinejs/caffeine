@@ -37,8 +37,9 @@ export interface CircuitBreakerOptions {
   /** Trial calls let through while half open; their outcome closes or re-opens the breaker. Defaults to 10. */
   permittedNumberOfCallsInHalfOpenState?: number
   /**
-   * Longest time the breaker may stay half open before it re-opens, for trial calls that never settle. `0`, the
-   * default, waits for them forever.
+   * Longest time trial calls may hold every trial slot. Once all slots are taken and the last trial admitted has
+   * run this long, the next call re-opens the breaker. Time spent half open with a free slot does not count. `0`,
+   * the default, waits for the trial calls forever.
    */
   maxWaitDurationInHalfOpenStateMs?: number
   /**
@@ -107,7 +108,8 @@ const FORCED_OPEN = 3
 const DISABLED = 4
 const METRICS_ONLY = 5
 
-const STATES: readonly CircuitBreakerState[] = [
+// Indexed by the numeric states above; the OpenTelemetry binding reports one series per entry.
+export const CIRCUIT_BREAKER_STATES: readonly CircuitBreakerState[] = [
   'closed',
   'open',
   'half_open',
@@ -179,7 +181,7 @@ export class CircuitBreaker implements StrategyObject {
   #openedAt = 0
   #openWaitMs = 0
   #openCount = 0
-  #halfOpenEnteredAt = 0
+  #lastTrialAt = 0
   #permits = 0
   #timer: TimerHandle | undefined
   #notPermittedCalls = 0
@@ -224,6 +226,18 @@ export class CircuitBreaker implements StrategyObject {
       return value
     }
 
+    // A length the runtime cannot allocate is an option out of range, not a crash inside a typed array.
+    const allocate = <W>(key: string, create: () => W): W => {
+      try {
+        return create()
+      } catch (error) {
+        if (error instanceof RangeError) {
+          throw invalid(`${key} is too large to allocate`)
+        }
+        throw error
+      }
+    }
+
     this.#name = name
     this.#failureRateThreshold = percent('failureRateThreshold', options.failureRateThreshold ?? 50)
     this.#slowCallRateThreshold = percent('slowCallRateThreshold', options.slowCallRateThreshold ?? 100)
@@ -237,10 +251,11 @@ export class CircuitBreaker implements StrategyObject {
     let minimum = count('minimumNumberOfCalls', options.minimumNumberOfCalls ?? 100)
     if (window.type === 'count') {
       const size = count('slidingWindow.size', window.size)
-      this.#window = new CountWindow(size)
+      this.#window = allocate('slidingWindow.size', () => new CountWindow(size))
       minimum = Math.min(minimum, size)
     } else if (window.type === 'time') {
-      this.#window = new TimeWindow(count('slidingWindow.seconds', window.seconds))
+      const seconds = count('slidingWindow.seconds', window.seconds)
+      this.#window = allocate('slidingWindow.seconds', () => new TimeWindow(seconds))
     } else {
       throw invalid(`slidingWindow must be { type: 'count', size } or { type: 'time', seconds }`)
     }
@@ -253,7 +268,10 @@ export class CircuitBreaker implements StrategyObject {
       'permittedNumberOfCallsInHalfOpenState',
       options.permittedNumberOfCallsInHalfOpenState ?? 10,
     )
-    this.#halfOpenWindow = new CountWindow(this.#permittedCalls)
+    this.#halfOpenWindow = allocate(
+      'permittedNumberOfCallsInHalfOpenState',
+      () => new CountWindow(this.#permittedCalls),
+    )
     this.#maxWaitInHalfOpenMs = milliseconds(
       'maxWaitDurationInHalfOpenStateMs',
       options.maxWaitDurationInHalfOpenStateMs ?? 0,
@@ -282,7 +300,7 @@ export class CircuitBreaker implements StrategyObject {
   }
 
   get state(): CircuitBreakerState {
-    return STATES[this.#state]
+    return CIRCUIT_BREAKER_STATES[this.#state]
   }
 
   /**
@@ -307,7 +325,13 @@ export class CircuitBreaker implements StrategyObject {
     if (state === CLOSED || state === METRICS_ONLY) {
       generation = this.#generation
     } else {
-      const admitted = this.#admit()
+      let admitted: number | Refusal
+      try {
+        admitted = this.#admit()
+      } catch (error) {
+        // Re-opening asks the wait function for a delay, and that function may throw. It rejects, like a refusal.
+        return Promise.reject(error)
+      }
       if (typeof admitted !== 'number') {
         this.#refused(admitted.state)
         // Built here, in the frame that refuses, so a captured stack starts at `run` and not in a helper. Returned,
@@ -369,9 +393,6 @@ export class CircuitBreaker implements StrategyObject {
    * settle.
    */
   reset(): void {
-    this.#window.reset()
-    this.#halfOpenWindow.reset()
-    this.#openCount = 0
     this.#transitionTo(CLOSED)
 
     if (this.#emitter.has('reset')) {
@@ -380,7 +401,13 @@ export class CircuitBreaker implements StrategyObject {
   }
 
   metrics(): CircuitBreakerMetrics {
-    const halfOpen = this.#state === HALF_OPEN
+    const state = this.#state
+    // Only a window that still records ages; an open breaker keeps showing the window that opened it.
+    if ((state === CLOSED || state === METRICS_ONLY) && this.#window instanceof TimeWindow) {
+      this.#window.advance(clock.now())
+    }
+
+    const halfOpen = state === HALF_OPEN
     const window = halfOpen ? this.#halfOpenWindow : this.#window
     const minimum = halfOpen ? this.#permittedCalls : this.#minimumNumberOfCalls
     const { total, failed, slow, slowFailed } = window
@@ -425,15 +452,21 @@ export class CircuitBreaker implements StrategyObject {
   }
 
   #admitTrial(): number | Refusal {
-    // Checked before the permits: when hung trial calls hold every permit, this is the only way out.
-    if (this.#maxWaitInHalfOpenMs > 0 && clock.now() - this.#halfOpenEnteredAt >= this.#maxWaitInHalfOpenMs) {
-      this.#transitionTo(OPEN)
-      return { state: 'open', retryAfterMs: this.#openWaitMs }
-    }
-
     if (this.#permits > 0) {
       this.#permits--
+      if (this.#maxWaitInHalfOpenMs > 0) {
+        this.#lastTrialAt = clock.now()
+      }
       return this.#generation
+    }
+
+    // Every trial slot is taken, and each unsettled trial was admitted at or before the last one. Once the last has
+    // run for the maximum wait, all of them have: they hung, and this is the only way out. Time spent half open with
+    // a free slot says nothing about the dependency and is not counted.
+    if (this.#maxWaitInHalfOpenMs > 0 && clock.now() - this.#lastTrialAt >= this.#maxWaitInHalfOpenMs) {
+      this.#transitionTo(OPEN)
+      // A stateChange listener may have moved the breaker again; decide from where it is now.
+      return this.#admit()
     }
 
     return HALF_OPEN_REFUSAL
@@ -531,9 +564,7 @@ export class CircuitBreaker implements StrategyObject {
       }
       case METRICS_ONLY:
         this.#window.record(failed, slow, now)
-        if (this.#window.total >= this.#minimumNumberOfCalls) {
-          this.#publishCrossings()
-        }
+        this.#publishCrossings()
         return
       case HALF_OPEN:
         this.#halfOpenWindow.record(failed, slow)
@@ -561,17 +592,22 @@ export class CircuitBreaker implements StrategyObject {
   }
 
   #publishCrossings(): void {
-    const tripped = this.#tripped(this.#window)
-    const failureAbove = tripped.failureRate !== undefined
-    const slowAbove = tripped.slowCallRate !== undefined
-    const crossed: Tripped = {
-      failureRate: failureAbove && !this.#failureRateAbove ? tripped.failureRate : undefined,
-      slowCallRate: slowAbove && !this.#slowCallRateAbove ? tripped.slowCallRate : undefined,
-    }
+    const { total, failed, slow } = this.#window
+    // Under the minimum there is no rate, so a rate that was above is no longer: its next crossing is a new one.
+    const measured = total >= this.#minimumNumberOfCalls
+    const failureAbove = measured && failed * 100 >= this.#failureRateThreshold * total
+    const slowAbove = measured && slow * 100 >= this.#slowCallRateThreshold * total
+    const failureCrossed = failureAbove && !this.#failureRateAbove
+    const slowCrossed = slowAbove && !this.#slowCallRateAbove
     this.#failureRateAbove = failureAbove
     this.#slowCallRateAbove = slowAbove
 
-    this.#emitRates(crossed)
+    if (failureCrossed && this.#emitter.has('failureRateExceeded')) {
+      this.#emitter.emit('failureRateExceeded', { name: this.#name, failureRate: (failed / total) * 100 })
+    }
+    if (slowCrossed && this.#emitter.has('slowCallRateExceeded')) {
+      this.#emitter.emit('slowCallRateExceeded', { name: this.#name, slowCallRate: (slow / total) * 100 })
+    }
   }
 
   #emitRates(rates: Tripped): void {
@@ -609,7 +645,6 @@ export class CircuitBreaker implements StrategyObject {
         }
         break
       case HALF_OPEN:
-        this.#halfOpenEnteredAt = now
         this.#permits = this.#permittedCalls
         this.#halfOpenWindow.reset()
         break
@@ -626,7 +661,11 @@ export class CircuitBreaker implements StrategyObject {
     }
 
     if (from !== target && this.#emitter.has('stateChange')) {
-      this.#emitter.emit('stateChange', { name: this.#name, from: STATES[from], to: STATES[target] })
+      this.#emitter.emit('stateChange', {
+        name: this.#name,
+        from: CIRCUIT_BREAKER_STATES[from],
+        to: CIRCUIT_BREAKER_STATES[target],
+      })
     }
   }
 

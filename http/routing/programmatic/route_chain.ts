@@ -6,6 +6,7 @@ import {
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
 
+import type { AdapterTypes } from '../../adapter_types.js'
 import type { ErrorHandlerRef } from '../../error/error.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RouteValidationSchema } from '../../route.js'
@@ -33,11 +34,12 @@ export class RouteChain<
   GP extends string,
   M extends string,
   R,
+  T extends AdapterTypes = never,
 > {
-  readonly #owner: Router<V, C, GD, GP, R>
+  readonly #owner: Router<V, C, GD, GP, R, T>
   readonly #state: RouteState
 
-  constructor(owner: Router<V, C, GD, GP, R>, state: RouteState) {
+  constructor(owner: Router<V, C, GD, GP, R, T>, state: RouteState) {
     this.#owner = owner
     this.#state = state
   }
@@ -48,9 +50,9 @@ export class RouteChain<
    * Same contract as `@Schema`: each slot is compiled to JSON Schema once, at registration, and the adapter's
    * validator does the request-time work.
    */
-  schema<S2 extends RouteValidationSchema>(schema: S2): RouteChain<S2, P, D, V, C, GD, GP, M, R> {
+  schema<S2 extends RouteValidationSchema>(schema: S2): RouteChain<S2, P, D, V, C, GD, GP, M, R, T> {
     this.#state.builder.schema(schema)
-    return this as unknown as RouteChain<S2, P, D, V, C, GD, GP, M, R>
+    return this as unknown as RouteChain<S2, P, D, V, C, GD, GP, M, R, T>
   }
 
   /**
@@ -71,10 +73,10 @@ export class RouteChain<
    */
   inject<const SPEC extends ObjectInjectionSpec>(
     spec: SPEC,
-  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R>
+  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R, T>
   inject<const SPEC extends ObjectInjectionSpec>(
     build: (i: InjectionHelpers<C>) => SPEC,
-  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R>
+  ): RouteChain<S, P, MergeDeps<D, InjectedOf<SPEC>>, V, C, GD, GP, M, R, T>
   inject(specOrBuild: ObjectInjectionSpec | ((i: InjectionHelpers) => ObjectInjectionSpec)): any {
     const spec = typeof specOrBuild === 'function' ? specOrBuild($i) : specOrBuild
 
@@ -181,9 +183,9 @@ export class RouteChain<
    * combining them with `blend` arrives at the same type.
    */
   handler<O>(
-    fn: RouteHandler<S, JoinPath<GP, P>, V, C, D, O>,
-  ): Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>> {
+    fn: RouteHandler<S, JoinPath<GP, P>, V, C, D, O, T>,
+  ): Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>, T> {
     this.#state.handle = fn as (...args: unknown[]) => unknown
-    return this.#owner as Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>>
+    return this.#owner as Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>, T>
   }
 }

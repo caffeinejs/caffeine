@@ -4,19 +4,22 @@ Adapter is Fastify. Controllers are `@Controller` + `@Get` / `@Post` / … + `@A
 
 ## The built-ins are plugins
 
-There is no `Services` record, no `Contributions`, and no `ServerExtension`. Everything this package wires at
-start-up — the error handler, the form body parser, the health probes, the OIDC callback routes, the
-authentication gate, the not-found handler — is an ordinary Fastify plugin its own feature hands over with
-`registerPlugin(kit, plugin)`, and `adapter.setup()` has one registration loop.
+There is no `Services` record, no `Contributions`, no `ServerExtension`, no `registerPlugin` and no
+`kit.extensions`. Everything this package wires at start-up — the error handler, the form body parser, the health
+probes, the OIDC callback routes, the authentication gate, the not-found handler — is an ordinary Fastify plugin.
+A feature registers its own from its server hook (`HTTPFeature`, `[kFeatureServer]`; `HTTPFeatureBuilder.server`),
+which the adapter runs as one `fastify-plugin`-wrapped plugin in the feature's slot, so `instance` is the root
+server. `adapter.setup()` has one registration loop over factories' plugins and features' hooks alike.
 
 Wrap a plugin in `fastify-plugin` and its hooks and decorations apply to the context it was registered in;
 leave it unwrapped and they stay inside the plugin, covering only what the plugin itself registered. The
 plugin does not pick that context — the application registers it on the root server, and `router.plugin(...)`
 / `@Use(...)` register it inside one route group's context. Every first-party plugin here is wrapped.
 
-`.with(...)` takes either a feature or a plugin factory `(config, container) => <plugin>` — never a bare
-plugin, so `.with(() => myPlugin)` is how a plugin needing no configuration is written. Both shapes land in the
-same list, so they register in the order the calls were written. A feature is installed once per name. A
+`.with(...)` takes either a feature or a plugin factory `({ config, container, logger }) => <plugin>` — never a
+bare plugin, so `.with(() => myPlugin)` is how a plugin needing no configuration is written. The factory's one
+argument is `HTTPSetupContext`, the same object a feature's server hook and a middleware factory get. Both shapes
+land in the same list, so they register in the order the calls were written. A feature is installed once per name. A
 plugin factory is never deduplicated, so two calls register two plugins; a `fastify-plugin` name already
 registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than hanging inside a
 re-declared decorator.
@@ -26,7 +29,8 @@ holds the only framework slot — `ErrorHandlingServiceConfigurer` leads — and
 features and the user's alike, runs in `.with(...)` call order. The adapter installs two things around that
 loop: the form body parser before it, and the default not-found handler after it. Do not
 reintroduce a stage, and do not add another direct `install*()` call in the adapter: write the plugin and put its
-feature in the right place.
+feature in the right place. Do not move server wiring back into `bootstrap`: bootstrap hooks run concurrently,
+before the adapter has decorated the server.
 
 The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
 `.authentication(...)` was written: a CORS plugin registered before it still stamps its headers on a 401, and a hook
@@ -65,6 +69,29 @@ The resolved options of the built-ins that remain container bindings — `kServe
 container bindings, not configuration keys (health no longer has one). There is no `featureConfigKey` and
 `ctx.config` is not callable — a package that needs its settings on a request either binds them and resolves
 them, or decorates the Fastify instance as `@caffeinejs/html` does.
+
+## The adapter owns its types
+
+Everything that belongs to the server library behind an adapter is named once, in an `AdapterTypes` descriptor
+(`adapter_types.ts`): the instance, the request, the extension unit `.with(factory)` installs, the hook names
+`app.use(..., { hook })` accepts, the raw request, cookie options and `ctx.platform`. `FastifyTypes`
+(`fastify_types.ts`) is Fastify's. `Adapter<T>`, `WebApplication<T>`, `Router<…, T>` and `Context<V, C, T>` read
+their server-specific types off it. A newly found one becomes a member there, never another type parameter.
+
+`adapter_types.ts`, `adapter_extension.ts`, `setup_context.ts`, `context.ts`, `middleware/pipeline.ts` and
+`middleware/middleware.ts` import nothing from `fastify`. Fastify's side lives in `fastify_*.ts`,
+`middleware/fastify.ts` and the adapter.
+
+`AdapterRegistry` is augmentable and holds every adapter in the compilation; the Fastify entry is declared in
+`fastify_types.ts`. What is written without knowing its adapter is typed against all of them: `@Use(...)` takes
+any registered extension, and `ctx.platform` on a plain `Context` is any registered platform. With a second
+entry, every un-narrowed `ctx.platform` read stops compiling until it checks `ctx.platform.name`. That is
+intended.
+
+A router is bound to an adapter only through its last type parameter, which defaults to `never`: bound to none,
+it mounts anywhere and its `.plugin(...)` takes nothing. `newRouter()` returns one bound to `FastifyRouterTypes`,
+which leaves the instance and request types open so it mounts on an application built around its own Fastify
+instance.
 
 ## Reading the routes from a plugin
 
@@ -136,7 +163,7 @@ dependency on `@fastify/cors` or `@fastify/compress`, and http does not ship a p
 register the third-party plugin yourself, exactly like any other Fastify plugin —
 
 ```ts
-.with(c => fp(async instance => instance.register(fastifyCors, c.app.cors.options), { name: 'cors' }))
+.with(({ config }) => fp(async instance => instance.register(fastifyCors, config.app.cors.options), { name: 'cors' }))
 ```
 
 `CorsOptions` and `CompressOptions` are deliberately empty interfaces: this package has no dependency on
@@ -151,11 +178,11 @@ A feature that must attach a real Fastify hook to the routes it applies to — r
 
 ## Installing a plugin on one group
 
-`router.plugin(factory)` and `@Use(factory)` register a Fastify plugin inside that route group's context instead of on the root server. A router takes **only** plugins: scoping was always about where the plugin registers, and a router installs no feature, declares no configuration and is never deduplicated — two routers wanting different settings pass two factories.
+`router.plugin(factory)` and `@Use(factory)` register a Fastify plugin inside that route group's context instead of on the root server. Only a router bound to an adapter has `.plugin(...)` to call with a plugin: `newRouter()` rather than `new Router()`. A router takes **only** plugins: scoping was always about where the plugin registers, and a router installs no feature, declares no configuration and is never deduplicated — two routers wanting different settings pass two factories.
 
 The factories are resolved in `WebApplication.setup()`, where configuration has resolved and the container has initialized, so one sees exactly what a factory passed to the application's `.with(...)` sees. `RouteGroup.scopes` carries what registered the plugins for a group — a programmatic group lists its own router and every router it is nested under, so `router.plugin(...)` inherits downward the way `.with(ext, ...)` does; a controller group lists the class.
 
-The factory's configuration argument is **not** re-typed against the application's the way `builder.with` is: a router or a controller is written without knowing which application it will end up in, so it sees `ConfigHandle<unknown>`.
+The factory's context is **not** re-typed against the application's configuration the way `builder.with` is: a router or a controller is written without knowing which application it will end up in, so its `config` is `ConfigHandle<unknown>`. A router's binding is checked when it is mounted. A controller's `@Use(...)` never meets the application's type, so the adapter checks what it returned at start-up (`ERR_HTTP_INVALID_PLUGIN`).
 
 `fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.$caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 
@@ -219,8 +246,12 @@ the application's configuration whether or not a router declared the type.
 `ctx.config` is **not** callable. A package that needs its own settings on a request cannot read them off the
 context — it knows neither `C` nor where the application put the block. It either binds them in `configure`
 and resolves them from the container, or decorates the Fastify instance and reads the decoration back off
-`ctx.fst.request.server`, which is what `@caffeinejs/html` does and what keeps a plugin registered on one
+`ctx.platform.request.server`, which is what `@caffeinejs/html` does and what keeps a plugin registered on one
 route group from parameterizing the rest.
+
+`ctx.platform` is the context's one escape hatch to the server library, as `fst({ … })` is a route's, and every
+adapter implements it: under Fastify, `{ name: 'fastify', request, reply }`. Code holding a plain `Context` reads it with no cast. Do not add a
+Fastify-named member to `Context`, and do not cast a `Context` to `FastifyContext` to reach Fastify.
 
 `ctx.state` is application space. A first-party package does not write to it: a framework value gets a dedicated
 member, as authentication does with `ctx.user`, or goes on the route config. One flat key namespace shared by an
@@ -238,8 +269,10 @@ anything a later phase needs — the reason a token was rejected, so `challenge(
 result and is handed back as the third argument to `challenge`. A handler that writes to `ctx.auth`, or keeps its
 own per-request state, is doing the coordinator's job.
 
-`app.use()` registers middleware on Fastify lifecycle hooks (default `onRequest`); it does not wrap the route
-handler. It infers the variables a middleware declares but does not check them against the routers it ends up in
+`app.use()` registers middleware on the adapter's lifecycle hooks — Fastify's, a `FastifyMiddlewareHook`, default
+`onRequest`; it does not wrap the route handler. `MiddlewarePipeline` only resolves what was registered;
+`installFastifyMiddlewares` attaches it, validates the hook names, and normalizes paths the way Fastify's router
+does. It infers the variables a middleware declares but does not check them against the routers it ends up in
 front of — the routers are declared elsewhere. A middleware naming variables no router declares is not an error.
 
 ## Request scope

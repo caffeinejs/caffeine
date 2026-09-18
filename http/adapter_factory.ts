@@ -2,16 +2,15 @@ import Fastify, { FastifyInstance, FastifyRequest, FastifyReply, LogController }
 
 import { FastifyAdapter } from './adapter.js'
 import { type AdapterFactory } from './application.js'
+import type { FastifyTypes } from './fastify_types.js'
 
-export function fastifyAdapterFactory(): AdapterFactory<FastifyInstance, FastifyRequest, FastifyAdapter>
+export function fastifyAdapterFactory(): AdapterFactory<FastifyTypes>
 export function fastifyAdapterFactory<
   SERVER extends FastifyInstance = FastifyInstance,
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
->(fastify: SERVER): AdapterFactory<SERVER, REQ, FastifyAdapter<SERVER, REQ, RES>>
-export function fastifyAdapterFactory(
-  instance?: FastifyInstance,
-): AdapterFactory<FastifyInstance, FastifyRequest, FastifyAdapter> {
+>(fastify: SERVER): AdapterFactory<FastifyTypes<SERVER, REQ, RES>>
+export function fastifyAdapterFactory(instance?: FastifyInstance): AdapterFactory<FastifyTypes> {
   return (kit): FastifyAdapter => {
     // Fastify reads `loggerInstance` while it constructs and exposes no setter afterwards, so this is the only
     // point the application's logger can reach it — hence the instance is built here rather than above, where

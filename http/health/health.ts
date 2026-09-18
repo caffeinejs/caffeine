@@ -1,4 +1,3 @@
-import type { Container } from '@caffeinejs/di'
 import { ApplicationAvailability } from '@caffeinejs/std'
 import type { ConfigHandle } from '@caffeinejs/std/config'
 import type { FastifyPluginAsync } from 'fastify'
@@ -27,7 +26,7 @@ export type HealthConfigurer<C = unknown> = (builder: HealthBuilder, config: Con
  * `app.shutdown(...)`.
  */
 export function health<C = unknown>(configure?: HealthConfigurer<C>): HTTPPluginFactory<C> {
-  return (config: ConfigHandle<C>, container: Container) => {
+  return ({ config, container }) => {
     const builder = new HealthBuilder()
     configure?.(builder, config)
     const options = builder.resolve()

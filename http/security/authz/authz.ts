@@ -1,12 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { Scopes } from '@caffeinejs/di'
-import {
-  kFeatureBootstrap,
-  kFeatureConfigure,
-  kFeatureName,
-  type Feature,
-  type FeatureConfigureKit,
-} from '@caffeinejs/std'
+import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import type { RouteGroup } from '../../route.js'
 import { ErrAuthorizationRequired } from './errors.js'
@@ -154,10 +148,6 @@ export class AuthorizationBuilder implements Feature {
         .lifetime(Scopes.SINGLETON)
         .internal(),
     )
-  }
-
-  [kFeatureBootstrap](): void {
-    // Nothing to register.
   }
 }
 

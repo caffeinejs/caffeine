@@ -1,17 +1,7 @@
-import { IncomingMessage } from 'http'
-
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
-import type { ConfigHandle, Configuration } from '@caffeinejs/std/config'
-import { CookieSerializeOptions } from '@fastify/cookie'
-import {
-  FastifyRequest,
-  RawServerDefault,
-  RawRequestDefaultExpression,
-  FastifyReply,
-  type FastifyContextConfig,
-} from 'fastify'
+import type { ConfigHandle } from '@caffeinejs/std/config'
 
-import { statusErrorBody } from './error/http.js'
+import type { AdapterTypes, AnyAdapterTypes } from './adapter_types.js'
 import type { RouteValidationSchema } from './route.js'
 import type { AuthenticationState } from './security/auth/authentication_state.js'
 import { type Principal } from './security/index.js'
@@ -87,26 +77,28 @@ export interface Req<
 }
 
 /**
- * The Fastify objects behind a context: the escape hatch for platform-specific consumers, such as view rendering
- * reaching `reply.view` or `@caffeinejs/multipart` reading `request.parts()`.
+ * What a middleware, a guard, an error handler and a route handler see of the request they serve.
+ *
+ * `T` is the serving adapter's {@link AdapterTypes}. Left out, it is any registered adapter's, which is what a
+ * middleware or a `Responder` written without knowing its adapter gets.
  */
-export interface Fst<REPLY extends FastifyReply = FastifyReply> {
-  get request(): FastifyRequest
-  get reply(): REPLY
-}
-
 export interface Context<
   V = Record<never, never>,
   C = Record<never, never>,
-  REQ = unknown,
-  CO = unknown,
-  TAsync extends boolean = false,
+  T extends AdapterTypes = AnyAdapterTypes,
   TParams = Record<string, string>,
   TQuery = Record<string, string>,
   THeaders = Record<string, string>,
   TBody = unknown,
 > {
-  get req(): Req<REQ, TParams, TQuery, THeaders, TAsync, TBody>
+  get req(): Req<T['raw'], TParams, TQuery, THeaders, T['asyncCookies'], TBody>
+
+  /**
+   * The server library's own objects behind this request: the escape hatch for what the context does not
+   * cover. What it holds belongs to the adapter. `name` says which adapter, and is what code written against
+   * one narrows on.
+   */
+  get platform(): T['platform']
 
   /** The values this request carries between the middlewares, guards and handler serving it. */
   get state(): ContextState<V>
@@ -155,9 +147,9 @@ export interface Context<
   headers(headers: Record<string, string>): this
   hasHeader(key: string): boolean
 
-  cookie(name: string, value: string, opts?: CO): this
+  cookie(name: string, value: string, opts?: T['cookieOptions']): this
 
-  deleteCookie(name: string, opts?: CO): this
+  deleteCookie(name: string, opts?: T['cookieOptions']): this
 
   body(body?: unknown): this
 
@@ -193,272 +185,3 @@ export type InferParams<S> = InferSlot<S, 'params', Record<string, string>>
 export type InferQuery<S> = InferSlot<S, 'querystring', Record<string, string>>
 export type InferHeaders<S> = InferSlot<S, 'headers', Record<string, string>>
 export type InferBody<S> = InferSlot<S, 'body', unknown>
-
-export class FastifyContext<
-  V = Record<never, never>,
-  SCHEMA extends RouteValidationSchema = RouteValidationSchema,
-  C = Record<never, never>,
-  REPLY extends FastifyReply = FastifyReply,
-> implements Context<
-  V,
-  C,
-  RawRequestDefaultExpression<RawServerDefault>,
-  CookieSerializeOptions,
-  false,
-  InferParams<SCHEMA>,
-  InferQuery<SCHEMA>,
-  InferHeaders<SCHEMA>,
-  InferBody<SCHEMA>
-> {
-  /** @see {@link Context.auth} */
-  auth?: AuthenticationState
-
-  #req!: FastifyContextRequest<SCHEMA>
-  #fst!: Fst<REPLY>
-  #state!: ContextState<V>
-  #config?: ConfigHandle<C>
-  #fastifyRequest: FastifyRequest
-  #reply: REPLY
-  #configuration: Configuration<unknown>
-
-  constructor(request: FastifyRequest, reply: REPLY, configuration: Configuration<unknown>) {
-    this.#reply = reply
-    this.#fastifyRequest = request
-    this.#configuration = configuration
-  }
-
-  get req(): FastifyContextRequest<SCHEMA> {
-    return (this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest))
-  }
-
-  /** The underlying Fastify request and reply. The escape hatch for platform-specific consumers. */
-  get fst(): Fst<REPLY> {
-    return (this.#fst ??= { request: this.#fastifyRequest, reply: this.#reply })
-  }
-
-  get state(): ContextState<V> {
-    return (this.#state ??= new ContextState<V>())
-  }
-
-  /**
-   * The application configuration, as a snapshot taken the first time this reads.
-   *
-   * The tree is replaced wholesale by a refresh rather than mutated, so the object handed back keeps the values
-   * it had when it was taken — a refresh landing later in the same request is not observed here.
-   */
-  get config(): ConfigHandle<C> {
-    return (this.#config ??= this.#configuration.snapshotHandle as ConfigHandle<C>)
-  }
-
-  get user(): Principal {
-    return this.#fastifyRequest.user
-  }
-
-  set user(user: Principal) {
-    this.#fastifyRequest.user = user
-  }
-
-  get sent(): boolean {
-    return this.#reply.sent
-  }
-
-  /**
-   * The route's Fastify config — where the adapter records what a route declared. The authentication
-   * middleware reads its per-route options from here, which is what keeps it off the raw request.
-   */
-  get routeConfig(): FastifyContextConfig {
-    return this.#fastifyRequest.routeOptions.config as FastifyContextConfig
-  }
-
-  get statusCode(): number {
-    return this.#reply.statusCode
-  }
-
-  get signal(): AbortSignal {
-    return this.#fastifyRequest.signal
-  }
-
-  status(code: number): this {
-    this.#reply.code(code)
-    return this
-  }
-
-  header(key: string, value: string): this {
-    this.#reply.header(key, value)
-    return this
-  }
-
-  headers(headers: Record<string, string>): this {
-    this.#reply.headers(headers)
-    return this
-  }
-
-  hasHeader(key: string): boolean {
-    return this.#reply.hasHeader(key)
-  }
-
-  removeHeader(key: string): this {
-    this.#reply.removeHeader(key)
-    return this
-  }
-
-  body(body?: unknown): this {
-    this.#reply.send(body)
-    return this
-  }
-
-  badRequest(body?: unknown): this {
-    return this.#fail(400, 'ERR_HTTP_BAD_REQUEST', body)
-  }
-
-  notFound(body?: unknown): this {
-    return this.#fail(404, 'ERR_HTTP_NOT_FOUND', body)
-  }
-
-  unprocessableEntity(body?: unknown): this {
-    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_ENTITY', body)
-  }
-
-  internalServerError(body?: unknown): this {
-    return this.#fail(500, 'ERR_HTTP_INTERNAL_SERVER_ERROR', body)
-  }
-
-  redirect(url: string, status?: number): this {
-    this.#reply.redirect(url, status)
-    return this
-  }
-
-  cookie(name: string, value: string, opts?: CookieSerializeOptions): this {
-    this.#reply.setCookie(name, value, opts)
-    return this
-  }
-
-  deleteCookie(name: string, opts?: CookieSerializeOptions): this {
-    this.#reply.clearCookie(name, opts)
-    return this
-  }
-
-  /**
-   * Sends an error status, defaulting the body to the same envelope a thrown `ErrHTTP` renders to.
-   *
-   * Without the default these shorthands answer with an empty body, which leaves an application emitting one
-   * error shape from `@Catch` and a different one from `ctx.notFound()`.
-   */
-  #fail(statusCode: number, code: string, body?: unknown): this {
-    this.#reply.code(statusCode).send(body ?? statusErrorBody(statusCode, code))
-    return this
-  }
-}
-
-export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteValidationSchema> implements Req<
-  RawRequestDefaultExpression<RawServerDefault>,
-  InferParams<SCHEMA>,
-  InferQuery<SCHEMA>,
-  InferHeaders<SCHEMA>,
-  false,
-  InferBody<SCHEMA>
-> {
-  constructor(private readonly request: FastifyRequest) {}
-
-  get raw(): IncomingMessage {
-    return this.request.raw
-  }
-
-  get url(): string {
-    return this.request.url
-  }
-
-  get method(): string {
-    return this.request.method
-  }
-
-  body(): InferBody<SCHEMA> {
-    return this.request.body as InferBody<SCHEMA>
-  }
-
-  header(): InferHeaders<SCHEMA>
-  header(key: string): string | undefined
-  header(key?: string): InferHeaders<SCHEMA> | string | undefined {
-    if (key === undefined) {
-      return this.request.headers as InferHeaders<SCHEMA>
-    }
-    return this.request.headers[key] as string | undefined
-  }
-
-  hasHeader(key: string): boolean {
-    return this.request.headers[key] !== undefined
-  }
-
-  param(): InferParams<SCHEMA>
-  param(key: string): string | undefined
-  param(key?: string): InferParams<SCHEMA> | string | undefined {
-    if (key === undefined) {
-      return this.request.params as InferParams<SCHEMA>
-    }
-    return (this.request.params as Record<string, string>)[key]
-  }
-
-  query(): InferQuery<SCHEMA>
-  query(key: string): string | undefined
-  query(key?: string): InferQuery<SCHEMA> | string | undefined {
-    if (key === undefined) {
-      return this.request.query as InferQuery<SCHEMA>
-    }
-    return (this.request.query as Record<string, string>)[key]
-  }
-
-  queries(key: string): string[] | undefined {
-    const val = (this.request.query as Record<string, string | string[] | undefined>)[key]
-    if (Array.isArray(val)) {
-      return val
-    }
-
-    return val !== undefined ? [val] : undefined
-  }
-
-  cookie(): Record<string, string>
-  cookie(name: string): string | undefined
-  cookie(name?: string): Record<string, string> | string | undefined {
-    if (typeof this.request.cookies === 'undefined') {
-      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
-    }
-
-    if (name === undefined) {
-      return this.request.cookies as Record<string, string>
-    }
-
-    return this.request.cookies[name] as string | undefined
-  }
-
-  signedCookie(): Record<string, UnsignedCookie>
-  signedCookie(name: string): UnsignedCookie
-  signedCookie(name?: string): Record<string, UnsignedCookie> | UnsignedCookie {
-    if (typeof this.request.cookies === 'undefined') {
-      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
-    }
-
-    if (typeof name === 'string') {
-      const cookie = this.request.cookies[name]
-      if (cookie === undefined) {
-        return undefined
-      }
-
-      const result = this.request.unsignCookie(cookie)
-
-      return result.valid && result.value !== null ? result.value : false
-    }
-
-    const cookies = this.request.cookies as Record<string, string>
-    const ret: Record<string, UnsignedCookie> = {}
-    for (const [name, value] of Object.entries(cookies)) {
-      ret[name] = this.#unsignCookie(value)
-    }
-
-    return ret
-  }
-
-  #unsignCookie(cookie: string): string | false {
-    const result = this.request.unsignCookie(cookie)
-    return result.valid && result.value !== null ? result.value : false
-  }
-}

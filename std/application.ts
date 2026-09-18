@@ -16,7 +16,6 @@ import {
   kFeatureConfigure,
   kFeatureName,
   type BootstrapKit,
-  type ExtensionRegistrar,
   type Feature,
   type FeatureConfigureKit,
 } from './feature.js'
@@ -51,13 +50,6 @@ export interface RunInfo {
 
 /** Where the framework's own block lives in the configuration tree. */
 export const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
-
-/** An application with no platform runs no extensions, so what a feature contributes is dropped. */
-const NOOP_REGISTRAR: ExtensionRegistrar = {
-  register() {
-    return undefined
-  },
-}
 
 /**
  * The framework's own configuration: read from `caffeine.*` by every application, whether or not the
@@ -275,14 +267,6 @@ export class Application<TConfig = unknown> {
   }
 
   /**
-   * Where the feature at `order` contributes start-up wiring. A headless application runs none, so what a
-   * feature registers here goes nowhere; a platform overrides this with a registrar of its own.
-   */
-  protected extensionRegistrar(_order: number): ExtensionRegistrar {
-    return NOOP_REGISTRAR
-  }
-
-  /**
    * Brings the application up to the point where it can serve.
    *
    * 1. the always-on `caffeine` slice is registered and the active profiles are decided;
@@ -292,7 +276,7 @@ export class Application<TConfig = unknown> {
    * 5. every feature **configures** — running the application's configure callback against its builder, then
    *    binding into the container;
    * 6. the container initializes;
-   * 7. every feature **bootstraps** — looking up bindings and registering its extensions;
+   * 7. every feature **bootstraps** — looking up bindings;
    * 8. the platform is set up.
    *
    * Configuration resolves before any feature configures and while binding is still open, which is what lets a
@@ -361,17 +345,16 @@ export class Application<TConfig = unknown> {
 
     await this.#container.init()
 
-    // Each feature gets its own kit, carrying its position in the feature list. Extensions are registered
-    // against that position rather than against the moment the hook reached the call, so what a feature awaits
-    // before registering cannot move it past a feature installed after it.
+    // Concurrent: a bootstrap hook only looks bindings up, so no feature's hook depends on another's.
+    const kit = this.serviceKit()
     const bootstrapPending: Promise<void>[] = []
 
-    features.forEach((feature, index) => {
-      const result = feature[kFeatureBootstrap](this.serviceKit(index))
+    for (const feature of features) {
+      const result = feature[kFeatureBootstrap]?.(kit)
       if (result) {
         bootstrapPending.push(result)
       }
-    })
+    }
 
     if (bootstrapPending.length > 0) {
       await Promise.all(bootstrapPending)
@@ -513,18 +496,15 @@ export class Application<TConfig = unknown> {
   }
 
   /**
-   * The kit passed to {@link kFeatureBootstrap} for the feature at `order`. Subclasses may widen it (e.g. add
-   * platform handles). Binding is closed; the container exposes lookup only.
-   *
-   * @param order - The feature's position in {@link configurers}, which is the order what it registers with
-   *   {@link BootstrapKit.extensions} runs in.
+   * The kit passed to {@link kFeatureBootstrap}. Binding is closed; the container exposes lookup only.
    */
-  protected serviceKit(order: number): BootstrapKit {
+  protected serviceKit(): BootstrapKit {
     return {
       container: this.#container,
       // Non-null by construction: the only caller runs after `config.bootstrap()` resolved.
       config: this.#handle!,
-      extensions: this.extensionRegistrar(order),
+      // Refreshed once every feature configured, so this is the logger `.logger(...)` asked for.
+      logger: this.#logger,
     }
   }
 

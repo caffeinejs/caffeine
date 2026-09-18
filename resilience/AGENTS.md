@@ -13,20 +13,23 @@ Fake timers replace the global and miss the captured object, so tests that fake 
 
 ## The hot path allocates nothing it does not need
 
-A call through a `compose()` runner allocates one context object and the promises. Rules the hot path keeps:
+A call through a `compose()` runner allocates one context object and the promises. A call that needs a second
+attempt also allocates one record of its progress. Rules the hot path keeps:
 
 - A strategy's `run` is not `async`: it returns `next(ctx).then(...)`. The entry, and the link `compose.ts` builds
   around every later strategy, turn a synchronous throw or a non-promise into a promise, so the `next` a strategy
   receives never throws. A built-in also calls `next` inside its own `try` and wraps a plain value with `settled`:
   `run` is public and may be called by hand with any `next`, and a taken permit or a counted attempt must still be
-  settled. Only a retry that has to wait enters an `async` function; an `async` strategy would also add an `async`
-  frame to every error thrown after an `await`.
+  settled. A retry that has to wait settles the caller's promise from its own handlers and enters no `async`
+  function either; an `async` strategy would also add an `async` frame to every error thrown after an `await`.
 - A refusal is returned as `Promise.reject(...)`, never thrown, and captures no stack unless the breaker was
   created with `captureStackTrace: true`. `Error.stackTraceLimit` is restored in a `finally`. The error is built in
   `run`, the frame that refuses; `#admit` only says why.
 - Chains call object strategies as methods; nothing is bound per chain or per call.
-- Windows are typed arrays with O(1) record; thresholds compare in integer form
-  (`failed * 100 >= threshold * total`) and rates are divided out only when the breaker opens.
+- Windows are typed arrays. A count window records in O(1). So does a time window, except on the first record or
+  read after an idle gap, which clears one bucket per second skipped. Thresholds compare without division
+  (`failed * 100 >= threshold * total`). A rate is divided out only when the breaker opens or, in `metrics_only`,
+  when a rate crosses its threshold.
 - An event object is built only when `emitter.has(type)`, which returns at once while nothing listens.
 
 `runWith()` pays the chain build per call and `compose()` once. Measure with `make bench:resilience`, alone on the

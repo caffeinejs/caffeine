@@ -2,27 +2,31 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type AddressInfo, connect } from 'node:net'
 
 import { CaffeineIoC, token, type Container } from '@caffeinejs/di'
-import type { Configuration } from '@caffeinejs/std/config'
+import type { ConfigHandle } from '@caffeinejs/std/config'
+import { newNoopLogger } from '@caffeinejs/std/logger'
 import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import type { Context } from '../context.js'
+import type { HTTPSetupContext } from '../setup_context.js'
 import { Keys } from '../symbols.js'
 import { ErrNextCalledTwice } from './errors.js'
-import {
-  type Middleware,
-  type MiddlewareFn,
-  type MiddlewareHook,
-  type Next,
-  type NodeMiddleware,
-  kMiddlewareHook,
-} from './middleware.js'
+import { installFastifyMiddlewares, type FastifyMiddlewareHook } from './fastify.js'
+import { type Middleware, type MiddlewareFn, type Next, type NodeMiddleware, kMiddlewareHook } from './middleware.js'
 import { MiddlewarePipeline } from './pipeline.js'
 
 type RawRequest = IncomingMessage & Record<string, unknown>
 
-function emptyConfiguration(config: object = {}): Configuration<unknown> {
-  return { config } as Configuration<unknown>
+function setupContext(options: { config?: object; container?: Container } = {}): HTTPSetupContext {
+  return {
+    container: options.container ?? ({} as Container),
+    config: (options.config ?? {}) as ConfigHandle<unknown>,
+    logger: newNoopLogger(),
+  }
+}
+
+function install(pipeline: MiddlewarePipeline, server: FastifyInstance, context = setupContext()): void {
+  installFastifyMiddlewares(server, pipeline.resolve(context))
 }
 
 function contextStub(reply: FastifyReply): Context {
@@ -58,8 +62,7 @@ async function serve(
   pipeline: MiddlewarePipeline,
   options: {
     context?: boolean
-    container?: Container
-    configuration?: Configuration<unknown>
+    setup?: HTTPSetupContext
     server?: FastifyInstance
     routes?: (server: FastifyInstance) => void
   } = {},
@@ -69,7 +72,7 @@ async function serve(
     attachContext(server)
   }
 
-  pipeline.install(server, options.container ?? ({} as Container), options.configuration ?? emptyConfiguration())
+  install(pipeline, server, options.setup)
   server.get('/echo', () => ({ ok: true }))
   server.get('/api/echo', () => ({ ok: true }))
   options.routes?.(server)
@@ -183,18 +186,38 @@ describe('MiddlewarePipeline', () => {
     pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'onRequest')
     pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'onRequest')
     pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'preHandler')
-    pipeline.install(stubServer(added), {} as Container, emptyConfiguration())
+    install(pipeline, stubServer(added))
 
     expect(added).toEqual(['onRequest', 'preHandler'])
   })
 
-  it('runs a config factory once at install with the live config handle', async () => {
+  // What makes the pipeline adapter-neutral: resolving it touches no server, and hands back everything an adapter
+  // needs to place each middleware. Deciding the hook, and validating it, is left to that adapter.
+  it('resolves every entry in registration order without a server', () => {
+    const first: NodeMiddleware = (_req, _res, next) => next()
+    const second: MiddlewareFn = (_ctx, next) => next()
+    Object.defineProperty(second, kMiddlewareHook, { value: 'preHandler' })
+
+    const pipeline = new MiddlewarePipeline().add('/api', first).add(undefined, second).add('*', first, 'onSend')
+
+    const resolved = pipeline.resolve(setupContext())
+
+    expect(resolved.map(({ path, hook }) => ({ path, hook }))).toEqual([
+      { path: '/api', hook: undefined },
+      { path: undefined, hook: 'preHandler' },
+      { path: undefined, hook: 'onSend' },
+    ])
+    expect(resolved[0]!.fn).toBe(first)
+    expect(() => pipeline.add(undefined, first)).toThrow('the application is already started')
+  })
+
+  it('runs a middleware factory once at install with the setup context', async () => {
     const config = { origin: 'from-config' }
     let factoryRuns = 0
     const pipeline = new MiddlewarePipeline()
     pipeline.add(
       undefined,
-      (c: { origin: string }) => {
+      ({ config: c }: HTTPSetupContext<{ origin: string }>) => {
         factoryRuns += 1
         return (_ctx: Context, next: Next) => {
           _ctx.header('x-origin', c.origin)
@@ -204,13 +227,41 @@ describe('MiddlewarePipeline', () => {
       'onRequest',
     )
 
-    const server = await serve(pipeline, { configuration: emptyConfiguration(config) })
+    const server = await serve(pipeline, { setup: setupContext({ config }) })
     const first = await server.inject('/echo')
     const second = await server.inject('/echo')
 
     expect(factoryRuns).toBe(1)
     expect(first.headers['x-origin']).toBe('from-config')
     expect(second.headers['x-origin']).toBe('from-config')
+    await server.close()
+  })
+
+  // A middleware factory gets what an extension factory gets. One that needs a service or the application's logger
+  // builds from them here, once, instead of reaching for them on every request.
+  it('hands a middleware factory the container and the logger as well as the configuration', async () => {
+    const kGreeting = token<string>(Symbol('greeting'))
+    const container = new CaffeineIoC()
+    container.bind(kGreeting, t => t.toValue('hello'))
+    await container.init()
+    const logger = { ...newNoopLogger() }
+    let seen: unknown
+
+    const pipeline = new MiddlewarePipeline().add(undefined, ({ container: c, logger: l }: HTTPSetupContext) => {
+      seen = l
+      const greeting = c.get(kGreeting)
+
+      return ((_req, res, next) => {
+        res.setHeader('x-greeting', greeting)
+        next()
+      }) as NodeMiddleware
+    })
+
+    const server = await serve(pipeline, { setup: { container, config: {} as ConfigHandle<unknown>, logger } })
+    const res = await server.inject('/echo')
+
+    expect(res.headers['x-greeting']).toBe('hello')
+    expect(seen).toBe(logger)
     await server.close()
   })
 
@@ -229,7 +280,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, Tagger, 'onRequest')
 
-    const server = await serve(pipeline, { container })
+    const server = await serve(pipeline, { setup: setupContext({ container }) })
     const res = await server.inject('/echo')
     expect(res.headers['x-tag']).toBe('class')
     await server.close()
@@ -251,7 +302,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, kTagger, 'onRequest')
 
-    const server = await serve(pipeline, { container })
+    const server = await serve(pipeline, { setup: setupContext({ container }) })
     const res = await server.inject('/echo')
     expect(res.headers['x-tag']).toBe('key')
     await server.close()
@@ -339,7 +390,7 @@ describe('MiddlewarePipeline', () => {
 
   it('refuses a registration once the pipeline is installed', () => {
     const pipeline = new MiddlewarePipeline()
-    pipeline.install(stubServer([]), {} as Container, emptyConfiguration())
+    install(pipeline, stubServer([]))
 
     expect(() => pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'onRequest')).toThrow(
       'the application is already started',
@@ -348,7 +399,7 @@ describe('MiddlewarePipeline', () => {
 
   it('uses a class static hook hint when none is passed', async () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): FastifyMiddlewareHook {
         return 'preHandler'
       }
 
@@ -364,14 +415,14 @@ describe('MiddlewarePipeline', () => {
     const added: string[] = []
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, Hinted)
-    pipeline.install(stubServer(added), container, emptyConfiguration())
+    install(pipeline, stubServer(added), setupContext({ container }))
 
     expect(added).toEqual(['preHandler'])
   })
 
   it('lets { hook } override a class static hook hint', async () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): FastifyMiddlewareHook {
         return 'preHandler'
       }
 
@@ -387,7 +438,7 @@ describe('MiddlewarePipeline', () => {
     const added: string[] = []
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, Hinted, 'onRequest')
-    pipeline.install(stubServer(added), container, emptyConfiguration())
+    install(pipeline, stubServer(added), setupContext({ container }))
 
     expect(added).toEqual(['onRequest'])
   })
@@ -399,14 +450,14 @@ describe('MiddlewarePipeline', () => {
     const added: string[] = []
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, mw)
-    pipeline.install(stubServer(added), {} as Container, emptyConfiguration())
+    install(pipeline, stubServer(added))
 
     expect(added).toEqual(['preHandler'])
   })
 
   it('reads a class hook hint from an instance constructor', () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): FastifyMiddlewareHook {
         return 'preHandler'
       }
 
@@ -418,7 +469,7 @@ describe('MiddlewarePipeline', () => {
     const added: string[] = []
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, new Hinted())
-    pipeline.install(stubServer(added), {} as Container, emptyConfiguration())
+    install(pipeline, stubServer(added))
 
     expect(added).toEqual(['preHandler'])
   })
@@ -430,15 +481,15 @@ describe('MiddlewarePipeline', () => {
     const added: string[] = []
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, mw)
-    pipeline.install(stubServer(added), {} as Container, emptyConfiguration())
+    install(pipeline, stubServer(added))
 
     expect(added).toEqual(['onRequest'])
   })
 
   it('throws at install when a hook hint is not a middleware hook', async () => {
     class Bad implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
-        return 'nope' as MiddlewareHook
+      static get [kMiddlewareHook](): FastifyMiddlewareHook {
+        return 'nope' as FastifyMiddlewareHook
       }
 
       handle(_c: Context, next: Next): void {
@@ -453,12 +504,12 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, Bad)
 
-    expect(() => pipeline.install(stubServer([]), container, emptyConfiguration())).toThrow('is not a middleware hook')
+    expect(() => install(pipeline, stubServer([]), setupContext({ container }))).toThrow('is not a middleware hook')
   })
 
   it('picks up a class hook hint from a container token', async () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): FastifyMiddlewareHook {
         return 'preHandler'
       }
 
@@ -475,7 +526,7 @@ describe('MiddlewarePipeline', () => {
     const added: string[] = []
     const pipeline = new MiddlewarePipeline()
     pipeline.add(undefined, kHinted)
-    pipeline.install(stubServer(added), container, emptyConfiguration())
+    install(pipeline, stubServer(added), setupContext({ container }))
 
     expect(added).toEqual(['preHandler'])
   })
@@ -677,16 +728,16 @@ describe('MiddlewarePipeline connect-style middleware', () => {
     await server.close()
   })
 
-  it('runs when a config factory returns it', async () => {
+  it('runs when a middleware factory returns it', async () => {
     const pipeline = new MiddlewarePipeline().add(
       undefined,
-      (c: { tag: string }) =>
+      ({ config }: HTTPSetupContext<{ tag: string }>) =>
         ((_req, res, next) => {
-          res.setHeader('x-tag', c.tag)
+          res.setHeader('x-tag', config.tag)
           next()
         }) as NodeMiddleware,
     )
-    const server = await serve(pipeline, { configuration: emptyConfiguration({ tag: 'factory' }) })
+    const server = await serve(pipeline, { setup: setupContext({ config: { tag: 'factory' } }) })
 
     const res = await server.inject('/echo')
     expect(res.headers['x-tag']).toBe('factory')

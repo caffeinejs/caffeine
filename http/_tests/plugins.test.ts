@@ -1,23 +1,46 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { kFeatureBootstrap, kFeatureConfigure, kFeatureName, type BootstrapKit, type Feature } from '@caffeinejs/std'
-import fastify, { type FastifyPluginAsync } from 'fastify'
+import { kFeatureConfigure, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { newNoopLogger, type Logger } from '@caffeinejs/std/logger'
+import fastify, { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
+import { kFeatureServer, type HTTPFeature } from '../feature.js'
 import { createWebApplication, fastifyAdapterFactory, type WebApplication } from '../index.js'
-import { registerPlugin, type HTTPPluginFactory } from '../plugin.js'
+import type { HTTPPluginFactory } from '../plugin.js'
+import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
+import type { HTTPSetupContext } from '../setup_context.js'
 
 /**
- * What replaced `ServerExtension`: a feature's bootstrap hands the application an ordinary Fastify plugin.
+ * What an application installs on its server: the plugins its factories produce and its features' server hooks.
  *
- * These tests pin the three things the old mechanism did with bands and a registry, and the one it could not
- * do at all. Order is the order `.with(...)` was written — nothing sorts by what a plugin is. The framework
- * still brackets the list at both ends. And a plugin can now belong to one route group instead of the whole
- * server, which is what having a real Fastify plugin buys.
+ * These tests pin the ordering model — the order `.with(...)` was written, whatever a factory or a hook awaits, with
+ * nothing sorted by what a plugin is — the slots the framework keeps at both ends, what a server hook is handed,
+ * and a plugin belonging to one route group instead of the whole server.
  */
+
+/** A feature whose server hook registers one named plugin that records when it loaded. */
+function logging(name: string, log: string[]): HTTPFeature {
+  return {
+    [kFeatureName]: name,
+    [kFeatureConfigure](): void {
+      // Nothing to bind.
+    },
+    [kFeatureServer]: async (instance: FastifyInstance): Promise<void> => {
+      await instance.register(
+        fp(
+          async () => {
+            log.push(name)
+          },
+          { name },
+        ),
+      )
+    },
+  }
+}
 
 /**
  * One `fastify-plugin`-wrapped plugin that stamps a response header.
@@ -67,45 +90,162 @@ describe('plugin registration', () => {
   it('interleaves features and plugins in the order they were written', async () => {
     const log: string[] = []
 
-    const feature = (name: string): Feature => ({
-      [kFeatureName]: name,
-      [kFeatureConfigure](): void {
-        // Nothing to bind.
-      },
-      [kFeatureBootstrap](kit: BootstrapKit): void {
-        registerPlugin(
-          kit,
-          fp(
-            async () => {
-              log.push(name)
-            },
-            { name },
-          ),
-        )
-      },
-    })
-
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
       .with(stamping('plugin-a', 'x-a', log))
-      .with(feature('feature-b'))
+      .with(logging('feature-b', log))
       .with(stamping('plugin-c', 'x-c', log))
-      .with(feature('feature-d'))
+      .with(logging('feature-d', log))
 
     await app.ready()
 
     expect(log).toEqual(['plugin-a', 'feature-b', 'plugin-c', 'feature-d'])
   })
 
-  // An app-level factory is called from feature bootstrap, after `container.init()` — not from its
-  // feature's configure, where the container has not initialized yet and this would throw
-  // `ErrInvalidContainerState`. Resolving here, inside the factory itself rather than inside the plugin body,
-  // is exactly the case that used to be broken.
+  // `addFeature` skips the name check `.with(...)` makes, and nothing else: a feature installed through it still
+  // wires the server, in the slot it was installed in.
+  it('runs the server hook of a feature installed with addFeature, in its slot', async () => {
+    const log: string[] = []
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .with(stamping('before', 'x-before', log))
+      .addFeature(logging('added', log))
+      .with(stamping('after', 'x-after', log))
+
+    await app.ready()
+
+    expect(log).toEqual(['before', 'added', 'after'])
+  })
+
+  // The authentication gate relies on this: a feature's slot is where it was written, so a hook that awaits
+  // before it registers anything cannot let a feature written after it register first.
+  it('keeps a server hook that awaits first at its written position', async () => {
+    const log: string[] = []
+
+    const slow: HTTPFeature = {
+      [kFeatureName]: 'slow',
+      [kFeatureConfigure](): void {
+        // Nothing to bind.
+      },
+      [kFeatureServer]: async (instance: FastifyInstance): Promise<void> => {
+        await new Promise(resolve => setTimeout(resolve, 10))
+        await instance.register(
+          fp(
+            async () => {
+              log.push('slow')
+            },
+            { name: 'slow' },
+          ),
+        )
+      },
+    }
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .with(slow)
+      .with(stamping('after', 'x-after', log))
+
+    await app.ready()
+
+    expect(log).toEqual(['slow', 'after'])
+  })
+
+  // The hook body is a plugin body, which is what makes a forgotten `await` harmless: what it registered loads as
+  // part of its slot, before the next one starts.
+  it('loads what a server hook registered without awaiting before the next slot', async () => {
+    const log: string[] = []
+
+    const forgetful: HTTPFeature = {
+      [kFeatureName]: 'forgetful',
+      [kFeatureConfigure](): void {
+        // Nothing to bind.
+      },
+      [kFeatureServer]: (instance: FastifyInstance): void => {
+        void instance.register(
+          fp(
+            async () => {
+              log.push('nested')
+            },
+            { name: 'nested' },
+          ),
+        )
+      },
+    }
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .with(forgetful)
+      .with(stamping('after', 'x-after', log))
+
+    await app.ready()
+
+    expect(log).toEqual(['nested', 'after'])
+  })
+
+  // Why the server was not simply put on the bootstrap kit: bootstrap runs before the adapter has set the server up.
+  // The hook runs where plugins run, on the application's own server, with what the framework decorates already
+  // there.
+  it('hands a server hook the application server, already decorated', async () => {
+    let seen: FastifyInstance | undefined
+    let decorated = false
+
+    const probe: HTTPFeature = {
+      [kFeatureName]: 'probe',
+      [kFeatureConfigure](): void {
+        // Nothing to bind.
+      },
+      [kFeatureServer]: (instance: FastifyInstance): void => {
+        seen = instance
+        decorated = instance.hasDecorator('$container')
+      },
+    }
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(probe)
+
+    await app.ready()
+
+    expect(seen).toBe(app.instance)
+    expect(decorated).toBe(true)
+  })
+
+  // The logger feature configures alongside every other feature, so the logger is only final once they all have.
+  // What the factories and hooks are handed is built after that, which is why it carries the one `.logger(...)`
+  // asked for rather than the default the application started with.
+  it('hands factories and server hooks one context carrying the configured logger', async () => {
+    const custom: Logger = { ...newNoopLogger() }
+    const seen: { factory?: HTTPSetupContext; hook?: BootstrapKit } = {}
+
+    const probe: HTTPFeature = {
+      [kFeatureName]: 'kit-probe',
+      [kFeatureConfigure](): void {
+        // Nothing to bind.
+      },
+      [kFeatureServer]: (_instance: FastifyInstance, kit: BootstrapKit): void => {
+        seen.hook = kit
+      },
+    }
+
+    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+      .logger(b => b.use(custom))
+      .with(context => {
+        seen.factory = context
+        return fp(async () => undefined, { name: 'context-probe' })
+      })
+      .with(probe)
+
+    await app.ready()
+
+    expect(seen.hook).toBe(seen.factory)
+    expect(seen.factory?.logger).toBe(custom)
+    expect(seen.factory?.container).toBe(app.container)
+  })
+
+  // An app-level factory is called once the container has initialized — not while features configure, where
+  // this would throw `ErrInvalidContainerState`. Resolving here, inside the factory itself rather than inside the
+  // plugin body, is exactly the case that used to be broken.
   it('resolves from the container inside an app-level factory', async () => {
     const kGreeting = token<string>(Symbol('greeting'))
     const container = new CaffeineIoC()
     container.bind(kGreeting, t => t.toValue('hello'))
 
-    const factory: HTTPPluginFactory = (_config, container) => {
+    const factory: HTTPPluginFactory = ({ container }) => {
       const greeting = container.get(kGreeting)
 
       const plugin: FastifyPluginAsync = async instance => {
@@ -125,9 +265,9 @@ describe('plugin registration', () => {
     expect((await app.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
   })
 
-  // The order a plugin ends up in is the order its `.with(...)` was written, stamped when its feature
-  // bootstrapped — not the order its factory happens to finish resolving. An awaiting factory must not jump
-  // ahead of, or fall behind, a synchronous one written before or after it.
+  // The order a plugin ends up in is the order its `.with(...)` was written — not the order its factory happens to
+  // finish resolving. An awaiting factory must not jump ahead of, or fall behind, a synchronous one written before
+  // or after it.
   it('keeps an awaiting app-level factory at its written position', async () => {
     const log: string[] = []
 
@@ -155,8 +295,8 @@ describe('plugin registration', () => {
     expect(log).toEqual(['before', 'awaiting', 'after'])
   })
 
-  // The head slot: error handling is bootstrapped ahead of everything the application installed, so a route
-  // that throws is answered by the framework handler rather than by Fastify's default.
+  // The head slot: error handling is installed ahead of everything the application installed, so a route that
+  // throws is answered by the framework handler rather than by Fastify's default.
   it('covers a route with the framework error handler whatever a plugin registered', async () => {
     @Controller('/head-slot')
     class HeadSlotController {
@@ -194,7 +334,7 @@ describe('plugin registration', () => {
 
 describe('scoped plugin registration', () => {
   // Widened: `mount()` re-types the application with the routes it took, and the holder outlives the call.
-  let app: WebApplication<any, any, any, any, any> | undefined
+  let app: WebApplication<any, any, any, any> | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -204,8 +344,11 @@ describe('scoped plugin registration', () => {
   // The capability the extension mechanism did not have. A route group is its own Fastify plugin context, so
   // the same wrapped plugin covers that group's routes and no others when it is registered there.
   it('keeps a router-installed plugin inside that router', async () => {
-    const pets = new Router('/scoped-pets').plugin(stamping('pets-stamp', 'x-pets')).get('/', () => ({ ok: true }))
+    const pets = newRouter('/scoped-pets')
+      .plugin(stamping('pets-stamp', 'x-pets'))
+      .get('/', () => ({ ok: true }))
 
+    // Bound to no adapter, and mounted next to a Fastify-bound router all the same.
     const orders = new Router('/scoped-orders').get('/', () => ({ ok: true }))
 
     app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(pets, orders)
@@ -219,7 +362,9 @@ describe('scoped plugin registration', () => {
   // A nested group is flattened into its own context, so inheritance is carried rather than encapsulated —
   // `.plugin(...)` reaches the groups below it the way `.with(...)` configuration does.
   it('reaches a nested group from the router that installed the plugin', async () => {
-    const shop = new Router('/scoped-shop').plugin(stamping('shop-stamp', 'x-shop')).get('/', () => ({ ok: true }))
+    const shop = newRouter('/scoped-shop')
+      .plugin(stamping('shop-stamp', 'x-shop'))
+      .get('/', () => ({ ok: true }))
 
     shop.group('/items', items => items.get('/', () => ({ ok: true })))
 
@@ -293,8 +438,10 @@ describe('scoped plugin registration', () => {
   })
 
   it('keeps the plugins of two routers apart, one per group', async () => {
-    const pets = new Router('/inst-pets').plugin(stamping('inst', 'x-inst')).get('/', () => ({ ok: true }))
-    const orders = new Router('/inst-orders')
+    const pets = newRouter('/inst-pets')
+      .plugin(stamping('inst', 'x-inst'))
+      .get('/', () => ({ ok: true }))
+    const orders = newRouter('/inst-orders')
       .plugin(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 

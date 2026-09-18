@@ -168,7 +168,7 @@ describe('fst', () => {
         .with(fst({ attachValidation: true }))
         .schema({ querystring: $t.Object({ n: $t.Integer() }) })
         .handler(ctx => {
-          const { validationError } = ctx.fst.request as { validationError?: unknown }
+          const { validationError } = ctx.platform.request as { validationError?: unknown }
           return { invalid: validationError !== undefined }
         })
 

@@ -1,15 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
-import type { ConfigHandle } from '@caffeinejs/std/config'
 
 import type { Context } from '../context.js'
+import type { HTTPSetupContext } from '../setup_context.js'
 
 /**
- * Optional preferred Fastify hook for a Caffeine middleware, when `use()` does not pass `{ hook }`.
+ * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: one of the names the
+ * application's adapter accepts, such as a `FastifyMiddlewareHook`.
  *
- * Omit it and the middleware runs at `onRequest`. On a class, declare it as a static getter. On a function,
- * set it as a property.
+ * Omit it and the middleware runs at the adapter's default, `onRequest` under Fastify. On a class, declare it as a
+ * static getter. On a function, set it as a property. The adapter refuses a name it does not know at start-up.
  */
 export const kMiddlewareHook = Symbol('@caffeinejs/http:middlewareHook')
 
@@ -31,19 +32,21 @@ export type Next = (err?: Error) => void
 export type NodeMiddleware = (req: IncomingMessage, res: ServerResponse, next: Next) => void
 
 /**
- * Builds a middleware once at start-up from the application's configuration.
+ * Builds a middleware once at start-up, from the same context an extension factory gets: the configuration, the
+ * container and the logger.
  *
- * The function is called with the live config handle, so `c.someSetting` and `c(featureKey)` both work. A
- * later refresh does not rebuild the middleware.
+ * `config` is the live handle, so `config.someSetting` reads the current tree. A later refresh does not rebuild
+ * the middleware.
  */
-export type MiddlewareConfigFactory<C = unknown> = (
-  config: ConfigHandle<C>,
+export type MiddlewareFactory<C = unknown> = (
+  context: HTTPSetupContext<C>,
 ) => NodeMiddleware | MiddlewareFn | Middleware
 
 export type MiddlewarePath = string | readonly string[]
 
-export interface MiddlewareOptions {
-  hook?: MiddlewareHook
+/** `H` is the hook names the application's adapter accepts. */
+export interface MiddlewareOptions<H extends string = string> {
+  hook?: H
 }
 
 /**
@@ -68,7 +71,7 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  *
  * ```ts
  * class Tagger implements Middleware {
- *   static get [kMiddlewareHook](): MiddlewareHook {
+ *   static get [kMiddlewareHook](): FastifyMiddlewareHook {
  *     return 'preHandler'
  *   }
  *
@@ -81,42 +84,12 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  * app.use(Tagger)
  * ```
  *
- * The static getter is optional; without it the class runs at `onRequest`. `{ hook }` on `use()` overrides
- * {@link kMiddlewareHook}.
+ * The static getter is optional; without it the class runs at the adapter's default, `onRequest` under Fastify.
+ * `{ hook }` on `use()` overrides {@link kMiddlewareHook}.
  */
 export interface Middleware<V = Record<never, never>, C = Record<never, never>> {
   handle(ctx: Context<V, C>, next: Next): void
 }
-
-/**
- * Where a middleware runs: a Fastify request-lifecycle hook.
- *
- * Defaults to `onRequest`. Hooks cover every route, including ones the framework registers for itself, except
- * probe routes which have no context and are skipped. Use a later hook when the middleware must see a parsed
- * or validated body.
- */
-export type MiddlewareHook =
-  | 'onRequest'
-  | 'preParsing'
-  | 'preValidation'
-  | 'preHandler'
-  | 'preSerialization'
-  | 'onSend'
-  | 'onResponse'
-  | 'onError'
-  | 'onTimeout'
-
-export const MIDDLEWARE_HOOKS: readonly MiddlewareHook[] = [
-  'onRequest',
-  'preParsing',
-  'preValidation',
-  'preHandler',
-  'preSerialization',
-  'onSend',
-  'onResponse',
-  'onError',
-  'onTimeout',
-]
 
 /** Anything `use()` accepts as its middleware argument. */
 export type MiddlewareTarget<C = unknown> =
@@ -124,7 +97,7 @@ export type MiddlewareTarget<C = unknown> =
   | MiddlewareFn
   | Middleware
   | InjectionToken<Middleware>
-  | MiddlewareConfigFactory<C>
+  | MiddlewareFactory<C>
 
 export type MiddlewareResolvable = Middleware | InjectionToken<Middleware>
 

@@ -1,11 +1,5 @@
 import { Scopes, type InjectionToken } from '@caffeinejs/di'
-import {
-  kFeatureBootstrap,
-  kFeatureConfigure,
-  kFeatureName,
-  type Feature,
-  type FeatureConfigureKit,
-} from '@caffeinejs/std'
+import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import type { Guard } from './guard.js'
 import { kGlobalGuards } from './keys.js'
@@ -28,9 +22,5 @@ export class GuardsBuilder implements Feature {
 
   [kFeatureConfigure](kit: FeatureConfigureKit): void {
     kit.container.bind(kGlobalGuards, t => t.toValue(this.#keys).lifetime(Scopes.SINGLETON).internal())
-  }
-
-  [kFeatureBootstrap](): void {
-    // Nothing to register.
   }
 }

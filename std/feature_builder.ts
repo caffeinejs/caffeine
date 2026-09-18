@@ -36,7 +36,7 @@ export const kAddConfigurer = Symbol('caffeine.feature.addConfigurer')
  * The shape every feature builder takes: a fluent authoring surface that is also the {@link Feature}.
  *
  * A subclass names itself with {@link kFeatureName}, holds whatever its fluent methods set in ordinary
- * fields, binds in {@link configure}, and registers extensions in {@link bootstrap}. The base owns one
+ * fields, binds in {@link configure}, and looks bindings up in {@link bootstrap}. The base owns one
  * thing: running the application's configure callbacks against the builder, with the resolved configuration,
  * immediately before {@link configure}.
  *
@@ -70,10 +70,10 @@ export abstract class FeatureBuilder<C = unknown> implements Feature<C> {
   }
 
   /**
-   * Looks up bindings and registers extensions. Runs after the container initializes.
+   * Looks up bindings. Runs after the container initializes.
    */
   protected bootstrap(_kit: BootstrapKit<C>): void | Promise<void> {
-    // Nothing to register.
+    // Nothing to look up.
   }
 
   [kFeatureConfigure](kit: FeatureConfigureKit<C>): void | Promise<void> {

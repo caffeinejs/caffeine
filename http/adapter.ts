@@ -4,17 +4,21 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { Container, Scopes } from '@caffeinejs/di'
 import { Configuration } from '@caffeinejs/std/config'
 import { logToken } from '@caffeinejs/std/logger'
-import { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify'
+import { type FastifyInstance, type FastifyPluginAsync, type FastifyReply, type FastifyRequest } from 'fastify'
+import fp from 'fastify-plugin'
 
-import { assertPluginNotRegistered, registerCompiledRouteGroup } from './_register_route_group.js'
+import { assertFastifyPlugin, assertPluginNotRegistered, registerCompiledRouteGroup } from './_register_route_group.js'
+import type { AdapterExtensionEntry } from './adapter_extension.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
-import { FastifyContext } from './context.js'
 import { ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/error_handling.js'
 import { solutions } from './error/util.js'
+import { FastifyContext } from './fastify_context.js'
+import type { FastifyTypes } from './fastify_types.js'
 import { installFormBodyParser } from './form/index.js'
+import { installFastifyMiddlewares } from './middleware/fastify.js'
 import { installNotFoundHandler } from './not_found.js'
 import type { RouteGroup } from './route.js'
 import { RouteGroupBuilder } from './routing/builder.js'
@@ -36,7 +40,7 @@ export class FastifyAdapter<
   SERVER extends FastifyInstance = FastifyInstance,
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
-> implements Adapter<SERVER, REQ> {
+> implements Adapter<FastifyTypes<SERVER, REQ, RES>> {
   /**
    * The parameter compilers handed to every route's dispatch, built once for the whole server. The reply type
    * a source sees is opaque, so the two are re-typed here rather than in the neutral contract.
@@ -67,7 +71,7 @@ export class FastifyAdapter<
     await this.#fastify.listen(this.#serverOptions)
   }
 
-  async setup(input: AdapterIn<REQ>): Promise<void> {
+  async setup(input: AdapterIn<FastifyTypes<SERVER, REQ, RES>>): Promise<void> {
     const container = this.#container
     // Copied, not aliased: `$route` appends to this, and `input.routeGroups` is the very array
     // `WebApplication.routeGroups` hands out — a push would publish a plugin's route as the application's.
@@ -143,15 +147,17 @@ export class FastifyAdapter<
       routeGroups.push(input.compileRouteGroup(builder.toRouteGroup<REQ>(), { name }))
     })
 
-    // Every plugin the features contributed, in the order their features were installed — this package's own
-    // included. Registered one at a time and awaited, so a plugin sees what the one before it decorated. A
-    // plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every route; an
-    // unwrapped one keeps what it registers to itself. That is the plugin author's call, not this loop's.
-    // `$route` (above) is what a plugin in this loop calls to add one more route. The form body parser
-    // goes first, so every plugin registers onto a server that has it.
+    // Every plugin the factories produced and every feature's server hook, in the order the application
+    // installed them — this package's own included. Registered one at a time and awaited, so a plugin sees what
+    // the one before it decorated. A plugin wrapped in `fastify-plugin` lands on this instance and therefore
+    // covers every route; an unwrapped one keeps what it registers to itself. That is the plugin author's call,
+    // not this loop's. `$route` (above) is what a plugin in this loop calls to add one more route. The form body
+    // parser goes first, so every plugin registers onto a server that has it.
     installFormBodyParser(fastify)
 
-    for (const plugin of input.plugins.root()) {
+    for (const entry of input.extensions.root()) {
+      const plugin = entry.kind === 'feature' ? featurePlugin(entry) : entry.extension
+      assertFastifyPlugin(plugin)
       assertPluginNotRegistered(fastify, plugin)
       await fastify.register(plugin)
     }
@@ -164,7 +170,7 @@ export class FastifyAdapter<
     const globalErrorHandler = container.get(GlobalErrorHandlerRef).handler
 
     // Installed after the plugins so the hooks run inside a server that already has its error handler.
-    input.middlewares.install(fastify, container, configuration)
+    installFastifyMiddlewares(fastify, input.middlewares.resolve(input.context))
 
     // Every plugin has had its turn, so whatever `$route` compiled is in `routeGroups` and the two scans see
     // the same table the registration loop below reads.
@@ -173,7 +179,7 @@ export class FastifyAdapter<
     assertRouteFeaturesInstalled(fastify, routeGroups)
 
     // The same for every group, so it is built once here rather than per registration.
-    const registration = { plugins: input.plugins, compilers: this.#compilers, globalErrorHandler }
+    const registration = { extensions: input.extensions, compilers: this.#compilers, globalErrorHandler }
 
     for (const router of routeGroups) {
       registerCompiledRouteGroup(fastify, router, registration)
@@ -282,6 +288,25 @@ export class FastifyAdapter<
       )
     })
   }
+}
+
+/**
+ * A feature's server hook, as the plugin its slot registers.
+ *
+ * Wrapped in `fastify-plugin`, so the hook is handed the root server itself and what it adds covers every route.
+ * Being a plugin is also what holds the next slot back until the hook, and whatever it registered without awaiting,
+ * has loaded.
+ */
+function featurePlugin<S extends FastifyInstance>(
+  entry: Extract<AdapterExtensionEntry<S, unknown>, { kind: 'feature' }>,
+): FastifyPluginAsync {
+  return fp(
+    async (instance: FastifyInstance) => {
+      // The root server is the one this adapter drives, so it is the caller's own server type.
+      await entry.install(instance as S)
+    },
+    { name: `@caffeinejs/http:feature:${entry.name}` },
+  )
 }
 
 /**

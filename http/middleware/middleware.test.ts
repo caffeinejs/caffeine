@@ -9,7 +9,7 @@ import {
   ErrPipelineSealed,
   Get,
   type Middleware,
-  type MiddlewareHook,
+  type FastifyMiddlewareHook,
   type Next,
   Router,
   createWebApplication,
@@ -233,7 +233,7 @@ describe('middleware pipeline', () => {
     const order: string[] = []
 
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): FastifyMiddlewareHook {
         return 'preHandler'
       }
 
@@ -263,7 +263,7 @@ describe('middleware pipeline', () => {
     const order: string[] = []
 
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): MiddlewareHook {
+      static get [kMiddlewareHook](): FastifyMiddlewareHook {
         return 'preHandler'
       }
 

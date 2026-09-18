@@ -184,6 +184,37 @@ describe('instrumentCircuitBreaker', () => {
     ])
   })
 
+  // Series exported while nothing calls the dependency must describe the window as it is now.
+  it('reports an empty window once an idle gap outlasts a time window', async () => {
+    useFakeClock({ toFake: ['performance'] })
+    const h = harness()
+    const breaker = breakerOf({ slidingWindow: { type: 'time', seconds: 2 } })
+    instrumentCircuitBreaker(breaker, { meterProvider: h.meterProvider })
+    const window = async (): Promise<unknown[]> =>
+      (await h.points('resilience.circuit_breaker.buffered_calls')).map(point => [
+        point.attributes['resilience.circuit_breaker.kind'],
+        point.value,
+      ])
+    await succeed(breaker)
+    await succeed(breaker)
+    await fail(breaker)
+    expect(await window()).toEqual(
+      expect.arrayContaining([
+        ['successful', 2],
+        ['failed', 1],
+      ]),
+    )
+
+    vi.advanceTimersByTime(5_000)
+
+    expect(await window()).toEqual(
+      expect.arrayContaining([
+        ['successful', 0],
+        ['failed', 0],
+      ]),
+    )
+  })
+
   // A counter that went down would read as a process restart and corrupt every rate computed from it.
   it('keeps the refused-calls counter across reset', async () => {
     const h = harness()

@@ -2,22 +2,7 @@ import type { ContainerBindingOps, ContainerOps } from '@caffeinejs/di'
 
 import type { ConfigHandle } from './config/index.js'
 import { ErrCaffeine } from './error.js'
-
-/**
- * Where a feature hands the platform a unit of start-up wiring.
- *
- * What the platform does with `extension` is the platform's business — the HTTP application takes a Fastify
- * plugin and registers it. A headless application takes nothing, so its registrar is a no-op and a feature
- * that contributes one is simply inert there.
- */
-export interface ExtensionRegistrar<E = unknown> {
-  /**
-   * Contributes one extension. What is registered runs in the order the application's features were
-   * installed, not in the order their bootstrap hooks happened to reach this call — features bootstrap
-   * concurrently, so an `await` before this does not move it.
-   */
-  register(extension: E): void
-}
+import type { Logger } from './logger/logger.js'
 
 /**
  * What a feature is handed when the application configures it: after configuration has resolved and before
@@ -30,8 +15,7 @@ export interface FeatureConfigureKit<C = unknown> {
 
 /**
  * What a feature is handed when the application bootstraps it, after the container is initialized.
- * Binding is closed; the container exposes lookup only. Concrete applications may widen it with
- * platform-specific handles.
+ * Binding is closed; the container exposes lookup only.
  */
 export interface BootstrapKit<C = unknown> {
   /**
@@ -48,8 +32,8 @@ export interface BootstrapKit<C = unknown> {
    */
   config: ConfigHandle<C>
 
-  /** Where a feature contributes start-up wiring the platform runs. */
-  extensions: ExtensionRegistrar
+  /** The application's logger, as the logger feature configured it. */
+  logger: Logger
 }
 
 /**
@@ -82,9 +66,11 @@ export interface Feature<C = unknown> {
   [kFeatureConfigure](kit: FeatureConfigureKit<C>): void | Promise<void>
 
   /**
-   * Runs after the container initializes. Look up bindings and register extensions here.
+   * Runs after the container initializes. Look up bindings here.
+   *
+   * Features bootstrap concurrently, so nothing here may depend on another feature's bootstrap having run.
    */
-  [kFeatureBootstrap](kit: BootstrapKit<C>): void | Promise<void>
+  [kFeatureBootstrap]?(kit: BootstrapKit<C>): void | Promise<void>
 }
 
 /** Thrown when `.with` installs a feature whose {@link kFeatureName} is already installed. */

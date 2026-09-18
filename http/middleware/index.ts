@@ -1,10 +1,10 @@
 export { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
+export { installFastifyMiddlewares, type FastifyMiddlewareHook } from './fastify.js'
 export { isMiddlewareOptions, kMiddlewareHook } from './middleware.js'
 export type {
   Middleware,
-  MiddlewareConfigFactory,
+  MiddlewareFactory,
   MiddlewareFn,
-  MiddlewareHook,
   MiddlewareOptions,
   MiddlewarePath,
   MiddlewareResolvable,
@@ -12,4 +12,4 @@ export type {
   Next,
   NodeMiddleware,
 } from './middleware.js'
-export { MiddlewarePipeline } from './pipeline.js'
+export { MiddlewarePipeline, type ResolvedMiddleware } from './pipeline.js'

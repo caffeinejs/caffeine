@@ -7,20 +7,15 @@ import {
   type ObjectInjection,
   type ObjectInjections,
 } from '@caffeinejs/di'
-import { createWebApplication, type FastifyAdapter, type Router, type WebApplication } from '@caffeinejs/http'
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import { createWebApplication, type Router, type WebApplication } from '@caffeinejs/http'
 
 import { ErrTestClientAlreadyReady } from './error.js'
 
 /** Any router, spelled the way `blend` and `mount` spell it. */
-export type AnyRouter = Router<any, any, any, any, any>
+export type AnyRouter = Router<any, any, any, any, any, any>
 
-/** The application a client drives, whichever way it got one. */
-export type TestApplication = WebApplication<
-  FastifyInstance,
-  FastifyRequest,
-  FastifyAdapter<FastifyInstance, FastifyRequest>
->
+/** The application a client drives, whichever way it got one: a Fastify one. */
+export type TestApplication = WebApplication
 
 export interface HarnessInit {
   inject?: Record<string, unknown>
