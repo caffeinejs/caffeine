@@ -58,19 +58,19 @@
   "devDependencies": {
     "@fast-check/vitest": "^0.4.1",
     "@redis/client": "^6.2.1",
-    "@swc/core": "^1.16.1",
+    "@swc/core": "^1.16.2",
     "@types/node": "^26.4.0",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^5.0.0",
     "fast-check": "^4.9.0",
     "globby": "^16.2.4",
     "markdownlint-cli2": "^0.23.2",
-    "oxfmt": "^0.66.0",
-    "oxlint": "^1.81.0",
+    "oxfmt": "^0.67.0",
+    "oxlint": "^1.82.0",
     "oxlint-tsgolint": "^7.0.2001",
     "reflect-metadata": "^0.2.2",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
-    "unplugin-swc": "^1.5.11",
-    "vitest": "^4.1.8"
+    "unplugin-swc": "^1.6.0",
+    "vitest": "^5.0.0"
   }
 }
