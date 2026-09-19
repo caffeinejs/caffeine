@@ -4,10 +4,15 @@ import { $t } from '../../../schema/t.js'
 import { loadConfig } from '../../load.js'
 import { ArgsConfigSource } from '../../sources/args_source.js'
 import { EnvConfigSource } from '../../sources/env_source.js'
-import type { ConfigLayer, ConfigSchema, ConfigSource } from '../../types.js'
+import type { ConfigLayer, ConfigLoadContext, ConfigSchema, ConfigSource } from '../../types.js'
+import { RecordingLogger } from '../log.testkit.js'
 
-function load(options: ConstructorParameters<typeof EnvConfigSource>[0]): ConfigLayer {
-  return new EnvConfigSource(options).load()[0]
+function context(logger = new RecordingLogger()): ConfigLoadContext {
+  return { profiles: [], signal: new AbortController().signal, logger }
+}
+
+function load(options: ConstructorParameters<typeof EnvConfigSource>[0], logger?: RecordingLogger): ConfigLayer {
+  return new EnvConfigSource(options).load(context(logger))[0]
 }
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>) {
@@ -47,17 +52,27 @@ describe('EnvConfigSource', () => {
     expect(load({ env: { TAGS__0: 'a', TAGS__1: 'b' } }).data).toEqual({ tags: ['a', 'b'] })
   })
 
-  // A list with a hole would surface later as a baffling complaint about index 0.
-  it('refuses indices that are not a complete list, naming the source', () => {
-    expect(() => load({ prefix: 'APP_', env: { APP_TAGS__1: 'z' } })).toThrow(
-      expect.objectContaining({ code: 'ERR_CONFIG_ARRAY_INDICES', message: expect.stringContaining('"env:APP_"') }),
-    )
+  it('keeps numeric keys that are not a list as the keys of a record', () => {
+    expect(load({ env: { MESSAGES__404: 'Not found', MESSAGES__500: 'Oops' } }).data).toEqual({
+      messages: { 404: 'Not found', 500: 'Oops' },
+    })
   })
 
-  it('refuses a path set both as a value and as a parent', () => {
-    expect(() => load({ env: { TAGS: 'a,b', TAGS__0: 'c' } })).toThrow(
-      expect.objectContaining({ code: 'ERR_CONFIG_KEY_CONFLICT' }),
-    )
+  // Without a prefix every variable of the process is read, other tools' among them. Two of them disagreeing about
+  // a path cannot be allowed to stop the application from starting: the parent wins, and the other is reported.
+  it('skips a variable whose path another one uses as a parent, and says so', () => {
+    const logger = new RecordingLogger()
+
+    const layer = load({ env: { OTEL__RESOURCE: 'x', OTEL__RESOURCE__ATTRIBUTES: 'a=b', PORT: '8080' } }, logger)
+
+    expect(layer.data).toEqual({ otel: { resource: { attributes: 'a=b' } }, port: '8080' })
+    expect(layer.origins?.has('otel.resource')).toBe(false)
+    expect(logger.at('warn')).toEqual([
+      expect.objectContaining({
+        msg: 'config variable ignored',
+        fields: { path: 'otel.resource', origin: 'env:OTEL__RESOURCE' },
+      }),
+    ])
   })
 
   // Shells set `_`, and macOS sets `__CF_USER_TEXT_ENCODING`: an unprefixed source reads them, and they must not
@@ -109,7 +124,7 @@ describe('EnvConfigSource', () => {
     })
 
     expect(calls).toBe(0)
-    expect(source.load()[0].data).toEqual({ lazy: 'read-late' })
+    expect(source.load(context())[0].data).toEqual({ lazy: 'read-late' })
     expect(calls).toBe(1)
   })
 
@@ -153,6 +168,19 @@ describe('text reaching the schema', () => {
     const fromEnv = await loadConfig(definition([new EnvConfigSource({ env })], schema))
 
     expect(fromArgs.current).toEqual(fromEnv.current)
+  })
+
+  // `TAGS__1` alone is a record's key rather than a list with a hole. A schema expecting a list still refuses it at
+  // start-up, naming the list.
+  it('fails validation, naming the list, when indices leave a hole in it', async () => {
+    const schema = $t.Object({ tags: $t.Array($t.String()) })
+
+    await expect(
+      loadConfig(definition([new EnvConfigSource({ env: { TAGS__1: 'z' } })], schema)),
+    ).rejects.toMatchObject({
+      code: 'ERR_CONFIG_VALIDATION',
+      issues: [expect.objectContaining({ path: expect.stringMatching(/^tags\b/) })],
+    })
   })
 
   it('splits a delimited list for a field declared as one', async () => {

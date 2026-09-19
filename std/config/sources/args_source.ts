@@ -46,7 +46,7 @@ export class ArgsConfigSource implements ConfigSource {
     this.#switchMappings = options.switchMappings ?? {}
   }
 
-  /** @throws ErrConfig `ERR_CONFIG_ARRAY_INDICES` or `ERR_CONFIG_KEY_CONFLICT` when two arguments disagree. */
+  /** @throws ErrConfig `ERR_CONFIG_KEY_CONFLICT` when one argument sets a path another uses as a parent. */
   load(): readonly ConfigLayer[] {
     const entries: [string[], string][] = []
     const origins = new Map<string, string>()

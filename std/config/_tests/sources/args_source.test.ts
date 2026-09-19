@@ -65,6 +65,12 @@ describe('ArgsConfigSource', () => {
     expect(parse(['--server.port=8080', '--', '--server.host=nope'])).toEqual({ server: { port: '8080' } })
   })
 
+  // The command line is the application's own input: two arguments that disagree are a mistake to report, not a
+  // conflict to settle quietly as the environment does.
+  it('refuses an argument that sets a path another uses as a parent', () => {
+    expect(() => parse(['--db=x', '--db.url=y'])).toThrow(expect.objectContaining({ code: 'ERR_CONFIG_KEY_CONFLICT' }))
+  })
+
   it('builds a list from indexed or bracketed keys', () => {
     expect(parse(['--tags.0=a', '--tags.1=b'])).toEqual({ tags: ['a', 'b'] })
     expect(parse(['--servers[0].host=h'])).toEqual({ servers: [{ host: 'h' }] })

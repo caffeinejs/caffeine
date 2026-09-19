@@ -174,7 +174,11 @@ anything.
 | `SpringCloudConfigSource` | a Spring Cloud Config server    | `reload()`, and `pollInterval` if set                          |
 
 `HEALTH__DRAIN_DELAY` reaches `health.drainDelay`: `__` splits segments and `_` within a segment folds to camelCase.
-Without a prefix every variable of the process is read; a name that maps to no path, such as `_`, is skipped.
+Without a prefix every variable of the process is read; a name that maps to no path, such as `_`, is skipped, and
+so is a variable whose path another one uses as a parent, with a warning. On the command line that is an error.
+
+`TAGS__0` and `TAGS__1` make a list: keys that are the indices 0 to n - 1 become an array, from any flat source.
+Any other numeric keys stay keys, so `MESSAGES__404` beside `MESSAGES__500` makes a record.
 
 **Values stay text.** The environment and the command line do not guess types. A `$t` schema converts: `PORT=8080`
 is `8080` for a number field and `'8080'` for a string field, and `VERSION=1` stays `'1'`. A Standard Schema
@@ -289,8 +293,7 @@ A tree that cannot validate fails `ready()`, which is more legible than failing 
 | `ERR_CONFIG_SOURCE`           | a source failed to load, or returned something that is not layers      |
 | `ERR_CONFIG_SOURCE_TIMEOUT`   | a source did not answer within the load timeout, or still has not      |
 | `ERR_CONFIG_DUPLICATE_SOURCE` | two sources share a name                                               |
-| `ERR_CONFIG_ARRAY_INDICES`    | a source's indexed keys are not a complete list from 0                 |
-| `ERR_CONFIG_KEY_CONFLICT`     | a source sets one path both as a value and as a parent                 |
+| `ERR_CONFIG_KEY_CONFLICT`     | an argument or an expanded key sets a path another uses as a parent    |
 | `ERR_CONFIG_FILE_PARSE`       | a file does not parse to an object                                     |
 | `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`                          |
 | `ERR_CONFIG_VALIDATION`       | the tree does not satisfy the schema (`ErrConfigValidation`, `issues`) |

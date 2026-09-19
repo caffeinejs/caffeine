@@ -1,5 +1,5 @@
 import { buildTree, splitKey } from '../merge.js'
-import type { ConfigLayer, ConfigSource } from '../types.js'
+import type { ConfigLayer, ConfigLoadContext, ConfigSource } from '../types.js'
 
 /** The environment as a plain record, or a function returning one, such as `() => Deno.env.toObject()`. */
 export type EnvAccessor = Record<string, string | undefined> | (() => Record<string, string | undefined>)
@@ -31,7 +31,9 @@ export interface EnvConfigSourceOptions {
  * where an acronym starts. Reach such a key from a file, the command line, or {@link EnvConfigSourceOptions.transformKey}.
  *
  * Without a prefix every variable of the process is read, and only the schema decides which ones count. A variable
- * whose name maps to no path, such as `_` or `__CF_USER_TEXT_ENCODING`, is skipped.
+ * whose name maps to no path, such as `_` or `__CF_USER_TEXT_ENCODING`, is skipped. So is one whose path another
+ * variable uses as a parent, `OTEL__RESOURCE` beside `OTEL__RESOURCE__ATTRIBUTES`, with a warning: the parent wins,
+ * and a variable that belongs to some other tool cannot stop the application from starting.
  */
 export class EnvConfigSource implements ConfigSource {
   readonly name: string
@@ -48,11 +50,7 @@ export class EnvConfigSource implements ConfigSource {
     this.#transformKey = options.transformKey ?? (key => foldKey(key, separator))
   }
 
-  /**
-   * @throws ErrConfig `ERR_CONFIG_ARRAY_INDICES` or `ERR_CONFIG_KEY_CONFLICT`, naming the path, when two variables
-   *   disagree about what a path holds.
-   */
-  load(): readonly ConfigLayer[] {
+  load(context: ConfigLoadContext): readonly ConfigLayer[] {
     const env = this.#env === undefined ? process.env : typeof this.#env === 'function' ? this.#env() : this.#env
     const entries: [string[], string][] = []
     const origins = new Map<string, string>()
@@ -72,7 +70,13 @@ export class EnvConfigSource implements ConfigSource {
       origins.set(parts.join('.'), `env:${variable}`)
     }
 
-    return [{ name: this.name, data: buildTree(entries, this.name), origins }]
+    const data = buildTree(entries, this.name, path => {
+      const key = path.join('.')
+      context.logger.warn({ path: key, origin: origins.get(key) }, 'config variable ignored')
+      origins.delete(key)
+    })
+
+    return [{ name: this.name, data, origins }]
   }
 }
 

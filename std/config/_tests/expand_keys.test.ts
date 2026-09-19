@@ -73,13 +73,19 @@ describe('expandKeys', () => {
     expect(expandKeys({})).toEqual({})
   })
 
-  // `TAGS__1=z` alone reads like "the list is ['z']" minus index 0. Replacing a list with a holed one would
-  // surface later as a baffling complaint about index 0, so it fails here, naming the path.
-  it('rejects indices that are not a complete list', () => {
-    expect(() => expandKeys({ 'tags.1': 'z' }, 'env')).toThrow(
-      expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_ARRAY_INDICES' }),
-    )
-    expect(() => expandKeys({ 'tags.0': 'a', 'tags.2': 'c' }, 'env')).toThrow(/"tags" from "env": indices \[0, 2\]/)
+  // A numeric key is data as often as it is a position: a status code, a port. A config server serving
+  // `messages.404` must not fail to load, so only 0 to n - 1 reads as a list, and a schema expecting a list still
+  // refuses anything else when it validates.
+  it('keeps numeric keys that are not 0 to n - 1 as the keys of an object', () => {
+    expect(expandKeys({ 'messages.404': 'Not found', 'messages.500': 'Oops' })).toEqual({
+      messages: { 404: 'Not found', 500: 'Oops' },
+    })
+    expect(expandKeys({ 'tags.1': 'z' })).toEqual({ tags: { 1: 'z' } })
+    expect(expandKeys({ 'tags.0': 'a', 'tags.2': 'c' })).toEqual({ tags: { 0: 'a', 2: 'c' } })
+  })
+
+  it('builds an array from indices in any order', () => {
+    expect(expandKeys({ 'tags.1': 'b', 'tags.0': 'a' })).toEqual({ tags: ['a', 'b'] })
   })
 
   // `TAGS=a` beside `TAGS__0=b` says two different things. Neither may win silently.
@@ -116,7 +122,34 @@ describe('buildTree', () => {
   })
 
   it('names the source in an error', () => {
-    expect(() => buildTree([[['tags', '1'], 'z']], 'env:APP_')).toThrow(/from "env:APP_"/)
+    expect(() =>
+      buildTree(
+        [
+          [['tags'], 'a'],
+          [['tags', '0'], 'b'],
+        ],
+        'env:APP_',
+      ),
+    ).toThrow(/from "env:APP_"/)
+  })
+
+  // The parent wins whichever came first, so the tree does not depend on the order the entries arrive in, which for
+  // the environment is whatever order the process holds its variables in.
+  it('drops a value whose path is also a parent, and reports it, when given somewhere to report it', () => {
+    const value: [readonly string[], ConfigValue] = [['otel', 'resource'], 'x']
+    const parent: [readonly string[], ConfigValue] = [['otel', 'resource', 'attributes'], 'y']
+
+    for (const entries of [
+      [value, parent],
+      [parent, value],
+    ]) {
+      const dropped: string[] = []
+
+      expect(buildTree(entries, 'env', path => dropped.push(path.join('.')))).toEqual({
+        otel: { resource: { attributes: 'y' } },
+      })
+      expect(dropped).toEqual(['otel.resource'])
+    }
   })
 })
 
