@@ -436,7 +436,6 @@ export class ConfigStore<T> {
         sources,
         issues: error.issues,
         revision: this.#revision,
-        secrets: this.#secrets,
       })
       return this.#outcome('rejected', [], failures, error)
     }

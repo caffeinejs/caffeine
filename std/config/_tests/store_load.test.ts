@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { $t } from '../../schema/t.js'
 import { ErrConfig } from '../errors.js'
 import { loadConfig } from '../load.js'
+import { REDACTED } from '../redact.js'
 import { passthroughConfigSchema } from '../schema.js'
 import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../types.js'
 import { RecordingLogger } from './log.testkit.js'
@@ -78,6 +79,18 @@ describe('loadConfig', () => {
       name: 'ErrConfigValidation',
       code: 'ERR_CONFIG_VALIDATION',
     })
+  })
+
+  // Whatever runs the process logs a failed start-up, and a codec's parser quotes the text it rejected.
+  it('fails at start-up without the text of a secret', async () => {
+    const schema = $t.Object({ credentials: $t.Secret($t.JSON($t.Object({ key: $t.String() }))) })
+
+    const error = await loadConfig(definition([source('env', { credentials: 'hunter2' })], schema)).catch(
+      (e: unknown) => e,
+    )
+
+    expect(error).toMatchObject({ code: 'ERR_CONFIG_VALIDATION', issues: [{ path: 'credentials', message: REDACTED }] })
+    expect((error as Error).message).not.toContain('hunter2')
   })
 
   it('rejects a root that validates to something other than an object', async () => {

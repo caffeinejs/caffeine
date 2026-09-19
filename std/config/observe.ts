@@ -2,9 +2,7 @@ import { channel, tracingChannel, type TracingChannel } from 'node:diagnostics_c
 
 import type { Logger } from '../logger/logger.js'
 import type { SchemaIssue } from '../schema/schema.js'
-import { REDACTED, isSecretPath, type SecretPaths } from './redact.js'
 import type { ConfigStore } from './store.js'
-import { toParts } from './tree.js'
 import type { ConfigLayer, ConfigReloadOutcome, ConfigTrigger } from './types.js'
 
 /**
@@ -159,22 +157,18 @@ export class ConfigEvents {
     )
   }
 
-  /** A foreign validator may echo the value it rejected, so an issue under a secret path loses its message. */
   rejected(fields: {
     trigger: ConfigTrigger
     sources: readonly string[]
     issues: readonly SchemaIssue[]
     revision: number
-    secrets: SecretPaths
   }): void {
     this.#current().error(
       {
         trigger: fields.trigger,
         sources: fields.sources,
-        issues: fields.issues.map(issue => ({
-          path: issue.path,
-          message: isSecretPath(toParts(issue.path), fields.secrets) ? REDACTED : issue.message,
-        })),
+        // Already redacted: validation drops the message of an issue under a secret.
+        issues: fields.issues.map(({ path, message }) => ({ path, message })),
         revision: fields.revision,
       },
       'configuration reload rejected',

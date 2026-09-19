@@ -1,5 +1,6 @@
+import type { SchemaIssue } from '../schema/schema.js'
 import { isSecretSchema } from '../schema/t.js'
-import { isForbiddenKey, isPlainObject } from './tree.js'
+import { isForbiddenKey, isPlainObject, toParts } from './tree.js'
 
 /** What a redacted value reads as. A fixed string, so a dump keeps the shape it would otherwise have. */
 export const REDACTED = '[redacted]'
@@ -56,6 +57,11 @@ export function redactValue(value: unknown, parts: readonly string[], secrets: S
   }
 
   return value
+}
+
+/** `issues`, with the message of each one at or beneath a secret replaced by {@link REDACTED}. */
+export function redactIssues(issues: readonly SchemaIssue[], secrets: SecretPaths): SchemaIssue[] {
+  return issues.map(issue => (isSecretPath(toParts(issue.path), secrets) ? { ...issue, message: REDACTED } : issue))
 }
 
 /** Whether the first `secret.length` segments of `parts`, or all of them if fewer, match `secret`. */

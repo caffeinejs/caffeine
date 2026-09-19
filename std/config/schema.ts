@@ -3,6 +3,7 @@ import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { AnySchema } from '../schema/schema.js'
 import { validateSchema } from '../schema/validate.js'
 import { ErrConfigValidation } from './errors.js'
+import { collectSecretPaths, redactIssues } from './redact.js'
 import type { ConfigSchema } from './types.js'
 
 /**
@@ -32,7 +33,8 @@ export function validateConfig<T>(schema: ConfigSchema<T>, input: unknown): T {
   const result = validateSchema(schema as AnySchema, input, { decode: true })
 
   if (!result.ok) {
-    throw new ErrConfigValidation(result.issues)
+    // An issue under a secret loses its message: a codec's parser can quote the text it rejected, as `JSON.parse` does.
+    throw new ErrConfigValidation(redactIssues(result.issues, collectSecretPaths(schema)))
   }
 
   return result.value as T

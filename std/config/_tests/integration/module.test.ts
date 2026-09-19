@@ -2,8 +2,10 @@ import { $i, CaffeineIoC, Injectable, Keys, Scopes, token, type NamedToken } fro
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import { $t } from '../../../schema/t.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { loadConfig } from '../../load.js'
+import { REDACTED } from '../../redact.js'
 import { ConfigStore } from '../../store.js'
 import type { ConfigSchema, ConfigSource, InferConfig } from '../../types.js'
 
@@ -105,6 +107,19 @@ describe('ConfigModule', () => {
       name: 'ErrConfigValidation',
     })
     expect(container.get(kConfig).http.host).toBe('localhost')
+  })
+
+  // Whoever refreshes may log what the refresh threw, and a codec's parser quotes the text it rejected.
+  it('makes the refresh reject without the text of a secret', async () => {
+    const secret = $t.Object({ credentials: $t.Secret($t.JSON($t.Object({ key: $t.String() }))) })
+    const { source, state } = remote({ credentials: '{"key":"k"}' })
+    const { container } = await containerWith(secret, source)
+
+    state.data = { credentials: 'hunter2' }
+    const error = await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol).catch((e: unknown) => e)
+
+    expect(error).toMatchObject({ name: 'ErrConfigValidation', issues: [{ path: 'credentials', message: REDACTED }] })
+    expect((error as Error).message).not.toContain('hunter2')
   })
 
   it('makes the refresh reject when a live source failed', async () => {

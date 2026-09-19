@@ -240,8 +240,9 @@ logged.
 
 ## Diagnostics
 
-Mark a field `$t.Secret(...)` and every diagnostic redacts it: `explain()`, `inspect()` and the logs. A feature's
-own read path does not go through redaction. Only the `$t` dialect can be walked for secrets.
+Mark a field `$t.Secret(...)` and every diagnostic redacts it: `explain()`, `inspect()`, the logs, and the issues of
+an `ErrConfigValidation`. A feature's own read path does not go through redaction. Only the `$t` dialect can be
+walked for secrets.
 
 ```ts
 store.explain('database.host') // the value, and every layer that sets it, winner first, with its origin

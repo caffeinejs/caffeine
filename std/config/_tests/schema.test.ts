@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { $t } from '../../schema/t.js'
 import { textList } from '../../schema/text.js'
 import { ErrConfigValidation } from '../errors.js'
+import { REDACTED } from '../redact.js'
 import { validateConfig } from '../schema.js'
 import type { ConfigSchema } from '../types.js'
 
@@ -57,6 +58,34 @@ describe('validateConfig', () => {
       },
     }
     expect(() => validateConfig(asyncSchema, {})).toThrowError(/Async schema validation is not supported/)
+  })
+
+  // The error reaches whoever called, and whatever logs it. Only the issue under the secret loses its message.
+  it('drops the message of an issue under a secret, and keeps the others', () => {
+    const secret = $t.Object({ port: $t.Number(), token: $t.Secret($t.String()) })
+
+    try {
+      validateConfig(secret, { port: 'nope', token: { leaked: 'hunter2' } })
+      expect.unreachable()
+    } catch (err) {
+      expect((err as ErrConfigValidation).issues).toEqual([
+        expect.objectContaining({ path: 'port', message: 'Expected number' }),
+        expect.objectContaining({ path: 'token', message: REDACTED }),
+      ])
+    }
+  })
+
+  // A codec's parser quotes the text it rejected: JSON.parse says `"hunter2" is not valid JSON`.
+  it('keeps the text a codec rejected out of the error of a secret', () => {
+    const secret = $t.Object({ credentials: $t.Secret($t.JSON($t.Object({ key: $t.String() }))) })
+
+    try {
+      validateConfig(secret, { credentials: 'hunter2' })
+      expect.unreachable()
+    } catch (err) {
+      expect((err as ErrConfigValidation).issues).toEqual([{ path: 'credentials', message: REDACTED, code: 'Decode' }])
+      expect((err as ErrConfigValidation).message).not.toContain('hunter2')
+    }
   })
 })
 

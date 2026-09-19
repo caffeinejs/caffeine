@@ -157,7 +157,8 @@ const caffeineT = {
    *
    * A secret belongs in the configuration tree — that is how `AUTH__SCHEMES__JWT__SECRET` reaches the feature
    * that needs it, and keeping it out would mean the caller reading the environment by hand again. What must
-   * not happen is the same value coming back out of `ConfigStore.explain()`, `inspect()` or a log line.
+   * not happen is the same value coming back out of `ConfigStore.explain()`, `inspect()`, a validation error or a
+   * log line.
    *
    * ```ts
    * $t.Object({
