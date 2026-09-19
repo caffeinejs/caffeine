@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
-import { WATCH_DEBOUNCE_MS, pollDelay } from '../triggers.js'
+import { WATCH_DEBOUNCE_MS, WATCH_RETRY_MS, pollDelay } from '../triggers.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSource } from '../types.js'
 import { RecordingLogger } from './log.testkit.js'
 
@@ -197,6 +197,61 @@ describe('watching', () => {
 
     expect(store.current).toEqual({ value: 1 })
     expect(logger.at('warn')).toEqual([expect.objectContaining({ msg: 'config source failed' })])
+  })
+
+  // What a source watches can appear after start-up, such as a directory a config map is mounted on. Giving up on the
+  // first failure would leave the source unwatched for good, and without another word.
+  it('starts a watcher that could not start again, and reloads once it does', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const logger = new RecordingLogger()
+    let attempts = 0
+    let changed: (() => void) | undefined
+    let value = 1
+    const source: ConfigSource = {
+      name: 'file',
+      watch: callback => {
+        if (++attempts <= 2) {
+          throw new Error('no such directory')
+        }
+        changed = callback
+        return () => undefined
+      },
+      load: () => [{ name: 'file', data: { value } }],
+    }
+    const store = await loadConfig(definition([source]), { logger })
+
+    // Written while nothing is watching: only the reload that follows a late start can find it.
+    value = 2
+    await vi.advanceTimersByTimeAsync(WATCH_RETRY_MS)
+    expect(attempts).toBe(2)
+    await vi.advanceTimersByTimeAsync(2 * WATCH_RETRY_MS)
+    expect(attempts).toBe(3)
+    expect(store.current).toEqual({ value: 2 })
+
+    value = 3
+    changed?.()
+    await vi.advanceTimersByTimeAsync(WATCH_DEBOUNCE_MS)
+    expect(store.current).toEqual({ value: 3 })
+    expect(logger.at('warn')).toHaveLength(1)
+  })
+
+  it('stops trying to start a watcher once the store closes', async () => {
+    let attempts = 0
+    const source: ConfigSource = {
+      name: 'file',
+      watch: () => {
+        attempts++
+        throw new Error('no such directory')
+      },
+      load: () => [],
+    }
+    const store = await loadConfig(definition([source]))
+
+    await store.close()
+    await vi.advanceTimersByTimeAsync(60 * WATCH_RETRY_MS)
+
+    expect(attempts).toBe(1)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

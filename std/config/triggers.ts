@@ -3,6 +3,9 @@ import type { ConfigSource } from './types.js'
 /** How long a watched source stays quiet before it is reloaded: a burst of events becomes one reload. */
 export const WATCH_DEBOUNCE_MS = 250
 
+/** How long before a watcher that could not start is started again. Doubled per failure, up to 8 times. */
+export const WATCH_RETRY_MS = 1_000
+
 /** What the scheduler needs to know about one source. */
 export interface Triggered {
   readonly source: ConfigSource
@@ -28,7 +31,8 @@ export function pollBackoff(intervalMs: number, consecutiveFailures: number): nu
  * Arms the poll timers and the watchers of a set of sources, and disarms them.
  *
  * Every timer is unreferenced, so a trigger never keeps a process alive. A poll is scheduled when the previous
- * reload request settles, so two polls of one source never overlap.
+ * reload request settles, so two polls of one source never overlap. A watcher that cannot start is reported once
+ * and started again, backing off as a failing poll does, and the source is reloaded once it starts.
  */
 export class TriggerScheduler<S extends Triggered> {
   readonly #request: (state: S, trigger: 'poll' | 'watch') => Promise<unknown>
@@ -78,19 +82,16 @@ export class TriggerScheduler<S extends Triggered> {
       return
     }
 
-    const timer = setTimeout(
-      () => {
-        this.#timers.delete(timer)
-        void this.#request(state, 'poll').finally(() => this.#schedule(state))
-      },
-      pollDelay(state.pollMs!, state.consecutiveFailures),
-    )
-
-    timer.unref?.()
-    this.#timers.add(timer)
+    this.#after(pollDelay(state.pollMs!, state.consecutiveFailures), () => {
+      void this.#request(state, 'poll').finally(() => this.#schedule(state))
+    })
   }
 
-  #watch(state: S): void {
+  #watch(state: S, failures = 0): void {
+    if (this.#stopped) {
+      return
+    }
+
     let debounce: ReturnType<typeof setTimeout> | undefined
 
     const changed = (): void => {
@@ -102,21 +103,38 @@ export class TriggerScheduler<S extends Triggered> {
         this.#timers.delete(debounce)
       }
 
-      const timer = setTimeout(() => {
-        this.#timers.delete(timer)
+      debounce = this.#after(WATCH_DEBOUNCE_MS, () => {
         debounce = undefined
         void this.#request(state, 'watch')
-      }, WATCH_DEBOUNCE_MS)
-
-      timer.unref?.()
-      this.#timers.add(timer)
-      debounce = timer
+      })
     }
 
     try {
       this.#stops.push(state.source.watch!(changed))
     } catch (error) {
-      this.#onWatchError(state, error)
+      // What is watched may not exist yet, such as a directory mounted after start-up, so this is not the end of it.
+      if (failures === 0) {
+        this.#onWatchError(state, error)
+      }
+      this.#after(pollDelay(WATCH_RETRY_MS, failures), () => this.#watch(state, failures + 1))
+      return
     }
+
+    if (failures > 0) {
+      // Nothing reported what changed while nothing was watching.
+      void this.#request(state, 'watch')
+    }
+  }
+
+  /** Runs `run` after `ms`, on an unreferenced timer that {@link stop} clears. */
+  #after(ms: number, run: () => void): ReturnType<typeof setTimeout> {
+    const timer = setTimeout(() => {
+      this.#timers.delete(timer)
+      run()
+    }, ms)
+
+    timer.unref?.()
+    this.#timers.add(timer)
+    return timer
   }
 }

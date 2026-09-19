@@ -224,6 +224,9 @@ with `ERR_CONFIG_PROFILE`, wherever they were named.
 | Poll    | `pollInterval` on the source | Reloaded on that period, with 10 percent of jitter, backing off up to 8 times on failure |
 | Watch   | `watch(changed)` on a source | Reloaded 250 ms after the changes stop                                                   |
 
+A watcher that cannot start, because what it watches does not exist yet, is reported once and started again,
+backing off from 1 s to 8 s. The source is reloaded as soon as it starts.
+
 A reload loads only the sources its trigger names; a static source is never loaded again. Reloads never overlap:
 one that arrives mid-run joins the single follow-up. Nor do a source's loads: until a load that timed out settles,
 the source is not asked again, and each attempt fails at once with `ERR_CONFIG_SOURCE_TIMEOUT`. If no source's
