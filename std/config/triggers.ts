@@ -1,18 +1,10 @@
-import type { ConfigSource } from './types.js'
+import type { SourceState } from './store.js'
 
 /** How long a watched source stays quiet before it is reloaded: a burst of events becomes one reload. */
 export const WATCH_DEBOUNCE_MS = 250
 
 /** How long before a watcher that could not start is started again. Doubled per failure, up to 8 times. */
 export const WATCH_RETRY_MS = 1_000
-
-/** What the scheduler needs to know about one source. */
-export interface Triggered {
-  readonly source: ConfigSource
-  /** The poll period, or `undefined` when the source is not polled. */
-  readonly pollMs: number | undefined
-  readonly consecutiveFailures: number
-}
 
 /**
  * The delay before the next poll: the interval, doubled per consecutive failure up to 8 times, with 10 percent of
@@ -34,22 +26,22 @@ export function pollBackoff(intervalMs: number, consecutiveFailures: number): nu
  * reload request settles, so two polls of one source never overlap. A watcher that cannot start is reported once
  * and started again, backing off as a failing poll does, and the source is reloaded once it starts.
  */
-export class TriggerScheduler<S extends Triggered> {
-  readonly #request: (state: S, trigger: 'poll' | 'watch') => Promise<unknown>
-  readonly #onWatchError: (state: S, error: unknown) => void
+export class TriggerScheduler {
+  readonly #request: (state: SourceState, trigger: 'poll' | 'watch') => Promise<unknown>
+  readonly #onWatchError: (state: SourceState, error: unknown) => void
   readonly #timers = new Set<ReturnType<typeof setTimeout>>()
   readonly #stops: (() => void)[] = []
   #stopped = false
 
   constructor(
-    request: (state: S, trigger: 'poll' | 'watch') => Promise<unknown>,
-    onWatchError: (state: S, error: unknown) => void,
+    request: (state: SourceState, trigger: 'poll' | 'watch') => Promise<unknown>,
+    onWatchError: (state: SourceState, error: unknown) => void,
   ) {
     this.#request = request
     this.#onWatchError = onWatchError
   }
 
-  start(states: readonly S[]): void {
+  start(states: readonly SourceState[]): void {
     for (const state of states) {
       if (state.pollMs !== undefined) {
         this.#schedule(state)
@@ -77,7 +69,7 @@ export class TriggerScheduler<S extends Triggered> {
     }
   }
 
-  #schedule(state: S): void {
+  #schedule(state: SourceState): void {
     if (this.#stopped) {
       return
     }
@@ -87,7 +79,7 @@ export class TriggerScheduler<S extends Triggered> {
     })
   }
 
-  #watch(state: S, failures = 0): void {
+  #watch(state: SourceState, failures = 0): void {
     if (this.#stopped) {
       return
     }

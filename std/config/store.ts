@@ -85,7 +85,7 @@ export class ConfigStore<T> {
   readonly #states: readonly SourceState[]
   readonly #closing = new AbortController()
   readonly #views = new Set<ViewState<T>>()
-  readonly #scheduler: TriggerScheduler<SourceState>
+  readonly #scheduler: TriggerScheduler
   #notifier!: ChangeNotifier<ConfigSnapshot<T>>
   #current!: ConfigSnapshot<T>
   #live!: LiveConfig<T>
@@ -109,7 +109,7 @@ export class ConfigStore<T> {
     this.#logger = options.logger
     this.#events = new ConfigEvents(options.logger)
     this.#states = stateOf(definition.sources)
-    this.#scheduler = new TriggerScheduler<SourceState>(
+    this.#scheduler = new TriggerScheduler(
       (state, trigger) => this.#request([state], trigger),
       (state, error) => this.#reportFailure(state, error),
     )
