@@ -448,6 +448,11 @@ export class ConfigStore<T> {
     for (const [state, layers] of candidates) {
       commit(state, layers)
     }
+    // A verdict is about a merge, not about one source: once the rest of the tree changed, a candidate rejected
+    // before may be valid, so none of them may be short-circuited again.
+    for (const state of this.#states) {
+      state.rejected = undefined
+    }
     this.#merged = freezeDeep(merged)
 
     if (next === this.#current) {
@@ -671,7 +676,6 @@ function triggerOf(source: ConfigSource): ConfigTrigger {
 
 function commit(state: SourceState, layers: readonly ConfigLayer[]): void {
   state.layers = layers
-  state.rejected = undefined
   state.keys = layers.reduce((sum, layer) => sum + countLeaves(layer.data), 0)
 }
 

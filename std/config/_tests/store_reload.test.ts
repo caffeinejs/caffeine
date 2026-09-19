@@ -15,14 +15,17 @@ function definition<T = unknown>(
   return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
 }
 
-/** A live source over data the test changes, counting its loads. */
+/** A live source over data the test changes, counting its loads. It cannot be reached while `fail` is set. */
 function liveSource(name: string, initial: Record<string, unknown>) {
-  const state = { data: initial, loads: 0 }
+  const state = { data: initial, loads: 0, fail: false }
   const source: ConfigSource = {
     name,
     live: true,
     load: () => {
       state.loads++
+      if (state.fail) {
+        throw new Error(`${name} is unreachable`)
+      }
       return [{ name, data: structuredClone(state.data) as never }]
     },
   }
@@ -246,6 +249,29 @@ describe('reload', () => {
     state.data = { ...initial, server: { host: 'h', port: 'other' } }
     await store.reload()
     expect(logger.at('error')).toHaveLength(2)
+  })
+
+  // A rejection is a verdict on a merge, not on one source's data. Once another source changed the rest of the tree,
+  // a candidate rejected before can be valid, and short-circuiting it would keep it out for good.
+  it('validates a rejected candidate again once another source changed the tree', async () => {
+    const a = liveSource('a', initial)
+    const b = liveSource('b', {})
+    const store = await loadConfig<App>(definition([a.source, b.source], schema))
+
+    a.state.data = { ...initial, server: { host: 'h2', port: 'nope' } }
+    expect((await store.reload()).status).toBe('rejected')
+
+    // `b` overrides the port while `a` cannot be reached, so `b` is applied on its own.
+    a.state.fail = true
+    b.state.data = { server: { port: 2 } }
+    expect((await store.reload()).status).toBe('applied')
+
+    // `a` answers with the very candidate rejected before, which `b` has made valid.
+    a.state.fail = false
+    const outcome = await store.reload()
+
+    expect(outcome).toMatchObject({ status: 'applied', changed: ['server.host'] })
+    expect(store.current.server).toEqual({ host: 'h2', port: 2 })
   })
 
   it('applies a source once its data is valid again', async () => {
