@@ -74,7 +74,7 @@ interface PendingReload {
  * The runtime of an application's configuration: it loads the sources, validates the result, keeps it current as
  * live sources change, and says why every value is what it is.
  *
- * Instances come from {@link loadConfig}. The class is public so that it can be a container key.
+ * Instances come from {@link loadConfig}.
  */
 export class ConfigStore<T> {
   /** What `loadConfig()` was given. `ConfigModule` reads the keys off it. */
@@ -711,6 +711,8 @@ function isLayer(value: unknown): value is ConfigLayer {
   )
 }
 
+// Not `freezeCopy`: what a source hands over is copied even when it is frozen, since being frozen does not make it
+// free of the keys dropped here.
 function copyTree(value: unknown, path: string, dropped: string[]): unknown {
   if (Array.isArray(value)) {
     return Object.freeze(value.map((element, i) => copyTree(element, join(path, String(i)), dropped)))
