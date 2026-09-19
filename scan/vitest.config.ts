@@ -6,6 +6,8 @@ export default defineConfig({
   oxc: false,
   plugins: [
     swc.vite({
+      // Vite already applied the dist file's source map; SWC must not apply it again.
+      inputSourceMap: false,
       jsc: {
         parser: { syntax: 'typescript', decorators: true },
         target: 'esnext',
