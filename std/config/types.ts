@@ -1,3 +1,4 @@
+import type { NamedToken } from '@caffeinejs/di'
 import type { TSchema } from '@sinclair/typebox'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
@@ -5,6 +6,7 @@ import type { Duration } from '../duration/duration.js'
 import type { Logger } from '../logger/logger.js'
 import type { AnySchema, InferSchema } from '../schema/schema.js'
 import type { ErrConfigValidation } from './errors.js'
+import type { ConfigStore } from './store.js'
 
 export type ConfigPrimitive = string | number | boolean | null
 export type ConfigValue = ConfigPrimitive | readonly ConfigValue[] | ConfigObject
@@ -95,6 +97,22 @@ export type LiveConfig<T> = ReadonlyConfig<T>
 
 /** The validated tree at one revision. Frozen. A reload replaces it and never mutates it. */
 export type ConfigSnapshot<T> = ReadonlyConfig<T>
+
+/** What `newConfiguration(...).build()` returns and `loadConfig()` takes. Data only. */
+export interface ConfigDefinition<T = unknown> {
+  readonly schema: ConfigSchema<T>
+  /**
+   * The key the live config object is bound under. `T` is the application's own type, already read-only
+   * (`InferConfig<typeof schema>`), so `token<AppConfig>()` is what an application writes.
+   */
+  readonly key: NamedToken<T> | undefined
+  /** The key the typed store is bound under, for an application that wants one. */
+  readonly storeKey: NamedToken<ConfigStore<T>> | undefined
+  /** Lowest precedence first: a later source wins a conflicting value. */
+  readonly sources: readonly ConfigSource[]
+  /** Bounds each load of each source. */
+  readonly loadTimeoutMs: number
+}
 
 /** Which trigger reloads a source. A `static` source is never reloaded. */
 export type ConfigTrigger = 'static' | 'manual' | 'poll' | 'watch'

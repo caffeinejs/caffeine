@@ -4,5 +4,5 @@
     "noEmit": false
   },
   "references": [{ "path": "../di/tsconfig.build.json" }],
-  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "vitest.config.ts"]
+  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts", "**/*.testkit.ts", "vitest.config.ts"]
 }
