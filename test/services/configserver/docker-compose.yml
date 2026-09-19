@@ -3,6 +3,11 @@ services:
     build: .
     ports:
       - '8888:8888'
+    environment:
+      # The e2e specs write their own application's files here, and edit them while an application polls.
+      SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCHLOCATIONS: classpath:/config,file:/runtime/
+    volumes:
+      - ./runtime:/runtime:ro
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://localhost:8888/actuator/health']
       interval: 10s
