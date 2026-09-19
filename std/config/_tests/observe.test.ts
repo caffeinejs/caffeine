@@ -4,7 +4,6 @@ import type { Logger } from '../../logger/logger.js'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { logConfigLoaded } from '../observe.js'
-import { REDACTED } from '../redact.js'
 import type { ConfigDefinition, ConfigSchema, ConfigSource } from '../types.js'
 import { RecordingLogger } from './log.testkit.js'
 
@@ -14,7 +13,7 @@ function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>): Config
 
 const schema = $t.Object({
   port: $t.Number(),
-  token: $t.Secret($t.String()),
+  token: $t.String(),
   tags: $t.Optional($t.Array($t.String())),
 })
 
@@ -113,13 +112,13 @@ describe('the events the store logs', () => {
     expect(logger.records.map(r => [r.level, r.msg])).toEqual([['debug', 'configuration unchanged']])
   })
 
-  // A foreign validator may echo the value it rejected. A secret must not reach a log that way.
-  it('lists the issues of a rejected reload, without the message of a secret one', async () => {
+  // The log says where and what was expected, which is enough to fix the source. It never says what the value was.
+  it('lists the issues of a rejected reload as a path and a message, never the value', async () => {
     const logger = new RecordingLogger()
     const { source, state } = live({ port: 1, token: 't' })
     const store = await loadConfig(definition([source], schema), { logger })
 
-    // An object is not converted to a string, so the secret field fails as well.
+    // An object is not converted to a string, so the token fails as well.
     state.data = { port: 'nope', token: { leaked: 'super-secret' } }
     await store.reload()
 
@@ -128,10 +127,11 @@ describe('the events the store logs', () => {
     expect(record.fields).toMatchObject({ trigger: 'manual', sources: ['remote'], revision: 0 })
     expect(record.fields.issues).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: 'port', message: expect.not.stringContaining(REDACTED) }),
-        { path: 'token', message: REDACTED },
+        { path: 'port', message: 'Expected number' },
+        { path: 'token', message: 'Expected string' },
       ]),
     )
+    expect(JSON.stringify(record.fields)).not.toContain('super-secret')
   })
 
   it('reports a listener that throws', async () => {

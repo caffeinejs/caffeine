@@ -161,7 +161,7 @@ export interface ConfigSourceFailure {
 
 export interface ConfigExplanation {
   readonly path: string
-  /** The value in the current snapshot, secrets redacted. */
+  /** The value in the current snapshot, as it is. */
   readonly value: unknown
   /** Every layer defining the path, winner first. Empty with a present value: a schema default. */
   readonly layers: readonly ConfigExplanationLayer[]
@@ -170,7 +170,7 @@ export interface ConfigExplanation {
 export interface ConfigExplanationLayer {
   readonly layer: string
   readonly origin: string
-  /** Secrets redacted. */
+  /** The value this layer supplies, as it is. */
   readonly value: unknown
 }
 
@@ -180,7 +180,7 @@ export interface ConfigInspection {
   readonly swappedAt: number
   readonly profiles: readonly string[]
   readonly sources: readonly ConfigSourceStatus[]
-  /** The current snapshot, secrets redacted. */
+  /** The current snapshot, every value as it is. */
   readonly snapshot: unknown
 }
 

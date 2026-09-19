@@ -7,7 +7,6 @@ import { createLive, syncLive } from './live.js'
 import { mergeLayers } from './merge.js'
 import { ConfigEvents, kFirstLoadMs, loadChannel, publishChange, reloadChannel, traced } from './observe.js'
 import { deepEquals, reconcile } from './reconcile.js'
-import { collectSecretPaths, redactValue, type SecretPaths } from './redact.js'
 import { validateConfig } from './schema.js'
 import { countLeaves, freezeCopy, freezeDeep, isForbiddenKey, isPlainObject, toParts } from './tree.js'
 import { TriggerScheduler, pollBackoff } from './triggers.js'
@@ -90,7 +89,6 @@ export class ConfigStore<T> {
   #current!: ConfigSnapshot<T>
   #live!: LiveConfig<T>
   #merged!: ConfigObject
-  #secrets: SecretPaths = []
   #revision = 0
   #swappedAt = 0
   #firstLoadMs = 0
@@ -171,7 +169,6 @@ export class ConfigStore<T> {
     // mode. A fresh copy of each new node is back in fast mode, where a read is a field load.
     this.#current = freezeCopy(validated) as ConfigSnapshot<T>
     this.#live = createLive(this.#current)
-    this.#secrets = collectSecretPaths(this.definition.schema)
     this.#notifier = new ChangeNotifier<ConfigSnapshot<T>>(this.#current, error => this.#events.listenerFailed(error))
     this.#swappedAt = Date.now()
     this.#firstLoadMs = performance.now() - started
@@ -250,18 +247,24 @@ export class ConfigStore<T> {
     this.#scheduler.start(this.#states)
   }
 
-  /** A string path splits on `.` and on `[n]`. A key that holds a literal dot needs the array form. */
+  /**
+   * Why a path has the value it has. A string path splits on `.` and on `[n]`. A key that holds a literal dot needs
+   * the array form.
+   *
+   * Every value comes back as it is, a secret included: treat the result as sensitive.
+   */
   explain(path: string | readonly string[]): ConfigExplanation {
-    return explainPath(toParts(path), this.#current, this.#layers(), this.#secrets)
+    return explainPath(toParts(path), this.#current, this.#layers())
   }
 
+  /** The state of the store. The snapshot holds every value as it is, a secret included: treat it as sensitive. */
   inspect(): ConfigInspection {
     return {
       revision: this.#revision,
       swappedAt: this.#swappedAt,
       profiles: this.#profiles,
       sources: this.#states.map(describeSource),
-      snapshot: redactValue(this.#current, [], this.#secrets),
+      snapshot: this.#current,
     }
   }
 

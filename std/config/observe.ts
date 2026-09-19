@@ -167,7 +167,6 @@ export class ConfigEvents {
       {
         trigger: fields.trigger,
         sources: fields.sources,
-        // Already redacted: validation drops the message of an issue under a secret.
         issues: fields.issues.map(({ path, message }) => ({ path, message })),
         revision: fields.revision,
       },

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
-import { REDACTED } from '../redact.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { ArgsConfigSource } from '../sources/args_source.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
@@ -17,7 +16,7 @@ function source(name: string, ...layers: ConfigLayer[]): ConfigSource {
 
 const schema = $t.Object({
   server: $t.Object({ host: $t.String({ default: '0.0.0.0' }), port: $t.Number() }, { default: {} }),
-  db: $t.Object({ url: $t.String(), password: $t.Secret($t.String()) }),
+  db: $t.Object({ url: $t.String(), password: $t.String() }),
   map: $t.Optional($t.Record($t.String(), $t.String())),
 })
 
@@ -63,42 +62,18 @@ describe('ConfigStore.explain', () => {
     expect(store.explain('server.host')).toEqual({ path: 'server.host', value: '0.0.0.0', layers: [] })
   })
 
-  it('redacts a secret in the value and in every layer, and keeps the origin', async () => {
+  // What explain() returns is for whoever asked: nothing in it is hidden, so a caller that prints it prints secrets.
+  it('explains a branch as the part of it each layer holds, every value as it is', async () => {
     const store = await loaded()
 
-    expect(store.explain('db.password')).toEqual({
-      path: 'db.password',
-      value: REDACTED,
+    expect(store.explain('db')).toEqual({
+      path: 'db',
+      value: { url: 'u', password: 'from-env' },
       layers: [
-        { layer: 'env', origin: 'env:APP_DB__PASSWORD', value: REDACTED },
-        { layer: 'file:app.json', origin: 'file:app.json', value: REDACTED },
+        { layer: 'env', origin: 'env', value: { password: 'from-env' } },
+        { layer: 'file:app.json', origin: 'file:app.json', value: { url: 'u', password: 'from-file' } },
       ],
     })
-    expect(store.explain('db')).toMatchObject({ value: { url: 'u', password: REDACTED } })
-  })
-
-  // One schema object at two paths, the way an application reuses a feature's exported schema: the second password
-  // is as hidden as the first.
-  it('redacts a secret at every path a shared schema is used at', async () => {
-    const credentials = $t.Object({ user: $t.String(), password: $t.Secret($t.String()) })
-    const store = await loadConfig(
-      definition(
-        [
-          source('file', {
-            name: 'file:app.json',
-            data: { primary: { user: 'a', password: 'first' }, replica: { user: 'b', password: 'second' } },
-          }),
-        ],
-        $t.Object({ primary: credentials, replica: credentials }),
-      ),
-    )
-
-    expect(store.explain('replica.password')).toEqual({
-      path: 'replica.password',
-      value: REDACTED,
-      layers: [{ layer: 'file:app.json', origin: 'file:app.json', value: REDACTED }],
-    })
-    expect(JSON.stringify(store.inspect())).not.toContain('second')
   })
 
   it('reaches a key holding a literal dot through the array form', async () => {
@@ -169,13 +144,13 @@ describe('ConfigStore.inspect', () => {
     expect(inspection.sources[0]).not.toHaveProperty('lastError')
   })
 
-  it('redacts the snapshot it reports', async () => {
+  it('reports the current snapshot, every value as it is', async () => {
     const store = await loaded()
 
+    expect(store.inspect().snapshot).toBe(store.current)
     expect(store.inspect().snapshot).toEqual({
       server: { host: '0.0.0.0', port: 8080 },
-      db: { url: 'u', password: REDACTED },
+      db: { url: 'u', password: 'from-env' },
     })
-    expect(JSON.stringify(store.inspect())).not.toContain('from-env')
   })
 })

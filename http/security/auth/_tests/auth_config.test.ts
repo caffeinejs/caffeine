@@ -1,6 +1,6 @@
 import { token } from '@caffeinejs/di'
 import { $t, newConfiguration } from '@caffeinejs/std'
-import { ConfigStore, EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
@@ -21,9 +21,7 @@ import { kAuthSchemeDescriptors } from '../keys.js'
 // The application owns the schema: it declares where the authentication block lives — importing the feature's
 // own schema for the scheme-independent half — and `a.config(c.auth)` hands the feature that node.
 //
-// `schemes` is declared **precisely**, splicing in each kind's own schema. That is what carries `$t.Secret`
-// into the tree, and `$t.Secret` is what the diagnostics redact on: an open record would validate the same
-// values and print the secrets.
+// `schemes` is declared **precisely**, splicing in each kind's own schema, so each scheme's options are validated.
 const rootSchema = $t.Object({
   auth: $t.Object(
     {
@@ -117,32 +115,6 @@ describe('authentication configuration', () => {
 
     const res = await app.fetch('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(CODE_SECRET)}` },
-    })
-    expect(res.status).toBe(200)
-
-    await app.close()
-  })
-
-  it('redacts a configured secret in the diagnostics while the handler still authenticates with it', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }))
-      .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
-      config: conf,
-    }).authentication((a, c) =>
-      a.config(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-    )
-
-    await app.ready()
-
-    const store = app.container.get(ConfigStore)
-    expect(store.explain('auth.schemes.jwt.secret').value).toBe('[redacted]')
-    expect(JSON.stringify(store.explain('auth.schemes.jwt.secret'))).not.toContain(ENV_SECRET)
-    expect(JSON.stringify(store.inspect())).not.toContain(ENV_SECRET)
-
-    // Redacted at the diagnostic boundary only — the scheme itself has the real value.
-    const res = await app.fetch('/protected', {
-      headers: { authorization: `Bearer ${await tokenSignedWith(ENV_SECRET)}` },
     })
     expect(res.status).toBe(200)
 

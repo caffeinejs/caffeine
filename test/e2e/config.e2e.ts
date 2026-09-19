@@ -35,7 +35,7 @@ const schema = $t.Object({
   server: $t.Object({ port: $t.Number() }),
   features: $t.Object({ beta: $t.Boolean() }),
   limits: $t.Object({ rps: $t.Number() }),
-  db: $t.Object({ url: $t.String(), password: $t.Secret($t.String()) }),
+  db: $t.Object({ url: $t.String(), password: $t.String() }),
 })
 
 type AppConfig = InferConfig<typeof schema>
@@ -182,9 +182,9 @@ describe.skipIf(!up)('a web application configured from a config server and five
     })
   })
 
-  // Whoever asks where a value came from is pointed at the config server's file, and a secret is never shown, not
-  // even as the value a lower source had.
-  it('traces a setting to the config server file that set it, and never shows a secret', () => {
+  // Whoever asks where a value came from is pointed at the config server's file, and sees what each source held,
+  // the losing ones included.
+  it('traces a setting to the config server file that set it, with what each source held', () => {
     expect(store.explain('greeting').layers.map(layer => layer.origin)).toEqual([
       expect.stringMatching(/^spring-cloud-config:.*e2e-web-dev\.yml/),
       expect.stringMatching(/^spring-cloud-config:.*e2e-web\.yml/),
@@ -193,8 +193,8 @@ describe.skipIf(!up)('a web application configured from a config server and five
     ])
 
     const password = store.explain('db.password')
-    expect(password.value).toBe('[redacted]')
-    expect(password.layers.map(layer => layer.value)).toEqual(['[redacted]', '[redacted]'])
+    expect(password.value).toBe('s3cr3t')
+    expect(password.layers.map(layer => layer.value)).toEqual(['s3cr3t', 'dev'])
   })
 
   // The point of a live source: an operator edits the config server, and the running application serves the new

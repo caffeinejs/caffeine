@@ -249,17 +249,19 @@ logged.
 
 ## Diagnostics
 
-Mark a field `$t.Secret(...)` and every diagnostic redacts it: `explain()`, `inspect()`, the logs, and the issues of
-an `ErrConfigValidation`. A feature's own read path does not go through redaction. Only the `$t` dialect can be
-walked for secrets.
-
 ```ts
 store.explain('database.host') // the value, and every layer that sets it, winner first, with its origin
-store.inspect() // the revision, each source's trigger, layers and health, and a redacted snapshot
+store.inspect() // the revision, each source's trigger, layers and health, and the snapshot
 ```
 
+Both return every value as it is, a secret included, so treat what they return as sensitive.
+
 The store logs under `{ name: 'config' }`: the first load, every reload with the paths that changed, rejections,
-failing and recovering sources, and failing listeners. Values are never logged, only paths.
+failing and recovering sources, and failing listeners. Values are never logged, only paths. The issues of an
+`ErrConfigValidation` from a `$t` schema name a path and what was expected there, never the value: `$t.JSON` and
+`$t.List` report text they cannot read without quoting it. Two messages are not the store's own and may quote
+text: a config file that does not parse, where the parser says what it stopped at, and the issues of a Standard
+Schema, which its library writes.
 
 It also publishes on `node:diagnostics_channel`, costing nothing while nobody subscribes. `load` and `reload` are
 tracing channels; `change` is a plain one. The names are in `CONFIG_CHANNELS`.
@@ -307,7 +309,7 @@ A tree that cannot validate fails `ready()`, which is more legible than failing 
 | Vocabulary            | `types.ts`                                                 |
 | Trees                 | `tree.ts`, `merge.ts`, `reconcile.ts`, `live.ts`           |
 | Runtime               | `store.ts`, `load.ts`, `triggers.ts`, `change_notifier.ts` |
-| Schema and secrets    | `schema.ts`, `redact.ts`, `errors.ts`                      |
+| Schema                | `schema.ts`, `errors.ts`                                   |
 | Diagnostics           | `explain.ts`, `observe.ts`                                 |
 | Profiles              | `profiles.ts`                                              |
 | Container integration | `integration/module.ts`                                    |
