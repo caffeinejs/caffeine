@@ -94,6 +94,16 @@ describe('newConfiguration', () => {
     expect(() => (conf.sources as ConfigSource[]).push(new InlineConfigSource({}, 'late'))).toThrow(TypeError)
   })
 
+  // The list form registers in the order written, after what was already there: a later source still wins.
+  it('adds several sources at once, in order', () => {
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigSource({}, 'defaults'))
+      .sources(new InlineConfigSource({}, 'file'), new InlineConfigSource({}, 'env'))
+      .build()
+
+    expect(conf.sources.map(source => source.name)).toEqual(['defaults', 'file', 'env'])
+  })
+
   it('bounds each load by 30 seconds unless told otherwise', () => {
     expect(newConfiguration(schema, kConfig).build().loadTimeoutMs).toBe(30_000)
     expect(newConfiguration(schema, kConfig).loadTimeout('5s').build().loadTimeoutMs).toBe(5_000)

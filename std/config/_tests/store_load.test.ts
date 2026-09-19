@@ -239,6 +239,26 @@ describe('loadConfig', () => {
     })
   })
 
+  // A source written in plain JavaScript can hand back one layer instead of a list. The message names the contract.
+  it('refuses a source whose load() does not return a list of layers', async () => {
+    const single = source('single', {}, { load: () => ({ name: 'single', data: {} }) as never })
+
+    await expect(loadConfig(definition([single]))).rejects.toMatchObject({
+      code: 'ERR_CONFIG_SOURCE',
+      message: 'Cannot load config source "single": load() must return an array of layers',
+    })
+  })
+
+  // A key set to undefined says nothing: it neither hides what a lower source set there nor counts as a setting.
+  it('ignores a key a source sets to undefined', async () => {
+    const store = await loadConfig(
+      definition([source('file', { port: 3000, host: 'h' }), source('code', { port: undefined, host: 'x' })]),
+    )
+
+    expect(store.current).toEqual({ port: 3000, host: 'x' })
+    expect(store.inspect().sources.find(s => s.name === 'code')).toMatchObject({ keys: 1 })
+  })
+
   it('arms no trigger when told not to start', async () => {
     vi.useFakeTimers()
 

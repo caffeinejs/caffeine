@@ -80,6 +80,23 @@ describe('SpringCloudConfigSource', () => {
     expect(await source({ includeMetadata: false }).load(context())).toHaveLength(2)
   })
 
+  it('adds only the version when the server reports no state', async () => {
+    const { state: _state, ...withoutState } = body
+    vi.stubGlobal('fetch', respond([{ ok: true, body: withoutState }]))
+
+    expect((await source().load(context())).at(-1)).toEqual({
+      name: 'spring-cloud-config:metadata',
+      data: { config: { client: { version: 'abc123' } } },
+    })
+  })
+
+  // A server that holds no file for the application answers with no property source, and so adds nothing.
+  it('contributes nothing when the server lists no property source', async () => {
+    vi.stubGlobal('fetch', respond([{ ok: true, body: { name: 'caffeine', profiles: ['default'] } }]))
+
+    expect(await source().load(context())).toEqual([])
+  })
+
   it('is live, and carries what the store reads off it', () => {
     const polled: ConfigSource = source({ optional: true, pollInterval: '30s', name: 'remote' })
 
@@ -161,6 +178,23 @@ describe('SpringCloudConfigSource', () => {
 
     expect(beforeRequest).toHaveBeenCalledTimes(2)
     expect((fetch.mock.calls[1] as unknown[])[1]).toMatchObject({ headers: { 'X-Custom': 'value' } })
+  })
+
+  // A dropped connection is worth another attempt, after a pause, so a server that is restarting is not hammered.
+  it('retries a failed connection after a pause', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce({ ok: true, json: async () => body })
+    vi.stubGlobal('fetch', fetch)
+
+    const started = performance.now()
+    const layers = await source({ retries: 1 }).load(context())
+
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(performance.now() - started).toBeGreaterThanOrEqual(90)
+    expect(layers).toHaveLength(3)
   })
 
   it('passes the dispatcher through to fetch', async () => {

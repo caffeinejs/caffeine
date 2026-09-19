@@ -210,6 +210,28 @@ describe('reload', () => {
     expect(logger.at('error').map(r => r.msg)).toEqual(['configuration reload rejected'])
   })
 
+  // A validator that throws, rather than reporting issues, still only rejects the reload: reload() never rejects,
+  // and the application stays on its last good revision.
+  it('rejects a reload whose validator throws, and keeps the last good revision', async () => {
+    const { source, state } = liveSource('remote', { mode: 'ok' })
+    const validate = (value: unknown) => {
+      if ((value as { mode?: string }).mode === 'bad') {
+        throw new Error('validator blew up')
+      }
+      return { value }
+    }
+    const store = await loadConfig(definition([source], { '~standard': { version: 1, vendor: 'test', validate } }))
+    const before = store.current
+
+    state.data = { mode: 'bad' }
+    const outcome = await store.reload()
+
+    expect(outcome.status).toBe('rejected')
+    expect(outcome.error?.issues).toEqual([{ path: '', message: 'validator blew up' }])
+    expect(store.current).toBe(before)
+    expect(store.revision).toBe(0)
+  })
+
   it('reports one rejected candidate once, however often it is found again', async () => {
     const logger = new RecordingLogger()
     const { source, state } = liveSource('remote', initial)
@@ -366,5 +388,26 @@ describe('reload', () => {
     await store.close()
 
     expect(closed).toHaveBeenCalledTimes(1)
+  })
+
+  // One source that cannot close must not keep the others open, and close() reports it rather than throwing.
+  it('closes the other sources when one fails to close, and reports it', async () => {
+    const logger = new RecordingLogger()
+    const closed = vi.fn()
+    const stuck: ConfigSource = {
+      name: 'stuck',
+      load: () => [],
+      close: () => {
+        throw new Error('socket stuck')
+      },
+    }
+    const store = await loadConfig(definition([stuck, { name: 'b', load: () => [], close: closed }]), { logger })
+
+    await store.close()
+
+    expect(closed).toHaveBeenCalledOnce()
+    expect(logger.at('warn')).toEqual([
+      expect.objectContaining({ msg: 'config source failed', fields: expect.objectContaining({ source: 'stuck' }) }),
+    ])
   })
 })

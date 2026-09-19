@@ -77,6 +77,31 @@ describe('MutableConfigSource', () => {
     expect(data(source)).toEqual({ health: { verbose: true } })
   })
 
+  // The empty path is the root, so a set there is a replace.
+  it('replaces everything when set at the empty path', () => {
+    const source = new MutableConfigSource().set('server.port', 3000)
+
+    expect(data(source.set([], { health: { verbose: true } }))).toEqual({ health: { verbose: true } })
+    expect(data(source.set('', { a: 1 }))).toEqual({ a: 1 })
+  })
+
+  it('changes nothing when unsetting a path that runs through a leaf or through nothing', () => {
+    const source = new MutableConfigSource().set('server.port', 3000)
+
+    source.unset('server.port.number').unset('missing.deep.path')
+
+    expect(data(source)).toEqual({ server: { port: 3000 } })
+  })
+
+  // `source.merge({ server: { port: options.port } })` with no port given must not erase the port it holds.
+  it('skips a key merged in as undefined', () => {
+    const source = new MutableConfigSource().set('server.port', 3000)
+
+    source.merge({ server: { port: undefined as never }, extra: undefined as never })
+
+    expect(data(source)).toEqual({ server: { port: 3000 } })
+  })
+
   it('hands each load its own copy, so a later write cannot change one already handed out', () => {
     const source = new MutableConfigSource().set('server.port', 3000)
     const first = data(source)
@@ -106,6 +131,22 @@ describe('MutableConfigSource', () => {
     source.set('a', 1)
 
     expect(changed).toHaveBeenCalledTimes(4)
+  })
+
+  // A source can outlive a store: a second store over it takes the watch, and the first store closing must not
+  // unhook it.
+  it('keeps the current watcher when an earlier one stops', () => {
+    const source = new MutableConfigSource()
+    const earlier = vi.fn()
+    const current = vi.fn()
+    const stopEarlier = source.watch(earlier)
+    source.watch(current)
+
+    stopEarlier()
+    source.set('a', 1)
+
+    expect(current).toHaveBeenCalledOnce()
+    expect(earlier).not.toHaveBeenCalled()
   })
 
   // A write reaches readers on its own: no refresh call, no reload call.

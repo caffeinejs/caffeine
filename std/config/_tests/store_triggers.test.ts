@@ -197,4 +197,50 @@ describe('triggers and the lifecycle', () => {
     expect(vi.getTimerCount()).toBe(0)
     expect(stopped).toBe(1)
   })
+
+  // The next poll is armed when the previous one settles, and one can still be loading when the store closes.
+  it('arms no further poll when the store closes while a poll is loading', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    let loads = 0
+    const source: ConfigSource = {
+      name: 'remote',
+      pollInterval: 1_000,
+      load: () => (++loads === 1 ? [] : new Promise<never>(() => undefined)),
+    }
+    const store = await loadConfig(definition([source]))
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(loads).toBe(2)
+
+    await store.close()
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(loads).toBe(2)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  // A watcher can still report a change after close, before it has stopped.
+  it('arms nothing for a change reported after close', async () => {
+    let changed: (() => void) | undefined
+    let loads = 0
+    const source: ConfigSource = {
+      name: 'file',
+      watch: callback => {
+        changed = callback
+        return () => undefined
+      },
+      load: () => {
+        loads++
+        return []
+      },
+    }
+    const store = await loadConfig(definition([source]))
+
+    await store.close()
+    changed?.()
+
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(WATCH_DEBOUNCE_MS)
+    expect(loads).toBe(1)
+  })
 })
