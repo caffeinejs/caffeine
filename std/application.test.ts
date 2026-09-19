@@ -97,6 +97,27 @@ describe('Application lifecycle', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
+  // The store closes with the container, and only an initialized container has the hook that does it. A ready() that
+  // fails before then must close it, or the sources it loaded stay open with nobody left to close them.
+  it('closes the configuration when ready() fails before the container initializes', async () => {
+    const close = vi.fn()
+    const conf = newConfiguration(caffeineSchema, kConfig)
+      .source({ name: 'watched', load: () => [{ name: 'watched', data: {} }], close })
+      .build()
+    const misconfigured: Feature = {
+      [kFeatureName]: 'misconfigured',
+      [kFeatureConfigure]() {
+        throw new Error('misconfigured')
+      },
+    }
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
+      misconfigured,
+    )
+
+    await expect(app.ready()).rejects.toThrow('misconfigured')
+    expect(close).toHaveBeenCalledOnce()
+  })
+
   it('installs a feature and bootstraps it', async () => {
     const kSentinel = token<Record<string, unknown>>(Symbol('sentinel'))
     const state: { value: string | undefined } = { value: undefined }

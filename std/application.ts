@@ -308,50 +308,57 @@ export class Application<TConfig = unknown> {
     this.#store = store
     this.#container.addModules(ConfigModule(store))
 
-    // The framework's own block, read from the merged tree: it is there whether or not the application's schema
-    // declares it.
-    const caffeine = validateConfig(
-      caffeineConfigSchema,
-      readPath(store[kMergedTree], CAFFEINE_CONFIG_NAMESPACE) ?? {},
-    ) as CaffeineConfig
+    // The store closes with the container, through a hook the module installs when the container initializes. A
+    // failure before then would leave the sources it loaded open, with nothing left to close them.
+    try {
+      // The framework's own block, read from the merged tree: it is there whether or not the application's schema
+      // declares it.
+      const caffeine = validateConfig(
+        caffeineConfigSchema,
+        readPath(store[kMergedTree], CAFFEINE_CONFIG_NAMESPACE) ?? {},
+      ) as CaffeineConfig
 
-    // What was named up front wins. Nothing was, so the base config file decided, on the same load.
-    const profiles = named.length > 0 ? named : activeProfiles(caffeine.profiles)
-    if (profiles.length > 0) {
-      this.#container.addProfiles(profiles[0], ...profiles.slice(1))
-    }
-
-    this.#name = caffeine.name
-    this.#profiles = profiles
-
-    // The application's own instance, bound before any feature configures so health (and anything else) can
-    // inject it rather than closing over a kit field. The lifecycle writes to this object.
-    this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
-
-    // Called in order and awaited together: every feature's configure callback — which the builder runs at the
-    // top of its hook — has therefore run before the first feature does asynchronous work.
-    const configurePending: Promise<void>[] = []
-
-    for (const feature of features) {
-      const result = feature[kFeatureConfigure](this.configureKit())
-      if (result) {
-        configurePending.push(result)
+      // What was named up front wins. Nothing was, so the base config file decided, on the same load.
+      const profiles = named.length > 0 ? named : activeProfiles(caffeine.profiles)
+      if (profiles.length > 0) {
+        this.#container.addProfiles(profiles[0], ...profiles.slice(1))
       }
+
+      this.#name = caffeine.name
+      this.#profiles = profiles
+
+      // The application's own instance, bound before any feature configures so health (and anything else) can
+      // inject it rather than closing over a kit field. The lifecycle writes to this object.
+      this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
+
+      // Called in order and awaited together: every feature's configure callback — which the builder runs at the
+      // top of its hook — has therefore run before the first feature does asynchronous work.
+      const configurePending: Promise<void>[] = []
+
+      for (const feature of features) {
+        const result = feature[kFeatureConfigure](this.configureKit())
+        if (result) {
+          configurePending.push(result)
+        }
+      }
+
+      if (configurePending.length > 0) {
+        await Promise.all(configurePending)
+      }
+
+      // LoggerBuilder's own `configure()` already rebound `logToken()`; `#logger` is refreshed here too so
+      // `.log` reflects a `.logger(configure)` call without going through the container, which isn't
+      // initialized yet.
+      this.#logger = this.#loggerBuilder.logger
+
+      // The logger is configured from configuration, so the load could not be reported until now.
+      logConfigLoaded(this.#logger, store)
+
+      await this.#container.init()
+    } catch (error) {
+      await store.close()
+      throw error
     }
-
-    if (configurePending.length > 0) {
-      await Promise.all(configurePending)
-    }
-
-    // LoggerBuilder's own `configure()` already rebound `logToken()`; `#logger` is refreshed here too so
-    // `.log` reflects a `.logger(configure)` call without going through the container, which isn't
-    // initialized yet.
-    this.#logger = this.#loggerBuilder.logger
-
-    // The logger is configured from configuration, so the load could not be reported until now.
-    logConfigLoaded(this.#logger, store)
-
-    await this.#container.init()
 
     // Concurrent: a bootstrap hook only looks bindings up, so no feature's hook depends on another's.
     const kit = this.serviceKit()
