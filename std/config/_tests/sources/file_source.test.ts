@@ -1,10 +1,12 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { loadConfig } from '../../load.js'
 import { mergeLayers, expandKeys } from '../../merge.js'
+import { passthroughConfigSchema } from '../../schema.js'
 import { FileConfigSource, concernsFile, type ConfigFileParser } from '../../sources/file_source.js'
 import { JSONConfigSource } from '../../sources/json_source.js'
 import type { ConfigLayer, ConfigLoadContext } from '../../types.js'
@@ -207,6 +209,27 @@ describe('FileConfigSource profile files', () => {
     await write('none-eu.json', { region: 'eu' })
 
     expect(await new JSONConfigSource(base).load(context())).toHaveLength(1)
+  })
+
+  // `app/config-x/../../outside.json` is `outside.json`, a directory above the one configured. The profile is refused
+  // before any path is built from it, whether the base file or the application named it.
+  it('never reads a file outside its directory through a profile', async () => {
+    await mkdir(join(dir, 'app'))
+    await write('outside.json', { secret: 'outside' })
+    const refused = expect.objectContaining({ code: 'ERR_CONFIG_PROFILE' })
+
+    const declared = await write('app/config.json', { caffeine: { profiles: ['x/../../outside'] } })
+    await expect(new JSONConfigSource(declared).load(context())).rejects.toThrow(refused)
+
+    const named = await write('app/named.json', { region: 'base' })
+    const definition = {
+      schema: passthroughConfigSchema,
+      key: undefined,
+      storeKey: undefined,
+      sources: [new JSONConfigSource(named)],
+      loadTimeoutMs: 30_000,
+    }
+    await expect(loadConfig(definition, { profiles: ['x/../../outside'] })).rejects.toThrow(refused)
   })
 })
 

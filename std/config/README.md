@@ -211,6 +211,9 @@ then `app-canary.json`, each overriding the one before. The profiles are decided
 If none of the three named a profile, and only then, a file source reads `caffeine.profiles` from its own base file
 and picks its overlays. Every source is loaded once, profile or not.
 
+A profile is a name, since a file source makes a file name of it: `.`, `..` and a name holding `/` or `\` are refused
+with `ERR_CONFIG_PROFILE`, wherever they were named.
+
 ---
 
 ## Live reload
@@ -283,6 +286,7 @@ A tree that cannot validate fails `ready()`, which is more legible than failing 
 | `ERR_CONFIG_ARRAY_INDICES`    | a source's indexed keys are not a complete list from 0                 |
 | `ERR_CONFIG_KEY_CONFLICT`     | a source sets one path both as a value and as a parent                 |
 | `ERR_CONFIG_FILE_PARSE`       | a file does not parse to an object                                     |
+| `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`                          |
 | `ERR_CONFIG_VALIDATION`       | the tree does not satisfy the schema (`ErrConfigValidation`, `issues`) |
 
 ---

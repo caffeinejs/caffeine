@@ -1,4 +1,5 @@
 import { textList } from '../schema/text.js'
+import { ErrConfig } from './errors.js'
 
 /**
  * Where the active-profile list lives in the configuration tree.
@@ -18,6 +19,8 @@ const ENV_VAR = 'CAFFEINE__PROFILES'
  * Accepts what a source actually produces: a string array from a file, or delimited text
  * (`CAFFEINE__PROFILES=eu,dev`) from an environment variable or a command-line argument. Blank entries are
  * dropped, and a profile named twice keeps only its first position, so no source ever sees a duplicate.
+ *
+ * @throws ErrConfig `ERR_CONFIG_PROFILE` when a profile is `.` or `..`, or holds `/` or `\`.
  */
 export function activeProfiles(raw: unknown, separator?: string): string[] {
   const split = textList(raw, separator)
@@ -29,9 +32,19 @@ export function activeProfiles(raw: unknown, separator?: string): string[] {
       continue
     }
     const profile = entry.trim()
-    if (profile !== '') {
-      seen.add(profile)
+    if (profile === '') {
+      continue
     }
+    // A file source makes a file name of a profile, and a config server a segment of its request path.
+    if (profile === '.' || profile === '..' || /[/\\]/.test(profile)) {
+      throw new ErrConfig(
+        `Cannot use profile "${profile}": a profile name cannot be "." or "..", or contain "/" or "\\"`,
+        'ERR_CONFIG_PROFILE',
+        undefined,
+        'Name the profile with letters, digits, "-", "_" and "."',
+      )
+    }
+    seen.add(profile)
   }
 
   return [...seen]
