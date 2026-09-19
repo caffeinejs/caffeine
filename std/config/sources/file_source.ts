@@ -68,9 +68,15 @@ export class FileConfigSource implements ConfigSource {
       layers.push({ name: `file:${this.#path}`, data: base as ConfigObject })
     }
 
-    for (const profile of profiles) {
-      const path = profilePath(this.#path, profile)
-      const parsed = await this.#read(path, true)
+    // No sibling depends on another, so they are read together and layered in profile order.
+    const siblings = await Promise.all(
+      profiles.map(async profile => {
+        const path = profilePath(this.#path, profile)
+        return { path, profile, parsed: await this.#read(path, true) }
+      }),
+    )
+
+    for (const { path, profile, parsed } of siblings) {
       if (parsed !== undefined) {
         layers.push({ name: `file:${path}`, data: parsed as ConfigObject, profile })
       }
