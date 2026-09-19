@@ -85,6 +85,14 @@ describe('MutableConfigSource', () => {
     expect(data(source.set('', { a: 1 }))).toEqual({ a: 1 })
   })
 
+  // The empty path is the root, so an unset there empties the source, as a set there replaces it.
+  it('empties the source when unset at the empty path', () => {
+    const source = new MutableConfigSource().set('server.port', 3000)
+
+    expect(source.unset('').empty).toBe(true)
+    expect(source.set('a', 1).unset([]).empty).toBe(true)
+  })
+
   // A layer's data is an object: anything else failed every later load of the source, far from the call that wrote it.
   it('refuses a root that is not an object, and keeps what it held', () => {
     const changed = vi.fn()

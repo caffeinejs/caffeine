@@ -48,15 +48,20 @@ export class MutableConfigSource implements ConfigSource {
     return this.#written()
   }
 
-  /** Removes the value at `path` and everything beneath it. */
+  /**
+   * Removes the value at `path` and everything beneath it. Unsetting the empty path, the root, empties the source.
+   */
   unset(path: string | readonly string[]): this {
     const parts = toParts(path)
-    let node: unknown = this.#data
+    if (parts.length === 0) {
+      return this.replace({})
+    }
 
+    let node: unknown = this.#data
     for (const part of parts.slice(0, -1)) {
       node = isPlainObject(node) ? own(node, part) : undefined
     }
-    if (isPlainObject(node) && parts.length > 0) {
+    if (isPlainObject(node)) {
       delete node[parts[parts.length - 1]]
     }
 
