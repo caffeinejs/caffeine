@@ -75,15 +75,35 @@ describe('validateConfig', () => {
     }
   })
 
-  // A codec's parser quotes the text it rejected: JSON.parse says `"hunter2" is not valid JSON`.
-  it('keeps the text a codec rejected out of the error of a secret', () => {
-    const secret = $t.Object({ credentials: $t.Secret($t.JSON($t.Object({ key: $t.String() }))) })
+  // The error reaches whoever called, and whatever logs it, and a configuration value may be a secret. A parser
+  // quotes the text it rejected: JSON.parse says `"hunter2" is not valid JSON`.
+  it('keeps the text a codec could not parse out of the error', () => {
+    const json = $t.Object({ credentials: $t.JSON($t.Object({ key: $t.String() })) })
 
     try {
-      validateConfig(secret, { credentials: 'hunter2' })
+      validateConfig(json, { credentials: 'hunter2' })
       expect.unreachable()
     } catch (err) {
-      expect((err as ErrConfigValidation).issues).toEqual([{ path: 'credentials', message: REDACTED, code: 'Decode' }])
+      expect((err as ErrConfigValidation).issues).toEqual([
+        { path: 'credentials', message: 'The value is not valid JSON', code: 'Decode' },
+      ])
+      expect((err as ErrConfigValidation).message).not.toContain('hunter2')
+    }
+  })
+
+  it('keeps what a custom list parser threw out of the error', () => {
+    const parse = (raw: string): unknown[] => {
+      throw new Error(`cannot read "${raw}"`)
+    }
+    const list = $t.Object({ keys: $t.List($t.Number(), { parse }) })
+
+    try {
+      validateConfig(list, { keys: 'hunter2' })
+      expect.unreachable()
+    } catch (err) {
+      expect((err as ErrConfigValidation).issues).toEqual([
+        { path: 'keys', message: 'The value could not be parsed as a list', code: 'Decode' },
+      ])
       expect((err as ErrConfigValidation).message).not.toContain('hunter2')
     }
   })

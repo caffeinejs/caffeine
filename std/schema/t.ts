@@ -146,6 +146,7 @@ const caffeineT = {
           // from an environment variable is: `$t.List($t.Number())` must yield numbers, not numeric strings.
           convert: true,
           parse: raw => (parse === undefined ? textList(raw, separator) : parse(raw)),
+          unreadable: 'could not be parsed as a list',
           complaint: 'is not a list of the declared item type',
         }),
       )
@@ -221,6 +222,7 @@ const caffeineT = {
           // mistake worth reporting, not something to quietly turn into `"123"`.
           convert: false,
           parse: raw => JSON.parse(raw) as unknown,
+          unreadable: 'is not valid JSON',
           complaint: 'is not the declared shape',
         }),
       )
@@ -265,17 +267,27 @@ const caffeineT = {
  *
  * A value that did not arrive as text is passed through untouched — it came from a file or the code band and
  * the surrounding schema already governs it.
+ *
+ * Text the parser cannot read is reported as `unreadable`, and a parsed value of the wrong shape as `complaint`.
+ * Neither carries the text itself.
  */
 function decodeInto<T extends TSchema>(
   target: T,
   value: unknown,
-  how: { convert: boolean; parse: (raw: string) => unknown; complaint: string },
+  how: { convert: boolean; parse: (raw: string) => unknown; unreadable: string; complaint: string },
 ): Static<T> {
   if (typeof value !== 'string') {
     return value as Static<T>
   }
 
-  const parsed = how.parse(value)
+  let parsed: unknown
+  try {
+    parsed = how.parse(value)
+  } catch {
+    // The parser's own message is left out: it quotes the text it rejected, and a configuration value may be a secret.
+    throw new Error(`The value ${how.unreadable}`)
+  }
+
   const decoded = how.convert ? Value.Convert(target, parsed) : parsed
 
   if (!Value.Check(target, decoded)) {
