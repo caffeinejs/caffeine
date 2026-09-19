@@ -4,7 +4,7 @@ import {
   CONFIG_REFRESH_LABEL,
   EnvConfigSource,
   InlineConfigSource,
-  type LiveConfig,
+  type InferConfig,
   type ConfigSource,
 } from '@caffeinejs/std/config'
 import fastify from 'fastify'
@@ -77,7 +77,7 @@ describe('HealthBuilder.resolve', () => {
 
 describe('health()', () => {
   const rootSchema = $t.Object({ health: healthConfigSchema })
-  const kRootConfig = token<LiveConfig<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+  const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
   const schema = $t.Object({
     health: $t.Object({
@@ -86,7 +86,7 @@ describe('health()', () => {
       verbose: $t.Boolean(),
     }),
   })
-  const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
+  const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
   type AppConfig = InferSchema<typeof schema>
 
   const source = (health: AppConfig['health']): InlineConfigSource => new InlineConfigSource({ health })

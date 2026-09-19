@@ -1,7 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { CONFIG_REFRESH_LABEL, InlineConfigSource, MutableConfigSource, type LiveConfig } from './config/index.js'
+import { CONFIG_REFRESH_LABEL, InlineConfigSource, MutableConfigSource } from './config/index.js'
 import { kFeatureName } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 import { createApplication, newConfiguration } from './index.js'
@@ -68,7 +68,7 @@ function gadget<C = unknown>(configure?: FeatureConfigurer<GadgetBuilder<C>, C>)
 
 const appSchema = $t.Object({ app: $t.Object({ gadget: gadgetSchema }) })
 type AppConfig = { app: { gadget: GadgetConfig } }
-const kAppConfig = token<LiveConfig<AppConfig>>(Symbol('app.config'))
+const kAppConfig = token<AppConfig>(Symbol('app.config'))
 
 const headless = () => createApplication({ container: new CaffeineIoC({ decorators: false }) })
 

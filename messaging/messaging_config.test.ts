@@ -1,6 +1,6 @@
 import { token, type Container } from '@caffeinejs/di'
-import { $t, newConfiguration, type InferSchema, createApplication } from '@caffeinejs/std'
-import { EnvConfigSource, InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
+import { $t, newConfiguration, createApplication } from '@caffeinejs/std'
+import { EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
 import { inMemoryBinder } from './binder.testkit.js'
@@ -28,7 +28,7 @@ const instanceSchema = $t.Object(messagingConfigSchema.properties, { default: {}
 const rootSchema = $t.Object({
   messaging: $t.Object({ default: instanceSchema, audit: instanceSchema }, { default: {} }),
 })
-const kRootConfig = token<LiveConfig<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
 const env = (values: Record<string, string>) => new EnvConfigSource({ env: values })
 
@@ -120,7 +120,7 @@ describe('messaging configuration', () => {
   // The code-only members ride through untouched.
   it('keeps a code-only schema on a configured binding', async () => {
     const schema = $t.Object({ id: $t.Number() })
-    const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ messaging: { default: { in: { orders: { destination: 'orders.v2' } } } } }))
@@ -152,7 +152,7 @@ describe('messaging configuration', () => {
         }),
       }),
     })
-    const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ app: { events: { in: { orders: { destination: 'moved.orders' } } } } }))

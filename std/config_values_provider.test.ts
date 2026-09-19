@@ -1,7 +1,7 @@
 import { $i, CaffeineIoC, Injectable, Scopes, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { CONFIG_REFRESH_LABEL, MutableConfigSource, InlineConfigSource, type LiveConfig } from './config/index.js'
+import { CONFIG_REFRESH_LABEL, MutableConfigSource, InlineConfigSource } from './config/index.js'
 import { createApplication, newConfiguration } from './index.js'
 import { $t } from './schema/t.js'
 
@@ -14,7 +14,7 @@ const schema = $t.Object({
 
 type AppConfig = { database: { host: string; port: number } }
 
-const kConfig = token<LiveConfig<AppConfig>>(Symbol('app.config'))
+const kConfig = token<AppConfig>(Symbol('app.config'))
 
 function appWith(...sources: Array<{ provider: InlineConfigSource | MutableConfigSource }>) {
   const container = new CaffeineIoC({ decorators: false })

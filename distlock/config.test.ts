@@ -1,6 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { $t, createApplication, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import { InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
+import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
@@ -51,7 +51,7 @@ const appConfigSchema = $t.Object(
 type AppConfig = InferSchema<typeof appConfigSchema>
 type DistLockTree = AppConfig['app']['distlock']
 
-const kConfig = token<LiveConfig<AppConfig>>(Symbol('distlock.test.config'))
+const kConfig = token<InferConfig<typeof appConfigSchema>>(Symbol('distlock.test.config'))
 
 /** Boots an application whose configuration tree carries the given distlock slice. */
 async function newLock(

@@ -9,7 +9,7 @@ import {
   type FeatureConfigurer,
   type InferSchema,
 } from '@caffeinejs/std'
-import { InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
+import { InlineConfigSource, type InferConfig, type LiveConfig } from '@caffeinejs/std/config'
 import fastify, { type FastifyPluginAsync, type FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
@@ -272,7 +272,7 @@ describe('adapter types', () => {
 describe('configure callback typing', () => {
   const schema = $t.Object({ name: $t.String({ default: 'app' }) })
   type AppConfig = InferSchema<typeof schema>
-  const kConfig = token<LiveConfig<AppConfig>>(Symbol('adapter-agnostic.config'))
+  const kConfig = token<InferConfig<typeof schema>>(Symbol('adapter-agnostic.config'))
 
   class PlainBuilder<C = unknown> extends FeatureBuilder<C> {
     readonly [kFeatureName] = 'plain-probe'

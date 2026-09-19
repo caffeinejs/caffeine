@@ -6,6 +6,7 @@ import {
   CONFIG_REFRESH_LABEL,
   EnvConfigSource,
   InlineConfigSource,
+  type InferConfig,
   type LiveConfig,
   type ConfigSource,
 } from '@caffeinejs/std/config'
@@ -24,7 +25,7 @@ const schema = $t.Object({
 
 type AppConfig = InferSchema<typeof schema>
 
-const kConfig = token<LiveConfig<AppConfig>>(Symbol('app.config'))
+const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
 /** An env source over a fixed map, so the tests never touch the real environment. */
 function env(values: Record<string, string>): ConfigSource {
@@ -147,7 +148,7 @@ describe('server builder + config', () => {
     const nested = $t.Object({
       app: $t.Object({ server: $t.Object(serverConfigSchema.properties, { default: {} }) }, { default: {} }),
     })
-    const kNested = token<LiveConfig<InferSchema<typeof nested>>>(Symbol('app.config'))
+    const kNested = token<InferConfig<typeof nested>>(Symbol('app.config'))
 
     const conf = newConfiguration(nested, kNested)
       .source(env({ APP__SERVER__HOST: '127.0.0.1' }))
@@ -166,7 +167,7 @@ describe('server builder + config', () => {
     const nested = $t.Object({
       app: $t.Object({ server: $t.Object(serverConfigSchema.properties, { default: {} }) }, { default: {} }),
     })
-    const kNested = token<LiveConfig<InferSchema<typeof nested>>>(Symbol('app.config'))
+    const kNested = token<InferConfig<typeof nested>>(Symbol('app.config'))
 
     const conf = newConfiguration(nested, kNested)
       .source(env({ APP__SERVER__PORT: '8082' }))

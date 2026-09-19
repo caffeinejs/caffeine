@@ -1,6 +1,6 @@
 import { token } from '@caffeinejs/di'
-import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import { ConfigStore, EnvConfigSource, InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
+import { $t, newConfiguration } from '@caffeinejs/std'
+import { ConfigStore, EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
@@ -43,7 +43,7 @@ const rootSchema = $t.Object({
     { default: {} },
   ),
 })
-const kRootConfig = token<LiveConfig<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
 const ENV_SECRET = 'env-secret-key-must-be-at-least-32-chars!!'
@@ -259,7 +259,7 @@ describe('authentication configuration', () => {
         }),
       }),
     })
-    const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))

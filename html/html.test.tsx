@@ -12,8 +12,8 @@ import {
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
-import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import { InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
+import { $t, newConfiguration } from '@caffeinejs/std'
+import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -21,7 +21,7 @@ import { HTML, html, type HTMLDefaults } from './index.js'
 
 const schema = $t.Object({ html: $t.Object({ autoDoctype: $t.Boolean() }) })
 
-const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
+const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
 function Document({ title }: { title: string }) {
   return (

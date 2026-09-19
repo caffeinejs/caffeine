@@ -1,7 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { InlineConfigSource, type LiveConfig } from './config/index.js'
+import { InlineConfigSource } from './config/index.js'
 import {
   kFeatureBootstrap,
   kFeatureConfigure,
@@ -16,7 +16,7 @@ import { $t } from './schema/t.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
 type AppConfig = { widget: { size: number } }
-const kConfig = token<LiveConfig<AppConfig>>(Symbol('app.config'))
+const kConfig = token<AppConfig>(Symbol('app.config'))
 
 /** A minimal feature: reads the resolved configuration, then binds what it found. */
 class WidgetFeature implements Feature<AppConfig> {

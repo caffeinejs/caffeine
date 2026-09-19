@@ -1,6 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
-import { CONFIG_REFRESH_LABEL, InlineConfigSource, type LiveConfig, type ConfigSource } from '@caffeinejs/std/config'
+import { CONFIG_REFRESH_LABEL, InlineConfigSource, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
@@ -12,7 +12,7 @@ const schema = $t.Object({
 
 type AppConfig = InferSchema<typeof schema>
 
-const kConfig = token<LiveConfig<AppConfig>>(Symbol('app.config'))
+const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
 /** A live source the test can re-point, so a refresh actually reloads it. */
 function liveSource(read: () => AppConfig): ConfigSource {
@@ -188,7 +188,7 @@ describe('ctx.config with an application schema', () => {
 
   type FullConfig = InferSchema<typeof ownSchema>
 
-  const kFull = token<LiveConfig<FullConfig>>(Symbol('app.full'))
+  const kFull = token<InferConfig<typeof ownSchema>>(Symbol('app.full'))
 
   it('reads a feature block the application declared and pointed the feature at', async () => {
     const routes = new Router('/catalog')
@@ -259,7 +259,7 @@ describe('ctx.config with an application schema', () => {
         { default: {} },
       ),
     })
-    const kServer = token<LiveConfig<InferSchema<typeof withServer>>>(Symbol('app.server'))
+    const kServer = token<InferConfig<typeof withServer>>(Symbol('app.server'))
 
     const conf = newConfiguration(withServer, kServer).build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {

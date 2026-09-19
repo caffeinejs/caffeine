@@ -1,6 +1,6 @@
 import { token, type Container } from '@caffeinejs/di'
-import { $t, newConfiguration, type InferSchema, createApplication } from '@caffeinejs/std'
-import { EnvConfigSource, InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
+import { $t, newConfiguration, createApplication } from '@caffeinejs/std'
+import { EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -21,7 +21,7 @@ const instanceSchema = $t.Object(kafkaConfigSchema.properties, { default: {} })
 const rootSchema = $t.Object({
   kafka: $t.Object({ default: instanceSchema, orders: instanceSchema }, { default: {} }),
 })
-const kRootConfig = token<LiveConfig<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
 function noopClients(): KafkaClients {
   const producer: ProducerClient = { send: () => Promise.resolve(), close: () => Promise.resolve() }
@@ -111,7 +111,7 @@ describe('kafka configuration', () => {
         }),
       }),
     })
-    const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
     const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })

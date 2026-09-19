@@ -6,12 +6,11 @@ import { CaffeineIoC, Injectable, Profile, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
-import { InlineConfigSource, JSONConfigSource, type LiveConfig } from './config/index.js'
+import { InlineConfigSource, JSONConfigSource, type InferConfig } from './config/index.js'
 import {
   $t,
   ErrApplicationStarted,
   type FeatureConfigureKit,
-  type InferSchema,
   kFeatureBootstrap,
   kFeatureConfigure,
   kFeatureName,
@@ -24,7 +23,7 @@ import {
 const caffeineSchema = $t.Object({
   caffeine: $t.Object({ name: $t.Optional($t.String()), profiles: $t.Optional($t.List($t.String())) }, { default: {} }),
 })
-const kConfig = token<LiveConfig<InferSchema<typeof caffeineSchema>>>(Symbol('app.config'))
+const kConfig = token<InferConfig<typeof caffeineSchema>>(Symbol('app.config'))
 
 // Builds a headless app over an isolated container (no global autowire) with only the explicit binds —
 // exercises the singleton-scan discovery path deterministically.
