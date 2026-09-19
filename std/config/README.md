@@ -102,8 +102,8 @@ class Pricing {
 ```
 
 A singleton built once still reads the margin of the newest reload, and so does a node kept on a field. The live
-object is an ordinary object whose properties are read-only accessors, not a `Proxy`: a read costs what a plain
-object costs, and a write throws. `Object.keys`, `in`, spread, `JSON.stringify` and `console.log` behave as they
+object is an ordinary object whose properties are read-only data properties, not a `Proxy`: a read costs what a
+plain object costs, and a write throws. `Object.keys`, `in`, spread, `JSON.stringify` and `console.log` behave as they
 would on a plain object.
 
 Three limits follow from what a live object is:

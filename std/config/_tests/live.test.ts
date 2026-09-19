@@ -1,4 +1,5 @@
 import { inspect, types } from 'node:util'
+import { setFlagsFromString } from 'node:v8'
 
 import { describe, expect, it } from 'vitest'
 
@@ -16,6 +17,11 @@ interface AppConfig {
 function snapshot<T>(value: T): ConfigSnapshot<T> {
   return freezeDeep(value) as ConfigSnapshot<T>
 }
+
+// V8's own answer to whether an object is in fast mode. The flag only lets the function below parse.
+setFlagsFromString('--allow-natives-syntax')
+// oxlint-disable-next-line typescript/no-implied-eval -- natives syntax parses only from source compiled after the flag
+const hasFastProperties = new Function('value', 'return %HasFastProperties(value)') as (value: object) => boolean
 
 const base: AppConfig = {
   http: { host: 'localhost', port: 3000 },
@@ -174,13 +180,15 @@ describe('the live config object', () => {
       expect(inspect(live.server)).toBe("{ host: 'h', port: 9 }")
     })
 
-    it('describes every property as a read-only accessor', () => {
+    it('describes every property as read-only data', () => {
       const live = createLive(snapshot(base))
-      const descriptor = Object.getOwnPropertyDescriptor(live, 'origin')
 
-      expect(descriptor?.enumerable).toBe(true)
-      expect(typeof descriptor?.get).toBe('function')
-      expect(descriptor?.set).toBeUndefined()
+      expect(Object.getOwnPropertyDescriptor(live, 'origin')).toMatchObject({
+        value: 'test-origin',
+        writable: false,
+        enumerable: true,
+      })
+      expect(Object.getOwnPropertyDescriptor(live, 'http')).toMatchObject({ value: live.http, writable: false })
     })
 
     it('has no methods of its own, so a field called origin or snapshot is just a field', () => {
@@ -190,6 +198,22 @@ describe('the live config object', () => {
       expect(live.snapshot).toBe('s')
       expect(Object.keys(live).filter(k => typeof (live as Record<string, unknown>)[k] === 'function')).toEqual([])
     })
+  })
+
+  // A read costs what a plain object costs only while V8 keeps the node in fast mode. In dictionary mode every
+  // level of a read is a hash lookup, 9 ns or more against under 1 ns. Sibling blocks with the same keys, such as
+  // `db.primary` and `db.replica`, and every node of a second store repeat a key list another node already took.
+  it('keeps nodes that repeat a key list in fast mode, through a second store and a sync', () => {
+    const tree = { primary: { host: 'a', port: 1 }, replica: { host: 'b', port: 2 } }
+    const first = createLive(snapshot(structuredClone(tree)))
+    const second = createLive(snapshot(structuredClone(tree)))
+
+    syncLive(second, snapshot({ primary: { host: 'c', port: 3 }, replica: { host: 'd', port: 4 } }))
+
+    for (const node of [first, first.primary, first.replica, second, second.primary, second.replica]) {
+      expect(hasFastProperties(node)).toBe(true)
+    }
+    expect(second.replica.port).toBe(4)
   })
 
   it('never defines __proto__, constructor or prototype', () => {

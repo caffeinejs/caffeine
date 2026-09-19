@@ -9,22 +9,31 @@ import { bench, do_not_optimize, group, run, summary } from 'mitata'
 //
 // Each case runs twice: at a monomorphic call site, fed one object, and at a megamorphic one, fed eight objects of
 // different shapes in turn, which is what a read inside shared framework code sees.
+//
+// A live node that repeats a key list another node already took, `app.replica` beside `app.server` or any node of
+// a second store, is read on its own too. A live object whose nodes cannot share a hidden class falls into
+// dictionary mode there, and only these cases show it.
 
-interface Tree {
-  app: { server: { host: string; port: number } }
+interface Server {
+  host: string
+  port: number
 }
 
-type Server = Tree['app']['server']
+interface Tree {
+  app: { server: Server; replica: Server }
+}
 
 const SHAPES = 8
 
 // Every level carries a key of its own ahead of the ones read, so no two trees share a hidden class at any level.
+// Within one tree, `replica` repeats the keys of `server`.
 function makeTree(i: number): Tree {
   return {
     [`x${i}`]: i,
     app: {
       [`y${i}`]: i,
       server: { [`z${i}`]: i, host: '0.0.0.0', port: 3000 + i },
+      replica: { [`z${i}`]: i, host: '0.0.0.0', port: 4000 + i },
     },
   } as unknown as Tree
 }
@@ -82,6 +91,7 @@ const loaded = await Promise.all(trees.map(configOf))
 const lives = loaded.map(l => l.live)
 const snapshots = loaded.map(l => l.snapshot)
 const views = loaded.map(l => l.view)
+const secondStore = (await configOf(trees[0])).live
 
 // One function per case and per call site, so no two benchmarks share an inline cache.
 const plainMono = (c: Tree): number => c.app.server.port
@@ -90,6 +100,9 @@ const proxyMono = (c: Tree): number => c.app.server.port
 const proxyMega = (c: Tree): number => c.app.server.port
 const liveMono = (c: LiveConfig<Tree>): number => c.app.server.port
 const liveMega = (c: LiveConfig<Tree>): number => c.app.server.port
+const liveReplicaMono = (c: LiveConfig<Tree>): number => c.app.replica.port
+const liveReplicaMega = (c: LiveConfig<Tree>): number => c.app.replica.port
+const liveSecondStoreMono = (c: LiveConfig<Tree>): number => c.app.server.port
 const snapshotMono = (c: Tree): number => c.app.server.port
 const snapshotMega = (c: Tree): number => c.app.server.port
 const viewMono = (v: ConfigView<Server>): number => v.value.port
@@ -103,6 +116,9 @@ group('monomorphic: c.app.server.port', () => {
     bench('control: plain frozen object', () => do_not_optimize(plainMono(plains[0])))
     bench('control: minimal Proxy', () => do_not_optimize(proxyMono(proxies[0])))
     bench('live config object', () => do_not_optimize(liveMono(lives[0])))
+    bench('live config object, node repeating a sibling: c.app.replica.port', () =>
+      do_not_optimize(liveReplicaMono(lives[0])))
+    bench('live config object, second store of one shape', () => do_not_optimize(liveSecondStoreMono(secondStore)))
     bench('snapshot (store.current, ctx.config)', () => do_not_optimize(snapshotMono(snapshots[0])))
     bench('view over app.server: v.value.port', () => do_not_optimize(viewMono(views[0])))
   })
@@ -113,6 +129,8 @@ group('megamorphic: c.app.server.port over 8 shapes', () => {
     bench('control: plain frozen object', () => do_not_optimize(plainMega(plains[next()])))
     bench('control: minimal Proxy', () => do_not_optimize(proxyMega(proxies[next()])))
     bench('live config object', () => do_not_optimize(liveMega(lives[next()])))
+    bench('live config object, nodes repeating a sibling: c.app.replica.port', () =>
+      do_not_optimize(liveReplicaMega(lives[next()])))
     bench('snapshot (store.current, ctx.config)', () => do_not_optimize(snapshotMega(snapshots[next()])))
     bench('view over app.server: v.value.port', () => do_not_optimize(viewMega(views[next()])))
   })
