@@ -5,7 +5,7 @@ import { ErrConfig, ErrConfigValidation, messageOf } from './errors.js'
 import { describeSource, explainPath } from './explain.js'
 import { createLive, syncLive } from './live.js'
 import { mergeLayers } from './merge.js'
-import { ConfigEvents, kFirstLoadMs } from './observe.js'
+import { ConfigEvents, kFirstLoadMs, loadChannel, publishChange, reloadChannel, traced } from './observe.js'
 import { reconcile } from './reconcile.js'
 import { collectSecretPaths, redactValue, type SecretPaths } from './redact.js'
 import { validateConfig } from './schema.js'
@@ -109,12 +109,7 @@ export class ConfigStore<T> {
     this.#states = stateOf(definition.sources)
     this.#scheduler = new TriggerScheduler<SourceState>(
       (state, trigger) => this.#request([state], trigger),
-      (state, error) =>
-        this.#events.sourceFailed({
-          source: state.source.name,
-          err: error,
-          consecutiveFailures: state.consecutiveFailures,
-        }),
+      (state, error) => this.#reportFailure(state, error),
     )
   }
 
@@ -149,7 +144,7 @@ export class ConfigStore<T> {
    */
   async [kFirstLoad](): Promise<void> {
     const started = performance.now()
-    const results = await Promise.allSettled(this.#states.map(state => this.#load(state)))
+    const results = await Promise.allSettled(this.#states.map(state => this.#load(state, 'start')))
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i]
@@ -297,16 +292,16 @@ export class ConfigStore<T> {
         try {
           await state.source.close?.()
         } catch (error) {
-          this.#events.sourceFailed({
-            source: state.source.name,
-            err: error,
-            consecutiveFailures: state.consecutiveFailures,
-          })
+          this.#reportFailure(state, error)
         }
       }),
     )
 
     this.#events.closed()
+  }
+
+  #reportFailure(state: SourceState, error: unknown): void {
+    this.#events.sourceFailed({ source: state.source.name, err: error, consecutiveFailures: state.consecutiveFailures })
   }
 
   #layers(): ConfigLayer[] {
@@ -355,13 +350,21 @@ export class ConfigStore<T> {
     void this.#request([...pending.states], pending.trigger).then(pending.resolve)
   }
 
-  async #run(states: readonly SourceState[], trigger: ReloadTrigger): Promise<ConfigReloadOutcome> {
+  #run(states: readonly SourceState[], trigger: ReloadTrigger): Promise<ConfigReloadOutcome> {
+    return traced(
+      reloadChannel,
+      () => ({ store: this as ConfigStore<unknown>, trigger, sources: states.map(state => state.source.name) }),
+      () => this.#reloadOnce(states, trigger),
+    )
+  }
+
+  async #reloadOnce(states: readonly SourceState[], trigger: ReloadTrigger): Promise<ConfigReloadOutcome> {
     const started = performance.now()
     const failures: ConfigSourceFailure[] = []
     const candidates = new Map<SourceState, readonly ConfigLayer[]>()
     const loaded = states.map(state => state.source.name)
 
-    const results = await Promise.allSettled(states.map(state => this.#load(state)))
+    const results = await Promise.allSettled(states.map(state => this.#load(state, trigger)))
 
     if (this.#closed) {
       return this.#outcome('unchanged', [], failures)
@@ -459,6 +462,7 @@ export class ConfigStore<T> {
 
     const change: ConfigChange = { revision: this.#revision, changed }
     this.#events.reloaded({ revision: this.#revision, trigger, sources, changed, ms: performance.now() - started })
+    publishChange(() => ({ store: this as ConfigStore<unknown>, revision: change.revision, changed }))
 
     // Listeners run after everything is at the new revision, and a reload never waits for them.
     this.#notifier.record(next, change)
@@ -505,8 +509,16 @@ export class ConfigStore<T> {
     return { status, revision: this.#revision, changed, failures, ...(error === undefined ? {} : { error }) }
   }
 
+  #load(state: SourceState, trigger: ConfigTrigger | 'start'): Promise<readonly ConfigLayer[]> {
+    return traced(
+      loadChannel,
+      () => ({ store: this as ConfigStore<unknown>, source: state.source.name, trigger }),
+      () => this.#loadOnce(state),
+    )
+  }
+
   /** Loads one source, bounded by the load timeout and by `close()`, and accepts what it returned. */
-  async #load(state: SourceState): Promise<readonly ConfigLayer[]> {
+  async #loadOnce(state: SourceState): Promise<readonly ConfigLayer[]> {
     const name = state.source.name
     const controller = new AbortController()
     const timeoutMs = this.definition.loadTimeoutMs

@@ -1,9 +1,67 @@
+import { channel, tracingChannel, type TracingChannel } from 'node:diagnostics_channel'
+
 import type { Logger } from '../logger/logger.js'
 import type { SchemaIssue } from '../schema/schema.js'
 import { REDACTED, isSecretPath, type SecretPaths } from './redact.js'
 import type { ConfigStore } from './store.js'
 import { toParts } from './tree.js'
-import type { ConfigTrigger } from './types.js'
+import type { ConfigLayer, ConfigReloadOutcome, ConfigTrigger } from './types.js'
+
+/**
+ * The `node:diagnostics_channel` names a configuration store publishes on.
+ *
+ * `load` and `reload` are tracing channels: subscribe with `tracingChannel(name)`, and each load of one source, or
+ * each reload, publishes `start`, `end`, `asyncStart` and `asyncEnd` around one message. By `asyncEnd` the message
+ * carries its `result`, or the `error` a failed load threw. `change` is a plain channel, published after a swap.
+ * Channels are process-wide, so every message names the `store` that published it. Read a message; never write to it.
+ */
+export const CONFIG_CHANNELS = {
+  load: 'caffeinejs:config:load',
+  reload: 'caffeinejs:config:reload',
+  change: 'caffeinejs:config:change',
+} as const
+
+export interface ConfigLoadMessage {
+  readonly store: ConfigStore<unknown>
+  readonly source: string
+  /** `start` for the first load. */
+  readonly trigger: ConfigTrigger | 'start'
+  readonly result?: readonly ConfigLayer[]
+  readonly error?: unknown
+}
+
+export interface ConfigReloadMessage {
+  readonly store: ConfigStore<unknown>
+  readonly trigger: ConfigTrigger
+  readonly sources: readonly string[]
+  /** A reload never fails, so this is how every one ends. */
+  readonly result?: ConfigReloadOutcome
+}
+
+export interface ConfigChangeMessage {
+  readonly store: ConfigStore<unknown>
+  readonly revision: number
+  readonly changed: readonly string[]
+}
+
+export const loadChannel = tracingChannel<ConfigLoadMessage>(CONFIG_CHANNELS.load)
+export const reloadChannel = tracingChannel<ConfigReloadMessage>(CONFIG_CHANNELS.reload)
+const changeChannel = channel(CONFIG_CHANNELS.change)
+
+/** Runs `fn` inside a tracing channel, or bare when nobody listens: no message is built and no wrapper runs. */
+export function traced<C extends object, R>(
+  tc: TracingChannel<C>,
+  message: () => NoInfer<C>,
+  fn: () => Promise<R>,
+): Promise<R> {
+  return tc.hasSubscribers ? tc.tracePromise(fn, message()) : fn()
+}
+
+export function publishChange(message: () => ConfigChangeMessage): void {
+  if (changeChannel.hasSubscribers) {
+    changeChannel.publish(message())
+  }
+}
 
 /** How long the first load took, in milliseconds. Read by {@link logConfigLoaded}. */
 export const kFirstLoadMs: unique symbol = Symbol('@caffeinejs/config:first-load-ms')

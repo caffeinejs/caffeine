@@ -71,23 +71,11 @@ export function readPath(tree: unknown, parts: readonly string[]): unknown {
 /** How many settings `value` holds: every scalar, and every empty array, which is a setting of its own. */
 export function countLeaves(value: unknown): number {
   if (isPlainObject(value)) {
-    let count = 0
-    for (const key of Object.keys(value)) {
-      count += countLeaves(value[key])
-    }
-    return count
+    return sumLeaves(Object.values(value))
   }
+  return Array.isArray(value) && value.length > 0 ? sumLeaves(value) : 1
+}
 
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return 1
-    }
-    let count = 0
-    for (const element of value) {
-      count += countLeaves(element)
-    }
-    return count
-  }
-
-  return 1
+function sumLeaves(values: readonly unknown[]): number {
+  return values.reduce<number>((count, child) => count + countLeaves(child), 0)
 }

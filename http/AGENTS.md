@@ -238,7 +238,7 @@ destroy callback, no scope. What it may hold is named by the `V` type parameter 
 `.vars<V>()` — written as a call and not `new Router<V>(path)`, because naming one type argument stops the
 compiler inferring the rest and would drop the group's path.
 
-`ctx.config` is a snapshot, taken the first time a request reads it and fixed from then on: a refresh landing
+`ctx.config` is a snapshot, taken the first time a request reads it and fixed from then on: a reload landing
 mid-request is not observed by a request already under way. Its type is named by `.configType<C>()` on the
 router — named apart from `.config()`, which writes the adapter's per-route configuration. The values come from
 the application's configuration whether or not a router declared the type.

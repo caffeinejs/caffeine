@@ -194,12 +194,13 @@ fields and no source to fill them fails validation at `ready()`.
 A feature nothing wired runs on its own defaults and its builder values alone: it works, and no file,
 environment variable or argument reaches it.
 
-Liveness is the author's choice rather than something the framework manufactures. A configuration node is a
-live accessor over the current tree, so `b.withConfig(c.app.thing)` follows a refresh while
-`b.port(c.app.thing.port)` reads a number once. A feature's own resolved options are a plain object read once,
-when the feature configures: config resolves before any feature configures, so there is nothing left to fold
-lazily — `configure` reads its inputs, folds in whatever the builder itself holds (a dispatcher, a merged
-default), and binds the result. A refresh afterward does not reach an already-bound value.
+Liveness is the author's choice rather than something the framework manufactures. A configuration node is live:
+its fields follow every reload, so `b.withConfig(c.app.thing)` follows a reload while `b.port(c.app.thing.port)`
+reads a number once. A feature's own resolved options are a plain object read once, when the feature configures:
+config loads before any feature configures, so there is nothing left to fold lazily — `configure` reads its
+inputs, folds in whatever the builder itself holds (a dispatcher, a merged default), and binds the result. A
+reload afterward does not reach an already-bound value. A feature that has to act on a change takes a view,
+`(b, c, store) => b.withLiveConfig(store.view(t => t.app.thing))`.
 
 Do not route a plugin's own configuration through a container key it reads back at server setup: the builder
 is holding the value when it builds the plugin, so the plugin closes over it.
