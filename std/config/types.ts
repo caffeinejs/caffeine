@@ -154,6 +154,8 @@ export interface ConfigReloadOutcome {
 
 export interface ConfigSourceFailure {
   readonly source: string
+  /** Whether the source was declared `optional`, so that the configuration does not depend on it. */
+  readonly optional: boolean
   readonly error: unknown
 }
 

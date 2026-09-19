@@ -22,7 +22,7 @@ export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:re
  * - The current snapshot as the values provider, so `$i.value(c => c.database.host)` reads configuration. The value
  *   is read when the consumer is built.
  * - A binding under `CONFIG_REFRESH_LABEL`, so `container.refresher.refresh(CONFIG_REFRESH_LABEL)` reloads the live
- *   sources. It rejects when the reload was rejected or a source failed.
+ *   sources. It rejects when the reload was rejected or a source that is not `optional` failed.
  *
  * The store closes with the container.
  */
@@ -55,8 +55,10 @@ export function ConfigModule<T>(store: ConfigStore<T>): Module {
         if (outcome.status === 'rejected') {
           throw outcome.error
         }
-        if (outcome.failures.length > 0) {
-          throw outcome.failures[0].error
+        // An optional source is logged when it fails, and the refresh stands without it, as start-up does.
+        const failure = outcome.failures.find(f => !f.optional)
+        if (failure !== undefined) {
+          throw failure.error
         }
       },
     }

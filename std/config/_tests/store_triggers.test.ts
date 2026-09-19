@@ -126,6 +126,7 @@ describe('polling', () => {
     expect(outcome.failures).toEqual([
       {
         source: 'remote',
+        optional: false,
         error: expect.objectContaining({ code: 'ERR_CONFIG_SOURCE_TIMEOUT', message: stillRunning }),
       },
     ])

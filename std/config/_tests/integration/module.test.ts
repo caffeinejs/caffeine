@@ -142,6 +142,35 @@ describe('ConfigModule', () => {
     expect(container.get(kConfig).http.host).toBe('localhost')
   })
 
+  // The configuration never depended on an optional source: start-up goes on without it, and so does a refresh. A
+  // refresh reported as failed, although it applied everything else, would be retried by whoever asked for it.
+  it('lets the refresh stand when only an optional source failed', async () => {
+    const app = remote(data, 'app')
+    const flaky: ConfigSource = {
+      name: 'flaky',
+      live: true,
+      optional: true,
+      load: () => {
+        throw new Error('connection reset')
+      },
+    }
+    const store = await loadConfig<AppConfig>(
+      { schema, key: kConfig, storeKey: undefined, sources: [app.source, flaky], loadTimeoutMs: 30_000 },
+      { start: false },
+    )
+    const container = new CaffeineIoC({ decorators: false })
+    container.addModules(ConfigModule(store))
+    await container.init()
+
+    app.state.data = { ...data, http: { host: 'after', port: '443' } }
+    await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
+
+    expect(container.get(kConfig).http.host).toBe('after')
+    expect((await store.reload()).failures).toEqual([
+      { source: 'flaky', optional: true, error: expect.objectContaining({ code: 'ERR_CONFIG_SOURCE' }) },
+    ])
+  })
+
   it('refreshes two configurations in one container independently', async () => {
     const dbSchema = z.object({ db: z.object({ url: z.string() }) })
     type DBConfig = InferConfig<typeof dbSchema>

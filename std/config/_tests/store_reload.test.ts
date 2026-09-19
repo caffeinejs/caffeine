@@ -300,7 +300,7 @@ describe('reload', () => {
 
     expect(outcome.status).toBe('unchanged')
     expect(outcome.failures).toEqual([
-      { source: 'remote', error: expect.objectContaining({ code: 'ERR_CONFIG_SOURCE' }) },
+      { source: 'remote', optional: false, error: expect.objectContaining({ code: 'ERR_CONFIG_SOURCE' }) },
     ])
     expect(store.current.server.port).toBe(1)
     expect(store.inspect().sources[0]).toMatchObject({ consecutiveFailures: 1, layers: ['remote'] })

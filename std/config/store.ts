@@ -381,7 +381,7 @@ export class ConfigStore<T> {
       if (result.status === 'rejected') {
         state.consecutiveFailures++
         state.lastError = result.reason
-        failures.push({ source: state.source.name, error: result.reason })
+        failures.push({ source: state.source.name, optional: state.source.optional === true, error: result.reason })
         this.#events.sourceFailed({
           source: state.source.name,
           err: result.reason,
