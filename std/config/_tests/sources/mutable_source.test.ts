@@ -111,6 +111,16 @@ describe('MutableConfigSource', () => {
     expect(data(source)).toEqual({ server: { port: 3000 } })
   })
 
+  // A merge follows the rule layers merge by, so it drops what a layer merge drops rather than carrying it along.
+  it('drops __proto__, constructor and prototype from what it merges', () => {
+    const source = new MutableConfigSource()
+
+    source.merge(JSON.parse('{"__proto__": {"polluted": true}, "a": {"constructor": 1, "prototype": 2, "b": 3}}'))
+
+    expect(data(source)).toEqual({ a: { b: 3 } })
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+
   // `source.merge({ server: { port: options.port } })` with no port given must not erase the port it holds.
   it('skips a key merged in as undefined', () => {
     const source = new MutableConfigSource().set('server.port', 3000)

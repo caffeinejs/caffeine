@@ -1,4 +1,5 @@
 import { ErrConfig } from '../errors.js'
+import { mergeInto } from '../merge.js'
 import { countLeaves, isPlainObject, toParts } from '../tree.js'
 import type { ConfigLayer, ConfigObject, ConfigSource, ConfigValue } from '../types.js'
 
@@ -44,7 +45,7 @@ export class MutableConfigSource implements ConfigSource {
 
   /** Merges `values` in: objects merge key by key, and anything else replaces what this source held. */
   merge(values: Record<string, ConfigValue>): this {
-    mergeInto(this.#data, values)
+    mergeInto(this.#data, structuredClone(values))
     return this.#written()
   }
 
@@ -115,17 +116,4 @@ function own(node: Record<string, unknown>, key: string): unknown {
 function put<V>(node: Record<string, unknown>, key: string, value: V): V {
   Object.defineProperty(node, key, { value, enumerable: true, writable: true, configurable: true })
   return value
-}
-
-function mergeInto(target: Record<string, unknown>, values: Readonly<Record<string, unknown>>): void {
-  for (const key of Object.keys(values)) {
-    const next = values[key]
-    const previous = own(target, key)
-
-    if (isPlainObject(next) && isPlainObject(previous)) {
-      mergeInto(previous, next)
-    } else if (next !== undefined) {
-      put(target, key, structuredClone(next))
-    }
-  }
 }
