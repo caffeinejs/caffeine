@@ -131,7 +131,8 @@ export class ConfigStore<T> {
   }
 
   get [kMergedTree](): ConfigObject {
-    return this.#merged
+    // Frozen when asked for rather than on every reload: the application reads it once, at start-up.
+    return freezeDeep(this.#merged)
   }
 
   get [kFirstLoadMs](): number {
@@ -165,7 +166,7 @@ export class ConfigStore<T> {
     const merged = mergeLayers(this.#layers())
     const validated = validateRoot(this.definition, merged)
 
-    this.#merged = freezeDeep(merged)
+    this.#merged = merged
     // Validation deletes the keys a schema does not declare, and V8 keeps an object it deleted from in dictionary
     // mode. A fresh copy of each new node is back in fast mode, where a read is a field load.
     this.#current = freezeCopy(validated) as ConfigSnapshot<T>
@@ -453,7 +454,7 @@ export class ConfigStore<T> {
     for (const state of this.#states) {
       state.rejected = undefined
     }
-    this.#merged = freezeDeep(merged)
+    this.#merged = merged
 
     if (next === this.#current) {
       // Only keys the schema drops differed.
