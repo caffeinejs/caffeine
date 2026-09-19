@@ -9,7 +9,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'json-summary'],
-      exclude: ['examples/**'],
+      exclude: ['examples/**', '**/*.testkit.ts'],
     },
     pool: 'threads',
     maxWorkers: 4,
