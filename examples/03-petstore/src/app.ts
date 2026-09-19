@@ -142,7 +142,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
         .default('GitHub'),
     )
     // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
-    .server((s, c) => s.withConfig(c.server))
+    .server((s, c) => s.config(c.server))
     // Kubernetes probes: /livez, /readyz, /startupz.
     .with(health())
     // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the

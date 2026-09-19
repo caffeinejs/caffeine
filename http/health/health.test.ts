@@ -42,7 +42,7 @@ describe('HealthBuilder.resolve', () => {
   it('drives the configuration from a configured block', () => {
     const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
 
-    const options = new HealthBuilder().withConfig(config).resolve()
+    const options = new HealthBuilder().config(config).resolve()
 
     expect(options).toMatchObject({
       enabled: true,
@@ -57,7 +57,7 @@ describe('HealthBuilder.resolve', () => {
   it('keeps a code-set duration and takes the rest from the configured block', () => {
     const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
 
-    const options = new HealthBuilder().cacheTTL('10ms').probeDeadline('7s').withConfig(config).resolve()
+    const options = new HealthBuilder().cacheTTL('10ms').probeDeadline('7s').config(config).resolve()
 
     expect(options).toMatchObject({
       // Named in code, so it stands...
@@ -69,7 +69,7 @@ describe('HealthBuilder.resolve', () => {
   })
 
   it('lets a configured enabled win over both the fluent default and .k8s()', () => {
-    const options = new HealthBuilder().k8s().withConfig({ enabled: true }).resolve()
+    const options = new HealthBuilder().k8s().config({ enabled: true }).resolve()
 
     expect(options.enabled).toBe(true)
   })
@@ -122,7 +122,7 @@ describe('health()', () => {
       .build()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, c) => h.withConfig(c.health)),
+      health((h, c) => h.config(c.health)),
     )
 
     await app.ready()
@@ -131,7 +131,7 @@ describe('health()', () => {
   })
 
   // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.
-  it('ignores the configured block unless withConfig pointed at it', async () => {
+  it('ignores the configured block unless config(...) pointed at it', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
@@ -148,7 +148,7 @@ describe('health()', () => {
 
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, c) => h.withConfig(c.health)),
+      health((h, c) => h.config(c.health)),
     )
 
     await app.run()

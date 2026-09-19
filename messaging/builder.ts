@@ -51,7 +51,7 @@ export interface OutBindingOptions {
  * A second integration is `.with(messaging('audit', m => ...))`.
  *
  * Configuration overlays what `.in(...)` / `.out(...)` set for everything a binding's config slice
- * declares: a destination written in code is a default a deployment can redirect once {@link withConfig}
+ * declares: a destination written in code is a default a deployment can redirect once {@link config}
  * is wired.
  */
 export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
@@ -117,7 +117,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
    * bindings the builder declared are resolved: a binding named in the tree that no `.in(...)` created has
    * nothing to attach to, and declaring one is a code act.
    */
-  withConfig(config: Partial<MessagingConfigSlice>): this {
+  config(config: Partial<MessagingConfigSlice>): this {
     this.#config = config
     return this
   }

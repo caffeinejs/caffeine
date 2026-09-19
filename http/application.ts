@@ -152,7 +152,7 @@ export class WebApplication<
     super(options)
 
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
-    // through `.server((s, c) => s.withConfig(...))` — declaring `server` in the schema is not enough.
+    // through `.server((s, c) => s.config(...))` — declaring `server` in the schema is not enough.
     this.addFeature(this.#serverBuilder)
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.

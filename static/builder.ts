@@ -23,7 +23,7 @@ export const kBuild = Symbol('caffeine.static.build')
  * parameterizes the mount but never switches it on, so a config file cannot start serving a shell the
  * application never asked for.
  *
- * What a fluent method sets is final — there is no `.withConfig(...)` to read a mount or a SPA setting from
+ * What a fluent method sets is final — there is no `.config(...)` to read a mount or a SPA setting from
  * the configuration tree.
  */
 export class StaticBuilder {

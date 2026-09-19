@@ -199,7 +199,7 @@ describe('ctx.config with an application schema', () => {
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .server((s, c) => s.withConfig(c.server))
+      .server((s, c) => s.config(c.server))
       .mount(routes)
 
     await app.ready()
@@ -220,7 +220,7 @@ describe('ctx.config with an application schema', () => {
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .server((s, c) => s.withConfig(c.server))
+      .server((s, c) => s.config(c.server))
       .mount(routes)
 
     await app.ready()
@@ -265,7 +265,7 @@ describe('ctx.config with an application schema', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {
       container: new CaffeineIoC(),
       config: conf,
-    }).server((s, c) => s.withConfig(c.server))
+    }).server((s, c) => s.config(c.server))
 
     await app.ready()
 

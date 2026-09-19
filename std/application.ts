@@ -100,7 +100,7 @@ export class Application<TConfig = unknown> {
   readonly #definition: ConfigDefinition<unknown>
 
   // Registered unconditionally: the drain policy applies to every application, probes or not. Configuration
-  // reaches it only through `.shutdown((s, c) => s.withConfig(...))`. Held so `.shutdown()` can configure it
+  // reaches it only through `.shutdown((s, c) => s.config(...))`. Held so `.shutdown()` can configure it
   // in place.
   readonly #shutdownBuilder = new ShutdownBuilder<unknown>()
 
@@ -229,7 +229,7 @@ export class Application<TConfig = unknown> {
    * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
    * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults.
    * A fluent method is the last word; `SHUTDOWN__DRAIN_DELAY` reaches the feature only through
-   * `.shutdown((s, c) => s.withConfig(c.shutdown))`.
+   * `.shutdown((s, c) => s.config(c.shutdown))`.
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */

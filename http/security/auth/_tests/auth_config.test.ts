@@ -19,7 +19,7 @@ import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 
 // The application owns the schema: it declares where the authentication block lives — importing the feature's
-// own schema for the scheme-independent half — and `a.withConfig(c.auth)` hands the feature that node.
+// own schema for the scheme-independent half — and `a.config(c.auth)` hands the feature that node.
 //
 // `schemes` is declared **precisely**, splicing in each kind's own schema. That is what carries `$t.Secret`
 // into the tree, and `$t.Secret` is what the diagnostics redact on: an open record would validate the same
@@ -89,7 +89,7 @@ describe('authentication configuration', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      a.config(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
     await app.ready()
@@ -130,7 +130,7 @@ describe('authentication configuration', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      a.config(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
     await app.ready()
@@ -157,7 +157,7 @@ describe('authentication configuration', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
+      a.config(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
     )
 
     await expect(app.ready()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
@@ -180,7 +180,7 @@ describe('authentication configuration', () => {
       config: conf,
     }).authentication((a, c) =>
       a
-        .withConfig(c.auth)
+        .config(c.auth)
         .addBasic(b => b.realm('From Code').validate(() => null))
         .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
         .default('Basic'),
@@ -210,7 +210,7 @@ describe('authentication configuration', () => {
       config: conf,
     }).authentication((a, c) =>
       a
-        .withConfig(c.auth)
+        .config(c.auth)
         .addBasic(b => b.validate(() => null))
         .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
@@ -232,7 +232,7 @@ describe('authentication configuration', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.auth).addBasic(b =>
+      a.config(c.auth).addBasic(b =>
         b.realm('Coded').validate(() => {
           validated++
           return null
@@ -267,7 +267,7 @@ describe('authentication configuration', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      a.config(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
     await app.ready()

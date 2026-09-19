@@ -9,7 +9,7 @@ import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
 ```
 
 One rule runs through all of it: **a fluent method is the last word.** Configuration reaches a feature because the
-application's configure callback wired it (`withConfig`). A value set in code is not a default that a file, the
+application's configure callback wired it (`config(...)`). A value set in code is not a default that a file, the
 environment or an argument quietly outranks. Kafka, messaging and authentication scheme secrets are the named
 exceptions (see `CONVENTIONS.md`).
 
@@ -66,7 +66,7 @@ const conf = newConfiguration(appConfigSchema, kAppConfig)
   .args()
   .build()
 
-createWebApplication(adapter, { config: conf }).server((s, c) => s.withConfig(c.server))
+createWebApplication(adapter, { config: conf }).server((s, c) => s.config(c.server))
 ```
 
 Precedence is registration order alone: a source added later wins a conflicting value. Here the environment
@@ -145,9 +145,9 @@ request. A selector that throws during a swap is logged and leaves the view as i
 A feature registers nothing here. The application hands it what it wants, in the configure callback:
 
 ```ts
-.with(server((s, c) => s.withConfig(c.app.server)))
+.with(server((s, c) => s.config(c.app.server)))
 .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
-.with(thing((b, c, store) => b.withLiveConfig(store.view(t => t.app.thing))))
+.with(thing((b, c, store) => b.config(store.view(t => t.app.thing))))
 ```
 
 - **Liveness is the author's choice.** A node handed over follows every reload; a scalar copied out of one does

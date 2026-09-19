@@ -65,7 +65,7 @@ async function newLock(
 
   const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
     distlock<AppConfig>((d, c) => {
-      d.backend(backend).withConfig(c.app.distlock)
+      d.backend(backend).config(c.app.distlock)
       fluent?.(d)
     }),
   )

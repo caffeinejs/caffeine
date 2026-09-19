@@ -30,7 +30,7 @@ class GadgetBuilder<C = unknown> extends FeatureBuilder<C> {
   #size: number | undefined
   #label: string | undefined
 
-  withConfig(config: Partial<GadgetConfig>): this {
+  config(config: Partial<GadgetConfig>): this {
     this.node = config
     return this
   }
@@ -107,7 +107,7 @@ describe('FeatureBuilder', () => {
 
   // The other half of the same rule, and the only path configuration has into a feature.
   it('reads a setting from the tree when the callback wires it', async () => {
-    const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
+    const g = gadget<AppConfig>((b, c) => b.config(c.app.gadget))
 
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
@@ -182,7 +182,7 @@ describe('FeatureBuilder', () => {
     const mutable = new MutableConfigSource('gadget-test')
     mutable.set('app', { gadget: { size: 5 } })
 
-    const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
+    const g = gadget<AppConfig>((b, c) => b.config(c.app.gadget))
     const conf = newConfiguration(appSchema, kAppConfig).source(mutable).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 

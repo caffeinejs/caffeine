@@ -80,7 +80,7 @@ describe('WebApplication.with()', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(Fastify()), { config: conf })
       .with(probe())
-      .server((s, c) => s.withConfig(c.app.server))
+      .server((s, c) => s.config(c.app.server))
 
     expect(typeof app.ready).toBe('function')
   })

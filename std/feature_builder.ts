@@ -13,8 +13,8 @@ import {
  * store it came from.
  *
  * What the callback does with `c` decides what follows a reload: `b.port(c.app.server.port)` reads a number once,
- * while `b.withConfig(c.app.server)` hands over a node whose fields follow every reload. A feature that has to act
- * on a change takes a view: `(b, c, store) => b.withLiveConfig(store.view(t => t.app.thing))`.
+ * while `b.config(c.app.server)` hands over a node whose fields follow every reload. A feature that has to act
+ * on a change takes a view in its `config(...)` instead: `(b, c, store) => b.config(store.view(t => t.app.thing))`.
  *
  * ```ts
  * .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))

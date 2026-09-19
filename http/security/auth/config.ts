@@ -14,7 +14,7 @@ export type SchemeKind = 'jwt' | 'basic' | 'cookie' | 'opaque' | 'oidc' | 'oauth
 
 /**
  * What an application may configure for authentication, handed to the builder with
- * `AuthenticationBuilder.withConfig`.
+ * `AuthenticationBuilder.config`.
  *
  * `schemes` is keyed by the name the `addX(...)` call gave the scheme, and each entry carries that kind's
  * configurable keys — {@link SCHEME_CONFIG} holds one schema per kind.

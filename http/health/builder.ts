@@ -9,7 +9,7 @@ import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPa
  * configuration; {@link healthConfigSchema} is exported so an application can splice it into its own schema:
  *
  * ```ts
- * .with(health((h, c) => h.withConfig(c.app.health)))
+ * .with(health((h, c) => h.config(c.app.health)))
  * ```
  *
  * Health indicators are not configured here — they are container-managed beans discovered through
@@ -26,7 +26,7 @@ export class HealthBuilder {
    * The node is read once, when the plugin registers. A fluent method called alongside this one wins over
    * what the node carries.
    */
-  withConfig(config: Partial<HealthConfig>): this {
+  config(config: Partial<HealthConfig>): this {
     this.#config = config
     return this
   }

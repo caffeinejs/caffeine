@@ -39,7 +39,7 @@ function runtimeOf(container: Container, instance = 'default'): MessagingRuntime
 describe('messaging configuration', () => {
   // The regression the whole mechanism exists for: a destination is a topic name, and it differs per
   // environment exactly the way a broker list does. Named exception: messaging is config-wins once
-  // `withConfig` is wired.
+  // `config(...)` is wired.
   it('lets the environment override a builder-set destination', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }))
@@ -47,7 +47,7 @@ describe('messaging configuration', () => {
     const app = createApplication({ config: conf }).with(
       messaging((m, c) =>
         m
-          .withConfig(c.messaging.default)
+          .config(c.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary' })
           .out('notify', { destination: 'notify', via: 'primary' }),
@@ -72,7 +72,7 @@ describe('messaging configuration', () => {
     const app = createApplication({ config: conf }).with(
       messaging((m, c) =>
         m
-          .withConfig(c.messaging.default)
+          .config(c.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary' }),
       ),
@@ -94,7 +94,7 @@ describe('messaging configuration', () => {
       .with(
         messaging((m, c) =>
           m
-            .withConfig(c.messaging.default)
+            .config(c.messaging.default)
             .use('primary', inMemoryBinder())
             .out('log', { destination: 'log', via: 'primary' }),
         ),
@@ -102,7 +102,7 @@ describe('messaging configuration', () => {
       .with(
         messaging('audit', (m, c) =>
           m
-            .withConfig(c.messaging.audit)
+            .config(c.messaging.audit)
             .use('primary', inMemoryBinder())
             .out('log', { destination: 'log', via: 'primary' }),
         ),
@@ -128,7 +128,7 @@ describe('messaging configuration', () => {
     const app = createApplication({ config: conf }).with(
       messaging((m, c) =>
         m
-          .withConfig(c.messaging.default)
+          .config(c.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary', schema }),
       ),
@@ -162,7 +162,7 @@ describe('messaging configuration', () => {
       .with(
         messaging((m, c) =>
           m
-            .withConfig(c.app.events)
+            .config(c.app.events)
             .use('primary', inMemoryBinder())
             .in('orders', { destination: 'orders', via: 'primary' }),
         ),
@@ -188,7 +188,7 @@ describe('messaging configuration', () => {
     const app = createApplication({ config: conf }).with(
       messaging((m, c) =>
         m
-          .withConfig(c.messaging.default)
+          .config(c.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary' }),
       ),
