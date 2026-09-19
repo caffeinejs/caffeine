@@ -202,8 +202,10 @@ describe('MutableConfigSource', () => {
     await store.close()
   })
 
-  it('is live', () => {
-    expect(new MutableConfigSource().live).toBe(true)
+  it('is watched, which is what makes it live', async () => {
+    const store = await loadConfig(definition([new MutableConfigSource()]), { start: false })
+
+    expect(store.inspect().sources[0].trigger).toBe('watch')
   })
 })
 

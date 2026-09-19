@@ -12,7 +12,6 @@ import type { ConfigLayer, ConfigObject, ConfigSource, ConfigValue } from '../ty
  */
 export class MutableConfigSource implements ConfigSource {
   readonly name: string
-  readonly live = true
   #data: Record<string, unknown> = {}
   #changed: (() => void) | undefined
 
