@@ -225,7 +225,9 @@ with `ERR_CONFIG_PROFILE`, wherever they were named.
 | Watch   | `watch(changed)` on a source | Reloaded 250 ms after the changes stop                                                   |
 
 A reload loads only the sources its trigger names; a static source is never loaded again. Reloads never overlap:
-one that arrives mid-run joins the single follow-up. If no source's layers changed, nothing is merged or validated.
+one that arrives mid-run joins the single follow-up. Nor do a source's loads: until a load that timed out settles,
+the source is not asked again, and each attempt fails at once with `ERR_CONFIG_SOURCE_TIMEOUT`. If no source's
+layers changed, nothing is merged or validated.
 
 A reload is all or nothing. When the new tree fails validation the reload is rejected: the snapshot, the live
 object, the views and every source's layers stay as they were, and nobody is notified. A source that fails to load
@@ -282,7 +284,7 @@ A tree that cannot validate fails `ready()`, which is more legible than failing 
 | Code                          | When                                                                   |
 | ----------------------------- | ---------------------------------------------------------------------- |
 | `ERR_CONFIG_SOURCE`           | a source failed to load, or returned something that is not layers      |
-| `ERR_CONFIG_SOURCE_TIMEOUT`   | a source did not answer within the load timeout                        |
+| `ERR_CONFIG_SOURCE_TIMEOUT`   | a source did not answer within the load timeout, or still has not      |
 | `ERR_CONFIG_DUPLICATE_SOURCE` | two sources share a name                                               |
 | `ERR_CONFIG_ARRAY_INDICES`    | a source's indexed keys are not a complete list from 0                 |
 | `ERR_CONFIG_KEY_CONFLICT`     | a source sets one path both as a value and as a parent                 |

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { WATCH_DEBOUNCE_MS, pollDelay } from '../triggers.js'
-import type { ConfigDefinition, ConfigSource } from '../types.js'
+import type { ConfigDefinition, ConfigLayer, ConfigSource } from '../types.js'
 import { RecordingLogger } from './log.testkit.js'
 
 function definition(sources: ConfigSource[]): ConfigDefinition {
@@ -85,6 +85,55 @@ describe('polling', () => {
     expect(state.loads).toBe(4)
     await vi.advanceTimersByTimeAsync(1_000)
     expect(state.loads).toBe(5)
+  })
+
+  // A source that ignores its signal can go on running a load the store gave up on. Asking it again on every poll
+  // would pile up calls that may never end.
+  it('asks a source that ignores its signal for one load at a time, and again once it answers', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const logger = new RecordingLogger()
+    let loads = 0
+    let answer: ((layers: readonly ConfigLayer[]) => void) | undefined
+    const source: ConfigSource = {
+      name: 'remote',
+      pollInterval: 1_000,
+      load: () => {
+        loads++
+        return loads === 2
+          ? new Promise<readonly ConfigLayer[]>(resolve => {
+              answer = resolve
+            })
+          : []
+      },
+    }
+    const store = await loadConfig({ ...definition([source]), loadTimeoutMs: 500 }, { logger })
+    const stillRunning = 'Cannot load config source "remote": the load that timed out is still running'
+
+    // The poll at 1 000 times out at 1 500. The polls at 3 500, 7 500 and 15 500 find it still running.
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(loads).toBe(2)
+    expect(logger.at('warn').map(r => (r.fields.err as Error).message)).toEqual([
+      'Cannot load config source "remote": no answer within 500 ms',
+      stillRunning,
+      stillRunning,
+      stillRunning,
+    ])
+
+    const outcome = await store.reload()
+
+    expect(loads).toBe(2)
+    expect(outcome.failures).toEqual([
+      {
+        source: 'remote',
+        error: expect.objectContaining({ code: 'ERR_CONFIG_SOURCE_TIMEOUT', message: stillRunning }),
+      },
+    ])
+
+    answer?.([])
+    await vi.advanceTimersByTimeAsync(3_500) // the poll at 23 500
+
+    expect(loads).toBe(3)
   })
 
   it('logs each armed trigger', async () => {

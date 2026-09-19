@@ -50,6 +50,8 @@ export interface SourceState {
   lastLoadMs: number
   consecutiveFailures: number
   lastError: unknown
+  /** The source's own `load()` is running, possibly one the store stopped waiting for when it timed out. */
+  loading: boolean
 }
 
 interface ViewState<T> {
@@ -521,6 +523,15 @@ export class ConfigStore<T> {
   /** Loads one source, bounded by the load timeout and by `close()`, and accepts what it returned. */
   async #loadOnce(state: SourceState): Promise<readonly ConfigLayer[]> {
     const name = state.source.name
+
+    // A source that ignored the signal of a load that timed out may still be running it, and never runs two.
+    if (state.loading) {
+      throw new ErrConfig(
+        `Cannot load config source "${name}": the load that timed out is still running`,
+        'ERR_CONFIG_SOURCE_TIMEOUT',
+      )
+    }
+
     const controller = new AbortController()
     const timeoutMs = this.definition.loadTimeoutMs
 
@@ -562,10 +573,15 @@ export class ConfigStore<T> {
     const started = performance.now()
 
     try {
-      const layers = await Promise.race([
-        new Promise<readonly ConfigLayer[]>(resolve => resolve(state.source.load(context))),
-        aborted,
-      ])
+      state.loading = true
+      const loading = new Promise<readonly ConfigLayer[]>(resolve => resolve(state.source.load(context)))
+      // Cleared when the source's own call settles, which can be long after the race below stopped waiting for it.
+      const settled = (): void => {
+        state.loading = false
+      }
+      void loading.then(settled, settled)
+
+      const layers = await Promise.race([loading, aborted])
       const accepted = this.#accept(state, layers)
       state.lastLoadedAt = Date.now()
       state.lastLoadMs = performance.now() - started
@@ -638,6 +654,7 @@ function stateOf(sources: readonly ConfigSource[]): SourceState[] {
       lastLoadMs: 0,
       consecutiveFailures: 0,
       lastError: undefined,
+      loading: false,
     }
   })
 }

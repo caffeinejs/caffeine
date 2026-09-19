@@ -44,7 +44,10 @@ export interface ConfigLoadContext {
 export interface ConfigSource {
   /** Unique within one configuration. */
   readonly name: string
-  /** This source's layers, lowest precedence first. Runs at start-up, and again on each reload of a live source. */
+  /**
+   * This source's layers, lowest precedence first. Runs at start-up, and again on each reload of a live source, but
+   * never while an earlier call still runs, even one the store stopped waiting for.
+   */
   load(context: ConfigLoadContext): readonly ConfigLayer[] | Promise<readonly ConfigLayer[]>
   /** The data can change while the process runs. */
   readonly live?: boolean
