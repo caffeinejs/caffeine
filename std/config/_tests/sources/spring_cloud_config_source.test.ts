@@ -182,11 +182,28 @@ describe('SpringCloudConfigSource', () => {
 
   // A dropped connection is worth another attempt, after a pause, so a server that is restarting is not hammered.
   it('retries a failed connection after a pause', async () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0)
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
     const fetch = vi
       .fn()
       .mockRejectedValueOnce(new TypeError('fetch failed'))
       .mockResolvedValueOnce({ ok: true, json: async () => body })
+    vi.stubGlobal('fetch', fetch)
+
+    const started = performance.now()
+    const layers = await source({ retries: 1 }).load(context())
+
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(performance.now() - started).toBeGreaterThanOrEqual(90)
+    expect(layers).toHaveLength(3)
+  })
+
+  // A 5xx is a server in trouble, often an overloaded one: asking again at once, from every instance, adds to it.
+  it('retries a 5xx after a pause', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    const fetch = respond([
+      { ok: false, status: 503 },
+      { ok: true, body },
+    ])
     vi.stubGlobal('fetch', fetch)
 
     const started = performance.now()

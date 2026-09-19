@@ -3,7 +3,11 @@ import { setTimeout as delay } from 'node:timers/promises'
 import type { Duration } from '../../duration/duration.js'
 import { ErrConfig, messageOf } from '../errors.js'
 import { expandKeys } from '../merge.js'
+import { pollDelay } from '../triggers.js'
 import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource, ConfigValue } from '../types.js'
+
+/** The pause before the first retry of a URL. It doubles per retry, as the pause of a failing poll does. */
+const RETRY_DELAY_MS = 100
 
 export interface SpringCloudConfigSourceOptions {
   /** The application name: the first path segment of the request, `/{app}/{profiles}`. */
@@ -100,6 +104,11 @@ export class SpringCloudConfigSource implements ConfigSource {
     let lastError: unknown
 
     for (let attempt = 0; attempt <= retries; attempt++) {
+      // Whatever failed, a dropped connection or a 5xx, the server is given time before it is asked again.
+      if (attempt > 0) {
+        await delay(pollDelay(RETRY_DELAY_MS, attempt - 1), undefined, { signal, ref: false })
+      }
+
       const base: RequestInit = {
         method: 'GET',
         headers: this.#requestHeaders(),
@@ -121,9 +130,6 @@ export class SpringCloudConfigSource implements ConfigSource {
           throw error
         }
         lastError = error
-        if (attempt < retries) {
-          await delay(Math.min(100 * 2 ** attempt + Math.random() * 50, 2_000), undefined, { signal, ref: false })
-        }
         continue
       } finally {
         clearTimeout(timeout)

@@ -16,7 +16,7 @@ export interface Triggered {
  * jitter either way so that many processes polling one server spread apart.
  */
 export function pollDelay(intervalMs: number, consecutiveFailures: number, random: () => number = Math.random): number {
-  return intervalMs * Math.min(2 ** consecutiveFailures, 8) * (0.9 + random() * 0.2)
+  return pollBackoff(intervalMs, consecutiveFailures) * (0.9 + random() * 0.2)
 }
 
 /** The delay {@link pollDelay} centres on, without jitter. What a log reports as the next attempt. */
