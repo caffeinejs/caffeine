@@ -3,7 +3,6 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { loadConfig } from '../../load.js'
-import { MutableConfigSource } from '../../sources/mutable_source.js'
 import {
   SpringCloudConfigSource,
   type SpringCloudConfigSourceOptions,
@@ -115,7 +114,12 @@ describe('a config server behind a container refresh', () => {
   it('reads new values through the live object after a refresh', async context => {
     context.skip(!serverAvailable, `no config server at ${CONFIGSERVER_URL}`)
 
-    const overrides = new MutableConfigSource('overrides')
+    let overridden: Record<string, unknown> = {}
+    const overrides: ConfigSource = {
+      name: 'overrides',
+      live: true,
+      load: () => [{ name: 'overrides', data: overridden as never }],
+    }
     const kConfig = token<CaffeineConfig>(Symbol('caffeine.config'))
     const store = await loadConfig<CaffeineConfig>(
       { schema, key: kConfig, storeKey: undefined, sources: [server(), overrides], loadTimeoutMs: 30_000 },
@@ -128,7 +132,7 @@ describe('a config server behind a container refresh', () => {
     const config = container.get(kConfig)
     expect(config.caffeine.version).toBe('1.0.0')
 
-    overrides.set('caffeine.version', '99.0.0')
+    overridden = { caffeine: { version: '99.0.0' } }
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     expect(config.caffeine.version).toBe('99.0.0')

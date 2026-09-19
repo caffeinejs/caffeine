@@ -3,8 +3,8 @@ import {
   EnvConfigSource,
   InlineConfigSource,
   loadConfig,
-  MutableConfigSource,
   type ConfigSchema,
+  type ConfigSource,
 } from '@caffeinejs/std/config'
 import { bench, do_not_optimize, run, summary } from 'mitata'
 
@@ -53,7 +53,13 @@ function makeSchema() {
   return $t.Object(sections)
 }
 
-const mutable = new MutableConfigSource('live')
+// The live source: the one value a case writes, handed out fresh on every load.
+let flip = false
+const written: ConfigSource = {
+  name: 'live',
+  live: true,
+  load: () => [{ name: 'live', data: { section1: { group1: { key1: flip ? 'a' : 'b' } } } }],
+}
 const store = await loadConfig<Tree>(
   {
     schema: makeSchema() as ConfigSchema<Tree>,
@@ -63,7 +69,7 @@ const store = await loadConfig<Tree>(
       new InlineConfigSource(makeTree('default'), 'defaults'),
       new InlineConfigSource(makeTree('file'), 'file'),
       new EnvConfigSource({ env: { SECTION0__GROUP0__KEY0: 'env', SECTION3__GROUP2__KEY5: 'env' } }),
-      mutable,
+      written,
     ],
     loadTimeoutMs: 30_000,
   },
@@ -71,12 +77,10 @@ const store = await loadConfig<Tree>(
 )
 
 const live = store.live
-let flip = false
 
 summary(() => {
   bench('one value written, one reload', async () => {
     flip = !flip
-    mutable.set('section1.group1.key1', flip ? 'a' : 'b')
     await store.reload()
     do_not_optimize(live.section1.group1.key1)
   })

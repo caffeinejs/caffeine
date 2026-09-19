@@ -184,6 +184,39 @@ describe('watching', () => {
     expect((store.current as { value: number }).value).toBe(1)
   })
 
+  // A change is one source's news. Loading the others again would cost each of them a request, and would let an
+  // edited file in on a reload nobody asked it for.
+  it('loads only the source that reported a change, and keeps what the others supplied', async () => {
+    const neighbour = { loads: 0 }
+    const fixed: ConfigSource = {
+      name: 'defaults',
+      load: () => {
+        neighbour.loads++
+        return [{ name: 'defaults', data: { host: 'h', value: 0 } }]
+      },
+    }
+    const { source, state } = watched()
+    const store = await loadConfig(definition([fixed, source]))
+    const live = store.live as { host: string; value: number }
+
+    state.value = 9
+    state.changed?.()
+    await vi.advanceTimersByTimeAsync(WATCH_DEBOUNCE_MS)
+
+    expect(live.value).toBe(9)
+    expect(live.host).toBe('h')
+    expect(neighbour.loads).toBe(1)
+    await store.close()
+  })
+
+  // `inspect()` is where an operator learns whether a source follows its own changes.
+  it('reports the watch trigger for a source that can be watched', async () => {
+    const { source } = watched()
+    const store = await loadConfig(definition([source]), { start: false })
+
+    expect(store.inspect().sources[0].trigger).toBe('watch')
+  })
+
   it('reports a watcher that cannot start, and keeps the store working', async () => {
     const logger = new RecordingLogger()
     const source: ConfigSource = {

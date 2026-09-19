@@ -1,7 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { CONFIG_REFRESH_LABEL, InlineConfigSource, MutableConfigSource } from './config/index.js'
+import { CONFIG_REFRESH_LABEL, InlineConfigSource, type ConfigSource } from './config/index.js'
 import { kFeatureName } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 import { createApplication, newConfiguration } from './index.js'
@@ -179,11 +179,15 @@ describe('FeatureBuilder', () => {
   // Liveness is the author's choice, not something the framework manufactures: a node read through follows a
   // refresh, while a scalar copied out of it at bootstrap does not.
   it('hands over a live node, so a refresh is visible through it', async () => {
-    const mutable = new MutableConfigSource('gadget-test')
-    mutable.set('app', { gadget: { size: 5 } })
+    let size = 5
+    const changing: ConfigSource = {
+      name: 'gadget-test',
+      live: true,
+      load: () => [{ name: 'gadget-test', data: { app: { gadget: { size } } } }],
+    }
 
     const g = gadget<AppConfig>((b, c) => b.config(c.app.gadget))
-    const conf = newConfiguration(appSchema, kAppConfig).source(mutable).build()
+    const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 
     await app.ready()
@@ -191,7 +195,7 @@ describe('FeatureBuilder', () => {
     expect(g.resolved?.size).toBe(5)
     expect(g.node?.size).toBe(5)
 
-    mutable.set('app', { gadget: { size: 42 } })
+    size = 42
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // The node reads through the tree as it stands now...

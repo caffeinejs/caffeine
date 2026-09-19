@@ -1,7 +1,7 @@
 import { CaffeineIoC, Injectable, token } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
-import { MutableConfigSource, type InferConfig } from './config/index.js'
+import type { ConfigSource, InferConfig } from './config/index.js'
 import { createApplication, newConfiguration } from './index.js'
 import { $t } from './schema/t.js'
 
@@ -22,7 +22,19 @@ describe('live configuration', () => {
       }
     }
 
-    const overrides = new MutableConfigSource('overrides').set('pricing.margin', 0.2)
+    // A source that says when it changed. Nothing below asks for a reload: the store loads it again by itself.
+    let margin = 0.2
+    let changed: (() => void) | undefined
+    const overrides: ConfigSource = {
+      name: 'overrides',
+      load: () => [{ name: 'overrides', data: { pricing: { margin } } }],
+      watch: listener => {
+        changed = listener
+        return () => {
+          changed = undefined
+        }
+      },
+    }
     const conf = newConfiguration(schema, kConfig).source(overrides).build()
     const container = new CaffeineIoC({ decorators: false })
     container.bind(Pricing, t => t.toSelf())
@@ -32,7 +44,8 @@ describe('live configuration', () => {
     const pricing = app.container.get(Pricing)
     expect(pricing.quote()).toBe(0.2)
 
-    overrides.set('pricing.margin', 0.35)
+    margin = 0.35
+    changed?.()
 
     await vi.waitFor(() => expect(pricing.quote()).toBe(0.35))
     expect(app.container.get(Pricing)).toBe(pricing)

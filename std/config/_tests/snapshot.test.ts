@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
-import { MutableConfigSource } from '../sources/mutable_source.js'
-import type { ConfigSchema } from '../types.js'
+import { InlineConfigSource } from '../sources/inline_source.js'
+import type { ConfigSchema, ConfigSource } from '../types.js'
 
 interface App {
   server: { port: number; paths: { live: string } }
@@ -21,13 +21,24 @@ const schema = $t.Object({
   ),
 })
 
+/** A source over data the test changes. Each load hands out its own copy, as a source has to. */
+function changing(data: Record<string, unknown>) {
+  const state = { data }
+  const source: ConfigSource = {
+    name: 'test',
+    live: true,
+    load: () => [{ name: 'test', data: structuredClone(state.data) as never }],
+  }
+  return { source, state }
+}
+
 async function setup() {
-  const mutable = new MutableConfigSource('test').set('server.port', 3000)
+  const { source, state } = changing({ server: { port: 3000 } })
   const store = await loadConfig<App>(
-    { schema, key: undefined, storeKey: undefined, sources: [mutable], loadTimeoutMs: 30_000 },
+    { schema, key: undefined, storeKey: undefined, sources: [source], loadTimeoutMs: 30_000 },
     { start: false },
   )
-  return { store, mutable }
+  return { store, state }
 }
 
 /**
@@ -44,11 +55,11 @@ describe('reading configuration', () => {
   })
 
   it('keeps one identity for the live object and its nodes while their fields follow a reload', async () => {
-    const { store, mutable } = await setup()
+    const { store, state } = await setup()
     const live = store.live
     const server = store.live.server
 
-    mutable.set('server.port', 8080)
+    state.data = { server: { port: 8080 } }
     await store.reload()
 
     expect(store.live).toBe(live)
@@ -58,10 +69,10 @@ describe('reading configuration', () => {
 
   // A snapshot is what a request latches: a reload landing mid-request cannot change the answers it started with.
   it('detaches a snapshot from later reloads', async () => {
-    const { store, mutable } = await setup()
+    const { store, state } = await setup()
     const taken = store.current
 
-    mutable.set('server.port', 8080)
+    state.data = { server: { port: 8080 } }
     await store.reload()
 
     expect(taken.server.port).toBe(3000)
@@ -90,14 +101,14 @@ describe('reading configuration', () => {
         validate: value => ({ value: (value as { later?: boolean }).later === true ? { first, later } : { first } }),
       },
     }
-    const mutable = new MutableConfigSource('test')
+    const { source, state } = changing({})
     const store = await loadConfig(
-      { schema: validating, key: undefined, storeKey: undefined, sources: [mutable], loadTimeoutMs: 30_000 },
+      { schema: validating, key: undefined, storeKey: undefined, sources: [source], loadTimeoutMs: 30_000 },
       { start: false },
     )
 
     // `first` came in with the first load, `later` with a reload, as a key the previous snapshot did not have.
-    mutable.set('later', true)
+    state.data = { later: true }
     expect((await store.reload()).status).toBe('applied')
 
     for (const node of [store.current.first.backoff, store.current.later!.backoff]) {
@@ -109,24 +120,24 @@ describe('reading configuration', () => {
   })
 
   it('advances the revision only when a reload changed something', async () => {
-    const { store, mutable } = await setup()
+    const { store, state } = await setup()
 
     await store.reload()
     expect(store.revision).toBe(0)
 
-    mutable.set('server.port', 8080)
+    state.data = { server: { port: 8080 } }
     await store.reload()
     expect(store.revision).toBe(1)
   })
 
   // The store's members live on the store, never on the configuration, so an application field is only a field.
   it('does not collide with an application field named current, live or snapshot', async () => {
-    const mutable = new MutableConfigSource('test').merge({ current: 'c', live: 'l', snapshot: 's' })
+    const source = new InlineConfigSource({ current: 'c', live: 'l', snapshot: 's' })
     const store = await loadConfig<{ current: string; live: string; snapshot: string }>({
       schema: $t.Object({ current: $t.String(), live: $t.String(), snapshot: $t.String() }),
       key: undefined,
       storeKey: undefined,
-      sources: [mutable],
+      sources: [source],
       loadTimeoutMs: 30_000,
     })
 

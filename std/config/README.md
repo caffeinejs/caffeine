@@ -170,7 +170,6 @@ anything.
 | `FileConfigSource`        | one file and its profile files  | `{ watch: true }`: reloaded when the file or a sibling changes |
 | `JSONConfigSource`        | a `.json` file                  | as `FileConfigSource`                                          |
 | `InlineConfigSource`      | a fixed object                  | nothing; loaded once                                           |
-| `MutableConfigSource`     | an object written at run time   | every `set`, `merge`, `unset` or `replace`                     |
 | `SpringCloudConfigSource` | a Spring Cloud Config server    | `reload()`, and `pollInterval` if set                          |
 
 `HEALTH__DRAIN_DELAY` reaches `health.drainDelay`: `__` splits segments and `_` within a segment folds to camelCase.

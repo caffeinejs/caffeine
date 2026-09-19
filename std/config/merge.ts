@@ -19,18 +19,9 @@ export function mergeLayers(layers: readonly ConfigLayer[]): ConfigObject {
   return merged as ConfigObject
 }
 
-/**
- * Merges `values` into `target`, which it changes: plain objects merge key by key, and anything else replaces what
- * was there. `undefined` is skipped, and so are `__proto__`, `constructor` and `prototype`.
- *
- * A plain object of `values` is copied, never adopted, so `values` is never changed. Arrays and scalars are shared.
- */
-export function mergeInto(
-  target: Record<string, unknown>,
-  values: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
-  for (const key of Object.keys(values)) {
-    const next = values[key]
+function mergeInto(target: Record<string, unknown>, layer: ConfigObject): Record<string, unknown> {
+  for (const key of Object.keys(layer)) {
+    const next = layer[key]
 
     if (next === undefined || isForbiddenKey(key)) {
       continue
@@ -38,8 +29,8 @@ export function mergeInto(
 
     if (isPlainObject(next)) {
       const previous = target[key]
-      // `previous` belongs to `target`, the one thing a merge changes.
-      target[key] = mergeInto(isPlainObject(previous) ? previous : {}, next)
+      // `previous` is plain only when this merge created it, so filling it in never touches a layer.
+      target[key] = mergeInto(isPlainObject(previous) ? previous : {}, next as ConfigObject)
     } else {
       target[key] = next
     }

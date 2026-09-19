@@ -5,8 +5,8 @@ import {
   CONFIG_REFRESH_LABEL,
   EnvConfigSource,
   InlineConfigSource,
-  MutableConfigSource,
   type ConfigDefinition,
+  type ConfigSource,
   type InferConfig,
 } from '../config/index.js'
 import { $t, createApplication, newConfiguration } from '../index.js'
@@ -90,17 +90,21 @@ describe('ShutdownBuilder', () => {
   })
 
   it('does not follow a config refresh after the policy is bound', async () => {
-    const mutable = new MutableConfigSource('shutdown-test')
-    mutable.set('shutdown', { shutdownTimeout: '9s' })
+    let shutdownTimeout = '9s'
+    const changing: ConfigSource = {
+      name: 'shutdown-test',
+      live: true,
+      load: () => [{ name: 'shutdown-test', data: { shutdown: { shutdownTimeout } } }],
+    }
 
-    const conf = newConfiguration(appSchema, kAppConfig).source(mutable).build()
+    const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
     const app = headless(conf).shutdown((s, c) => s.config(c.shutdown))
     await app.ready()
 
     const policy = policyOf(app)
     expect(policy.shutdownTimeoutMs).toBe(9_000)
 
-    mutable.set('shutdown', { shutdownTimeout: '12s' })
+    shutdownTimeout = '12s'
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // The policy was read once, when the feature configured: a later refresh does not reach it.

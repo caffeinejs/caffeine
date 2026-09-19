@@ -10,8 +10,8 @@ import {
   EnvConfigSource,
   InlineConfigSource,
   JSONConfigSource,
-  MutableConfigSource,
   SpringCloudConfigSource,
+  type ConfigSource,
   type InferConfig,
 } from '@caffeinejs/std/config'
 import fastify from 'fastify'
@@ -101,7 +101,7 @@ const routes = new Router('/config').configType<AppConfig>().get('/', ctx => {
   }
 })
 
-function buildApp(fileDir: string, overrides: MutableConfigSource) {
+function buildApp(fileDir: string, overrides: ConfigSource) {
   const conf = newConfiguration(schema, kConfig)
     .sources(
       new InlineConfigSource(defaults, 'defaults'),
@@ -129,7 +129,24 @@ function buildApp(fileDir: string, overrides: MutableConfigSource) {
 const up = await configServerServesRuntime()
 
 describe.skipIf(!up)('a web application configured from a config server and five other sources', () => {
-  const overrides = new MutableConfigSource('overrides')
+  // A source written at run time. It says when it changed, and the store loads it again by itself.
+  let overridden: Record<string, unknown> = {}
+  let changed: (() => void) | undefined
+  const overrides: ConfigSource = {
+    name: 'overrides',
+    load: () => [{ name: 'overrides', data: structuredClone(overridden) as never }],
+    watch: listener => {
+      changed = listener
+      return () => {
+        changed = undefined
+      }
+    },
+  }
+  function override(values: Record<string, unknown>): void {
+    overridden = values
+    changed?.()
+  }
+
   let dir: string | undefined
   let app: ReturnType<typeof buildApp>
   let store: ConfigStore<AppConfig>
@@ -228,14 +245,14 @@ describe.skipIf(!up)('a web application configured from a config server and five
 
   // An override set at run time outranks every source, the config server included, until it is removed.
   it('lets a runtime override win over the config server, and falls back when it is removed', async () => {
-    overrides.set('limits.rps', 999)
+    override({ limits: { rps: 999 } })
     await waitForRPS(999)
 
     await writeServerFile(`${APP}.yml`, serverBase(300))
     await store.reload()
     expect(await json('/config')).toMatchObject({ rps: 999 })
 
-    overrides.unset('limits.rps')
+    override({})
     await waitForRPS(300)
 
     await restore()
