@@ -26,6 +26,6 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*",
-    "fastify": "^5.12.1"
+    "fastify": "^5.12.4"
   }
 }
