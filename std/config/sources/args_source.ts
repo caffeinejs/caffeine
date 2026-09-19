@@ -24,6 +24,7 @@ export interface ArgsConfigSourceOptions {
  * | ---------------------- | ------------------------------------- |
  * | `--server.port=8080`   | `server.port` is `'8080'`             |
  * | `--server.port 8080`   | `server.port` is `'8080'`             |
+ * | `--worker.offset -1`   | `worker.offset` is `'-1'`             |
  * | `--server:port=8080`   | `server.port` is `'8080'`             |
  * | `--server.verbose`     | `server.verbose` is `'true'`          |
  * | `--no-server.verbose`  | `server.verbose` is `'false'`         |
@@ -86,10 +87,10 @@ function parse(argv: readonly string[], switchMappings: Record<string, string>):
       break
     }
 
-    const mapped = switchMappings[token]
+    const mapped = Object.hasOwn(switchMappings, token) ? switchMappings[token] : undefined
     if (mapped !== undefined) {
       const next = argv[i + 1]
-      if (next !== undefined && !next.startsWith('-')) {
+      if (isValue(next, switchMappings)) {
         out.push([mapped, next, `args:${token}`])
         i++
       } else {
@@ -117,7 +118,7 @@ function parse(argv: readonly string[], switchMappings: Record<string, string>):
     }
 
     const next = argv[i + 1]
-    if (next !== undefined && !next.startsWith('-')) {
+    if (isValue(next, switchMappings)) {
       out.push([body, next, `args:${token}`])
       i++
       continue
@@ -127,4 +128,14 @@ function parse(argv: readonly string[], switchMappings: Record<string, string>):
   }
 
   return out
+}
+
+const NEGATIVE_NUMBER = /^-\.?\d/
+
+/** Whether `token` is the value of the switch before it: not a switch itself, though a negative number is a value. */
+function isValue(token: string | undefined, switchMappings: Record<string, string>): token is string {
+  if (token === undefined) {
+    return false
+  }
+  return !token.startsWith('-') || (NEGATIVE_NUMBER.test(token) && !Object.hasOwn(switchMappings, token))
 }

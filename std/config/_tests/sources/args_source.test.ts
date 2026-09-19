@@ -33,6 +33,34 @@ describe('ArgsConfigSource', () => {
     expect(parse(['-x', '--server.port=8080'])).toEqual({ server: { port: '8080' } })
   })
 
+  // A switch is one of the application's own mappings, never a property every object inherits: `constructor` would
+  // otherwise become a key that is not text, and fail the whole load.
+  it('ignores a token named after an inherited property', () => {
+    const tokens = ['--server.port=8080', 'constructor', 'toString', '__proto__']
+
+    expect(parse(tokens)).toEqual({ server: { port: '8080' } })
+    expect(parse(tokens, { switchMappings: { '-p': 'server.port' } })).toEqual({ server: { port: '8080' } })
+  })
+
+  // A leading `-` marks a switch, but not in a number: `--offset -1` means -1, where it used to mean true.
+  it('reads a negative number as the value of the switch before it', () => {
+    expect(parse(['--worker.offset', '-1'])).toEqual({ worker: { offset: '-1' } })
+    expect(parse(['-o', '-2.5'], { switchMappings: { '-o': 'worker.offset' } })).toEqual({
+      worker: { offset: '-2.5' },
+    })
+    expect(parse(['--verbose', '-p', '1'], { switchMappings: { '-p': 'server.port' } })).toEqual({
+      verbose: 'true',
+      server: { port: '1' },
+    })
+  })
+
+  it('reads a mapped switch that looks like a negative number as a switch', () => {
+    expect(parse(['--verbose', '-1'], { switchMappings: { '-1': 'log.once' } })).toEqual({
+      verbose: 'true',
+      log: { once: 'true' },
+    })
+  })
+
   it('stops at --, leaving the rest to the application', () => {
     expect(parse(['--server.port=8080', '--', '--server.host=nope'])).toEqual({ server: { port: '8080' } })
   })
