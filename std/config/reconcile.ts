@@ -35,6 +35,43 @@ export function reconcile<T>(previous: unknown, next: T, changed?: string[], pat
   return next
 }
 
+/**
+ * Whether {@link reconcile} would find nothing that differs, answered without building anything and stopping at
+ * the first difference.
+ */
+export function deepEquals(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) {
+    return true
+  }
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((element, i) => deepEquals(element, b[i]))
+  }
+
+  if (!isPlainObject(a) || !isPlainObject(b)) {
+    return false
+  }
+
+  let keys = 0
+  for (const key of Object.keys(b)) {
+    if (isForbiddenKey(key)) {
+      continue
+    }
+    if (!Object.hasOwn(a, key) || !deepEquals(a[key], b[key])) {
+      return false
+    }
+    keys++
+  }
+
+  for (const key of Object.keys(a)) {
+    if (!isForbiddenKey(key)) {
+      keys--
+    }
+  }
+
+  return keys === 0
+}
+
 function reconcileObject(
   previous: Record<string, unknown>,
   next: Record<string, unknown>,

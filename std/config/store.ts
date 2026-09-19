@@ -6,7 +6,7 @@ import { describeSource, explainPath } from './explain.js'
 import { createLive, syncLive } from './live.js'
 import { mergeLayers } from './merge.js'
 import { ConfigEvents, kFirstLoadMs, loadChannel, publishChange, reloadChannel, traced } from './observe.js'
-import { reconcile } from './reconcile.js'
+import { deepEquals, reconcile } from './reconcile.js'
 import { collectSecretPaths, redactValue, type SecretPaths } from './redact.js'
 import { validateConfig } from './schema.js'
 import { countLeaves, freezeCopy, freezeDeep, isForbiddenKey, isPlainObject, toParts } from './tree.js'
@@ -691,10 +691,7 @@ function validateRoot<T>(definition: ConfigDefinition<T>, merged: ConfigObject):
 
 /** Whether two sets of layers carry the same data. Provenance alone does not make a reload. */
 function sameLayers(a: readonly ConfigLayer[], b: readonly ConfigLayer[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((layer, i) => layer.name === b[i].name && reconcile(layer.data, b[i].data) === layer.data)
-  )
+  return a.length === b.length && a.every((layer, i) => layer.name === b[i].name && deepEquals(layer.data, b[i].data))
 }
 
 /** Selected plain data is frozen. Anything else is the caller's own object and is left alone. */
