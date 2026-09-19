@@ -34,7 +34,13 @@ export async function loadConfig<T>(
   const logger = typeof given === 'function' ? given : () => given ?? noopLogger
 
   const store = new ConfigStore<T>(definition, { profiles: activeProfiles(options.profiles ?? []), logger })
-  await store[kFirstLoad]()
+  try {
+    await store[kFirstLoad]()
+  } catch (error) {
+    // Nobody receives a store that failed to load, so nobody else could close the sources that did load.
+    await store.close()
+    throw error
+  }
 
   if (options.start !== false) {
     store.start()

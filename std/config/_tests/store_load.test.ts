@@ -133,6 +133,32 @@ describe('loadConfig', () => {
     })
   })
 
+  // The caller of a load that failed never holds the store, so the store is the last chance to release what the
+  // sources that did load are holding: a watcher, a socket, a dispatcher.
+  it('closes every source when the load fails', async () => {
+    const closed: string[] = []
+    const close = (name: string) => () => {
+      closed.push(name)
+    }
+    const broken = source(
+      'remote',
+      {},
+      { load: () => Promise.reject(new Error('connection refused')), close: close('remote') },
+    )
+    const invalid = $t.Object({ port: $t.Number() })
+
+    await expect(loadConfig(definition([source('file', {}, { close: close('file') }), broken]))).rejects.toMatchObject({
+      code: 'ERR_CONFIG_SOURCE',
+    })
+    expect(closed).toEqual(['file', 'remote'])
+
+    closed.length = 0
+    await expect(
+      loadConfig(definition([source('file', { port: 'nope' }, { close: close('file') })], invalid)),
+    ).rejects.toMatchObject({ code: 'ERR_CONFIG_VALIDATION' })
+    expect(closed).toEqual(['file'])
+  })
+
   // A source that already explained itself is not buried under a generic message.
   it('passes a source own ErrConfig through as it is', async () => {
     const own = new ErrConfig('Cannot parse config file "x.json": oops', 'ERR_CONFIG_FILE_PARSE')
