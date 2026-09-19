@@ -4,11 +4,14 @@ import swc from 'unplugin-swc'
 import { defineConfig } from 'vitest/config'
 
 // Opt-in e2e project (not in the root vitest projects list). Runs the OIDC/OAuth2 flows against
-// the dockerized Spring Authorization Server (test/services/oauthserver), and distlock against the
-// dockerized Redis and Valkey (test/services/redis). Specs skip when their service is not up.
+// the dockerized Spring Authorization Server (test/services/oauthserver), distlock against the
+// dockerized Redis and Valkey (test/services/redis), and configuration against the dockerized Spring
+// Cloud Config Server (test/services/configserver). Specs skip when their service is not up.
 export default defineConfig({
   plugins: [
     swc.vite({
+      // Vite already applied the dist file's source map; SWC must not apply it again.
+      inputSourceMap: false,
       jsc: {
         parser: { syntax: 'typescript', decorators: true },
         transform: { decoratorVersion: '2022-03' },

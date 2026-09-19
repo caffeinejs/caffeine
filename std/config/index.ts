@@ -1,35 +1,43 @@
 export type {
-  ConfigAccessors,
+  ConfigChange,
   ConfigChangeListener,
-  ConfigDiagnostics,
-  ConfigEntry,
-  ConfigHandle,
+  ConfigDefinition,
+  ConfigExplanation,
+  ConfigExplanationLayer,
+  ConfigInspection,
+  ConfigLayer,
+  ConfigLoadContext,
+  ConfigObject,
   ConfigPrimitive,
-  ConfigProvider,
+  ConfigReloadOutcome,
   ConfigSchema,
-  ConfigSliceFailure,
   ConfigSnapshot,
+  ConfigSource,
+  ConfigSourceFailure,
+  ConfigSourceStatus,
+  ConfigTrigger,
   ConfigValue,
+  ConfigView,
   InferConfig,
-  PropertySource,
-  ResolutionContext,
-} from './config.js'
-export { Configuration } from './configuration.js'
-export { ConfigDefinition, kConfigDefinition } from './definition.js'
-export { ErrConfig, ErrConfigSlices, ErrConfigValidation } from './errors.js'
+  LiveConfig,
+  ReadonlyConfig,
+} from './types.js'
+export { ErrConfig, ErrConfigValidation } from './errors.js'
 export { CONFIG_REFRESH_LABEL, ConfigModule } from './integration/module.js'
-export { configEquals } from './notifier.js'
+export { DEFAULT_LOAD_TIMEOUT_MS, loadConfig, type LoadConfigOptions } from './load.js'
+export { expandKeys } from './merge.js'
+export {
+  CONFIG_CHANNELS,
+  logConfigLoaded,
+  type ConfigChangeMessage,
+  type ConfigLoadMessage,
+  type ConfigReloadMessage,
+} from './observe.js'
 export { activeProfiles, hostProfiles, PROFILES_KEY } from './profiles.js'
-export type { ArgsConfigProviderOptions } from './providers/args_provider.js'
-export { ArgsConfigProvider } from './providers/args_provider.js'
-export type { EnvConfigProviderOptions } from './providers/env_provider.js'
-export { EnvConfigProvider } from './providers/env_provider.js'
-export type { ConfigFileParser, FileConfigProviderOptions } from './providers/file_provider.js'
-export { FileConfigProvider } from './providers/file_provider.js'
-export { InlineConfigProvider } from './providers/inline_provider.js'
-export { JSONConfigProvider } from './providers/json_provider.js'
-export { MutableConfigProvider } from './providers/mutable_provider.js'
-export type { SpringCloudConfigProviderOptions } from './providers/scc_provider.js'
-export { SpringCloudConfigProvider } from './providers/scc_provider.js'
-export { ConfigSlice } from './slice.js'
-export { ConfigSources } from './sources.js'
+export { ArgsConfigSource, type ArgsConfigSourceOptions } from './sources/args_source.js'
+export { EnvConfigSource, type EnvAccessor, type EnvConfigSourceOptions } from './sources/env_source.js'
+export { FileConfigSource, type ConfigFileParser, type FileConfigSourceOptions } from './sources/file_source.js'
+export { InlineConfigSource } from './sources/inline_source.js'
+export { JSONConfigSource } from './sources/json_source.js'
+export { SpringCloudConfigSource, type SpringCloudConfigSourceOptions } from './sources/spring_cloud_config_source.js'
+export { ConfigStore } from './store.js'

@@ -1,7 +1,7 @@
 import { $i, CaffeineIoC, Injectable, Scopes, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { CONFIG_REFRESH_LABEL, MutableConfigProvider, InlineConfigProvider, type ConfigHandle } from './config/index.js'
+import { CONFIG_REFRESH_LABEL, InlineConfigSource, type ConfigSource } from './config/index.js'
 import { createApplication, newConfiguration } from './index.js'
 import { $t } from './schema/t.js'
 
@@ -14,9 +14,9 @@ const schema = $t.Object({
 
 type AppConfig = { database: { host: string; port: number } }
 
-const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+const kConfig = token<AppConfig>(Symbol('app.config'))
 
-function appWith(...sources: Array<{ provider: InlineConfigProvider | MutableConfigProvider }>) {
+function appWith(...sources: Array<{ provider: ConfigSource }>) {
   const container = new CaffeineIoC({ decorators: false })
   const configBuilder = newConfiguration(schema, kConfig)
   for (const { provider } of sources) {
@@ -35,7 +35,7 @@ describe('configuration as the DI values provider', () => {
     }
 
     const { builder, container } = appWith({
-      provider: new InlineConfigProvider({ database: { host: 'db.local', port: 5432 } }),
+      provider: new InlineConfigSource({ database: { host: 'db.local', port: 5432 } }),
     })
     container.bind(Repository, t => t.toSelf())
 
@@ -57,7 +57,7 @@ describe('configuration as the DI values provider', () => {
     }
 
     const { builder, container } = appWith({
-      provider: new InlineConfigProvider({ database: { host: 'h', port: 5432 } }),
+      provider: new InlineConfigSource({ database: { host: 'h', port: 5432 } }),
     })
     container.bind(Repository, t => t.toSelf())
 
@@ -76,16 +76,17 @@ describe('configuration as the DI values provider', () => {
       constructor(readonly host: string) {}
     }
 
-    const mutable = new MutableConfigProvider('test').set(['database'], { host: 'first', port: 5432 })
+    let database = { host: 'first', port: 5432 }
+    const changing: ConfigSource = { name: 'test', live: true, load: () => [{ name: 'test', data: { database } }] }
 
-    const { builder, container } = appWith({ provider: mutable })
+    const { builder, container } = appWith({ provider: changing })
     container.bind(Holder, t => t.toSelf().lifetime(Scopes.TRANSIENT))
 
     await builder.ready()
 
     expect(container.get(Holder).host).toBe('first')
 
-    mutable.set(['database'], { host: 'second', port: 5432 })
+    database = { host: 'second', port: 5432 }
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     expect(container.get(kConfig).database.host).toBe('second')
@@ -99,7 +100,7 @@ describe('configuration as the DI values provider', () => {
     }
 
     const { builder, container } = appWith({
-      provider: new InlineConfigProvider({ database: { host: 'h', port: 1 } }),
+      provider: new InlineConfigSource({ database: { host: 'h', port: 1 } }),
     })
     container.bindValuesProvider<{ own: string }>(t => t.toValue({ own: 'mine' }))
     container.bind(Holder, t => t.toSelf())

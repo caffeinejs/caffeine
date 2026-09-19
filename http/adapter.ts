@@ -2,7 +2,7 @@ import './_fastify.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 import { Container, Scopes } from '@caffeinejs/di'
-import { Configuration } from '@caffeinejs/std/config'
+import { ConfigStore } from '@caffeinejs/std/config'
 import { logToken } from '@caffeinejs/std/logger'
 import { type FastifyInstance, type FastifyPluginAsync, type FastifyReply, type FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
@@ -86,8 +86,8 @@ export class FastifyAdapter<
     fastify.decorateRequest('routeTarget', null)
     fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
 
-    // One resolution for the whole server: each context takes its own snapshot off it, on first read.
-    const configuration = container.get(Configuration)
+    // One lookup for the whole server: each context takes its own snapshot off the store, on first read.
+    const store = container.get(ConfigStore)
 
     // Copied out of the live settings: `listen()` mutates what it is handed, and the address has to stop
     // moving once the socket is bound. An application that never registered the server feature runs on the
@@ -104,7 +104,7 @@ export class FastifyAdapter<
     }
 
     fastify.addHook('onRequest', (req, reply, done) => {
-      req.httpContext = new FastifyContext(req, reply, configuration)
+      req.httpContext = new FastifyContext(req, reply, store)
 
       Object.defineProperty(req.raw, Keys.CONTEXT, {
         value: req.httpContext,

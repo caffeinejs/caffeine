@@ -2,7 +2,7 @@ import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { Application } from '../application.js'
-import { InlineConfigProvider, type ConfigHandle } from '../config/index.js'
+import { InlineConfigSource } from '../config/index.js'
 import { newConfiguration } from '../configuration.js'
 import { $t } from '../schema/t.js'
 import { LoggerBuilder } from './builder.js'
@@ -13,10 +13,10 @@ import { noopLogger } from './noop.js'
 
 const schema = $t.Object({ logEnabled: $t.Boolean() })
 type AppConfig = { logEnabled: boolean }
-const kConfig = token<ConfigHandle<AppConfig>>(Symbol('logger_builder.test.config'))
+const kConfig = token<AppConfig>(Symbol('logger_builder.test.config'))
 
 function appWithConfig(logEnabled: boolean) {
-  const conf = newConfiguration(schema, kConfig).source(new InlineConfigProvider({ logEnabled })).build()
+  const conf = newConfiguration(schema, kConfig).source(new InlineConfigSource({ logEnabled })).build()
 
   return new Application({ container: new CaffeineIoC({ decorators: false }), config: conf })
 }

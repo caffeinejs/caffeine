@@ -2,13 +2,18 @@ import { CaffeineIoC, type Container, type Module, type ModuleFn, type Options }
 
 import {
   activeProfiles,
-  ConfigDefinition,
   ConfigModule,
+  DEFAULT_LOAD_TIMEOUT_MS,
   hostProfiles,
-  kConfigDefinition,
-  type ConfigHandle,
+  loadConfig,
+  logConfigLoaded,
+  type ConfigDefinition,
+  type ConfigStore,
+  type LiveConfig,
 } from './config/index.js'
-import type { AppConfiguration } from './configuration.js'
+import { passthroughConfigSchema, validateConfig } from './config/schema.js'
+import { kMergedTree } from './config/store.js'
+import { readPath } from './config/tree.js'
 import { ErrCaffeine } from './error.js'
 import {
   ErrFeatureAlreadyInstalled,
@@ -26,12 +31,11 @@ import { $t } from './schema/t.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
 import { ShutdownBuilder } from './shutdown/shutdown_builder.js'
 import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './shutdown/shutdown_options.js'
-import { detectSignalDispatcher } from './shutdown/signals.js'
 
 export interface ApplicationOptions<TConfig = unknown> {
   container?: Container | Options
-  /** Built with {@link newConfiguration}. Omitted, the application resolves an empty, passthrough tree. */
-  config?: AppConfiguration<TConfig>
+  /** Built with {@link newConfiguration}. Omitted, the application loads no source and keeps every key. */
+  config?: ConfigDefinition<TConfig>
   /** A plain instance to use as-is, or `false` to disable the logger entirely. */
   logger?: Logger | false
 }
@@ -93,10 +97,10 @@ export class Application<TConfig = unknown> {
   readonly #services: Feature[] = []
   readonly #installed = new Set<string>()
   readonly #availability = new ApplicationAvailability()
-  readonly #config: ConfigDefinition
+  readonly #definition: ConfigDefinition<unknown>
 
   // Registered unconditionally: the drain policy applies to every application, probes or not. Configuration
-  // reaches it only through `.shutdown((s, c) => s.withConfig(...))`. Held so `.shutdown()` can configure it
+  // reaches it only through `.shutdown((s, c) => s.config(...))`. Held so `.shutdown()` can configure it
   // in place.
   readonly #shutdownBuilder = new ShutdownBuilder<unknown>()
 
@@ -107,7 +111,7 @@ export class Application<TConfig = unknown> {
   readonly #loggerBuilder = new LoggerBuilder<unknown>()
   #logger: Logger
 
-  #handle: ConfigHandle<unknown> | undefined
+  #store: ConfigStore<unknown> | undefined
   #name = ''
   #profiles: string[] = []
   #shutdownPolicy?: ShutdownOptions
@@ -131,17 +135,15 @@ export class Application<TConfig = unknown> {
       this.#container.autoWire()
     }
 
-    // Configuration is unconditional: features read their own slices from the tree whether or not the
-    // application ever declared one, so the module is installed here regardless of `options.config`. It reads
-    // the definition at `container.init()`, by which point every feature has registered.
-    //
-    // The warning channel is wired here rather than inside `std/config`, which stays free of any host
-    // dependency: a refresh that fails for one feature is contained rather than thrown, so it needs somewhere
-    // to be heard.
-    this.#config = options.config ?? new ConfigDefinition()
-    this.#config.warn = message => detectSignalDispatcher().warn(message)
-    this.#container.bind(kConfigDefinition, t => t.toValue(this.#config))
-    this.#container.addModules(ConfigModule(this.#config))
+    // Loaded in `ready()`, once the profiles are known. An application that declared nothing still loads: no
+    // source, and a schema that keeps every key, so the framework's own block is read the same way.
+    this.#definition = (options.config as ConfigDefinition<unknown> | undefined) ?? {
+      schema: passthroughConfigSchema,
+      key: undefined,
+      storeKey: undefined,
+      sources: [],
+      loadTimeoutMs: DEFAULT_LOAD_TIMEOUT_MS,
+    }
 
     // Pushed directly, not through `addFeature`: a subclass's private fields do not exist yet while this
     // constructor runs, so an overridden method cannot be called from here.
@@ -227,7 +229,7 @@ export class Application<TConfig = unknown> {
    * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
    * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults.
    * A fluent method is the last word; `SHUTDOWN__DRAIN_DELAY` reaches the feature only through
-   * `.shutdown((s, c) => s.withConfig(c.shutdown))`.
+   * `.shutdown((s, c) => s.config(c.shutdown))`.
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
@@ -269,18 +271,19 @@ export class Application<TConfig = unknown> {
   /**
    * Brings the application up to the point where it can serve.
    *
-   * 1. the always-on `caffeine` slice is registered and the active profiles are decided;
-   * 2. configuration **resolves**, once, already profile-aware;
+   * 1. the active profiles are decided;
+   * 2. configuration **loads**, once, already profile-aware;
    * 3. `caffeine.name` and the active profiles are applied;
    * 4. the application's {@link ApplicationAvailability} is bound;
    * 5. every feature **configures** — running the application's configure callback against its builder, then
    *    binding into the container;
-   * 6. the container initializes;
-   * 7. every feature **bootstraps** — looking up bindings;
-   * 8. the platform is set up.
+   * 6. the load is reported, through the logger the features settled on;
+   * 7. the container initializes;
+   * 8. every feature **bootstraps** — looking up bindings;
+   * 9. the platform is set up, and the configuration's live sources start being watched.
    *
-   * Configuration resolves before any feature configures and while binding is still open, which is what lets a
-   * feature be configured from a setting it then consumes at binding time. Resolving inside `container.init()`
+   * Configuration loads before any feature configures and while binding is still open, which is what lets a
+   * feature be configured from a setting it then consumes at binding time. Loading inside `container.init()`
    * would be too late for both.
    */
   async ready(): Promise<void> {
@@ -290,60 +293,72 @@ export class Application<TConfig = unknown> {
 
     this.#booting = true
 
-    // The framework's own block, registered directly: the application name and profiles are read before any
-    // feature has configured, so its location is fixed rather than something a builder supplies.
-    this.#config.frameworkDefaults.set(CAFFEINE_CONFIG_NAMESPACE, { ...DEFAULT_CAFFEINE_CONFIG })
-    const caffeine = this.#config.slice<CaffeineConfig>(CAFFEINE_CONFIG_NAMESPACE, caffeineConfigSchema)
-
-    // Decided before anything resolves, so the resolve that follows is profile-aware on its first and only
-    // pass. The container's own set counts: `new CaffeineIoC({ profiles: ['test'] })` names a profile as
-    // surely as an argument does, and the three union the way `addProfiles` always has.
+    // Decided before anything loads, so the load that follows is profile-aware on its first and only pass. The
+    // container's own set counts: `new CaffeineIoC({ profiles: ['test'] })` names a profile as surely as an
+    // argument does, and the three union the way `addProfiles` always has.
     //
-    // Empty, and only then, `FileConfigProvider` falls back to the `caffeine.profiles` its base file declares.
+    // Empty, and only then, `FileConfigSource` falls back to the `caffeine.profiles` its base file declares.
     const named = activeProfiles([...this.#container.profiles, ...hostProfiles()])
-    this.#config.profiles = named
 
     // Captured once: a subclass assembles this list per call, and it must be the same list throughout.
     const features = this.configurers()
 
-    const shard = await this.#config.bootstrap()
-    this.#handle = shard.handle
+    // Not started yet: every feature configures against one revision, and the triggers arm once this is done.
+    const store = await loadConfig(this.#definition, { profiles: named, logger: () => this.#logger, start: false })
+    this.#store = store
+    this.#container.addModules(ConfigModule(store))
 
-    // What was named up front wins. Nothing was, so the base config file decided — and its value reached the
-    // tree on the same resolve.
-    const profiles = named.length > 0 ? named : activeProfiles(caffeine.config.profiles)
-    if (profiles.length > 0) {
-      this.#container.addProfiles(profiles[0], ...profiles.slice(1))
-    }
+    // The store closes with the container, through a hook the module installs when the container initializes. A
+    // failure before then would leave the sources it loaded open, with nothing left to close them.
+    try {
+      // The framework's own block, read from the merged tree: it is there whether or not the application's schema
+      // declares it.
+      const caffeine = validateConfig(
+        caffeineConfigSchema,
+        readPath(store[kMergedTree], CAFFEINE_CONFIG_NAMESPACE) ?? {},
+      ) as CaffeineConfig
 
-    this.#name = caffeine.config.name
-    this.#profiles = profiles
-
-    // The application's own instance, bound before any feature configures so health (and anything else) can
-    // inject it rather than closing over a kit field. The lifecycle writes to this object.
-    this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
-
-    // Called in order and awaited together: every feature's configure callback — which the builder runs at the
-    // top of its hook — has therefore run before the first feature does asynchronous work.
-    const configurePending: Promise<void>[] = []
-
-    for (const feature of features) {
-      const result = feature[kFeatureConfigure](this.configureKit())
-      if (result) {
-        configurePending.push(result)
+      // What was named up front wins. Nothing was, so the base config file decided, on the same load.
+      const profiles = named.length > 0 ? named : activeProfiles(caffeine.profiles)
+      if (profiles.length > 0) {
+        this.#container.addProfiles(profiles[0], ...profiles.slice(1))
       }
+
+      this.#name = caffeine.name
+      this.#profiles = profiles
+
+      // The application's own instance, bound before any feature configures so health (and anything else) can
+      // inject it rather than closing over a kit field. The lifecycle writes to this object.
+      this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
+
+      // Called in order and awaited together: every feature's configure callback — which the builder runs at the
+      // top of its hook — has therefore run before the first feature does asynchronous work.
+      const configurePending: Promise<void>[] = []
+
+      for (const feature of features) {
+        const result = feature[kFeatureConfigure](this.configureKit())
+        if (result) {
+          configurePending.push(result)
+        }
+      }
+
+      if (configurePending.length > 0) {
+        await Promise.all(configurePending)
+      }
+
+      // LoggerBuilder's own `configure()` already rebound `logToken()`; `#logger` is refreshed here too so
+      // `.log` reflects a `.logger(configure)` call without going through the container, which isn't
+      // initialized yet.
+      this.#logger = this.#loggerBuilder.logger
+
+      // The logger is configured from configuration, so the load could not be reported until now.
+      logConfigLoaded(this.#logger, store)
+
+      await this.#container.init()
+    } catch (error) {
+      await store.close()
+      throw error
     }
-
-    if (configurePending.length > 0) {
-      await Promise.all(configurePending)
-    }
-
-    // LoggerBuilder's own `configure()` already rebound `logToken()`; `#logger` is refreshed here too so
-    // `.log` reflects a `.logger(configure)` call without going through the container, which isn't
-    // initialized yet.
-    this.#logger = this.#loggerBuilder.logger
-
-    await this.#container.init()
 
     // Concurrent: a bootstrap hook only looks bindings up, so no feature's hook depends on another's.
     const kit = this.serviceKit()
@@ -366,6 +381,7 @@ export class Application<TConfig = unknown> {
 
     await this.setup()
 
+    store.start()
     this.#ready = true
   }
 
@@ -462,16 +478,21 @@ export class Application<TConfig = unknown> {
     return { name: this.name, profiles: this.profiles }
   }
 
+  /** The live config object. Readable from {@link setup} onward. */
+  protected get liveConfig(): LiveConfig<unknown> {
+    return this.configStore.live
+  }
+
   /**
-   * The resolved application configuration. Readable from {@link setup} onward; before configuration has
-   * resolved there is nothing to hand back.
+   * The loaded configuration. Readable from {@link setup} onward; before configuration has loaded there is nothing
+   * to hand back.
    */
-  protected get configHandle(): ConfigHandle<unknown> {
-    if (this.#handle === undefined) {
-      throw new Error('Configuration has not been resolved yet')
+  protected get configStore(): ConfigStore<unknown> {
+    if (this.#store === undefined) {
+      throw new Error('Configuration has not been loaded yet')
     }
 
-    return this.#handle
+    return this.#store
   }
 
   /** Whether `ready()` has completed. */
@@ -490,8 +511,8 @@ export class Application<TConfig = unknown> {
   protected configureKit(): FeatureConfigureKit {
     return {
       container: this.#container,
-      // Non-null by construction: the only caller runs after `config.bootstrap()` resolved.
-      config: this.#handle!,
+      config: this.configStore.live,
+      store: this.configStore,
     }
   }
 
@@ -501,8 +522,8 @@ export class Application<TConfig = unknown> {
   protected serviceKit(): BootstrapKit {
     return {
       container: this.#container,
-      // Non-null by construction: the only caller runs after `config.bootstrap()` resolved.
-      config: this.#handle!,
+      config: this.configStore.live,
+      store: this.configStore,
       // Refreshed once every feature configured, so this is the logger `.logger(...)` asked for.
       logger: this.#logger,
     }

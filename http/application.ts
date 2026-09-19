@@ -152,7 +152,7 @@ export class WebApplication<
     super(options)
 
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
-    // through `.server((s, c) => s.withConfig(...))` — declaring `server` in the schema is not enough.
+    // through `.server((s, c) => s.config(...))` — declaring `server` in the schema is not enough.
     this.addFeature(this.#serverBuilder)
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
@@ -500,10 +500,15 @@ export class WebApplication<
     this.#built = true
 
     // One context for everything built from here on. `log` is the configured logger by now.
-    const context: HTTPSetupContext = { container: this.container, config: this.configHandle, logger: this.log }
+    const context: HTTPSetupContext = {
+      container: this.container,
+      config: this.liveConfig,
+      store: this.configStore,
+      logger: this.log,
+    }
 
-    // configHandle is deliberately ConfigHandle<unknown> on the base class (see std's Application); it is this
-    // application's own handle for its own C, so the application's own factories get it typed.
+    // The live object is deliberately LiveConfig<unknown> on the base class (see std's Application); it is this
+    // application's own configuration for its own C, so the application's own factories get it typed.
     await this.#registerExtensions(context as HTTPSetupContext<C>)
     await this.#registerScopedExtensions(context)
 

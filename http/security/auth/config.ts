@@ -14,12 +14,12 @@ export type SchemeKind = 'jwt' | 'basic' | 'cookie' | 'opaque' | 'oidc' | 'oauth
 
 /**
  * What an application may configure for authentication, handed to the builder with
- * `AuthenticationBuilder.withConfig`.
+ * `AuthenticationBuilder.config`.
  *
  * `schemes` is keyed by the name the `addX(...)` call gave the scheme, and each entry carries that kind's
  * configurable keys — {@link SCHEME_CONFIG} holds one schema per kind.
  *
- * **A scheme addressed by environment variable needs a lowercase name.** `EnvConfigProvider` lowercases each
+ * **A scheme addressed by environment variable needs a lowercase name.** `EnvConfigSource` lowercases each
  * path segment before folding underscores into camelCase, so `AUTH__SCHEMES__BEARER__SECRET` resolves to
  * `auth.schemes.bearer`, not `auth.schemes.Bearer`. The default names the `addX` methods choose are
  * capitalized (`Bearer`, `Basic`, `Cookie`, `OpaqueToken`), so name the scheme explicitly —
@@ -54,8 +54,7 @@ export const refreshConfigSchema = $t.Object({
  * The shape of the authentication block, with `schemes` left open.
  *
  * Open because the keys one scheme accepts depend on its kind, which only the `addX(...)` call knows. An
- * application wanting a scheme's secret validated — or redacted from the diagnostics, which `$t.Secret` on the
- * kind's own schema is what drives — declares that scheme precisely instead:
+ * application wanting a scheme's options validated declares that scheme precisely instead:
  *
  * ```ts
  * $t.Object({ schemes: $t.Object({ Bearer: SCHEME_SCHEMAS.jwt }) })
@@ -104,14 +103,12 @@ export function applyScheme<B>(builder: B, spec: SchemeConfigSpec<B>, values: Re
   }
 }
 
-const secretString = (): ReturnType<typeof $t.Secret> => $t.Secret($t.String())
-
 const challengeMode = (): ReturnType<typeof $t.UnionEnum> => $t.UnionEnum(['auto', 'redirect', 'status'])
 
 const jwtSchemeSchema = $t.Object({
   // Only the string form is configurable. A `KeyLike` or a `Uint8Array` cannot travel through a tree, so a
   // scheme built on one keeps supplying it in code.
-  secret: $t.Optional(secretString()),
+  secret: $t.Optional($t.String()),
   issuer: $t.Optional($t.String()),
   audience: $t.Optional($t.Union([$t.String(), $t.Array($t.String())])),
   algorithm: $t.Optional($t.String()),
@@ -154,7 +151,7 @@ const opaque: SchemeConfigSpec<OpaqueTokenAuthenticationOptionsBuilder> = {
 }
 
 const cookieSchemeSchema = $t.Object({
-  sessionSecret: $t.Optional(secretString()),
+  sessionSecret: $t.Optional($t.String()),
   cookieName: $t.Optional($t.String()),
   rememberMe: $t.Optional($t.Boolean()),
   rememberMeCookieName: $t.Optional($t.String()),
@@ -194,8 +191,8 @@ const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
 
 const oidcSchemeSchema = $t.Object({
   clientID: $t.Optional($t.String()),
-  clientSecret: $t.Optional(secretString()),
-  sessionSecret: $t.Optional(secretString()),
+  clientSecret: $t.Optional($t.String()),
+  sessionSecret: $t.Optional($t.String()),
   discoveryURL: $t.Optional($t.String()),
   issuer: $t.Optional($t.String()),
   authorizationEndpoint: $t.Optional($t.String()),
@@ -270,8 +267,8 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
 
 const oauthSchemeSchema = $t.Object({
   clientID: $t.Optional($t.String()),
-  clientSecret: $t.Optional(secretString()),
-  sessionSecret: $t.Optional(secretString()),
+  clientSecret: $t.Optional($t.String()),
+  sessionSecret: $t.Optional($t.String()),
   authorizationEndpoint: $t.Optional($t.String()),
   tokenEndpoint: $t.Optional($t.String()),
   userInfoEndpoint: $t.Optional($t.String()),
@@ -331,8 +328,7 @@ const oauth: SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder> = {
  * Each scheme kind's configurable shape, for an application that declares its schemes precisely.
  *
  * Splice one in where the block lives — `$t.Object({ Bearer: SCHEME_SCHEMAS.jwt })` — to have a scheme's
- * options validated, and to have its secrets redacted from the diagnostics: `$t.Secret` in the schema is what
- * the redaction follows, so an open record prints them.
+ * options validated.
  */
 export const SCHEME_SCHEMAS = {
   jwt: jwtSchemeSchema,

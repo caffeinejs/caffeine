@@ -39,7 +39,7 @@ import { KafkaTemplate } from './template.js'
  *
  * There is one read path for everything a configuration tree can carry. Configuration overlays fluent
  * methods for `brokers`, `clientId`, `groupId`, and the rest of the configurable slice:
- * `k.brokers('localhost:9092')` is a default a deployment can redirect once {@link withConfig} is wired.
+ * `k.brokers('localhost:9092')` is a default a deployment can redirect once {@link config} is wired.
  * The members that cannot be configuration — serializers, the classifier, the recoverer, the error hooks —
  * stay on the builder and are merged in afterwards.
  */
@@ -83,7 +83,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
    * The serializers, the retry strategy, the classifier, the recoverer and the error hooks are functions and
    * cannot travel through a tree — they stay on the builder and are merged in either way.
    */
-  withConfig(config: Partial<KafkaConfigSlice>): this {
+  config(config: Partial<KafkaConfigSlice>): this {
     this.#config = config
     return this
   }

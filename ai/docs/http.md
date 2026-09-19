@@ -94,7 +94,7 @@ app.mount(pets) // before app.ready()
   other Fastify plugin. The same on a controller is
   `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
   deduplicated: two groups wanting different settings pass two factories. The factory's context carries
-  `config` as `ConfigHandle<unknown>` — a router does not know which application it will be mounted into.
+  `config` as `LiveConfig<unknown>` — a router does not know which application it will be mounted into.
 - `fst({ ... })` is the Fastify escape hatch: lifecycle hooks, `attachValidation`, `logLevel`, custom compilers —
   everything Fastify takes except what the router already decides (`method`, `url`, `schema`, `config`, `handler`,
   `bodyLimit`, `handlerTimeout`).

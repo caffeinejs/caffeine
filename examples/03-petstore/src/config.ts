@@ -1,6 +1,6 @@
 import { token } from '@caffeinejs/di'
-import { type InferSchema, $t } from '@caffeinejs/std'
-import type { ConfigHandle } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std'
+import type { InferConfig } from '@caffeinejs/std/config'
 
 // The application config schema, in Caffeine's `$t` dialect. Values come from the environment (see app.ts) as
 // strings, and are coerced to the declared types: PETSTORE_SERVER__PORT becomes a number because the schema says
@@ -19,8 +19,8 @@ export const appConfigSchema = $t.Object({
   ),
 })
 
-export type AppConfig = InferSchema<typeof appConfigSchema>
+export type AppConfig = InferConfig<typeof appConfigSchema>
 
-// The key the resolved configuration is bound under. Declared here, next to the schema it is typed from, so
-// `container.get(kAppConfig)` hands back a typed handle with no type argument at the call site.
-export const kAppConfig = token<ConfigHandle<AppConfig>>(Symbol('petstore.config'))
+// The key the configuration is bound under. Declared here, next to the schema it is typed from, so
+// `container.get(kAppConfig)` hands back the typed config object with no type argument at the call site.
+export const kAppConfig = token<AppConfig>(Symbol('petstore.config'))

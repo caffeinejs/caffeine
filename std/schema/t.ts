@@ -20,14 +20,6 @@ type LiteralsOf<T extends readonly TLiteralValue[]> = {
   -readonly [K in keyof T]: TLiteral<T[K] & TLiteralValue>
 }
 
-/** The annotation {@link caffeineT.Secret} stamps, and {@link isSecretSchema} reads back. */
-export const SECRET_KEYWORD = 'x-caffeine-secret'
-
-/** Whether a schema node was marked with {@link caffeineT.Secret}. */
-export function isSecretSchema(schema: unknown): boolean {
-  return typeof schema === 'object' && schema !== null && (schema as Record<string, unknown>)[SECRET_KEYWORD] === true
-}
-
 /**
  * Whether a schema node is an uploaded file — `{@link caffeineT.File}` or the items of
  * {@link caffeineT.Files}.
@@ -146,36 +138,12 @@ const caffeineT = {
           // from an environment variable is: `$t.List($t.Number())` must yield numbers, not numeric strings.
           convert: true,
           parse: raw => (parse === undefined ? textList(raw, separator) : parse(raw)),
+          unreadable: 'could not be parsed as a list',
           complaint: 'is not a list of the declared item type',
         }),
       )
       .Encode(value => value) as never
   },
-
-  /**
-   * Marks a field as a secret, so configuration diagnostics report it as `[redacted]` rather than printing it.
-   *
-   * A secret belongs in the configuration tree — that is how `AUTH__SCHEMES__JWT__SECRET` reaches the feature
-   * that needs it, and keeping it out would mean the caller reading the environment by hand again. What must
-   * not happen is the same value coming back out of `Configuration.diagnostics`, which exists to be dumped.
-   *
-   * ```ts
-   * $t.Object({
-   *   issuer: $t.String(),
-   *   secret: $t.Secret($t.String()),
-   * })
-   * ```
-   *
-   * **This is a disclosure boundary, not secret management.** The value is in memory, in whatever source
-   * supplied it, and readable by whatever holds the slice. All this stops is the framework's own diagnostics
-   * handing it to a log.
-   *
-   * Implemented as a plain annotation rather than a TypeBox `Kind`: an unknown keyword rides along untouched,
-   * whereas a custom Kind makes `Value.Check` throw `Unknown type` on the schema — the same trap
-   * {@link caffeineT.UnionEnum} documents.
-   */
-  Secret: <T extends TSchema>(schema: T, options?: SchemaOptions): T =>
-    ({ ...schema, ...options, [SECRET_KEYWORD]: true }) as T,
 
   /**
    * An uploaded file, in the body of a `multipart/form-data` route.
@@ -220,6 +188,7 @@ const caffeineT = {
           // mistake worth reporting, not something to quietly turn into `"123"`.
           convert: false,
           parse: raw => JSON.parse(raw) as unknown,
+          unreadable: 'is not valid JSON',
           complaint: 'is not the declared shape',
         }),
       )
@@ -264,17 +233,27 @@ const caffeineT = {
  *
  * A value that did not arrive as text is passed through untouched — it came from a file or the code band and
  * the surrounding schema already governs it.
+ *
+ * Text the parser cannot read is reported as `unreadable`, and a parsed value of the wrong shape as `complaint`.
+ * Neither carries the text itself.
  */
 function decodeInto<T extends TSchema>(
   target: T,
   value: unknown,
-  how: { convert: boolean; parse: (raw: string) => unknown; complaint: string },
+  how: { convert: boolean; parse: (raw: string) => unknown; unreadable: string; complaint: string },
 ): Static<T> {
   if (typeof value !== 'string') {
     return value as Static<T>
   }
 
-  const parsed = how.parse(value)
+  let parsed: unknown
+  try {
+    parsed = how.parse(value)
+  } catch {
+    // The parser's own message is left out: it quotes the text it rejected, and a configuration value may be a secret.
+    throw new Error(`The value ${how.unreadable}`)
+  }
+
   const decoded = how.convert ? Value.Convert(target, parsed) : parsed
 
   if (!Value.Check(target, decoded)) {

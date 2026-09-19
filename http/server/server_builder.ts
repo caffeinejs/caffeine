@@ -28,7 +28,7 @@ export interface ServerAddress {
 /**
  * The shape the server expects wherever the application decides to keep its settings — import it into an
  * application schema (`$t.Object({ app: $t.Object({ server: serverConfigSchema }) })`) rather than restating
- * the fields, then hand that node to {@link ServerBuilder.withConfig}.
+ * the fields, then hand that node to {@link ServerBuilder.config}.
  */
 export const serverConfigSchema = $t.Object({
   port: $t.Number({ default: DEFAULT_SERVER_OPTIONS.port }),
@@ -43,7 +43,7 @@ export const serverConfigSchema = $t.Object({
  * rather than restate the fields:
  *
  * ```ts
- * .server((s, c) => s.withConfig(c.app.server))
+ * .server((s, c) => s.config(c.app.server))
  * ```
  *
  * The resolved options are bound under {@link kServerOptions}, which is how the adapter reads them without
@@ -63,7 +63,7 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
    * The node is read once, when the feature configures. {@link port} and {@link host} win over what the node
    * carries.
    */
-  withConfig(config: Partial<ServerOptions>): this {
+  config(config: Partial<ServerOptions>): this {
     this.#config = config
     return this
   }

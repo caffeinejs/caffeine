@@ -1,71 +1,76 @@
-import { Keys, mod, token, type Module, type NamedToken, Scopes, type InjectionToken } from '@caffeinejs/di'
+import {
+  Keys,
+  kSelfRefresh,
+  mod,
+  Scopes,
+  token,
+  type InjectionToken,
+  type Module,
+  type SelfRefreshable,
+} from '@caffeinejs/di'
 
-import type { ConfigHandle } from '../config.js'
-import { Configuration } from '../configuration.js'
-import type { ConfigDefinition } from '../definition.js'
-import { ConfigShard } from './shard.js'
+import { ConfigStore } from '../store.js'
 
+/** The label `refresher.refresh(CONFIG_REFRESH_LABEL)` takes to reload every live configuration source. */
 export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:refresh-label')
 
 /**
- * Binds an application's configuration.
+ * Binds a loaded configuration into a container.
  *
- * The resolved configuration is normally already there: the application calls `definition.bootstrap()` between
- * the two service steps, so every feature could read its own settings while it was binding. This module then
- * only binds what that produced.
+ * - The live config object under the definition's key, and the store under its store key, when it names them.
+ * - The store under the {@link ConfigStore} class, which is how the framework finds it.
+ * - The current snapshot as the values provider, so `$i.value(c => c.database.host)` reads configuration. The value
+ *   is read when the consumer is built.
+ * - A binding under `CONFIG_REFRESH_LABEL`, so `container.refresher.refresh(CONFIG_REFRESH_LABEL)` reloads the live
+ *   sources. It rejects when the reload was rejected or a source that is not `optional` failed.
  *
- * A definition that was never bootstrapped is resolved here instead, at `container.init()`. That is the
- * standalone path — a container assembled by hand, with no application driving the lifecycle — and it is why
- * the module owns the bindings rather than the application.
+ * The store closes with the container.
  */
-export function ConfigModule<T>(definition: ConfigDefinition): Module {
-  return mod('ConfigModule', async container => {
-    // Idempotent, so the usual path — the application bootstrapped between the two service steps — hands back
-    // the shard it already built rather than resolving a second time. The definition reads the fields it holds
-    // when *it* bootstraps, so nothing is captured here.
-    const shard = (await definition.bootstrap()) as ConfigShard<T>
+export function ConfigModule<T>(store: ConfigStore<T>): Module {
+  return mod('ConfigModule', container => {
+    const { key, storeKey } = store.definition
 
-    const shardKey = token<ConfigShard<T>>(Symbol('@caffeinejs/config:shard'))
-
-    // Read here, not when the module was created: the application installs this module in its own constructor,
-    // and the key arrives on the `config` option — built separately with `newConfiguration(schema, key)`.
-    const tokenName = definition.token as NamedToken<ConfigHandle<T>> | undefined
-
-    // Only when the application named a key. An application that declared no configuration of its own still has
-    // its slices published and its values injectable; what it does not have is a root binding to reach them by.
-    if (tokenName !== undefined) {
-      container.bind(tokenName, t => t.toValue(shard.handle))
+    if (key !== undefined) {
+      // `T` is the application's own read-only type, so the live object is exactly what the key names.
+      container.bind(key, t => t.toValue(store.live as T))
     }
-
-    // The same handle, under the container's well-known values key, so `$i.value(c => c.database.host)` reads
-    // the application configuration. The handle is live and the config resolver calls the binding's factory on
-    // every read, so an injected value follows a refresh rather than freezing at construction.
-    //
-    // Guarded: an application that bound its own values provider meant it, and silently replacing it would be
-    // the kind of framework surprise that is very hard to find. Checked by walking the entries because a module
-    // is handed the binding operations only — `has()` is not among them.
-    const boundAlready = [...container.entries()].some(([key]) => key === Keys.kValuesProvider)
-
-    if (!boundAlready) {
-      container.bindValuesProvider<ConfigHandle<T>>(t => t.toValue(shard.handle))
+    if (storeKey !== undefined) {
+      container.bind(storeKey, t => t.toValue(store))
     }
-
-    // Bound under the class, which cannot carry the application's config type: `get(Configuration)` hands back a
-    // `Configuration<unknown>`, so the cast is what lets the one place that knows `T` construct the real wrapper.
-    // The typed way to the same values is the application's own config key.
-    container.bind(Configuration as InjectionToken<Configuration<unknown>>, t =>
-      t.toValue(new Configuration<T>(shard)).internal(),
+    container.bind(ConfigStore as InjectionToken<ConfigStore<unknown>>, t =>
+      t.toValue(store as ConfigStore<unknown>).internal(),
     )
 
-    container.bind(shardKey, t =>
+    // An application that bound its own values provider meant it. A module is handed the binding operations only,
+    // so the check walks the entries.
+    const boundAlready = [...container.entries()].some(([bound]) => bound === Keys.kValuesProvider)
+    if (!boundAlready) {
+      // Transient, so every injection reads the snapshot that is current then.
+      container.bindValuesProvider(t => t.toFactory(() => store.current).lifetime(Scopes.TRANSIENT))
+    }
+
+    const refresher: SelfRefreshable = {
+      async [kSelfRefresh]() {
+        const outcome = await store.reload()
+        if (outcome.status === 'rejected') {
+          throw outcome.error
+        }
+        // An optional source is logged when it fails, and the refresh stands without it, as start-up does.
+        const failure = outcome.failures.find(f => !f.optional)
+        if (failure !== undefined) {
+          throw failure.error
+        }
+      },
+    }
+    container.bind(token<SelfRefreshable>(Symbol('@caffeinejs/config:refresher')), t =>
       t
-        .toValue(shard)
+        .toValue(refresher)
         .lifetime(Scopes.REFRESH)
         .labels(CONFIG_REFRESH_LABEL as symbol),
     )
 
     container.hooks.on('onDisposed', async () => {
-      await shard.dispose()
+      await store.close()
     })
   })
 }

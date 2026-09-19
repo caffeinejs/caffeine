@@ -1,12 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
-import {
-  CONFIG_REFRESH_LABEL,
-  Configuration,
-  InlineConfigProvider,
-  type ConfigHandle,
-  type ConfigProvider,
-} from '@caffeinejs/std/config'
+import { CONFIG_REFRESH_LABEL, InlineConfigSource, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
@@ -18,14 +12,14 @@ const schema = $t.Object({
 
 type AppConfig = InferSchema<typeof schema>
 
-const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
-/** A source the test can re-point, so a refresh actually re-resolves rather than being skipped. */
-function reloadable(read: () => AppConfig): ConfigProvider {
+/** A live source the test can re-point, so a refresh actually reloads it. */
+function liveSource(read: () => AppConfig): ConfigSource {
   return {
-    id: 'test',
-    reloadable: true,
-    load: ctx => new InlineConfigProvider(read()).load(ctx),
+    name: 'test',
+    live: true,
+    load: () => new InlineConfigSource(read(), 'test').load(),
   }
 }
 
@@ -36,7 +30,7 @@ describe('ctx.config', () => {
       .get('/page-size', ctx => ({ pageSize: ctx.config.catalog.pageSize }))
 
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ catalog: { pageSize: 25 } }))
+      .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {
       container: new CaffeineIoC(),
@@ -69,7 +63,7 @@ describe('ctx.config', () => {
     })
 
     const conf = newConfiguration(schema, kConfig)
-      .source(reloadable(() => current))
+      .source(liveSource(() => current))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {
       container: new CaffeineIoC(),
@@ -99,9 +93,8 @@ describe('ctx.config', () => {
     await app.ready()
 
     // No `config` constructor option, so there is no application config key to resolve — and the context still reads.
-    // Only `caffeine` is there: it is the framework's own block, while the server and health features were
-    // pointed nowhere and therefore contribute no field to the tree.
-    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['caffeine'] })
+    // It is empty: no source, and no feature adds a field to the configuration an application reads.
+    expect(await (await app.fetch('/plain')).json()).toEqual({ keys: [] })
 
     await app.close()
   })
@@ -118,7 +111,7 @@ describe('ctx.config', () => {
     })
 
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ catalog: { pageSize: 25 } }))
+      .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {
       container: new CaffeineIoC(),
@@ -195,7 +188,7 @@ describe('ctx.config with an application schema', () => {
 
   type FullConfig = InferSchema<typeof ownSchema>
 
-  const kFull = token<ConfigHandle<FullConfig>>(Symbol('app.full'))
+  const kFull = token<InferConfig<typeof ownSchema>>(Symbol('app.full'))
 
   it('reads a feature block the application declared and pointed the feature at', async () => {
     const routes = new Router('/catalog')
@@ -203,10 +196,10 @@ describe('ctx.config with an application schema', () => {
       .get('/', ctx => ({ pageSize: ctx.config.catalog.pageSize, host: ctx.config.server.host }))
 
     const conf = newConfiguration(ownSchema, kFull)
-      .source(new InlineConfigProvider({ catalog: { pageSize: 25 } }))
+      .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .server((s, c) => s.withConfig(c.server))
+      .server((s, c) => s.config(c.server))
       .mount(routes)
 
     await app.ready()
@@ -224,10 +217,10 @@ describe('ctx.config with an application schema', () => {
       .get('/', (_ctx, deps) => ({ host: deps.host }))
 
     const conf = newConfiguration(ownSchema, kFull)
-      .source(new InlineConfigProvider({ catalog: { pageSize: 25 } }))
+      .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .server((s, c) => s.withConfig(c.server))
+      .server((s, c) => s.config(c.server))
       .mount(routes)
 
     await app.ready()
@@ -243,7 +236,7 @@ describe('ctx.config with an application schema', () => {
     const routes = new Router('/plain').configType<FullConfig>().get('/', ctx => ({ keys: Object.keys(ctx.config) }))
 
     const conf = newConfiguration($t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) }), kFull)
-      .source(new InlineConfigProvider({ catalog: { pageSize: 25 }, server: { host: '127.0.0.1' } }))
+      .source(new InlineConfigSource({ catalog: { pageSize: 25 }, server: { host: '127.0.0.1' } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {
       container: new CaffeineIoC(),
@@ -266,13 +259,13 @@ describe('ctx.config with an application schema', () => {
         { default: {} },
       ),
     })
-    const kServer = token<ConfigHandle<InferSchema<typeof withServer>>>(Symbol('app.server'))
+    const kServer = token<InferConfig<typeof withServer>>(Symbol('app.server'))
 
     const conf = newConfiguration(withServer, kServer).build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), {
       container: new CaffeineIoC(),
       config: conf,
-    }).server((s, c) => s.withConfig(c.server))
+    }).server((s, c) => s.config(c.server))
 
     await app.ready()
 

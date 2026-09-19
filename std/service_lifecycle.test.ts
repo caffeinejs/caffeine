@@ -1,7 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { InlineConfigProvider, type ConfigHandle } from './config/index.js'
+import { InlineConfigSource } from './config/index.js'
 import {
   kFeatureBootstrap,
   kFeatureConfigure,
@@ -16,7 +16,7 @@ import { $t } from './schema/t.js'
 
 const schema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
 type AppConfig = { widget: { size: number } }
-const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+const kConfig = token<AppConfig>(Symbol('app.config'))
 
 /** A minimal feature: reads the resolved configuration, then binds what it found. */
 class WidgetFeature implements Feature<AppConfig> {
@@ -39,7 +39,7 @@ class WidgetFeature implements Feature<AppConfig> {
 
 function appWith(feature: Feature<never>, size: number) {
   const conf = newConfiguration(schema, kConfig)
-    .source(new InlineConfigProvider({ widget: { size } }))
+    .source(new InlineConfigSource({ widget: { size } }))
     .build()
   return createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).addFeature(feature)
 }
@@ -86,7 +86,7 @@ describe('feature lifecycle', () => {
 
     // The tree carries a string where the schema declares a number.
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ widget: { size: 'not-a-number' } }))
+      .source(new InlineConfigSource({ widget: { size: 'not-a-number' } }))
       .build()
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).addFeature({

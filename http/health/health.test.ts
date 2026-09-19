@@ -2,10 +2,10 @@ import { token } from '@caffeinejs/di'
 import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
-  EnvConfigProvider,
-  InlineConfigProvider,
-  type ConfigHandle,
-  type ConfigProvider,
+  EnvConfigSource,
+  InlineConfigSource,
+  type InferConfig,
+  type ConfigSource,
 } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -42,7 +42,7 @@ describe('HealthBuilder.resolve', () => {
   it('drives the configuration from a configured block', () => {
     const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
 
-    const options = new HealthBuilder().withConfig(config).resolve()
+    const options = new HealthBuilder().config(config).resolve()
 
     expect(options).toMatchObject({
       enabled: true,
@@ -57,7 +57,7 @@ describe('HealthBuilder.resolve', () => {
   it('keeps a code-set duration and takes the rest from the configured block', () => {
     const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
 
-    const options = new HealthBuilder().cacheTTL('10ms').probeDeadline('7s').withConfig(config).resolve()
+    const options = new HealthBuilder().cacheTTL('10ms').probeDeadline('7s').config(config).resolve()
 
     expect(options).toMatchObject({
       // Named in code, so it stands...
@@ -69,7 +69,7 @@ describe('HealthBuilder.resolve', () => {
   })
 
   it('lets a configured enabled win over both the fluent default and .k8s()', () => {
-    const options = new HealthBuilder().k8s().withConfig({ enabled: true }).resolve()
+    const options = new HealthBuilder().k8s().config({ enabled: true }).resolve()
 
     expect(options.enabled).toBe(true)
   })
@@ -77,7 +77,7 @@ describe('HealthBuilder.resolve', () => {
 
 describe('health()', () => {
   const rootSchema = $t.Object({ health: healthConfigSchema })
-  const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+  const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
   const schema = $t.Object({
     health: $t.Object({
@@ -86,10 +86,10 @@ describe('health()', () => {
       verbose: $t.Boolean(),
     }),
   })
-  const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+  const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
   type AppConfig = InferSchema<typeof schema>
 
-  const source = (health: AppConfig['health']): InlineConfigProvider => new InlineConfigProvider({ health })
+  const source = (health: AppConfig['health']): InlineConfigSource => new InlineConfigSource({ health })
 
   let app: WebApplication | undefined
 
@@ -118,11 +118,11 @@ describe('health()', () => {
 
   it('lets the environment switch the probes off even though installing opted in', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }))
+      .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, c) => h.withConfig(c.health)),
+      health((h, c) => h.config(c.health)),
     )
 
     await app.ready()
@@ -131,9 +131,9 @@ describe('health()', () => {
   })
 
   // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.
-  it('ignores the configured block unless withConfig pointed at it', async () => {
+  it('ignores the configured block unless config(...) pointed at it', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new EnvConfigProvider({ env: { HEALTH__ENABLED: 'false' } }))
+      .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(health())
 
@@ -144,11 +144,11 @@ describe('health()', () => {
 
   it('does not follow a config refresh after the options are resolved', async () => {
     let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: false }
-    const mutable: ConfigProvider = { id: 'mutable', reloadable: true, load: ctx => source(data).load(ctx) }
+    const mutable: ConfigSource = { name: 'mutable', live: true, load: () => source(data).load() }
 
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, c) => h.withConfig(c.health)),
+      health((h, c) => h.config(c.health)),
     )
 
     await app.run()

@@ -1,6 +1,6 @@
 import { token } from '@caffeinejs/di'
-import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import { EnvConfigProvider, InlineConfigProvider, Configuration, type ConfigHandle } from '@caffeinejs/std/config'
+import { $t, newConfiguration } from '@caffeinejs/std'
+import { EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
@@ -19,11 +19,9 @@ import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 
 // The application owns the schema: it declares where the authentication block lives — importing the feature's
-// own schema for the scheme-independent half — and `a.withConfig(c.auth)` hands the feature that node.
+// own schema for the scheme-independent half — and `a.config(c.auth)` hands the feature that node.
 //
-// `schemes` is declared **precisely**, splicing in each kind's own schema. That is what carries `$t.Secret`
-// into the tree, and `$t.Secret` is what the diagnostics redact on: an open record would validate the same
-// values and print the secrets.
+// `schemes` is declared **precisely**, splicing in each kind's own schema, so each scheme's options are validated.
 const rootSchema = $t.Object({
   auth: $t.Object(
     {
@@ -43,12 +41,12 @@ const rootSchema = $t.Object({
     { default: {} },
   ),
 })
-const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
 const ENV_SECRET = 'env-secret-key-must-be-at-least-32-chars!!'
 
-const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
+const env = (values: Record<string, string>) => new EnvConfigSource({ env: values })
 
 @Authorize()
 @Controller('/protected')
@@ -80,7 +78,7 @@ function tokenSignedWith(secret: string): Promise<string> {
 describe('authentication configuration', () => {
   // The case the whole reordering was for: a secret that never appears in code or in a file.
   //
-  // The scheme is named `jwt` rather than left as the default `Bearer` because `EnvConfigProvider` lowercases
+  // The scheme is named `jwt` rather than left as the default `Bearer` because `EnvConfigSource` lowercases
   // each path segment — `AUTH__SCHEMES__BEARER__SECRET` addresses `auth.schemes.bearer`, which is not where a
   it('takes a JWT secret from the environment, over the one set in code', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
@@ -89,7 +87,7 @@ describe('authentication configuration', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      a.config(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
     await app.ready()
@@ -123,40 +121,15 @@ describe('authentication configuration', () => {
     await app.close()
   })
 
-  it('redacts a configured secret in the diagnostics while the handler still authenticates with it', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }))
-      .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
-      config: conf,
-    }).authentication((a, c) =>
-      a.withConfig(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-    )
-
-    await app.ready()
-
-    const diagnostics = app.container.get(Configuration).diagnostics
-    expect(diagnostics.valueAt('auth.schemes.jwt.secret')).toBe('[redacted]')
-    expect(JSON.stringify(diagnostics.snapshot)).not.toContain(ENV_SECRET)
-
-    // Redacted at the diagnostic boundary only — the scheme itself has the real value.
-    const res = await app.fetch('/protected', {
-      headers: { authorization: `Bearer ${await tokenSignedWith(ENV_SECRET)}` },
-    })
-    expect(res.status).toBe(200)
-
-    await app.close()
-  })
-
   // Building last is what puts each scheme's own validation on the merged options.
   it('validates the merged options, not the code half', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new InlineConfigProvider({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
+      .source(new InlineConfigSource({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
+      a.config(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
     )
 
     await expect(app.ready()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
@@ -165,7 +138,7 @@ describe('authentication configuration', () => {
   it('configures a basic realm and a cookie name from the tree', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(
-        new InlineConfigProvider({
+        new InlineConfigSource({
           auth: {
             schemes: {
               Basic: { realm: 'From Config' },
@@ -179,7 +152,7 @@ describe('authentication configuration', () => {
       config: conf,
     }).authentication((a, c) =>
       a
-        .withConfig(c.auth)
+        .config(c.auth)
         .addBasic(b => b.realm('From Code').validate(() => null))
         .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
         .default('Basic'),
@@ -209,7 +182,7 @@ describe('authentication configuration', () => {
       config: conf,
     }).authentication((a, c) =>
       a
-        .withConfig(c.auth)
+        .config(c.auth)
         .addBasic(b => b.validate(() => null))
         .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
@@ -226,12 +199,12 @@ describe('authentication configuration', () => {
     let validated = 0
 
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new InlineConfigProvider({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
+      .source(new InlineConfigSource({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.auth).addBasic(b =>
+      a.config(c.auth).addBasic(b =>
         b.realm('Coded').validate(() => {
           validated++
           return null
@@ -258,15 +231,15 @@ describe('authentication configuration', () => {
         }),
       }),
     })
-    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
+      .source(new InlineConfigSource({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
     }).authentication((a, c) =>
-      a.withConfig(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+      a.config(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
     await app.ready()

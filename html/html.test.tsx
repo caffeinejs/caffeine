@@ -12,8 +12,8 @@ import {
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
-import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import { InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import { $t, newConfiguration } from '@caffeinejs/std'
+import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -21,7 +21,7 @@ import { HTML, html, type HTMLDefaults } from './index.js'
 
 const schema = $t.Object({ html: $t.Object({ autoDoctype: $t.Boolean() }) })
 
-const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
 function Document({ title }: { title: string }) {
   return (
@@ -202,7 +202,7 @@ describe('HTML', () => {
   // doctype off without a rebuild.
   it('reads the doctype default from the configuration the callback handed it', async () => {
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ html: { autoDoctype: false } }))
+      .source(new InlineConfigSource({ html: { autoDoctype: false } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(({ config }) =>
       html(config.html),

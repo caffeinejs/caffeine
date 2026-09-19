@@ -1,5 +1,5 @@
 import { ApplicationAvailability } from '@caffeinejs/std'
-import type { ConfigHandle } from '@caffeinejs/std/config'
+import type { LiveConfig } from '@caffeinejs/std/config'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
@@ -10,7 +10,7 @@ import { loadHealthIndicators } from './load.js'
 import { installHealthProbes } from './probes_route.js'
 
 /** Authors {@link HealthOptions} through {@link HealthBuilder} instead of a plain object. */
-export type HealthConfigurer<C = unknown> = (builder: HealthBuilder, config: ConfigHandle<C>) => void
+export type HealthConfigurer<C = unknown> = (builder: HealthBuilder, config: LiveConfig<C>) => void
 
 /**
  * The Kubernetes probes (`/livez`, `/readyz`, `/startupz`), as an ordinary Fastify plugin factory:

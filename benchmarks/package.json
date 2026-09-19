@@ -24,6 +24,8 @@
     "bench:testing": "node --import=tsx testing/bench.ts",
     "bench:aspect": "node --import=tsx aspect/bench.ts",
     "bench:resilience": "node --expose-gc --import=tsx resilience/bench.ts",
+    "bench:config-read": "node --expose-gc --import=tsx config/read.bench.ts",
+    "bench:config-reload": "node --expose-gc --import=tsx config/reload.bench.ts",
     "bench:di": "node --expose-gc --import=tsx di/container.bench.ts",
     "bench:di-compile": "node --expose-gc --import=tsx di/compile.bench.ts",
     "bench:di-compare": "node --expose-gc --import=tsx di/compare_third_parties.bench.ts",

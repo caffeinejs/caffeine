@@ -19,7 +19,7 @@ type Listener = (...args: unknown[]) => void
  *
  * The backend is the one thing with no default: pick it, and the rest of the settings only tune how long a
  * lease lasts and how hard `acquire` tries. Everything set here is final — configuration reaches the feature
- * because the application's callback wired it through {@link withConfig}, and a setter written in code beats
+ * because the application's callback wired it through {@link config}, and a setter written in code beats
  * whatever the tree carries.
  */
 export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
@@ -98,7 +98,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
    * The node is read once, when the feature configures. Every other method on this builder wins over what it
    * carries.
    */
-  withConfig(config: Partial<DistLockConfigSlice>): this {
+  config(config: Partial<DistLockConfigSlice>): this {
     this.#config = config
     return this
   }

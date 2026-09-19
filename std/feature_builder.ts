@@ -1,4 +1,4 @@
-import type { ConfigHandle } from './config/index.js'
+import type { ConfigStore, LiveConfig } from './config/index.js'
 import {
   kFeatureBootstrap,
   kFeatureConfigure,
@@ -9,18 +9,18 @@ import {
 } from './feature.js'
 
 /**
- * The callback an application writes to configure a feature, handed the builder and the resolved
- * configuration.
+ * The callback an application writes to configure a feature, handed the builder, the live config object, and the
+ * store it came from.
  *
- * `c` is the live configuration handle, so what the callback does with it decides what follows a refresh:
- * `b.port(c.app.server.port)` reads a number once, while `b.withConfig(c.app.server)` hands over a node whose
- * reads go through the current tree.
+ * What the callback does with `c` decides what follows a reload: `b.port(c.app.server.port)` reads a number once,
+ * while `b.config(c.app.server)` hands over a node whose fields follow every reload. A feature that has to act
+ * on a change takes a view in its `config(...)` instead: `(b, c, store) => b.config(store.view(t => t.app.thing))`.
  *
  * ```ts
  * .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
  * ```
  */
-export type FeatureConfigurer<B, C = unknown> = (builder: B, config: ConfigHandle<C>) => void
+export type FeatureConfigurer<B, C = unknown> = (builder: B, config: LiveConfig<C>, store: ConfigStore<C>) => void
 
 /**
  * Adds a configure callback to a builder the framework registered itself.
@@ -80,7 +80,7 @@ export abstract class FeatureBuilder<C = unknown> implements Feature<C> {
     // Synchronous, and ahead of `configure`: the application calls every feature's hook in order before
     // awaiting any of them, so each builder is fully authored before the first one does asynchronous work.
     for (const configure of this.#configurers) {
-      configure(this as never, kit.config)
+      configure(this as never, kit.config, kit.store)
     }
 
     return this.configure(kit)

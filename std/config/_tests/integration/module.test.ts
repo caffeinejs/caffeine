@@ -1,138 +1,212 @@
-import { CaffeineIoC, Keys, token, type NamedToken } from '@caffeinejs/di'
+import { $i, CaffeineIoC, Injectable, Keys, Scopes, token, type NamedToken } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import type { ConfigHandle, ConfigProvider, ConfigSchema } from '../../config.js'
-import { Configuration } from '../../configuration.js'
-import { ConfigDefinition } from '../../definition.js'
+import { $t } from '../../../schema/t.js'
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
-import { InlineConfigProvider } from '../../providers/inline_provider.js'
+import { loadConfig } from '../../load.js'
+import { ConfigStore } from '../../store.js'
+import type { ConfigSchema, ConfigSource, InferConfig } from '../../types.js'
 
 const schema = z.object({
   http: z.object({ host: z.string(), port: z.coerce.number() }),
   db: z.object({ url: z.string() }),
 })
-type AppConfig = z.infer<typeof schema>
+type AppConfig = InferConfig<typeof schema>
 
-const APP_CONFIG = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+const kConfig = token<AppConfig>(Symbol('app.config'))
+const kStore = token<ConfigStore<AppConfig>>(Symbol('app.config.store'))
 
-function define<T>(
-  configSchema: ConfigSchema<unknown>,
-  provider: ConfigProvider,
-  key?: NamedToken<ConfigHandle<T>>,
-): ConfigDefinition {
-  const definition = new ConfigDefinition(key)
-  definition.schema = configSchema
-  definition.sources.add(provider)
-  return definition
+/** A live source over data the test replaces. */
+function remote(initial: Record<string, unknown>, name = 'remote') {
+  const state = { data: initial }
+  const source: ConfigSource = { name, live: true, load: () => [{ name, data: state.data as never }] }
+  return { source, state }
 }
 
-function makeModule(data: Record<string, unknown>) {
-  return ConfigModule<AppConfig>(define(schema, new InlineConfigProvider(data as never), APP_CONFIG))
+async function containerWith<T>(
+  schemaOf: ConfigSchema<T>,
+  source: ConfigSource,
+  keys: { key?: NamedToken<T>; storeKey?: NamedToken<ConfigStore<T>> } = {},
+) {
+  const store = await loadConfig<T>(
+    { schema: schemaOf, key: keys.key, storeKey: keys.storeKey, sources: [source], loadTimeoutMs: 30_000 },
+    { start: false },
+  )
+  const container = new CaffeineIoC({ decorators: false })
+  container.addModules(ConfigModule(store))
+  await container.init()
+  return { container, store }
 }
+
+const data = { http: { host: 'localhost', port: '3000' }, db: { url: 'postgres://localhost' } }
 
 describe('ConfigModule', () => {
-  it('binds ConfigHandle to the provided token after init', async () => {
-    const container = new CaffeineIoC()
-    container.addModules(makeModule({ http: { host: 'localhost', port: 3000 }, db: { url: 'postgres://localhost' } }))
-    await container.init()
+  it('binds the live config object under the key, and the store under its key and its class', async () => {
+    const { container, store } = await containerWith(schema, remote(data).source, { key: kConfig, storeKey: kStore })
 
-    const config = container.get(APP_CONFIG)
-    expect(config.http.host).toBe('localhost')
-    expect(config.http.port).toBe(3000)
-    expect(config.db.url).toBe('postgres://localhost')
+    expect(container.get(kConfig)).toBe(store.live)
+    expect(container.get(kConfig).http.port).toBe(3000)
+    expect(container.get(kStore)).toBe(store)
+    expect(container.get(ConfigStore)).toBe(store)
   })
 
-  it('binds no root key when none was given, and still binds the rest', async () => {
-    const container = new CaffeineIoC()
-    container.addModules(
-      ConfigModule<AppConfig>(
-        define(schema, new InlineConfigProvider({ http: { host: 'h', port: 80 }, db: { url: 'u' } } as never)),
-      ),
-    )
-    await container.init()
+  it('binds no application key when none was given, and still binds the rest', async () => {
+    const { container, store } = await containerWith(schema, remote(data).source)
 
-    // Nothing to resolve the handle by — an application that declared no configuration of its own — but the
-    // configuration itself resolved, and value injection still reads it.
-    expect(container.has(APP_CONFIG)).toBe(false)
-    expect(container.get(Configuration).diagnostics.originOf('http.host')).toBeDefined()
+    expect(container.has(kConfig)).toBe(false)
+    expect(container.get(ConfigStore)).toBe(store)
     expect(container.has(Keys.kValuesProvider)).toBe(true)
   })
 
-  it('ConfigHandle is typed and function-free', async () => {
-    const container = new CaffeineIoC()
-    container.addModules(makeModule({ http: { host: 'h', port: 80 }, db: { url: 'u' } }))
-    await container.init()
-
-    const config = container.get(APP_CONFIG)
-    const ownMethods = Object.keys(config).filter(k => typeof (config as never)[k] === 'function')
-    expect(ownMethods).toHaveLength(0)
-  })
-
-  it('two ConfigModule registrations refresh independently', async () => {
-    const dbSchema = z.object({ db: z.object({ url: z.string() }) })
-    type DBConfig = z.infer<typeof dbSchema>
-    const DB_TOKEN = token<ConfigHandle<DBConfig>>(Symbol('db.config'))
-
-    let appData = { http: { host: 'app', port: 80 }, db: { url: 'u' } }
-    let dbData = { db: { url: 'postgres://a' } }
-
-    const appProvider: ConfigProvider = {
-      id: 'app',
-      reloadable: true,
-      load: async () => new InlineConfigProvider(appData as never).load({ profiles: ['default'] }),
-    }
-    const dbProvider: ConfigProvider = {
-      id: 'db',
-      reloadable: true,
-      load: async () => new InlineConfigProvider(dbData as never).load({ profiles: ['default'] }),
+  // The values provider is read when a consumer is built, so a transient built after a reload sees the new value.
+  it('lets $i.value read the snapshot current when the consumer is built', async () => {
+    @Injectable([$i.value<AppConfig, string>(c => c.http.host)])
+    class Client {
+      constructor(readonly host: string) {}
     }
 
-    const container = new CaffeineIoC()
-    container.addModules(
-      ConfigModule<AppConfig>(define(schema, appProvider, APP_CONFIG)),
-      ConfigModule<DBConfig>(define(dbSchema, dbProvider, DB_TOKEN)),
+    const { source, state } = remote(data)
+    const store = await loadConfig<AppConfig>(
+      { schema, key: kConfig, storeKey: undefined, sources: [source], loadTimeoutMs: 30_000 },
+      { start: false },
     )
+    const container = new CaffeineIoC({ decorators: false })
+    container.addModules(ConfigModule(store))
+    container.bind(Client, t => t.toSelf().lifetime(Scopes.TRANSIENT))
     await container.init()
 
-    const appConfig = container.get(APP_CONFIG)
-    const dbConfig = container.get(DB_TOKEN)
+    expect(container.get(Client).host).toBe('localhost')
 
-    expect(appConfig.http.host).toBe('app')
-    expect(dbConfig.db.url).toBe('postgres://a')
+    state.data = { ...data, http: { host: 'moved', port: '1' } }
+    await store.reload()
 
-    appData = { http: { host: 'refreshed', port: 443 }, db: { url: 'u' } }
-    dbData = { db: { url: 'postgres://b' } }
-    await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
-
-    expect(appConfig.http.host).toBe('refreshed')
-    expect(dbConfig.db.url).toBe('postgres://b')
+    expect(container.get(Client).host).toBe('moved')
   })
 
-  it('live proxy reflects values after manual shard refresh', async () => {
-    let data = { http: { host: 'before', port: 80 }, db: { url: 'u' } }
+  it('reloads the live sources when the container refreshes the configuration label', async () => {
+    const { source, state } = remote(data)
+    const { container } = await containerWith(schema, source, { key: kConfig })
+    const config = container.get(kConfig)
 
-    const mutableProvider: ConfigProvider = {
-      id: 'mutable',
-      reloadable: true,
-      load: async () => {
-        const { InlineConfigProvider } = await import('../../providers/inline_provider.js')
-        const p = new InlineConfigProvider(data as never)
-        return p.load({ profiles: ['default'] })
-      },
-    }
-
-    const container = new CaffeineIoC()
-    container.addModules(ConfigModule<AppConfig>(define(schema, mutableProvider, APP_CONFIG)))
-    await container.init()
-
-    const config = container.get(APP_CONFIG)
-    expect(config.http.host).toBe('before')
-
-    data = { http: { host: 'after', port: 443 }, db: { url: 'u' } }
+    state.data = { http: { host: 'after', port: '443' }, db: { url: 'u' } }
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     expect(config.http.host).toBe('after')
     expect(config.http.port).toBe(443)
+  })
+
+  it('makes the refresh reject when the reload was rejected, and changes nothing', async () => {
+    const { source, state } = remote(data)
+    const { container } = await containerWith(schema, source, { key: kConfig })
+
+    state.data = { http: { host: 'after', port: 'not-a-number' }, db: { url: 'u' } }
+
+    await expect(container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)).rejects.toMatchObject({
+      name: 'ErrConfigValidation',
+    })
+    expect(container.get(kConfig).http.host).toBe('localhost')
+  })
+
+  // Whoever refreshes may log what the refresh threw, and a codec's parser quotes the text it rejected.
+  it('makes the refresh reject without the text a codec could not parse', async () => {
+    const json = $t.Object({ credentials: $t.JSON($t.Object({ key: $t.String() })) })
+    const { source, state } = remote({ credentials: '{"key":"k"}' })
+    const { container } = await containerWith(json, source)
+
+    state.data = { credentials: 'hunter2' }
+    const error = await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol).catch((e: unknown) => e)
+
+    expect(error).toMatchObject({
+      name: 'ErrConfigValidation',
+      issues: [{ path: 'credentials', message: 'The value is not valid JSON' }],
+    })
+    expect((error as Error).message).not.toContain('hunter2')
+  })
+
+  it('makes the refresh reject when a live source failed', async () => {
+    let loads = 0
+    const failing: ConfigSource = {
+      name: 'remote',
+      live: true,
+      load: () => {
+        if (loads++ > 0) {
+          throw new Error('connection reset')
+        }
+        return [{ name: 'remote', data: data as never }]
+      },
+    }
+    const { container } = await containerWith(schema, failing, { key: kConfig })
+
+    await expect(container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)).rejects.toMatchObject({
+      code: 'ERR_CONFIG_SOURCE',
+    })
+    expect(container.get(kConfig).http.host).toBe('localhost')
+  })
+
+  // The configuration never depended on an optional source: start-up goes on without it, and so does a refresh. A
+  // refresh reported as failed, although it applied everything else, would be retried by whoever asked for it.
+  it('lets the refresh stand when only an optional source failed', async () => {
+    const app = remote(data, 'app')
+    const flaky: ConfigSource = {
+      name: 'flaky',
+      live: true,
+      optional: true,
+      load: () => {
+        throw new Error('connection reset')
+      },
+    }
+    const store = await loadConfig<AppConfig>(
+      { schema, key: kConfig, storeKey: undefined, sources: [app.source, flaky], loadTimeoutMs: 30_000 },
+      { start: false },
+    )
+    const container = new CaffeineIoC({ decorators: false })
+    container.addModules(ConfigModule(store))
+    await container.init()
+
+    app.state.data = { ...data, http: { host: 'after', port: '443' } }
+    await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
+
+    expect(container.get(kConfig).http.host).toBe('after')
+    expect((await store.reload()).failures).toEqual([
+      { source: 'flaky', optional: true, error: expect.objectContaining({ code: 'ERR_CONFIG_SOURCE' }) },
+    ])
+  })
+
+  it('refreshes two configurations in one container independently', async () => {
+    const dbSchema = z.object({ db: z.object({ url: z.string() }) })
+    type DBConfig = InferConfig<typeof dbSchema>
+    const kDB = token<DBConfig>(Symbol('db.config'))
+
+    const app = remote(data, 'app')
+    const db = remote({ db: { url: 'postgres://a' } }, 'db')
+    const appStore = await loadConfig<AppConfig>(
+      { schema, key: kConfig, storeKey: undefined, sources: [app.source], loadTimeoutMs: 30_000 },
+      { start: false },
+    )
+    const dbStore = await loadConfig<DBConfig>(
+      { schema: dbSchema, key: kDB, storeKey: undefined, sources: [db.source], loadTimeoutMs: 30_000 },
+      { start: false },
+    )
+    const container = new CaffeineIoC({ decorators: false })
+    container.addModules(ConfigModule(appStore), ConfigModule(dbStore))
+    await container.init()
+
+    app.state.data = { http: { host: 'refreshed', port: '443' }, db: { url: 'u' } }
+    db.state.data = { db: { url: 'postgres://b' } }
+    await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
+
+    expect(container.get(kConfig).http.host).toBe('refreshed')
+    expect(container.get(kDB).db.url).toBe('postgres://b')
+  })
+
+  it('closes the store when the container is disposed', async () => {
+    let closed = 0
+    const source: ConfigSource = { ...remote(data).source, close: () => void closed++ }
+    const { container } = await containerWith(schema, source)
+
+    await container.dispose()
+
+    expect(closed).toBe(1)
   })
 })

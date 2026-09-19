@@ -1,23 +1,27 @@
 import { textList } from '../schema/text.js'
+import { ErrConfig } from './errors.js'
+import { hostArgv, parseArgv } from './sources/args_source.js'
 
 /**
  * Where the active-profile list lives in the configuration tree.
  *
  * The one location `std/config` knows by name. A feature never picks its own place in the tree, but the
- * profiles are read *before* anything resolves — there is no configuration yet to say where they are — so the
+ * profiles are read *before* anything loads — there is no configuration yet to say where they are — so the
  * framework's own namespace is fixed here, the same way `std/application.ts` fixes `caffeine`.
  */
 export const PROFILES_KEY = ['caffeine', 'profiles'] as const
 
-const ARG_FLAGS = ['--caffeine.profiles', '--caffeine:profiles'] as const
+const ARG_PATH = PROFILES_KEY.join('.')
 const ENV_VAR = 'CAFFEINE__PROFILES'
 
 /**
  * Normalizes a raw active-profile value into a unique list, in first-seen order.
  *
- * Accepts what a source actually produces: a string array from a file or the code band, or delimited text
+ * Accepts what a source actually produces: a string array from a file, or delimited text
  * (`CAFFEINE__PROFILES=eu,dev`) from an environment variable or a command-line argument. Blank entries are
- * dropped, and a profile named twice keeps only its first position, so no provider ever sees a duplicate.
+ * dropped, and a profile named twice keeps only its first position, so no source ever sees a duplicate.
+ *
+ * @throws ErrConfig `ERR_CONFIG_PROFILE` when a profile is `.` or `..`, or holds `/` or `\`.
  */
 export function activeProfiles(raw: unknown, separator?: string): string[] {
   const split = textList(raw, separator)
@@ -29,23 +33,33 @@ export function activeProfiles(raw: unknown, separator?: string): string[] {
       continue
     }
     const profile = entry.trim()
-    if (profile !== '') {
-      seen.add(profile)
+    if (profile === '') {
+      continue
     }
+    // A file source makes a file name of a profile, and a config server a segment of its request path.
+    if (profile === '.' || profile === '..' || /[/\\]/.test(profile)) {
+      throw new ErrConfig(
+        `Cannot use profile "${profile}": a profile name cannot be "." or "..", or contain "/" or "\\"`,
+        'ERR_CONFIG_PROFILE',
+        undefined,
+        'Name the profile with letters, digits, "-", "_" and "."',
+      )
+    }
+    seen.add(profile)
   }
 
   return [...seen]
 }
 
 /**
- * The profiles named on the command line or in the environment, read straight from the host — no provider, no
- * merge, no resolve.
+ * The profiles named on the command line or in the environment, read straight from the host — no source, no
+ * merge, no load.
  *
- * This runs before configuration exists, which is the whole point: it is what lets a single resolve be
+ * This runs before configuration exists, which is the whole point: it is what lets a single load be
  * profile-aware instead of one probe pass followed by a real one. An argument wins over the environment, and
  * both go through {@link activeProfiles}, so `eu,dev` splits and dedupes exactly as a configured value would.
  *
- * Reading `process.argv` here is not the same opt-in {@link ArgsConfigProvider} is: exactly one flag is
+ * Reading `process.argv` here is not the same opt-in {@link ArgsConfigSource} is: exactly one flag is
  * matched, so a process whose switches were meant for something else contributes nothing.
  *
  * @param argv - Defaults to the host's own arguments. Present so a test need not touch the real process.
@@ -55,37 +69,24 @@ export function hostProfiles(argv: readonly string[] = hostArgv(), env = hostEnv
   return activeProfiles(argProfiles(argv) ?? env[ENV_VAR] ?? [])
 }
 
-/** `--caffeine.profiles=eu,dev`, `--caffeine.profiles eu,dev`, or the `:` spelling. Last occurrence wins. */
+/**
+ * `--caffeine.profiles=eu,dev`, `--caffeine.profiles eu,dev`, or the `:` spelling, read as {@link ArgsConfigSource}
+ * reads any switch. Last occurrence wins.
+ */
 function argProfiles(argv: readonly string[]): string | undefined {
   let found: string | undefined
 
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]
-
-    if (token === '--') {
-      break
-    }
-
-    for (const flag of ARG_FLAGS) {
-      if (token.startsWith(`${flag}=`)) {
-        found = token.slice(flag.length + 1)
-      } else if (token === flag) {
-        const next = argv[i + 1]
-        // A bare flag with nothing usable after it names no profile rather than the empty one.
-        found = next !== undefined && !next.startsWith('-') ? next : undefined
-      }
+  for (const [path, value] of parseArgv(argv, {})) {
+    if (path === ARG_PATH) {
+      // A bare flag names no profile rather than the empty one.
+      found = value
     }
   }
 
   return found
 }
 
-/** The host's own arguments, read through `globalThis` so this file carries no host binding of its own. */
-function hostArgv(): readonly string[] {
-  return (globalThis as { process?: { argv?: readonly string[] } }).process?.argv ?? []
-}
-
-/** The host's own environment, on the same terms. */
+/** The host's own environment, read through `globalThis` so this file carries no host binding of its own. */
 function hostEnv(): Record<string, string | undefined> {
   return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
 }

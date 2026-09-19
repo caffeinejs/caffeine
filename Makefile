@@ -110,7 +110,10 @@ example\:petstore: build\:cli ## run the petstore example (Postgres in Docker, a
 
 .PHONY: configserver-up
 configserver-up: ## spin up the Spring Cloud Config Server locally (Docker)
-	@docker compose -f test/services/configserver/docker-compose.yml up --build
+	@docker compose -f test/services/configserver/docker-compose.yml up --build -d
+	@echo "waiting for http://localhost:8888/actuator/health ..."
+	@until wget -qO- http://localhost:8888/actuator/health >/dev/null 2>&1; do sleep 2; done
+	@echo "configserver is up"
 
 .PHONY: configserver-down
 configserver-down: ## stop the Spring Cloud Config Server
@@ -128,8 +131,11 @@ oauthserver-down: ## stop the Spring Authorization Server
 	@docker compose -f test/services/oauthserver/docker-compose.yml down
 
 .PHONY: test-e2e
-test-e2e: oauthserver-up ## run the OIDC/OAuth2 e2e against a real Spring Authorization Server
-	@npm run test:e2e; status=$$?; docker compose -f test/services/oauthserver/docker-compose.yml down; exit $$status
+test-e2e: oauthserver-up configserver-up ## run the e2e against a real Spring Authorization Server and Config Server
+	@npm run test:e2e; status=$$?; \
+		docker compose -f test/services/oauthserver/docker-compose.yml down; \
+		docker compose -f test/services/configserver/docker-compose.yml down; \
+		exit $$status
 
 .PHONY: kafka-up
 kafka-up: ## spin up a single-node Kafka broker locally (Docker)

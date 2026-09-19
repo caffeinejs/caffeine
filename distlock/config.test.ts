@@ -1,6 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { $t, createApplication, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import { InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
@@ -51,7 +51,7 @@ const appConfigSchema = $t.Object(
 type AppConfig = InferSchema<typeof appConfigSchema>
 type DistLockTree = AppConfig['app']['distlock']
 
-const kConfig = token<ConfigHandle<AppConfig>>(Symbol('distlock.test.config'))
+const kConfig = token<InferConfig<typeof appConfigSchema>>(Symbol('distlock.test.config'))
 
 /** Boots an application whose configuration tree carries the given distlock slice. */
 async function newLock(
@@ -60,12 +60,12 @@ async function newLock(
   fluent?: (d: DistLockBuilder<AppConfig>) => void,
 ): Promise<DistLock> {
   const conf = newConfiguration(appConfigSchema, kConfig)
-    .source(new InlineConfigProvider({ app: { distlock: tree } }))
+    .source(new InlineConfigSource({ app: { distlock: tree } }))
     .build()
 
   const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
     distlock<AppConfig>((d, c) => {
-      d.backend(backend).withConfig(c.app.distlock)
+      d.backend(backend).config(c.app.distlock)
       fluent?.(d)
     }),
   )
@@ -155,7 +155,7 @@ describe('distlock configuration', () => {
   // The schema bounds the tree. Nothing bounded the setter, and a jitter above 1 silently stretches every
   // pause past the budget it was supposed to fit inside.
   it('refuses to start when the retry jitter is outside 0..1', async () => {
-    const conf = newConfiguration(appConfigSchema, kConfig).source(new InlineConfigProvider({})).build()
+    const conf = newConfiguration(appConfigSchema, kConfig).source(new InlineConfigSource({})).build()
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
       distlock<AppConfig>(d => d.backend(new MemoryLockBackend()).retryJitter(2)),

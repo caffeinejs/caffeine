@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { activeProfiles, hostProfiles } from '../profiles.js'
+import { ArgsConfigSource } from '../sources/args_source.js'
 
 describe('activeProfiles', () => {
   it('passes a string array through, trimmed', () => {
@@ -26,6 +27,21 @@ describe('activeProfiles', () => {
     expect(activeProfiles(undefined)).toEqual([])
     expect(activeProfiles(null)).toEqual([])
     expect(activeProfiles(42)).toEqual([])
+  })
+
+  // A file source makes a file name of each profile. A name that climbs out of the directory would read a file
+  // nobody configured, so it fails before anything loads.
+  it('refuses a profile that is a path rather than a name', () => {
+    for (const raw of [['..'], ['.'], ['a/b'], ['a\\b'], 'eu,x/../../etc']) {
+      expect(() => activeProfiles(raw)).toThrow(
+        expect.objectContaining({ name: 'ErrConfig', code: 'ERR_CONFIG_PROFILE' }),
+      )
+    }
+    expect(() => activeProfiles(['x/../../etc'])).toThrow(/Cannot use profile "x\/..\/..\/etc"/)
+  })
+
+  it('accepts a name holding dots and dashes', () => {
+    expect(activeProfiles(['eu-west.1', 'v1..2'])).toEqual(['eu-west.1', 'v1..2'])
   })
 })
 
@@ -63,7 +79,28 @@ describe('hostProfiles', () => {
     expect(hostProfiles(['--', '--caffeine.profiles=eu'], noEnv)).toEqual([])
   })
 
+  // The profiles are read before anything loads, but from the same command line: an argument that names a profile
+  // there has to name the same one to the args source, whatever spelling it uses.
+  it('reads the flag as the args source reads the same argument', () => {
+    for (const argv of [
+      ['--caffeine.profiles=eu'],
+      ['--caffeine:profiles', 'eu,dev'],
+      ['/usr/bin/node', 'main.js', '--caffeine.profiles', 'eu', '--caffeine.profiles=dev'],
+    ]) {
+      const tree = new ArgsConfigSource({ argv }).load()[0].data as { caffeine: { profiles: string } }
+
+      expect(hostProfiles(argv, noEnv)).toEqual(activeProfiles(tree.caffeine.profiles))
+    }
+  })
+
   it('normalizes exactly as a configured value would', () => {
     expect(hostProfiles(['--caffeine.profiles=eu,,eu, dev'], noEnv)).toEqual(['eu', 'dev'])
+  })
+
+  it('refuses a path from the command line and from the environment', () => {
+    const refused = expect.objectContaining({ code: 'ERR_CONFIG_PROFILE' })
+
+    expect(() => hostProfiles(['--caffeine.profiles=../secrets'], noEnv)).toThrow(refused)
+    expect(() => hostProfiles([], { CAFFEINE__PROFILES: 'eu,x/../../etc' })).toThrow(refused)
   })
 })

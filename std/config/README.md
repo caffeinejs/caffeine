@@ -1,337 +1,315 @@
 # `@caffeinejs/std/config`
 
-The configuration subsystem behind a Caffeine application: a layered, schema-validated,
-live-refreshable configuration tree that the application schema describes and a feature reads from
-only where the configure callback wired it.
-
-One rule runs through all of it — **a fluent method is the last word.** Configuration reaches a
-feature because the application's callback wired it (`withConfig`). A value set in code is not a
-default that file, env or args quietly outrank. Kafka, view, messaging, and authentication scheme
-secrets are the named exceptions (see CONVENTIONS.md).
+The configuration of a Caffeine application: a tree built from ordered sources, validated against the
+application's own schema, and read as a plain object. A live source can change part of the tree while the process
+runs, and every reader of the configuration sees the new values without asking.
 
 ```ts
-import type { ConfigHandle, ConfigProvider } from '@caffeinejs/std/config'
-import { EnvConfigProvider } from '@caffeinejs/std/config'
+import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
 ```
 
-The package entry point is [`config.ts`](./config.ts) — the core type vocabulary — re-exported
-alongside the runtime pieces from [`index.ts`](./index.ts).
+One rule runs through all of it: **a fluent method is the last word.** Configuration reaches a feature because the
+application's configure callback wired it (`config(...)`). A value set in code is not a default that a file, the
+environment or an argument quietly outranks. Kafka, messaging and authentication scheme secrets are the named
+exceptions (see `CONVENTIONS.md`).
 
 ---
 
-## The mental model
+## The pieces
 
-Every provider produces flat dotted keys (`server.port`). The engine merges them, the result is
-materialized into a tree, and that tree is validated against the application's own schema.
+| Name                  | What it is                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| `ConfigSource`        | Where configuration comes from: an object with `load()`, and maybe a way to change         |
+| `ConfigLayer`         | What a source contributed: a named, sparse tree                                            |
+| `ConfigDefinition<T>` | What `newConfiguration(...).build()` returns: schema, keys, sources. Data only             |
+| `ConfigStore<T>`      | The runtime: it loads, validates, reloads, and explains every value                        |
+| `LiveConfig<T>`       | The object an application injects. One identity, and its fields follow every reload        |
+| `ConfigSnapshot<T>`   | The validated tree at one revision. Frozen, and replaced rather than changed by a reload   |
+| `ConfigView<V>`       | A value derived from the configuration that the store keeps current, with its own listener |
+
+A source **loads** layers. Layers **merge** into one tree, later wins. The schema **validates** it into a
+snapshot. The store **swaps** the snapshot in and keeps the live object in step. After the first load, the whole
+pipeline is a **reload**.
 
 ```mermaid
 flowchart TB
-  subgraph reg["ConfigSources — a live, ordered registry"]
+  subgraph S["sources, in registration order: later wins"]
     direction LR
-    fw["framework defaults"]
-    sd["app schema defaults"]
-    cd["code band"]
-    us["EnvConfigProvider · FileConfigProvider · ..."]
+    s1["InlineConfigSource"] --> s2["JSONConfigSource"] --> s3["SpringCloudConfigSource"] --> s4["EnvConfigSource"]
   end
-  reg --> eng["ConfigEngine.resolve()\nload every provider, merge first-wins"]
-  eng --> snap["ConfigSnapshot\nflat key → entry, with provenance"]
-  snap --> mat["materialize()\nnested tree · numeric keys → arrays"]
-  mat --> root["validateConfig(appSchema)\ndrops undeclared keys · runs codecs"]
-  root --> handle["ConfigHandle — live, deep-frozen\nread on request paths"]
+  S -->|"load, per source"| C["layers: frozen trees, the last good ones per source"]
+  C --> M["merge: objects merge key by key, arrays and scalars replace"]
+  M --> V["validate against the schema: defaults, conversion, codecs, unknown keys dropped"]
+  V --> W["swap: new snapshot, live object synced, views updated"]
+  W --> N["listeners, logs, diagnostics channels"]
 ```
-
-The merge is **first-wins** over a most-recently-registered-first list: the last source registered
-that names a path owns that path and everything beneath it. No earlier source contributes part of
-something a later source already spoke about — which is why an array is _replaced_, never
-element-merged.
-
-Keys the application's schema does not declare are dropped at root validation. A feature reads only
-what the configure callback handed it from that tree.
 
 ---
 
-## Resolution order
+## Declaring the configuration
 
-There is no priority argument. Precedence is registration order alone: the most recently added
-source wins a conflicting key. `newConfiguration(...)` registers the framework defaults and the
-app's own schema defaults first, before any user source, so both always lose to whatever the
-application adds. Beyond that, call the override last:
+`newConfiguration(schema, key)` names the schema the tree is validated against and the key the live config object
+is bound under. The key names the application's own type, so the two must agree:
 
 ```ts
-newConfiguration(schema, kConfig)
-  .source(new JSONConfigProvider('./config/app.json'))
-  .source(new EnvConfigProvider({ prefix: 'APP_' }))
-  .args()
-  .build()
-```
-
-Here `EnvConfigProvider` overrides the JSON file, and `.args()` overrides both — because each was
-registered after the one it should win against.
-
----
-
-## Declaring the application configuration
-
-`newConfiguration(schema, key)` does three things: sets the schema the root tree is validated
-against, names the DI token the resolved [`ConfigHandle`](./config.ts) is bound under, and opens a
-builder for registering sources. `.build()` hands the finished configuration to the application's
-constructor as `{ config }` — configuration is not declared on the application chain itself.
-
-```ts
-// config.ts — schema and key together, so container.get(kAppConfig) needs no type argument
+// config.ts
 export const appConfigSchema = $t.Object({
   server: $t.Object({ host: $t.String({ default: '0.0.0.0' }), port: $t.Number({ default: 9999 }) }, { default: {} }),
 })
-export type AppConfig = InferSchema<typeof appConfigSchema>
-export const kAppConfig = token<ConfigHandle<AppConfig>>(Symbol('petstore.config'))
+export type AppConfig = InferConfig<typeof appConfigSchema>
+export const kAppConfig = token<AppConfig>(Symbol('petstore.config'))
 
 // app.ts
 const conf = newConfiguration(appConfigSchema, kAppConfig)
-  .source(new EnvConfigProvider({ prefix: 'PETSTORE_' }))
+  .source(new JSONConfigSource('./config/app.json'))
+  .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
+  .args()
   .build()
 
-createWebApplication({ config: conf }).server((s, c) => s.withConfig(c.server))
+createWebApplication(adapter, { config: conf }).server((s, c) => s.config(c.server))
 ```
 
-The schema is either the **`$t` dialect** (TypeBox — the first-class choice, introspected for
-defaults and `$t.Secret` marks) or any [Standard Schema](https://standardschema.dev) — zod v4,
-valibot, arktype. A foreign schema is validated by its own library, transforms and all, but exposes
-nothing to walk: its defaults reach only the root tree, and a secret declared in one is not marked.
+Precedence is registration order alone: a source added later wins a conflicting value. Here the environment
+overrides the file and the command line overrides both. `.loadTimeout('10s')` bounds each load of each source; the
+default is 30 seconds. A third argument, `newConfiguration(schema, key, storeKey)`, binds the typed store as well.
 
-An application that declares nothing still resolves — the root validates against a pass-through schema.
-
----
-
-## How a feature gets its configuration
-
-A feature registers nothing here. The application reads the tree and hands the feature what it wants,
-in the configure callback `.with(...)` takes:
-
-```ts
-.with(server((s, c) => s.withConfig(c.app.server)))
-.with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
-```
-
-```mermaid
-flowchart TB
-  cb["configure callback — (builder, config)"]
-  cb -->|"reads a node: b.withConfig(c.app.thing)"| live["the builder holds a live accessor
-reads go through the current tree, so a refresh reaches them"]
-  cb -->|"reads a value: b.port(c.app.thing.port)"| snap["the builder holds a number
-fixed at the moment it was read"]
-  cb -->|"reads nothing"| own["the feature runs on its own defaults
-and whatever its fluent methods set"]
-```
-
-Three things follow from that:
-
-- **A fluent method is the last word.** `s.port(3000)` is not a default the environment outranks. Where
-  both are named, the more specific wins: a setter beats the block `withConfig` handed over.
-- **Liveness is the author's choice.** A node read through follows a refresh; a scalar copied out of one
-  does not. A feature's own resolved options are a plain object read once, when the feature configures — a
-  refresh afterward does not reach an already-bound value.
-- **The application's schema is the only schema.** A feature seeds nothing, so a block declared with
-  required, undefaulted fields and no source to fill them fails validation. Splice the feature's exported
-  schema (`serverConfigSchema`, `healthConfigSchema`, …) rather than restating the fields — importing it is
-  what carries the feature's defaults into the tree.
-
-The callback runs once, when the application bootstraps: after configuration has resolved, and before the
-feature binds anything. An authoring mistake inside it therefore surfaces from `ready()`, not from the
-`.with(...)` call that wrote it.
+The schema is the `$t` dialect (TypeBox), or any [Standard Schema](https://standardschema.dev) such as zod v4,
+valibot or arktype, validated by its own library. An application that declares nothing still loads: no source, and
+a schema that keeps every key.
 
 ---
 
 ## Reading configuration
 
-| From                      | How                                                                 | Notes                                                        |
-| ------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
-| The application's own key | `container.get(kAppConfig)`                                         | Typed `ConfigHandle<AppConfig>`, live                        |
-| Any feature's settings    | `container.getOptional(kServerOptions)`                             | A binding the feature made, absent if not installed          |
-| Value injection           | `$i.value(c => c.database.host)`                                    | The handle is bound under the values key; follows refresh    |
-| Inside a feature          | whatever the configure callback handed it                           | A node stays live; a value copied out of one does not        |
-| Resolve metadata          | `container.get(Configuration)`                                      | `.snapshot()`, `.revision`, `.diagnostics`, `.onChange(...)` |
-| Escape hatch              | `configuration.env('DATABASE_URL')` / `.either(c => c.x, fallback)` | Straight from `process.env`, or a safe deep read             |
+| Need                                                     | Use                                           | Follows a reload                             |
+| -------------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
+| Read settings in a service                               | Inject the application key: the live object   | Yes, always                                  |
+| One revision across several `await`s, or for one request | `store.current`, or `ctx.config` in a request | No, by design                                |
+| A value built from settings, or a reaction to a change   | `store.view(...)`                             | Yes: `value` is reassigned, `onChange` fires |
+| One value, fixed when the consumer is built              | `$i.value(c => c.database.host)`              | Only when the consumer is rebuilt            |
 
-There is no feature-key registry and no callable config handle: a feature that wants its resolved options
-readable from outside binds them, exactly as `ShutdownBuilder` binds `kShutdownPolicy`.
+The ordinary way has no wrapper:
 
-`Configuration.snapshotHandle` is a handle fixed to one revision — what a request-scoped read latches
-onto, so a refresh landing mid-request cannot change the answers a request already started with.
+```ts
+@Injectable([kAppConfig])
+class Pricing {
+  constructor(private readonly config: AppConfig) {}
+
+  quote(): number {
+    return this.config.pricing.margin
+  }
+}
+```
+
+A singleton built once still reads the margin of the newest reload, and so does a node kept on a field. The live
+object is an ordinary object whose properties are read-only data properties, not a `Proxy`: a read costs what a
+plain object costs, and a write throws. `Object.keys`, `in`, spread, `JSON.stringify` and `console.log` behave as they
+would on a plain object.
+
+Three limits follow from what a live object is:
+
+- Reads separated by an `await` can come from two revisions. Code that needs one takes `store.current` first.
+- An array is a value. A kept array, or an element of one, is a snapshot; read it from a live node each time.
+- A node's identity never changes, so it cannot tell you whether anything changed. Use a view, or `onChange`.
+
+The store itself is bound under the `ConfigStore` class. It carries `current`, `revision`, `view()`, `onChange()`,
+`reload()`, `explain()` and `inspect()`.
 
 ---
 
-## Providers
+## Views
 
-| Provider                    | Reads from                                     | Notes                                                                                                      |
-| --------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `EnvConfigProvider`         | `process.env` (or an injected accessor)        | `HEALTH__DRAIN_DELAY` → `health.drainDelay`; `__` splits segments, `_` within a segment folds to camelCase |
-| `ArgsConfigProvider`        | `process.argv`                                 | `--server.port=8080`, `--no-x`, short-switch mappings; opt-in via `.args()`                                |
-| `FileConfigProvider`        | one file + profile siblings                    | Takes a parser function — `std` ships only JSON                                                            |
-| `JSONConfigProvider`        | a `.json` file                                 | `FileConfigProvider` with `JSON.parse`                                                                     |
-| `InlineConfigProvider`      | a fixed object                                 | Test fixtures, embedded defaults                                                                           |
-| `MutableConfigProvider`     | an in-memory object written after registration | `reloadable`; backs the framework's own bands                                                              |
-| `SpringCloudConfigProvider` | a remote configuration server                  | `reloadable`; re-fetched on every refresh                                                                  |
-
-A YAML or TOML file is read by handing `FileConfigProvider` the parse function from whatever library
-the application already depends on:
+A view is a value the store keeps current. `select` runs once when the view is made and once per swap, never on a
+read. An optional `derive` turns the selection into something that is not plain data, and runs only when the
+selection changed.
 
 ```ts
-new FileConfigProvider('./config/app.yaml', text => YAML.parse(text))
+const pool = store.view(c => c.database.pool)
+pool.onChange(async next => db.resize(next.max)) // silent unless the pool settings changed
+
+const allowed = store.view(
+  c => c.security.allowedOrigins,
+  origins => new Set(origins),
+)
+allowed.value.has(origin) // a property read on the request path; the Set is rebuilt only when the list changes
 ```
 
-Text values coerce identically across `EnvConfigProvider` and `ArgsConfigProvider`, so moving a
-setting between the environment and the command line cannot change its type.
+A selection deep-equal to the previous one keeps its identity, so a view is a safe memo key and a listener hears
+only about its own part of the tree. The store holds a view until `close()`: make views while wiring, never per
+request. A selector that throws during a swap is logged and leaves the view as it was.
 
-Writing a custom provider is implementing [`ConfigProvider`](./config.ts): an `id`, a `load(ctx)` that
-returns `PropertySource[]`, and optionally `reloadable` + `revision()` for cheap refresh.
+---
+
+## How a feature gets its configuration
+
+A feature registers nothing here. The application hands it what it wants, in the configure callback:
+
+```ts
+.with(server((s, c) => s.config(c.app.server)))
+.with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+.with(thing((b, c, store) => b.config(store.view(t => t.app.thing))))
+```
+
+- **Liveness is the author's choice.** A node handed over follows every reload; a scalar copied out of one does
+  not. A feature's own resolved options are a plain object read once, when the feature configures.
+- **The application's schema is the only schema.** A feature seeds nothing, so a block declared with required,
+  undefaulted fields and no source to fill them fails validation. Splice the feature's exported schema
+  (`serverConfigSchema`, `healthConfigSchema`, …) rather than restating it.
+
+The callback runs once, when the application readies: after configuration has loaded and before the feature binds
+anything.
+
+---
+
+## Sources
+
+| Source                    | Reads                           | Changes by                                                     |
+| ------------------------- | ------------------------------- | -------------------------------------------------------------- |
+| `EnvConfigSource`         | the environment                 | nothing; loaded once                                           |
+| `ArgsConfigSource`        | the command line, via `.args()` | nothing; loaded once                                           |
+| `FileConfigSource`        | one file and its profile files  | `{ watch: true }`: reloaded when the file or a sibling changes |
+| `JSONConfigSource`        | a `.json` file                  | as `FileConfigSource`                                          |
+| `InlineConfigSource`      | a fixed object                  | nothing; loaded once                                           |
+| `SpringCloudConfigSource` | a Spring Cloud Config server    | `reload()`, and `pollInterval` if set                          |
+
+`HEALTH__DRAIN_DELAY` reaches `health.drainDelay`: `__` splits segments and `_` within a segment folds to camelCase.
+Without a prefix every variable of the process is read; a name that maps to no path, such as `_`, is skipped, and
+so is a variable whose path another one uses as a parent, with a warning. On the command line that is an error.
+
+`TAGS__0` and `TAGS__1` make a list: keys that are the indices 0 to n - 1 become an array, from any flat source.
+Any other numeric keys stay keys, so `MESSAGES__404` beside `MESSAGES__500` makes a record.
+
+**Values stay text.** The environment and the command line do not guess types. A `$t` schema converts: `PORT=8080`
+is `8080` for a number field and `'8080'` for a string field, and `VERSION=1` stays `'1'`. A Standard Schema
+converts for itself, as `z.coerce.number()` does. `$t.List` reads `TAGS=a,b` as a list and `$t.JSON` reads a whole
+object from one variable.
+
+A source's tree is taken literally. A format with no nesting of its own expands dotted keys in its parser:
+
+```ts
+new FileConfigSource('./config/app.yaml', text => YAML.parse(text))
+new FileConfigSource('./config/app.ini', text => expandKeys(ini.parse(text)))
+```
+
+Layers merge per key, later winning. An array is replaced whole, so a later source can shorten or clear a list. A
+key named `__proto__`, `constructor` or `prototype` is dropped and logged, never merged.
+
+A source of your own implements `ConfigSource`: a unique `name` and `load(context)` returning layers. It declares
+how it changes with `live`, `pollInterval` or `watch(changed)`, and it can be `optional`. A source that has nothing
+to contribute returns no layer; a source that cannot load throws.
 
 ---
 
 ## Profiles
 
-An active profile (`dev`, `eu`, `canary`) selects overlay config files:
+An active profile selects overlay files: with `eu` then `canary` active, `app.json` is read, then `app-eu.json`,
+then `app-canary.json`, each overriding the one before. The profiles are decided before anything loads:
 
-```text
-./config/app.json          base
-./config/app-eu.json       loaded when 'eu' is active, overrides the base
-./config/app-canary.json   loaded when 'canary' is active, overrides both
-```
+| Source                                                   | Read by                                   |
+| -------------------------------------------------------- | ----------------------------------------- |
+| The container: `new CaffeineIoC({ profiles: ['test'] })` | the application, off `container.profiles` |
+| The command line: `--caffeine.profiles=eu,dev`           | `hostProfiles()`, from `process.argv`     |
+| The environment: `CAFFEINE__PROFILES=eu,dev`             | `hostProfiles()`, from `process.env`      |
 
-Which profiles are active is settled **before anything resolves** — a value that only exists after a
-resolve cannot decide what that resolve reads. Three sources name them, and they union:
+If none of the three named a profile, and only then, a file source reads `caffeine.profiles` from its own base file
+and picks its overlays. Every source is loaded once, profile or not.
 
-| Source                                                    | Read by                                        |
-| --------------------------------------------------------- | ---------------------------------------------- |
-| The container — `new CaffeineIoC({ profiles: ['test'] })` | the application, off `container.profiles`      |
-| Command line — `--caffeine.profiles=eu,dev`               | `hostProfiles()`, straight from `process.argv` |
-| Environment — `CAFFEINE__PROFILES=eu,dev`                 | `hostProfiles()`, straight from `process.env`  |
-
-`hostProfiles()` reads the host directly: no provider, no merge, no resolve. An argument beats an
-environment variable, and both go through `activeProfiles(raw)`, so `eu,dev` splits and a duplicate
-or a blank is harmless.
-
-**If none of the three named a profile — and only then — the base config file speaks for itself:**
-`FileConfigProvider` reads `caffeine.profiles` out of the base object it already parses and picks its
-own overlays. Only the base, never an overlay; an overlay deciding which overlays to load would be
-the second resolve this design exists to remove.
-
-Setting `caffeine.profiles` anywhere else — an inline source, a config server — selects nothing. The
-value still reaches the tree, but by the time it exists every file has already been read.
-
-> Name the profiles in one place. If something named a profile up front _and_ a base file also sets
-> `caffeine.profiles`, the up-front set wins everywhere it matters — overlays, `@Profile` beans,
-> `app.profiles` — but the resolved `caffeine.profiles` field still shows the file's literal value.
-
-The whole application resolves **once** at start-up and once per refresh, whether or not a profile is
-active.
+A profile is a name, since a file source makes a file name of it: `.`, `..` and a name holding `/` or `\` are refused
+with `ERR_CONFIG_PROFILE`, wherever they were named.
 
 ---
 
-## Live refresh
+## Live reload
 
-```mermaid
-sequenceDiagram
-  participant Caller
-  participant Shard as ConfigShard
-  participant Src as reloadable sources
-  Caller->>Shard: refresher.refresh(CONFIG_REFRESH_LABEL)
-  Shard->>Src: any source's revision() stamp changed?
-  alt nothing changed
-    Shard-->>Caller: skipped — no load, no re-validate, no new object
-  else something changed
-    Shard->>Shard: re-resolve, re-validate, replace the tree wholesale
-    Shard->>Shard: notify listeners (fire-and-forget)
-    Shard-->>Caller: done
-  end
-```
+| Trigger | Declared by                  | What happens                                                                             |
+| ------- | ---------------------------- | ---------------------------------------------------------------------------------------- |
+| Manual  | `live: true`                 | `store.reload()`, or `container.refresher.refresh(CONFIG_REFRESH_LABEL)`                 |
+| Poll    | `pollInterval` on the source | Reloaded on that period, with 10 percent of jitter, backing off up to 8 times on failure |
+| Watch   | `watch(changed)` on a source | Reloaded 250 ms after the changes stop                                                   |
 
-A source is refreshable only if it says so — `reloadable` is opt-in, because one source wrongly
-claiming it can change defeats the optimization for the whole application. A `revision()` stamp that
-matches last time skips the resolve entirely.
+A watcher that cannot start, because what it watches does not exist yet, is reported once and started again,
+backing off from 1 s to 8 s. The source is reloaded as soon as it starts.
 
-`onChange` delivery is **latest-wins**: a listener never runs concurrently with itself, at most one
-delivery is pending per listener, and a throw is reported through the warning channel rather than
-escaping. It is not called at start-up, nor when a refresh produced the same values. Reading a field
-through the handle already follows every refresh — `onChange` is for a listener that has to _act_
-(resize a pool, reopen a connection).
+A reload loads only the sources its trigger names; a static source is never loaded again. Reloads never overlap:
+one that arrives mid-run joins the single follow-up. Nor do a source's loads: until a load that timed out settles,
+the source is not asked again, and each attempt fails at once with `ERR_CONFIG_SOURCE_TIMEOUT`. If no source's
+layers changed, nothing is merged or validated.
 
-The shard is bound under `Scopes.REFRESH` with the `CONFIG_REFRESH_LABEL` label.
+A reload is all or nothing. When the new tree fails validation the reload is rejected: the snapshot, the live
+object, the views and every source's layers stay as they were, and nobody is notified. A source that fails to load
+keeps its last good layers. Either way the reason is logged, and `reload()` resolves with an outcome rather than
+rejecting.
+
+`onChange` listeners, on the store and on views, run after everything is at the new revision. A reload never waits
+for them; a listener never runs concurrently with itself, a burst reaches it as the newest value, and a throw is
+logged.
 
 ---
 
-## Secrets and diagnostics
-
-Mark a field `$t.Secret(...)` and the diagnostics redact it — `valueAt`, and the whole `snapshot`,
-which is the one thing here built to be dumped to a log. A feature's own read path does **not** go
-through redaction: it reads the real value the callback handed it.
+## Diagnostics
 
 ```ts
-container.get(Configuration).diagnostics.originOf('database.host') // → 'env:DATABASE_HOST'
-container.get(Configuration).diagnostics.valueAt('database.password') // → '[redacted]'
+store.explain('database.host') // the value, and every layer that sets it, winner first, with its origin
+store.inspect() // the revision, each source's trigger, layers and health, and the snapshot
 ```
 
-Only the `$t` dialect is introspected for `$t.Secret` — worth knowing before reaching for zod to
-describe a slice that holds credentials.
+Both return every value as it is, a secret included, so treat what they return as sensitive.
+
+The store logs under `{ name: 'config' }`: the first load, every reload with the paths that changed, rejections,
+failing and recovering sources, and failing listeners. Values are never logged, only paths. The issues of an
+`ErrConfigValidation` from a `$t` schema name a path and what was expected there, never the value: `$t.JSON` and
+`$t.List` report text they cannot read without quoting it. Two messages are not the store's own and may quote
+text: a config file that does not parse, where the parser says what it stopped at, and the issues of a Standard
+Schema, which its library writes.
+
+It also publishes on `node:diagnostics_channel`, costing nothing while nobody subscribes. `load` and `reload` are
+tracing channels; `change` is a plain one. The names are in `CONFIG_CHANNELS`.
 
 ---
 
-## Where it sits in application bootstrap
+## In application bootstrap
 
 ```mermaid
 sequenceDiagram
-  participant Conf as newConfiguration(...)
-  participant App as Application
+  participant App as Application.ready()
+  participant Store as ConfigStore
   participant Feat as each Feature
-  participant Def as ConfigDefinition
-  participant Shard as ConfigShard
-  Conf->>Def: .source(...).build() — a ConfigDefinition, built before the application exists
-  App->>App: constructor({ config: conf }) — adopts it, or builds a fresh one if omitted
-  App->>Def: bootstrap() (before any feature configures)
-  Def->>Shard: ConfigShard.bootstrap(options)
-  Shard->>Shard: resolve then materialize then validate root
-  Shard-->>Def: handle bound
-  App->>Feat: kFeatureConfigure - run the configure callback, then bind
-  App->>App: container.init()
-  App->>Feat: kFeatureBootstrap - look up bindings
+  App->>App: decide the active profiles
+  App->>Store: loadConfig(definition), not started yet
+  App->>App: read caffeine.name and caffeine.profiles
+  App->>Feat: configure: the callback gets the live object and the store
+  App->>App: logConfigLoaded, once the logger is final
+  App->>App: container.init(), features bootstrap, platform set up
+  App->>Store: start(): poll timers and watchers armed
 ```
 
-`ConfigDefinition` is the mutable description `newConfiguration(...)` builds and the application adopts at
-construction. It is resolved once, before any feature configures and while binding is still open — which is
-what lets a feature be configured from a setting it then consumes at binding time. A tree that cannot
-validate fails start-up here, which is more legible than failing at whatever moment something first read it.
-`ConfigModule` binds what the resolved shard holds.
+A tree that cannot validate fails `ready()`, which is more legible than failing wherever it was first read.
 
 ---
 
-## Core types
+## Errors
 
-All in [`config.ts`](./config.ts):
-
-| Type                                                                      | Role                                                 |
-| ------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `ConfigValue`, `ConfigPrimitive`, `ConfigEntry`                           | The value shapes flowing through a resolve           |
-| `ConfigProvider`, `PropertySource`, `ResolutionContext`, `ConfigSnapshot` | The provider contract and what it produces           |
-| `ConfigSchema`, `InferConfig`                                             | A schema: `$t` or any Standard Schema                |
-| `ConfigHandle`, `ConfigAccessors`                                         | The read-only projections — root handle, nested node |
-| `ConfigChangeListener`                                                    | An `onChange` listener                               |
-| `ConfigDiagnostics`, `ConfigSliceFailure`                                 | Provenance, redaction, per-feature resolve failures  |
-
-Runtime pieces exported from [`index.ts`](./index.ts): `ConfigSlice`, `ConfigSources`,
-`ConfigDefinition`, `ConfigModule`, `Configuration`,
-`configEquals`, `activeProfiles`, `hostProfiles`, the seven providers, and
-the `ErrConfig*` classes.
+| Code                          | When                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| `ERR_CONFIG_SOURCE`           | a source failed to load, or returned something that is not layers      |
+| `ERR_CONFIG_SOURCE_TIMEOUT`   | a source did not answer within the load timeout, or still has not      |
+| `ERR_CONFIG_DUPLICATE_SOURCE` | two sources share a name                                               |
+| `ERR_CONFIG_KEY_CONFLICT`     | an argument or an expanded key sets a path another uses as a parent    |
+| `ERR_CONFIG_FILE_PARSE`       | a file does not parse to an object                                     |
+| `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`                          |
+| `ERR_CONFIG_VALIDATION`       | the tree does not satisfy the schema (`ErrConfigValidation`, `issues`) |
 
 ---
 
 ## Package layout
 
-| Area                | Files                                                                 |
-| ------------------- | --------------------------------------------------------------------- |
-| Vocabulary          | `config.ts`                                                           |
-| Merge engine        | `engine.ts`, `sources.ts`, `flatten.ts`, `materializer.ts`, `path.ts` |
-| Schema + validation | `schema.ts`, `secrets.ts`, `errors.ts`                                |
-| Definition          | `definition.ts`, `accessor.ts`, `slice.ts`                            |
-| Resolve + refresh   | `bootstrap.ts`, `notifier.ts`, `diagnostics.ts`, `profiles.ts`        |
-| DI integration      | `integration/shard.ts`, `integration/module.ts`, `configuration.ts`   |
-| Providers           | `providers/`                                                          |
-| Authoring helpers   | `selector_path.ts`                                                    |
+| Area                  | Files                                                      |
+| --------------------- | ---------------------------------------------------------- |
+| Vocabulary            | `types.ts`                                                 |
+| Trees                 | `tree.ts`, `merge.ts`, `reconcile.ts`, `live.ts`           |
+| Runtime               | `store.ts`, `load.ts`, `triggers.ts`, `change_notifier.ts` |
+| Schema                | `schema.ts`, `errors.ts`                                   |
+| Diagnostics           | `explain.ts`, `observe.ts`                                 |
+| Profiles              | `profiles.ts`                                              |
+| Container integration | `integration/module.ts`                                    |
+| Sources               | `sources/`                                                 |

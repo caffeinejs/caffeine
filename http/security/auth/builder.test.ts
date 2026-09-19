@@ -1,6 +1,4 @@
-import { token } from '@caffeinejs/di'
 import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
-import { ConfigDefinition } from '@caffeinejs/std/config'
 import { describe, it, expect, vi } from 'vitest'
 
 import { AuthenticationBuilder } from './builder.js'
@@ -12,7 +10,8 @@ function makeKit(): FeatureConfigureKit {
   const wrap = vi.fn().mockReturnValue({ get: vi.fn() })
   return {
     container: { bind, wrap },
-    config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
+    config: {},
+    store: {},
   } as unknown as FeatureConfigureKit
 }
 

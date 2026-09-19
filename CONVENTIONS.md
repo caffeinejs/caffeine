@@ -177,10 +177,10 @@ no slice, publishes no key, and adds no field to the resolved configuration obje
 
 **A fluent method is the last word.** `s.port(3000)` is what the feature runs on; it is not a default that a
 higher band quietly outranks. Configuration reaches a feature because the application's configure callback
-wired it — `.with(server((s, c) => s.withConfig(c.app.server)))` — and by no other path. Where the more
-specific of the two is named, the more specific wins: a setter beats the block `withConfig` handed over.
+wired it — `.with(server((s, c) => s.config(c.app.server)))` — and by no other path. Where the more
+specific of the two is named, the more specific wins: a setter beats the block `config(...)` handed over.
 
-Exceptions, where `withConfig` overlays what the fluent methods set:
+Exceptions, where `config(...)` overlays what the fluent methods set:
 
 - authentication scheme options, so a secret in the tree redirects one written in code
 - kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice)
@@ -194,12 +194,13 @@ fields and no source to fill them fails validation at `ready()`.
 A feature nothing wired runs on its own defaults and its builder values alone: it works, and no file,
 environment variable or argument reaches it.
 
-Liveness is the author's choice rather than something the framework manufactures. A configuration node is a
-live accessor over the current tree, so `b.withConfig(c.app.thing)` follows a refresh while
-`b.port(c.app.thing.port)` reads a number once. A feature's own resolved options are a plain object read once,
-when the feature configures: config resolves before any feature configures, so there is nothing left to fold
-lazily — `configure` reads its inputs, folds in whatever the builder itself holds (a dispatcher, a merged
-default), and binds the result. A refresh afterward does not reach an already-bound value.
+Liveness is the author's choice rather than something the framework manufactures. A configuration node is live:
+its fields follow every reload, so `b.config(c.app.thing)` follows a reload while `b.port(c.app.thing.port)`
+reads a number once. A feature's own resolved options are a plain object read once, when the feature configures:
+config loads before any feature configures, so there is nothing left to fold lazily — `configure` reads its
+inputs, folds in whatever the builder itself holds (a dispatcher, a merged default), and binds the result. A
+reload afterward does not reach an already-bound value. A feature that has to act on a change takes a view in its
+`config(...)` instead: `(b, c, store) => b.config(store.view(t => t.app.thing))`.
 
 Do not route a plugin's own configuration through a container key it reads back at server setup: the builder
 is holding the value when it builds the plugin, so the plugin closes over it.
@@ -261,7 +262,7 @@ export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   #config: Partial<ThingConfig> | undefined
   #size: number | undefined
 
-  withConfig(config: Partial<ThingConfig>): this {
+  config(config: Partial<ThingConfig>): this {
     this.#config = config
     return this
   }

@@ -34,8 +34,8 @@ scope-key type, and the invariant brand is what keeps a service key out of `.lif
 
 There is no escape hatch. A key whose value type the declaring package cannot name is not declared by that
 package — it is declared by whoever knows the type, and passed in. The application configuration key works
-exactly this way: the application writes `token<ConfigHandle<AppConfig>>(...)` next to its schema and hands it to
-`.config(schema, key)`.
+exactly this way: the application writes `token<AppConfig>(...)` next to its schema and hands it to
+`newConfiguration(schema, key)`.
 
 ## `has()` means resolvable, not directly bound
 
