@@ -1,5 +1,6 @@
 import { textList } from '../schema/text.js'
 import { ErrConfig } from './errors.js'
+import { hostArgv, parseArgv } from './sources/args_source.js'
 
 /**
  * Where the active-profile list lives in the configuration tree.
@@ -10,7 +11,7 @@ import { ErrConfig } from './errors.js'
  */
 export const PROFILES_KEY = ['caffeine', 'profiles'] as const
 
-const ARG_FLAGS = ['--caffeine.profiles', '--caffeine:profiles'] as const
+const ARG_PATH = PROFILES_KEY.join('.')
 const ENV_VAR = 'CAFFEINE__PROFILES'
 
 /**
@@ -68,37 +69,24 @@ export function hostProfiles(argv: readonly string[] = hostArgv(), env = hostEnv
   return activeProfiles(argProfiles(argv) ?? env[ENV_VAR] ?? [])
 }
 
-/** `--caffeine.profiles=eu,dev`, `--caffeine.profiles eu,dev`, or the `:` spelling. Last occurrence wins. */
+/**
+ * `--caffeine.profiles=eu,dev`, `--caffeine.profiles eu,dev`, or the `:` spelling, read as {@link ArgsConfigSource}
+ * reads any switch. Last occurrence wins.
+ */
 function argProfiles(argv: readonly string[]): string | undefined {
   let found: string | undefined
 
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i]
-
-    if (token === '--') {
-      break
-    }
-
-    for (const flag of ARG_FLAGS) {
-      if (token.startsWith(`${flag}=`)) {
-        found = token.slice(flag.length + 1)
-      } else if (token === flag) {
-        const next = argv[i + 1]
-        // A bare flag with nothing usable after it names no profile rather than the empty one.
-        found = next !== undefined && !next.startsWith('-') ? next : undefined
-      }
+  for (const [path, value] of parseArgv(argv, {})) {
+    if (path === ARG_PATH) {
+      // A bare flag names no profile rather than the empty one.
+      found = value
     }
   }
 
   return found
 }
 
-/** The host's own arguments, read through `globalThis` so this file carries no host binding of its own. */
-function hostArgv(): readonly string[] {
-  return (globalThis as { process?: { argv?: readonly string[] } }).process?.argv ?? []
-}
-
-/** The host's own environment, on the same terms. */
+/** The host's own environment, read through `globalThis` so this file carries no host binding of its own. */
 function hostEnv(): Record<string, string | undefined> {
   return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
 }

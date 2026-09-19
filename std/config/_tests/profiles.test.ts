@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { activeProfiles, hostProfiles } from '../profiles.js'
+import { ArgsConfigSource } from '../sources/args_source.js'
 
 describe('activeProfiles', () => {
   it('passes a string array through, trimmed', () => {
@@ -76,6 +77,20 @@ describe('hostProfiles', () => {
 
   it('stops at the argument terminator', () => {
     expect(hostProfiles(['--', '--caffeine.profiles=eu'], noEnv)).toEqual([])
+  })
+
+  // The profiles are read before anything loads, but from the same command line: an argument that names a profile
+  // there has to name the same one to the args source, whatever spelling it uses.
+  it('reads the flag as the args source reads the same argument', () => {
+    for (const argv of [
+      ['--caffeine.profiles=eu'],
+      ['--caffeine:profiles', 'eu,dev'],
+      ['/usr/bin/node', 'main.js', '--caffeine.profiles', 'eu', '--caffeine.profiles=dev'],
+    ]) {
+      const tree = new ArgsConfigSource({ argv }).load()[0].data as { caffeine: { profiles: string } }
+
+      expect(hostProfiles(argv, noEnv)).toEqual(activeProfiles(tree.caffeine.profiles))
+    }
   })
 
   it('normalizes exactly as a configured value would', () => {

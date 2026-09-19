@@ -51,12 +51,13 @@ export class ArgsConfigSource implements ConfigSource {
     const entries: [string[], string][] = []
     const origins = new Map<string, string>()
 
-    for (const [key, value, origin] of parse(this.#argv ?? hostArgv(), this.#switchMappings)) {
-      const parts = splitKey(key.split(':').join('.'))
+    for (const [path, value, origin] of parseArgv(this.#argv ?? hostArgv(), this.#switchMappings)) {
+      const parts = splitKey(path)
       if (parts.includes('')) {
         continue
       }
-      entries.push([parts, value])
+      // A switch given no value is a flag that is on.
+      entries.push([parts, value ?? 'true'])
       origins.set(parts.join('.'), origin)
     }
 
@@ -65,14 +66,22 @@ export class ArgsConfigSource implements ConfigSource {
 }
 
 /** The host's own command line, read through `globalThis` so a runtime without a `process` contributes nothing. */
-function hostArgv(): readonly string[] {
+export function hostArgv(): readonly string[] {
   return (globalThis as { process?: { argv?: readonly string[] } }).process?.argv ?? []
 }
 
-type Parsed = [key: string, value: string, origin: string]
+type Parsed = [path: string, value: string | undefined, origin: string]
 
-function parse(argv: readonly string[], switchMappings: Record<string, string>): Parsed[] {
+/**
+ * Reads the switches of a command line, up to `--`: `--a.b=v`, `--a.b v`, the `:` spelling, `--no-a.b` as `'false'`,
+ * and the short switches `switchMappings` names. Each is a dotted path, its value or `undefined` for a switch given
+ * none, and the argument it came from.
+ */
+export function parseArgv(argv: readonly string[], switchMappings: Record<string, string>): Parsed[] {
   const out: Parsed[] = []
+  const add = (key: string, value: string | undefined, token: string): void => {
+    out.push([key.split(':').join('.'), value, `args:${token}`])
+  }
 
   // Configuration only ever lives in the flags, so the interpreter and script paths ahead of them are skipped.
   let i = 0
@@ -91,10 +100,10 @@ function parse(argv: readonly string[], switchMappings: Record<string, string>):
     if (mapped !== undefined) {
       const next = argv[i + 1]
       if (isValue(next, switchMappings)) {
-        out.push([mapped, next, `args:${token}`])
+        add(mapped, next, token)
         i++
       } else {
-        out.push([mapped, 'true', `args:${token}`])
+        add(mapped, undefined, token)
       }
       continue
     }
@@ -108,23 +117,23 @@ function parse(argv: readonly string[], switchMappings: Record<string, string>):
     const eq = body.indexOf('=')
 
     if (eq >= 0) {
-      out.push([body.slice(0, eq), body.slice(eq + 1), `args:${token}`])
+      add(body.slice(0, eq), body.slice(eq + 1), token)
       continue
     }
 
     if (body.startsWith('no-')) {
-      out.push([body.slice(3), 'false', `args:${token}`])
+      add(body.slice(3), 'false', token)
       continue
     }
 
     const next = argv[i + 1]
     if (isValue(next, switchMappings)) {
-      out.push([body, next, `args:${token}`])
+      add(body, next, token)
       i++
       continue
     }
 
-    out.push([body, 'true', `args:${token}`])
+    add(body, undefined, token)
   }
 
   return out
