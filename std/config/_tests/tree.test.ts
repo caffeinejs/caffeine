@@ -8,6 +8,7 @@ import {
   isIndex,
   isPlainObject,
   readPath,
+  splitKey,
   toParts,
 } from '../tree.js'
 import { hasFastProperties } from './v8.testkit.js'
@@ -122,8 +123,27 @@ describe('toParts', () => {
     expect(toParts(['a.b', 'c'])).toEqual(['a.b', 'c'])
   })
 
+  // One spelling of a path means one path, whether a flat source reads it or a caller asks about it.
+  it('splits the bracket form as a flat source does', () => {
+    expect(toParts('servers[0].host')).toEqual(splitKey('servers[0].host'))
+    expect(toParts('servers[0].host')).toEqual(['servers', '0', 'host'])
+  })
+
   it('reads the empty path as the root', () => {
     expect(toParts('')).toEqual([])
+  })
+})
+
+describe('splitKey', () => {
+  it('splits on dots and brackets', () => {
+    expect(splitKey('a.b')).toEqual(['a', 'b'])
+    expect(splitKey('servers[0].host')).toEqual(['servers', '0', 'host'])
+    expect(splitKey('m[1][2]')).toEqual(['m', '1', '2'])
+    expect(splitKey('[0]')).toEqual(['0'])
+  })
+
+  it('leaves a bracket that is not an index alone', () => {
+    expect(splitKey('a[x]')).toEqual(['a[x]'])
   })
 })
 

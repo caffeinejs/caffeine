@@ -54,14 +54,42 @@ export function freezeCopy<T>(value: T): T {
   return Object.freeze(copy) as T
 }
 
-/** A path given dotted or already split. A dotted path has no escape, so a key holding a dot needs the array form. */
+/**
+ * A path given dotted or already split. A dotted path is split as a flat source's key is, by {@link splitKey}, and
+ * has no escape, so a key holding a dot needs the array form.
+ */
 export function toParts(path: string | readonly string[]): readonly string[] {
   if (typeof path !== 'string') {
     return path
   }
 
-  return path === '' ? [] : path.split('.')
+  return path === '' ? [] : splitKey(path)
 }
+
+/** Splits a key on `.`, and splits `name[0][1]` into `name`, `0`, `1`. */
+export function splitKey(key: string): string[] {
+  const parts: string[] = []
+
+  for (const piece of key.split('.')) {
+    const match = BRACKETS.exec(piece)
+    if (match === null) {
+      parts.push(piece)
+      continue
+    }
+
+    if (match[1] !== '') {
+      parts.push(match[1])
+    }
+    for (const index of match[2].matchAll(INDEX_IN_BRACKETS)) {
+      parts.push(index[1])
+    }
+  }
+
+  return parts
+}
+
+const BRACKETS = /^([^[\]]*)((?:\[\d+\])+)$/
+const INDEX_IN_BRACKETS = /\[(\d+)\]/g
 
 /** Whether a path segment addresses an array element: an unsigned integer with no leading zero. */
 export function isIndex(segment: string): boolean {

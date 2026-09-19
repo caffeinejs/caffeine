@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { REDACTED } from '../redact.js'
+import { passthroughConfigSchema } from '../schema.js'
+import { ArgsConfigSource } from '../sources/args_source.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>): ConfigDefinition<T> {
@@ -114,6 +116,18 @@ describe('ConfigStore.explain', () => {
 
     expect(store.explain(['map', 'a.b'])).toMatchObject({ path: 'map.a.b', value: 'x' })
     expect(store.explain('map.a.b').value).toBeUndefined()
+  })
+
+  // `--servers[0].host=h` sets a path; asking why it has its value, spelled the same way, must find it.
+  it('reads the bracket form of a path as the command line does', async () => {
+    const argv = ['--servers[0].host=h']
+    const store = await loadConfig(definition([new ArgsConfigSource({ argv })], passthroughConfigSchema))
+
+    expect(store.explain('servers[0].host')).toMatchObject({
+      path: 'servers.0.host',
+      value: 'h',
+      layers: [{ layer: 'args', origin: 'args:--servers[0].host=h', value: 'h' }],
+    })
   })
 
   it('explains a path nothing defines', async () => {

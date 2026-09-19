@@ -1,4 +1,5 @@
-import { buildTree, splitKey } from '../merge.js'
+import { buildTree } from '../merge.js'
+import { splitKey } from '../tree.js'
 import type { ConfigLayer, ConfigLoadContext, ConfigSource } from '../types.js'
 
 /** The environment as a plain record, or a function returning one, such as `() => Deno.env.toObject()`. */

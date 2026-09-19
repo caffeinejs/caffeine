@@ -1,4 +1,5 @@
-import { buildTree, splitKey } from '../merge.js'
+import { buildTree } from '../merge.js'
+import { splitKey } from '../tree.js'
 import type { ConfigLayer, ConfigSource } from '../types.js'
 
 export interface ArgsConfigSourceOptions {

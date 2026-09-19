@@ -1,5 +1,5 @@
 import { ErrConfig } from './errors.js'
-import { isForbiddenKey, isIndex, isPlainObject } from './tree.js'
+import { isForbiddenKey, isIndex, isPlainObject, splitKey } from './tree.js'
 import type { ConfigLayer, ConfigObject, ConfigValue } from './types.js'
 
 /**
@@ -94,31 +94,6 @@ export function expandKeys(flat: Readonly<Record<string, ConfigValue>>, source?:
   collect(flat, [], entries)
   return buildTree(entries, source)
 }
-
-/** Splits a key on `.`, and splits `name[0][1]` into `name`, `0`, `1`. */
-export function splitKey(key: string): string[] {
-  const parts: string[] = []
-
-  for (const piece of key.split('.')) {
-    const match = BRACKETS.exec(piece)
-    if (match === null) {
-      parts.push(piece)
-      continue
-    }
-
-    if (match[1] !== '') {
-      parts.push(match[1])
-    }
-    for (const index of match[2].matchAll(INDEX_IN_BRACKETS)) {
-      parts.push(index[1])
-    }
-  }
-
-  return parts
-}
-
-const BRACKETS = /^([^[\]]*)((?:\[\d+\])+)$/
-const INDEX_IN_BRACKETS = /\[(\d+)\]/g
 
 function collect(value: Readonly<Record<string, unknown>>, prefix: readonly string[], out: [string[], ConfigValue][]) {
   for (const key of Object.keys(value)) {

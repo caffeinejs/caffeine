@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildTree, expandKeys, splitKey } from '../merge.js'
+import { buildTree, expandKeys } from '../merge.js'
 import type { ConfigValue } from '../types.js'
 
 describe('expandKeys', () => {
@@ -150,18 +150,5 @@ describe('buildTree', () => {
       })
       expect(dropped).toEqual(['otel.resource'])
     }
-  })
-})
-
-describe('splitKey', () => {
-  it('splits on dots and brackets', () => {
-    expect(splitKey('a.b')).toEqual(['a', 'b'])
-    expect(splitKey('servers[0].host')).toEqual(['servers', '0', 'host'])
-    expect(splitKey('m[1][2]')).toEqual(['m', '1', '2'])
-    expect(splitKey('[0]')).toEqual(['0'])
-  })
-
-  it('leaves a bracket that is not an index alone', () => {
-    expect(splitKey('a[x]')).toEqual(['a[x]'])
   })
 })

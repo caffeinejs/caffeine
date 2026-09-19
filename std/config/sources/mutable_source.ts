@@ -22,8 +22,8 @@ export class MutableConfigSource implements ConfigSource {
   }
 
   /**
-   * Sets the value at `path`, replacing whatever this source held there. A dotted path splits on `.`; a key
-   * holding a dot needs the array form.
+   * Sets the value at `path`, replacing whatever this source held there. A dotted path splits on `.` and on `[n]`;
+   * a key holding a dot needs the array form.
    *
    * @throws ErrConfig `ERR_CONFIG_SOURCE` when `path` is the root and `value` is not an object.
    */

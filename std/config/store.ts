@@ -249,7 +249,7 @@ export class ConfigStore<T> {
     this.#scheduler.start(this.#states)
   }
 
-  /** A string path splits on `.`. A key that holds a literal dot needs the array form. */
+  /** A string path splits on `.` and on `[n]`. A key that holds a literal dot needs the array form. */
   explain(path: string | readonly string[]): ConfigExplanation {
     return explainPath(toParts(path), this.#current, this.#layers(), this.#secrets)
   }
