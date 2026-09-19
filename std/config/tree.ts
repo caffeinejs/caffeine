@@ -30,6 +30,30 @@ export function freezeDeep<T>(value: T): T {
   return Object.freeze(value)
 }
 
+/**
+ * Freezes `value` and everything beneath it like {@link freezeDeep}, but returns each plain object and array that
+ * was not frozen yet as a frozen copy. A frozen subtree comes back as it is, and any other object is frozen in place.
+ */
+export function freezeCopy<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(freezeCopy)) as T
+  }
+  if (!isPlainObject(value)) {
+    return freezeDeep(value)
+  }
+
+  const copy: Record<string, unknown> = {}
+  for (const key of Object.keys(value)) {
+    if (!isForbiddenKey(key)) {
+      copy[key] = freezeCopy(value[key])
+    }
+  }
+  return Object.freeze(copy) as T
+}
+
 /** A path given dotted or already split. A dotted path has no escape, so a key holding a dot needs the array form. */
 export function toParts(path: string | readonly string[]): readonly string[] {
   if (typeof path !== 'string') {

@@ -1,11 +1,11 @@
 import { inspect, types } from 'node:util'
-import { setFlagsFromString } from 'node:v8'
 
 import { describe, expect, it } from 'vitest'
 
 import { createLive, syncLive } from '../live.js'
 import { freezeDeep } from '../tree.js'
 import type { ConfigSnapshot } from '../types.js'
+import { hasFastProperties } from './v8.testkit.js'
 
 interface AppConfig {
   http: { host: string; port: number; tls?: { cert: string } }
@@ -17,11 +17,6 @@ interface AppConfig {
 function snapshot<T>(value: T): ConfigSnapshot<T> {
   return freezeDeep(value) as ConfigSnapshot<T>
 }
-
-// V8's own answer to whether an object is in fast mode. The flag only lets the function below parse.
-setFlagsFromString('--allow-natives-syntax')
-// oxlint-disable-next-line typescript/no-implied-eval -- natives syntax parses only from source compiled after the flag
-const hasFastProperties = new Function('value', 'return %HasFastProperties(value)') as (value: object) => boolean
 
 const base: AppConfig = {
   http: { host: 'localhost', port: 3000 },

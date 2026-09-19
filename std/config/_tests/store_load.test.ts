@@ -7,6 +7,7 @@ import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../types.js'
 import { RecordingLogger } from './log.testkit.js'
+import { hasFastProperties } from './v8.testkit.js'
 
 function definition<T = unknown>(
   sources: ConfigSource[],
@@ -53,6 +54,21 @@ describe('loadConfig', () => {
     expect(Object.isFrozen(store.current)).toBe(true)
     expect(Object.isFrozen((store.current as { server: object }).server)).toBe(true)
     expect((store.live as { server: { port: number } }).server.port).toBe(1)
+  })
+
+  // A schema drops an undeclared key by deleting it, and V8 then keeps the object in dictionary mode, where every
+  // level of a read is a hash lookup. The framework's own `caffeine` block is such a key in most applications.
+  it('keeps every snapshot node in fast mode when the schema drops keys', async () => {
+    const schema = $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) })
+    const data = { caffeine: { profiles: ['dev'] }, server: { extra: 'x', host: 'h', port: 1 } }
+
+    const store = await loadConfig<{ server: { host: string; port: number } }>(
+      definition([source('file', data)], schema),
+    )
+
+    expect(store.current).toEqual({ server: { host: 'h', port: 1 } })
+    expect(hasFastProperties(store.current)).toBe(true)
+    expect(hasFastProperties(store.current.server)).toBe(true)
   })
 
   it('fails validation loudly at start-up', async () => {

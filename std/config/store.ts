@@ -9,7 +9,7 @@ import { ConfigEvents, kFirstLoadMs, loadChannel, publishChange, reloadChannel, 
 import { reconcile } from './reconcile.js'
 import { collectSecretPaths, redactValue, type SecretPaths } from './redact.js'
 import { validateConfig } from './schema.js'
-import { countLeaves, freezeDeep, isForbiddenKey, isPlainObject, toParts } from './tree.js'
+import { countLeaves, freezeCopy, freezeDeep, isForbiddenKey, isPlainObject, toParts } from './tree.js'
 import { TriggerScheduler, pollBackoff } from './triggers.js'
 import type {
   ConfigChange,
@@ -164,7 +164,9 @@ export class ConfigStore<T> {
     const validated = validateRoot(this.definition, merged)
 
     this.#merged = freezeDeep(merged)
-    this.#current = freezeDeep(validated) as ConfigSnapshot<T>
+    // Validation deletes the keys a schema does not declare, and V8 keeps an object it deleted from in dictionary
+    // mode. A fresh copy of each new node is back in fast mode, where a read is a field load.
+    this.#current = freezeCopy(validated) as ConfigSnapshot<T>
     this.#live = createLive(this.#current)
     this.#secrets = collectSecretPaths(this.definition.schema)
     this.#notifier = new ChangeNotifier<ConfigSnapshot<T>>(this.#current, error => this.#events.listenerFailed(error))
@@ -440,7 +442,7 @@ export class ConfigStore<T> {
     }
 
     const changed: string[] = []
-    const next = reconcile(this.#current, validated, changed) as ConfigSnapshot<T>
+    const next = freezeCopy(reconcile(this.#current, validated, changed)) as ConfigSnapshot<T>
 
     for (const [state, layers] of candidates) {
       commit(state, layers)
@@ -454,7 +456,7 @@ export class ConfigStore<T> {
     }
 
     // The swap: one synchronous block, so a reader sees the old revision or the new one, never a mix.
-    this.#current = freezeDeep(next)
+    this.#current = next
     this.#revision++
     this.#swappedAt = Date.now()
     syncLive(this.#live, next)

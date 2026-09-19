@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { countLeaves, freezeDeep, isForbiddenKey, isIndex, isPlainObject, readPath, toParts } from '../tree.js'
+import {
+  countLeaves,
+  freezeCopy,
+  freezeDeep,
+  isForbiddenKey,
+  isIndex,
+  isPlainObject,
+  readPath,
+  toParts,
+} from '../tree.js'
+import { hasFastProperties } from './v8.testkit.js'
 
 describe('isForbiddenKey', () => {
   // Assigning any of these on a plain object can reach a prototype instead of creating a property, which is how a
@@ -45,6 +55,64 @@ describe('freezeDeep', () => {
     freezeDeep({ shared })
 
     expect(Object.isFrozen(shared.inner)).toBe(false)
+  })
+})
+
+describe('freezeCopy', () => {
+  it('returns frozen copies of the objects and arrays not frozen yet, and leaves the input alone', () => {
+    const input = { a: { b: [{ c: 1 }] } }
+
+    const tree = freezeCopy(input)
+
+    expect(tree).toEqual(input)
+    expect(tree).not.toBe(input)
+    expect(tree.a).not.toBe(input.a)
+    expect(tree.a.b).not.toBe(input.a.b)
+    expect(tree.a.b[0]).not.toBe(input.a.b[0])
+    expect([tree, tree.a, tree.a.b, tree.a.b[0]].every(node => Object.isFrozen(node))).toBe(true)
+    expect(Object.isFrozen(input)).toBe(false)
+  })
+
+  // A reconciled tree shares the frozen subtrees of the previous snapshot. Copying them would cost the whole tree on
+  // every reload and would break the identity that tells a reader nothing changed there.
+  it('returns a frozen subtree as it is', () => {
+    const shared = Object.freeze({ inner: {} })
+
+    const tree = freezeCopy({ shared })
+
+    expect(tree.shared).toBe(shared)
+    expect(Object.isFrozen(shared.inner)).toBe(false)
+  })
+
+  it('freezes any other object in place', () => {
+    const date = new Date(0)
+
+    const tree = freezeCopy({ date })
+
+    expect(tree.date).toBe(date)
+    expect(Object.isFrozen(date)).toBe(true)
+  })
+
+  it('never copies __proto__, constructor or prototype', () => {
+    const hostile = JSON.parse('{"a":1,"__proto__":{"polluted":"yes"},"constructor":2}') as object
+
+    const tree = freezeCopy(hostile)
+
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(Object.keys(tree)).toEqual(['a'])
+  })
+
+  // V8 keeps an object it deleted a key from in dictionary mode, where every read is a hash lookup. Validation
+  // deletes each key a schema does not declare, and the copy is what puts such a node back in fast mode.
+  it('gives back a node that had a key deleted in fast mode', () => {
+    const node: Record<string, number> = { a: 1, b: 2, c: 3 }
+    delete node.a
+    expect(hasFastProperties(node)).toBe(false)
+
+    const tree = freezeCopy({ node })
+
+    expect(tree.node).toEqual({ b: 2, c: 3 })
+    expect(hasFastProperties(tree.node)).toBe(true)
   })
 })
 

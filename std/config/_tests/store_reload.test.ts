@@ -6,6 +6,7 @@ import { passthroughConfigSchema } from '../schema.js'
 import { kMergedTree } from '../store.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
 import { RecordingLogger } from './log.testkit.js'
+import { hasFastProperties } from './v8.testkit.js'
 
 function definition<T = unknown>(
   sources: ConfigSource[],
@@ -63,6 +64,20 @@ describe('reload', () => {
     expect(outcome).toEqual({ status: 'applied', revision: 1, changed: ['server.port'], failures: [] })
     expect(store.current.server.port).toBe(2)
     expect(store.revision).toBe(1)
+  })
+
+  // A subtree that appears on a reload comes straight from validation, which deleted its undeclared keys. V8 keeps
+  // such an object in dictionary mode, where every level of a read is a hash lookup.
+  it('keeps a subtree that appears on a reload in fast mode', async () => {
+    const withDB = $t.Object({ app: $t.String(), db: $t.Optional($t.Object({ url: $t.String() })) })
+    const { source, state } = liveSource('remote', { app: 'a' })
+    const store = await loadConfig<{ app: string; db?: { url: string } }>(definition([source], withDB))
+
+    state.data = { app: 'a', db: { extra: 1, url: 'u' } }
+    await store.reload()
+
+    expect(store.current.db).toEqual({ url: 'u' })
+    expect(hasFastProperties(store.current.db as object)).toBe(true)
   })
 
   // The whole point: a singleton that kept the injected object reads the newest values with no refresh of its own.

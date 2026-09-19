@@ -1,4 +1,11 @@
-import { InlineConfigSource, loadConfig, type ConfigView, type LiveConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std'
+import {
+  InlineConfigSource,
+  loadConfig,
+  type ConfigSchema,
+  type ConfigView,
+  type LiveConfig,
+} from '@caffeinejs/std/config'
 import { bench, do_not_optimize, group, run, summary } from 'mitata'
 
 // What a configuration read costs on a request path: three property levels, `app.server.port`.
@@ -13,6 +20,9 @@ import { bench, do_not_optimize, group, run, summary } from 'mitata'
 // A live node that repeats a key list another node already took, `app.replica` beside `app.server` or any node of
 // a second store, is read on its own too. A live object whose nodes cannot share a hidden class falls into
 // dictionary mode there, and only these cases show it.
+//
+// So is a snapshot whose schema dropped undeclared keys. Validation deletes them, and V8 keeps an object it deleted
+// a key from in dictionary mode unless the store hands out a copy.
 
 interface Server {
   host: string
@@ -93,6 +103,20 @@ const snapshots = loaded.map(l => l.snapshot)
 const views = loaded.map(l => l.view)
 const secondStore = (await configOf(trees[0])).live
 
+// Declares the read path only, so `x0`, `y0` and `z0` are dropped at every level.
+const serverSchema = $t.Object({ host: $t.String(), port: $t.Number() })
+const cleaned = await loadConfig<Tree>(
+  {
+    schema: $t.Object({ app: $t.Object({ server: serverSchema, replica: serverSchema }) }) as ConfigSchema<Tree>,
+    key: undefined,
+    storeKey: undefined,
+    sources: [new InlineConfigSource(trees[0] as unknown as Record<string, unknown>)],
+    loadTimeoutMs: 30_000,
+  },
+  { start: false },
+)
+const droppedSnapshot = cleaned.current as Tree
+
 // One function per case and per call site, so no two benchmarks share an inline cache.
 const plainMono = (c: Tree): number => c.app.server.port
 const plainMega = (c: Tree): number => c.app.server.port
@@ -105,6 +129,7 @@ const liveReplicaMega = (c: LiveConfig<Tree>): number => c.app.replica.port
 const liveSecondStoreMono = (c: LiveConfig<Tree>): number => c.app.server.port
 const snapshotMono = (c: Tree): number => c.app.server.port
 const snapshotMega = (c: Tree): number => c.app.server.port
+const snapshotDroppedMono = (c: Tree): number => c.app.server.port
 const viewMono = (v: ConfigView<Server>): number => v.value.port
 const viewMega = (v: ConfigView<Server>): number => v.value.port
 
@@ -120,6 +145,8 @@ group('monomorphic: c.app.server.port', () => {
       do_not_optimize(liveReplicaMono(lives[0])))
     bench('live config object, second store of one shape', () => do_not_optimize(liveSecondStoreMono(secondStore)))
     bench('snapshot (store.current, ctx.config)', () => do_not_optimize(snapshotMono(snapshots[0])))
+    bench('snapshot, after the schema dropped undeclared keys', () =>
+      do_not_optimize(snapshotDroppedMono(droppedSnapshot)))
     bench('view over app.server: v.value.port', () => do_not_optimize(viewMono(views[0])))
   })
 })
