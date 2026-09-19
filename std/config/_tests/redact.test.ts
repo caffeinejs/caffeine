@@ -43,6 +43,24 @@ describe('collectSecretPaths', () => {
     ])
   })
 
+  // An application declares a feature's exported schema wherever it needs one, so one schema object can sit at two
+  // paths. A secret found at the first and missed at the second is shown in clear.
+  it('finds a secret at every path one schema object is used at', () => {
+    const credentials = $t.Object({ user: $t.String(), password: $t.Secret($t.String()) })
+    const token = $t.Secret($t.String())
+    const schema = $t.Object({ primary: credentials, replica: $t.Optional(credentials), api: token, admin: token })
+
+    expect(collectSecretPaths(schema)).toEqual([['primary', 'password'], ['replica', 'password'], ['api'], ['admin']])
+  })
+
+  it('stops at a schema that contains itself', () => {
+    const properties: Record<string, unknown> = { secret: $t.Secret($t.String()) }
+    const schema = { type: 'object', properties }
+    properties.self = schema
+
+    expect(collectSecretPaths(schema)).toEqual([['secret']])
+  })
+
   it('finds nothing in a schema that marked nothing', () => {
     expect(collectSecretPaths($t.Object({ host: $t.String() }))).toEqual([])
   })

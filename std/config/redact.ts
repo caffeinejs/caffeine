@@ -69,28 +69,29 @@ function matches(secret: readonly string[], parts: readonly string[]): boolean {
   return true
 }
 
-function collect(node: unknown, path: readonly string[], out: string[][], seen: Set<object>): void {
+function collect(node: unknown, path: readonly string[], out: string[][], visiting: Set<object>): void {
   if (typeof node !== 'object' || node === null) {
     return
   }
-
-  // A schema may be recursive, and a codec holds a reference back to what it wraps.
-  if (seen.has(node)) {
-    return
-  }
-  seen.add(node)
 
   if (isSecretSchema(node) && path.length > 0) {
     out.push([...path])
     return
   }
 
+  // A schema may be recursive, and a codec holds a reference back to what it wraps. Only the nodes on the way down
+  // are skipped: one schema used at two paths holds its secrets at both.
+  if (visiting.has(node)) {
+    return
+  }
+  visiting.add(node)
+
   const schema = node as Record<string, unknown>
 
   const properties = schema.properties
   if (typeof properties === 'object' && properties !== null) {
     for (const [key, value] of Object.entries(properties)) {
-      collect(value, [...path, key], out, seen)
+      collect(value, [...path, key], out, visiting)
     }
   }
 
@@ -99,19 +100,21 @@ function collect(node: unknown, path: readonly string[], out: string[][], seen: 
     const branches = schema[key]
     if (Array.isArray(branches)) {
       for (const branch of branches) {
-        collect(branch, path, out, seen)
+        collect(branch, path, out, visiting)
       }
     }
   }
 
   // An array's items and a record's values sit at a key not known until a value exists.
-  collect(schema.items, [...path, ANY], out, seen)
+  collect(schema.items, [...path, ANY], out, visiting)
 
   const patterns = schema.patternProperties
   if (typeof patterns === 'object' && patterns !== null) {
     for (const value of Object.values(patterns)) {
-      collect(value, [...path, ANY], out, seen)
+      collect(value, [...path, ANY], out, visiting)
     }
   }
-  collect(schema.additionalProperties, [...path, ANY], out, seen)
+  collect(schema.additionalProperties, [...path, ANY], out, visiting)
+
+  visiting.delete(node)
 }

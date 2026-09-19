@@ -75,6 +75,30 @@ describe('ConfigStore.explain', () => {
     expect(store.explain('db')).toMatchObject({ value: { url: 'u', password: REDACTED } })
   })
 
+  // One schema object at two paths, the way an application reuses a feature's exported schema: the second password
+  // is as hidden as the first.
+  it('redacts a secret at every path a shared schema is used at', async () => {
+    const credentials = $t.Object({ user: $t.String(), password: $t.Secret($t.String()) })
+    const store = await loadConfig(
+      definition(
+        [
+          source('file', {
+            name: 'file:app.json',
+            data: { primary: { user: 'a', password: 'first' }, replica: { user: 'b', password: 'second' } },
+          }),
+        ],
+        $t.Object({ primary: credentials, replica: credentials }),
+      ),
+    )
+
+    expect(store.explain('replica.password')).toEqual({
+      path: 'replica.password',
+      value: REDACTED,
+      layers: [{ layer: 'file:app.json', origin: 'file:app.json', value: REDACTED }],
+    })
+    expect(JSON.stringify(store.inspect())).not.toContain('second')
+  })
+
   it('reaches a key holding a literal dot through the array form', async () => {
     const store = await loadConfig(
       definition(
