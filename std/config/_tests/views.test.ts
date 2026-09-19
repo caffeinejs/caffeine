@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { loadConfig } from '../load.js'
-import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
 import type { ConfigDefinition, ConfigSnapshot, ConfigSource, ConfigView } from '../types.js'
+import { RecordingLogger } from './log.testkit.js'
 
 interface App {
   database: { pool: { min: number; max: number }; url: string }

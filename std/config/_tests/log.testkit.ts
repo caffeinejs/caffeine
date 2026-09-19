@@ -1,4 +1,4 @@
-import type { Bindings, EmitLevel, LevelMapping, LogFn, Logger } from '../logger/logger.js'
+import type { Bindings, EmitLevel, LevelMapping, LogFn, Logger } from '../../logger/logger.js'
 
 export interface LogRecord {
   readonly level: EmitLevel

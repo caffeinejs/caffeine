@@ -1,105 +1,94 @@
 import type { NamedToken } from '@caffeinejs/di'
 
 import {
-  ArgsConfigProvider,
-  ConfigDefinition,
-  type ArgsConfigProviderOptions,
-  type ConfigHandle,
-  type ConfigProvider,
+  ArgsConfigSource,
+  DEFAULT_LOAD_TIMEOUT_MS,
+  type ArgsConfigSourceOptions,
+  type ConfigDefinition,
   type ConfigSchema,
+  type ConfigSource,
+  type ConfigStore,
   type InferConfig,
 } from './config/index.js'
+import type { Duration } from './duration/index.js'
+import { toMillis } from './shutdown/shutdown_options.js'
 
 /**
- * The phantom a configuration carries to name its type. Never assigned, never read at runtime —
- * `declare readonly __config?: T` is the whole implementation.
- */
-export interface ApplicationConfigMarker<T> {
-  readonly __config?: T
-}
-
-/**
- * A finished configuration, ready to hand to `createApplication`/`createWebApplication` as `{ config }`.
+ * Fluent definition of an application's configuration, started with {@link newConfiguration}.
  *
- * Named apart from `@caffeinejs/std/config`'s `Configuration` class — that one is the *resolved* runtime
- * accessor (`container.get(Configuration)`); this is the *declared*, not-yet-resolved definition a builder
- * hands to an application's constructor.
- *
- * It is a real {@link ConfigDefinition} — `newConfiguration(...).build()` does not wrap it — so a source added
- * to it after `.build()` (before the application reads it at `ready()`) still lands in the tree. `T` is a
- * phantom: it never appears at runtime, only in the type this flows to the application's own `TConfig`.
- */
-export type AppConfiguration<T = unknown> = ConfigDefinition & ApplicationConfigMarker<T>
-
-/**
- * Fluent definition of an application's configuration sources, started with {@link newConfiguration}.
- *
- * A source always lands above the framework and schema defaults. Beyond that, precedence is registration
- * order alone — the most recently added source wins a conflicting key — so a source meant to override
- * another is added after it.
+ * Precedence is registration order alone: a source added later wins a conflicting value, so the override is added
+ * last.
  */
 export class ConfigurationBuilder<T = unknown> {
-  readonly #definition: ConfigDefinition
+  readonly #schema: ConfigSchema<T>
+  readonly #key: NamedToken<T>
+  readonly #storeKey: NamedToken<ConfigStore<T>> | undefined
+  readonly #sources: ConfigSource[] = []
+  #loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS
 
-  constructor(schema: ConfigSchema<unknown>, key: NamedToken<ConfigHandle<T>>) {
-    this.#definition = new ConfigDefinition(key)
-    this.#definition.schema = schema
+  constructor(schema: ConfigSchema<T>, key: NamedToken<T>, storeKey?: NamedToken<ConfigStore<T>>) {
+    this.#schema = schema
+    this.#key = key
+    this.#storeKey = storeKey
   }
 
-  /** Adds a single config source. Overrides an earlier one on a conflicting key; call the override last. */
-  source(provider: ConfigProvider): this {
-    this.#definition.sources.add(provider)
+  /** Adds a source. It wins a conflicting value over every source added before it. */
+  source(source: ConfigSource): this {
+    this.#sources.push(source)
     return this
   }
 
-  /** Adds several config sources at once, in the given order — later ones in the list win the earlier ones. */
-  sources(...providers: ConfigProvider[]): this {
-    this.#definition.sources.addAll(providers)
+  /** Adds several sources, in order: a later one in the list wins over an earlier one. */
+  sources(...sources: ConfigSource[]): this {
+    this.#sources.push(...sources)
     return this
   }
 
   /**
-   * Reads configuration from the command line.
-   *
-   * The arguments are the host's own unless `options.argv` names others. Calling this is the opt-in: an
-   * application that never does reads no command line at all. Like any other source, it wins a conflicting
-   * key only if called after the sources it should override.
+   * Reads configuration from the command line: the host's own arguments unless `options.argv` names others. Calling
+   * this is the opt-in, and like any source it wins only over the sources added before it.
    */
-  args(options: ArgsConfigProviderOptions = {}): this {
-    this.#definition.sources.add(new ArgsConfigProvider(options))
+  args(options: ArgsConfigSourceOptions = {}): this {
+    return this.source(new ArgsConfigSource(options))
+  }
+
+  /** How long one load of one source may take. Defaults to 30 seconds. */
+  loadTimeout(timeout: Duration): this {
+    this.#loadTimeoutMs = toMillis(timeout)
     return this
   }
 
-  /** Stops a failing provider from aborting start-up; it contributes nothing instead. */
-  failFast(failFast: boolean): this {
-    this.#definition.failFast = failFast
-    return this
-  }
-
-  /** Finishes the configuration. Runtime returns the live {@link ConfigDefinition}; only the type is new. */
-  build(): AppConfiguration<T> {
-    return this.#definition as AppConfiguration<T>
+  /** Finishes the configuration. What it returns is data, fixed from here on. */
+  build(): ConfigDefinition<T> {
+    return Object.freeze({
+      schema: this.#schema,
+      key: this.#key,
+      storeKey: this.#storeKey,
+      sources: Object.freeze([...this.#sources]),
+      loadTimeoutMs: this.#loadTimeoutMs,
+    })
   }
 }
 
 /**
- * Starts a configuration: the schema it is validated against, and the key its resolved {@link ConfigHandle} is
- * bound under.
+ * Starts a configuration: the schema it is validated against, the key the live config object is bound under, and
+ * optionally a key for the typed store.
  *
- * The key is the application's, so the binding is typed: `container.get(key)` needs no type argument. The
- * schema comes first, which is what lets the compiler ask for the exact token type it implies.
+ * The key names the application's own type, so the schema and the key must agree:
  *
  * ```ts
- * const kConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+ * export type AppConfig = InferConfig<typeof appConfigSchema>
+ * export const kConfig = token<AppConfig>(Symbol('app.config'))
  *
- * const conf = newConfiguration(schema, kConfig).source(new EnvConfigProvider()).build()
+ * const conf = newConfiguration(appConfigSchema, kConfig).source(new EnvConfigSource({ prefix: 'APP_' })).build()
  *
  * createApplication({ config: conf })
  * ```
  */
 export function newConfiguration<S extends ConfigSchema, T extends InferConfig<NoInfer<S>> = InferConfig<NoInfer<S>>>(
   schema: S,
-  key: NamedToken<ConfigHandle<T>>,
+  key: NamedToken<T>,
+  storeKey?: NamedToken<ConfigStore<T>>,
 ): ConfigurationBuilder<T> {
-  return new ConfigurationBuilder<T>(schema as ConfigSchema<unknown>, key)
+  return new ConfigurationBuilder<T>(schema as ConfigSchema<T>, key, storeKey)
 }

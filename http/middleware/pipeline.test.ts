@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type AddressInfo, connect } from 'node:net'
 
 import { CaffeineIoC, token, type Container } from '@caffeinejs/di'
-import type { ConfigHandle } from '@caffeinejs/std/config'
+import type { ConfigStore, LiveConfig } from '@caffeinejs/std/config'
 import { newNoopLogger } from '@caffeinejs/std/logger'
 import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { describe, expect, it } from 'vitest'
@@ -20,7 +20,8 @@ type RawRequest = IncomingMessage & Record<string, unknown>
 function setupContext(options: { config?: object; container?: Container } = {}): HTTPSetupContext {
   return {
     container: options.container ?? ({} as Container),
-    config: (options.config ?? {}) as ConfigHandle<unknown>,
+    config: (options.config ?? {}) as LiveConfig<unknown>,
+    store: {} as ConfigStore<unknown>,
     logger: newNoopLogger(),
   }
 }
@@ -257,7 +258,9 @@ describe('MiddlewarePipeline', () => {
       }) as NodeMiddleware
     })
 
-    const server = await serve(pipeline, { setup: { container, config: {} as ConfigHandle<unknown>, logger } })
+    const server = await serve(pipeline, {
+      setup: { container, config: {} as LiveConfig<unknown>, store: {} as ConfigStore<unknown>, logger },
+    })
     const res = await server.inject('/echo')
 
     expect(res.headers['x-greeting']).toBe('hello')

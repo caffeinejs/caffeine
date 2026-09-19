@@ -1,6 +1,5 @@
 import { ErrCaffeine } from '../error.js'
 import type { SchemaIssue } from '../schema/schema.js'
-import type { ConfigSliceFailure } from './config.js'
 
 /**
  * Every failure in `std/config`.
@@ -19,13 +18,6 @@ export class ErrConfigValidation extends ErrConfig {
   ) {
     const detail = issues.length > 0 ? `: ${issues.map(i => `${i.path}: ${i.message}`).join('; ')}` : ''
     super(`Config validation failed${detail}`, 'ERR_CONFIG_VALIDATION', cause)
-  }
-}
-
-export class ErrConfigSlices extends ErrConfig {
-  constructor(readonly failures: readonly ConfigSliceFailure[]) {
-    const detail = failures.map(f => `${f.path}: ${messageOf(f.error)}`).join('; ')
-    super(`Cannot resolve configuration for ${failures.length} feature(s): ${detail}`, 'ERR_CONFIG_SLICES')
   }
 }
 

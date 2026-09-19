@@ -1,18 +1,15 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
 import {
-  CONFIG_REFRESH_LABEL,
-  type ConfigHandle,
-  ConfigDefinition,
-  ConfigModule,
-  EnvConfigProvider,
-  InlineConfigProvider,
-  MutableConfigProvider,
+  EnvConfigSource,
+  InlineConfigSource,
+  loadConfig,
+  MutableConfigSource,
+  type ConfigSchema,
 } from '@caffeinejs/std/config'
-import { bench, do_not_optimize, run } from 'mitata'
+import { bench, do_not_optimize, run, summary } from 'mitata'
 
-// What one reload costs when one live source changed one value: 448 leaves, 4 levels deep, 4 sources, validated
-// against a `$t` schema.
+// What one reload costs: 448 leaves, 4 levels deep, 4 sources, validated against a `$t` schema. One case writes one
+// value to the live source; the other reloads it with nothing written, which must cost only the load.
 
 type Tree = Record<string, Record<string, Record<string, unknown>>>
 
@@ -56,30 +53,38 @@ function makeSchema() {
   return $t.Object(sections)
 }
 
-const key = token<ConfigHandle<Tree>>(Symbol('bench.config'))
-const definition = new ConfigDefinition(key)
-definition.schema = makeSchema()
+const mutable = new MutableConfigSource('live')
+const store = await loadConfig<Tree>(
+  {
+    schema: makeSchema() as ConfigSchema<Tree>,
+    key: undefined,
+    storeKey: undefined,
+    sources: [
+      new InlineConfigSource(makeTree('default'), 'defaults'),
+      new InlineConfigSource(makeTree('file'), 'file'),
+      new EnvConfigSource({ env: { SECTION0__GROUP0__KEY0: 'env', SECTION3__GROUP2__KEY5: 'env' } }),
+      mutable,
+    ],
+    loadTimeoutMs: 30_000,
+  },
+  { start: false },
+)
 
-const mutable = new MutableConfigProvider('live')
-definition.sources.addAll([
-  new InlineConfigProvider(makeTree('default') as never, 'defaults'),
-  new InlineConfigProvider(makeTree('file') as never, 'file'),
-  new EnvConfigProvider({ env: { SECTION0__GROUP0__KEY0: 'env', SECTION3__GROUP2__KEY5: 'env' } }),
-  mutable,
-])
-
-const container = new CaffeineIoC({ decorators: false })
-container.addModules(ConfigModule(definition))
-await container.init()
-
-const config = container.get(key)
+const live = store.live
 let flip = false
 
-bench('today: one value written, one refresh of the whole tree', async () => {
-  flip = !flip
-  mutable.set('section1.group1.key1', flip ? 'a' : 'b')
-  await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
-  do_not_optimize(config.section1.group1.key1)
+summary(() => {
+  bench('one value written, one reload', async () => {
+    flip = !flip
+    mutable.set('section1.group1.key1', flip ? 'a' : 'b')
+    await store.reload()
+    do_not_optimize(live.section1.group1.key1)
+  })
+
+  bench('nothing written, one reload', async () => {
+    await store.reload()
+    do_not_optimize(live.section1.group1.key1)
+  })
 })
 
 await run()

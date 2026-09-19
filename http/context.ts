@@ -1,5 +1,5 @@
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
-import type { ConfigHandle } from '@caffeinejs/std/config'
+import type { ConfigSnapshot } from '@caffeinejs/std/config'
 
 import type { AdapterTypes, AnyAdapterTypes } from './adapter_types.js'
 import type { RouteValidationSchema } from './route.js'
@@ -105,13 +105,13 @@ export interface Context<
 
   /**
    * The application configuration, as a snapshot: one object for the life of this context, taken the first time
-   * it is read. A refresh that lands mid-request is not observed once the snapshot has been taken.
+   * it is read. A reload that lands mid-request is not observed once the snapshot has been taken.
    *
    * `C` is declared where the routes are, with `.configType<C>()`. This is a getter, not a function: a package
    * that needs its own settings cannot look them up from here. It binds them and resolves them, or reads a
    * decoration off the Fastify instance as `@caffeinejs/html` does.
    */
-  get config(): ConfigHandle<C>
+  get config(): ConfigSnapshot<C>
 
   get statusCode(): number
 

@@ -51,33 +51,19 @@ export class SpringCloudConfigSource implements ConfigSource {
   readonly live = true
   readonly optional: boolean
   readonly pollInterval: Duration | undefined
-  readonly #app: string
-  readonly #label: string | undefined
-  readonly #baseURLs: string[]
-  readonly #headers: Record<string, string>
-  readonly #authToken: string
-  readonly #basicAuth: { username: string; password: string } | undefined
-  readonly #dispatcher: RequestInit['dispatcher'] | undefined
-  readonly #beforeRequest: ((url: string, init: RequestInit) => RequestInit | Promise<RequestInit>) | undefined
-  readonly #retries: number
-  readonly #timeoutMs: number
-  readonly #includeMetadata: boolean
+  readonly #options: SpringCloudConfigSourceOptions & { retries: number; timeoutMs: number; includeMetadata: boolean }
 
   constructor(options: SpringCloudConfigSourceOptions) {
     this.name = options.name ?? 'spring-cloud-config'
     this.optional = options.optional ?? false
     this.pollInterval = options.pollInterval
-    this.#app = options.app
-    this.#label = options.label
-    this.#baseURLs = options.baseURLs.map(url => url.replace(/\/+$/, ''))
-    this.#headers = options.headers ?? {}
-    this.#authToken = options.authToken ?? ''
-    this.#basicAuth = options.basicAuth
-    this.#dispatcher = options.dispatcher
-    this.#beforeRequest = options.beforeRequest
-    this.#retries = options.retries ?? 3
-    this.#timeoutMs = options.timeoutMs ?? 10_000
-    this.#includeMetadata = options.includeMetadata ?? true
+    this.#options = {
+      ...options,
+      baseURLs: options.baseURLs.map(url => url.replace(/\/+$/, '')),
+      retries: options.retries ?? 3,
+      timeoutMs: options.timeoutMs ?? 10_000,
+      includeMetadata: options.includeMetadata ?? true,
+    }
   }
 
   /**
@@ -86,12 +72,12 @@ export class SpringCloudConfigSource implements ConfigSource {
   async load(context: ConfigLoadContext): Promise<readonly ConfigLayer[]> {
     // No active profile sends `default`, as a Spring config client does when it has none.
     const profile = context.profiles.map(p => encodeURIComponent(p)).join(',') || 'default'
-    const label = this.#label === undefined ? '' : `/${encodeURIComponent(this.#label)}`
-    const path = `/${encodeURIComponent(this.#app)}/${profile}${label}`
+    const { app, label } = this.#options
+    const path = `/${encodeURIComponent(app)}/${profile}${label === undefined ? '' : `/${encodeURIComponent(label)}`}`
 
     let lastError: unknown
 
-    for (const baseURL of this.#baseURLs) {
+    for (const baseURL of this.#options.baseURLs) {
       try {
         return this.#layers(await this.#fetch(baseURL + path, context.signal))
       } catch (error) {
@@ -110,20 +96,21 @@ export class SpringCloudConfigSource implements ConfigSource {
   }
 
   async #fetch(url: string, signal: AbortSignal): Promise<ConfigServerResponse> {
+    const { retries, timeoutMs, dispatcher, beforeRequest } = this.#options
     let lastError: unknown
 
-    for (let attempt = 0; attempt <= this.#retries; attempt++) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
       const base: RequestInit = {
         method: 'GET',
         headers: this.#requestHeaders(),
-        ...(this.#dispatcher === undefined ? {} : { dispatcher: this.#dispatcher }),
+        ...(dispatcher === undefined ? {} : { dispatcher }),
       }
 
       // Outside the timeout: a token refresh must not eat the budget of the HTTP call.
-      const init = this.#beforeRequest === undefined ? base : await this.#beforeRequest(url, base)
+      const init = beforeRequest === undefined ? base : await beforeRequest(url, base)
 
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), this.#timeoutMs)
+      const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
       let response: Response
       try {
@@ -134,7 +121,7 @@ export class SpringCloudConfigSource implements ConfigSource {
           throw error
         }
         lastError = error
-        if (attempt < this.#retries) {
+        if (attempt < retries) {
           await delay(Math.min(100 * 2 ** attempt + Math.random() * 50, 2_000), undefined, { signal, ref: false })
         }
         continue
@@ -157,13 +144,13 @@ export class SpringCloudConfigSource implements ConfigSource {
   }
 
   #requestHeaders(): Record<string, string> {
-    const headers: Record<string, string> = { ...this.#headers }
+    const { headers: fixed, authToken, basicAuth } = this.#options
+    const headers: Record<string, string> = { ...fixed }
 
-    if (this.#authToken) {
-      headers['Authorization'] = `Bearer ${this.#authToken}`
-    } else if (this.#basicAuth !== undefined) {
-      const { username, password } = this.#basicAuth
-      headers['Authorization'] = `Basic ${btoa(`${username}:${password}`)}`
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`
+    } else if (basicAuth !== undefined) {
+      headers['Authorization'] = `Basic ${btoa(`${basicAuth.username}:${basicAuth.password}`)}`
     }
 
     return headers
@@ -176,7 +163,7 @@ export class SpringCloudConfigSource implements ConfigSource {
       return { name, data: expandKeys((remote.source ?? {}) as Record<string, ConfigValue>, name) }
     })
 
-    if (this.#includeMetadata && (response.version !== undefined || response.state !== undefined)) {
+    if (this.#options.includeMetadata && (response.version !== undefined || response.state !== undefined)) {
       const client: Record<string, string> = {}
       if (response.version !== undefined) {
         client.version = response.version

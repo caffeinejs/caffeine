@@ -1,6 +1,6 @@
 import type { ContainerBindingOps, ContainerOps } from '@caffeinejs/di'
 
-import type { ConfigHandle } from './config/index.js'
+import type { ConfigStore, LiveConfig } from './config/index.js'
 import { ErrCaffeine } from './error.js'
 import type { Logger } from './logger/logger.js'
 
@@ -10,7 +10,10 @@ import type { Logger } from './logger/logger.js'
  */
 export interface FeatureConfigureKit<C = unknown> {
   container: ContainerBindingOps
-  config: ConfigHandle<C>
+  /** The live config object: a node read from it follows every reload. */
+  config: LiveConfig<C>
+  /** The loaded configuration: snapshots, views, and what explains a value. */
+  store: ConfigStore<C>
 }
 
 /**
@@ -24,13 +27,15 @@ export interface BootstrapKit<C = unknown> {
   container: ContainerOps
 
   /**
-   * The resolved application configuration. Live: its nodes read through the current tree, so a value taken
-   * from a node rather than copied out of it follows a refresh.
+   * The live config object: a value taken from a node rather than copied out of it follows a reload.
    *
    * A feature sees `C` as `unknown` here and cannot usefully navigate it. The typed path is the second
-   * argument of the configure callback the application wrote, which is this same handle.
+   * argument of the configure callback the application wrote, which is this same object.
    */
-  config: ConfigHandle<C>
+  config: LiveConfig<C>
+
+  /** The loaded configuration: snapshots, views, and what explains a value. */
+  store: ConfigStore<C>
 
   /** The application's logger, as the logger feature configured it. */
   logger: Logger

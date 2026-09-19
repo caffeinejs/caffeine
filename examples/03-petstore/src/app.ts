@@ -14,7 +14,7 @@ import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
 import { newConfiguration } from '@caffeinejs/std'
-import { EnvConfigProvider } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config'
 import { view } from '@caffeinejs/view'
 import FastifyCookie from '@fastify/cookie'
 import fastify, { type FastifyServerOptions } from 'fastify'
@@ -46,7 +46,7 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
   server.register(FastifyCookie)
 
   const conf = newConfiguration(appConfigSchema, kAppConfig)
-    .source(new EnvConfigProvider({ prefix: 'PETSTORE_' }))
+    .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
     .build()
 
   const builder = createWebApplication(fastifyAdapterFactory(server), {

@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http'
 
-import type { ConfigHandle, Configuration } from '@caffeinejs/std/config'
+import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/std/config'
 import type { CookieSerializeOptions } from '@fastify/cookie'
 import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
@@ -41,15 +41,15 @@ export class FastifyContext<
   #req!: FastifyContextRequest<SCHEMA>
   #platform!: FastifyPlatform<REPLY>
   #state!: ContextState<V>
-  #config?: ConfigHandle<C>
+  #config?: ConfigSnapshot<C>
   #fastifyRequest: FastifyRequest
   #reply: REPLY
-  #configuration: Configuration<unknown>
+  #store: ConfigStore<unknown>
 
-  constructor(request: FastifyRequest, reply: REPLY, configuration: Configuration<unknown>) {
+  constructor(request: FastifyRequest, reply: REPLY, store: ConfigStore<unknown>) {
     this.#reply = reply
     this.#fastifyRequest = request
-    this.#configuration = configuration
+    this.#store = store
   }
 
   get req(): FastifyContextRequest<SCHEMA> {
@@ -66,13 +66,13 @@ export class FastifyContext<
   }
 
   /**
-   * The application configuration, as a snapshot taken the first time this reads.
+   * The application configuration, as the snapshot current the first time this reads.
    *
-   * The tree is replaced wholesale by a refresh rather than mutated, so the object handed back keeps the values
-   * it had when it was taken — a refresh landing later in the same request is not observed here.
+   * A reload replaces the snapshot rather than mutating it, so the object handed back keeps the values it had when
+   * it was taken — a reload landing later in the same request is not observed here.
    */
-  get config(): ConfigHandle<C> {
-    return (this.#config ??= this.#configuration.snapshotHandle as ConfigHandle<C>)
+  get config(): ConfigSnapshot<C> {
+    return (this.#config ??= this.#store.current as ConfigSnapshot<C>)
   }
 
   get user(): Principal {

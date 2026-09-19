@@ -30,7 +30,8 @@ export interface EnvConfigSourceOptions {
  * An acronym does not survive the folding, `CACHE_TTL` becomes `cacheTtl`: nothing in an upper-case name says
  * where an acronym starts. Reach such a key from a file, the command line, or {@link EnvConfigSourceOptions.transformKey}.
  *
- * Without a prefix every variable of the process is read, and only the schema decides which ones count.
+ * Without a prefix every variable of the process is read, and only the schema decides which ones count. A variable
+ * whose name maps to no path, such as `_` or `__CF_USER_TEXT_ENCODING`, is skipped.
  */
 export class EnvConfigSource implements ConfigSource {
   readonly name: string
@@ -64,6 +65,9 @@ export class EnvConfigSource implements ConfigSource {
       const parts = splitKey(
         this.#transformKey(this.#prefix === undefined ? variable : variable.slice(this.#prefix.length)),
       )
+      if (parts.includes('')) {
+        continue
+      }
       entries.push([parts, value])
       origins.set(parts.join('.'), `env:${variable}`)
     }

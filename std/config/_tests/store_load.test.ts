@@ -4,9 +4,9 @@ import { z } from 'zod'
 import { $t } from '../../schema/t.js'
 import { ErrConfig } from '../errors.js'
 import { loadConfig } from '../load.js'
-import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
 import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../types.js'
+import { RecordingLogger } from './log.testkit.js'
 
 function definition<T = unknown>(
   sources: ConfigSource[],

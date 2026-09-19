@@ -1,6 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { createApplication, ErrFeatureAlreadyInstalled } from '@caffeinejs/std'
-import type { ErrConfigSlices } from '@caffeinejs/std/config'
 import { describe, it, expect } from 'vitest'
 
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'

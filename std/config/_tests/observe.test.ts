@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type { Logger } from '../../logger/logger.js'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
-import { RecordingLogger } from '../log.testkit.js'
 import { logConfigLoaded } from '../observe.js'
 import { REDACTED } from '../redact.js'
 import type { ConfigDefinition, ConfigSchema, ConfigSource } from '../types.js'
+import { RecordingLogger } from './log.testkit.js'
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>): ConfigDefinition<T> {
   return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }

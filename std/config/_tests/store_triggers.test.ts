@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { loadConfig } from '../load.js'
-import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { WATCH_DEBOUNCE_MS, pollDelay } from '../triggers.js'
 import type { ConfigDefinition, ConfigSource } from '../types.js'
+import { RecordingLogger } from './log.testkit.js'
 
 function definition(sources: ConfigSource[]): ConfigDefinition {
   return { schema: passthroughConfigSchema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }

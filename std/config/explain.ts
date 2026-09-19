@@ -1,25 +1,7 @@
 import { redactValue, type SecretPaths } from './redact.js'
+import type { SourceState } from './store.js'
 import { readPath } from './tree.js'
-import type {
-  ConfigExplanation,
-  ConfigExplanationLayer,
-  ConfigLayer,
-  ConfigSource,
-  ConfigSourceStatus,
-  ConfigTrigger,
-} from './types.js'
-
-/** What {@link describeSource} reads off one source's state. */
-export interface SourceRecord {
-  readonly source: ConfigSource
-  readonly trigger: ConfigTrigger
-  readonly layers: readonly ConfigLayer[]
-  readonly keys: number
-  readonly lastLoadedAt: number
-  readonly lastLoadMs: number
-  readonly consecutiveFailures: number
-  readonly lastError: unknown
-}
+import type { ConfigExplanation, ConfigExplanationLayer, ConfigLayer, ConfigSourceStatus } from './types.js'
 
 /**
  * Why `parts` has the value it has: every layer that defines it, winner first, and the value in the current
@@ -52,7 +34,7 @@ export function explainPath(
   return { path, value: redactValue(readPath(current, parts), parts, secrets), layers: found }
 }
 
-export function describeSource(record: SourceRecord): ConfigSourceStatus {
+export function describeSource(record: SourceState): ConfigSourceStatus {
   return {
     name: record.source.name,
     trigger: record.trigger,

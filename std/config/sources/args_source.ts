@@ -52,6 +52,9 @@ export class ArgsConfigSource implements ConfigSource {
 
     for (const [key, value, origin] of parse(this.#argv ?? hostArgv(), this.#switchMappings)) {
       const parts = splitKey(key.split(':').join('.'))
+      if (parts.includes('')) {
+        continue
+      }
       entries.push([parts, value])
       origins.set(parts.join('.'), origin)
     }

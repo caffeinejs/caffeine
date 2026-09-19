@@ -1,7 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { CONFIG_REFRESH_LABEL, InlineConfigProvider, MutableConfigProvider, type ConfigHandle } from './config/index.js'
+import { CONFIG_REFRESH_LABEL, InlineConfigSource, MutableConfigSource, type LiveConfig } from './config/index.js'
 import { kFeatureName } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 import { createApplication, newConfiguration } from './index.js'
@@ -68,7 +68,7 @@ function gadget<C = unknown>(configure?: FeatureConfigurer<GadgetBuilder<C>, C>)
 
 const appSchema = $t.Object({ app: $t.Object({ gadget: gadgetSchema }) })
 type AppConfig = { app: { gadget: GadgetConfig } }
-const kAppConfig = token<ConfigHandle<AppConfig>>(Symbol('app.config'))
+const kAppConfig = token<LiveConfig<AppConfig>>(Symbol('app.config'))
 
 const headless = () => createApplication({ container: new CaffeineIoC({ decorators: false }) })
 
@@ -96,7 +96,7 @@ describe('FeatureBuilder', () => {
     const g = gadget<AppConfig>(b => b.size(7))
 
     const conf = newConfiguration(appSchema, kAppConfig)
-      .source(new InlineConfigProvider({ app: { gadget: { size: 99 } } }))
+      .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
       .build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 
@@ -110,7 +110,7 @@ describe('FeatureBuilder', () => {
     const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))
 
     const conf = newConfiguration(appSchema, kAppConfig)
-      .source(new InlineConfigProvider({ app: { gadget: { size: 99 } } }))
+      .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
       .build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 
@@ -179,7 +179,7 @@ describe('FeatureBuilder', () => {
   // Liveness is the author's choice, not something the framework manufactures: a node read through follows a
   // refresh, while a scalar copied out of it at bootstrap does not.
   it('hands over a live node, so a refresh is visible through it', async () => {
-    const mutable = new MutableConfigProvider('gadget-test')
+    const mutable = new MutableConfigSource('gadget-test')
     mutable.set('app', { gadget: { size: 5 } })
 
     const g = gadget<AppConfig>((b, c) => b.withConfig(c.app.gadget))

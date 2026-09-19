@@ -55,6 +55,10 @@ describe('ArgsConfigSource', () => {
     expect(parse(['/usr/bin/node', '/app/main.js'])).toEqual({})
   })
 
+  it('skips an argument whose key maps to no path', () => {
+    expect(parse(['--=x', '--.a=1', '--server.port=8080'])).toEqual({ server: { port: '8080' } })
+  })
+
   it('lets a later argument win over an earlier one for the same key', () => {
     expect(parse(['--server.port=8080', '--server.port=9090'])).toEqual({ server: { port: '9090' } })
   })

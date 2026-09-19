@@ -19,7 +19,7 @@ export type SchemeKind = 'jwt' | 'basic' | 'cookie' | 'opaque' | 'oidc' | 'oauth
  * `schemes` is keyed by the name the `addX(...)` call gave the scheme, and each entry carries that kind's
  * configurable keys — {@link SCHEME_CONFIG} holds one schema per kind.
  *
- * **A scheme addressed by environment variable needs a lowercase name.** `EnvConfigProvider` lowercases each
+ * **A scheme addressed by environment variable needs a lowercase name.** `EnvConfigSource` lowercases each
  * path segment before folding underscores into camelCase, so `AUTH__SCHEMES__BEARER__SECRET` resolves to
  * `auth.schemes.bearer`, not `auth.schemes.Bearer`. The default names the `addX` methods choose are
  * capitalized (`Bearer`, `Basic`, `Cookie`, `OpaqueToken`), so name the scheme explicitly —

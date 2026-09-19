@@ -1,6 +1,6 @@
 import { token } from '@caffeinejs/di'
 import { $t, newConfiguration, type InferSchema } from '@caffeinejs/std'
-import { EnvConfigProvider, InlineConfigProvider, Configuration, type ConfigHandle } from '@caffeinejs/std/config'
+import { ConfigStore, EnvConfigSource, InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
@@ -43,12 +43,12 @@ const rootSchema = $t.Object({
     { default: {} },
   ),
 })
-const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+const kRootConfig = token<LiveConfig<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
 const ENV_SECRET = 'env-secret-key-must-be-at-least-32-chars!!'
 
-const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
+const env = (values: Record<string, string>) => new EnvConfigSource({ env: values })
 
 @Authorize()
 @Controller('/protected')
@@ -80,7 +80,7 @@ function tokenSignedWith(secret: string): Promise<string> {
 describe('authentication configuration', () => {
   // The case the whole reordering was for: a secret that never appears in code or in a file.
   //
-  // The scheme is named `jwt` rather than left as the default `Bearer` because `EnvConfigProvider` lowercases
+  // The scheme is named `jwt` rather than left as the default `Bearer` because `EnvConfigSource` lowercases
   // each path segment — `AUTH__SCHEMES__BEARER__SECRET` addresses `auth.schemes.bearer`, which is not where a
   it('takes a JWT secret from the environment, over the one set in code', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
@@ -135,9 +135,10 @@ describe('authentication configuration', () => {
 
     await app.ready()
 
-    const diagnostics = app.container.get(Configuration).diagnostics
-    expect(diagnostics.valueAt('auth.schemes.jwt.secret')).toBe('[redacted]')
-    expect(JSON.stringify(diagnostics.snapshot)).not.toContain(ENV_SECRET)
+    const store = app.container.get(ConfigStore)
+    expect(store.explain('auth.schemes.jwt.secret').value).toBe('[redacted]')
+    expect(JSON.stringify(store.explain('auth.schemes.jwt.secret'))).not.toContain(ENV_SECRET)
+    expect(JSON.stringify(store.inspect())).not.toContain(ENV_SECRET)
 
     // Redacted at the diagnostic boundary only — the scheme itself has the real value.
     const res = await app.fetch('/protected', {
@@ -151,7 +152,7 @@ describe('authentication configuration', () => {
   // Building last is what puts each scheme's own validation on the merged options.
   it('validates the merged options, not the code half', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new InlineConfigProvider({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
+      .source(new InlineConfigSource({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
@@ -165,7 +166,7 @@ describe('authentication configuration', () => {
   it('configures a basic realm and a cookie name from the tree', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(
-        new InlineConfigProvider({
+        new InlineConfigSource({
           auth: {
             schemes: {
               Basic: { realm: 'From Config' },
@@ -226,7 +227,7 @@ describe('authentication configuration', () => {
     let validated = 0
 
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new InlineConfigProvider({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
+      .source(new InlineConfigSource({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
@@ -258,10 +259,10 @@ describe('authentication configuration', () => {
         }),
       }),
     })
-    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
+      .source(new InlineConfigSource({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,

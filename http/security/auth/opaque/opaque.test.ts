@@ -1,6 +1,4 @@
-import { token } from '@caffeinejs/di'
 import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
-import { ConfigDefinition } from '@caffeinejs/std/config'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
@@ -176,7 +174,8 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       const bind = vi.fn().mockReturnValue({ toValue })
       return {
         container: { bind, wrap },
-        config: new ConfigDefinition(token<Record<string, unknown>>(Symbol('app.config'))),
+        config: {},
+        store: {},
       } as unknown as FeatureConfigureKit
     }
 

@@ -6,7 +6,7 @@ import { CaffeineIoC, Injectable, Profile, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
-import { InlineConfigProvider, JSONConfigProvider, type ConfigHandle } from './config/index.js'
+import { InlineConfigSource, JSONConfigSource, type LiveConfig } from './config/index.js'
 import {
   $t,
   ErrApplicationStarted,
@@ -24,7 +24,7 @@ import {
 const caffeineSchema = $t.Object({
   caffeine: $t.Object({ name: $t.Optional($t.String()), profiles: $t.Optional($t.List($t.String())) }, { default: {} }),
 })
-const kConfig = token<ConfigHandle<InferSchema<typeof caffeineSchema>>>(Symbol('app.config'))
+const kConfig = token<LiveConfig<InferSchema<typeof caffeineSchema>>>(Symbol('app.config'))
 
 // Builds a headless app over an isolated container (no global autowire) with only the explicit binds —
 // exercises the singleton-scan discovery path deterministically.
@@ -171,7 +171,7 @@ describe('application name and profiles', () => {
 
   it('reads caffeine.name from a config source', async () => {
     const conf = newConfiguration(caffeineSchema, kConfig)
-      .source(new InlineConfigProvider({ caffeine: { name: 'petstore' } }))
+      .source(new InlineConfigSource({ caffeine: { name: 'petstore' } }))
       .build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     await app.ready()
@@ -226,7 +226,7 @@ describe('application name and profiles', () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu')
 
     const conf = newConfiguration(caffeineSchema, kConfig)
-      .source(new InlineConfigProvider({ caffeine: { name: 'petstore' } }))
+      .source(new InlineConfigSource({ caffeine: { name: 'petstore' } }))
       .build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
@@ -253,7 +253,7 @@ describe('application name and profiles', () => {
   it('ignores a source-declared profile once anything named one up front', async () => {
     const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
     const conf = newConfiguration(caffeineSchema, kConfig)
-      .source(new InlineConfigProvider({ caffeine: { profiles: ['eu'] } }))
+      .source(new InlineConfigSource({ caffeine: { profiles: ['eu'] } }))
       .build()
     const app = createApplication({ container, config: conf })
     await app.ready()
@@ -285,7 +285,7 @@ describe('profile-segregated config files', () => {
     const base = await writeTmp('app-e2e.json', JSON.stringify({ caffeine: { name: 'base', profiles: ['eu'] } }))
     await writeTmp('app-e2e-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
 
-    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigProvider(base)).build()
+    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     await app.ready()
 
@@ -297,7 +297,7 @@ describe('profile-segregated config files', () => {
     const base = await writeTmp('app-ctr.json', JSON.stringify({ caffeine: { name: 'base' } }))
     await writeTmp('app-ctr-test.json', JSON.stringify({ caffeine: { name: 'test-app' } }))
 
-    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigProvider(base)).build()
+    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
     const app = createApplication({
       container: new CaffeineIoC({ decorators: false, profiles: ['test'] }),
       config: conf,

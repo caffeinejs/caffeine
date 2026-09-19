@@ -3,9 +3,9 @@ import { z } from 'zod'
 
 import { $t } from '../../schema/t.js'
 import { textList } from '../../schema/text.js'
-import type { ConfigSchema } from '../config.js'
 import { ErrConfigValidation } from '../errors.js'
 import { validateConfig } from '../schema.js'
+import type { ConfigSchema } from '../types.js'
 
 interface TestConfig {
   host: string

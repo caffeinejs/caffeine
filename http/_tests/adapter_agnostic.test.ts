@@ -9,7 +9,7 @@ import {
   type FeatureConfigurer,
   type InferSchema,
 } from '@caffeinejs/std'
-import { InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import { InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
 import fastify, { type FastifyPluginAsync, type FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
@@ -272,7 +272,7 @@ describe('adapter types', () => {
 describe('configure callback typing', () => {
   const schema = $t.Object({ name: $t.String({ default: 'app' }) })
   type AppConfig = InferSchema<typeof schema>
-  const kConfig = token<ConfigHandle<AppConfig>>(Symbol('adapter-agnostic.config'))
+  const kConfig = token<LiveConfig<AppConfig>>(Symbol('adapter-agnostic.config'))
 
   class PlainBuilder<C = unknown> extends FeatureBuilder<C> {
     readonly [kFeatureName] = 'plain-probe'
@@ -293,12 +293,12 @@ describe('configure callback typing', () => {
   // `.with(...)` is overloaded, and only the overload TypeScript tries first contextually types a callback. Each
   // call shape must still reach the application's configuration type rather than fall back to `unknown`.
   it('types the callback against the application configuration, whichever overload takes it', () => {
-    const conf = newConfiguration(schema, kConfig).source(new InlineConfigProvider({})).build()
+    const conf = newConfiguration(schema, kConfig).source(new InlineConfigSource({})).build()
 
     const app = createWebApplication({ config: conf })
-      .with(plain((_b, c) => expectTypeOf(c).toEqualTypeOf<ConfigHandle<AppConfig>>()))
-      .with(serverSide((_b, c) => expectTypeOf(c).toEqualTypeOf<ConfigHandle<AppConfig>>()))
-      .with(health((_h, c) => expectTypeOf(c).toEqualTypeOf<ConfigHandle<AppConfig>>()))
+      .with(plain((_b, c) => expectTypeOf(c).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .with(serverSide((_b, c) => expectTypeOf(c).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .with(health((_h, c) => expectTypeOf(c).toEqualTypeOf<LiveConfig<AppConfig>>()))
 
     expect(app).toBeDefined()
   })

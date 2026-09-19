@@ -37,7 +37,7 @@ export const kMergedTree: unique symbol = Symbol('@caffeinejs/config:merged-tree
 
 type ReloadTrigger = Exclude<ConfigTrigger, 'static'>
 
-interface SourceState {
+export interface SourceState {
   readonly source: ConfigSource
   readonly trigger: ConfigTrigger
   readonly pollMs: number | undefined
@@ -56,7 +56,8 @@ interface ViewState<T> {
   readonly select: (config: ConfigSnapshot<T>) => unknown
   readonly derive: ((selected: unknown) => unknown) | undefined
   readonly notifier: ChangeNotifier<unknown>
-  readonly view: StoreView<unknown>
+  /** A plain object whose `value` the store assigns, so a read is a property load. */
+  readonly view: { -readonly [K in keyof ConfigView<unknown>]: ConfigView<unknown>[K] }
   selected: unknown
 }
 
@@ -65,26 +66,6 @@ interface PendingReload {
   readonly trigger: ReloadTrigger
   readonly promise: Promise<ConfigReloadOutcome>
   readonly resolve: (outcome: ConfigReloadOutcome) => void
-}
-
-class StoreView<V> implements ConfigView<V> {
-  value: V
-  readonly #subscribe: (listener: ConfigChangeListener<V>) => () => void
-  readonly #close: () => void
-
-  constructor(value: V, subscribe: (listener: ConfigChangeListener<V>) => () => void, close: () => void) {
-    this.value = value
-    this.#subscribe = subscribe
-    this.#close = close
-  }
-
-  onChange(listener: ConfigChangeListener<V>): () => void {
-    return this.#subscribe(listener)
-  }
-
-  close(): void {
-    this.#close()
-  }
 }
 
 /**
@@ -217,14 +198,14 @@ export class ConfigStore<T> {
       derive,
       notifier,
       selected,
-      view: new StoreView<unknown>(
+      view: {
         value,
-        listener => notifier.add(listener),
-        () => {
+        onChange: listener => notifier.add(listener),
+        close: () => {
           this.#views.delete(state)
           notifier.clear()
         },
-      ),
+      },
     }
 
     if (!this.#closed) {

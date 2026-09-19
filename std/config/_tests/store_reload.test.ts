@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
-import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { kMergedTree } from '../store.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
+import { RecordingLogger } from './log.testkit.js'
 
 function definition<T = unknown>(
   sources: ConfigSource[],

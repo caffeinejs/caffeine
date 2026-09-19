@@ -60,6 +60,16 @@ describe('EnvConfigSource', () => {
     )
   })
 
+  // Shells set `_`, and macOS sets `__CF_USER_TEXT_ENCODING`: an unprefixed source reads them, and they must not
+  // be able to stop an application from starting.
+  it('skips a variable whose name maps to no path', () => {
+    expect(
+      load({ env: { _: '/usr/bin/env', __CF_USER_TEXT_ENCODING: '0x1F6', __X__: 'x', PORT: '8080' } }).data,
+    ).toEqual({
+      port: '8080',
+    })
+  })
+
   it('keeps every value as text', () => {
     expect(load({ env: { DEBUG: 'true', PORT: '8080', RATIO: '1.5', NAME: 'caffeine', EMPTY: '' } }).data).toEqual({
       debug: 'true',

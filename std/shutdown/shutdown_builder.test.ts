@@ -3,19 +3,21 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CONFIG_REFRESH_LABEL,
-  EnvConfigProvider,
-  InlineConfigProvider,
-  MutableConfigProvider,
-  type ConfigHandle,
+  EnvConfigSource,
+  InlineConfigSource,
+  MutableConfigSource,
+  type ConfigDefinition,
+  type InferConfig,
 } from '../config/index.js'
-import { type AppConfiguration, type InferSchema, $t, createApplication, newConfiguration } from '../index.js'
+import { $t, createApplication, newConfiguration } from '../index.js'
 import { kShutdownPolicy, shutdownConfigSchema, type ShutdownOptions } from './shutdown_options.js'
 import { noopSignalDispatcher } from './signals.js'
 
 const appSchema = $t.Object({ shutdown: shutdownConfigSchema })
-const kAppConfig = token<ConfigHandle<InferSchema<typeof appSchema>>>(Symbol('app.config'))
+type AppConfig = InferConfig<typeof appSchema>
+const kAppConfig = token<AppConfig>(Symbol('app.config'))
 
-const headless = (config?: AppConfiguration<InferSchema<typeof appSchema>>) =>
+const headless = (config?: ConfigDefinition<AppConfig>) =>
   createApplication({ container: new CaffeineIoC({ decorators: false }), config })
 
 function policyOf(app: { container: { get(t: typeof kShutdownPolicy): ShutdownOptions } }): ShutdownOptions {
@@ -37,7 +39,7 @@ describe('ShutdownBuilder', () => {
   // Declaring `shutdown` in the schema is not on its own an instruction to configure the drain from it.
   it('leaves the drain on its defaults when nothing pointed it at the block', async () => {
     const conf = newConfiguration(appSchema, kAppConfig)
-      .source(new EnvConfigProvider({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }))
+      .source(new EnvConfigSource({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }))
       .build()
     const app = headless(conf)
     await app.ready()
@@ -50,7 +52,7 @@ describe('ShutdownBuilder', () => {
   // so the code value is what the drain runs on.
   it('takes a fluent value over the configured one', async () => {
     const conf = newConfiguration(appSchema, kAppConfig)
-      .source(new InlineConfigProvider({ shutdown: { drainDelay: '90ms' } }))
+      .source(new InlineConfigSource({ shutdown: { drainDelay: '90ms' } }))
       .build()
     const app = headless(conf).shutdown((s, c) => s.drainDelay('10s').withConfig(c.shutdown))
     await app.ready()
@@ -61,7 +63,7 @@ describe('ShutdownBuilder', () => {
   it('reads durations and the signal list from the environment', async () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(
-        new EnvConfigProvider({
+        new EnvConfigSource({
           env: { SHUTDOWN__DRAIN_DELAY: '40ms', SHUTDOWN__SIGNALS: 'SIGTERM,SIGINT' },
         }),
       )
@@ -77,7 +79,7 @@ describe('ShutdownBuilder', () => {
 
   it('keeps the dispatcher on the builder — a function cannot travel the config tree', async () => {
     const conf = newConfiguration(appSchema, kAppConfig)
-      .source(new InlineConfigProvider({ shutdown: { drainDelay: '30ms' } }))
+      .source(new InlineConfigSource({ shutdown: { drainDelay: '30ms' } }))
       .build()
     const app = headless(conf).shutdown((s, c) => s.dispatcher(noopSignalDispatcher).withConfig(c.shutdown))
     await app.ready()
@@ -88,7 +90,7 @@ describe('ShutdownBuilder', () => {
   })
 
   it('does not follow a config refresh after the policy is bound', async () => {
-    const mutable = new MutableConfigProvider('shutdown-test')
+    const mutable = new MutableConfigSource('shutdown-test')
     mutable.set('shutdown', { shutdownTimeout: '9s' })
 
     const conf = newConfiguration(appSchema, kAppConfig).source(mutable).build()

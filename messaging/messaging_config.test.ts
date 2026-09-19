@@ -1,6 +1,6 @@
 import { token, type Container } from '@caffeinejs/di'
 import { $t, newConfiguration, type InferSchema, createApplication } from '@caffeinejs/std'
-import { EnvConfigProvider, InlineConfigProvider, type ConfigHandle } from '@caffeinejs/std/config'
+import { EnvConfigSource, InlineConfigSource, type LiveConfig } from '@caffeinejs/std/config'
 import { describe, expect, it } from 'vitest'
 
 import { inMemoryBinder } from './binder.testkit.js'
@@ -28,9 +28,9 @@ const instanceSchema = $t.Object(messagingConfigSchema.properties, { default: {}
 const rootSchema = $t.Object({
   messaging: $t.Object({ default: instanceSchema, audit: instanceSchema }, { default: {} }),
 })
-const kRootConfig = token<ConfigHandle<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
+const kRootConfig = token<LiveConfig<InferSchema<typeof rootSchema>>>(Symbol('app.config'))
 
-const env = (values: Record<string, string>) => new EnvConfigProvider({ env: values })
+const env = (values: Record<string, string>) => new EnvConfigSource({ env: values })
 
 function runtimeOf(container: Container, instance = 'default'): MessagingRuntime {
   return container.get(runtimeKey(instance)) as MessagingRuntime
@@ -67,7 +67,7 @@ describe('messaging configuration', () => {
 
   it('reads a consumer group from the configuration tree', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new InlineConfigProvider({ messaging: { default: { in: { orders: { group: 'from-config' } } } } }))
+      .source(new InlineConfigSource({ messaging: { default: { in: { orders: { group: 'from-config' } } } } }))
       .build()
     const app = createApplication({ config: conf }).with(
       messaging((m, c) =>
@@ -88,7 +88,7 @@ describe('messaging configuration', () => {
 
   it('keeps named instances apart, the unnamed one at messaging.default', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new InlineConfigProvider({ messaging: { audit: { out: { log: { destination: 'audit.v2' } } } } }))
+      .source(new InlineConfigSource({ messaging: { audit: { out: { log: { destination: 'audit.v2' } } } } }))
       .build()
     const app = createApplication({ config: conf })
       .with(
@@ -120,10 +120,10 @@ describe('messaging configuration', () => {
   // The code-only members ride through untouched.
   it('keeps a code-only schema on a configured binding', async () => {
     const schema = $t.Object({ id: $t.Number() })
-    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const conf = newConfiguration(rootSchema, kRootConfig)
-      .source(new InlineConfigProvider({ messaging: { default: { in: { orders: { destination: 'orders.v2' } } } } }))
+      .source(new InlineConfigSource({ messaging: { default: { in: { orders: { destination: 'orders.v2' } } } } }))
       .build()
     const app = createApplication({ config: conf }).with(
       messaging((m, c) =>
@@ -152,10 +152,10 @@ describe('messaging configuration', () => {
         }),
       }),
     })
-    const kConfig = token<ConfigHandle<InferSchema<typeof schema>>>(Symbol('app.config'))
+    const kConfig = token<LiveConfig<InferSchema<typeof schema>>>(Symbol('app.config'))
 
     const conf = newConfiguration(schema, kConfig)
-      .source(new InlineConfigProvider({ app: { events: { in: { orders: { destination: 'moved.orders' } } } } }))
+      .source(new InlineConfigSource({ app: { events: { in: { orders: { destination: 'moved.orders' } } } } }))
       .build()
     const app = createApplication({ config: conf })
       // No annotation on the selector: the config type is recovered from the builder.
@@ -180,7 +180,7 @@ describe('messaging configuration', () => {
   it('creates no binding the application never declared', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(
-        new InlineConfigProvider({
+        new InlineConfigSource({
           messaging: { default: { in: { ghost: { destination: 'ghost', via: 'primary' } } } },
         }),
       )

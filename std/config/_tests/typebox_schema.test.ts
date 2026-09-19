@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
-import { bootstrapConfig } from '../bootstrap.js'
 import { ErrConfigValidation } from '../errors.js'
-import { InlineConfigProvider } from '../providers/inline_provider.js'
+import { loadConfig } from '../load.js'
 import { validateConfig } from '../schema.js'
-import { ConfigSources } from '../sources.js'
+import { InlineConfigSource } from '../sources/inline_source.js'
 
 const schema = $t.Object({
   server: $t.Object({
@@ -49,12 +48,15 @@ describe('validateConfig with the $t dialect', () => {
     expect(input).toEqual({ server: { port: '8080' } })
   })
 
-  it('works end to end through bootstrapConfig', async () => {
-    const { config } = await bootstrapConfig({
+  it('works end to end through loadConfig', async () => {
+    const store = await loadConfig<{ server: { host: string; port: number } }>({
       schema,
-      sources: ConfigSources.of(new InlineConfigProvider({ server: { host: '127.0.0.1', port: 1234 } })),
+      key: undefined,
+      storeKey: undefined,
+      sources: [new InlineConfigSource({ server: { host: '127.0.0.1', port: '1234' } })],
+      loadTimeoutMs: 30_000,
     })
-    expect(config.server.host).toBe('127.0.0.1')
-    expect(config.server.port).toBe(1234)
+    expect(store.live.server.host).toBe('127.0.0.1')
+    expect(store.live.server.port).toBe(1234)
   })
 })
