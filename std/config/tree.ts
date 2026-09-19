@@ -31,15 +31,17 @@ export function freezeDeep<T>(value: T): T {
 }
 
 /**
- * Freezes `value` and everything beneath it like {@link freezeDeep}, but returns each plain object and array that
- * was not frozen yet as a frozen copy. A frozen subtree comes back as it is, and any other object is frozen in place.
+ * Returns `value` frozen all the way down, with each plain object and array a frozen copy. One that is frozen already
+ * is copied too: being frozen says nothing about what is beneath it. Any other object is frozen in place.
+ *
+ * A subtree that is `previous` itself, or what `previous` holds under the same key, comes back as it is.
  */
-export function freezeCopy<T>(value: T): T {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+export function freezeCopy<T>(value: T, previous?: unknown): T {
+  if (value === previous || value === null || typeof value !== 'object') {
     return value
   }
   if (Array.isArray(value)) {
-    return Object.freeze(value.map(freezeCopy)) as T
+    return Object.freeze(value.map(element => freezeCopy(element))) as T
   }
   if (!isPlainObject(value)) {
     return freezeDeep(value)
@@ -48,7 +50,10 @@ export function freezeCopy<T>(value: T): T {
   const copy: Record<string, unknown> = {}
   for (const key of Object.keys(value)) {
     if (!isForbiddenKey(key)) {
-      copy[key] = freezeCopy(value[key])
+      copy[key] = freezeCopy(
+        value[key],
+        isPlainObject(previous) && Object.hasOwn(previous, key) ? previous[key] : undefined,
+      )
     }
   }
   return Object.freeze(copy) as T

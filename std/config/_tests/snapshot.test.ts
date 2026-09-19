@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { MutableConfigSource } from '../sources/mutable_source.js'
+import type { ConfigSchema } from '../types.js'
 
 interface App {
   server: { port: number; paths: { live: string } }
@@ -75,6 +76,36 @@ describe('reading configuration', () => {
     expect(() => {
       ;(store.current.server as { port: number }).port = 1
     }).toThrow(TypeError)
+  })
+
+  // A validator runs user code, and a default or a transform can hand back a constant frozen only at its top. A
+  // snapshot is shared by every reader, so a write that got through one would change what all of them read.
+  it('freezes all of a snapshot, even where a validator returned an object frozen only at its top', async () => {
+    const first = Object.freeze({ backoff: { ms: 100 } })
+    const later = Object.freeze({ backoff: { ms: 200 } })
+    const validating: ConfigSchema<{ first: typeof first; later?: typeof later }> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: value => ({ value: (value as { later?: boolean }).later === true ? { first, later } : { first } }),
+      },
+    }
+    const mutable = new MutableConfigSource('test')
+    const store = await loadConfig(
+      { schema: validating, key: undefined, storeKey: undefined, sources: [mutable], loadTimeoutMs: 30_000 },
+      { start: false },
+    )
+
+    // `first` came in with the first load, `later` with a reload, as a key the previous snapshot did not have.
+    mutable.set('later', true)
+    expect((await store.reload()).status).toBe('applied')
+
+    for (const node of [store.current.first.backoff, store.current.later!.backoff]) {
+      expect(() => {
+        ;(node as { ms: number }).ms = 0
+      }).toThrow(TypeError)
+    }
+    expect(Object.isFrozen(first.backoff)).toBe(false)
   })
 
   it('advances the revision only when a reload changed something', async () => {

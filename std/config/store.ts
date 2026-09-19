@@ -444,7 +444,7 @@ export class ConfigStore<T> {
     }
 
     const changed: string[] = []
-    const next = freezeCopy(reconcile(this.#current, validated, changed)) as ConfigSnapshot<T>
+    const next = freezeCopy(reconcile(this.#current, validated, changed), this.#current) as ConfigSnapshot<T>
 
     for (const [state, layers] of candidates) {
       commit(state, layers)
@@ -709,8 +709,7 @@ function isLayer(value: unknown): value is ConfigLayer {
   )
 }
 
-// Not `freezeCopy`: what a source hands over is copied even when it is frozen, since being frozen does not make it
-// free of the keys dropped here.
+// Not `freezeCopy`: this copy reports each forbidden key it drops, and leaves out a key whose value is `undefined`.
 function copyTree(value: unknown, path: string, dropped: string[]): unknown {
   if (Array.isArray(value)) {
     return Object.freeze(value.map((element, i) => copyTree(element, join(path, String(i)), dropped)))

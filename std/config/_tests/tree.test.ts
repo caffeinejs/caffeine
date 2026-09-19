@@ -74,15 +74,24 @@ describe('freezeCopy', () => {
     expect(Object.isFrozen(input)).toBe(false)
   })
 
-  // A reconciled tree shares the frozen subtrees of the previous snapshot. Copying them would cost the whole tree on
-  // every reload and would break the identity that tells a reader nothing changed there.
-  it('returns a frozen subtree as it is', () => {
-    const shared = Object.freeze({ inner: {} })
+  // What a validator returns is user code's: a default or a transform can hand back a constant frozen only at its top.
+  it('copies a frozen object too, since being frozen says nothing about what is beneath', () => {
+    const shared = Object.freeze({ inner: { n: 1 } })
 
     const tree = freezeCopy({ shared })
 
-    expect(tree.shared).toBe(shared)
+    expect(tree.shared).not.toBe(shared)
+    expect(Object.isFrozen(tree.shared.inner)).toBe(true)
     expect(Object.isFrozen(shared.inner)).toBe(false)
+  })
+
+  // A reconciled tree shares the subtrees of the previous snapshot. Copying them would cost the whole tree on every
+  // reload and would break the identity that tells a reader nothing changed there.
+  it('returns a subtree of previous, at the same path, as it is', () => {
+    const previous = freezeCopy({ kept: { n: 1 } })
+
+    expect(freezeCopy({ kept: previous.kept }, previous).kept).toBe(previous.kept)
+    expect(freezeCopy(previous, previous)).toBe(previous)
   })
 
   it('freezes any other object in place', () => {
