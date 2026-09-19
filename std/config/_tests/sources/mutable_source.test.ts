@@ -85,6 +85,24 @@ describe('MutableConfigSource', () => {
     expect(data(source.set('', { a: 1 }))).toEqual({ a: 1 })
   })
 
+  // A layer's data is an object: anything else failed every later load of the source, far from the call that wrote it.
+  it('refuses a root that is not an object, and keeps what it held', () => {
+    const changed = vi.fn()
+    const source = new MutableConfigSource().set('server.port', 3000)
+    source.watch(changed)
+    const refused = expect.objectContaining({
+      code: 'ERR_CONFIG_SOURCE',
+      message: 'Cannot set the root of config source "mutable": the value must be an object',
+    })
+
+    expect(() => source.set('', 1)).toThrow(refused)
+    expect(() => source.set([], ['a'])).toThrow(refused)
+    expect(() => source.replace(null as never)).toThrow(refused)
+
+    expect(data(source)).toEqual({ server: { port: 3000 } })
+    expect(changed).not.toHaveBeenCalled()
+  })
+
   it('changes nothing when unsetting a path that runs through a leaf or through nothing', () => {
     const source = new MutableConfigSource().set('server.port', 3000)
 

@@ -1,3 +1,4 @@
+import { ErrConfig } from '../errors.js'
 import { countLeaves, isPlainObject, toParts } from '../tree.js'
 import type { ConfigLayer, ConfigObject, ConfigSource, ConfigValue } from '../types.js'
 
@@ -22,6 +23,8 @@ export class MutableConfigSource implements ConfigSource {
   /**
    * Sets the value at `path`, replacing whatever this source held there. A dotted path splits on `.`; a key
    * holding a dot needs the array form.
+   *
+   * @throws ErrConfig `ERR_CONFIG_SOURCE` when `path` is the root and `value` is not an object.
    */
   set(path: string | readonly string[], value: ConfigValue): this {
     const parts = toParts(path)
@@ -60,8 +63,20 @@ export class MutableConfigSource implements ConfigSource {
     return this.#written()
   }
 
-  /** Discards everything and starts over from `values`. */
+  /**
+   * Discards everything and starts over from `values`.
+   *
+   * @throws ErrConfig `ERR_CONFIG_SOURCE` when `values` is not an object.
+   */
   replace(values: Record<string, ConfigValue>): this {
+    // A layer's data is an object, so anything else would fail every later load of this source, far from here.
+    if (!isPlainObject(values)) {
+      throw new ErrConfig(
+        `Cannot set the root of config source "${this.name}": the value must be an object`,
+        'ERR_CONFIG_SOURCE',
+      )
+    }
+
     this.#data = structuredClone(values) as Record<string, unknown>
     return this.#written()
   }
