@@ -4,10 +4,10 @@ import { config as loadEnv } from 'dotenv'
 import swc from 'unplugin-swc'
 import { defineConfig } from 'vitest/config'
 
-// Load the repo-root .env (where the PETSTOREDEMO_AUTH_GITHUB_* credentials live) and hand the
+// Load the repo-root .env (where the PETSTORE_AUTH__GITHUB__* credentials live) and hand the
 // parsed values to the test workers via `test.env`. Vitest runs specs in worker threads, so a bare
-// `dotenv/config` in this config file would not reach them. Absent .env → {} → github.config falls
-// back to dev placeholders, so the suite stays green offline. Real creds only matter for manual runs;
+// `dotenv/config` in this config file would not reach them. Absent .env → {} → the schema's own defaults
+// apply, so the suite stays green offline. Real creds only matter for manual runs;
 // GitHub's interactive login cannot complete in an automated test (the flow spec stubs GitHub).
 const rootEnv = loadEnv({ path: fileURLToPath(new URL('../../.env', import.meta.url)) }).parsed ?? {}
 
@@ -23,8 +23,11 @@ export default defineConfig({
       // Vite already applied the dist file's source map; SWC must not apply it again.
       inputSourceMap: false,
       jsc: {
-        parser: { syntax: 'typescript', decorators: true },
-        transform: { decoratorVersion: '2022-03' },
+        parser: { syntax: 'typescript', tsx: true, decorators: true },
+        transform: {
+          decoratorVersion: '2022-03',
+          react: { runtime: 'automatic', importSource: '@kitajs/html' },
+        },
         target: 'es2022',
       },
     }),
@@ -43,8 +46,12 @@ export default defineConfig({
         new URL('../../http/decorators/registrar/index.ts', import.meta.url),
       ),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
+      // Source too, because `HTMLResult extends Responder` from @caffeinejs/http: resolved from dist, it would
+      // extend a *different* Responder than the adapter checks for, and every HTML route would come back as JSON.
+      '@caffeinejs/html': fileURLToPath(new URL('../../html/index.ts', import.meta.url)),
       '@caffeinejs/openapi': fileURLToPath(new URL('../../openapi/index.ts', import.meta.url)),
       '@caffeinejs/testing': fileURLToPath(new URL('../../testing/index.ts', import.meta.url)),
+      '@caffeinejs/brewer': fileURLToPath(new URL('../../brewer/index.ts', import.meta.url)),
     },
   },
   test: {

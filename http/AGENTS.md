@@ -27,10 +27,21 @@ re-declared decorator.
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
 holds the only framework slot — `ErrorHandlingServiceConfigurer` leads — and everything after it, this package's
 features and the user's alike, runs in `.with(...)` call order. The adapter installs two things around that
-loop: the form body parser before it, and the default not-found handler after it. Do not
-reintroduce a stage, and do not add another direct `install*()` call in the adapter: write the plugin and put its
-feature in the right place. Do not move server wiring back into `bootstrap`: bootstrap hooks run concurrently,
-before the adapter has decorated the server.
+loop: the form body parser before it, and the default not-found handler after it. Do not reintroduce a stage,
+and do not add a third direct `install*()` call: anything a feature can own belongs in a feature, in the right
+place. Do not move server wiring back into `bootstrap`: bootstrap hooks run concurrently, before the adapter has
+decorated the server.
+
+Cookies are parsed for every request, ahead of every plugin. `CookieBuilder` (`cookies.ts`) is an ordinary
+`HTTPFeatureBuilder` that `WebApplication` registers unconditionally in its constructor, which is what puts it
+first in the install list — only the error handler precedes it, and it reads no cookies. So an application
+neither registers `@fastify/cookie` nor orders it, and the authentication gate carries no cookie check: a scheme
+reading its credential from a cookie can no longer be registered ahead of the parsing. An application states the
+plugin's options with `.cookie(...)`, wherever in the chain it likes — a `secret` is the one that matters, since
+`ctx.req.signedCookie()` has nothing to verify with otherwise. The two ways out of the registration: a Fastify
+instance that already has the plugin keeps its own (the feature stands down rather than failing on the duplicate
+decorators, and that application owns its cookie settings entirely), and `.cookie(k => k.enabled(false))`, which
+leaves the plugin unregistered so `ctx.req.cookie()` fails rather than answering `undefined`.
 
 The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
 `.authentication(...)` was written: a CORS plugin registered before it still stamps its headers on a 401, and a hook

@@ -84,3 +84,85 @@ describe('validateSchema with a Standard Schema', () => {
     expect(result.ok === false && result.issues[0].message).toMatch(/Async schema validation is not supported/)
   })
 })
+
+// `Value.Default` walks the value, so a block the input omits is never built from its children's defaults and
+// fails as a missing required property. Materializing creates the declared node first — structure only, so a
+// wrong value still fails exactly as it did.
+describe('validateSchema with materialize', () => {
+  it('builds a block the input omits entirely from its field defaults', () => {
+    const schema = $t.Object({
+      server: $t.Object({ host: $t.String({ default: '0.0.0.0' }), port: $t.Number({ default: 9999 }) }),
+    })
+
+    expect(validateSchema(schema, {}).ok).toBe(false)
+    expect(validateSchema(schema, {}, { materialize: true })).toEqual({
+      ok: true,
+      value: { server: { host: '0.0.0.0', port: 9999 } },
+    })
+  })
+
+  it('builds every level, not only the outermost', () => {
+    const schema = $t.Object({
+      auth: $t.Object({ github: $t.Object({ clientId: $t.String({ default: '' }) }) }),
+    })
+
+    expect(validateSchema(schema, {}, { materialize: true })).toEqual({
+      ok: true,
+      value: { auth: { github: { clientId: '' } } },
+    })
+  })
+
+  it('leaves an optional block absent, because the author said optional', () => {
+    const schema = $t.Object({ tracing: $t.Optional($t.Object({ sampleRate: $t.Number({ default: 1 }) })) })
+
+    expect(validateSchema(schema, {}, { materialize: true })).toEqual({ ok: true, value: {} })
+  })
+
+  // The point of creating structure and not content: nothing here can invent a value nobody supplied.
+  it('still fails a required field that has no default, naming the field rather than the block', () => {
+    const schema = $t.Object({ auth: $t.Object({ clientId: $t.String() }) })
+
+    const result = validateSchema(schema, {}, { materialize: true })
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.issues[0].path).toBe('auth.clientId')
+  })
+
+  it('still fails a value of the wrong type', () => {
+    const schema = $t.Object({ server: $t.Object({ port: $t.Number({ default: 9999 }) }) })
+
+    expect(validateSchema(schema, { server: { port: 'abc' } }, { materialize: true }).ok).toBe(false)
+  })
+
+  it('seeds an absent block from its own default, so an object-level default still wins', () => {
+    const schema = $t.Object({
+      server: $t.Object({ port: $t.Number({ default: 9999 }) }, { default: { port: 8080 } }),
+    })
+
+    expect(validateSchema(schema, {}, { materialize: true })).toEqual({ ok: true, value: { server: { port: 8080 } } })
+  })
+
+  it('does not invent keys for a record, which declares none', () => {
+    const schema = $t.Object({ counts: $t.Record($t.String(), $t.Integer(), { default: {} }) })
+
+    expect(validateSchema(schema, {}, { materialize: true })).toEqual({ ok: true, value: { counts: {} } })
+  })
+
+  it('leaves a non-object where an object was declared, so the type error is still reported', () => {
+    const schema = $t.Object({ server: $t.Object({ port: $t.Number({ default: 1 }) }) })
+
+    const result = validateSchema(schema, { server: 'nope' }, { materialize: true })
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.issues[0].path).toBe('server')
+  })
+
+  it('terminates on a self-referencing schema', () => {
+    const node = $t.Recursive(self => $t.Object({ name: $t.String({ default: 'n' }), child: $t.Optional(self) }))
+
+    expect(validateSchema($t.Object({ root: node }), {}, { materialize: true })).toEqual({
+      ok: true,
+      value: { root: { name: 'n' } },
+    })
+  })
+})

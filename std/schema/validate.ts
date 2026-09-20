@@ -2,6 +2,7 @@ import type { TSchema } from '@sinclair/typebox'
 import { HasTransform, TransformDecodeError, Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
+import { materializeObjects } from './_materialize.js'
 import { type AnySchema, type InferSchema, isTypeBoxSchema, type SchemaIssue } from './schema.js'
 
 export type SchemaValidationResult<T> = { ok: true; value: T } | { ok: false; issues: SchemaIssue[] }
@@ -15,6 +16,15 @@ export interface SchemaValidateOptions {
    * not, and must not start decoding because some other part of the framework wanted it to.
    */
   decode?: boolean
+  /**
+   * Creates the object nodes the schema declares and the input omits, so a block whose fields all carry defaults
+   * materializes from nothing rather than failing as a missing required property.
+   *
+   * Off by default, and a caller's decision for the same reason {@link decode} is. Configuration turns it on
+   * because a block nobody configured should still resolve to its defaults; a message payload must not gain a
+   * node the sender never sent.
+   */
+  materialize?: boolean
 }
 
 /**
@@ -33,26 +43,34 @@ export function validateSchema<S extends AnySchema>(
   options: SchemaValidateOptions = {},
 ): SchemaValidationResult<InferSchema<S>> {
   if (isTypeBoxSchema(schema)) {
-    return validateTypeBox(schema, input, options.decode === true) as SchemaValidationResult<InferSchema<S>>
+    return validateTypeBox(schema, input, options) as SchemaValidationResult<InferSchema<S>>
   }
   return validateStandard(schema as StandardSchemaV1, input) as SchemaValidationResult<InferSchema<S>>
 }
 
 /**
- * Clone so the caller's input is never mutated, then fill defaults, coerce (`'8080'` becomes `8080`, which is the
- * only way environment variables can satisfy a typed schema), drop undeclared keys, and check.
+ * Clone so the caller's input is never mutated, then optionally create the declared object nodes it omits, fill
+ * defaults, coerce (`'8080'` becomes `8080`, which is the only way environment variables can satisfy a typed
+ * schema), drop undeclared keys, and check.
  *
  * `Value.Clean` is what makes unknown keys *dropped rather than rejected*, matching how object schemas behave in
  * zod and valibot. Without it a single unrelated environment variable would fail startup.
  */
-function validateTypeBox(schema: TSchema, input: unknown, decode: boolean): SchemaValidationResult<unknown> {
+function validateTypeBox(
+  schema: TSchema,
+  input: unknown,
+  options: SchemaValidateOptions,
+): SchemaValidationResult<unknown> {
   let value = Value.Clone(input)
+  if (options.materialize === true) {
+    value = materializeObjects(schema, value)
+  }
   value = Value.Default(schema, value)
   value = Value.Convert(schema, value)
   value = Value.Clean(schema, value)
 
   if (Value.Check(schema, value)) {
-    return decode ? decodeCodecs(schema, value) : { ok: true, value }
+    return options.decode === true ? decodeCodecs(schema, value) : { ok: true, value }
   }
 
   const issues = [...Value.Errors(schema, value)].map<SchemaIssue>(error => ({

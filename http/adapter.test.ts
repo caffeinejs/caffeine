@@ -1,5 +1,4 @@
 import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
-import FastifyCookie from '@fastify/cookie'
 import Fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
@@ -232,6 +231,9 @@ describe('Fastify Adapter', () => {
     })
   })
 
+  // The cookie feature registers @fastify/cookie, so an application that signs cookies states the secret with
+  // .cookie(...) rather than registering the plugin a second time — which Fastify refuses, the decorators
+  // being there.
   describe('Cookies', () => {
     it('injects a named cookie via cookie() picker', async () => {
       @Controller('/ck')
@@ -245,7 +247,6 @@ describe('Fastify Adapter', () => {
       void [NamedCookieController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie)
 
       const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
@@ -267,7 +268,6 @@ describe('Fastify Adapter', () => {
       void [AllCookiesController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie)
 
       const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
@@ -293,9 +293,8 @@ describe('Fastify Adapter', () => {
       void [SignedController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie, { secret: SECRET })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).cookie(k => k.secret(SECRET))
       await app.ready()
 
       const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${signed}` } })
@@ -315,9 +314,8 @@ describe('Fastify Adapter', () => {
       void [TamperedController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie, { secret: 'test-secret' })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).cookie(k => k.secret('test-secret'))
       await app.ready()
 
       const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
@@ -338,7 +336,6 @@ describe('Fastify Adapter', () => {
       void [SetCookieController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie)
 
       const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
@@ -362,7 +359,6 @@ describe('Fastify Adapter', () => {
       void [GetCookieController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie)
 
       const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()
@@ -388,9 +384,8 @@ describe('Fastify Adapter', () => {
       void [ReqSignedCookieController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie, { secret: SECRET })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication(fastifyAdapterFactory(fastify)).cookie(k => k.secret(SECRET))
       await app.ready()
 
       const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${signed}` } })
@@ -411,7 +406,6 @@ describe('Fastify Adapter', () => {
       void [DeleteCookieController]
 
       const fastify = Fastify()
-      fastify.register(FastifyCookie)
 
       const app = createWebApplication(fastifyAdapterFactory(fastify))
       await app.ready()

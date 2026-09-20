@@ -1,5 +1,6 @@
 // Prisma schema for the 03-petstore example.
-// Models mirror the Modern Petstore OpenAPI 3.2 spec (docs/openapi.petstore.yaml).
+// Models mirror the Modern Petstore OpenAPI 3.2 specification. The API shapes themselves are declared in each
+// feature's `*.schemas.ts`, which is also what the OpenAPI document is generated from.
 
 generator client {
   provider = "prisma-client-js"

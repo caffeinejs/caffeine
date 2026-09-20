@@ -154,3 +154,41 @@ describe('validateConfig codecs', () => {
     expect(validateConfig(wrapped, { tags: 'a,b' })).toEqual({ tags: ['a', 'b'] })
   })
 })
+
+// An application declares its blocks and their field defaults; it does not also have to write `{ default: {} }`
+// on every block to make an unconfigured one exist.
+describe('validateConfig and blocks nobody configured', () => {
+  it('resolves a block absent from every source to its field defaults', () => {
+    const schema = $t.Object({
+      server: $t.Object({ host: $t.String({ default: '0.0.0.0' }), port: $t.Number({ default: 9999 }) }),
+      log: $t.Object({ level: $t.String({ default: 'info' }) }),
+    })
+
+    expect(validateConfig(schema as ConfigSchema<unknown>, {})).toEqual({
+      server: { host: '0.0.0.0', port: 9999 },
+      log: { level: 'info' },
+    })
+  })
+
+  it('still refuses a block whose fields are required and undefaulted, naming the field', () => {
+    const schema = $t.Object({ auth: $t.Object({ clientId: $t.String() }) })
+
+    try {
+      validateConfig(schema as ConfigSchema<unknown>, {})
+      expect.unreachable()
+    } catch (err) {
+      expect(err).toBeInstanceOf(ErrConfigValidation)
+      expect((err as ErrConfigValidation).issues.map(i => i.path)).toContain('auth.clientId')
+    }
+  })
+
+  it('lets a partially configured block keep what was set and default the rest', () => {
+    const schema = $t.Object({
+      server: $t.Object({ host: $t.String({ default: '0.0.0.0' }), port: $t.Number({ default: 9999 }) }),
+    })
+
+    expect(validateConfig(schema as ConfigSchema<unknown>, { server: { port: '3000' } })).toEqual({
+      server: { host: '0.0.0.0', port: 3000 },
+    })
+  })
+})

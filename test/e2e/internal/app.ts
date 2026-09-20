@@ -1,7 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { createWebApplication, fastifyAdapterFactory, type WebApplicationOptions } from '@caffeinejs/http'
 import type { ConfigDefinition } from '@caffeinejs/std/config'
-import FastifyCookie from '@fastify/cookie'
 import fastify from 'fastify'
 
 /**
@@ -16,7 +15,6 @@ function newApplication<C>(options: StartAppOptions<C>) {
 
   // Registered on the server itself, ahead of everything the application installs, so cookies are parsed by the
   // time the authentication gate reads them.
-  server.register(FastifyCookie)
 
   // Both type parameters are inferred: the adapter from the factory, the configuration from `options.config`.
   const applicationOptions: WebApplicationOptions<C> = {

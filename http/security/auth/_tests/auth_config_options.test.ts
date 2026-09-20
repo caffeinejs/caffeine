@@ -1,7 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
-import FastifyCookie from '@fastify/cookie'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -46,7 +45,6 @@ const configured = (auth: Record<string, unknown>) =>
 
 function server() {
   const instance = fastify({ logger: false })
-  instance.register(FastifyCookie)
 
   return instance
 }

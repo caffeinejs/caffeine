@@ -1,5 +1,7 @@
-import type { WebApplication } from '@caffeinejs/http'
+import type { Fetchable } from '@caffeinejs/brewer'
 import { vi } from 'vitest'
+
+import { GITHUB_SESSION_COOKIE, GITHUB_STATE_COOKIE } from '../../app.config.js'
 
 /**
  * Test helpers for driving the GitHub OAuth flow without a network.
@@ -7,7 +9,7 @@ import { vi } from 'vitest'
  * Shared because GitHub is now the application's default authentication scheme: any test that needs an
  * authenticated caller — not just the auth tests — has to complete this flow to obtain a session cookie.
  *
- * Lives under `util/` rather than beside the auth feature because `features/pets/` needs it too, and a
+ * Lives under `util/` rather than beside the auth feature because `pets/` and `orders/` need it too, and a
  * `_`-prefixed module would be private to its own directory.
  */
 
@@ -16,9 +18,6 @@ import { vi } from 'vitest'
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token'
 const GITHUB_USER_URL = 'https://api.github.com/user'
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails'
-
-export const GITHUB_STATE_COOKIE = 'petstore_gh_state'
-export const GITHUB_SESSION_COOKIE_NAME = 'petstore_gh_session'
 
 /**
  * What a browser address-bar request looks like.
@@ -115,7 +114,7 @@ export function setCookie(res: Response, name: string): string {
  *
  * Call `stubGithub()` first, and remember to `vi.unstubAllGlobals()` afterwards.
  */
-export async function signInWithGithub(app: WebApplication): Promise<string> {
+export async function signInWithGithub(app: Fetchable): Promise<string> {
   // Sign-in is a browser navigation, and the challenge answers a non-navigation with 401 instead of the
   // 302 this helper follows — so say what this is.
   const login = await app.fetch('/login/github', { headers: NAVIGATION })
@@ -130,10 +129,10 @@ export async function signInWithGithub(app: WebApplication): Promise<string> {
     headers: { cookie: `${stateCookieName}=${stateCookie}` },
   })
 
-  return setCookie(callback, GITHUB_SESSION_COOKIE_NAME)
+  return setCookie(callback, GITHUB_SESSION_COOKIE)
 }
 
 /** The `cookie` header carrying a signed-in GitHub session. */
 export function sessionHeader(session: string): Record<string, string> {
-  return { cookie: `${GITHUB_SESSION_COOKIE_NAME}=${session}` }
+  return { cookie: `${GITHUB_SESSION_COOKIE}=${session}` }
 }

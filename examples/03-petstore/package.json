@@ -14,24 +14,25 @@
   },
   "dependencies": {
     "@caffeinejs/di": "*",
+    "@caffeinejs/html": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/multipart": "*",
     "@caffeinejs/openapi": "*",
     "@caffeinejs/static": "*",
     "@caffeinejs/std": "*",
-    "@caffeinejs/view": "*",
-    "@fastify/cookie": "^11.1.2",
     "@fastify/multipart": "^10.1.1",
     "@fastify/static": "^10.1.3",
-    "@fastify/view": "^12.0.0",
+    "@kitajs/html": "^4.2.13",
     "@prisma/client": "^6.19.3",
     "dotenv": "^17.0.0",
     "fastify": "^5.12.1",
-    "handlebars": "^4.7.9",
-    "jose": "^6.2.10"
+    "jose": "^6.2.10",
+    "pino": "^10.3.1"
   },
   "devDependencies": {
+    "@caffeinejs/brewer": "*",
     "@caffeinejs/cli": "*",
+    "@caffeinejs/testing": "*",
     "@types/node": "^26.4.0",
     "prisma": "^6.2.1",
     "tsx": "^4.23.13"

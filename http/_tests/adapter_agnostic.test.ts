@@ -127,7 +127,8 @@ const noop: FastifyPluginAsync = async () => undefined
 
 describe('an application on an adapter that is not Fastify', () => {
   // The contract's whole claim at run time: the adapter gets the root list in the order it was written, with error
-  // handling first, and resolves the middleware pipeline with no server in sight.
+  // handling first and the cookie parsing behind it — the two the application registers itself, before anything
+  // `.with(...)` adds — and resolves the middleware pipeline with no server in sight.
   it('hands the adapter its extensions in order and a pipeline it resolves alone', async () => {
     const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
     const unit =
@@ -146,7 +147,13 @@ describe('an application on an adapter that is not Fastify', () => {
       entry.kind === 'feature' ? `feature:${entry.name}` : `extension:${entry.extension.unit}`,
     )
 
-    expect(root).toEqual(['feature:error-handling', 'extension:first', 'feature:second', 'extension:third'])
+    expect(root).toEqual([
+      'feature:error-handling',
+      'feature:cookie',
+      'extension:first',
+      'feature:second',
+      'extension:third',
+    ])
     expect(adapter.middlewares.map(middleware => middleware.hook)).toEqual(['after'])
 
     await app.close()

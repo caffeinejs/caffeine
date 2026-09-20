@@ -2,5 +2,4 @@
 **/dist
 **/*.tsbuildinfo
 **/.env
-examples/03-petstore/src/**/*.generated.mod.ts
 .git

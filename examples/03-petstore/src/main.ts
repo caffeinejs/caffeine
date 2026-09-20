@@ -1,8 +1,11 @@
 import 'dotenv/config'
 import { createContainer } from './app.container.js'
 import { buildApp } from './app.js'
+import { rootModule } from './root.gen.mod.js'
 
-const app = buildApp(await createContainer())
+// The generated module graph is imported here rather than inside createContainer, so nothing but the entry
+// point depends on generated code and a test can build a container from one feature's module.
+const app = buildApp(createContainer(rootModule))
 
 // The Prisma handle disconnects itself on container dispose — see `PrismaConfig` — which the framework runs
 // after the drain delay and after the server has stopped.
@@ -13,5 +16,5 @@ const app = buildApp(await createContainer())
 const { address } = await app.run()
 
 if (address !== undefined) {
-  console.log(`Petstore listening on ${address.origin}`)
+  app.log.info(`Petstore listening on ${address.origin}`)
 }

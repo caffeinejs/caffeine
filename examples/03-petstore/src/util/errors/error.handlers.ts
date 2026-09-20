@@ -1,6 +1,8 @@
+import { HTML } from '@caffeinejs/html'
 import { Catch, type ActionResult, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import { View } from '@caffeinejs/view'
+
+import { ErrorPage } from './html/ErrorPage.js'
 
 // A simple, conventional error body: a machine-readable `code`, a human-readable `message`, and —
 // for validation failures — a list of the offending fields. Rendered as plain application/json.
@@ -17,7 +19,7 @@ export interface FieldError {
 
 // The same body as a schema, so the OpenAPI document describes what these handlers actually return. The `$id`
 // is what lands it in components.schemas as `ApiError` and turns every use into a $ref.
-export const fieldErrorSchema = $t.Object(
+export const FieldErrorSchema = $t.Object(
   {
     field: $t.String(),
     message: $t.String(),
@@ -25,11 +27,11 @@ export const fieldErrorSchema = $t.Object(
   { $id: 'FieldError' },
 )
 
-export const apiErrorSchema = $t.Object(
+export const APIErrorSchema = $t.Object(
   {
     code: $t.String(),
     message: $t.String(),
-    errors: $t.Optional($t.Array(fieldErrorSchema)),
+    errors: $t.Optional($t.Array(FieldErrorSchema)),
   },
   { $id: 'ApiError' },
 )
@@ -57,11 +59,11 @@ function wantsHTML(ctx: Context): boolean {
   return ctx.req.header('accept')?.includes('text/html') ?? false
 }
 
-// Returns the JSON body, or a rendered error view when the client asked for HTML. `ctx.status(...)` sets
+// Returns the JSON body, or a rendered error page when the client asked for HTML. `ctx.status(...)` sets
 // the response code either way; the returned value is finalized by the framework (JSON or HTML).
-function respond(ctx: Context, status: number, body: ErrorBody): ErrorBody | ReturnType<typeof View> {
+function respond(ctx: Context, status: number, body: ErrorBody): ErrorBody | ReturnType<typeof HTML> {
   ctx.status(status)
-  return wantsHTML(ctx) ? View('error', { ...body, status, title: `Error ${status}` }) : body
+  return wantsHTML(ctx) ? HTML(ErrorPage({ ...body, status })) : body
 }
 
 // Shape of a Fastify schema-validation failure. Fastify attaches `validation` (the Ajv errors) and

@@ -13,6 +13,7 @@ import type { Logger } from '@caffeinejs/std/logger'
 import { AdapterExtensions, type AdapterExtensionFactory } from './adapter_extension.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
 import type { AdapterTypes } from './adapter_types.js'
+import { CookieBuilder } from './cookies.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrConfiguration, ErrShutdownTimeout } from './error/common.js'
 import { ErrorHandlingServiceConfigurer } from './error/error.js'
@@ -147,9 +148,15 @@ export class WebApplication<
   #authzBuilder: AuthorizationBuilder | undefined
   #guardsBuilder: GuardsBuilder | undefined
   readonly #serverBuilder = new ServerBuilder<unknown>()
+  readonly #cookieBuilder = new CookieBuilder<unknown>()
 
   constructor(adapterFactory: AdapterFactory<T>, options: WebApplicationOptions<C> = {}) {
     super(options)
+
+    // Registered unconditionally and ahead of everything `.with(...)` installs, so cookies are parsed before
+    // any plugin that reads one runs — the authentication gate included, wherever `.authentication(...)` put
+    // it. Only the error handler is installed earlier, and it reads no cookies.
+    this.addFeature(this.#cookieBuilder)
 
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
     // through `.server((s, c) => s.config(...))` — declaring `server` in the schema is not enough.
@@ -377,6 +384,24 @@ export class WebApplication<
   server(configure: FeatureConfigurer<ServerBuilder<C>, C>): this {
     this.assertConfigurable()
     this.#serverBuilder[kAddConfigurer](configure as never)
+    return this
+  }
+
+  /**
+   * Configures the cookie parsing every application gets: the signing secret, the serialization defaults, and
+   * whether cookies are parsed at all. The feature is registered either way, so this only overrides the
+   * defaults — and it is registered ahead of every plugin, so where in the chain the call is written makes no
+   * difference.
+   *
+   * ```ts
+   * .cookie((k, c) => k.config(c.app.cookie))
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  cookie(configure: FeatureConfigurer<CookieBuilder<C>, C>): this {
+    this.assertConfigurable()
+    this.#cookieBuilder[kAddConfigurer](configure as never)
     return this
   }
 

@@ -1,5 +1,4 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import FastifyCookie from '@fastify/cookie'
 import fastify from 'fastify'
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
@@ -138,7 +137,6 @@ void [SessionController, MeController, SchemeScopedMeController]
 
 async function buildApp() {
   const f = fastify()
-  f.register(FastifyCookie)
   const container = new CaffeineIoC()
   container.bind(TestUserProvider, t => t.toSelf().extends())
   // Fast hasher keeps the test snappy; overrides the fallback ScryptPasswordHasher from addCredentials.
@@ -234,7 +232,6 @@ describe('cookie session login (application)', () => {
 
 async function buildDurableApp(graceSeconds?: number) {
   const f = fastify()
-  f.register(FastifyCookie)
   const container = new CaffeineIoC()
   container.bind(TestUserProvider, t => t.toSelf().extends())
   const store = new InMemoryRememberStore()

@@ -1,4 +1,3 @@
-import FastifyCookie from '@fastify/cookie'
 import fastify from 'fastify'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWK, JWTVerifyGetKey, CryptoKey } from 'jose'
@@ -74,7 +73,6 @@ describe('OIDC integration', () => {
     void [OIDCIntChallengeController]
 
     const f = fastify()
-    f.register(FastifyCookie)
     const app = makeOIDCApp(f)
     await app.ready()
 
@@ -145,7 +143,6 @@ describe('OIDC integration', () => {
 
       const stateCookie = await makeStateCookie(nonce)
       const f = fastify()
-      f.register(FastifyCookie)
       const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
@@ -161,7 +158,6 @@ describe('OIDC integration', () => {
     it('callback with state mismatch → 400', async () => {
       const stateCookie = await makeStateCookie('n', 'correct-state')
       const f = fastify()
-      f.register(FastifyCookie)
       const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
@@ -178,7 +174,6 @@ describe('OIDC integration', () => {
       mockTokenEndpoint('wrong-nonce')
       const stateCookie = await makeStateCookie('correct-nonce')
       const f = fastify()
-      f.register(FastifyCookie)
       const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
@@ -193,7 +188,6 @@ describe('OIDC integration', () => {
       mockTokenEndpoint('wrong-nonce')
       const stateCookie = await makeStateCookie('correct-nonce')
       const f = fastify({ logger: false })
-      f.register(FastifyCookie)
       const app = makeOIDCApp(f, jwksResolver)
       await app.ready()
 
@@ -227,7 +221,6 @@ describe('OIDC integration', () => {
 
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'oidc-int-user', ISSUER)])
     const f = fastify()
-    f.register(FastifyCookie)
     const app = makeOIDCApp(f)
     await app.ready()
 
@@ -258,7 +251,6 @@ describe('OIDC integration', () => {
     void [OIDCIntAnonController]
 
     const f = fastify()
-    f.register(FastifyCookie)
     const app = makeOIDCApp(f)
     await app.ready()
 
@@ -288,7 +280,6 @@ describe('OIDC integration', () => {
     void [OIDCIntXHRController]
 
     const f = fastify()
-    f.register(FastifyCookie)
     const app = makeOIDCApp(f)
     await app.ready()
 
@@ -324,7 +315,6 @@ describe('OIDC integration', () => {
 
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'admin', ISSUER), new Claim('roles', 'admin', ISSUER)])
     const f = fastify()
-    f.register(FastifyCookie)
     const app = makeOIDCApp(f)
     await app.ready()
 
@@ -350,7 +340,6 @@ describe('OIDC integration', () => {
       new Claim('roles', 'viewer', ISSUER),
     ])
     const f = fastify()
-    f.register(FastifyCookie)
     const app = makeOIDCApp(f)
     await app.ready()
 
@@ -360,9 +349,12 @@ describe('OIDC integration', () => {
     expect(res.status).toBe(403)
   })
 
-  it('throws at startup if @fastify/cookie is not registered', async () => {
+  // The adapter registers @fastify/cookie itself, so the state and session cookies this flow depends on are
+  // parsed with nothing asked of the application.
+  it('starts with @fastify/cookie registered by nobody', async () => {
     const builder = makeOIDCApp(fastify())
-    await expect(builder.ready()).rejects.toThrow('@fastify/cookie')
+    await expect(builder.ready()).resolves.toBeUndefined()
+    await builder.close()
   })
 
   it('throws at startup if controller route conflicts with callbackPath', async () => {
@@ -376,7 +368,6 @@ describe('OIDC integration', () => {
     void [ConflictingController]
 
     const f = fastify()
-    f.register(FastifyCookie)
     const builder = makeOIDCApp(f)
     await expect(builder.ready()).rejects.toThrow('conflicts with a registered controller route')
   })

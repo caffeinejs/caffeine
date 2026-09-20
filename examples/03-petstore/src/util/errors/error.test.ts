@@ -1,5 +1,4 @@
-import { fileURLToPath } from 'node:url'
-
+import { html } from '@caffeinejs/html'
 import {
   Catch,
   CatchWith,
@@ -15,9 +14,7 @@ import {
   fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import { view } from '@caffeinejs/view'
 import fastify from 'fastify'
-import handlebars from 'handlebars'
 import { describe, it, expect } from 'vitest'
 
 // Side-effect import: registers HTTPErrorHandler / FallbackErrorHandler as global @Catch handlers.
@@ -82,13 +79,10 @@ class GadgetsController {
 }
 void [GadgetsController]
 
-const viewsRoot = fileURLToPath(new URL('../../views', import.meta.url))
-
 async function buildApp() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
-    view(v => v.add(e => e.engine({ handlebars }).root(viewsRoot).extension('hbs').layout('layout'))),
-  )
+  const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => html())
   await app.ready()
+
   return app
 }
 
@@ -166,10 +160,11 @@ describe('error handling', () => {
 
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toContain('text/html')
-    const html = await res.text()
-    expect(html).toContain('Error 404')
-    // Handlebars escapes the double-quotes in the message ("abc" → &quot;abc&quot;).
-    expect(html).toContain('The requested thing with ID &quot;abc&quot; was not found')
+    const page = await res.text()
+    expect(page).toContain('Error 404')
+    // `@kitajs/html` escapes nothing unless a node says `safe`, and the error page says it on every value it
+    // renders — so the double quotes around the id come back escaped ("abc" → &#34;abc&#34;).
+    expect(page).toContain('The requested thing with ID &#34;abc&#34; was not found')
   })
 
   it('lets a controller override the global 404 rendering with @CatchWith', async () => {

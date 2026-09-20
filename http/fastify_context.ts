@@ -296,7 +296,10 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
    */
   #assertCookiesParsed(): void {
     if (this.request.cookies === undefined) {
-      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
+      throw new Error(
+        'Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance: turn cookie ' +
+          'parsing back on with .cookie(k => k.enabled(true))',
+      )
     }
 
     if (this.request.cookies === null) {

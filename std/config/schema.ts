@@ -27,9 +27,13 @@ export const passthroughConfigSchema: StandardSchemaV1<unknown, unknown> = {
  * Codecs run here, and only here. Configuration is where values arrive as text — an environment variable, a
  * command-line argument — so a schema declaring `$t.List` or `$t.JSON` is decoded as part of validating it. A
  * Standard Schema is unaffected: it runs its own validator, transforms included, exactly as authored.
+ *
+ * Declared object nodes the tree omits are created before defaults are filled, so a block nobody configured
+ * resolves to its defaults rather than failing as a missing required property. A block whose fields are required
+ * and undefaulted still fails, now naming those fields.
  */
 export function validateConfig<T>(schema: ConfigSchema<T>, input: unknown): T {
-  const result = validateSchema(schema as AnySchema, input, { decode: true })
+  const result = validateSchema(schema as AnySchema, input, { decode: true, materialize: true })
 
   if (!result.ok) {
     throw new ErrConfigValidation(result.issues)

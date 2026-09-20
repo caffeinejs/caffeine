@@ -320,10 +320,11 @@ export class Router<
   }
 
   /**
-   * OpenAPI 3.2's QUERY method: a GET-shaped read with a request body.
+   * OpenAPI 3.2's QUERY method: a GET-shaped read with a request body — safe and idempotent like a `GET`, for
+   * search criteria too structured to fit in a query string.
    *
-   * QUERY is not in Fastify's default method set. The underlying Fastify instance needs
-   * `instance.addHttpMethod('QUERY', { hasBody: true })` before `app.ready()`, or the route never matches.
+   * Fastify carries QUERY in its default method set, so nothing has to be opted into. Documenting it does need
+   * `.version('3.2.0')` on `@caffeinejs/openapi`: a 3.1 path item has no field for a method outside the fixed set.
    */
   query<P extends string>(path: P): Chain<'QUERY', P, V, C, GD, GP, R, T>
   query<P extends string, O>(

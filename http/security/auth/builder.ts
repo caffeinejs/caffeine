@@ -449,7 +449,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   protected async server(instance: FastifyInstance): Promise<void> {
     // The gate lands where `.authentication(...)` was written: everything installed before it runs ahead of
     // the hook, everything after it only for a request the hook let through.
-    await instance.register(authenticationPlugin({ readsCookies: this.#registrations.some(readsCookies) }))
+    await instance.register(authenticationPlugin())
 
     if (this.#oidcMeta !== undefined) {
       await instance.register(oidcRoutesPlugin(this.#oidcMeta))
@@ -742,11 +742,6 @@ function isKey<T>(value: InjectionToken<T> | T): value is InjectionToken<T> {
   return (
     typeof value === 'string' || typeof value === 'symbol' || isConstructable(value) || value instanceof DeferredCtor
   )
-}
-
-/** Whether a scheme of this kind reads its credential from a cookie. */
-function readsCookies(registration: SchemeRegistration): boolean {
-  return registration.kind !== 'jwt' && registration.kind !== 'basic' && registration.kind !== 'opaque'
 }
 
 /**

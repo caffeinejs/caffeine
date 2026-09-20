@@ -59,21 +59,3 @@ export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
     this.name = 'ErrAuthenticationRequired'
   }
 }
-
-/**
- * ErrAuthenticationCookies is thrown at start-up when a scheme reads its credential from a cookie and
- * `@fastify/cookie` is not registered ahead of authentication.
- *
- * Ahead of, not merely registered: the plugin parses cookies in a hook of its own and hooks run in registration
- * order, so one registered later has parsed nothing by the time the gate reads them, and every request fails.
- */
-export class ErrAuthenticationCookies extends ErrCaffeineWebApplication {
-  constructor() {
-    super(
-      'Cannot start application: an authentication scheme reads cookies and @fastify/cookie is not registered ' +
-        'before it: register @fastify/cookie on the server ahead of .authentication(...)',
-      'ERR_AUTHENTICATION_COOKIES',
-    )
-    this.name = 'ErrAuthenticationCookies'
-  }
-}

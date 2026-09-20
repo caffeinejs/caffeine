@@ -1,4 +1,3 @@
-import FastifyCookie from '@fastify/cookie'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -26,7 +25,6 @@ function application(onFail?: (ctx: Context, error: Error) => void, logged: LogE
   const server = fastify({
     logger: { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } },
   })
-  server.register(FastifyCookie)
 
   return createWebApplication(fastifyAdapterFactory(server))
     .authentication(auth =>

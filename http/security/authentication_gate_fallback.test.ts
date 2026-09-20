@@ -1,4 +1,3 @@
-import FastifyCookie from '@fastify/cookie'
 import fastify, { type FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -207,7 +206,6 @@ describe('the challenge of a route that names several schemes', () => {
 
   function build(schemes: string[]) {
     const server = fastify()
-    server.register(FastifyCookie)
 
     return ready(
       createWebApplication(fastifyAdapterFactory(server))
@@ -274,24 +272,35 @@ describe('the challenge of a route that names several schemes', () => {
 describe('an application whose scheme reads cookies', () => {
   const secret = 'a-session-secret-of-at-least-32-characters'
 
-  // The plugin parses cookies in a hook of its own and hooks run in registration order: registered after the
-  // gate, it has parsed nothing by the time the gate reads them. That used to be a TypeError on every request.
-  it('refuses to start when @fastify/cookie is not registered ahead of authentication', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .authentication(auth => auth.addCookie(c => c.sessionSecret(secret)))
-      .with(() => fp(async (instance: FastifyInstance) => instance.register(FastifyCookie), { name: 'late-cookies' }))
-
-    await expect(app.ready()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_COOKIES' })
-  })
-
-  it('starts when it is', async () => {
-    const server = fastify()
-    server.register(FastifyCookie)
-    const app = createWebApplication(fastifyAdapterFactory(server)).authentication(auth =>
+  // The adapter registers @fastify/cookie before any plugin, so the parsing is in place whatever slot the gate
+  // lands in. Ordering this by hand used to be the application's job, and getting it wrong was a TypeError on
+  // every request.
+  it('starts with nothing registered by the application', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).authentication(auth =>
       auth.addCookie(c => c.sessionSecret(secret)),
     )
 
     await expect(app.ready()).resolves.toBeUndefined()
+    await app.close()
+  })
+
+  it('parses the cookies of a request reaching a route registered before authentication', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+      .with(() =>
+        fp(
+          async (instance: FastifyInstance) => {
+            instance.get('/seen', request => ({ seen: request.cookies.probe ?? null }))
+          },
+          { name: 'early-route' },
+        ),
+      )
+      .authentication(auth => auth.addCookie(c => c.sessionSecret(secret)))
+
+    await app.ready()
+
+    const response = await app.fetch('/seen', { headers: { cookie: 'probe=yes' } })
+
+    expect(await response.json()).toEqual({ seen: 'yes' })
     await app.close()
   })
 

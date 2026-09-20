@@ -4,7 +4,7 @@ import fp from 'fastify-plugin'
 
 import type { Context } from '../context.js'
 import type { RouteGroup } from '../route.js'
-import { ErrAuthenticationCookies, ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
+import { ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
 import { kAuthenticationExempt } from './auth/keys.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
 import { AuthenticationService } from './auth/service.js'
@@ -31,15 +31,6 @@ export function assertAuthenticationConfigured(container: Container, routeGroups
   }
 }
 
-/** What the builder knows about the schemes it registered, and the gate cannot find out for itself. */
-export interface AuthenticationPluginOptions {
-  /**
-   * Whether a registered scheme reads its credential from a cookie. Such a scheme needs `@fastify/cookie` to have
-   * parsed the request before the gate runs, which is a matter of what was registered first.
-   */
-  readsCookies: boolean
-}
-
 /**
  * Authenticates the request and, when the route is protected, authorizes it — in that order, in one Fastify
  * `onRequest` hook.
@@ -56,9 +47,10 @@ export interface AuthenticationPluginOptions {
  * A route registered straight on the server is gated too, by the fallback policy when the application set one.
  * It carries no `@Authorize` anyone could have forgotten, so nothing else would stand in front of it.
  *
- * @throws ErrAuthenticationCookies when a scheme reads cookies and `@fastify/cookie` is not registered yet.
+ * A scheme reading its credential from a cookie needs no ordering care: the adapter registers `@fastify/cookie`
+ * before any plugin, so the cookies are parsed whatever slot this lands in.
  */
-export function authenticationPlugin(options: AuthenticationPluginOptions): FastifyPluginAsync {
+export function authenticationPlugin(): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     const container = instance.$container
 
@@ -70,12 +62,6 @@ export function authenticationPlugin(options: AuthenticationPluginOptions): Fast
 
     if (service === undefined || schemeProvider === undefined) {
       return
-    }
-
-    // Decorations appear as plugins register, so this also says `@fastify/cookie` came first — which it has to,
-    // since hooks run in registration order and it parses the cookies in one of its own.
-    if (options.readsCookies && !instance.hasRequestDecorator('cookies')) {
-      throw new ErrAuthenticationCookies()
     }
 
     // A name that resolves to nothing authenticates nobody, and the failure is invisible: the route would

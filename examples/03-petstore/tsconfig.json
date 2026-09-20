@@ -5,7 +5,9 @@
     "rootDir": ".",
     "lib": ["esnext", "Decorators", "esnext.decorators", "dom"],
     "types": ["node"],
-    "composite": false
+    "composite": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@kitajs/html"
   },
   "include": ["."],
   "exclude": ["vitest.config.ts"]

@@ -5,8 +5,7 @@ import { Controller, Args, Query, createWebApplication, fastifyAdapterFactory } 
 import { $p } from '../route_picker.js'
 
 // Isolated file: registering a @Query controller forces a QUERY route onto every app built in the
-// same module (the decorator registry is module-global), so it must not share a file with apps
-// whose Fastify instance lacks addHttpMethod('QUERY').
+// same module, the decorator registry being module-global.
 describe('@Query verb (OpenAPI 3.2 QUERY method)', () => {
   it('registers a QUERY-method route that reads the request body', async () => {
     @Controller('/query-test')
@@ -20,7 +19,6 @@ describe('@Query verb (OpenAPI 3.2 QUERY method)', () => {
     void [QueryController]
 
     const instance = Fastify()
-    instance.addHttpMethod('QUERY', { hasBody: true })
     const app = createWebApplication(fastifyAdapterFactory(instance))
     await app.ready()
 

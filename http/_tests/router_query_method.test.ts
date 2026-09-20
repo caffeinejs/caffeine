@@ -5,8 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createWebApplication, fastifyAdapterFactory, Router } from '../index.js'
 
-// Isolated file: registering a QUERY route requires addHttpMethod('QUERY') on the Fastify instance
-// before app.ready(), which other tests' apps don't opt into.
+// QUERY is in Fastify's default method set, so a route declaring it needs nothing opted into.
 describe('Router.query()', () => {
   it('registers a QUERY-method route that reads the request body', async () => {
     const routes = new Router('/query-test').query('/', { body: $t.Object({ term: $t.String() }) }, ctx => ({
@@ -14,7 +13,6 @@ describe('Router.query()', () => {
     }))
 
     const instance = fastify()
-    instance.addHttpMethod('QUERY', { hasBody: true })
     const app = createWebApplication(fastifyAdapterFactory(instance), { container: new CaffeineIoC() }).mount(routes)
     await app.ready()
 
