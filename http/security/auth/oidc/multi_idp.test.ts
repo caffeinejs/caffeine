@@ -336,7 +336,7 @@ describe('startup validation', () => {
         addOIDC(b, 'Okta', OKTA)
         b.forward('auth', () => 'Google').default('AuthTypo')
       }),
-    ).rejects.toThrow(/"AuthTypo" is not a registered strategy/)
+    ).rejects.toMatchObject({ code: 'ERR_AUTH_SCHEME_NOT_FOUND', message: expect.stringContaining('"AuthTypo"') })
   })
 
   // #11: two handlers sharing a name derive their sealed-cookie keys from the same HKDF
@@ -349,7 +349,7 @@ describe('startup validation', () => {
         addOIDC(b, 'Duplicate', OKTA, { callbackURL: 'https://app.example.com/auth/okta' })
         b.forward('auth', () => 'Duplicate').default('auth')
       }),
-    ).rejects.toThrow(/two OAuth strategies share the name "Duplicate"/)
+    ).rejects.toThrow(/a scheme is already registered under the name "Duplicate"/)
   })
 
   it('does not require Forward for a single OIDC strategy', async () => {

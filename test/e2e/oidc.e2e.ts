@@ -381,6 +381,37 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
 
   it.todo('answers a failed challenge with the public message only, never the configured issuer')
 
+  // Everything is gated, the callback included unless it is exempt — and it is where the provider sends a user
+  // who is, by definition, not signed in yet.
+  describe('in an application that requires a signed-in user everywhere', () => {
+    let running: RunningApp
+
+    beforeAll(async () => {
+      running = await startApp(
+        app =>
+          app
+            .authentication(auth => auth.addOIDC(OIDC, springOIDC))
+            .authorization(authz => authz.requireAuthenticatedByDefault())
+            .mount(newRouter('/dashboard').get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))),
+        { port: PORT },
+      )
+    })
+
+    afterAll(() => running.close())
+
+    it('still lets the provider hand the user back, and lands them on the route that declared nothing', async () => {
+      const browser = new Browser()
+
+      const login = await browser.navigate(`${ORIGIN}/dashboard`)
+      expect(login.hops[0]).toMatchObject({ url: `${ORIGIN}/dashboard`, status: 302 })
+
+      const home = await springLogin(browser, login, 'alice', 'wonderland')
+
+      expect(home.url).toBe(`${ORIGIN}/dashboard`)
+      expect(home.json()).toEqual({ sub: 'alice' })
+    })
+  })
+
   describe.skipIf(!redisUp)('with sessions held in a Redis ticket store', () => {
     let running: RunningApp
     let redis: RedisClient

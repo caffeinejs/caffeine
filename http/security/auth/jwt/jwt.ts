@@ -70,7 +70,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
       return this.options.onChallenge(ctx)
     }
 
-    ctx.status(401).header('WWW-Authenticate', this.#challengeHeader(previous?.error))
+    ctx.status(401).appendHeader('WWW-Authenticate', this.#challengeHeader(previous?.error))
   }
 
   #challengeHeader(error: Error | undefined): string {

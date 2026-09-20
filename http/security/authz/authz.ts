@@ -3,7 +3,12 @@ import { Scopes } from '@caffeinejs/di'
 import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import type { RouteGroup } from '../../route.js'
-import { ErrAuthorizationRequired, ErrAuthzPolicyEmpty, ErrAuthzRequirementHandlerDuplicate } from './errors.js'
+import {
+  ErrAuthorizationRequired,
+  ErrAuthzFallbackExcept,
+  ErrAuthzPolicyEmpty,
+  ErrAuthzRequirementHandlerDuplicate,
+} from './errors.js'
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
@@ -18,6 +23,20 @@ export interface AuthorizationOptions {
    * open.
    */
   fallbackPolicy?: AuthzPolicy
+  /** Path prefixes of routes registered straight on the server that the fallback policy leaves open. */
+  fallbackExcept?: readonly string[]
+}
+
+export interface FallbackPolicyOptions {
+  /**
+   * Path prefixes the fallback policy leaves open, for routes a plugin registered straight on the server —
+   * `/assets/` for the static files a login page loads. A route the application's own router compiled opts out
+   * with `@AllowAnonymous` instead, and is not affected by this list.
+   *
+   * Matched against the path the route was registered under, never against the URL of the request, so no spelling
+   * of a URL reaches a route on another route's exemption.
+   */
+  except?: readonly string[]
 }
 
 export class AuthorizationBuilder implements Feature {
@@ -28,6 +47,7 @@ export class AuthorizationBuilder implements Feature {
   #authzDecoratorPolicy: AuthzPolicy = new PolicyBuilder().requireAuthenticated().build()
 
   #fallbackPolicy: AuthzPolicy | undefined
+  #fallbackExcept: readonly string[] = []
 
   /** @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller. */
   addPolicy(policy: AuthzPolicy): this
@@ -61,7 +81,12 @@ export class AuthorizationBuilder implements Feature {
   }
 
   /**
-   * Gates every route that carries no `@Authorize` / `@Roles` of its own.
+   * Gates every route that carries no `@Authorize` / `@Roles` of its own — the ones a plugin registered straight
+   * on the server included, since there is no decorator on those for anyone to forget.
+   *
+   * What stays open under it: a route declared public, a health probe, the callback an OAuth strategy receives
+   * its redirect on, a route carrying `kAuthenticationExempt`, the prefixes listed in
+   * {@link FallbackPolicyOptions.except}, and a URL no route matches, which is answered 404 as it always was.
    *
    * Off by default, because turning it on changes what an *undecorated* route means and that has to be a
    * deliberate posture rather than something a dependency bump introduces. Turning it on is the difference
@@ -74,17 +99,27 @@ export class AuthorizationBuilder implements Feature {
    *
    * @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller.
    */
-  fallbackPolicy(policy: AuthzPolicy): this
-  fallbackPolicy(configure: (builder: PolicyBuilder) => void): this
-  fallbackPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
+  fallbackPolicy(policy: AuthzPolicy, options?: FallbackPolicyOptions): this
+  fallbackPolicy(configure: (builder: PolicyBuilder) => void, options?: FallbackPolicyOptions): this
+  fallbackPolicy(
+    policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void),
+    options: FallbackPolicyOptions = {},
+  ): this {
+    const except = options.except ?? []
+    const relative = except.find(prefix => !prefix.startsWith('/'))
+    if (relative !== undefined) {
+      throw new ErrAuthzFallbackExcept(relative)
+    }
+
     this.#fallbackPolicy = requirements(built(policyOrConfigure), 'fallbackPolicy')
+    this.#fallbackExcept = [...except]
 
     return this
   }
 
   /** Shorthand for the common posture: every undecorated route requires an authenticated user. */
-  requireAuthenticatedByDefault(): this {
-    return this.fallbackPolicy(p => p.requireAuthenticated())
+  requireAuthenticatedByDefault(options?: FallbackPolicyOptions): this {
+    return this.fallbackPolicy(p => p.requireAuthenticated(), options)
   }
 
   [kFeatureConfigure](kit: FeatureConfigureKit): void {
@@ -112,6 +147,7 @@ export class AuthorizationBuilder implements Feature {
         .toValue({
           authorizeDecoratorDefaultPolicy: this.#authzDecoratorPolicy,
           fallbackPolicy: this.#fallbackPolicy,
+          fallbackExcept: this.#fallbackExcept,
         })
         .lifetime(Scopes.SINGLETON)
         .internal(),

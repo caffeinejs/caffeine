@@ -53,7 +53,7 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
       return this.options.onChallenge(ctx)
     }
 
-    ctx.status(401).header('WWW-Authenticate', `Basic realm="${this.options.realm ?? ''}"`)
+    ctx.status(401).appendHeader('WWW-Authenticate', `Basic realm="${this.options.realm ?? ''}"`)
   }
 
   override async forbid(ctx: Context): Promise<void> {

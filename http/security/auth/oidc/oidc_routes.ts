@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
+import { kAuthenticationExempt } from '../keys.js'
 import { isOIDCError, type OIDCMeta } from './index.js'
 
 /**
@@ -18,12 +19,10 @@ export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
 }
 
 /**
- * Registers the callback routes, validates their paths do not collide with controller routes, and asserts
- * `@fastify/cookie` is present at start-up.
+ * Registers the callback routes and validates their paths do not collide with controller routes.
  *
- * The cookie check is hand-rolled rather than declared as a Fastify plugin `decorators` requirement on
- * purpose: Fastify's assertion names the missing decorator (`cookies`), while this one names the package
- * the user has to install and register.
+ * A callback is where an identity provider sends a user who is not signed in yet, so it is marked
+ * {@link kAuthenticationExempt}: no fallback policy may stand in front of it.
  */
 export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void {
   const callbackPaths = new Set(oidc.handlers.map(({ callbackPath }) => callbackPath))
@@ -68,14 +67,10 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
         },
       )
     }
-
-    if (!server.hasRequestDecorator('cookies')) {
-      throw new Error('Cannot start application: OIDC authentication requires @fastify/cookie to be registered')
-    }
   })
 
   for (const { callbackPath, handler } of oidc.handlers) {
-    server.get(callbackPath, async (req, reply) => {
+    server.get(callbackPath, { config: { [kAuthenticationExempt]: true } }, async (req, reply) => {
       try {
         await handler.processCallback(req.httpContext)
       } catch (e) {

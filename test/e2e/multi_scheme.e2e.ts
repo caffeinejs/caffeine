@@ -77,6 +77,11 @@ describe('routes that name their authentication schemes', () => {
         )
         .mount(newRouter('/default').authorize({}).get('/', identities))
         .mount(
+          newRouter('/either-header')
+            .authorize({ schemes: ['Basic', 'Bearer'] })
+            .get('/', identities),
+        )
+        .mount(
           newRouter('/reports')
             .authorize({ schemes: ['Basic', 'APIKey'] })
             .get('/', identities),
@@ -132,6 +137,15 @@ describe('routes that name their authentication schemes', () => {
 
     expect(response.status).toBe(200)
     expect(response.json()).toEqual({ identities: ['APIKey'], subjects: ['partner'] })
+  })
+
+  // A client picks the challenge it can answer, so it has to be shown every one the route accepts (RFC 9110
+  // §11.6.1), not whichever scheme happened to write its header last.
+  it('advertises every scheme the route names when it challenges', async () => {
+    const response = await get('/either-header')
+
+    expect(response.status).toBe(401)
+    expect(response.headersDistinct['www-authenticate']).toEqual(['Basic realm="Reports"', 'Bearer'])
   })
 
   it('challenges with a scheme the route names, not with the application default', async () => {

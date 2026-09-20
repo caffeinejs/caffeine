@@ -1,4 +1,4 @@
-import { type AuthorizationBuilder, newRouter } from '@caffeinejs/http'
+import { type AuthenticationBuilder, type AuthorizationBuilder, newRouter } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp, type E2EApplication } from './internal/app.js'
@@ -82,6 +82,34 @@ describe('an application that must not start', () => {
     )
 
     expect(error).toMatchObject({ code: 'ERR_AUTH_CONFIGURATION' })
+  })
+
+  // A name that resolves to nothing fails every request it is used for, and the default is used for all of them.
+  it.each([
+    ['the default scheme', (auth: AuthenticationBuilder) => auth.addJWTBearer(localJWT).default('Beaerer')],
+    [
+      'the default challenge scheme',
+      (auth: AuthenticationBuilder) => auth.addJWTBearer(localJWT).defaultChallenge('Beaerer'),
+    ],
+    [
+      'the default forbid scheme',
+      (auth: AuthenticationBuilder) => auth.addJWTBearer(localJWT).defaultForbid('Beaerer'),
+    ],
+  ])('misspells %s', async (_label, configure) => {
+    const error = await refusal(app => app.authentication(auth => configure(auth)))
+
+    expect(error).toMatchObject({ code: 'ERR_AUTH_SCHEME_NOT_FOUND' })
+    expect(String((error as Error).message)).toContain('"Beaerer"')
+  })
+
+  // The second registration used to replace the first without a word.
+  it('registers two schemes under one name', async () => {
+    const error = await refusal(app =>
+      app.authentication(auth => auth.addJWTBearer('api', localJWT).addBasic('api', b => b.validate(() => null))),
+    )
+
+    expect(error).toMatchObject({ code: 'ERR_AUTH_CONFIGURATION' })
+    expect(String((error as Error).message)).toContain('"api"')
   })
 
   it('configures authentication with no scheme at all', async () => {

@@ -39,6 +39,20 @@ protects a route and never configured authentication is not the gate's — it is
 groups in the adapter (`assertAuthenticationConfigured`), because the case being refused is the one where no
 gate exists.
 
+The gate runs for every request, a route registered straight on Fastify included: a root `onRequest` hook reaches
+root routes whatever order they registered in, so install order exempts nothing. A compiled route carries what it
+declared on `config.$caffeine.auth`. A route without `$caffeine` is gated by the application's `fallbackPolicy`
+when there is one — it has no `@Authorize` anyone could have forgotten — except a URL nothing matched
+(`request.is404`, where a SPA shell is served from), the path prefixes the application listed in
+`fallbackPolicy(policy, { except })`, and a route whose config carries `kAuthenticationExempt`. That marker makes
+the gate return before authenticating at all, so `request.user` stays `null` on such a route. The health probes
+and the OAuth callback routes set it. A first-party plugin whose route must answer before anyone is signed in sets
+it too; do not reach for `ServerOwnedPaths` for that, which says "the server answers here", not "anyone may ask".
+
+A route naming several schemes is challenged by each in the order named, each **appending** its
+`WWW-Authenticate` (`ctx.appendHeader`, never `ctx.header`), until one answers the request itself — a redirect
+status or a sent reply.
+
 A feature that answers on URLs outside the compiled routing binds a `ServerOwnedPaths` provider with
 `.extends(ServerOwnedPaths)`, and a plugin serving unmatched URLs reads them with
 `container.getManyOptional(ServerOwnedPaths)`. `health` does not participate in this: its plugin factory only

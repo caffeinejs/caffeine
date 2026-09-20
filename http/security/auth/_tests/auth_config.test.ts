@@ -1,6 +1,7 @@
 import { token } from '@caffeinejs/di'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import FastifyCookie from '@fastify/cookie'
 import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
@@ -148,7 +149,11 @@ describe('authentication configuration', () => {
         }),
       )
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    // A cookie scheme is registered, so the cookie plugin has to be there first or the application refuses to start.
+    const server = fastify({ logger: false })
+    server.register(FastifyCookie)
+
+    const app = createWebApplication(fastifyAdapterFactory(server), {
       config: conf,
     }).authentication((a, c) =>
       a

@@ -13,11 +13,12 @@ function makePrincipal(sub: string): Principal {
 
 function makeCtx(authHeader?: string) {
   const status = vi.fn().mockReturnThis()
+  // A challenge is appended: a route naming several schemes advertises each of them.
   const header = vi.fn().mockReturnThis()
   const ctx = {
     req: { header: (name: string) => (name === 'authorization' ? authHeader : undefined) },
     status,
-    header,
+    appendHeader: header,
   } as unknown as Context
   return { ctx, status, header }
 }

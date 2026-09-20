@@ -1,4 +1,4 @@
-import { Provider, type Ctor, type InjectionToken } from '@caffeinejs/di'
+import { DeferredCtor, Provider, type Ctor, type InjectionToken, type NamedToken } from '@caffeinejs/di'
 import { kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import type { FastifyInstance } from 'fastify'
 
@@ -24,7 +24,7 @@ import { CredentialsService, type CredentialsServiceOptions } from './credential
 import { PasswordHasher, ScryptPasswordHasher } from './credentials/password_hasher.js'
 import { UserProvider } from './credentials/user_provider.js'
 import type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
-import { ErrAuthConfiguration } from './errors.js'
+import { ErrAuthConfiguration, ErrAuthSchemeNotFound } from './errors.js'
 import { ForwardAuthenticationHandler } from './forward/forward.js'
 import type { AuthenticationHandler } from './handler.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
@@ -88,7 +88,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   readonly #registrations: SchemeRegistration[] = []
 
   #config: Partial<AuthConfig> | undefined
-  #mapper: PrincipalMapper | InjectionToken<PrincipalMapper> | undefined
+  #mapper: PrincipalMapper | NamedToken<PrincipalMapper> | undefined
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
   #refresh: RefreshTokenOptions | undefined
@@ -116,9 +116,15 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     return this
   }
 
+  /**
+   * Registers a handler of the application's own, or the container key one resolves from.
+   *
+   * @throws ErrAuthConfiguration when a scheme is already registered under `name`.
+   */
   addStrategy(name: string, handler: AuthenticationHandler): this
   addStrategy(name: string, key: InjectionToken<AuthenticationHandler>): this
   addStrategy(name: string, keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler): this {
+    this.#reserve(name)
     this.#schemes.set(name, keyOrHandler)
     return this
   }
@@ -131,9 +137,24 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    * when its value is replaced later.
    */
   #register(name: string, kind: SchemeKind, configure: (builder: never) => void, preset?: GithubPresetOptions): this {
+    this.#reserve(name)
     this.#registrations.push({ name, kind, configure, preset })
     this.#schemes.set(name, undefined as unknown as AuthenticationHandler)
     return this
+  }
+
+  /**
+   * A second scheme under a name would replace the first without a word, whichever kind either of them is.
+   *
+   * Unique names are also what keeps the OAuth strategies' sealed cookies apart: each derives its keys from its
+   * name, so two sharing one could open each other's sessions, even across protocols.
+   */
+  #reserve(name: string): void {
+    if (this.#schemes.has(name)) {
+      throw new ErrAuthConfiguration(
+        `Cannot configure authentication: a scheme is already registered under the name "${name}"`,
+      )
+    }
   }
 
   /**
@@ -263,7 +284,13 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     return this
   }
 
-  mapUser(mapper: PrincipalMapper | InjectionToken<PrincipalMapper>): this {
+  /**
+   * Maps every authenticated principal before the request sees it.
+   *
+   * @param mapper - The function itself, or the named token one is bound under. A class cannot be the key: a
+   * mapper is a function, and a function handed over here is taken to be the mapper.
+   */
+  mapUser(mapper: PrincipalMapper | NamedToken<PrincipalMapper>): this {
     this.#mapper = mapper
     return this
   }
@@ -285,7 +312,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   protected async server(instance: FastifyInstance): Promise<void> {
     // The gate lands where `.authentication(...)` was written: everything installed before it runs ahead of
     // the hook, everything after it only for a request the hook let through.
-    await instance.register(authenticationPlugin())
+    await instance.register(authenticationPlugin({ readsCookies: this.#registrations.some(readsCookies) }))
 
     if (this.#oidcMeta !== undefined) {
       await instance.register(oidcRoutesPlugin(this.#oidcMeta))
@@ -311,7 +338,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
           applyScheme(builder, SCHEME_CONFIG.jwt as SchemeConfigSpec<JWTAuthenticationOptionsBuilder>, configured)
 
           this.#describe(registration.name, { kind: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
-          this.addStrategy(registration.name, new JWTAuthenticationHandler(registration.name, builder.build()))
+          this.#schemes.set(registration.name, new JWTAuthenticationHandler(registration.name, builder.build()))
           break
         }
 
@@ -321,7 +348,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
           applyScheme(builder, SCHEME_CONFIG.basic as SchemeConfigSpec<BasicAuthenticationOptionsBuilder>, configured)
 
           this.#describe(registration.name, { kind: 'http', scheme: 'basic' })
-          this.addStrategy(registration.name, new BasicAuthenticationHandler(registration.name, builder.build()))
+          this.#schemes.set(registration.name, new BasicAuthenticationHandler(registration.name, builder.build()))
           break
         }
 
@@ -332,7 +359,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
           const resolved = builder.build()
 
           this.#describe(registration.name, { kind: 'apiKey', in: 'cookie', name: resolved.cookieName })
-          this.addStrategy(registration.name, new CookieAuthenticationHandler(registration.name, resolved))
+          this.#schemes.set(registration.name, new CookieAuthenticationHandler(registration.name, resolved))
           break
         }
 
@@ -351,7 +378,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
             scheme: (resolved.scheme ?? 'Bearer').toLowerCase(),
             description: 'Opaque token, verified against a server-side store',
           })
-          this.addStrategy(registration.name, new OpaqueTokenAuthenticationHandler(registration.name, resolved))
+          this.#schemes.set(registration.name, new OpaqueTokenAuthenticationHandler(registration.name, resolved))
           break
         }
 
@@ -378,7 +405,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
             ),
           )
 
-          this.addStrategy(registration.name, handler)
+          this.#schemes.set(registration.name, handler)
           break
         }
 
@@ -412,7 +439,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
             }),
           )
 
-          this.addStrategy(registration.name, handler)
+          this.#schemes.set(registration.name, handler)
           break
         }
       }
@@ -459,11 +486,21 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       defaultForbidScheme: opts.defaultForbidScheme,
     }
 
+    // The three defaults are used for every request that names no scheme of its own, so one that resolves to
+    // nothing fails all of them. Known now, refused now.
+    for (const name of [defaultScheme, options.defaultChallengeScheme, options.defaultForbidScheme]) {
+      if (name !== undefined && !this.#schemes.has(name)) {
+        throw new ErrAuthSchemeNotFound(name, [...this.#schemes.keys()])
+      }
+    }
+
     const schemes = new Map<string, Provider<AuthenticationHandler>>()
     for (const [name, keyOrHandler] of this.#schemes) {
-      const handler: Provider<AuthenticationHandler> = isConstructable(keyOrHandler)
+      // A key of any spelling — a class, a named token — resolves from the container. Only what is left is the
+      // handler itself.
+      const handler: Provider<AuthenticationHandler> = isKey(keyOrHandler)
         ? kit.container.wrap(keyOrHandler)
-        : { get: () => keyOrHandler as AuthenticationHandler }
+        : { get: () => keyOrHandler }
       schemes.set(name, handler)
     }
 
@@ -563,7 +600,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     }
 
     if (this.#oidcHandlers.length > 0) {
-      this.#assertOIDCIsolation(defaultScheme)
+      this.#assertOIDCIsolation()
 
       const meta: OIDCMeta = {
         handlers: this.#oidcHandlers.map(h => ({ callbackPath: h.callbackPath, handler: h })),
@@ -594,28 +631,14 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    * client registrations is a normal setup, and it is safe once cookies, callback paths and
    * derived keys are distinct.
    */
-  #assertOIDCIsolation(defaultScheme: string): void {
+  #assertOIDCIsolation(): void {
     const seen = new Map<string, Map<string, string>>([
       ['callbackPath', new Map()],
       ['session cookie name', new Map()],
       ['state cookie name', new Map()],
     ])
 
-    // Two handlers sharing a scheme name derive their sealed-cookie keys from the same HKDF
-    // namespace, so a session sealed by one could be opened by the other even across protocols
-    // (an OAuth2 identity, from an unverified JSON body, accepted as OIDC). The cookie-name
-    // checks below do not catch it because the protocol prefix makes the names differ; unique
-    // names are the invariant that actually keeps the key namespaces apart, so enforce it here.
-    const names = new Set<string>()
-
     for (const handler of this.#oidcHandlers) {
-      if (names.has(handler.schemeName)) {
-        throw new ErrAuthConfiguration(
-          `Cannot configure authentication: two OAuth strategies share the name "${handler.schemeName}"`,
-        )
-      }
-      names.add(handler.schemeName)
-
       const values: Array<[string, string]> = [
         ['callbackPath', handler.callbackPath],
         ['session cookie name', handler.sessionCookieName],
@@ -633,15 +656,6 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         }
         owners.set(value, handler.schemeName)
       }
-    }
-
-    // A default that names nothing must not pass silently: an undefined lookup used to make the guard
-    // below a no-op, so a typo'd default sailed through startup and failed only at request time when the
-    // scheme could not be resolved.
-    if (!this.#schemes.has(defaultScheme)) {
-      throw new ErrAuthConfiguration(
-        `Cannot configure authentication: the default authenticate scheme "${defaultScheme}" is not a registered strategy`,
-      )
     }
 
     // Registering several OAuth strategies without a Forward default used to be rejected outright, on the
@@ -688,7 +702,14 @@ function isConstructable<T>(value: unknown): value is Ctor<T> {
 }
 
 function isKey<T>(value: InjectionToken<T> | T): value is InjectionToken<T> {
-  return typeof value === 'string' || typeof value === 'symbol' || isConstructable(value)
+  return (
+    typeof value === 'string' || typeof value === 'symbol' || isConstructable(value) || value instanceof DeferredCtor
+  )
+}
+
+/** Whether a scheme of this kind reads its credential from a cookie. */
+function readsCookies(registration: SchemeRegistration): boolean {
+  return registration.kind !== 'jwt' && registration.kind !== 'basic' && registration.kind !== 'opaque'
 }
 
 /**

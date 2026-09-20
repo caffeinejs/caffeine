@@ -53,7 +53,7 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
       return this.options.onChallenge(ctx)
     }
 
-    ctx.status(401).header('WWW-Authenticate', `${this.#scheme} realm="${this.options.realm ?? ''}"`)
+    ctx.status(401).appendHeader('WWW-Authenticate', `${this.#scheme} realm="${this.options.realm ?? ''}"`)
   }
 
   override async forbid(ctx: Context): Promise<void> {

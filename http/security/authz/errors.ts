@@ -56,6 +56,21 @@ export class ErrAuthzPolicyEmpty extends ErrCaffeineWebApplication {
 }
 
 /**
+ * ErrAuthzFallbackExcept is thrown when a path the fallback policy should leave open is not an absolute path.
+ *
+ * Such a prefix matches no route, so what it was meant to open would stay closed with nothing to say why.
+ */
+export class ErrAuthzFallbackExcept extends ErrCaffeineWebApplication {
+  constructor(prefix: string) {
+    super(
+      `Cannot configure the fallback policy: the excepted path "${prefix}" does not start with "/"`,
+      'ERR_AUTHZ_FALLBACK_EXCEPT',
+    )
+    this.name = 'ErrAuthzFallbackExcept'
+  }
+}
+
+/**
  * ErrAuthzRequirementHandlerDuplicate is thrown when two requirement handlers claim the same `kind`.
  *
  * Start-up only. One of the two would otherwise evaluate every requirement of that kind, chosen by the order the

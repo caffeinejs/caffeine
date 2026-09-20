@@ -96,9 +96,4 @@ export class CredentialsService {
       needsRehash: this.#hasher.needsRehash(user.passwordHash),
     }
   }
-
-  /** Alias of {@link attempt}. */
-  verifyCredentials(identifier: string, password: string): Promise<Principal | null> {
-    return this.attempt(identifier, password)
-  }
 }

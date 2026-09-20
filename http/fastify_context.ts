@@ -113,6 +113,18 @@ export class FastifyContext<
     return this
   }
 
+  appendHeader(key: string, value: string): this {
+    const current = this.#reply.getHeader(key)
+
+    if (current === undefined) {
+      this.#reply.header(key, value)
+    } else {
+      this.#reply.header(key, [...(Array.isArray(current) ? current : [String(current)]), value])
+    }
+
+    return this
+  }
+
   headers(headers: Record<string, string>): this {
     this.#reply.headers(headers)
     return this
@@ -244,9 +256,7 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
   cookie(): Record<string, string>
   cookie(name: string): string | undefined
   cookie(name?: string): Record<string, string> | string | undefined {
-    if (typeof this.request.cookies === 'undefined') {
-      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
-    }
+    this.#assertCookiesParsed()
 
     if (name === undefined) {
       return this.request.cookies as Record<string, string>
@@ -258,9 +268,7 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
   signedCookie(): Record<string, UnsignedCookie>
   signedCookie(name: string): UnsignedCookie
   signedCookie(name?: string): Record<string, UnsignedCookie> | UnsignedCookie {
-    if (typeof this.request.cookies === 'undefined') {
-      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
-    }
+    this.#assertCookiesParsed()
 
     if (typeof name === 'string') {
       const cookie = this.request.cookies[name]
@@ -280,6 +288,23 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
     }
 
     return ret
+  }
+
+  /**
+   * `@fastify/cookie` decorates the request with `cookies: null` and fills it in from a hook of its own, so `null`
+   * means the plugin is there and has not run yet for this request, which is a different mistake from its absence.
+   */
+  #assertCookiesParsed(): void {
+    if (this.request.cookies === undefined) {
+      throw new Error('Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance')
+    }
+
+    if (this.request.cookies === null) {
+      throw new Error(
+        'Cannot read cookies: @fastify/cookie has not parsed them yet for this request: register it before whatever ' +
+          'reads cookies, such as .authentication(...), and leave its "hook" option on "onRequest"',
+      )
+    }
   }
 
   #unsignCookie(cookie: string): string | false {

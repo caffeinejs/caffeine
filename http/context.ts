@@ -144,6 +144,12 @@ export interface Context<
   status(code: number): this
 
   header(key: string, value: string): this
+  /**
+   * Adds a value to a response header instead of replacing what it holds, so the header goes out once per value.
+   * For a header several parties contribute to: each authentication scheme a route names adds its own
+   * `WWW-Authenticate` challenge.
+   */
+  appendHeader(key: string, value: string): this
   headers(headers: Record<string, string>): this
   hasHeader(key: string): boolean
 

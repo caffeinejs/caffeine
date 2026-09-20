@@ -22,7 +22,12 @@ export {
   UserProvider,
 } from './credentials/index.js'
 export type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
-export { ErrAuthConfiguration, ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './errors.js'
+export {
+  ErrAuthConfiguration,
+  ErrAuthenticationCookies,
+  ErrAuthenticationRequired,
+  ErrAuthSchemeNotFound,
+} from './errors.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { JWTAuthenticationHandler, type JWTAuthenticationOptions, jwtServiceKey } from './jwt/index.js'
 export {
@@ -33,7 +38,7 @@ export {
   type JWTServiceOptions,
   type JWTSignOptions,
 } from './jwt/index.js'
-export { kAuthSchemeDescriptors } from './keys.js'
+export { kAuthenticationExempt, kAuthSchemeDescriptors } from './keys.js'
 export {
   googleOIDCPreset,
   OIDCAuthenticationHandler,

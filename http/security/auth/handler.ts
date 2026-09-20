@@ -21,7 +21,7 @@ export abstract class BaseAuthenticationHandler<TOptions> implements Authenticat
   readonly #options: TOptions
 
   constructor(options: TOptions) {
-    this.#options = options as unknown as TOptions
+    this.#options = options
   }
 
   get options(): TOptions {
