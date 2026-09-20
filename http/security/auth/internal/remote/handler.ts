@@ -283,8 +283,12 @@ export abstract class RemoteAuthenticationHandler<
 
     noStore(ctx)
 
-    if (this.options.onChallenge === undefined && !this.#redirects(ctx)) {
+    if (!this.#redirects(ctx)) {
       const loginURL = this.#loginURL(returnTo)
+
+      if (this.options.onChallenge) {
+        return this.options.onChallenge(ctx, loginURL)
+      }
 
       // No `WWW-Authenticate`: the credential is a cookie, not an HTTP authentication scheme, so there is no
       // registered token to name and inventing one would mislead a client that parses it. `location` on a 401

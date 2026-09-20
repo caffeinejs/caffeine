@@ -130,7 +130,16 @@ export interface ResolvedOAuth2AuthenticationOptions {
    * what goes out. Left unanswered, the callback responds `400` with a generic body.
    */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
+  /**
+   * Shapes the challenge response, and receives where the browser should go next.
+   *
+   * A navigation receives the authorization URL, with state, PKCE and the state cookie already in place, so
+   * the flow stays correct no matter what the hook does. Anything else receives this origin's
+   * {@link loginPath} and starts no authorization round trip: a script cannot follow a redirect to the
+   * provider, and the flow begins when a browser goes to the login path. Use it to answer `401` with that
+   * URL in a shape of your own.
+   */
+  onChallenge?: (ctx: Context, redirectTo: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
   /** Full override of claim construction. `claimActions.remove` still applies afterwards. */
   claimMapper?: (userInfo: Record<string, unknown>) => Claim[]

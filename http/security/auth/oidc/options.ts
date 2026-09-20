@@ -250,12 +250,15 @@ export interface ResolvedOIDCAuthenticationOptions {
    */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
   /**
-   * Shapes the challenge response. Receives the fully built authorization URL — state,
-   * nonce and PKCE have already been generated and the state cookie already set, so the
-   * flow stays correct no matter what the hook does. Use it to return `401` with the
-   * login URL for SPA clients instead of the default `302`.
+   * Shapes the challenge response, and receives where the browser should go next.
+   *
+   * A navigation receives the authorization URL, with state, nonce, PKCE and the state cookie already in
+   * place, so the flow stays correct no matter what the hook does. Anything else receives this origin's
+   * {@link loginPath} and starts no authorization round trip: a script cannot follow a redirect to the
+   * provider, and the flow begins when a browser goes to the login path. Use it to answer `401` with that
+   * URL in a shape of your own.
    */
-  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
+  onChallenge?: (ctx: Context, redirectTo: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
   claimMapper?: (idTokenPayload: Record<string, unknown>) => Claim[]
 

@@ -338,6 +338,51 @@ describe('OIDCAuthenticationHandler', () => {
         expect(fetched).not.toHaveBeenCalled()
       })
 
+      /**
+       * The hook shapes the response, and the response it shapes for a caller that cannot follow a redirect is
+       * "go to the sign-in page". A flow started for that caller is one nobody spends: the browser goes to
+       * `loginPath`, and `startSignIn` mints a fresh one there.
+       */
+      describe('with an onChallenge hook', () => {
+        it('starts nothing for a caller that cannot follow a redirect, and hands it the sign-in URL', async () => {
+          const fetched = vi.fn()
+          vi.stubGlobal('fetch', fetched)
+
+          const onChallenge = vi.fn()
+          const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ onChallenge }))
+          const { ctx, cookie } = makeCtx({ url: '/reports?tab=1', headers: { accept: 'application/json' } })
+
+          await handler.challenge(ctx)
+
+          expect(cookie).not.toHaveBeenCalled()
+          expect(fetched).not.toHaveBeenCalled()
+          expect(onChallenge).toHaveBeenCalledWith(
+            ctx,
+            `https://app.example.com${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/reports?tab=1')}`,
+          )
+        })
+
+        // A page polling while signed out is challenged on every poll. Once the outstanding flows reach the
+        // cap they are all cleared, so a handful of polls used to take out the sign-in the user had under way
+        // in another tab: that tab came back from the provider to a state cookie no longer there.
+        it('does not clear the flows another tab has under way', async () => {
+          const onChallenge = vi.fn()
+          const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ onChallenge }))
+          const outstanding = Object.fromEntries(
+            Array.from({ length: 8 }, (_, index) => [`__oidc_state.state${index}`, 'sealed']),
+          )
+          const { ctx, cookie, deleteCookie } = makeCtx({
+            cookies: outstanding,
+            headers: { accept: 'application/json' },
+          })
+
+          await handler.challenge(ctx)
+
+          expect(deleteCookie).not.toHaveBeenCalled()
+          expect(cookie).not.toHaveBeenCalled()
+        })
+      })
+
       it('leaves a way back that would leave this origin out of the sign-in URL', async () => {
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
         const { ctx, header } = makeCtx({ headers: {} })
