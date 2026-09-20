@@ -35,9 +35,7 @@ export function fixtureRouter(
     target: key,
     detail: spec.detail,
     routes: spec.routes.map((route): Route<unknown> => {
-      // Mirrors buildRouting: any authz declared at either level is protection unless something opted out.
-      const hasDecoratorProtection = spec.authz !== undefined || route.authz !== undefined
-      const isAnonymous = !!(spec.authz?.allowAnonymous || route.authz?.allowAnonymous)
+      // Mirrors buildRouting: anything declared at either level is protection unless the result is public.
       const authz = mergeAuthz(spec.authz, route.authz)
       // Also mirrors buildRouting: the effective schemes are folded while the route compiles, so a route
       // naming none carries the application's default rather than leaving the generator to find it.
@@ -61,7 +59,7 @@ export function fixtureRouter(
         statusCode: route.statusCode,
         detail: route.detail,
         authorization: {
-          hasProtection: hasDecoratorProtection && !isAnonymous,
+          hasProtection: authz !== undefined && !authz.allowAnonymous,
           options: authz,
           schemes,
         },

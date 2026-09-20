@@ -19,7 +19,7 @@ import {
 } from '../security/authz/index.js'
 import type { RouteDispatch, RouteGroupHook } from './dispatch.js'
 import { mergeAuthz } from './inherit.js'
-import type { RouteAuthzOptions, RouteSpec, RouteGroupSpec } from './spec.js'
+import type { RouteAuthz, RouteSpec, RouteGroupSpec } from './spec.js'
 
 /** What a route source contributes on top of the spec: identity, and how the routes are invoked. */
 export interface RouteGroupMeta<R> {
@@ -141,20 +141,20 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
           // Skipped entirely when authorization is not installed: compileRoutePolicy would throw a
           // handler/policy-not-found error for a route that actually declares protection, and the real
           // cause — authorization was never configured — belongs to assertAuthorizationConfigured instead.
+          const authz = mergeAuthz(spec.authz, route.authz)
           const authorizer = authzInstalled
-            ? compileRoutePolicy(authzOpts!, authzEvaluators!, authzHandlers!, spec.authz, route.authz)
+            ? compileRoutePolicy(authzOpts!, authzEvaluators!, authzHandlers!, authz)
             : undefined
-          const routeAuthzOptions = mergeAuthz(spec.authz, route.authz)
 
           return {
             // Drives the "authorization configured but authentication is not" start-up check, so it has
             // to follow what actually gates the route rather than what was written on it.
-            hasProtection: authzInstalled ? authorizer !== undefined : declaresAuthzProtection(spec.authz, route.authz),
-            options: routeAuthzOptions,
+            hasProtection: authzInstalled ? authorizer !== undefined : declaresAuthzProtection(authz),
+            options: authz,
             authorizer,
             // Folded in here, where the application's default is known, so nothing downstream has to reach
             // into the authentication feature to find out which scheme an unnamed route ends up on.
-            schemes: effectiveSchemes(routeAuthzOptions?.schemes, defaultScheme),
+            schemes: effectiveSchemes(authz?.schemes, defaultScheme),
           }
         })(),
       }
@@ -200,12 +200,10 @@ function defaultDispatch<R>(route: RouteSpec<R>): RouteDispatch<R, unknown> {
 
 /**
  * Whether a route declares authorization protection, without needing a policy to evaluate it — used only
- * when authorization is not installed, where {@link compileRoutePolicy} cannot run. Mirrors the
- * anonymous/no-decorator branches of {@link compileRoutePolicy} itself.
+ * when authorization is not installed, where {@link compileRoutePolicy} cannot run.
  */
-function declaresAuthzProtection(routerOptions?: RouteAuthzOptions, routeOptions?: RouteAuthzOptions): boolean {
-  const anonymous = routerOptions?.allowAnonymous === true || routeOptions?.allowAnonymous === true
-  return !anonymous && (routerOptions !== undefined || routeOptions !== undefined)
+function declaresAuthzProtection(authz: RouteAuthz | undefined): boolean {
+  return authz !== undefined && !authz.allowAnonymous
 }
 
 function compileRouteGuardChain(

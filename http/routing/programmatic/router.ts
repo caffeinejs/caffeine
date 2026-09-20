@@ -371,6 +371,13 @@ export class Router<
     return this.#route(Array.isArray(method) ? method : [method], path, schemaOrHandler, handler)
   }
 
+  /**
+   * Adds an authorization declaration to the group. Calling it again adds another, and a router mounted inside
+   * this one adds to it: every `roles` list declared along the way has to be satisfied, and every policy named.
+   *
+   * `{ allowAnonymous: true }` opens the routes that declare nothing themselves; one that calls `.authorize(...)`
+   * on its own chain stays protected.
+   */
   authorize(options: RouteAuthzOptions): this {
     this.#state.builder.authorize(options)
     return this

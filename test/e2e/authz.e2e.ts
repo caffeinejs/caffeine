@@ -138,7 +138,68 @@ class DocsController {
   }
 }
 
+// Declarations stacked on one route. Each is a requirement of its own, in whichever order they were written.
+@Controller('/stacked')
+class StackedController {
+  @Roles('admin')
+  @Authorize({ policy: 'engineering' })
+  @Get('/roles-over-policy')
+  rolesOverPolicy() {
+    return { ok: true }
+  }
+
+  @Authorize({ policy: 'engineering' })
+  @Roles('admin')
+  @Get('/policy-over-roles')
+  policyOverRoles() {
+    return { ok: true }
+  }
+
+  @Roles('admin')
+  @Roles('manager')
+  @Get('/roles-twice')
+  rolesTwice() {
+    return { ok: true }
+  }
+}
+
+// The class says "signed-in users only"; a method adding a rule of its own does not take that back.
+@Authorize()
+@Controller('/bare-class')
+class BareClassController {
+  @Authorize({ policy: 'internal' })
+  @Get('/with-policy')
+  withPolicy() {
+    return { ok: true }
+  }
+}
+
+// The class is public; a method that asks for protection still gets it.
+@AllowAnonymous()
+@Controller('/open-class')
+class OpenClassController {
+  @Get('/public')
+  open() {
+    return { ok: true }
+  }
+
+  @Authorize()
+  @Get('/private')
+  closed() {
+    return { ok: true }
+  }
+
+  @Roles('admin')
+  @Get('/admin')
+  admin() {
+    return { ok: true }
+  }
+}
+
 void [
+  StackedController,
+  BareClassController,
+  OpenClassController,
   OpenController,
   UndecoratedController,
   BareController,
@@ -167,6 +228,35 @@ function programmatic() {
       .authorize({ roles: ['manager'] })
       .handler(ok),
     newRouter('/claim').authorize({ policy: 'engineering' }).get('/', ok),
+    // Two declarations on one chain.
+    newRouter('/stacked')
+      .get('/')
+      .authorize({ roles: ['admin'] })
+      .authorize({ policy: 'engineering' })
+      .handler(ok),
+    // A router nested in another: what the inner one declares is added to what the outer one declared.
+    newRouter('/admin')
+      .authorize({ roles: ['admin'] })
+      .get('/', ok)
+      .mount(
+        newRouter('/reports')
+          .authorize({ roles: ['manager'] })
+          .get('/', ok),
+        // Declared public on purpose, inside a protected router: the explicit opt-out still works...
+        newRouter('/status')
+          .authorize({ allowAnonymous: true })
+          .get('/', ok)
+          // ...and a route below it that asks for protection again gets all of it, the outer roles included.
+          .get('/detail')
+          .authorize({})
+          .handler(ok),
+      ),
+    newRouter('/open-group')
+      .authorize({ allowAnonymous: true })
+      .get('/', ok)
+      .get('/admin')
+      .authorize({ roles: ['admin'] })
+      .handler(ok),
   )
 }
 
@@ -198,6 +288,34 @@ const MATRIX: Array<[string, string, Record<string, string>, Partial<Record<Call
   ['a resource policy, asked about the caller’s own document', '/docs/1', {}, { anonymous: 401, user: 200 }],
   ['a resource policy, asked about someone else’s document', '/docs/2', {}, { user: 403, admin: 200 }],
 
+  [
+    '@Roles above @Authorize({ policy }) on one method: both are required',
+    '/stacked/roles-over-policy',
+    {},
+    { anonymous: 401, admin: 403, manager: 403, adminManager: 200 },
+  ],
+  [
+    '@Authorize({ policy }) above @Roles on one method: both are required',
+    '/stacked/policy-over-roles',
+    {},
+    { anonymous: 401, admin: 403, manager: 403, adminManager: 200 },
+  ],
+  [
+    '@Roles twice on one method: both are required',
+    '/stacked/roles-twice',
+    {},
+    { admin: 403, manager: 403, adminManager: 200 },
+  ],
+  [
+    'a bare @Authorize on the class and a policy on the method: signed-in is still required',
+    '/bare-class/with-policy',
+    INTERNAL,
+    { anonymous: 401, user: 200 },
+  ],
+  ['a public class: a method that declares nothing', '/open-class/public', {}, { anonymous: 200 }],
+  ['a public class: a method with a bare @Authorize', '/open-class/private', {}, { anonymous: 401, user: 200 }],
+  ['a public class: a method with @Roles', '/open-class/admin', {}, { anonymous: 401, user: 403, admin: 200 }],
+
   ['router: a group declared public', '/p/open', {}, { anonymous: 200 }],
   [
     'router: a group that declares nothing, under a fallback policy',
@@ -213,6 +331,28 @@ const MATRIX: Array<[string, string, Record<string, string>, Partial<Record<Call
     { anonymous: 401, manager: 403, admin: 403, adminManager: 200 },
   ],
   ['router: a claim policy', '/p/claim', {}, { anonymous: 401, user: 403, manager: 200 }],
+  [
+    'router: two declarations on one route',
+    '/p/stacked',
+    {},
+    { anonymous: 401, admin: 403, manager: 403, adminManager: 200 },
+  ],
+  ['router: the outer router of a nested pair', '/p/admin', {}, { anonymous: 401, manager: 403, admin: 200 }],
+  [
+    'router: a nested router adds its roles to its parent’s',
+    '/p/admin/reports',
+    {},
+    { anonymous: 401, manager: 403, admin: 403, adminManager: 200 },
+  ],
+  ['router: a nested router declared public inside a protected one', '/p/admin/status', {}, { anonymous: 200 }],
+  [
+    'router: a route asking for protection again below that public router',
+    '/p/admin/status/detail',
+    {},
+    { anonymous: 401, user: 403, admin: 200 },
+  ],
+  ['router: a public group: a route that declares nothing', '/p/open-group', {}, { anonymous: 200 }],
+  ['router: a public group: a route with roles', '/p/open-group/admin', {}, { anonymous: 401, user: 403, admin: 200 }],
 ]
 
 describe('what an authorization declaration means to each caller', () => {

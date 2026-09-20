@@ -168,8 +168,9 @@ export function deriveSecurity(
 
   // Roles become scopes only where the scheme has a scope concept. On an http or apiKey scheme a scope list
   // is meaningless — the specification requires it to be empty — so the roles are dropped here and remain
-  // visible in the operation's description instead.
-  const roles = authz.options?.roles ?? []
+  // visible in the operation's description instead. A scope list cannot say "any of", so every role named is
+  // listed and the description is where the grouping stays readable.
+  const roles = [...new Set(authz.options?.roleGroups.flat() ?? [])]
 
   return resolved.map(name => ({ [name]: scopesFor(schemes?.[name], roles) }))
 }
@@ -196,13 +197,16 @@ export function authorizationNote(route: Route<unknown>): string | undefined {
 
   const parts: string[] = []
 
-  if (options.roles?.length) {
-    parts.push(`roles: ${options.roles.join(', ')}`)
+  // Any role of a group will do, and every group has to be satisfied.
+  const groups = options.roleGroups.map(roles => roles.join(' or '))
+  if (groups.length === 1) {
+    parts.push(`roles: ${groups[0]}`)
+  } else if (groups.length > 1) {
+    parts.push(`roles: ${groups.map(group => `(${group})`).join(' and ')}`)
   }
 
-  const policies = options.policy === undefined ? [] : Array.isArray(options.policy) ? options.policy : [options.policy]
-  if (policies.length > 0) {
-    parts.push(`policy: ${policies.join(', ')}`)
+  if (options.policies.length > 0) {
+    parts.push(`policy: ${options.policies.join(', ')}`)
   }
 
   return parts.length === 0 ? undefined : `Requires ${parts.join('; ')}.`

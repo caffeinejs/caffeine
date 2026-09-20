@@ -1,8 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { loadConfig } from '../../load.js'
 import { mergeLayers, expandKeys } from '../../merge.js'
@@ -238,21 +239,53 @@ describe('FileConfigSource watching', () => {
     expect(new JSONConfigSource('./app.json').watch).toBeUndefined()
   })
 
+  // `fs.watch` returns before the platform's watcher is live, and a change made in that gap is never reported —
+  // not late, never. So a change is made again until one is seen, rather than once and then waited for.
+  async function changeUntilSeen(changed: Mock, name: string): Promise<void> {
+    let revision = 0
+
+    await vi.waitFor(
+      async () => {
+        await write(name, { revision: ++revision })
+        expect(changed).toHaveBeenCalled()
+      },
+      { timeout: 10_000, interval: 25 },
+    )
+  }
+
+  // Reports of the changes already made may still be on their way. Until none has arrived for a while, a call
+  // cannot be credited to the change that follows.
+  async function quiet(changed: Mock): Promise<void> {
+    await vi.waitFor(
+      async () => {
+        changed.mockClear()
+        await sleep(200)
+        expect(changed).not.toHaveBeenCalled()
+      },
+      { timeout: 5_000, interval: 0 },
+    )
+  }
+
   it('calls back when the file or a profile sibling changes, and stops when told', async () => {
     const base = await write('watched.json', { a: 1 })
     const changed = vi.fn()
 
     const stop = new JSONConfigSource(base, { watch: true }).watch!(changed)
     try {
-      await write('watched.json', { a: 2 })
-      await vi.waitFor(() => expect(changed).toHaveBeenCalled(), { timeout: 2_000 })
+      await changeUntilSeen(changed, 'watched.json')
 
-      changed.mockClear()
-      await write('watched-eu.json', { a: 3 })
-      await vi.waitFor(() => expect(changed).toHaveBeenCalled(), { timeout: 2_000 })
+      await quiet(changed)
+      await changeUntilSeen(changed, 'watched-eu.json')
     } finally {
       stop()
     }
+
+    await quiet(changed)
+    await write('watched.json', { a: 2 })
+    await write('watched-eu.json', { a: 3 })
+    await sleep(200)
+
+    expect(changed).not.toHaveBeenCalled()
   })
 
   // Decided by name, so the directory's other files cost a reload nothing.

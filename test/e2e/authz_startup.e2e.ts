@@ -1,4 +1,4 @@
-import { newRouter } from '@caffeinejs/http'
+import { type AuthorizationBuilder, newRouter } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp, type E2EApplication } from './internal/app.js'
@@ -43,6 +43,22 @@ describe('an application that must not start', () => {
     expect(error).toMatchObject({ code: 'ERR_AUTHZ_POLICY_NOT_FOUND' })
     expect(String((error as Error).message)).toContain('"enginering"')
     expect(String((error as Error).message)).toContain('"engineering"')
+  })
+
+  // A policy with no requirement is satisfied by everyone, the anonymous caller included.
+  it.each([
+    ['a named policy', (authz: AuthorizationBuilder) => authz.addPolicy('nothing', () => undefined)],
+    [
+      'the policy a bare @Authorize stands for',
+      (authz: AuthorizationBuilder) => authz.authorizeDecoratorDefaultPolicy(() => undefined),
+    ],
+    ['the fallback policy', (authz: AuthorizationBuilder) => authz.fallbackPolicy(() => undefined)],
+  ])('registers %s with no requirement in it', async (_label, configure) => {
+    const error = await refusal(app =>
+      app.authentication(auth => auth.addJWTBearer(localJWT)).authorization(authz => configure(authz)),
+    )
+
+    expect(error).toMatchObject({ code: 'ERR_AUTHZ_POLICY_EMPTY' })
   })
 
   it('names an authentication scheme that was never registered', async () => {

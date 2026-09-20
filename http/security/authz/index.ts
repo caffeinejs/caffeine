@@ -1,6 +1,12 @@
 export type { AuthorizationOptions } from './authz.js'
 export { assertAuthorizationConfigured, AuthorizationBuilder } from './authz.js'
-export { ErrAuthorizationRequired, ErrAuthzPolicyNotFound, ErrAuthzRequirementHandlerNotFound } from './errors.js'
+export {
+  ErrAuthorizationRequired,
+  ErrAuthzPolicyEmpty,
+  ErrAuthzPolicyNotFound,
+  ErrAuthzRequirementHandlerDuplicate,
+  ErrAuthzRequirementHandlerNotFound,
+} from './errors.js'
 export { AssertionHandler, AuthenticatedUserHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 export { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 export type { AuthzPolicy, AuthzRequirement, PolicyEvaluator } from './policy.js'

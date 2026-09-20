@@ -3,7 +3,7 @@ import { Scopes } from '@caffeinejs/di'
 import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import type { RouteGroup } from '../../route.js'
-import { ErrAuthorizationRequired } from './errors.js'
+import { ErrAuthorizationRequired, ErrAuthzPolicyEmpty, ErrAuthzRequirementHandlerDuplicate } from './errors.js'
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
@@ -29,6 +29,7 @@ export class AuthorizationBuilder implements Feature {
 
   #fallbackPolicy: AuthzPolicy | undefined
 
+  /** @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller. */
   addPolicy(policy: AuthzPolicy): this
   addPolicy(name: string, configure: (builder: PolicyBuilder) => void): this
   addPolicy(nameOrPolicy: string | AuthzPolicy, configure?: (builder: PolicyBuilder) => void): this {
@@ -36,29 +37,25 @@ export class AuthorizationBuilder implements Feature {
       const builder = new PolicyBuilder()
       configure?.(builder)
 
-      this.#policies.set(nameOrPolicy, builder.build(nameOrPolicy))
+      this.#policies.set(nameOrPolicy, requirements(builder.build(nameOrPolicy), nameOrPolicy))
 
       return this
     }
 
-    this.#policies.set(nameOrPolicy.name, nameOrPolicy)
+    this.#policies.set(nameOrPolicy.name, requirements(nameOrPolicy, nameOrPolicy.name))
 
     return this
   }
 
+  /**
+   * What a bare `@Authorize` means. Requires an authenticated user unless set.
+   *
+   * @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller.
+   */
   authorizeDecoratorDefaultPolicy(policy: AuthzPolicy): this
   authorizeDecoratorDefaultPolicy(configure: (builder: PolicyBuilder) => void): this
   authorizeDecoratorDefaultPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
-    if (typeof policyOrConfigure === 'function') {
-      const builder = new PolicyBuilder()
-      policyOrConfigure(builder)
-
-      this.#authzDecoratorPolicy = builder.build()
-
-      return this
-    }
-
-    this.#authzDecoratorPolicy = policyOrConfigure
+    this.#authzDecoratorPolicy = requirements(built(policyOrConfigure), 'authorizeDecoratorDefaultPolicy')
 
     return this
   }
@@ -74,20 +71,13 @@ export class AuthorizationBuilder implements Feature {
    *
    * It does not affect decorated routes: those already state their own rule, and a bare `@Authorize`
    * continues to mean {@link authorizeDecoratorDefaultPolicy}.
+   *
+   * @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller.
    */
   fallbackPolicy(policy: AuthzPolicy): this
   fallbackPolicy(configure: (builder: PolicyBuilder) => void): this
   fallbackPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
-    if (typeof policyOrConfigure === 'function') {
-      const builder = new PolicyBuilder()
-      policyOrConfigure(builder)
-
-      this.#fallbackPolicy = builder.build()
-
-      return this
-    }
-
-    this.#fallbackPolicy = policyOrConfigure
+    this.#fallbackPolicy = requirements(built(policyOrConfigure), 'fallbackPolicy')
 
     return this
   }
@@ -130,9 +120,17 @@ export class AuthorizationBuilder implements Feature {
     kit.container.bind(kAuthzHandlers, t =>
       t
         .toFactory(ctx => {
-          const handlers = ctx.container.getMany(AuthzRequirementHandler)
+          const handlers = new Map<string, AuthzRequirementHandler<AuthzRequirement>>()
 
-          return new Map(handlers.map(h => [h.kind, h]))
+          for (const handler of ctx.container.getMany(AuthzRequirementHandler)) {
+            if (handlers.has(handler.kind)) {
+              throw new ErrAuthzRequirementHandlerDuplicate(handler.kind)
+            }
+
+            handlers.set(handler.kind, handler)
+          }
+
+          return handlers
         })
         .lifetime(Scopes.SINGLETON)
         .internal(),
@@ -149,6 +147,26 @@ export class AuthorizationBuilder implements Feature {
         .internal(),
     )
   }
+}
+
+function built(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): AuthzPolicy {
+  if (typeof policyOrConfigure !== 'function') {
+    return policyOrConfigure
+  }
+
+  const builder = new PolicyBuilder()
+  policyOrConfigure(builder)
+
+  return builder.build()
+}
+
+/** The policy itself, once it is known to hold at least one requirement. */
+function requirements(policy: AuthzPolicy, name: string): AuthzPolicy {
+  if (policy.requirements.length === 0) {
+    throw new ErrAuthzPolicyEmpty(name)
+  }
+
+  return policy
 }
 
 /**

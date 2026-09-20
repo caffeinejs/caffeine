@@ -1,21 +1,42 @@
 import { mergeValue } from './_merge.js'
 import type { RouteGroupDetail } from './detail.js'
-import type { RouteAuthzOptions, RouteGroupSpec } from './spec.js'
+import type { RouteAuthz, RouteAuthzOptions, RouteGroupSpec } from './spec.js'
 
 /**
- * The authorization options actually in force on a route, combining what the group declared with what the
- * route declared.
+ * Adds one declaration to what a group or a route has declared so far.
  *
- * Also what a nested group inherits from its parent, which is the same question asked one level up: a
- * sub-group declaring `roles` adds to the parent's rather than replacing them.
- *
- * Merge follows what `compileRoutePolicy` does with the same inputs: single-valued fields take the inner
- * value when it has one, and `roles`/`policy` are unioned, because the compiled policy requires *both* sets.
+ * Nothing is replaced. Each `roles` declaration stays a requirement of its own, so `@Roles('admin')` next to
+ * `@Roles('manager')` asks for both, while `@Roles('admin', 'manager')` asks for either. Policies and schemes
+ * accumulate, and `allowAnonymous` sticks once declared.
  */
-export function mergeAuthz(
-  outer: RouteAuthzOptions | undefined,
-  inner: RouteAuthzOptions | undefined,
-): RouteAuthzOptions | undefined {
+export function foldAuthz(declared: RouteAuthz | undefined, options: RouteAuthzOptions): RouteAuthz {
+  const policies = normalizeList(options.policy)
+  const roles = options.roles ?? []
+  const allowAnonymous = options.allowAnonymous === true
+
+  return {
+    allowAnonymous: allowAnonymous || declared?.allowAnonymous === true,
+    // A declaration that opens the level asks for nothing. Any other one that names neither a role nor a policy
+    // is asking for the default.
+    defaultPolicy: declared?.defaultPolicy === true || (!allowAnonymous && policies.length === 0 && roles.length === 0),
+    policies: union(declared?.policies, policies),
+    roleGroups: roles.length > 0 ? [...(declared?.roleGroups ?? []), [...roles]] : (declared?.roleGroups ?? []),
+    schemes: options.schemes === undefined ? declared?.schemes : union(declared?.schemes, options.schemes),
+  }
+}
+
+/**
+ * The authorization in force on a route: what its group declared combined with what it declared itself. Also what
+ * a nested group inherits from its parent, which is the same question asked one level up.
+ *
+ * Requirements only ever accumulate on the way in: the inner level's role groups and policies are added to the
+ * outer level's, never merged into them, so a nested group cannot widen what its parent restricted.
+ *
+ * Whether the result is public is the inner level's call alone. A level declared public opens what declares
+ * nothing below it; a level that declares protection is protected whatever was declared above it, and by
+ * everything that was declared above it.
+ */
+export function mergeAuthz(outer: RouteAuthz | undefined, inner: RouteAuthz | undefined): RouteAuthz | undefined {
   if (outer === undefined) {
     return inner
   }
@@ -23,15 +44,17 @@ export function mergeAuthz(
     return outer
   }
 
-  const roles = [...new Set([...(outer.roles ?? []), ...(inner.roles ?? [])])]
-  const policy = [...new Set([...normalizeList(outer.policy), ...normalizeList(inner.policy)])]
-
   return {
-    allowAnonymous: inner.allowAnonymous ?? outer.allowAnonymous,
+    allowAnonymous: inner.allowAnonymous,
+    defaultPolicy: outer.defaultPolicy || inner.defaultPolicy,
+    policies: union(outer.policies, inner.policies),
+    roleGroups: [...outer.roleGroups, ...inner.roleGroups],
     schemes: inner.schemes ?? outer.schemes,
-    ...(roles.length > 0 ? { roles } : {}),
-    ...(policy.length > 0 ? { policy } : {}),
   }
+}
+
+function union(left: readonly string[] | undefined, right: readonly string[]): readonly string[] {
+  return [...new Set([...(left ?? []), ...right])]
 }
 
 function normalizeList(value: string | string[] | undefined): string[] {

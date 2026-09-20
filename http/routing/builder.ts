@@ -7,7 +7,8 @@ import type { RouteValidationSchema } from '../route.js'
 import { mergeValue } from './_merge.js'
 import type { RouteDetail, RouteGroupDetail } from './detail.js'
 import type { RouteInvoker } from './dispatch.js'
-import type { BodyMode, RouteAuthzOptions, RouteSpec, RouteGroupSpec } from './spec.js'
+import { foldAuthz } from './inherit.js'
+import type { BodyMode, RouteAuthz, RouteAuthzOptions, RouteSpec, RouteGroupSpec } from './spec.js'
 
 export class RouteGroupBuilder {
   #path?: string
@@ -18,7 +19,7 @@ export class RouteGroupBuilder {
   #routes?: RouteBuilder[]
   #bodyLimit?: number
   #timeout?: number
-  #authorize?: RouteAuthzOptions
+  #authorize?: RouteAuthz
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
   #detail?: RouteGroupDetail
@@ -80,8 +81,9 @@ export class RouteGroupBuilder {
     return this
   }
 
+  /** Adds a declaration to the group's. Calling it again adds another; nothing is replaced. */
   authorize(opts: RouteAuthzOptions) {
-    this.#authorize = opts
+    this.#authorize = foldAuthz(this.#authorize, opts)
     return this
   }
 
@@ -161,7 +163,7 @@ export class RouteBuilder {
   #timeout?: number
   #statusCode?: number
   #bodyAs?: BodyMode
-  #authorize?: RouteAuthzOptions
+  #authorize?: RouteAuthz
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
   #detail?: RouteDetail
@@ -238,8 +240,9 @@ export class RouteBuilder {
     return this
   }
 
+  /** Adds a declaration to the route's. Calling it again adds another; nothing is replaced. */
   authorize(opts: RouteAuthzOptions): this {
-    this.#authorize = opts
+    this.#authorize = foldAuthz(this.#authorize, opts)
     return this
   }
 
