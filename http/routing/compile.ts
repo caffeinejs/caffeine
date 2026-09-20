@@ -4,7 +4,7 @@ import { CatchMetadata, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorH
 import { solutions } from '../error/util.js'
 import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
 import type { Guard } from '../guards/index.js'
-import { kGlobalGuards, type GuardRef } from '../guards/keys.js'
+import { kGlobalGuards } from '../guards/keys.js'
 import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
 import {
@@ -57,10 +57,10 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
     ? container.get<Map<string, AuthzRequirementHandler<AuthzRequirement>>>(kAuthzHandlers)
     : undefined
 
-  const compiledGuards = new Map<GuardRef, CompiledGuard>()
+  const compiledGuards = new Map<InjectionToken<Guard>, CompiledGuard>()
   // Absent when the application never called `.guards(...)` — no global guards, same as an empty list.
-  const globalGuardKeys = container.getOptional<readonly GuardRef[]>(kGlobalGuards) ?? []
-  const globalGuards = compileGuardKeys(container, globalGuardKeys, 'application', compiledGuards)
+  const globalGuardKeys = container.getOptional(kGlobalGuards) ?? []
+  const globalGuards = dedupe(compileGuardKeys(container, globalGuardKeys, 'application', compiledGuards))
 
   // Absent when the application configured no authentication, which leaves every route naming no scheme of
   // its own with none.
@@ -208,12 +208,12 @@ function declaresAuthzProtection(authz: RouteAuthz | undefined): boolean {
 
 function compileRouteGuardChain(
   container: Container,
-  compiledGuards: Map<GuardRef, CompiledGuard>,
-  globalGuards: CompiledGuard[],
+  compiledGuards: Map<InjectionToken<Guard>, CompiledGuard>,
+  globalGuards: readonly CompiledGuard[],
   routerGuards: InjectionToken<Guard>[] | undefined,
   routeGuards: InjectionToken<Guard>[] | undefined,
   owner: string,
-): CompiledGuard[] | undefined {
+): readonly CompiledGuard[] | undefined {
   const routerKeys = routerGuards ?? []
   const routeKeys = routeGuards ?? []
   const local = compileGuardKeys(container, [...routerKeys, ...routeKeys], owner, compiledGuards)
@@ -226,11 +226,12 @@ function compileRouteGuardChain(
     return globalGuards
   }
 
-  if (globalGuards.length === 0) {
-    return local
-  }
+  return dedupe([...globalGuards, ...local])
+}
 
-  return [...globalGuards, ...local]
+// One compiled entry per token, so a guard listed twice for a route runs once, where it first appears.
+function dedupe(chain: CompiledGuard[]): CompiledGuard[] {
+  return [...new Set(chain)]
 }
 
 // Resolves the "@CatchWith" references of a group or route into a map of error type to handler

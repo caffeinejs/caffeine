@@ -16,7 +16,7 @@ import type { AdapterExtensions } from './adapter_extension.js'
 import { ErrCaffeineWebApplication } from './error/common.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from './error/error_handling.js'
 import { solutions } from './error/util.js'
-import { attachGuardHook } from './guards/attach.js'
+import { attachGuardHook } from './guards/fastify.js'
 import { joinPaths } from './internal/paths/index.js'
 import { pluginName, type AnyFastifyPlugin } from './plugin.js'
 import { Responder } from './response.js'
@@ -125,8 +125,6 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
             allowAnonymous: route.authorization.options?.allowAnonymous === true,
             authorizer: route.authorization.authorizer,
           },
-          target: router.target,
-          handler: route.name,
         }
 
         const url = joinPaths(basePath, route.path)

@@ -57,12 +57,6 @@ declare module 'fastify' {
         allowAnonymous: boolean
         authorizer?: AuthzRouteService
       }
-      /**
-       * The class that declared the route and the handler's name, so a Guard can read `Symbol.metadata`
-       * without a Nest-style ExecutionContext. A route declared without a class carries no `target`.
-       */
-      target?: Function
-      handler?: string | symbol
     }
   }
 }

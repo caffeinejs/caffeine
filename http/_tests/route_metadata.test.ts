@@ -37,7 +37,6 @@ interface Seen {
   url: string
   route: Route | undefined
   group: RouteGroup | undefined
-  target: Function | undefined
 }
 
 /** Records every route registered after it, with whatever `$caffeine` metadata the route carries. */
@@ -51,7 +50,6 @@ function observer(seen: Seen[]): HTTPPluginFactory {
             url: options.url,
             route: options.config?.$caffeine?.route,
             group: options.config?.$caffeine?.group,
-            target: options.config?.$caffeine?.target,
           })
         })
       },
@@ -101,10 +99,9 @@ describe('route metadata on config.$caffeine', () => {
     expect(get('/meta-router/hello')?.route?.path).toBe('/hello')
     expect(get('/meta-late/hello')?.group?.name).toBe('late')
 
-    // A guard reads `Symbol.metadata` off the target, so a group no class declared carries none rather than a
-    // stand-in class it could read nothing from.
-    expect(get('/meta-controller/hello')?.target).toBe(MetaController)
-    expect(get('/meta-late/hello')?.target).toBeUndefined()
+    // A guard reads `Symbol.metadata` off the class that declared the group, so a group no class declared
+    // carries none rather than a stand-in class it could read nothing from.
+    expect(get('/meta-late/hello')?.group?.target).toBeUndefined()
 
     expect(get('/meta-raw')).toBeDefined()
     expect(get('/meta-raw')?.route).toBeUndefined()
