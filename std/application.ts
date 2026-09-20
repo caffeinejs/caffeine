@@ -88,7 +88,7 @@ export class ErrApplicationStarted extends ErrCaffeine {
  *
  * ```ts
  * createApplication({ config: conf })
- *   .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+ *   .with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
  *   .shutdown(s => s.drainDelay('5s'))
  * ```
  */
@@ -100,8 +100,8 @@ export class Application<TConfig = unknown> {
   readonly #definition: ConfigDefinition<unknown>
 
   // Registered unconditionally: the drain policy applies to every application, probes or not. Configuration
-  // reaches it only through `.shutdown((s, c) => s.config(...))`. Held so `.shutdown()` can configure it
-  // in place.
+  // reaches it only through `.shutdown((s, { config }) => s.config(...))`. Held so `.shutdown()` can configure
+  // it in place.
   readonly #shutdownBuilder = new ShutdownBuilder<unknown>()
 
   // Registered unconditionally, like #shutdownBuilder: a `.logger(...)` call is deferred to this Feature's own
@@ -206,7 +206,7 @@ export class Application<TConfig = unknown> {
    * const conf = newConfiguration(schema, kConfig).build()
    *
    * createApplication({ config: conf })
-   *   .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+   *   .with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
    * ```
    *
    * @throws ErrFeatureAlreadyInstalled when a feature with the same {@link kFeatureName} is already installed.
@@ -229,7 +229,7 @@ export class Application<TConfig = unknown> {
    * Configures graceful shutdown: the drain delay, the teardown budget, the signals that trigger it, and the
    * dispatcher that delivers them. The feature is registered either way, so this only overrides the defaults.
    * A fluent method is the last word; `SHUTDOWN__DRAIN_DELAY` reaches the feature only through
-   * `.shutdown((s, c) => s.config(c.shutdown))`.
+   * `.shutdown((s, { config }) => s.config(config.shutdown))`.
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
@@ -245,8 +245,9 @@ export class Application<TConfig = unknown> {
   }
 
   /**
-   * Configures the application's logger, with access to the resolved configuration — `.logger((b, c) =>
-   * b.disable(c.app.logEnabled))`. The feature is registered either way, so this only overrides the default.
+   * Configures the application's logger, with access to the resolved configuration — `.logger((b, { config })
+   * => b.disable(config.app.logEnabled))`. The feature is registered either way, so this only overrides the
+   * default.
    * Deferred to `ready()`, like every other feature: {@link log} and `logToken()` reflect it once `ready()`
    * has run, not as soon as this returns.
    *

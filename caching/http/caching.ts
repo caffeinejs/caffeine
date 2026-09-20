@@ -1,5 +1,11 @@
 import { DeferredCtor, type Container, type InjectionToken } from '@caffeinejs/di'
-import { ErrConfiguration, type AdapterRouteOptions, type HTTPPluginFactory } from '@caffeinejs/http'
+import {
+  ErrConfiguration,
+  type AdapterRouteOptions,
+  type HTTPPluginConfigurer,
+  type HTTPPluginFactory,
+  type HTTPSetupContext,
+} from '@caffeinejs/http'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
@@ -13,7 +19,7 @@ import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
 import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
 
 /** Authors {@link HTTPCachingOptions} through {@link HTTPCachingOptionsBuilder} instead of the plain object. */
-export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
+export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachingOptionsBuilder, C>
 
 /**
  * HTTP response caching, as an ordinary Fastify plugin factory: `.with(HTTPCaching())`.
@@ -29,9 +35,12 @@ export type HTTPCachingConfigurer = (builder: HTTPCachingOptionsBuilder) => void
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
  * `cacheInvalidate()` route extensions. Install it after `.authentication(...)`.
  */
-export function HTTPCaching<C = unknown>(options?: HTTPCachingOptions | HTTPCachingConfigurer): HTTPPluginFactory<C> {
-  return ({ container, logger }) => {
-    const resolved = typeof options === 'function' ? build(options) : (options ?? {})
+export function HTTPCaching<C = unknown>(
+  options?: HTTPCachingOptions | HTTPCachingConfigurer<C>,
+): HTTPPluginFactory<C> {
+  return context => {
+    const { container, logger } = context
+    const resolved = typeof options === 'function' ? build(options, context) : (options ?? {})
 
     const store = resolveCache(resolved.store, container)
     const observer = resolveObserver(resolved.observer, container)
@@ -45,9 +54,9 @@ export function HTTPCaching<C = unknown>(options?: HTTPCachingOptions | HTTPCach
   }
 }
 
-function build(configure: HTTPCachingConfigurer): HTTPCachingOptions {
+function build<C>(configure: HTTPCachingConfigurer<C>, context: HTTPSetupContext<C>): HTTPCachingOptions {
   const builder = new HTTPCachingOptionsBuilder()
-  configure(builder)
+  configure(builder, context)
   return builder[kBuild]()
 }
 

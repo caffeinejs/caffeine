@@ -1,4 +1,4 @@
-import { ErrConfiguration, type HTTPPluginFactory } from '@caffeinejs/http'
+import { ErrConfiguration, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http'
 import { fastifyView } from '@fastify/view'
 import { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -10,7 +10,7 @@ import { ViewOptions } from './view.js'
 /**
  * Authors the view plugin's engines through {@link ViewBuilder}.
  */
-export type ViewConfigurer = (builder: ViewBuilder) => void
+export type ViewConfigurer<C = unknown> = HTTPPluginConfigurer<ViewBuilder, C>
 
 /**
  * Template-based server-side rendering over `@fastify/view`.
@@ -20,10 +20,10 @@ export type ViewConfigurer = (builder: ViewBuilder) => void
  *
  * At least one engine is required — installing with none fails at `app.ready()`.
  */
-export function view<C = unknown>(configure?: ViewConfigurer): HTTPPluginFactory<C> {
-  return () => {
+export function view<C = unknown>(configure?: ViewConfigurer<C>): HTTPPluginFactory<C> {
+  return context => {
     const builder = new ViewBuilder()
-    configure?.(builder)
+    configure?.(builder, context)
 
     if (builder[kBuild]().length === 0) {
       throw new ErrConfiguration(

@@ -111,8 +111,8 @@ describe('authentication options set from the tree', () => {
       container,
       config: configured({ schemes: { Cookie: { rememberMeAbsoluteMaxAge: 3600 } } }),
     })
-      .authentication((a, c) =>
-        a.config(c.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).rememberMe()),
+      .authentication((a, { config }) =>
+        a.config(config.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).rememberMe()),
       )
       .mount(
         newRouter('/session')
@@ -151,9 +151,9 @@ describe('authentication options set from the tree', () => {
       const app = createWebApplication(fastifyAdapterFactory(server()), {
         config: configured({ schemes: { oauth: { loginPath: '/start' } } }),
       })
-        .authentication((a, c) =>
+        .authentication((a, { config }) =>
           a
-            .config(c.auth)
+            .config(config.auth)
             .addOAuth2('oauth', o =>
               o
                 .clientID(provider.clientID)
@@ -188,9 +188,9 @@ describe('authentication options set from the tree', () => {
       const app = createWebApplication(fastifyAdapterFactory(server()), {
         config: configured({ schemes: { oidc: { loginPath: '/oidc/start' } } }),
       })
-        .authentication((a, c) =>
+        .authentication((a, { config }) =>
           a
-            .config(c.auth)
+            .config(config.auth)
             .addOIDC('oidc', o =>
               o
                 .clientID(provider.clientID)
@@ -253,9 +253,9 @@ describe('authentication options set from the tree', () => {
 
     const appWith = (oidc: Record<string, unknown>) =>
       createWebApplication(fastifyAdapterFactory(server()), { config: configured({ schemes: { oidc } }) })
-        .authentication((a, c) =>
+        .authentication((a, { config }) =>
           a
-            .config(c.auth)
+            .config(config.auth)
             .addOIDC('oidc', o => o.clientSecret(provider.clientSecret).sessionSecret(SESSION_SECRET).issuer(ISSUER)),
         )
         .mount(protectedRoute)
@@ -321,9 +321,9 @@ describe('authentication options set from the tree', () => {
     it('completes a hand-assembled provider that has no discovery document', async () => {
       const manual = (oidc: Record<string, unknown>) =>
         createWebApplication(fastifyAdapterFactory(server()), { config: configured({ schemes: { oidc } }) })
-          .authentication((a, c) =>
+          .authentication((a, { config }) =>
             a
-              .config(c.auth)
+              .config(config.auth)
               .addOIDC('oidc', o =>
                 o
                   .clientID('code-client')
@@ -357,9 +357,9 @@ describe('authentication options set from the tree', () => {
       const app = createWebApplication(fastifyAdapterFactory(server()), {
         config: configured({ schemes: { oidc: { postLogoutRedirectUri: 'https://app.test/signed-out' } } }),
       })
-        .authentication((a, c) =>
+        .authentication((a, { config }) =>
           a
-            .config(c.auth)
+            .config(config.auth)
             .addOIDC('oidc', o =>
               o
                 .clientID('code-client')
@@ -402,8 +402,8 @@ describe('authentication options set from the tree', () => {
       container,
       config: configured({ schemes: { Cookie: { returnUrlParameter: 'next' } } }),
     })
-      .authentication((a, c) =>
-        a.config(c.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).loginPath('/login')),
+      .authentication((a, { config }) =>
+        a.config(config.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).loginPath('/login')),
       )
       .mount(
         newRouter('/reports')
@@ -441,9 +441,9 @@ describe('authentication options set from the tree', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(server()), {
       config: configured({ schemes: { oauth: { tokenEndpointAuthMethod: 'client_secret_basic' } } }),
-    }).authentication((a, c) =>
+    }).authentication((a, { config }) =>
       a
-        .config(c.auth)
+        .config(config.auth)
         .addOAuth2('oauth', o =>
           o
             .clientID(provider.clientID)
@@ -488,9 +488,9 @@ describe('authentication options set from the tree', () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       container,
       config: configured({ refresh: { absoluteTtl: 60, refreshTtl: '30d' } }),
-    }).authentication((a, c) =>
+    }).authentication((a, { config }) =>
       a
-        .config(c.auth)
+        .config(config.auth)
         .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
         .addRefreshTokens(o => o.resolve(() => ada())),
     )
@@ -523,9 +523,9 @@ describe('authentication options set from the tree', () => {
       container,
       config: configured({ refresh: { accessTtl: 60 } }),
     })
-      .authentication((a, c) =>
+      .authentication((a, { config }) =>
         a
-          .config(c.auth)
+          .config(config.auth)
           .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
           .addRefreshTokens(o => o.resolve(() => ada())),
       )
@@ -571,9 +571,9 @@ describe('authentication options set from the tree', () => {
       return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
         container,
         config: configured({ credentials }),
-      }).authentication((a, c) =>
+      }).authentication((a, { config }) =>
         a
-          .config(c.auth)
+          .config(config.auth)
           .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
           .addCredentials({ scheme: 'FromCode' }),
       )

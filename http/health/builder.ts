@@ -9,7 +9,7 @@ import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPa
  * configuration; {@link healthConfigSchema} is exported so an application can splice it into its own schema:
  *
  * ```ts
- * .with(health((h, c) => h.config(c.app.health)))
+ * .with(health((h, { config }) => h.config(config.app.health)))
  * ```
  *
  * Health indicators are not configured here — they are container-managed beans discovered through

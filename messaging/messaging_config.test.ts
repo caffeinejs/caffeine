@@ -45,9 +45,9 @@ describe('messaging configuration', () => {
       .source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }))
       .build()
     const app = createApplication({ config: conf }).with(
-      messaging((m, c) =>
+      messaging((m, { config }) =>
         m
-          .config(c.messaging.default)
+          .config(config.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary' })
           .out('notify', { destination: 'notify', via: 'primary' }),
@@ -70,9 +70,9 @@ describe('messaging configuration', () => {
       .source(new InlineConfigSource({ messaging: { default: { in: { orders: { group: 'from-config' } } } } }))
       .build()
     const app = createApplication({ config: conf }).with(
-      messaging((m, c) =>
+      messaging((m, { config }) =>
         m
-          .config(c.messaging.default)
+          .config(config.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary' }),
       ),
@@ -92,17 +92,17 @@ describe('messaging configuration', () => {
       .build()
     const app = createApplication({ config: conf })
       .with(
-        messaging((m, c) =>
+        messaging((m, { config }) =>
           m
-            .config(c.messaging.default)
+            .config(config.messaging.default)
             .use('primary', inMemoryBinder())
             .out('log', { destination: 'log', via: 'primary' }),
         ),
       )
       .with(
-        messaging('audit', (m, c) =>
+        messaging('audit', (m, { config }) =>
           m
-            .config(c.messaging.audit)
+            .config(config.messaging.audit)
             .use('primary', inMemoryBinder())
             .out('log', { destination: 'log', via: 'primary' }),
         ),
@@ -126,9 +126,9 @@ describe('messaging configuration', () => {
       .source(new InlineConfigSource({ messaging: { default: { in: { orders: { destination: 'orders.v2' } } } } }))
       .build()
     const app = createApplication({ config: conf }).with(
-      messaging((m, c) =>
+      messaging((m, { config }) =>
         m
-          .config(c.messaging.default)
+          .config(config.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary', schema }),
       ),
@@ -160,9 +160,9 @@ describe('messaging configuration', () => {
     const app = createApplication({ config: conf })
       // No annotation on the selector: the config type is recovered from the builder.
       .with(
-        messaging((m, c) =>
+        messaging((m, { config }) =>
           m
-            .config(c.app.events)
+            .config(config.app.events)
             .use('primary', inMemoryBinder())
             .in('orders', { destination: 'orders', via: 'primary' }),
         ),
@@ -186,9 +186,9 @@ describe('messaging configuration', () => {
       )
       .build()
     const app = createApplication({ config: conf }).with(
-      messaging((m, c) =>
+      messaging((m, { config }) =>
         m
-          .config(c.messaging.default)
+          .config(config.messaging.default)
           .use('primary', inMemoryBinder())
           .in('orders', { destination: 'orders', via: 'primary' }),
       ),

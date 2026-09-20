@@ -1,4 +1,3 @@
-import type { ConfigStore, LiveConfig } from './config/index.js'
 import {
   kFeatureBootstrap,
   kFeatureConfigure,
@@ -9,18 +8,22 @@ import {
 } from './feature.js'
 
 /**
- * The callback an application writes to configure a feature, handed the builder, the live config object, and the
- * store it came from.
+ * The callback an application writes to configure a feature, handed the builder and one context argument, as a
+ * plugin factory is: the configuration, the store it came from, and a container still open to binding.
  *
- * What the callback does with `c` decides what follows a reload: `b.port(c.app.server.port)` reads a number once,
- * while `b.config(c.app.server)` hands over a node whose fields follow every reload. A feature that has to act
- * on a change takes a view in its `config(...)` instead: `(b, c, store) => b.config(store.view(t => t.app.thing))`.
+ * What the callback does with `config` decides what follows a reload: `b.port(config.app.server.port)` reads a
+ * number once, while `b.config(config.app.server)` hands over a node whose fields follow every reload. A feature
+ * that has to act on a change takes a view in its `config(...)` instead:
+ * `(b, { store }) => b.config(store.view(t => t.app.thing))`.
+ *
+ * It runs before the container initializes, so `container.bind(...)` is legal here and `container.get(...)` does
+ * not exist yet.
  *
  * ```ts
- * .with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
+ * .with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
  * ```
  */
-export type FeatureConfigurer<B, C = unknown> = (builder: B, config: LiveConfig<C>, store: ConfigStore<C>) => void
+export type FeatureConfigurer<B, C = unknown> = (builder: B, kit: FeatureConfigureKit<C>) => void
 
 /**
  * Adds a configure callback to a builder the framework registered itself.
@@ -41,10 +44,10 @@ export const kAddConfigurer = Symbol('caffeine.feature.addConfigurer')
  * immediately before {@link configure}.
  *
  * A value set by a fluent method is **final**. Configuration reaches a feature because the callback wired it
- * — `s.port(c.app.server.port)` — and not through any path the builder opens on its own.
+ * — `s.port(config.app.server.port)` — and not through any path the builder opens on its own.
  *
- * `C` is the application configuration type, so a callback's second argument is typed against the tree the
- * application actually declared.
+ * `C` is the application configuration type, so the `config` and `store` on the callback's kit are typed
+ * against the tree the application actually declared.
  */
 export abstract class FeatureBuilder<C = unknown> implements Feature<C> {
   abstract get [kFeatureName](): string
@@ -80,7 +83,7 @@ export abstract class FeatureBuilder<C = unknown> implements Feature<C> {
     // Synchronous, and ahead of `configure`: the application calls every feature's hook in order before
     // awaiting any of them, so each builder is fully authored before the first one does asynchronous work.
     for (const configure of this.#configurers) {
-      configure(this as never, kit.config, kit.store)
+      configure(this as never, kit)
     }
 
     return this.configure(kit)

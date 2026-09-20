@@ -10,7 +10,8 @@ import { noopLogger } from './noop.js'
  * Configures the application's logger.
  *
  * A `Feature`, unlike the eager `ApplicationOptions.logger` path: `.use()`/`.disable()` run once configuration
- * resolves — `.logger((b, c) => b.disable(c.app.logEnabled))` reads a real value, not a schema default.
+ * resolves — `.logger((b, { config }) => b.disable(config.app.logEnabled))` reads a real value, not a schema
+ * default.
  */
 export class LoggerBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'logger'

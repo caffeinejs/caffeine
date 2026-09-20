@@ -122,7 +122,7 @@ describe('health()', () => {
       .build()
 
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, c) => h.config(c.health)),
+      health((h, { config }) => h.config(config.health)),
     )
 
     await app.ready()
@@ -148,7 +148,7 @@ describe('health()', () => {
 
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
     app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, c) => h.config(c.health)),
+      health((h, { config }) => h.config(config.health)),
     )
 
     await app.run()

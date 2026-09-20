@@ -9,6 +9,7 @@ import {
   isServerOwned,
   ServerOwnedPaths,
   serverOwnedPaths,
+  type HTTPPluginConfigurer,
 } from '@caffeinejs/http'
 import fastifyStatic from '@fastify/static'
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
@@ -24,16 +25,16 @@ interface HeaderCapableReply {
 }
 
 /** Authors static file serving through {@link StaticBuilder}. */
-export type StaticConfigurer = (builder: StaticBuilder) => void
+export type StaticConfigurer<C = unknown> = HTTPPluginConfigurer<StaticBuilder, C>
 
 /**
  * Serves static files over `@fastify/static`, as an ordinary Fastify plugin factory:
  * `.with(staticFiles(s => s.serve(root)))`. http does not depend on this package.
  */
-export function staticFiles<C = unknown>(configure?: StaticConfigurer): HTTPPluginFactory<C> {
-  return () => {
+export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): HTTPPluginFactory<C> {
+  return context => {
     const builder = new StaticBuilder()
-    configure?.(builder)
+    configure?.(builder, context)
     return staticPlugin(builder[kBuild]())
   }
 }

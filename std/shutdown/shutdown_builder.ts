@@ -17,7 +17,7 @@ import type { ShutdownSignal, SignalDispatcher } from './signals.js'
  * fluent method sets is final; to let the environment redirect it, read the setting from the configuration:
  *
  * ```ts
- * .shutdown((s, c) => s.config(c.app.shutdown).dispatcher(myDispatcher))
+ * .shutdown((s, { config }) => s.config(config.app.shutdown).dispatcher(myDispatcher))
  * ```
  *
  * The resolved {@link ShutdownOptions} are bound under {@link kShutdownPolicy}; the application reads them once

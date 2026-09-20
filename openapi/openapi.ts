@@ -9,6 +9,7 @@ import {
   kAuthSchemeDescriptors,
   solutions,
   type AuthSchemeDescriptor,
+  type HTTPPluginConfigurer,
   type HTTPPluginFactory,
   type RouteAuthzOptions,
   type RouteGroup,
@@ -26,7 +27,7 @@ import type { OpenAPIDocument } from './spec/spec.js'
 import { readScalarBundle, scalarPage } from './ui/scalar.js'
 
 /** Authors {@link OpenAPIOptions} through {@link OpenAPIOptionsBuilder} instead of the plain object. */
-export type OpenAPIConfigurer = (builder: OpenAPIOptionsBuilder) => void
+export type OpenAPIConfigurer<C = unknown> = HTTPPluginConfigurer<OpenAPIOptionsBuilder, C>
 
 /** The path the Scalar bundle is served from, relative to the documentation page. */
 const ASSET_SEGMENT = '/_scalar.js'
@@ -48,10 +49,10 @@ interface EndpointPaths {
  * application already declares. The builder covers the document-level facts nothing else can know (title,
  * version, servers), where the document is served, and who may read it.
  */
-export function openapi<C = unknown>(configure?: OpenAPIConfigurer): HTTPPluginFactory<C> {
-  return () => {
+export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPluginFactory<C> {
+  return context => {
     const builder = new OpenAPIOptionsBuilder()
-    configure?.(builder)
+    configure?.(builder, context)
     return openapiPlugin(builder[kBuild]())
   }
 }

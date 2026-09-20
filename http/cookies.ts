@@ -43,7 +43,7 @@ export const cookieConfigSchema = $t.Object({
  * rather than restate the fields:
  *
  * ```ts
- * .cookie((k, c) => k.config(c.app.cookie))
+ * .cookie((k, { config }) => k.config(config.app.cookie))
  * ```
  *
  * An application whose own Fastify instance already registered `@fastify/cookie` keeps that registration and

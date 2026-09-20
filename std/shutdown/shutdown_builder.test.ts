@@ -54,7 +54,7 @@ describe('ShutdownBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigSource({ shutdown: { drainDelay: '90ms' } }))
       .build()
-    const app = headless(conf).shutdown((s, c) => s.drainDelay('10s').config(c.shutdown))
+    const app = headless(conf).shutdown((s, { config }) => s.drainDelay('10s').config(config.shutdown))
     await app.ready()
 
     expect(policyOf(app).drainDelayMs).toBe(10_000)
@@ -68,7 +68,7 @@ describe('ShutdownBuilder', () => {
         }),
       )
       .build()
-    const app = headless(conf).shutdown((s, c) => s.config(c.shutdown))
+    const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
     await app.ready()
 
     const policy = policyOf(app)
@@ -81,7 +81,7 @@ describe('ShutdownBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigSource({ shutdown: { drainDelay: '30ms' } }))
       .build()
-    const app = headless(conf).shutdown((s, c) => s.dispatcher(noopSignalDispatcher).config(c.shutdown))
+    const app = headless(conf).shutdown((s, { config }) => s.dispatcher(noopSignalDispatcher).config(config.shutdown))
     await app.ready()
 
     const policy = policyOf(app)
@@ -98,7 +98,7 @@ describe('ShutdownBuilder', () => {
     }
 
     const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
-    const app = headless(conf).shutdown((s, c) => s.config(c.shutdown))
+    const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
     await app.ready()
 
     const policy = policyOf(app)

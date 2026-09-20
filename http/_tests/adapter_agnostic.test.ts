@@ -298,14 +298,15 @@ describe('configure callback typing', () => {
   }
 
   // `.with(...)` is overloaded, and only the overload TypeScript tries first contextually types a callback. Each
-  // call shape must still reach the application's configuration type rather than fall back to `unknown`.
+  // call shape must still reach the application's configuration type rather than fall back to `unknown` — a
+  // feature through its `FeatureConfigureKit`, a plugin factory's builder through its `HTTPSetupContext`.
   it('types the callback against the application configuration, whichever overload takes it', () => {
     const conf = newConfiguration(schema, kConfig).source(new InlineConfigSource({})).build()
 
     const app = createWebApplication({ config: conf })
-      .with(plain((_b, c) => expectTypeOf(c).toEqualTypeOf<LiveConfig<AppConfig>>()))
-      .with(serverSide((_b, c) => expectTypeOf(c).toEqualTypeOf<LiveConfig<AppConfig>>()))
-      .with(health((_h, c) => expectTypeOf(c).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .with(plain((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .with(serverSide((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .with(health((_h, context) => expectTypeOf(context.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
 
     expect(app).toBeDefined()
   })

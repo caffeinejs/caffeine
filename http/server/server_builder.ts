@@ -43,7 +43,7 @@ export const serverConfigSchema = $t.Object({
  * rather than restate the fields:
  *
  * ```ts
- * .server((s, c) => s.config(c.app.server))
+ * .server((s, { config }) => s.config(config.app.server))
  * ```
  *
  * The resolved options are bound under {@link kServerOptions}, which is how the adapter reads them without

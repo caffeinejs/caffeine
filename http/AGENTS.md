@@ -87,7 +87,7 @@ exists; cache staleness at shutdown is handled by the plugin's own Fastify `onCl
 
 Graceful shutdown — the drain delay, the teardown budget, the signals — is its own feature, `ShutdownBuilder`
 from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
-`createWebApplication()` and headless `createApplication()` and configured with `app.shutdown((s, c) => …)`.
+`createWebApplication()` and headless `createApplication()` and configured with `app.shutdown((s, { config }) => …)`.
 It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch shutdown.
 
 The resolved options of the built-ins that remain container bindings — `kServerOptions`, `kStaticOptions` — are

@@ -42,9 +42,9 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // makes no difference to install order; they are grouped first because they read as configuration.
 
       // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
-      .server((s, c) => s.config(c.server))
+      .server((s, { config }) => s.config(config.server))
       // The level follows configuration, and the adapter re-syncs Fastify's own child logger from it.
-      .logger((b, c) => b.level(c.log.level))
+      .logger((b, { config }) => b.level(config.log.level))
       // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the
       // routing-table lag while requests keep being served normally, and only then does the server close. No
       // preStop sleep in the manifest. Signals are on by default.
@@ -61,14 +61,14 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
 
       // --- Installs, in the order they register. The authentication gate has no slot of its own: it lands
       // exactly here, which is why it is written first — nothing reading `req.user` registers ahead of it.
-      .authentication((auth, c) =>
+      .authentication((auth, { config }) =>
         auth
           // Basic, for the API documentation only. Demo credentials, overridable from the environment.
           .addBasic('Basic', o =>
             o
               .realm('Petstore docs')
               .validate((_ctx, username, password) =>
-                username === c.docs.user && password === c.docs.password
+                username === config.docs.user && password === config.docs.password
                   ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', username, 'petstore')])])
                   : null,
               ),
@@ -81,10 +81,10 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             'GitHub',
             o =>
               o
-                .clientID(c.auth.github.clientId)
-                .clientSecret(c.auth.github.clientSecret)
-                .callbackURL(c.auth.github.callbackUrl)
-                .sessionSecret(c.auth.github.sessionSecret)
+                .clientID(config.auth.github.clientId)
+                .clientSecret(config.auth.github.clientSecret)
+                .callbackURL(config.auth.github.callbackUrl)
+                .sessionSecret(config.auth.github.sessionSecret)
                 .sessionCookieName(GITHUB_SESSION_COOKIE)
                 .stateCookieName(GITHUB_STATE_COOKIE)
                 .defaultRedirectPath('/dashboard')

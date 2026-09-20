@@ -1,16 +1,15 @@
 import { ApplicationAvailability } from '@caffeinejs/std'
-import type { LiveConfig } from '@caffeinejs/std/config'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
-import type { HTTPPluginFactory } from '../plugin.js'
+import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
 import { HealthBuilder } from './builder.js'
 import { healthComponents } from './components.js'
 import { loadHealthIndicators } from './load.js'
 import { installHealthProbes } from './probes_route.js'
 
 /** Authors {@link HealthOptions} through {@link HealthBuilder} instead of a plain object. */
-export type HealthConfigurer<C = unknown> = (builder: HealthBuilder, config: LiveConfig<C>) => void
+export type HealthConfigurer<C = unknown> = HTTPPluginConfigurer<HealthBuilder, C>
 
 /**
  * The Kubernetes probes (`/livez`, `/readyz`, `/startupz`), as an ordinary Fastify plugin factory:
@@ -26,10 +25,12 @@ export type HealthConfigurer<C = unknown> = (builder: HealthBuilder, config: Liv
  * `app.shutdown(...)`.
  */
 export function health<C = unknown>(configure?: HealthConfigurer<C>): HTTPPluginFactory<C> {
-  return ({ config, container }) => {
+  return context => {
     const builder = new HealthBuilder()
-    configure?.(builder, config)
+    configure?.(builder, context)
     const options = builder.resolve()
+
+    const { container } = context
 
     const plugin: FastifyPluginAsync = async instance => {
       // Resolved unconditionally: this is what catches a non-singleton HealthIndicator at start-up, whether

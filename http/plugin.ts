@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
 
 import type { AdapterExtensionFactory } from './adapter_extension.js'
+import type { HTTPSetupContext } from './setup_context.js'
 
 /**
  * Any Fastify plugin, callback- or async-style — a bare third-party one (`@fastify/cors`, `@fastify/cookie`,
@@ -39,6 +40,22 @@ export type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
  * ```
  */
 export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<AnyFastifyPlugin, C>
+
+/**
+ * Authors a plugin's options through its builder, handed the same {@link HTTPSetupContext} the factory that
+ * runs it was given — so a plugin's settings can come from the application's configuration or from something
+ * it resolves out of the container.
+ *
+ * Runs while the factory builds the plugin, after `container.init()`, so `container.get(...)` is legal and
+ * `container.bind(...)` is not. A feature's callback is `FeatureConfigurer` from `@caffeinejs/std` instead,
+ * which runs earlier and binds rather than resolves.
+ *
+ * ```ts
+ * .with(health((h, { config }) => h.config(config.app.health)))
+ * .with(HTTPCaching((b, { container }) => b.store(container.get(RedisCache))))
+ * ```
+ */
+export type HTTPPluginConfigurer<B, C = unknown> = (builder: B, context: HTTPSetupContext<C>) => void
 
 const kPluginMeta = Symbol.for('plugin-meta')
 

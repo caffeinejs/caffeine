@@ -162,7 +162,7 @@ Where a value goes depends on who reads it, not on what is convenient:
 
 | The value is…                                         | Goes to                                | Read with                               |
 | ----------------------------------------------------- | -------------------------------------- | --------------------------------------- |
-| a setting a user tunes from the environment or a file | the application's configuration tree   | the configure callback's `c`            |
+| a setting a user tunes from the environment or a file | the application's configuration tree   | the configure kit's `config`            |
 | a value the feature runs on                           | an ordinary field on the builder       | the builder reads its own field         |
 | a setting code outside the feature must read          | a container binding, in `configure`    | `container.getOptional(key)`            |
 | something user code injects                           | a container binding, in `configure`    | `container.get` / constructor injection |
@@ -177,7 +177,7 @@ no slice, publishes no key, and adds no field to the resolved configuration obje
 
 **A fluent method is the last word.** `s.port(3000)` is what the feature runs on; it is not a default that a
 higher band quietly outranks. Configuration reaches a feature because the application's configure callback
-wired it — `.with(server((s, c) => s.config(c.app.server)))` — and by no other path. Where the more
+wired it — `.with(server((s, { config }) => s.config(config.app.server)))` — and by no other path. Where the more
 specific of the two is named, the more specific wins: a setter beats the block `config(...)` handed over.
 
 Exceptions, where `config(...)` overlays what the fluent methods set:
@@ -195,12 +195,12 @@ A feature nothing wired runs on its own defaults and its builder values alone: i
 environment variable or argument reaches it.
 
 Liveness is the author's choice rather than something the framework manufactures. A configuration node is live:
-its fields follow every reload, so `b.config(c.app.thing)` follows a reload while `b.port(c.app.thing.port)`
-reads a number once. A feature's own resolved options are a plain object read once, when the feature configures:
+its fields follow every reload, so `b.config(config.app.thing)` follows a reload while
+`b.port(config.app.thing.port)` reads a number once. A feature's own resolved options are a plain object read once, when the feature configures:
 config loads before any feature configures, so there is nothing left to fold lazily — `configure` reads its
 inputs, folds in whatever the builder itself holds (a dispatcher, a merged default), and binds the result. A
 reload afterward does not reach an already-bound value. A feature that has to act on a change takes a view in its
-`config(...)` instead: `(b, c, store) => b.config(store.view(t => t.app.thing))`.
+`config(...)` instead: `(b, { store }) => b.config(store.view(t => t.app.thing))`.
 
 Do not route a plugin's own configuration through a container key it reads back at server setup: the builder
 is holding the value when it builds the plugin, so the plugin closes over it.
@@ -239,7 +239,7 @@ export interface Feature<C = unknown> {
 }
 ```
 
-`[kFeatureName]` is the identity `.extend` deduplicates on, so a feature accepting an instance name folds it
+`[kFeatureName]` is the identity `.with` deduplicates on, so a feature accepting an instance name folds it
 in (`kafka` vs `kafka:orders`) and one image cannot install the same instance twice. `[kFeatureConfigure]`
 runs after configuration has resolved and before the container initializes, so the kit's `config` is readable
 and binding is still open. `[kFeatureBootstrap]` is optional and runs after `container.init()`; look up bindings
@@ -254,6 +254,12 @@ Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which adds exac
 application's configure callbacks against the builder, with the resolved configuration, immediately before
 `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in
 `configure`. An HTTP feature extends `HTTPFeatureBuilder<C>` instead, and wires the server in `server`:
+
+The callback the application writes is `(builder, kit)` — one context argument, the same shape a plugin
+factory takes. The kit is the `FeatureConfigureKit` the feature's own `configure` receives, so a callback
+reads `config` and `store` and may `container.bind(...)`; it runs before `container.init()`, so there is no
+`container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` instead and is handed the
+`HTTPSetupContext` its factory got, where the container resolves and binding is closed.
 
 ```ts
 export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
@@ -282,9 +288,9 @@ export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
 }
 ```
 
-The package exports a **factory function**, generic over the application configuration type so the callback's
-second argument is typed against the schema the application declared. An HTTP feature's factory returns
-`HTTPFeature<C>`, not `Feature<C>`, or the server it is written against goes unchecked:
+The package exports a **factory function**, generic over the application configuration type so the `config`
+and `store` on the callback's kit are typed against the schema the application declared. An HTTP feature's
+factory returns `HTTPFeature<C>`, not `Feature<C>`, or the server it is written against goes unchecked:
 
 ```ts
 export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C> {
