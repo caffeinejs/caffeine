@@ -112,7 +112,7 @@ describe('ctx.req.cookie()', () => {
 
     const app = await ready(
       createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
-        .cookie((k, c) => k.config(c.app.cookie))
+        .cookie((k, { config }) => k.config(config.app.cookie))
         .mount(reads()),
     )
 
@@ -132,7 +132,7 @@ describe('ctx.req.cookie()', () => {
 
     const app = await ready(
       createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
-        .cookie((k, c) => k.config(c.app.cookie).secret(fromCode))
+        .cookie((k, { config }) => k.config(config.app.cookie).secret(fromCode))
         .mount(reads()),
     )
 

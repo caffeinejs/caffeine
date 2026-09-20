@@ -54,7 +54,9 @@ describe('server builder + config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ server: { host: '127.0.0.1', port: 0 }, db: { url: 'x' } }))
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) => s.config(c.server))
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.server),
+    )
 
     await app.run()
 
@@ -69,8 +71,8 @@ describe('server builder + config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }))
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
-      s.config(c.server).port(3000),
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.server).port(3000),
     )
 
     await app.ready()
@@ -82,7 +84,9 @@ describe('server builder + config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(env({ SERVER__HOST: '127.0.0.1', SERVER__PORT: '8080', DB__URL: 'x' }))
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) => s.config(c.server))
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.server),
+    )
 
     await app.ready()
 
@@ -93,8 +97,8 @@ describe('server builder + config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(env({ DB__URL: 'x' }))
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
-      s.config(c.server).port(3000).host('127.0.0.1'),
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.server).port(3000).host('127.0.0.1'),
     )
 
     await app.ready()
@@ -131,7 +135,9 @@ describe('server builder + config', () => {
       // Given exactly as `process.argv` arrives, interpreter and script path included.
       .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.port=9090'] })
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) => s.config(c.server))
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.server),
+    )
 
     await app.ready()
 
@@ -147,8 +153,8 @@ describe('server builder + config', () => {
     const conf = newConfiguration(nested, kNested)
       .source(env({ APP__SERVER__HOST: '127.0.0.1' }))
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
-      s.config(c.app.server).port(4567),
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.app.server).port(4567),
     )
 
     await app.ready()
@@ -166,8 +172,8 @@ describe('server builder + config', () => {
     const conf = newConfiguration(nested, kNested)
       .source(env({ APP__SERVER__PORT: '8082' }))
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) =>
-      s.config(c.app.server),
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.app.server),
     )
 
     await app.ready()
@@ -178,7 +184,7 @@ describe('server builder + config', () => {
   it('resolves against the defaults when the application declared no schema', async () => {
     app = createWebApplication(fastifyAdapterFactory(fastify()))
       // No `config` constructor option — the block reads back empty, so the defaults and the code value stand.
-      .server((s, c) => s.config((c as LiveConfig<AppConfig>).server).port(4444))
+      .server((s, { config }) => s.config((config as LiveConfig<AppConfig>).server).port(4444))
 
     await app.ready()
 
@@ -194,7 +200,9 @@ describe('server builder + config', () => {
     }
 
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, c) => s.config(c.server))
+    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).server((s, { config }) =>
+      s.config(config.server),
+    )
 
     await app.run()
 
@@ -220,6 +228,6 @@ describe('server builder + config', () => {
       .build()
     void createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
       // @ts-expect-error the `db` slice ({ url }) is not assignable to ServerOptions
-      .server((s, c) => s.config(c.db))
+      .server((s, { config }) => s.config(config.db))
   })
 })

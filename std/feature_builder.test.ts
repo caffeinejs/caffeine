@@ -107,7 +107,7 @@ describe('FeatureBuilder', () => {
 
   // The other half of the same rule, and the only path configuration has into a feature.
   it('reads a setting from the tree when the callback wires it', async () => {
-    const g = gadget<AppConfig>((b, c) => b.config(c.app.gadget))
+    const g = gadget<AppConfig>((b, { config }) => b.config(config.app.gadget))
 
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
@@ -120,6 +120,27 @@ describe('FeatureBuilder', () => {
     expect(g.resolved).toEqual({ size: 99, label: 'plain' })
   })
 
+  // The kit is the whole reason the callback takes one context argument rather than the configuration alone:
+  // it runs while binding is still open, so an application can bind alongside the feature it is configuring
+  // instead of installing a second feature to do it.
+  it('binds into the container from the callback', async () => {
+    const kLabelSource = token<string>(Symbol('gadget.label.source'))
+
+    const g = gadget<AppConfig>((b, { config, container }) => {
+      container.bind(kLabelSource, t => t.toValue(`configured:${config.app.gadget.size}`))
+      b.config(config.app.gadget)
+    })
+
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(new InlineConfigSource({ app: { gadget: { size: 12 } } }))
+      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
+
+    await app.ready()
+
+    expect(app.container.get(kLabelSource)).toBe('configured:12')
+  })
+
   it('merges through a fluent method that builds on what it already wrote', async () => {
     const g = gadget(b => b.label('wide').suffix('-ish'))
 
@@ -128,8 +149,8 @@ describe('FeatureBuilder', () => {
     expect(g.resolved?.label).toBe('wide-ish')
   })
 
-  // The callback has to run after configuration resolves, or `c` would carry nothing — and before the
-  // feature's own bootstrap, or the builder would not be authored yet when it reads itself.
+  // The callback has to run after configuration resolves, or the kit's `config` would carry nothing — and
+  // before the feature's own bootstrap, or the builder would not be authored yet when it reads itself.
   it('runs the callback before the feature bootstraps', async () => {
     const order: string[] = []
 
@@ -186,7 +207,7 @@ describe('FeatureBuilder', () => {
       load: () => [{ name: 'gadget-test', data: { app: { gadget: { size } } } }],
     }
 
-    const g = gadget<AppConfig>((b, c) => b.config(c.app.gadget))
+    const g = gadget<AppConfig>((b, { config }) => b.config(config.app.gadget))
     const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
 

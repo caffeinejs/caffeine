@@ -227,7 +227,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    * see {@link AuthConfig} for how that name has to be spelled for an environment variable to reach it.
    *
    * ```ts
-   * .authentication((a, c) => a.config(c.app.auth).addJWTBearer('jwt', j => j.issuer('local')))
+   * .authentication((a, { config }) => a.config(config.app.auth).addJWTBearer('jwt', j => j.issuer('local')))
    * ```
    */
   config(config: Partial<AuthConfig>): this {

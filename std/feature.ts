@@ -5,10 +5,12 @@ import { ErrCaffeine } from './error.js'
 import type { Logger } from './logger/logger.js'
 
 /**
- * What a feature is handed when the application configures it: after configuration has resolved and before
- * the container is initialized, so binding is still open.
+ * What a feature is handed when the application configures it, and the second argument of the configure
+ * callback an application writes: after configuration has resolved and before the container is initialized,
+ * so binding is still open.
  */
 export interface FeatureConfigureKit<C = unknown> {
+  /** IoC container exposing binding operations. Lookup is not available until the container initializes. */
   container: ContainerBindingOps
   /** The live config object: a node read from it follows every reload. */
   config: LiveConfig<C>
@@ -29,8 +31,8 @@ export interface BootstrapKit<C = unknown> {
   /**
    * The live config object: a value taken from a node rather than copied out of it follows a reload.
    *
-   * A feature sees `C` as `unknown` here and cannot usefully navigate it. The typed path is the second
-   * argument of the configure callback the application wrote, which is this same object.
+   * A feature sees `C` as `unknown` here and cannot usefully navigate it. The typed path is the `config` on
+   * the kit the application's configure callback was handed, which is this same object.
    */
   config: LiveConfig<C>
 

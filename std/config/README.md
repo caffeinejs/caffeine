@@ -66,7 +66,7 @@ const conf = newConfiguration(appConfigSchema, kAppConfig)
   .args()
   .build()
 
-createWebApplication(adapter, { config: conf }).server((s, c) => s.config(c.server))
+createWebApplication(adapter, { config: conf }).server((s, { config }) => s.config(config.server))
 ```
 
 Precedence is registration order alone: a source added later wins a conflicting value. Here the environment
@@ -145,9 +145,9 @@ request. A selector that throws during a swap is logged and leaves the view as i
 A feature registers nothing here. The application hands it what it wants, in the configure callback:
 
 ```ts
-.with(server((s, c) => s.config(c.app.server)))
-.with(kafka((k, c) => k.brokers(c.app.kafka.brokers)))
-.with(thing((b, c, store) => b.config(store.view(t => t.app.thing))))
+.with(server((s, { config }) => s.config(config.app.server)))
+.with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
+.with(thing((b, { store }) => b.config(store.view(t => t.app.thing))))
 ```
 
 - **Liveness is the author's choice.** A node handed over follows every reload; a scalar copied out of one does

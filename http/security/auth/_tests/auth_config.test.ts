@@ -86,8 +86,8 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
-    }).authentication((a, c) =>
-      a.config(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+    }).authentication((a, { config }) =>
+      a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
     await app.ready()
@@ -128,8 +128,8 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
-    }).authentication((a, c) =>
-      a.config(c.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
+    }).authentication((a, { config }) =>
+      a.config(config.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
     )
 
     await expect(app.ready()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
@@ -153,9 +153,9 @@ describe('authentication configuration', () => {
 
     const app = createWebApplication(fastifyAdapterFactory(server), {
       config: conf,
-    }).authentication((a, c) =>
+    }).authentication((a, { config }) =>
       a
-        .config(c.auth)
+        .config(config.auth)
         .addBasic(b => b.realm('From Code').validate(() => null))
         .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
         .default('Basic'),
@@ -183,9 +183,9 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
-    }).authentication((a, c) =>
+    }).authentication((a, { config }) =>
       a
-        .config(c.auth)
+        .config(config.auth)
         .addBasic(b => b.validate(() => null))
         .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
@@ -206,8 +206,8 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
-    }).authentication((a, c) =>
-      a.config(c.auth).addBasic(b =>
+    }).authentication((a, { config }) =>
+      a.config(config.auth).addBasic(b =>
         b.realm('Coded').validate(() => {
           validated++
           return null
@@ -241,8 +241,8 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
       config: conf,
-    }).authentication((a, c) =>
-      a.config(c.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+    }).authentication((a, { config }) =>
+      a.config(config.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
     await app.ready()
@@ -265,7 +265,8 @@ describe('authentication configuration', () => {
       const conf = newConfiguration(openSchema, kOpenConfig).source(env(values)).build()
 
       return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf }).authentication(
-        (a, c) => a.config(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
+        (a, { config }) =>
+          a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
       )
     }
 
@@ -322,19 +323,20 @@ describe('authentication configuration', () => {
         .build()
       const server = fastify({ logger: false })
 
-      const app = createWebApplication(fastifyAdapterFactory(server), { config: conf }).authentication((a, c) =>
-        a
-          .config(c.auth)
-          .addOAuth2('oauth', o =>
-            o
-              .clientID('code-client')
-              .clientSecret('code-client-secret')
-              .sessionSecret('a-perfectly-long-session-secret-value!!')
-              .authorizationEndpoint('https://provider.test/authorize')
-              .tokenEndpoint('https://provider.test/token')
-              .userInfoEndpoint('https://provider.test/userinfo')
-              .callbackURL('https://app.test/auth/callback'),
-          ),
+      const app = createWebApplication(fastifyAdapterFactory(server), { config: conf }).authentication(
+        (a, { config }) =>
+          a
+            .config(config.auth)
+            .addOAuth2('oauth', o =>
+              o
+                .clientID('code-client')
+                .clientSecret('code-client-secret')
+                .sessionSecret('a-perfectly-long-session-secret-value!!')
+                .authorizationEndpoint('https://provider.test/authorize')
+                .tokenEndpoint('https://provider.test/token')
+                .userInfoEndpoint('https://provider.test/userinfo')
+                .callbackURL('https://app.test/auth/callback'),
+            ),
       )
 
       await app.ready()

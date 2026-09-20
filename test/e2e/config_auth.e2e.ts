@@ -26,7 +26,7 @@ function start(env: Record<string, string>) {
     app =>
       app
         // Named in lower case: an environment variable cannot address a scheme called `Bearer`.
-        .authentication((auth, c) => auth.config(c.auth).addJWTBearer('jwt', localJWT))
+        .authentication((auth, { config }) => auth.config(config.auth).addJWTBearer('jwt', localJWT))
         .mount(
           newRouter('/whoami')
             .authorize({})
@@ -80,9 +80,9 @@ describe('authentication options set from the environment', () => {
   it('takes an OAuth 2.0 client id and callback URL from the variables a deployment would write', async () => {
     const running = await startApp(
       app =>
-        app.authentication((auth, c) =>
+        app.authentication((auth, { config }) =>
           auth
-            .config(c.auth)
+            .config(config.auth)
             .addOAuth2('oauth', o =>
               o
                 .clientID('code-client')

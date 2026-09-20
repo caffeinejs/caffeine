@@ -124,7 +124,7 @@ describe('Application integration', () => {
   // `ready()`.
   it('reads the resolved configuration, not a pre-resolution default', async () => {
     const app = appWithConfig(false)
-    app.logger((b, c) => b.disable(c.logEnabled === false))
+    app.logger((b, { config }) => b.disable(config.logEnabled === false))
 
     await app.ready()
 
@@ -133,7 +133,7 @@ describe('Application integration', () => {
 
   it('stays enabled when the resolved configuration says so', async () => {
     const app = appWithConfig(true)
-    app.logger((b, c) => b.disable(c.logEnabled === false))
+    app.logger((b, { config }) => b.disable(config.logEnabled === false))
 
     await app.ready()
 
@@ -164,7 +164,7 @@ describe('Application integration', () => {
 
     it('reads the resolved configuration, like every other setting', async () => {
       const app = appWithConfig(true)
-      app.logger((l, c) => l.level(c.logEnabled ? 'debug' : 'error'))
+      app.logger((l, { config }) => l.level(config.logEnabled ? 'debug' : 'error'))
 
       await app.ready()
 

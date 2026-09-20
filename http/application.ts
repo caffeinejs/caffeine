@@ -159,7 +159,7 @@ export class WebApplication<
     this.addFeature(this.#cookieBuilder)
 
     // Registered unconditionally: every application has a listen address. Configuration reaches it only
-    // through `.server((s, c) => s.config(...))` — declaring `server` in the schema is not enough.
+    // through `.server((s, { config }) => s.config(...))` — declaring `server` in the schema is not enough.
     this.addFeature(this.#serverBuilder)
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
@@ -281,7 +281,7 @@ export class WebApplication<
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
   // One signature taking the union, not one overload per shape. A generic argument such as
-  // `health((h, c) => …)` has its callback typed against the first overload TypeScript tries, and those types
+  // `health((h, ctx) => …)` has its callback typed against the first overload TypeScript tries, and those types
   // stick: whichever shape came second — a factory like `health()`, or an `HTTPFeature` factory — silently
   // inferred C as unknown instead of the application's configuration type.
   override with(
@@ -321,7 +321,7 @@ export class WebApplication<
 
   /**
    * Configures authorization. Runs immediately: there is nothing to read from the configuration tree, so
-   * there is no `(a, c)` callback and nothing is queued for bootstrap — unlike `.server((s, c) => …)`.
+   * there is no `(a, kit)` callback and nothing is queued for bootstrap — unlike `.server((s, kit) => …)`.
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
@@ -342,7 +342,7 @@ export class WebApplication<
    * controller- and method-level `@UseGuards`.
    *
    * Runs immediately: guards have nothing to read from the configuration tree, so there is no `(g, c)`
-   * callback and nothing is queued for bootstrap — unlike `.server((s, c) => …)`.
+   * callback and nothing is queued for bootstrap — unlike `.server((s, kit) => …)`.
    *
    * Does not bind the classes. Each Key must already be a container-managed Guard.
    * Calling this is not required for `@UseGuards` on controllers.
@@ -394,7 +394,7 @@ export class WebApplication<
    * difference.
    *
    * ```ts
-   * .cookie((k, c) => k.config(c.app.cookie))
+   * .cookie((k, { config }) => k.config(config.app.cookie))
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
