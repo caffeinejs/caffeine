@@ -1,119 +1,162 @@
-import {
-  Authorize,
-  type Context,
-  Controller,
-  Get,
-  Args,
-  $p,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import FastifyCookie from '@fastify/cookie'
-import fastify from 'fastify'
-import { describe, it, expect, beforeAll } from 'vitest'
+import { Claim, newRouter } from '@caffeinejs/http'
+import { describe, expect, it } from 'vitest'
 
-import { oauthServerUp, pickCookie, springLogin } from './internal/spring/index.js'
+import { startApp } from './internal/app.js'
+import { Browser, type Page } from './internal/browser/index.js'
+import type { OAuth2OptionsBuilder } from './internal/builders.js'
+import { OAUTH_SERVER, oauthServerUp, springLogin } from './internal/spring/index.js'
+import { required } from './internal/strict.js'
 
-const OAUTH = 'http://localhost:9000'
-const CALLBACK_ORIGIN = 'http://localhost:9999'
+// The redirect URI registered for the client in test/services/oauthserver, so the port is not negotiable.
+const PORT = 9999
+const ORIGIN = `http://localhost:${PORT}`
 const SESSION_SECRET = 'spring-oauth2-e2e-session-secret-32!'
 
-@Authorize()
-@Controller('/oauth2-me')
-class OAuth2MeController {
-  @Get('/')
-  @Args([$p.context()])
-  me(ctx: Context) {
-    return {
-      sub: ctx.user.findFirst('sub')?.value,
-      email: ctx.user.findFirst('email')?.value,
-    }
-  }
+const SCHEME = 'spring-oauth2'
+
+function spring(o: OAuth2OptionsBuilder): OAuth2OptionsBuilder {
+  return o
+    .clientID('caffeine-oauth2')
+    .clientSecret('caffeine-oauth2-secret')
+    .sessionSecret(SESSION_SECRET)
+    .callbackURL(`${ORIGIN}/oauth2/callback`)
+    .authorizationEndpoint(`${OAUTH_SERVER}/oauth2/authorize`)
+    .tokenEndpoint(`${OAUTH_SERVER}/oauth2/token`)
+    .userInfoEndpoint(`${OAUTH_SERVER}/userinfo`)
+    .subjectClaim('sub')
+    .scopes('openid', 'profile', 'email')
 }
 
-@Authorize({ roles: ['admin'] })
-@Controller('/oauth2-admin')
-class OAuth2AdminController {
-  @Get('/')
-  admin() {
-    return { ok: true }
-  }
-}
-
-@Authorize({ roles: ['superadmin'] })
-@Controller('/oauth2-superadmin')
-class OAuth2SuperadminController {
-  @Get('/')
-  superadmin() {
-    return { ok: true }
-  }
-}
-
-void [OAuth2MeController, OAuth2AdminController, OAuth2SuperadminController]
-
-function buildApp() {
-  const f = fastify()
-  f.register(FastifyCookie)
-  const builder = createWebApplication(fastifyAdapterFactory(f))
-  builder.authentication(auth =>
-    auth.addOAuth2('spring-oauth2', o =>
-      o
-        .clientID('caffeine-oauth2')
-        .clientSecret('caffeine-oauth2-secret')
-        .sessionSecret(SESSION_SECRET)
-        .callbackURL(`${CALLBACK_ORIGIN}/oauth2/callback`)
-        .authorizationEndpoint(`${OAUTH}/oauth2/authorize`)
-        .tokenEndpoint(`${OAUTH}/oauth2/token`)
-        .userInfoEndpoint(`${OAUTH}/userinfo`)
-        .subjectClaim('sub')
-        .scopes('openid', 'profile', 'email'),
-    ),
+function routes() {
+  return newRouter().mount(
+    newRouter('/me')
+      .authorize({})
+      .get('/', ctx => Object.fromEntries(ctx.user.claims().map(claim => [claim.type, claim.value]))),
+    newRouter('/admin')
+      .authorize({ roles: ['admin'] })
+      .get('/', () => ({ ok: true })),
+    newRouter('/superadmin')
+      .authorize({ roles: ['superadmin'] })
+      .get('/', () => ({ ok: true })),
   )
-  return builder
 }
 
-const serverUp = await oauthServerUp()
+async function signIn(browser: Browser, url: string, username = 'alice', password = 'wonderland'): Promise<Page> {
+  return springLogin(browser, await browser.navigate(url), username, password)
+}
 
-describe.skipIf(!serverUp)('OAuth2 e2e against Spring Authorization Server', () => {
-  let app: ReturnType<typeof buildApp>
+/** Starts an application for one case and closes it whatever the case does: every one needs the same port. */
+async function withApp(configure: (o: OAuth2OptionsBuilder) => unknown, run: () => Promise<void>): Promise<void> {
+  const running = await startApp(
+    app => app.authentication(auth => auth.addOAuth2(SCHEME, o => configure(spring(o)))).mount(routes()),
+    { port: PORT },
+  )
 
-  beforeAll(async () => {
-    app = buildApp()
-    await app.ready()
+  try {
+    await run()
+  } finally {
+    await running.close()
+  }
+}
+
+const up = required('oauthserver', await oauthServerUp())
+
+describe.skipIf(!up)('OAuth 2.0 sign-in against Spring Authorization Server', () => {
+  it('signs in with the identity the user info endpoint returns', async () => {
+    await withApp(
+      o => o.mapClaims({ email: 'email', name: 'name' }),
+      async () => {
+        const browser = new Browser()
+
+        const login = await browser.navigate(`${ORIGIN}/me`)
+        expect(login.hops[0]).toMatchObject({ url: `${ORIGIN}/me`, status: 302 })
+        expect(login.hops[0].location).toContain(`${OAUTH_SERVER}/oauth2/authorize`)
+
+        const home = await springLogin(browser, login, 'alice', 'wonderland')
+
+        const callback = home.hops.find(hop => hop.url.startsWith(`${ORIGIN}/oauth2/callback`))
+        expect(callback).toMatchObject({ status: 302, location: '/me' })
+        expect(home.url).toBe(`${ORIGIN}/me`)
+        expect(home.json()).toEqual({ sub: 'alice', email: 'alice@example.com', name: 'Alice Liddell' })
+      },
+    )
   })
 
-  it('completes the authorization-code flow and resolves identity via userinfo', async () => {
-    // 1. Protected route with no session → 302 challenge; capture the state cookie.
-    const challenge = await app.fetch('/oauth2-me')
-    expect(challenge.status).toBe(302)
-    const authorizeUrl = challenge.headers.get('location')!
-    expect(authorizeUrl).toContain(`${OAUTH}/oauth2/authorize`)
-    const stateCookie = pickCookie(challenge, 'state')
+  // The user info body is unsigned JSON whose fields the provider chooses, and often the user. Nothing in it
+  // becomes a claim unless the application named it, and above all not a role.
+  it('maps nothing the application did not name, so the provider cannot hand out roles', async () => {
+    await withApp(
+      o => o,
+      async () => {
+        const browser = new Browser()
+        const home = await signIn(browser, `${ORIGIN}/me`)
 
-    // 2. Drive Spring's login → callback with the code.
-    const callbackUrl = new URL(await springLogin(authorizeUrl, 'alice', 'wonderland', CALLBACK_ORIGIN))
-    expect(callbackUrl.searchParams.get('code')).toBeTruthy()
+        // The provider's body carries email, name and `roles: [admin, user]`. Only the subject arrived.
+        expect(home.json()).toEqual({ sub: 'alice' })
+        expect((await browser.navigate(`${ORIGIN}/admin`)).status).toBe(403)
+      },
+    )
+  })
 
-    // 3. caffeine callback: exchange code at /oauth2/token, fetch /userinfo with the access token,
-    //    set the session cookie, redirect to the original route.
-    const callback = await app.fetch(`${callbackUrl.pathname}${callbackUrl.search}`, {
-      headers: { cookie: stateCookie },
-    })
-    expect(callback.status).toBe(302)
-    expect(callback.headers.get('location')).toBe('/oauth2-me')
-    const sessionCookie = pickCookie(callback, 'session')
+  it('refuses to start when a user info field is renamed into the role claim', async () => {
+    const outcome = await startApp(
+      app => app.authentication(auth => auth.addOAuth2(SCHEME, o => spring(o).mapClaims({ roles: 'roles' }))),
+      { port: PORT },
+    ).then(
+      // Closed before failing the case, or the port stays taken for every case after this one.
+      running => running.close().then(() => 'started'),
+      (error: Error) => error.message,
+    )
 
-    // 4. Authenticated request → 200 with identity from userinfo.
-    const me = await app.fetch('/oauth2-me', { headers: { cookie: sessionCookie } })
-    expect(me.status).toBe(200)
-    expect(await me.json()).toEqual({ sub: 'alice', email: 'alice@example.com' })
+    expect(outcome).toMatch(/role claim "roles"/)
+  })
 
-    // 5. authz positive: the session holds the admin role → 200.
-    const admin = await app.fetch('/oauth2-admin', { headers: { cookie: sessionCookie } })
-    expect(admin.status).toBe(200)
+  it('authorizes by roles once a claim mapper takes them on deliberately', async () => {
+    await withApp(
+      o =>
+        o.claimMapper(userInfo => [
+          new Claim('sub', String(userInfo.sub), OAUTH_SERVER),
+          ...(userInfo.roles as string[]).map(role => new Claim('roles', role, OAUTH_SERVER)),
+        ]),
+      async () => {
+        const alice = new Browser()
+        await signIn(alice, `${ORIGIN}/me`)
+        expect((await alice.navigate(`${ORIGIN}/admin`)).status).toBe(200)
+        expect((await alice.navigate(`${ORIGIN}/superadmin`)).status).toBe(403)
 
-    // 6. authz negative: the session lacks the superadmin role → 403.
-    const superadmin = await app.fetch('/oauth2-superadmin', { headers: { cookie: sessionCookie } })
-    expect(superadmin.status).toBe(403)
+        const bob = new Browser()
+        await signIn(bob, `${ORIGIN}/me`, 'bob', 'builder')
+        expect((await bob.navigate(`${ORIGIN}/admin`)).status).toBe(403)
+      },
+    )
+  })
+
+  it('sends PKCE by default, and fails cleanly against a client that demands it when told not to', async () => {
+    await withApp(
+      o => o,
+      async () => {
+        const login = await new Browser().navigate(`${ORIGIN}/me`)
+        const authorize = new URL(login.hops[0].location!)
+
+        expect(authorize.searchParams.get('code_challenge_method')).toBe('S256')
+        expect(authorize.searchParams.get('code_challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      },
+    )
+
+    await withApp(
+      o => o.usePKCE(false),
+      async () => {
+        const browser = new Browser()
+        const page = await browser.navigate(`${ORIGIN}/me`)
+
+        expect(new URL(page.hops[0].location!).searchParams.has('code_challenge')).toBe(false)
+
+        // The provider refuses the request and says so on the callback. Nobody is signed in, nothing crashes.
+        expect(page.url.startsWith(`${ORIGIN}/oauth2/callback`)).toBe(true)
+        expect(page.status).toBe(400)
+        expect(page.json()).toEqual({ error: 'Authentication failed', statusCode: 400 })
+        expect(await browser.cookieLike(ORIGIN, '_session')).toBeUndefined()
+      },
+    )
   })
 })
