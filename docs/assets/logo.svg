@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="CaffeineJS">
+  <!-- plate -->
+  <circle cx="55" cy="60" r="41" fill="#F2A93B"/>
+  <!-- handle (top-down: solid tab, no loop) -->
+  <path d="M84 54 H98 a6 6 0 0 1 0 12 H84 Z" fill="#D9622F"/>
+  <!-- mug wall -->
+  <circle cx="55" cy="60" r="32" fill="#D9622F"/>
+  <!-- coffee -->
+  <circle cx="55" cy="60" r="25" fill="#2C1A12"/>
+  <!-- @ latte art -->
+  <g transform="translate(55 60) scale(0.46) translate(-60 -60)"><circle cx="56" cy="60" r="14" fill="#FFF3E0"/><path d="M71.9 48 V70.2 A9.9 9.9 0 0 0 90.8 74.4 A34 34 0 1 0 68.8 92.8" fill="none" stroke="#FFF3E0" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

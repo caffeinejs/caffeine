@@ -1,1 +1,25 @@
-# Caffeine · [![CI](https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml/badge.svg)](https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml) · [![codecov](https://codecov.io/gh/caffeinejs/caffeine/graph/badge.svg?token=CH1MHCDV1J)](https://codecov.io/gh/caffeinejs/caffeine)
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="" width="128" height="128">
+</p>
+
+<h1 align="center">CaffeineJS</h1>
+
+<p align="center">
+  Modular, batteries-included TypeScript framework for server-side applications.<br>
+  Built on standard TC39 decorators. End-to-end type safety.
+</p>
+
+<p align="center">
+  <a href="https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml"><img src="https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/caffeinejs/caffeine"><img src="https://codecov.io/gh/caffeinejs/caffeine/graph/badge.svg?token=CH1MHCDV1J" alt="codecov"></a>
+  <img src="https://img.shields.io/badge/status-work%20in%20progress-F2A93B" alt="Status: work in progress">
+</p>
+
+## About
+
+CaffeineJS is a TypeScript framework for building server-side applications. It is a monorepo of focused `@caffeinejs/*` packages — an IoC container, HTTP, configuration, messaging, caching, resilience, and more — so an application depends on the pieces it uses and nothing else.
+
+It is built on standard TC39 decorators, with no `experimentalDecorators`, `emitDecoratorMetadata` or `reflect-metadata` anywhere, and it carries types end to end: the configuration schema, the route handler and the HTTP client all check against the same definitions.
+
+> [!WARNING]
+> Work in progress. Nothing is published to npm yet, and the public API changes without notice.
